@@ -97,6 +97,15 @@ If you have Termux installed, the AI can run real Linux commands on your phone: 
 </td>
 </tr>
 <tr>
+<td colspan="2" valign="top">
+
+### Workflows
+
+Tell the AI "when X happens, do Y" and it builds the automation. Triggers cover wifi connects/disconnects, bluetooth pairs, headphones plug, geofences (you arrive at home), schedules, low battery, screen on/off, notifications arriving, app launches. Conditions filter when it actually fires (only after sunset, only if charging, only on weekdays). Actions are any tools the AI can already use. Approve once at create-time, walk away — fires keep running headlessly with the same dangerous-command shield as everything else.
+
+</td>
+</tr>
+<tr>
 <td colspan="2" align="center" valign="top">
 
 ### Safety + privacy

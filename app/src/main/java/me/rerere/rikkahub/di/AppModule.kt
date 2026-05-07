@@ -87,8 +87,34 @@ val appModule = module {
         )
     }
 
+    // Phase 12: Workflows
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        me.rerere.rikkahub.workflow.repository.WorkflowRepository(
+            workflowDao = get<me.rerere.rikkahub.data.db.AppDatabase>().workflowDao(),
+            workflowRunDao = get<me.rerere.rikkahub.data.db.AppDatabase>().workflowRunDao(),
+        )
+    }
+    single { me.rerere.rikkahub.workflow.condition.ContextProvider(get()) }
+    single { me.rerere.rikkahub.workflow.execution.WorkflowActionRunner() }
+    single {
+        me.rerere.rikkahub.workflow.execution.WorkflowEngine(
+            repository = get(),
+            settingsStore = get(),
+            localTools = get(),
+            contextProvider = get(),
+            actionRunner = get(),
+        )
+    }
+    single {
+        me.rerere.rikkahub.workflow.trigger.TriggerRegistry(
+            context = get(),
+            appScope = get(),
+            workflowRepository = get(),
+        )
+    }
+
+    single {
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

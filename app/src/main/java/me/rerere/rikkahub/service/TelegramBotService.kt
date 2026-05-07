@@ -1255,7 +1255,9 @@ class TelegramBotService : Service() {
         tool: UIMessagePart.Tool,
     ) {
         // MCP control tools render their args via a redacting helper so Authorization /
-        // X-Api-Key / Cookie values never reach the chat. Any tool the renderer doesn't
+        // X-Api-Key / Cookie values never reach the chat. Workflow_* tools render their
+        // approval message in human-readable form via WorkflowApprovalRenderer (with key-name
+        // redaction for token / password / private_key etc). Any tool the renderers don't
         // recognise falls back to the generic args display.
         val mcpRendered: String? = runCatching {
             val parsed = kotlinx.serialization.json.Json.parseToJsonElement(
@@ -1265,7 +1267,19 @@ class TelegramBotService : Service() {
                 me.rerere.rikkahub.data.ai.mcp.control.McpApprovalRenderer.render(tool.toolName, it)
             }
         }.getOrNull()
-        val argsPreview = mcpRendered
+        // Workflow_* mutators render their args in plain multi-line form ("Create workflow X / When: … / Do: …").
+        // The plain variant is then escaped + wrapped in <pre> by the standard path, so the
+        // existing approval-card chrome stays consistent across tools.
+        val workflowRendered: String? = runCatching {
+            if (me.rerere.rikkahub.workflow.tools.WorkflowApprovalRenderer.isWorkflowTool(tool.toolName)
+                && tool.toolName !in setOf("workflow_list", "workflow_get")) {
+                me.rerere.rikkahub.workflow.tools.WorkflowApprovalRenderer.renderPlain(
+                    tool.toolName, tool.input.ifBlank { "{}" },
+                )
+            } else null
+        }.getOrNull()
+        val argsPreview = workflowRendered
+            ?: mcpRendered
             ?: formatArgsForDisplay(tool.input).ifEmpty { "(no args)" }
         val text = buildString {
             append("⚠️ <b>Permission required</b>\n\n")

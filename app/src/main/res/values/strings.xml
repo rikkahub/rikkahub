@@ -102,6 +102,8 @@
   <string name="assistant_page_local_tools_telegram_desc">Run the assistant as a Telegram bot — send/receive messages, files, manage /commands. Configured entirely via tools (set token, whitelist, default chat, then enable). Foreground service handles long-poll.</string>
   <string name="setting_page_telegram">Telegram bot</string>
   <string name="setting_page_telegram_desc">Run the LLM as a Telegram bot — chat with it remotely from any device.</string>
+  <string name="setting_page_workflows">Workflows</string>
+  <string name="setting_page_workflows_desc">Trigger-based automations: when something happens on the device, run a sequence of tools.</string>
   <string name="setting_page_tool_approvals">Tool approvals</string>
   <string name="setting_page_tool_approvals_desc">Tools you\'ve permanently granted via "Always Allow". Revoke any time.</string>
   <string name="setting_page_tool_approvals_header">Tools below run without asking, ever, on this device. Revoke if you no longer trust the model with this capability.</string>
@@ -1193,5 +1195,55 @@
   <string name="setting_page_notifications_action_ago_seconds">%1$ds ago</string>
   <string name="setting_page_notifications_action_ago_minutes">%1$dm ago</string>
   <string name="setting_page_notifications_action_ago_hours">%1$dh ago</string>
+
+  <!-- Phase 12 — Workflows. Top-level Settings page + detail screen + per-assistant
+       toggle. Strings are grouped by surface. Translations deferred (English-only). -->
+  <string name="assistant_page_local_tools_workflows_title">Workflows</string>
+  <string name="assistant_page_local_tools_workflows_desc">Let the assistant create automations that run on triggers — WiFi connect, schedule, geofence, notification arrival, and more.</string>
+
+  <string name="setting_page_workflows_empty">No workflows yet. Ask your assistant to create one.</string>
+  <string name="setting_page_workflows_how_it_works">How workflows work</string>
+  <string name="setting_page_workflows_how_it_works_dialog_title">How workflows work</string>
+  <string name="setting_page_workflows_how_it_works_dialog_body">A workflow is a trigger plus a list of actions. The trigger is what starts it (WiFi connects, a schedule fires, you arrive at a place, a notification arrives). The actions are tool calls run in order — the same tools you can run in chat.\n\nConditions filter when a triggered workflow actually fires (\"only after sunset\", \"only if charging\"). All conditions must pass.\n\nWorkflows run in headless mode — your assistant pre-authorised the tools when it created the workflow, so each fire doesn\'t prompt you. The HARDLINE filter still blocks dangerous shell commands and writes to system paths regardless. You\'ll see the result in the workflow\'s history list.</string>
+  <string name="setting_page_workflows_how_it_works_dialog_dismiss">Got it</string>
+
+  <string name="setting_page_workflows_subtitle_when">When: %1$s</string>
+  <string name="setting_page_workflows_subtitle_never_run">Never run</string>
+  <string name="setting_page_workflows_subtitle_ran_success">Ran %1$s • Success</string>
+  <string name="setting_page_workflows_subtitle_ran_failed">Failed %1$s</string>
+  <string name="setting_page_workflows_subtitle_ran_skipped">Skipped %1$s</string>
+
+  <string name="setting_page_workflow_detail_section_description">Description</string>
+  <string name="setting_page_workflow_detail_section_trigger">Trigger</string>
+  <string name="setting_page_workflow_detail_section_conditions">Conditions</string>
+  <string name="setting_page_workflow_detail_section_actions">Actions</string>
+  <string name="setting_page_workflow_detail_section_stats">Stats</string>
+  <string name="setting_page_workflow_detail_section_history">History</string>
+  <string name="setting_page_workflow_detail_no_conditions">(none)</string>
+  <string name="setting_page_workflow_detail_history_empty">No fires recorded yet.</string>
+  <string name="setting_page_workflow_detail_run_now">Run now</string>
+  <string name="setting_page_workflow_detail_edit">Edit in chat</string>
+  <string name="setting_page_workflow_detail_delete">Delete</string>
+  <string name="setting_page_workflow_detail_delete_confirm_title">Delete workflow?</string>
+  <string name="setting_page_workflow_detail_delete_confirm_body">This removes the workflow and its history. Triggers it owned (geofences, schedules, broadcasts) are torn down on the next reconciliation. Cannot be undone.</string>
+  <string name="setting_page_workflow_detail_delete_confirm_yes">Delete</string>
+  <string name="setting_page_workflow_detail_delete_confirm_no">Cancel</string>
+  <string name="setting_page_workflow_detail_run_now_done">Run finished: %1$s</string>
+  <string name="setting_page_workflow_detail_edit_prefill">Edit the workflow named &#8220;%1$s&#8221;.</string>
+
+  <string name="setting_page_workflow_detail_stat_last_run">Last run: %1$s</string>
+  <string name="setting_page_workflow_detail_stat_last_run_never">Last run: never</string>
+  <string name="setting_page_workflow_detail_stat_runs_today">Today: %1$d run(s)</string>
+  <string name="setting_page_workflow_detail_stat_cooldown">Cooldown: %1$ds</string>
+  <string name="setting_page_workflow_detail_stat_cooldown_none">Cooldown: none</string>
+  <string name="setting_page_workflow_detail_stat_daily_cap">Daily cap: %1$d</string>
+  <string name="setting_page_workflow_detail_stat_daily_cap_unlimited">Daily cap: unlimited</string>
+
+  <!-- Relative-time fragments for "Ran 2h ago" / "Ran just now" / "Ran 3d ago" formats -->
+  <string name="relative_time_just_now">just now</string>
+  <string name="relative_time_seconds_ago">%1$ds ago</string>
+  <string name="relative_time_minutes_ago">%1$dm ago</string>
+  <string name="relative_time_hours_ago">%1$dh ago</string>
+  <string name="relative_time_days_ago">%1$dd ago</string>
 </resources>
 

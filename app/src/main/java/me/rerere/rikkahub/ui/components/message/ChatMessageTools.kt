@@ -320,6 +320,23 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                             )
                         }
                     }
+                    // Workflow_* mutators: human-readable approval body ("Create workflow X /
+                    // When: WiFi connects to HomeWiFi / Do: 1. ssh_exec_saved(host=home) / …").
+                    // Action arg values whose key is in the secret-redaction list are masked.
+                    if (me.rerere.rikkahub.workflow.tools.WorkflowApprovalRenderer.isWorkflowTool(tool.toolName)
+                        && tool.toolName !in setOf("workflow_list", "workflow_get")) {
+                        val workflowRendered = runCatching {
+                            me.rerere.rikkahub.workflow.tools.WorkflowApprovalRenderer
+                                .renderPlain(tool.toolName, tool.input.ifBlank { "{}" })
+                        }.getOrNull()
+                        if (!workflowRendered.isNullOrBlank()) {
+                            Text(
+                                text = workflowRendered,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     // Four-button row: Allow / Always Allow / Allow for this chat / Deny.
                     // Order matches the Telegram inline-keyboard layout so the user sees the
                     // same mental model on both surfaces.

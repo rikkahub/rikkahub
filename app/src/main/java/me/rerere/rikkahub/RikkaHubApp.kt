@@ -107,7 +107,25 @@ class RikkaHubApp : Application() {
         // Increment launch count
         incrementLaunchCount()
 
+        // Phase 12: kick off the workflow trigger registry. It subscribes to the workflows
+        // table and reconciles broadcast receivers / geofences / time_cron schedules with
+        // every change. With zero enabled workflows, no receivers are registered.
+        startWorkflowRegistry()
+
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
+    }
+
+    private fun startWorkflowRegistry() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val registry = get<me.rerere.rikkahub.workflow.trigger.TriggerRegistry>()
+                val engine = get<me.rerere.rikkahub.workflow.execution.WorkflowEngine>()
+                registry.setEngineCallback(engine.triggerCallback)
+                registry.start()
+            }.onFailure {
+                Log.e(TAG, "startWorkflowRegistry failed", it)
+            }
+        }
     }
 
     /**

@@ -56,6 +56,7 @@ import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
 import me.rerere.hugeicons.stroke.Package
+import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Shield01
 import me.rerere.hugeicons.stroke.Telegram
@@ -260,6 +261,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Telegram, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_telegram_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_telegram)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingWorkflows) },
+                        leadingContent = { Icon(HugeIcons.Connect, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_workflows_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_workflows)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingToolApprovals) },

@@ -23,6 +23,14 @@
   <uses-permission android:name="android.permission.READ_PHONE_STATE" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <!-- Phase 12 — required for geofence triggers on Android 10+. The user grants this
+       lazily when they enable the first geofence workflow; without it, geofence
+       registration silently fails and the workflow row's last_run_status surfaces
+       "Unavailable on this device". -->
+  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+  <!-- Phase 12 — required for bluetooth_device_connected / bluetooth_device_disconnected
+       triggers on Android 12+. -->
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
   <uses-permission android:name="android.permission.WRITE_SETTINGS"
       tools:ignore="ProtectedPermissions" />
   <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
@@ -242,6 +250,18 @@
         <action android:name="android.intent.action.BOOT_COMPLETED" />
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
         <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+      </intent-filter>
+    </receiver>
+
+    <!-- Phase 12 — geofence transition receiver. Play Services delivers via
+         PendingIntent.getBroadcast outside any active component, so this MUST be a
+         manifest receiver. Not exported — the only sender is Play Services running in
+         our process. -->
+    <receiver
+      android:name=".workflow.trigger.GeofenceTriggerReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.workflow.GEOFENCE_TRANSITION" />
       </intent-filter>
     </receiver>
 

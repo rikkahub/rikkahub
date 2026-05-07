@@ -171,6 +171,11 @@ object HardlineCommandGuard {
             }
             toolName == "ssh_exec" || toolName == "ssh_exec_saved" ->
                 checkCommand(input["command"]?.jsonPrimitive?.contentOrNull)
+            // Sub-agent dispatch — the spawned LLM gets the parent's full tool surface
+            // headlessly, so a `task` / `prompt` containing a literal hardline-blocked
+            // command (e.g. `rm -rf /`) shouldn't be authorised even if the parent
+            // workflow_create approval was granted. Walk all string args.
+            toolName == "subagent_dispatch" -> walkAndCheck(input)
             // MCP-relayed tools: we don't know which server or what arg shape carries shell
             // content, so we recursively scan every string value in the input. False
             // positives are fine — an MCP tool whose legitimate-purpose arg happens to

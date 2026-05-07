@@ -169,6 +169,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("reliability")         data object Reliability        : LocalToolOption()
     @Serializable @SerialName("sub_agents")          data object SubAgents          : LocalToolOption()
     @Serializable @SerialName("cost_guards")         data object CostGuards         : LocalToolOption()
+    @Serializable @SerialName("workflows")           data object Workflows          : LocalToolOption()
 }
 
 class LocalTools(
@@ -192,6 +193,8 @@ class LocalTools(
     private val subAgentEngine: me.rerere.rikkahub.subagent.SubAgentEngine,
     private val subAgentRegistry: me.rerere.rikkahub.subagent.SubAgentRegistry,
     private val conversationRepo: me.rerere.rikkahub.data.repository.ConversationRepository,
+    private val workflowRepository: me.rerere.rikkahub.workflow.repository.WorkflowRepository,
+    private val workflowEngine: me.rerere.rikkahub.workflow.execution.WorkflowEngine,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -660,6 +663,21 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.CostGuards)) {
             tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(settingsStore, conversationRepo))
+        }
+        if (options.contains(LocalToolOption.Workflows)) {
+            tools.add(me.rerere.rikkahub.workflow.tools.workflowCreateTool(
+                workflowRepository,
+                knownToolNamesProvider = { tools.map { it.name } },
+            ))
+            tools.add(me.rerere.rikkahub.workflow.tools.workflowListTool(workflowRepository))
+            tools.add(me.rerere.rikkahub.workflow.tools.workflowGetTool(workflowRepository))
+            tools.add(me.rerere.rikkahub.workflow.tools.workflowUpdateTool(
+                workflowRepository,
+                knownToolNamesProvider = { tools.map { it.name } },
+            ))
+            tools.add(me.rerere.rikkahub.workflow.tools.workflowDeleteTool(workflowRepository))
+            tools.add(me.rerere.rikkahub.workflow.tools.workflowSetEnabledTool(workflowRepository))
+            tools.add(me.rerere.rikkahub.workflow.tools.workflowRunTool(workflowEngine, workflowRepository))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

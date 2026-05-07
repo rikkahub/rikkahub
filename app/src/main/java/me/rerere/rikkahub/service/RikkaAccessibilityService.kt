@@ -77,7 +77,16 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Intentionally empty - we don't react to events; we drive the device via tool calls.
+        // Phase 12 — feed foreground-app transitions to the workflow trigger dispatcher.
+        // We only care about TYPE_WINDOW_STATE_CHANGED and only when the package name is
+        // present. The dispatcher itself de-dupes (skips no-op transitions) and dispatches
+        // off-thread, so this stays fast on the AccessibilityService dispatcher.
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString()
+            if (!pkg.isNullOrBlank()) {
+                me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher.onForegroundChange(pkg)
+            }
+        }
     }
 
     override fun onInterrupt() {
