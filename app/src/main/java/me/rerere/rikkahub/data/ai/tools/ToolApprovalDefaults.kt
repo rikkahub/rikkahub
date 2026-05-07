@@ -165,6 +165,24 @@ object ToolApprovalDefaults {
         // so this is privilege-escalation-adjacent. NO_ALWAYS_ALLOW below.
         "skill_install_from_url",
         "skill_install_from_text",
+
+        // JS skills (Phase 18) — run a skill's JavaScript inside a hidden WebView.
+        // The script can issue arbitrary network requests on behalf of the user, so
+        // every invocation gets per-call approval. Eligible for "Always allow" once a
+        // particular skill is trusted (NOT in NO_ALWAYS_ALLOW — the skill's body has
+        // already been reviewed at install time).
+        "run_js",
+
+        // Native intent tools (Phase 18) — open the system Calendar / Contacts / SMS /
+        // Email composer / WiFi settings / Maps app. Each fires a system intent the user
+        // finalises in the destination app. Approval gate ensures the user reviews the
+        // pre-filled fields before the LLM hands the action off.
+        "create_calendar_event",
+        "create_contact",
+        "send_email_intent",
+        "send_sms_intent",
+        "open_wifi_settings",
+        "show_location_on_map",
     )
 
     /**

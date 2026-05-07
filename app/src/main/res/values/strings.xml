@@ -1207,6 +1207,12 @@
   <string name="assistant_page_local_tools_skill_import_title">Skill import</string>
   <string name="assistant_page_local_tools_skill_import_desc">Let the assistant install skills from a URL OR from text it already has (e.g. fetched via SSH / curl / MCP for authenticated servers). Native, openclaw, and Hermes formats. Per-call approval required for every install (Always Allow is disabled — you review the source each time).</string>
 
+  <!-- Phase 18 — JS skills + system intents. -->
+  <string name="assistant_page_local_tools_js_skills_title">JS skills</string>
+  <string name="assistant_page_local_tools_js_skills_desc">Let the assistant run JavaScript skills (calculate hash, query Wikipedia, generate QR codes, render maps, etc.) inside a hidden WebView. The skill\'s code defines what it does; per-call approval each time. Compatible with skills written for Google AI Edge Gallery — drop them into your skills folder and they just work.</string>
+  <string name="assistant_page_local_tools_system_intents_title">System intents</string>
+  <string name="assistant_page_local_tools_system_intents_desc">Let the assistant pre-fill system apps for you to finalise: Calendar event, new Contact, email composer, SMS composer, WiFi settings, Maps. Nothing is saved or sent without your tap in the destination app.</string>
+
   <!-- Workflows toggle setup-hint (audit fix 2026-05-07). Many trigger types need extra
        runtime permissions / system services — surface them at enable time so the user
        isn\'t surprised that their geofence / notification / app-launch workflow never fires. -->

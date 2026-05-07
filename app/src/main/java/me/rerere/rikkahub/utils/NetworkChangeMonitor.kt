@@ -49,7 +49,9 @@ object NetworkChangeMonitor {
             }
         }
         clients.add(WeakReference(client))
-        Log.d(TAG, "registered OkHttp client (now ${clients.size} active)")
+        // android.util.Log isn't mocked in JVM unit tests; SkillUrlImporter etc.
+        // construct OkHttp clients during test init and the log call would crash.
+        runCatching { Log.d(TAG, "registered OkHttp client (now ${clients.size} active)") }
     }
 
     /**

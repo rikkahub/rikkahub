@@ -910,6 +910,34 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_js_skills_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_js_skills_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.JsSkills),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.JsSkills, it) }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_system_intents_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_system_intents_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.SystemIntents),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.SystemIntents, it) }
+                    )
+                }
+            )
         }
 
         Text(

@@ -94,6 +94,10 @@ val appModule = module {
         )
     }
 
+    // Phase 18: JS skills (run_js + secrets store)
+    single { me.rerere.rikkahub.skills.js.JsSkillRunner(get()) }
+    single { me.rerere.rikkahub.skills.js.SkillSecretsStore(get()) }
+
     // Phase 12: Workflows
     single {
         me.rerere.rikkahub.workflow.repository.WorkflowRepository(
@@ -125,7 +129,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

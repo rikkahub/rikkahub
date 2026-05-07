@@ -106,11 +106,20 @@ Tell the AI "when X happens, do Y" and it builds the automation. Triggers cover 
 </td>
 </tr>
 <tr>
+<td colspan="2" valign="top">
+
+### System integrations
+
+Open the right Android app pre-filled, every time. "Schedule lunch with Bob next Thursday at 1" → Calendar app opens with a draft event, you tap save. "Email Anna the address" → Gmail composer pre-filled, you press send. Same for SMS, contacts, WiFi settings, and Maps. Nothing is sent or saved without your explicit tap in the destination app — the AI does the staging, you stay in control of the action.
+
+</td>
+</tr>
+<tr>
 <td valign="top">
 
 ### Skills
 
-Reusable playbooks the AI can follow. Four built-in skills out of the box: auto-reply (read incoming messages, draft replies, send), morning briefing (calendar + weather + comms summary), smart-forward (catch a notification, forward the gist to a contact), notification-summarise-and-act (group, summarise, suggest next steps). All skills are plain markdown — edit them in-app. Install more from a URL or pipe them in from your own server (openclaw and Hermes formats both supported, with tool-name auto-mapping).
+Reusable playbooks the AI can follow. Four built-in skills out of the box: auto-reply (read incoming messages, draft replies, send), morning briefing (calendar + weather + comms summary), smart-forward (catch a notification, forward the gist to a contact), notification-summarise-and-act (group, summarise, suggest next steps). Plus **JS skills** that run inside a hidden WebView — query Wikipedia, generate QR codes, render an interactive map, calculate hashes, anything you'd build with HTML+JS. **Compatible with skills written for Google AI Edge Gallery — drop them into your skills folder and they just work.** All skills are plain markdown — edit them in-app. Install from a URL or pipe them in from your own server (native, openclaw, and Hermes formats supported, with tool-name auto-mapping). Per-skill API key storage encrypted on-device.
 
 </td>
 <td valign="top">

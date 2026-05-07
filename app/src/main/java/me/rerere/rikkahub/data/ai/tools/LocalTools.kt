@@ -171,6 +171,8 @@ sealed class LocalToolOption {
     @Serializable @SerialName("cost_guards")         data object CostGuards         : LocalToolOption()
     @Serializable @SerialName("workflows")           data object Workflows          : LocalToolOption()
     @Serializable @SerialName("skill_import")        data object SkillImport        : LocalToolOption()
+    @Serializable @SerialName("js_skills")           data object JsSkills           : LocalToolOption()
+    @Serializable @SerialName("system_intents")      data object SystemIntents      : LocalToolOption()
 }
 
 class LocalTools(
@@ -197,6 +199,9 @@ class LocalTools(
     private val workflowRepository: me.rerere.rikkahub.workflow.repository.WorkflowRepository,
     private val workflowEngine: me.rerere.rikkahub.workflow.execution.WorkflowEngine,
     private val skillUrlImporter: me.rerere.rikkahub.skills.SkillUrlImporter,
+    private val skillManager: me.rerere.rikkahub.data.files.SkillManager,
+    private val jsSkillRunner: me.rerere.rikkahub.skills.js.JsSkillRunner,
+    private val skillSecretsStore: me.rerere.rikkahub.skills.js.SkillSecretsStore,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -676,6 +681,19 @@ class LocalTools(
         if (options.contains(LocalToolOption.SkillImport)) {
             tools.add(me.rerere.rikkahub.skills.skillInstallFromUrlTool(skillUrlImporter))
             tools.add(me.rerere.rikkahub.skills.skillInstallFromTextTool(skillUrlImporter))
+        }
+        if (options.contains(LocalToolOption.JsSkills)) {
+            tools.add(me.rerere.rikkahub.skills.js.runJsTool(
+                context, skillManager, jsSkillRunner, skillSecretsStore,
+            ))
+        }
+        if (options.contains(LocalToolOption.SystemIntents)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.createCalendarEventTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.createContactTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.sendEmailIntentTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.sendSmsIntentTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.openWifiSettingsTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.showLocationOnMapTool(context))
         }
         if (options.contains(LocalToolOption.Workflows)) {
             // workflow_create persists the authoringAssistantId from [context] so the
