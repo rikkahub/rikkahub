@@ -721,6 +721,20 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_reliability_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_reliability_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Reliability),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Reliability, it) }
+                    )
+                }
+            )
         }
 
         Text(

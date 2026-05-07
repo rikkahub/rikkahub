@@ -619,9 +619,19 @@ class TelegramBotService : Service() {
 
         when {
             finalReply.isBlank() -> {
-                // Nothing to say. If we have a placeholder, replace it with a fallback note;
-                // otherwise send a fresh message so the user is not left waiting silently.
-                val fallback = "(no reply text - tool ran but produced no message)"
+                // The model called tool(s) but emitted no final user-facing text. The OLD
+                // wording ("no reply text - tool ran but produced no message") read like
+                // the bot froze; users hit /stop assuming it broke. Reword to honest +
+                // actionable so the user knows what to do next. Observed 2026-05-05 with
+                // a model that silently stopped after take_screenshot instead of chaining
+                // to telegram_send_photo. Also add a debug log distinguishing
+                // finish_reason=stop with no content from a stream error so future
+                // diagnoses don't conflate the two.
+                android.util.Log.i(
+                    TAG,
+                    "handleIncoming: empty final reply (model finished with no text after tool calls) chat=${m.chatId}",
+                )
+                val fallback = "(model called tools but didn't reply — try saying \"continue\" or switch model with /model)"
                 if (placeholderId != null) {
                     try { client.editMessageText(m.chatId, placeholderId, fallback) } catch (_: Throwable) {}
                 } else {

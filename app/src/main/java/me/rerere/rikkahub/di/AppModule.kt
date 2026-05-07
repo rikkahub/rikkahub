@@ -71,8 +71,12 @@ val appModule = module {
         )
     }
 
+    // Phase 14: Reliability bundle
+    single { me.rerere.rikkahub.reliability.GitHubReleaseChecker(get()) }
+    single { me.rerere.rikkahub.reliability.BugReportBuilder(get()) }
+
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

@@ -166,6 +166,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("files")               data object Files              : LocalToolOption()
     @Serializable @SerialName("mcp_control")         data object McpControl         : LocalToolOption()
     @Serializable @SerialName("external_automation") data object ExternalAutomation : LocalToolOption()
+    @Serializable @SerialName("reliability")         data object Reliability        : LocalToolOption()
 }
 
 class LocalTools(
@@ -184,6 +185,8 @@ class LocalTools(
     private val notificationListenerPreferences: me.rerere.rikkahub.data.notifications.NotificationListenerPreferences,
     private val mcpManager: me.rerere.rikkahub.data.ai.mcp.McpManager,
     private val externalAutomationConfig: me.rerere.rikkahub.automation.ExternalAutomationConfig,
+    private val gitHubReleaseChecker: me.rerere.rikkahub.reliability.GitHubReleaseChecker,
+    private val bugReportBuilder: me.rerere.rikkahub.reliability.BugReportBuilder,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -639,6 +642,10 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.automation.externalAutomationSetEnabledTool(externalAutomationConfig))
             tools.add(me.rerere.rikkahub.automation.externalAutomationAddTrustedPackageTool(externalAutomationConfig))
             tools.add(me.rerere.rikkahub.automation.externalAutomationRemoveTrustedPackageTool(externalAutomationConfig))
+        }
+        if (options.contains(LocalToolOption.Reliability)) {
+            tools.add(me.rerere.rikkahub.reliability.checkAppUpdatesTool(gitHubReleaseChecker))
+            tools.add(me.rerere.rikkahub.reliability.generateBugReportTool(context, bugReportBuilder))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

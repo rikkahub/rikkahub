@@ -136,6 +136,12 @@ object ToolApprovalDefaults {
         "external_automation_set_enabled",
         "external_automation_add_trusted_package",
         "external_automation_remove_trusted_package",
+
+        // Reliability bundle — generate_bug_report writes a file to disk that includes
+        // a redacted logcat dump. The redactor catches the common token shapes; we still
+        // gate so the user can review what's being created and decide whether to share.
+        // check_app_updates is read-only and has no entry here.
+        "generate_bug_report",
     )
 
     /**
