@@ -63,4 +63,17 @@ class BrowserPreferences(private val context: Context) {
             prefs[keyFor(tool)] ?: (BrowserToolDefaults.DEFAULT_ENABLED[tool] ?: false)
         }
     }
+
+    /**
+     * Blocking variant of [snapshot] for callers that aren't already in a coroutine.
+     * Used by [me.rerere.rikkahub.data.ai.tools.LocalTools.getTools] which is non-suspend
+     * (called from ChatService / CronJobWorker / etc — all already on background dispatchers).
+     *
+     * DataStore caches the latest [Preferences] instance after the first read, so steady-state
+     * cost is a flow `.first()` against an in-memory replay — measured in microseconds. The
+     * ONLY scenario this could stall is the very first read after process start before the
+     * file is decoded; the alternative (forcing every getTools caller to be suspend) ripples
+     * through the entire generation path for what is, at most, a single-digit-millisecond hit.
+     */
+    fun snapshotBlocking(): Map<String, Boolean> = kotlinx.coroutines.runBlocking { snapshot() }
 }
