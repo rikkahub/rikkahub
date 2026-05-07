@@ -198,6 +198,10 @@ object ToolApprovalDefaults {
         "browser_select",
         "browser_press_key",
         "browser_eval_js",
+        // Composite click+read added in the token-cost optimisation pass — its click
+        // side carries the same trust footprint as plain browser_click, so it
+        // inherits the same approval gate.
+        "browser_click_and_read",
     )
 
     /**

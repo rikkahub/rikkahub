@@ -31,6 +31,12 @@ object BrowserToolDefaults {
     const val SELECT = "browser_select"
     const val PRESS_KEY = "browser_press_key"
     const val EVAL_JS = "browser_eval_js"
+    /**
+     * Token-cost optimisation pass — composite "click + read" tool. One round trip
+     * instead of click → wait → get_text. Default OFF: it's still a write tool, the
+     * click side carries the same trust footprint as plain browser_click.
+     */
+    const val CLICK_AND_READ = "browser_click_and_read"
 
     // --- Loop control (default ON) -----------------------------------------------------------
     const val DONE = "browser_done"
@@ -40,7 +46,7 @@ object BrowserToolDefaults {
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
-        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS,
+        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
     )
 
     val LOOP_CONTROL_TOOLS: Set<String> = setOf(DONE)
@@ -48,7 +54,7 @@ object BrowserToolDefaults {
     /** Stable display order for the Settings page. Read first, then write, then loop-control. */
     val ALL_TOOLS: List<String> = listOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
-        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS,
+        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
         DONE,
     )
 

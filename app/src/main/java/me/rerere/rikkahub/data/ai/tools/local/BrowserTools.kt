@@ -24,8 +24,10 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.browser.BrowserController
 import me.rerere.rikkahub.browser.BrowserControllerHandle
+import me.rerere.rikkahub.browser.BrowserDiffHelper
 import me.rerere.rikkahub.browser.BrowserToolDefaults
 import me.rerere.rikkahub.browser.HeadlessBrowserSessionPool
+import me.rerere.rikkahub.browser.ReadabilityRunner.runReadability
 import me.rerere.rikkahub.browser.awaitReadyState
 import me.rerere.rikkahub.browser.evaluateJavascriptAsync
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
@@ -271,27 +273,14 @@ fun browserScreenshotTool(context: Context): Tool = Tool(
 
 fun browserGetTextTool(): Tool = Tool(
     name = BrowserToolDefaults.GET_TEXT,
-    description = "Extract the readable innerText of a CSS selector (default 'body'). Truncates at max_chars (default 8000). {text, truncated}. Use this BEFORE screenshot if you only need text content.$TELEGRAM_HEADLESS_CUE",
-    parameters = { selectorAndMaxCharsSchema(defaultMax = 8000, required = false) },
-    execute = { input -> textPart(runReadHelper(input, BrowserToolDefaults.GET_TEXT, defaultMax = 8000) { selector, maxChars ->
-        // Trim runs of whitespace so the LLM doesn't pay for indentation. innerText
-        // already collapses multi-line text into something readable; we just clamp.
-        """(function(){
-            try {
-                var el = document.querySelector(${jsString(selector)});
-                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                var t = (el.innerText || el.textContent || '').replace(/\s+/g,' ').trim();
-                var truncated = false;
-                if (t.length > $maxChars) { t = t.substring(0, $maxChars); truncated = true; }
-                return JSON.stringify({text:t, truncated:truncated});
-            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-        })()"""
-    }) },
+    description = "Returns the main article content via Readability.js by default, falling back to selector-based extraction if Readability fails. Pass extract_mode:'raw' for the unfiltered text. Pass selector (e.g. 'article', 'main', '.content') for explicit scoping — selectors override Readability. max_chars (default 8000) caps the result. Use this BEFORE screenshot if you only need text content. {text, truncated, extract_mode}.$TELEGRAM_HEADLESS_CUE",
+    parameters = { getTextSchema(defaultMax = 8000) },
+    execute = { input -> textPart(runGetText(input)) },
 )
 
 fun browserGetDomTool(): Tool = Tool(
     name = BrowserToolDefaults.GET_DOM,
-    description = "Extract a simplified outerHTML of a CSS selector (default 'body'). Strips <script>/<style>. Truncates at max_chars (default 4000). {html, truncated}.$TELEGRAM_HEADLESS_CUE",
+    description = "Extract a simplified outerHTML of a CSS selector (default 'body'). Strips <script>/<style>. Truncates at max_chars (default 4000). Use scoped selectors like 'article' / 'main' rather than 'body' for relevance — body usually includes nav and footer chrome that costs tokens without value. {html, truncated}.$TELEGRAM_HEADLESS_CUE",
     parameters = { selectorAndMaxCharsSchema(defaultMax = 4000, required = false) },
     execute = { input -> textPart(runReadHelper(input, BrowserToolDefaults.GET_DOM, defaultMax = 4000) { selector, maxChars ->
         """(function(){
@@ -413,32 +402,35 @@ fun browserWaitForTool(): Tool = Tool(
 
 fun browserClickTool(): Tool = Tool(
     name = BrowserToolDefaults.CLICK,
-    description = "Click an element matching a CSS selector. scrollIntoView before dispatching the click. Waits up to 8 s for the resulting page to reach readyState=complete. {success, post_click_url}.$TELEGRAM_HEADLESS_CUE",
-    parameters = { selectorOnlySchema("CSS selector to click") },
+    description = "Click an element matching a CSS selector. Returns the diff between the page before and after the action by default ({added, removed, added_chars, removed_chars, truncated} truncated to 4000 chars total). Pass full:true to skip the diff and get post_click_url only — use when the click navigates to an entirely new page. Waits up to 8 s for readyState=complete.$TELEGRAM_HEADLESS_CUE",
+    parameters = { selectorWithFullSchema("CSS selector to click") },
     execute = { input ->
         val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val full = parseFullArg(input)
         val out = if (selector == null) {
             missingArgEnvelope("selector", "selector is required and must be a non-empty CSS selector")
         } else {
             withTimeoutOrNull(TOOL_TIMEOUT_MS) {
                 BrowserControllerHandle.withController {
-                    val js = """(function(){
-                        try {
-                            var el = document.querySelector(${jsString(selector)});
-                            if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                            el.scrollIntoView({block:'center', inline:'center'});
-                            el.click();
-                            return JSON.stringify({clicked:true});
-                        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                    })()"""
-                    val raw = webView.evaluateJavascriptAsync(js)
-                    val res = parseJsResult(raw)
-                    if (res.containsKey("error")) return@withController res
-                    webView.awaitReadyState(8_000L)
-                    BrowserController.appendAction("Click: $selector")
-                    buildJsonObject {
-                        put("success", true)
-                        put("post_click_url", webView.url.orEmpty())
+                    withDiff(full) {
+                        val js = """(function(){
+                            try {
+                                var el = document.querySelector(${jsString(selector)});
+                                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
+                                el.scrollIntoView({block:'center', inline:'center'});
+                                el.click();
+                                return JSON.stringify({clicked:true});
+                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                        })()"""
+                        val raw = webView.evaluateJavascriptAsync(js)
+                        val res = parseJsResult(raw)
+                        if (res.containsKey("error")) return@withDiff res
+                        webView.awaitReadyState(8_000L)
+                        BrowserController.appendAction("Click: $selector")
+                        buildJsonObject {
+                            put("success", true)
+                            put("post_click_url", webView.url.orEmpty())
+                        }
                     }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.CLICK)
@@ -454,46 +446,50 @@ fun browserClickTool(): Tool = Tool(
 
 fun browserTypeTool(): Tool = Tool(
     name = BrowserToolDefaults.TYPE,
-    description = "Type text into an input/textarea/contenteditable matching a CSS selector. Focuses, optionally clears, sets the value + dispatches an 'input' event so SPA frameworks observe the change. {success}.$TELEGRAM_HEADLESS_CUE",
+    description = "Type text into an input/textarea/contenteditable matching a CSS selector. Focuses, optionally clears, sets the value + dispatches an 'input' event so SPA frameworks observe the change. Returns the diff between the page before and after by default; pass full:true to skip the diff. {success, [diff]}.$TELEGRAM_HEADLESS_CUE",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("selector", buildJsonObject { put("type","string"); put("description","CSS selector of the input") })
             put("text", buildJsonObject { put("type","string"); put("description","Text to type") })
             put("clear", buildJsonObject { put("type","boolean"); put("description","Clear the field first (default true)") })
+            put("full", buildJsonObject { put("type","boolean"); put("description","If true, return the action envelope without the page-text diff (default false)") })
         }, required = listOf("selector","text"))
     },
     execute = { input ->
         val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
         val text = input.jsonObject["text"]?.jsonPrimitive?.contentOrNull
         val clear = input.jsonObject["clear"]?.jsonPrimitive?.booleanOrNull ?: true
+        val full = parseFullArg(input)
         val out = when {
             selector == null -> missingArgEnvelope("selector", "selector is required")
             text == null -> missingArgEnvelope("text", "text is required (use empty string to clear)")
             else -> withTimeoutOrNull(TOOL_TIMEOUT_MS) {
                 BrowserControllerHandle.withController {
-                    // Use both 'input' and 'change' events to satisfy frameworks that listen
-                    // to either; React's synthetic event layer needs the native value setter
-                    // path which we don't replicate here — covers ~90% of real inputs.
-                    val js = """(function(){
-                        try {
-                            var el = document.querySelector(${jsString(selector)});
-                            if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                            el.focus();
-                            if (${if (clear) "true" else "false"}) {
-                                if ('value' in el) el.value = '';
-                                else if (el.isContentEditable) el.textContent = '';
-                            }
-                            if ('value' in el) el.value = (el.value || '') + ${jsString(text)};
-                            else if (el.isContentEditable) el.textContent = (el.textContent || '') + ${jsString(text)};
-                            el.dispatchEvent(new Event('input', {bubbles:true}));
-                            el.dispatchEvent(new Event('change', {bubbles:true}));
-                            return JSON.stringify({typed:true});
-                        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                    })()"""
-                    val res = parseJsResult(webView.evaluateJavascriptAsync(js))
-                    if (res.containsKey("error")) return@withController res
-                    BrowserController.appendAction("Typed into $selector")
-                    buildJsonObject { put("success", true) }
+                    withDiff(full) {
+                        // Use both 'input' and 'change' events to satisfy frameworks that listen
+                        // to either; React's synthetic event layer needs the native value setter
+                        // path which we don't replicate here — covers ~90% of real inputs.
+                        val js = """(function(){
+                            try {
+                                var el = document.querySelector(${jsString(selector)});
+                                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
+                                el.focus();
+                                if (${if (clear) "true" else "false"}) {
+                                    if ('value' in el) el.value = '';
+                                    else if (el.isContentEditable) el.textContent = '';
+                                }
+                                if ('value' in el) el.value = (el.value || '') + ${jsString(text)};
+                                else if (el.isContentEditable) el.textContent = (el.textContent || '') + ${jsString(text)};
+                                el.dispatchEvent(new Event('input', {bubbles:true}));
+                                el.dispatchEvent(new Event('change', {bubbles:true}));
+                                return JSON.stringify({typed:true});
+                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                        })()"""
+                        val res = parseJsResult(webView.evaluateJavascriptAsync(js))
+                        if (res.containsKey("error")) return@withDiff res
+                        BrowserController.appendAction("Typed into $selector")
+                        buildJsonObject { put("success", true) }
+                    }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.TYPE)
         }
@@ -551,37 +547,40 @@ fun browserScrollTool(): Tool = Tool(
 
 fun browserSubmitTool(): Tool = Tool(
     name = BrowserToolDefaults.SUBMIT,
-    description = "Submit a form. If the selector is a <button type=submit> click it; otherwise locates the enclosing <form> and calls .submit(). Awaits the post-navigation readyState. {success, post_submit_url}.$TELEGRAM_HEADLESS_CUE",
-    parameters = { selectorOnlySchema("CSS selector of a submit button or any element inside the target form") },
+    description = "Submit a form. If the selector is a <button type=submit> click it; otherwise locates the enclosing <form> and calls .submit(). Awaits the post-navigation readyState. Returns the diff between the page before and after by default; pass full:true to skip the diff (recommended when submission navigates to a brand-new page). {success, post_submit_url, [diff]}.$TELEGRAM_HEADLESS_CUE",
+    parameters = { selectorWithFullSchema("CSS selector of a submit button or any element inside the target form") },
     execute = { input ->
         val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val full = parseFullArg(input)
         val out = if (selector == null) {
             missingArgEnvelope("selector", "selector is required")
         } else {
             withTimeoutOrNull(TOOL_TIMEOUT_MS) {
                 BrowserControllerHandle.withController {
-                    val js = """(function(){
-                        try {
-                            var el = document.querySelector(${jsString(selector)});
-                            if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                            if (el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === '')) {
-                                el.click();
-                                return JSON.stringify({submitted:true, via:'button_click'});
-                            }
-                            var form = el.closest('form');
-                            if (!form) return JSON.stringify({error:'no_enclosing_form'});
-                            if (typeof form.requestSubmit === 'function') form.requestSubmit();
-                            else form.submit();
-                            return JSON.stringify({submitted:true, via:'form_submit'});
-                        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                    })()"""
-                    val res = parseJsResult(webView.evaluateJavascriptAsync(js))
-                    if (res.containsKey("error")) return@withController res
-                    webView.awaitReadyState(8_000L)
-                    BrowserController.appendAction("Submit: $selector")
-                    buildJsonObject {
-                        put("success", true)
-                        put("post_submit_url", webView.url.orEmpty())
+                    withDiff(full) {
+                        val js = """(function(){
+                            try {
+                                var el = document.querySelector(${jsString(selector)});
+                                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
+                                if (el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === '')) {
+                                    el.click();
+                                    return JSON.stringify({submitted:true, via:'button_click'});
+                                }
+                                var form = el.closest('form');
+                                if (!form) return JSON.stringify({error:'no_enclosing_form'});
+                                if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                                else form.submit();
+                                return JSON.stringify({submitted:true, via:'form_submit'});
+                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                        })()"""
+                        val res = parseJsResult(webView.evaluateJavascriptAsync(js))
+                        if (res.containsKey("error")) return@withDiff res
+                        webView.awaitReadyState(8_000L)
+                        BrowserController.appendAction("Submit: $selector")
+                        buildJsonObject {
+                            put("success", true)
+                            put("post_submit_url", webView.url.orEmpty())
+                        }
                     }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.SUBMIT)
@@ -595,35 +594,39 @@ fun browserSubmitTool(): Tool = Tool(
 
 fun browserSelectTool(): Tool = Tool(
     name = BrowserToolDefaults.SELECT,
-    description = "Set a <select> element's value. Dispatches 'change' so framework listeners fire. {success}.$TELEGRAM_HEADLESS_CUE",
+    description = "Set a <select> element's value. Dispatches 'change' so framework listeners fire. Returns the diff between the page before and after by default; pass full:true to skip the diff. {success, [diff]}.$TELEGRAM_HEADLESS_CUE",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("selector", buildJsonObject { put("type","string"); put("description","CSS selector of the <select>") })
             put("value", buildJsonObject { put("type","string"); put("description","The option value to set") })
+            put("full", buildJsonObject { put("type","boolean"); put("description","If true, return the action envelope without the page-text diff (default false)") })
         }, required = listOf("selector","value"))
     },
     execute = { input ->
         val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
         val value = input.jsonObject["value"]?.jsonPrimitive?.contentOrNull
+        val full = parseFullArg(input)
         val out = when {
             selector == null -> missingArgEnvelope("selector", "selector is required")
             value == null -> missingArgEnvelope("value", "value is required")
             else -> withTimeoutOrNull(TOOL_TIMEOUT_MS) {
                 BrowserControllerHandle.withController {
-                    val js = """(function(){
-                        try {
-                            var el = document.querySelector(${jsString(selector)});
-                            if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                            if (el.tagName !== 'SELECT') return JSON.stringify({error:'not_a_select'});
-                            el.value = ${jsString(value)};
-                            el.dispatchEvent(new Event('change', {bubbles:true}));
-                            return JSON.stringify({selected:true});
-                        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                    })()"""
-                    val res = parseJsResult(webView.evaluateJavascriptAsync(js))
-                    if (res.containsKey("error")) return@withController res
-                    BrowserController.appendAction("Select: $selector=$value")
-                    buildJsonObject { put("success", true) }
+                    withDiff(full) {
+                        val js = """(function(){
+                            try {
+                                var el = document.querySelector(${jsString(selector)});
+                                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
+                                if (el.tagName !== 'SELECT') return JSON.stringify({error:'not_a_select'});
+                                el.value = ${jsString(value)};
+                                el.dispatchEvent(new Event('change', {bubbles:true}));
+                                return JSON.stringify({selected:true});
+                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                        })()"""
+                        val res = parseJsResult(webView.evaluateJavascriptAsync(js))
+                        if (res.containsKey("error")) return@withDiff res
+                        BrowserController.appendAction("Select: $selector=$value")
+                        buildJsonObject { put("success", true) }
+                    }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.SELECT)
         }
@@ -636,38 +639,42 @@ fun browserSelectTool(): Tool = Tool(
 
 fun browserPressKeyTool(): Tool = Tool(
     name = BrowserToolDefaults.PRESS_KEY,
-    description = "Synthesize keydown + keyup events on the active element. Use KeyboardEvent.key values like 'Enter', 'Escape', 'ArrowDown', 'Tab'. {success}.$TELEGRAM_HEADLESS_CUE",
+    description = "Synthesize keydown + keyup events on the active element. Use KeyboardEvent.key values like 'Enter', 'Escape', 'ArrowDown', 'Tab'. Returns the diff between the page before and after by default; pass full:true to skip the diff (recommended when Enter triggers a navigation). {success, [diff]}.$TELEGRAM_HEADLESS_CUE",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("key", buildJsonObject {
                 put("type","string")
                 put("description","KeyboardEvent.key value (e.g. 'Enter', 'Escape', 'ArrowDown')")
             })
+            put("full", buildJsonObject { put("type","boolean"); put("description","If true, return the action envelope without the page-text diff (default false)") })
         }, required = listOf("key"))
     },
     execute = { input ->
         // Cap at 32 chars — KeyboardEvent.key values like "ArrowDown" are short. A multi-KB
         // string here suggests model misuse; clamp before splicing into the JS payload.
         val key = input.jsonObject["key"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.take(32)
+        val full = parseFullArg(input)
         val out = if (key == null) {
             missingArgEnvelope("key", "key is required (e.g. 'Enter', 'Escape')")
         } else {
             withTimeoutOrNull(TOOL_TIMEOUT_MS) {
                 BrowserControllerHandle.withController {
-                    val js = """(function(){
-                        try {
-                            var el = document.activeElement || document.body;
-                            var down = new KeyboardEvent('keydown', {key:${jsString(key)}, bubbles:true, cancelable:true});
-                            var up = new KeyboardEvent('keyup', {key:${jsString(key)}, bubbles:true, cancelable:true});
-                            el.dispatchEvent(down);
-                            el.dispatchEvent(up);
-                            return JSON.stringify({pressed:true});
-                        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                    })()"""
-                    val res = parseJsResult(webView.evaluateJavascriptAsync(js))
-                    if (res.containsKey("error")) return@withController res
-                    BrowserController.appendAction("Press key: $key")
-                    buildJsonObject { put("success", true) }
+                    withDiff(full) {
+                        val js = """(function(){
+                            try {
+                                var el = document.activeElement || document.body;
+                                var down = new KeyboardEvent('keydown', {key:${jsString(key)}, bubbles:true, cancelable:true});
+                                var up = new KeyboardEvent('keyup', {key:${jsString(key)}, bubbles:true, cancelable:true});
+                                el.dispatchEvent(down);
+                                el.dispatchEvent(up);
+                                return JSON.stringify({pressed:true});
+                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                        })()"""
+                        val res = parseJsResult(webView.evaluateJavascriptAsync(js))
+                        if (res.containsKey("error")) return@withDiff res
+                        BrowserController.appendAction("Press key: $key")
+                        buildJsonObject { put("success", true) }
+                    }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.PRESS_KEY)
         }
@@ -704,6 +711,131 @@ fun browserEvalJsTool(): Tool = Tool(
                     buildJsonObject { put("result", raw ?: "null") }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.EVAL_JS)
+        }
+        textPart(out)
+    },
+)
+
+/**
+ * Token-cost optimisation pass — composite click+read tool. Cuts the dominant
+ * "click → wait → get_text" three-call sequence to one round trip. The trade is
+ * a slightly heavier per-call envelope (URL + title + text/diff) which is
+ * still cheaper than three separate calls' worth of model thinking-tokens.
+ *
+ * extract_mode: "diff" (default), "auto", "readability", "raw".
+ *   - "diff" → snapshot text before/after, return {diff: ...}.
+ *   - "auto"/"readability"/"raw" → snapshot URL+title, click, await readyState,
+ *     extract text per get_text rules, return {text, page_title}.
+ *
+ * max_chars caps either the diff side OR the extracted text. The cap protects
+ * against an LLM asking for a megabyte of text on a long-form page.
+ */
+fun browserClickAndReadTool(): Tool = Tool(
+    name = BrowserToolDefaults.CLICK_AND_READ,
+    description = "One-shot click + read in a single round trip. Click an element, await readyState, then return either the diff (default extract_mode:'diff') or the extracted text (auto/readability/raw — same semantics as browser_get_text). Use this instead of browser_click + browser_get_text when you want to minimise tokens. {success, post_click_url, page_title, [diff], [text]}.$TELEGRAM_HEADLESS_CUE",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("selector", buildJsonObject {
+                put("type","string")
+                put("description","CSS selector to click")
+            })
+            put("extract_mode", buildJsonObject {
+                put("type","string")
+                put("enum", buildJsonArray { add("diff"); add("auto"); add("readability"); add("raw") })
+                put("description","diff (default) returns a before/after diff; auto/readability/raw return the extracted page text")
+            })
+            put("max_chars", buildJsonObject {
+                put("type","integer")
+                put("description","Caps the returned text length (default 4000)")
+            })
+        }, required = listOf("selector"))
+    },
+    execute = { input ->
+        val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val mode = input.jsonObject["extract_mode"]?.jsonPrimitive?.contentOrNull?.lowercase()
+            ?.takeIf { it in setOf("diff", "auto", "readability", "raw") } ?: "diff"
+        val maxChars = (input.jsonObject["max_chars"]?.jsonPrimitive?.intOrNull ?: 4000)
+            .coerceIn(100, 64 * 1024)
+        val out = if (selector == null) {
+            missingArgEnvelope("selector", "selector is required")
+        } else {
+            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+                BrowserControllerHandle.withController {
+                    val before = if (mode == "diff") captureBodyText() else ""
+                    val titleBefore = withContext(Dispatchers.Main) { webView.title.orEmpty() }
+                    val clickJs = """(function(){
+                        try {
+                            var el = document.querySelector(${jsString(selector)});
+                            if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
+                            el.scrollIntoView({block:'center', inline:'center'});
+                            el.click();
+                            return JSON.stringify({clicked:true});
+                        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                    })()"""
+                    val clickRes = parseJsResult(webView.evaluateJavascriptAsync(clickJs))
+                    if (clickRes.containsKey("error")) return@withController clickRes
+                    webView.awaitReadyState(8_000L)
+                    BrowserController.appendAction("Click+read: $selector")
+                    val postUrl = withContext(Dispatchers.Main) { webView.url.orEmpty() }
+                    val postTitle = withContext(Dispatchers.Main) { webView.title.orEmpty() }
+                    @Suppress("UNUSED_VARIABLE")
+                    val unused = titleBefore // documents that we considered showing diff of titles
+                    when (mode) {
+                        "diff" -> {
+                            val after = captureBodyText()
+                            buildJsonObject {
+                                put("success", true)
+                                put("post_click_url", postUrl)
+                                put("page_title", postTitle)
+                                put("diff", BrowserDiffHelper.computeDiff(before, after))
+                            }
+                        }
+                        else -> {
+                            val text = when (mode) {
+                                "readability" -> webView.runReadability()
+                                "auto" -> webView.runReadability()?.takeIf { it.length >= READABILITY_MIN_CHARS }
+                                else -> null
+                            }
+                            val (resolved, extractMode) = if (!text.isNullOrEmpty()) {
+                                text to "readability"
+                            } else if (mode == "readability") {
+                                // Forced mode + null result → surface the error envelope.
+                                return@withController buildJsonObject {
+                                    put("success", false)
+                                    put("post_click_url", postUrl)
+                                    put("page_title", postTitle)
+                                    put("error", "readability_failed")
+                                }
+                            } else {
+                                // Fall back to selector-based body innerText.
+                                val rawJs = """(function(){
+                                    try {
+                                        var t = (document.body.innerText || document.body.textContent || '').replace(/\s+/g,' ').trim();
+                                        return JSON.stringify({text:t});
+                                    } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                                })()"""
+                                val rawRes = parseJsResult(webView.evaluateJavascriptAsync(rawJs))
+                                val rawText = rawRes["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                                rawText to (if (mode == "auto") "raw_fallback" else "raw")
+                            }
+                            val (clipped, truncated) = clipText(resolved, maxChars)
+                            buildJsonObject {
+                                put("success", true)
+                                put("post_click_url", postUrl)
+                                put("page_title", postTitle)
+                                put("text", clipped)
+                                put("truncated", truncated)
+                                put("extract_mode", extractMode)
+                            }
+                        }
+                    }
+                }
+            } ?: timeoutEnvelope(BrowserToolDefaults.CLICK_AND_READ)
+        }
+        // Pass 3 parity: stream a screenshot in headless mode on success, same as
+        // plain browser_click. The diff envelope still flows to the LLM via textPart.
+        if (out["success"]?.toString() == "true") {
+            BrowserController.streamScreenshotIfHeadless("Clicked $selector (and read)")
         }
         textPart(out)
     },
@@ -760,6 +892,25 @@ private fun selectorOnlySchema(description: String): InputSchema = InputSchema.O
     required = listOf("selector"),
 )
 
+/**
+ * selector + optional full flag — used by the state-changing tools (click / submit)
+ * that gain the diff-after-action toggle. selector remains required; `full` defaults
+ * to false (i.e. return diff). The naming matches the spec verbatim.
+ */
+private fun selectorWithFullSchema(description: String): InputSchema = InputSchema.Obj(
+    properties = buildJsonObject {
+        put("selector", buildJsonObject {
+            put("type", "string")
+            put("description", description)
+        })
+        put("full", buildJsonObject {
+            put("type", "boolean")
+            put("description", "If true, return the action envelope without the page-text diff (default false)")
+        })
+    },
+    required = listOf("selector"),
+)
+
 private fun selectorAndMaxCharsSchema(defaultMax: Int, required: Boolean): InputSchema = InputSchema.Obj(
     properties = buildJsonObject {
         put("selector", buildJsonObject {
@@ -773,6 +924,85 @@ private fun selectorAndMaxCharsSchema(defaultMax: Int, required: Boolean): Input
     },
     required = if (required) listOf("selector") else null,
 )
+
+/**
+ * Schema for browser_get_text. Adds the [extract_mode] enum (auto / readability /
+ * raw) to the standard selector + max_chars surface. Defaults are documented inline
+ * so the LLM doesn't need to hunt through the spec to know the fallback behaviour.
+ */
+private fun getTextSchema(defaultMax: Int): InputSchema = InputSchema.Obj(
+    properties = buildJsonObject {
+        put("selector", buildJsonObject {
+            put("type", "string")
+            put("description", "Optional CSS selector — when set, overrides Readability and reads the selector's innerText directly")
+        })
+        put("max_chars", buildJsonObject {
+            put("type", "integer")
+            put("description", "Truncation cap (default $defaultMax)")
+        })
+        put("extract_mode", buildJsonObject {
+            put("type", "string")
+            put("enum", buildJsonArray { add("auto"); add("readability"); add("raw") })
+            put("description", "auto (default) tries Readability then falls back; readability forces it; raw uses selector-based innerText")
+        })
+    },
+)
+
+
+/**
+ * Snapshot the page's `document.body.innerText` for the diff-after-action path.
+ * Whitespace is collapsed so that incidental layout reflows (e.g. an extra newline
+ * inserted by a CSS animation that just landed) don't show up as "added" lines in
+ * the diff. Returns the empty string on any JS failure — the diff helper will then
+ * treat an empty before-snapshot as "everything is new", which is the conservative
+ * call when we can't tell what was there.
+ */
+private suspend fun BrowserControllerHandle.WithControllerScope.captureBodyText(): String {
+    val raw = webView.evaluateJavascriptAsync(
+        "(function(){try{return JSON.stringify(document.body.innerText||'');}catch(e){return JSON.stringify('');}})()",
+        4_000L,
+    ) ?: return ""
+    return runCatching {
+        val outer = Json.parseToJsonElement(raw)
+        val inner = if (outer is JsonPrimitive && outer.isString) outer.contentOrNull.orEmpty() else outer.toString()
+        Json.parseToJsonElement(inner).jsonPrimitive.contentOrNull.orEmpty()
+    }.getOrElse { "" }
+}
+
+/**
+ * Token-cost optimisation pass — wrap a state-changing tool's action with a
+ * before/after text snapshot so the LLM gets a diff envelope instead of a full
+ * page re-read. Returns:
+ *  - The action's own envelope unchanged when [full] is true (legacy path).
+ *  - The action's envelope merged with `{ "diff": {...} }` when [full] is false.
+ *  - An error envelope if the action returned one — diff is skipped on error so we
+ *    don't push a stale snapshot when nothing changed because the action failed.
+ *
+ * The action is responsible for awaiting readyState if it triggers navigation; we
+ * snapshot AFTER the action returns to ensure we read the post-action page.
+ */
+private suspend fun BrowserControllerHandle.WithControllerScope.withDiff(
+    full: Boolean,
+    action: suspend BrowserControllerHandle.WithControllerScope.() -> JsonObject,
+): JsonObject {
+    if (full) return action()
+    val before = captureBodyText()
+    val result = action()
+    if (result.containsKey("error")) return result
+    val after = captureBodyText()
+    return buildJsonObject {
+        result.forEach { (k, v) -> put(k, v) }
+        put("diff", BrowserDiffHelper.computeDiff(before, after))
+    }
+}
+
+/**
+ * Read the optional `full` arg uniformly across the state-changing tools. Default
+ * false → diff path; true → preserve legacy envelope (post_*_url only). The arg
+ * name matches the spec verbatim so the LLM has one concept to learn.
+ */
+private fun parseFullArg(input: kotlinx.serialization.json.JsonElement): Boolean =
+    input.jsonObject["full"]?.jsonPrimitive?.booleanOrNull == true
 
 /**
  * Parse the raw string evaluateJavascript returned. Our JS helpers always return a
@@ -817,6 +1047,98 @@ private suspend fun runReadHelper(
         }
     } ?: timeoutEnvelope(toolName)
 }
+
+/**
+ * Token-cost optimisation pass — browser_get_text body. Resolves [extract_mode] +
+ * [selector] precedence:
+ *  - Explicit `selector` arg → skip Readability and use selector-based innerText
+ *    (the user knows what they want; we trust the model).
+ *  - `extract_mode = "raw"` → selector-based innerText against `body` (current
+ *    pre-pass behaviour).
+ *  - `extract_mode = "readability"` → force Readability; surface
+ *    `{error:"readability_failed"}` if it returns null.
+ *  - `extract_mode = "auto"` (default) → try Readability; fall back to
+ *    selector-based innerText if it returns null OR less than 200 chars (a
+ *    too-short article is often a junk extraction — better to fall back).
+ */
+private const val READABILITY_MIN_CHARS = 200
+
+private suspend fun runGetText(input: kotlinx.serialization.json.JsonElement): JsonObject {
+    val explicitSelector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull
+        ?.takeIf { it.isNotBlank() }
+    val maxChars = (input.jsonObject["max_chars"]?.jsonPrimitive?.intOrNull ?: 8000)
+        .coerceIn(100, 64 * 1024)
+    val mode = input.jsonObject["extract_mode"]?.jsonPrimitive?.contentOrNull?.lowercase()
+        ?.takeIf { it in setOf("auto", "readability", "raw") } ?: "auto"
+
+    return withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+        BrowserControllerHandle.withController {
+            // Selector arg trumps everything — the model is being explicit, honour it.
+            if (explicitSelector != null) {
+                return@withController runRawText(explicitSelector, maxChars, mode = "raw_selector")
+            }
+            when (mode) {
+                "raw" -> runRawText("body", maxChars, mode = "raw")
+                "readability" -> {
+                    val text = webView.runReadability()
+                    if (text.isNullOrEmpty()) {
+                        buildJsonObject {
+                            put("error", "readability_failed")
+                            put("recovery", "Try extract_mode:'auto' or pass a specific selector")
+                        }
+                    } else {
+                        buildJsonObject {
+                            val (clipped, truncated) = clipText(text, maxChars)
+                            put("text", clipped)
+                            put("truncated", truncated)
+                            put("extract_mode", "readability")
+                        }
+                    }
+                }
+                else -> {
+                    // auto: Readability first, then selector fallback
+                    val text = webView.runReadability()
+                    if (!text.isNullOrEmpty() && text.length >= READABILITY_MIN_CHARS) {
+                        val (clipped, truncated) = clipText(text, maxChars)
+                        buildJsonObject {
+                            put("text", clipped)
+                            put("truncated", truncated)
+                            put("extract_mode", "readability")
+                        }
+                    } else {
+                        runRawText("body", maxChars, mode = "raw_fallback")
+                    }
+                }
+            }
+        }
+    } ?: timeoutEnvelope(BrowserToolDefaults.GET_TEXT)
+}
+
+private suspend fun BrowserControllerHandle.WithControllerScope.runRawText(
+    selector: String,
+    maxChars: Int,
+    mode: String,
+): JsonObject {
+    val js = """(function(){
+        try {
+            var el = document.querySelector(${jsString(selector)});
+            if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
+            var t = (el.innerText || el.textContent || '').replace(/\s+/g,' ').trim();
+            var truncated = false;
+            if (t.length > $maxChars) { t = t.substring(0, $maxChars); truncated = true; }
+            return JSON.stringify({text:t, truncated:truncated});
+        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+    })()"""
+    val res = parseJsResult(webView.evaluateJavascriptAsync(js))
+    return if (res.containsKey("error")) res else buildJsonObject {
+        res.forEach { (k, v) -> put(k, v) }
+        put("extract_mode", mode)
+    }
+}
+
+private fun clipText(text: String, maxChars: Int): Pair<String, Boolean> =
+    if (text.length <= maxChars) text to false
+    else text.substring(0, maxChars) to true
 
 private suspend fun runHistoryNav(toolName: String, forward: Boolean): JsonObject {
     val out = withTimeoutOrNull(TOOL_TIMEOUT_MS) {
@@ -880,6 +1202,7 @@ fun createBrowserTool(
     BrowserToolDefaults.SELECT -> browserSelectTool()
     BrowserToolDefaults.PRESS_KEY -> browserPressKeyTool()
     BrowserToolDefaults.EVAL_JS -> browserEvalJsTool()
+    BrowserToolDefaults.CLICK_AND_READ -> browserClickAndReadTool()
     BrowserToolDefaults.DONE -> browserDoneTool(invocationContext)
     else -> null
 }

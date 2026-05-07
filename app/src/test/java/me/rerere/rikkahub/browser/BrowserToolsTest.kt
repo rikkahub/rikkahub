@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.NULL_CONTEXT
 import me.rerere.rikkahub.data.ai.tools.local.browserBackTool
+import me.rerere.rikkahub.data.ai.tools.local.browserClickAndReadTool
 import me.rerere.rikkahub.data.ai.tools.local.browserClickTool
 import me.rerere.rikkahub.data.ai.tools.local.browserCurrentUrlTool
 import me.rerere.rikkahub.data.ai.tools.local.browserDoneTool
@@ -184,11 +185,14 @@ class BrowserToolsTest {
         assertNull(t)
     }
 
-    @Test fun `default enabled map covers all 17 tools`() {
+    @Test fun `default enabled map covers all 18 tools`() {
+        // Token-cost optimisation pass added browser_click_and_read — count is now 18.
         // Every tool MUST have a default. A missing key would fall through to `false`,
         // which would silently disable a tool the user expected to be on. The reverse
         // (a default for a name not in ALL_TOOLS) wouldn't break anything but suggests
         // a typo, so we check both directions.
+        assertEquals(18, BrowserToolDefaults.ALL_TOOLS.size)
+        assertEquals(8, BrowserToolDefaults.WRITE_TOOLS.size)
         assertEquals(BrowserToolDefaults.ALL_TOOLS.toSet(), BrowserToolDefaults.DEFAULT_ENABLED.keys)
         // Read tools default ON
         for (n in BrowserToolDefaults.READ_TOOLS) {
@@ -198,6 +202,30 @@ class BrowserToolsTest {
         for (n in BrowserToolDefaults.WRITE_TOOLS) {
             assertEquals("$n should default OFF", false, BrowserToolDefaults.DEFAULT_ENABLED[n])
         }
+        // browser_click_and_read in particular MUST default OFF — it carries the same
+        // trust as plain browser_click and we never auto-enable a write tool.
+        assertEquals(false, BrowserToolDefaults.DEFAULT_ENABLED[BrowserToolDefaults.CLICK_AND_READ])
+    }
+
+    @Test fun `browser_click_and_read rejects missing selector`() {
+        val out = execText(browserClickAndReadTool(), "{}")
+        assertTrue("expected missing_selector envelope, got: $out", out.contains("missing_selector"))
+    }
+
+    @Test fun `browser_click_and_read short-circuits to not_open when controller unbound`() {
+        val out = execText(browserClickAndReadTool(), """{"selector":"#go"}""")
+        assertTrue("expected browser_not_open, got: $out", out.contains("browser_not_open"))
+    }
+
+    @Test fun `browser_click accepts the full arg without erroring`() {
+        // The diff-after-action path defaults to full=false; passing full:true must
+        // parse cleanly and fall through to the unbound short-circuit just like the
+        // bare-args case (no selector_not_found here — controller isn't bound).
+        val out = execText(browserClickTool(), """{"selector":"#go","full":true}""")
+        assertTrue("expected browser_not_open, got: $out", out.contains("browser_not_open"))
+        // And full:false is also valid.
+        val out2 = execText(browserClickTool(), """{"selector":"#go","full":false}""")
+        assertTrue("expected browser_not_open, got: $out2", out2.contains("browser_not_open"))
     }
 
     @Test fun `task window starts unbounded and accepts startTaskWindow`() {
