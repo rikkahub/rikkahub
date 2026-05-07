@@ -15,6 +15,7 @@ A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native
   <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android 8+" />
 </p>
 
+<a href="https://extv.github.io/rikkahub-agent/"><strong>Website</strong></a> ·
 <a href="https://github.com/ExTV/rikkahub-agent/releases/latest"><strong>Download</strong></a> ·
 <a href="#-features"><strong>Features</strong></a> ·
 <a href="#-quick-start"><strong>Quick Start</strong></a> ·
@@ -173,7 +174,3 @@ This fork is unaffiliated with the upstream RikkaHub maintainers. All credit for
 ## 📄 License
 
 Inherited from [upstream](https://github.com/rikkahub/rikkahub), see [LICENSE](LICENSE).
-
-<div align="center">
-<sub>Built by <a href="https://github.com/ExTV">@ExTV</a></sub>
-</div>
