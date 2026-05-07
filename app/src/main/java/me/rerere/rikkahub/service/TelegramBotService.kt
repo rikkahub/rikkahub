@@ -471,14 +471,19 @@ class TelegramBotService : Service() {
         val mutex = mutexFor(m.chatId)
         var acquired = mutex.tryLock()
         if (!acquired) {
-            // The prior turn is parked. If it's parked on a Pending tool approval, the
-            // user sending a fresh text message is the implicit "I want to abandon that
-            // and ask something else" — auto-stop the prior turn and proceed instead of
-            // bouncing the new message off the mutex with the "previous turn waiting"
-            // hint. If the prior turn is genuinely generating tokens, keep the bounce
-            // since cancelling could throw away in-flight work the user wants.
+            // The prior turn is parked. Two cases where a fresh user message is the
+            // implicit "abandon that, do this instead" and we should auto-stop:
+            //   (1) Pending approval keyboard sitting unanswered.
+            //   (2) Tool already approved + currently RUNNING — typically a tool that
+            //       backgrounded the app (take_photo to the camera, launch_app, the 6
+            //       system intents) and is now waiting on an activity result. The user
+            //       came back to the chat and started typing instead of finishing the
+            //       activity → they changed their mind. Without this case the new
+            //       message bounces with "previous turn still generating", which is
+            //       confusing because no tokens are actually being generated.
             val stuckOnApproval = ApprovalPromptRegistry.snapshotForChat(m.chatId).isNotEmpty()
-            if (stuckOnApproval) {
+            val stuckOnRunningTool = !stuckOnApproval && hasInFlightApprovedTool(m.chatId)
+            if (stuckOnApproval || stuckOnRunningTool) {
                 autoCancelStuckTurn(m.chatId)
                 acquired = mutex.tryLock()
             }
@@ -2111,6 +2116,22 @@ class TelegramBotService : Service() {
             if (isError) failures++
         }
         return failures
+    }
+
+    /**
+     * True if this chat's conversation has any Tool part that's been approved (or auto-
+     * approved) but hasn't finished executing yet — typically a tool that backgrounded the
+     * app to another activity (take_photo to camera, launch_app, system intents). The
+     * tryLock-fail path treats this the same as a parked approval keyboard: a fresh user
+     * message means abandon the in-flight tool, not bounce.
+     */
+    private suspend fun hasInFlightApprovedTool(chatId: Long): Boolean {
+        val mapping = runCatching { chatRepo.getByChatId(chatId) }.getOrNull() ?: return false
+        val convId = runCatching { Uuid.parse(mapping.conversationId) }.getOrNull() ?: return false
+        val conv = runCatching { chatService.getConversationFlow(convId).value }.getOrNull() ?: return false
+        return conv.currentMessages
+            .flatMap { it.parts.filterIsInstance<UIMessagePart.Tool>() }
+            .any { !it.isPending && !it.isExecuted }
     }
 
     /**
