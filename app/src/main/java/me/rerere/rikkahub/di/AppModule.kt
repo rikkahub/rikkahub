@@ -111,7 +111,6 @@ val appModule = module {
         me.rerere.rikkahub.workflow.execution.WorkflowEngine(
             repository = get(),
             settingsStore = get(),
-            localTools = get(),
             contextProvider = get(),
             actionRunner = get(),
         ).also { engine ->

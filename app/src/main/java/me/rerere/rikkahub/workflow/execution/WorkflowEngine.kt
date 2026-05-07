@@ -55,10 +55,21 @@ import java.time.ZoneId
 class WorkflowEngine(
     private val repository: WorkflowRepository,
     private val settingsStore: SettingsStore,
-    private val localTools: LocalTools,
     private val contextProvider: ContextProvider,
     private val actionRunner: WorkflowActionRunner,
 ) {
+
+    /**
+     * [LocalTools] is resolved lazily via Koin to break the construction cycle:
+     *   - [LocalTools] constructor takes a [WorkflowEngine] (so workflow_run can fire)
+     *   - [WorkflowEngine] needs [LocalTools] only at fire time (to build the action's tool surface)
+     * Eager constructor injection would loop the DI graph at startup — observed as a
+     * StackOverflowError on first install of Phase 12. Lazy lookup is safe because the
+     * graph is fully resolved by the time `fire()` is called.
+     */
+    private val localTools: LocalTools by lazy {
+        org.koin.java.KoinJavaComponent.getKoin().get<LocalTools>()
+    }
 
     private val perWorkflowLocks = mutableMapOf<String, Mutex>()
     private val locksMutex = Mutex()
