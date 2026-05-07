@@ -5,20 +5,25 @@ import android.graphics.Bitmap
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import java.io.File
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * Top-level Compose root for [BrowserActivity]. Lays out:
@@ -30,6 +35,7 @@ import java.io.File
  * reused across recompositions — recreating it on every recomp would lose page state
  * and re-fetch the URL. Same pattern as Phase 19's WebViewPage.
  */
+@OptIn(ExperimentalUuidApi::class)
 @Composable
 fun BrowserView(
     onWebViewReady: (WebView) -> Unit,
@@ -50,6 +56,7 @@ fun BrowserView(
     onStopAi: () -> Unit,
     onNavigate: (String) -> Unit,
     initialUrl: String,
+    conversationId: Uuid?,
 ) {
     Scaffold(
         topBar = {
@@ -70,26 +77,36 @@ fun BrowserView(
         },
         containerColor = MaterialTheme.colorScheme.surface,
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            if (loadProgressState.value in 1..99) {
-                LinearProgressIndicator(
-                    progress = { loadProgressState.value / 100f },
-                    modifier = Modifier.fillMaxWidth(),
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (loadProgressState.value in 1..99) {
+                    LinearProgressIndicator(
+                        progress = { loadProgressState.value / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                WebViewHost(
+                    modifier = Modifier.fillMaxSize(),
+                    initialUrl = initialUrl,
+                    onWebViewReady = onWebViewReady,
+                    onUrlChange = onUrlChange,
+                    onTitleChange = onTitleChange,
+                    onLoadProgress = onLoadProgress,
+                    onCanGoBackChange = onCanGoBackChange,
+                    onCanGoForwardChange = onCanGoForwardChange,
                 )
             }
-            WebViewHost(
-                modifier = Modifier.fillMaxSize(),
-                initialUrl = initialUrl,
-                onWebViewReady = onWebViewReady,
-                onUrlChange = onUrlChange,
-                onTitleChange = onTitleChange,
-                onLoadProgress = onLoadProgress,
-                onCanGoBackChange = onCanGoBackChange,
-                onCanGoForwardChange = onCanGoForwardChange,
+            // Bottom-anchored mini-chat overlay. Self-hides when conversationId is null
+            // (manual launch from Settings without a chat context).
+            BrowserMiniChat(
+                conversationId = conversationId,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 8.dp),
             )
         }
     }

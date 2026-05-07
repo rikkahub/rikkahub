@@ -9,6 +9,8 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import java.io.File
 
@@ -29,6 +31,7 @@ import java.io.File
  * Pass 3 will register an exclusion in `backup_rules.xml` to avoid restoring auth
  * cookies onto a fresh device.
  */
+@OptIn(ExperimentalUuidApi::class)
 class BrowserActivity : ComponentActivity() {
 
     private var webView: WebView? = null
@@ -37,10 +40,17 @@ class BrowserActivity : ComponentActivity() {
     private val currentUrl = mutableStateOf("about:blank")
     private val currentTitle = mutableStateOf("")
     private val loadProgress = mutableStateOf(0)
+    private var conversationId: Uuid? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Optional companion conversation. browser_open passes the calling chat's id so the
+        // mini-chat overlay can drive the same chat — user watches the AI work and can
+        // queue follow-up prompts without leaving the activity.
+        conversationId = intent?.getStringExtra(EXTRA_CONVERSATION_ID)
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
 
         // Best-effort profile dir creation. The WebView falls back to its default location if
         // creation fails — never a crash-on-launch risk. Pass 3's "Clear browsing data" will
@@ -97,6 +107,7 @@ class BrowserActivity : ComponentActivity() {
                         webView?.loadUrl(normalizeBrowserQuery(raw))
                     },
                     initialUrl = intent?.getStringExtra(EXTRA_INITIAL_URL) ?: "about:blank",
+                    conversationId = conversationId,
                 )
             }
         }
@@ -123,13 +134,26 @@ class BrowserActivity : ComponentActivity() {
         const val EXTRA_INITIAL_URL = "me.rerere.rikkahub.browser.EXTRA_INITIAL_URL"
 
         /**
-         * Builds the launch Intent. Pass 2 will use this from the `browser_open` tool;
-         * Pass 1 uses it from the Settings → Browser → "Open browser" row.
+         * Optional extra: companion conversation id (Uuid string). When set, the mini-chat
+         * overlay sends prompts into this conversation so the user can keep talking to the
+         * AI while watching the WebView. browser_open passes the caller's id; manual
+         * launches from Settings can omit this and the overlay self-hides.
          */
-        fun intent(context: android.content.Context, url: String? = null): Intent =
+        const val EXTRA_CONVERSATION_ID = "me.rerere.rikkahub.browser.EXTRA_CONVERSATION_ID"
+
+        /**
+         * Builds the launch Intent. Used by the `browser_open` tool, by the skill webview
+         * card, and by Settings → Browser → "Open browser".
+         */
+        fun intent(
+            context: android.content.Context,
+            url: String? = null,
+            conversationId: String? = null,
+        ): Intent =
             Intent(context, BrowserActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 if (url != null) putExtra(EXTRA_INITIAL_URL, url)
+                if (conversationId != null) putExtra(EXTRA_CONVERSATION_ID, conversationId)
             }
     }
 }

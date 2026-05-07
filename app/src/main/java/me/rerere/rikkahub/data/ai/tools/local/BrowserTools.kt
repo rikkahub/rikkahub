@@ -168,7 +168,11 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                     // browser_not_open is the LLM's signal to call this first.
                     if (!BrowserController.isBound()) {
                         context.startActivity(
-                            me.rerere.rikkahub.browser.BrowserActivity.intent(context, url)
+                            me.rerere.rikkahub.browser.BrowserActivity.intent(
+                                context,
+                                url,
+                                conversationId = callerConvId?.toString(),
+                            )
                         )
                         if (!BrowserController.awaitBind(5_000L)) {
                             return@withTimeoutOrNull buildJsonObject {
