@@ -41,6 +41,86 @@
       "size_kb": 5,
       "compatibility": "any",
       "is_bundled": true
+    },
+    {
+      "name": "calculate-hash",
+      "title": "Calculate Hash",
+      "description": "Compute the SHA-1 hash of a given text via the WebView's WebCrypto API.",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 12,
+      "compatibility": "js",
+      "is_bundled": true
+    },
+    {
+      "name": "interactive-map",
+      "title": "Interactive Map",
+      "description": "Embed a Google Maps view for a location. Returns a webview URL.",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 8,
+      "compatibility": "js",
+      "is_bundled": true
+    },
+    {
+      "name": "kitchen-adventure",
+      "title": "Kitchen Adventure",
+      "description": "Text-based RPG where every kitchen appliance is a sentient character. Pure prompt skill.",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 4,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "mood-tracker",
+      "title": "Mood Tracker",
+      "description": "Log daily 1-10 mood scores and view trend dashboards. Stores in WebView localStorage.",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 36,
+      "compatibility": "js",
+      "is_bundled": true
+    },
+    {
+      "name": "qr-code",
+      "title": "QR Code",
+      "description": "Generate a 512x512 QR code PNG for any URL. Requires internet (cdnjs qrcode.js).",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 8,
+      "compatibility": "js",
+      "is_bundled": true
+    },
+    {
+      "name": "query-wikipedia",
+      "title": "Query Wikipedia",
+      "description": "Fuzzy-search Wikipedia for a topic and return the introduction plus infobox.",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 12,
+      "compatibility": "js",
+      "is_bundled": true
+    },
+    {
+      "name": "text-spinner",
+      "title": "Text Spinner",
+      "description": "Render a 3D-spinning text label inside a webview embed.",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 16,
+      "compatibility": "js",
+      "is_bundled": true
+    },
+    {
+      "name": "virtual-piano",
+      "title": "Virtual Piano",
+      "description": "Playable 88-key piano with sampled note audio. Bundles ~7.7 MB of MP3 samples.",
+      "category": "demo",
+      "license": "Apache-2.0",
+      "size_kb": 7884,
+      "compatibility": "js",
+      "is_bundled": true
     }
   ]
 }
