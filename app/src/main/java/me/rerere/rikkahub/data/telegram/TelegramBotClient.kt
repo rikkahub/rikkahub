@@ -52,11 +52,13 @@ class TelegramBotClient(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
+        .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 
     private val pollClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)   // server-side max 50s + headroom
         .build()
+        .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 
     private fun base() = "https://api.telegram.org/bot${tokenProvider()}"
 

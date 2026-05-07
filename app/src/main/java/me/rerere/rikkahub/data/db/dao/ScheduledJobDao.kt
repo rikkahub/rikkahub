@@ -6,12 +6,16 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 
 @Dao
 interface ScheduledJobDao {
     @Query("SELECT * FROM scheduled_jobs ORDER BY createdAtMs DESC")
     suspend fun getAll(): List<ScheduledJobEntity>
+
+    @Query("SELECT * FROM scheduled_jobs ORDER BY createdAtMs DESC")
+    fun observeAll(): Flow<List<ScheduledJobEntity>>
 
     @Query("SELECT * FROM scheduled_jobs WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ScheduledJobEntity?

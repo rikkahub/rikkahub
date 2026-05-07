@@ -148,6 +148,41 @@ object ToolApprovalDefaults {
         // delegation happens. list / get / cancel are read-only or user-controlling and
         // have no entry here.
         "subagent_dispatch",
+
+        // Workflows (Phase 12) — every mutator goes through the existing approval flow
+        // with a human-readable summary rendered by WorkflowApprovalRenderer. workflow_run
+        // fires immediately on approve, with HARDLINE still applied to every action.
+        // workflow_list / workflow_get are read-only and have no entry here.
+        "workflow_create",
+        "workflow_update",
+        "workflow_delete",
+        "workflow_set_enabled",
+        "workflow_run",
+
+        // Skill import (Phase 16) — pulls a markdown / JSON skill from an arbitrary URL
+        // (or from raw text the LLM already fetched via ssh / curl / MCP) and installs
+        // it. Whatever is in the skill rides along with the assistant's tool surface,
+        // so this is privilege-escalation-adjacent. NO_ALWAYS_ALLOW below.
+        "skill_install_from_url",
+        "skill_install_from_text",
+
+        // JS skills (Phase 18) — run a skill's JavaScript inside a hidden WebView.
+        // The script can issue arbitrary network requests on behalf of the user, so
+        // every invocation gets per-call approval. Eligible for "Always allow" once a
+        // particular skill is trusted (NOT in NO_ALWAYS_ALLOW — the skill's body has
+        // already been reviewed at install time).
+        "run_js",
+
+        // Native intent tools (Phase 18) — open the system Calendar / Contacts / SMS /
+        // Email composer / WiFi settings / Maps app. Each fires a system intent the user
+        // finalises in the destination app. Approval gate ensures the user reviews the
+        // pre-filled fields before the LLM hands the action off.
+        "create_calendar_event",
+        "create_contact",
+        "send_email_intent",
+        "send_sms_intent",
+        "open_wifi_settings",
+        "show_location_on_map",
     )
 
     /**
@@ -160,6 +195,13 @@ object ToolApprovalDefaults {
     val NO_ALWAYS_ALLOW: Set<String> = setOf(
         "mcp_add",
         "mcp_update",
+        // Phase 16 — skill_install_from_url + skill_install_from_text. The skill body is
+        // fetched from an arbitrary URL (or supplied as raw text via any other tool, e.g.
+        // ssh_exec / termux_run_command for authenticated servers) and installed against
+        // the assistant's tool surface. We require per-call approval every single time so
+        // the user reviews the URL / source-label + skill name.
+        "skill_install_from_url",
+        "skill_install_from_text",
     )
 
     fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW

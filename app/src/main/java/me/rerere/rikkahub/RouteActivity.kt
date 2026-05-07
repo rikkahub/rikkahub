@@ -430,6 +430,26 @@ class RouteActivity : ComponentActivity() {
                                 SettingTelegramPage()
                             }
 
+                            entry<Screen.SettingWorkflows> {
+                                me.rerere.rikkahub.workflow.ui.WorkflowsScreen()
+                            }
+
+                            entry<Screen.WorkflowDetail> { key ->
+                                me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(workflowId = key.id)
+                            }
+
+                            entry<Screen.SettingScheduledJobs> {
+                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobsScreen()
+                            }
+
+                            entry<Screen.ScheduledJobDetail> { key ->
+                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobDetailScreen(jobId = key.id)
+                            }
+
+                            entry<Screen.SettingDoctor> {
+                                me.rerere.rikkahub.ui.pages.setting.doctor.DoctorScreen()
+                            }
+
                             entry<Screen.SettingToolApprovals> {
                                 me.rerere.rikkahub.ui.pages.setting.SettingToolApprovalsPage()
                             }
@@ -630,6 +650,21 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingTelegram : Screen
+
+    @Serializable
+    data object SettingWorkflows : Screen
+
+    @Serializable
+    data class WorkflowDetail(val id: String) : Screen
+
+    @Serializable
+    data object SettingScheduledJobs : Screen
+
+    @Serializable
+    data class ScheduledJobDetail(val id: String) : Screen
+
+    @Serializable
+    data object SettingDoctor : Screen
 
     @Serializable
     data object SettingToolApprovals : Screen

@@ -1,6 +1,8 @@
 ---
 name: agent-core
 description: Operating manual for the on-device RikkaHub agent. Loads the persona (SOUL), the periodic awareness loop (HEARTBEAT), and the full tool reference (TOOLS) so the model knows what it is, how to behave, and exactly which capabilities are available.
+auto_load: true
+auto_load_path: SOUL.md
 ---
 
 # Agent Core

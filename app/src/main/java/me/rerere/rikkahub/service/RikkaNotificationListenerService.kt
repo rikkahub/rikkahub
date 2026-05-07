@@ -90,6 +90,16 @@ class RikkaNotificationListenerService : NotificationListenerService() {
 
         // Auto-route to Telegram if package is whitelisted and a default chat is set.
         scope.launch { tryForwardToTelegram(entry) }
+
+        // Phase 12 — fan out to the workflow notification trigger dispatcher. The dispatcher
+        // checks the matching workflows itself; with zero matching, this is a no-op.
+        runCatching {
+            me.rerere.rikkahub.workflow.trigger.NotificationTriggerDispatcher.onPosted(
+                packageName = entry.packageName,
+                title = entry.title,
+                text = entry.text,
+            )
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {

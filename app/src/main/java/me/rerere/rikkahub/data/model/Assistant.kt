@@ -53,6 +53,12 @@ data class Assistant(
     // Phase 15.5 follow-up.
     val tokenBudgetSoftCap: Int? = null,
     val tokenBudgetHardCap: Int? = null,
+    // Phase 16 — Fast-path router. Off by default per spec. When ON, ChatService runs
+    // FastPathRouter.route() on the user's message before firing the LLM; matched intents
+    // execute the matching tool directly and skip the LLM. Conservative matching — falls
+    // through to the LLM whenever in doubt. Per-tool HARDLINE / approval still apply at
+    // the dispatch level; v1 only matches read-only tools so approval is a non-issue.
+    val fastPathRouterEnabled: Boolean = false,
 )
 
 @Serializable

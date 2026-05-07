@@ -62,6 +62,7 @@ class McpManager(
         .followSslRedirects(true)
         .followRedirects(true)
         .build()
+        .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 
     private val client = HttpClient(OkHttp) {
         engine {

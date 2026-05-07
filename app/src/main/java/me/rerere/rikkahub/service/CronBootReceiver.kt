@@ -51,6 +51,13 @@ class CronBootReceiver : BroadcastReceiver(), KoinComponent {
                     me.rerere.rikkahub.service.TelegramBotService.start(context)
                     me.rerere.rikkahub.service.TelegramBotHealthWorker.schedule(context)
                 }
+
+                // Phase 12 — fire any boot-completed workflows. The dispatcher reads the
+                // boot trigger family which has been bound to current matching workflows
+                // by TriggerRegistry.start().
+                runCatching {
+                    me.rerere.rikkahub.workflow.trigger.WorkflowBootDispatcher.onBoot()
+                }
             } finally {
                 pending.finish()
             }

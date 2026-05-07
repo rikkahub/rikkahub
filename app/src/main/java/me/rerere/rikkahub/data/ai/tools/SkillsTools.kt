@@ -27,17 +27,44 @@ fun createSkillTools(
             """.trimIndent(),
             systemPrompt = { _, _ ->
                 buildString {
-                    appendLine("**Skills**")
-                    appendLine("You have access to the following skills. Use the `use_skill` tool to load a skill's instructions when the user's request matches.")
-                    appendLine("<available_skills>")
-                    available.forEach { skill ->
-                        appendLine("  <skill>")
-                        appendLine("    <name>${skill.name}</name>")
-                        appendLine("    <description>${skill.description}</description>")
-                        appendLine("  </skill>")
+                    // Auto-load skills with `auto_load: true` in their SKILL.md frontmatter:
+                    // their body (auto_load_path file if set, else SKILL.md) is inlined into
+                    // the system prompt every turn, no `use_skill` call needed. Use for the
+                    // "core persona" skills (agent-core/SOUL.md). Models that previously
+                    // never bothered to discover the SOUL via use_skill now see it on turn 1.
+                    val autoLoaded = available.filter { it.autoLoad }
+                    autoLoaded.forEach { skill ->
+                        val path = skill.autoLoadPath
+                        val body = runCatching {
+                            if (path.isNullOrBlank()) {
+                                skillManager.readSkillBody(skill.name)
+                            } else {
+                                skillManager.resolveSkillFile(skill.name, path)
+                                    ?.takeIf { it.exists() }
+                                    ?.readText()
+                            }
+                        }.getOrNull()
+                        if (!body.isNullOrBlank()) {
+                            appendLine(body.trim())
+                            appendLine()
+                        }
                     }
-                    append("</available_skills>")
-                    appendLine()
+
+                    // Lazy skills — listed for discovery; loaded on demand via `use_skill`.
+                    val lazy = available.filterNot { it.autoLoad }
+                    if (lazy.isNotEmpty()) {
+                        appendLine("**Skills**")
+                        appendLine("You have access to the following skills. Use the `use_skill` tool to load a skill's instructions when the user's request matches.")
+                        appendLine("<available_skills>")
+                        lazy.forEach { skill ->
+                            appendLine("  <skill>")
+                            appendLine("    <name>${skill.name}</name>")
+                            appendLine("    <description>${skill.description}</description>")
+                            appendLine("  </skill>")
+                        }
+                        append("</available_skills>")
+                        appendLine()
+                    }
                 }
             },
             parameters = {
