@@ -192,4 +192,17 @@ val appModule = module {
             filesManager = get()
         )
     }
+
+    single {
+        me.rerere.rikkahub.ui.pages.setting.doctor.DoctorChecks(
+            context = get(),
+            settingsStore = get(),
+            telegramPrefs = get(),
+            workflowRepository = get(),
+            scheduledJobRepository = get(),
+            scheduledJobRunRepository = get(),
+            conversationRepository = get(),
+            database = get(),
+        )
+    }
 }

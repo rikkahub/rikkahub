@@ -1,10 +1,12 @@
 package me.rerere.rikkahub.data.repository
 
+import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.dao.ScheduledJobDao
 import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 
 class ScheduledJobRepository(private val dao: ScheduledJobDao) {
     suspend fun getAll(): List<ScheduledJobEntity> = dao.getAll()
+    fun observeAll(): Flow<List<ScheduledJobEntity>> = dao.observeAll()
     suspend fun getById(id: String): ScheduledJobEntity? = dao.getById(id)
     suspend fun getEnabled(): List<ScheduledJobEntity> = dao.getEnabled()
     suspend fun upsert(job: ScheduledJobEntity) = dao.upsert(job)

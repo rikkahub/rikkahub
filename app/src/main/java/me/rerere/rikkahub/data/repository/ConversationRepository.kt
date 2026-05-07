@@ -256,6 +256,26 @@ class ConversationRepository(
         }
     }
 
+    /**
+     * Repair the FTS5 search index when SQLite reports a malformed inverted index. Drops
+     * the message_fts virtual table (frees the corrupted index pages — DELETE alone won't),
+     * recreates it via the shared schema, then re-indexes every conversation. Returns the
+     * number of conversations re-indexed so the Doctor can report progress.
+     */
+    suspend fun repairAndRebuildIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }): Int {
+        messageFtsManager.dropAndRecreate()
+        val allIds = conversationDAO.getAllIds()
+        val total = allIds.size
+        allIds.forEachIndexed { index, id ->
+            val entity = conversationDAO.getConversationById(id) ?: return@forEachIndexed
+            val nodes = loadMessageNodes(entity.id)
+            val conversation = conversationEntityToConversation(entity, nodes)
+            messageFtsManager.indexConversation(conversation)
+            onProgress(index + 1, total)
+        }
+        return total
+    }
+
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {
         getConversationsOfAssistant(assistantId).first().forEach { conversation ->
             deleteConversation(conversation)

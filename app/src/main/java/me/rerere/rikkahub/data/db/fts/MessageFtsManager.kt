@@ -21,9 +21,39 @@ data class MessageSearchResult(
 
 private const val TAG = "MessageFtsManager"
 
+/**
+ * Schema for the message_fts FTS5 virtual table. Defined here so the table-init path in
+ * DataSourceModule and the Doctor's "rebuild search index" repair path use the same DDL.
+ * If the columns ever change, both the CREATE in DataSourceModule and the INSERT in
+ * [MessageFtsManager.indexConversation] need updating in lock-step.
+ */
+const val MESSAGE_FTS_CREATE_SQL = """
+    CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
+        text,
+        node_id UNINDEXED,
+        message_id UNINDEXED,
+        conversation_id UNINDEXED,
+        title UNINDEXED,
+        update_at UNINDEXED,
+        tokenize = 'simple'
+    )
+"""
+
 class MessageFtsManager(private val database: AppDatabase) {
 
     private val db get() = database.openHelper.writableDatabase
+
+    /**
+     * Drop and recreate the message_fts virtual table. Use this when SQLite reports
+     * a malformed inverted index (PRAGMA integrity_check) — DELETE-from-FTS5 doesn't
+     * free corrupted index pages, only DROP TABLE does. Safe because message_fts is a
+     * standalone search projection; the actual content lives in `messages` and gets
+     * reinserted by the caller (see [me.rerere.rikkahub.data.repository.ConversationRepository.rebuildAllIndexes]).
+     */
+    suspend fun dropAndRecreate() = withContext(Dispatchers.IO) {
+        db.execSQL("DROP TABLE IF EXISTS message_fts")
+        db.execSQL(MESSAGE_FTS_CREATE_SQL.trimIndent())
+    }
 
     suspend fun indexConversation(conversation: Conversation) = withContext(Dispatchers.IO) {
         val conversationId = conversation.id.toString()

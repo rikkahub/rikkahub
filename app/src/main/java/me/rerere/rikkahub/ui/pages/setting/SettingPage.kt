@@ -47,7 +47,9 @@ import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
+import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Database02
+import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
@@ -267,6 +269,18 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Connect, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_workflows_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_workflows)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingScheduledJobs) },
+                        leadingContent = { Icon(HugeIcons.Clock02, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_scheduled_jobs_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_scheduled_jobs)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingDoctor) },
+                        leadingContent = { Icon(HugeIcons.Wrench01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_doctor_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_doctor)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingToolApprovals) },

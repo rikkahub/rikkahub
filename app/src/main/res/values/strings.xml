@@ -104,6 +104,14 @@
   <string name="setting_page_telegram_desc">Run the LLM as a Telegram bot — chat with it remotely from any device.</string>
   <string name="setting_page_workflows">Workflows</string>
   <string name="setting_page_workflows_desc">Trigger-based automations: when something happens on the device, run a sequence of tools.</string>
+  <string name="setting_page_scheduled_jobs">Scheduled jobs</string>
+  <string name="setting_page_scheduled_jobs_desc">Time-based jobs the assistant scheduled — one-shots and recurring cron expressions.</string>
+  <string name="setting_page_doctor">Doctor</string>
+  <string name="setting_page_doctor_desc">Diagnose and fix the app — permissions, services, database, network, Termux.</string>
+  <string name="setting_page_doctor_run_again">Run again</string>
+  <string name="setting_page_doctor_running">Running…</string>
+  <string name="setting_page_doctor_copy_report">Copy report</string>
+  <string name="setting_page_doctor_report_copied">Diagnostic report copied to clipboard.</string>
   <string name="setting_page_tool_approvals">Tool approvals</string>
   <string name="setting_page_tool_approvals_desc">Tools you\'ve permanently granted via "Always Allow". Revoke any time.</string>
   <string name="setting_page_tool_approvals_header">Tools below run without asking, ever, on this device. Revoke if you no longer trust the model with this capability.</string>
@@ -1261,6 +1269,46 @@
   <string name="setting_page_workflow_detail_stat_cooldown_none">Cooldown: none</string>
   <string name="setting_page_workflow_detail_stat_daily_cap">Daily cap: %1$d</string>
   <string name="setting_page_workflow_detail_stat_daily_cap_unlimited">Daily cap: unlimited</string>
+
+  <!-- Scheduled jobs (Phase 9.5 cron system) — list + detail -->
+  <string name="setting_page_scheduled_jobs_empty">No scheduled jobs yet. Ask your assistant to create one.</string>
+  <string name="setting_page_scheduled_jobs_how_it_works">How scheduled jobs work</string>
+  <string name="setting_page_scheduled_jobs_how_it_works_title">How scheduled jobs work</string>
+  <string name="setting_page_scheduled_jobs_how_it_works_body">Scheduled jobs are time-based. Two timing types: \"once\" (fires at a single absolute moment) and \"cron\" (fires on a recurring expression like every weekday at 9 a.m.).\n\nTwo run modes: \"direct\" runs a fixed list of tool calls with no LLM (free, deterministic). \"LLM\" sends a prompt to the assistant at fire time and lets the model decide what to do.\n\nFires happen even when the app is closed — they\'re scheduled with WorkManager and survive reboot. The HARDLINE filter still blocks dangerous shell commands. Each fire is recorded in the job\'s history.</string>
+  <string name="setting_page_scheduled_jobs_how_it_works_dismiss">Got it</string>
+  <string name="setting_page_scheduled_jobs_subtitle_when">When: %1$s</string>
+  <string name="setting_page_scheduled_jobs_subtitle_never_run">Never fired</string>
+  <string name="setting_page_scheduled_jobs_subtitle_ran">Last fired %1$s</string>
+  <string name="setting_page_scheduled_jobs_section_description">Description</string>
+  <string name="setting_page_scheduled_jobs_section_schedule">Schedule</string>
+  <string name="setting_page_scheduled_jobs_section_what_runs">What runs</string>
+  <string name="setting_page_scheduled_jobs_section_stats">Stats</string>
+  <string name="setting_page_scheduled_jobs_section_history">History</string>
+  <string name="setting_page_scheduled_jobs_schedule_tz">Timezone: %1$s</string>
+  <string name="setting_page_scheduled_jobs_schedule_starts">Starts: %1$s</string>
+  <string name="setting_page_scheduled_jobs_schedule_ends">Ends: %1$s</string>
+  <string name="setting_page_scheduled_jobs_no_actions">(no actions defined)</string>
+  <string name="setting_page_scheduled_jobs_show_args">show args</string>
+  <string name="setting_page_scheduled_jobs_hide_args">hide args</string>
+  <string name="setting_page_scheduled_jobs_history_empty">No fires recorded yet.</string>
+  <string name="setting_page_scheduled_jobs_run_now">Run now</string>
+  <string name="setting_page_scheduled_jobs_edit">Edit in chat</string>
+  <string name="setting_page_scheduled_jobs_delete">Delete</string>
+  <string name="setting_page_scheduled_jobs_delete_confirm_title">Delete scheduled job?</string>
+  <string name="setting_page_scheduled_jobs_delete_confirm_body">This removes the job, its run history, and any pending fire. Cannot be undone.</string>
+  <string name="setting_page_scheduled_jobs_delete_confirm_yes">Delete</string>
+  <string name="setting_page_scheduled_jobs_delete_confirm_no">Cancel</string>
+  <string name="setting_page_scheduled_jobs_run_now_fired">Fire requested.</string>
+  <string name="setting_page_scheduled_jobs_run_now_disabled">Job is paused — enable it first.</string>
+  <string name="setting_page_scheduled_jobs_run_now_not_found">Job not found.</string>
+  <string name="setting_page_scheduled_jobs_edit_prefill">Edit the scheduled job named &#8220;%1$s&#8221;.</string>
+  <string name="setting_page_scheduled_jobs_stat_last_run">Last run: %1$s</string>
+  <string name="setting_page_scheduled_jobs_stat_last_run_never">Last run: never</string>
+  <string name="setting_page_scheduled_jobs_stat_next_run">Next run: %1$s</string>
+  <string name="setting_page_scheduled_jobs_stat_next_run_unscheduled">Next run: not scheduled</string>
+  <string name="setting_page_scheduled_jobs_stat_runs">Total fires: %1$d</string>
+  <string name="setting_page_scheduled_jobs_stat_runs_capped">Total fires: %1$d / %2$d</string>
+  <string name="setting_page_scheduled_jobs_stat_catchup">Catch-up: %1$s</string>
 
   <!-- Relative-time fragments for "Ran 2h ago" / "Ran just now" / "Ran 3d ago" formats -->
   <string name="relative_time_just_now">just now</string>
