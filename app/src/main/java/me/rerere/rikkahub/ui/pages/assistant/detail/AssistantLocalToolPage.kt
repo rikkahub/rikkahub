@@ -749,6 +749,20 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_cost_guards_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_cost_guards_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.CostGuards),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.CostGuards, it) }
+                    )
+                }
+            )
         }
 
         Text(

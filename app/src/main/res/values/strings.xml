@@ -1120,6 +1120,8 @@
   <string name="assistant_page_local_tools_reliability_desc">Let the assistant check GitHub for newer releases and build a redacted bug-report ZIP on demand. The bug report includes the last few thousand logcat lines (with secrets redacted) and the app version + device info — and explicitly excludes your conversations, tokens, and saved hosts.</string>
   <string name="assistant_page_local_tools_sub_agents_title">Sub-agents</string>
   <string name="assistant_page_local_tools_sub_agents_desc">Let the assistant dispatch focused sub-tasks (research, multi-step work) as independent LLM runs in the background. Each run is approval-gated, capped (default 3 concurrent per assistant, 16 global), and HARDLINE still applies inside.</string>
+  <string name="assistant_page_local_tools_cost_guards_title">Cost guards</string>
+  <string name="assistant_page_local_tools_cost_guards_desc">Let the assistant inspect its running token totals against the per-assistant soft / hard caps and self-throttle. Read-only — auto-stop integration with the streaming pipeline ships in a follow-up.</string>
   <string name="setting_page_accessibility">Accessibility</string>
   <string name="setting_page_accessibility_desc">Status, recent actions, and screenshot diagnostics for the screen-automation service.</string>
   <string name="setting_page_accessibility_status_section">Status</string>

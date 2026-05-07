@@ -168,6 +168,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("external_automation") data object ExternalAutomation : LocalToolOption()
     @Serializable @SerialName("reliability")         data object Reliability        : LocalToolOption()
     @Serializable @SerialName("sub_agents")          data object SubAgents          : LocalToolOption()
+    @Serializable @SerialName("cost_guards")         data object CostGuards         : LocalToolOption()
 }
 
 class LocalTools(
@@ -190,6 +191,7 @@ class LocalTools(
     private val bugReportBuilder: me.rerere.rikkahub.reliability.BugReportBuilder,
     private val subAgentEngine: me.rerere.rikkahub.subagent.SubAgentEngine,
     private val subAgentRegistry: me.rerere.rikkahub.subagent.SubAgentRegistry,
+    private val conversationRepo: me.rerere.rikkahub.data.repository.ConversationRepository,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -655,6 +657,9 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry))
             tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
             tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
+        }
+        if (options.contains(LocalToolOption.CostGuards)) {
+            tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(settingsStore, conversationRepo))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of
