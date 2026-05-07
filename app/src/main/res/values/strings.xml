@@ -1112,6 +1112,16 @@
   <string name="assistant_page_local_tools_files_title">Files</string>
   <string name="assistant_page_local_tools_files_desc">Read, write, list, search, copy, move, delete files.</string>
   <string name="assistant_page_local_tools_section_files">File manager</string>
+  <string name="assistant_page_local_tools_mcp_control_title">MCP control</string>
+  <string name="assistant_page_local_tools_mcp_control_desc">Let the assistant add, edit, and remove MCP servers. The assistant can install an MCP in Termux or on a remote SSH host, then wire it into the app — without you opening Settings.</string>
+  <string name="assistant_page_local_tools_external_automation_title">External automation</string>
+  <string name="assistant_page_local_tools_external_automation_desc">Let the assistant manage the External Automation Intent API — the path that lets Tasker / MacroDroid / Locale / ADB fire RUN_TASK intents at the assistant. Defaults to OFF; the assistant can flip it on, add trusted caller packages, and audit the recent invocation log.</string>
+  <string name="assistant_page_local_tools_reliability_title">Reliability</string>
+  <string name="assistant_page_local_tools_reliability_desc">Let the assistant check GitHub for newer releases and build a redacted bug-report ZIP on demand. The bug report includes the last few thousand logcat lines (with secrets redacted) and the app version + device info — and explicitly excludes your conversations, tokens, and saved hosts.</string>
+  <string name="assistant_page_local_tools_sub_agents_title">Sub-agents</string>
+  <string name="assistant_page_local_tools_sub_agents_desc">Let the assistant dispatch focused sub-tasks (research, multi-step work) as independent LLM runs in the background. Each run is approval-gated, capped (default 3 concurrent per assistant, 16 global), and HARDLINE still applies inside.</string>
+  <string name="assistant_page_local_tools_cost_guards_title">Cost guards</string>
+  <string name="assistant_page_local_tools_cost_guards_desc">Let the assistant inspect its running token totals against the per-assistant soft / hard caps and self-throttle. Read-only — auto-stop integration with the streaming pipeline ships in a follow-up.</string>
   <string name="setting_page_accessibility">Accessibility</string>
   <string name="setting_page_accessibility_desc">Status, recent actions, and screenshot diagnostics for the screen-automation service.</string>
   <string name="setting_page_accessibility_status_section">Status</string>

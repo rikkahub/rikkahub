@@ -164,6 +164,11 @@ sealed class LocalToolOption {
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
     @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
     @Serializable @SerialName("files")               data object Files              : LocalToolOption()
+    @Serializable @SerialName("mcp_control")         data object McpControl         : LocalToolOption()
+    @Serializable @SerialName("external_automation") data object ExternalAutomation : LocalToolOption()
+    @Serializable @SerialName("reliability")         data object Reliability        : LocalToolOption()
+    @Serializable @SerialName("sub_agents")          data object SubAgents          : LocalToolOption()
+    @Serializable @SerialName("cost_guards")         data object CostGuards         : LocalToolOption()
 }
 
 class LocalTools(
@@ -180,6 +185,13 @@ class LocalTools(
     private val telegramBotPreferences: me.rerere.rikkahub.data.telegram.TelegramBotPreferences,
     private val telegramBotClient: me.rerere.rikkahub.data.telegram.TelegramBotClient,
     private val notificationListenerPreferences: me.rerere.rikkahub.data.notifications.NotificationListenerPreferences,
+    private val mcpManager: me.rerere.rikkahub.data.ai.mcp.McpManager,
+    private val externalAutomationConfig: me.rerere.rikkahub.automation.ExternalAutomationConfig,
+    private val gitHubReleaseChecker: me.rerere.rikkahub.reliability.GitHubReleaseChecker,
+    private val bugReportBuilder: me.rerere.rikkahub.reliability.BugReportBuilder,
+    private val subAgentEngine: me.rerere.rikkahub.subagent.SubAgentEngine,
+    private val subAgentRegistry: me.rerere.rikkahub.subagent.SubAgentRegistry,
+    private val conversationRepo: me.rerere.rikkahub.data.repository.ConversationRepository,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -618,6 +630,36 @@ class LocalTools(
             tools.add(createDirectoryTool())
             tools.add(fileInfoTool())
             tools.add(findFilesTool())
+        }
+        if (options.contains(LocalToolOption.McpControl)) {
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpGetTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpAddTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpUpdateTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpDeleteTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpSetEnabledTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpTestTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListToolsTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpSetToolApprovalTool(settingsStore))
+        }
+        if (options.contains(LocalToolOption.ExternalAutomation)) {
+            tools.add(me.rerere.rikkahub.automation.externalAutomationStatusTool(externalAutomationConfig))
+            tools.add(me.rerere.rikkahub.automation.externalAutomationSetEnabledTool(externalAutomationConfig))
+            tools.add(me.rerere.rikkahub.automation.externalAutomationAddTrustedPackageTool(externalAutomationConfig))
+            tools.add(me.rerere.rikkahub.automation.externalAutomationRemoveTrustedPackageTool(externalAutomationConfig))
+        }
+        if (options.contains(LocalToolOption.Reliability)) {
+            tools.add(me.rerere.rikkahub.reliability.checkAppUpdatesTool(gitHubReleaseChecker))
+            tools.add(me.rerere.rikkahub.reliability.generateBugReportTool(context, bugReportBuilder))
+        }
+        if (options.contains(LocalToolOption.SubAgents)) {
+            tools.add(me.rerere.rikkahub.subagent.subagentDispatchTool(subAgentEngine))
+            tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
+        }
+        if (options.contains(LocalToolOption.CostGuards)) {
+            tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(settingsStore, conversationRepo))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

@@ -619,9 +619,19 @@ class TelegramBotService : Service() {
 
         when {
             finalReply.isBlank() -> {
-                // Nothing to say. If we have a placeholder, replace it with a fallback note;
-                // otherwise send a fresh message so the user is not left waiting silently.
-                val fallback = "(no reply text - tool ran but produced no message)"
+                // The model called tool(s) but emitted no final user-facing text. The OLD
+                // wording ("no reply text - tool ran but produced no message") read like
+                // the bot froze; users hit /stop assuming it broke. Reword to honest +
+                // actionable so the user knows what to do next. Observed 2026-05-05 with
+                // a model that silently stopped after take_screenshot instead of chaining
+                // to telegram_send_photo. Also add a debug log distinguishing
+                // finish_reason=stop with no content from a stream error so future
+                // diagnoses don't conflate the two.
+                android.util.Log.i(
+                    TAG,
+                    "handleIncoming: empty final reply (model finished with no text after tool calls) chat=${m.chatId}",
+                )
+                val fallback = "(model called tools but didn't reply — try saying \"continue\" or switch model with /model)"
                 if (placeholderId != null) {
                     try { client.editMessageText(m.chatId, placeholderId, fallback) } catch (_: Throwable) {}
                 } else {
@@ -1244,7 +1254,19 @@ class TelegramBotService : Service() {
         chatId: Long,
         tool: UIMessagePart.Tool,
     ) {
-        val argsPreview = formatArgsForDisplay(tool.input).ifEmpty { "(no args)" }
+        // MCP control tools render their args via a redacting helper so Authorization /
+        // X-Api-Key / Cookie values never reach the chat. Any tool the renderer doesn't
+        // recognise falls back to the generic args display.
+        val mcpRendered: String? = runCatching {
+            val parsed = kotlinx.serialization.json.Json.parseToJsonElement(
+                tool.input.ifBlank { "{}" }
+            ) as? kotlinx.serialization.json.JsonObject
+            parsed?.let {
+                me.rerere.rikkahub.data.ai.mcp.control.McpApprovalRenderer.render(tool.toolName, it)
+            }
+        }.getOrNull()
+        val argsPreview = mcpRendered
+            ?: formatArgsForDisplay(tool.input).ifEmpty { "(no args)" }
         val text = buildString {
             append("⚠️ <b>Permission required</b>\n\n")
             append("Tool: <code>")
@@ -1303,7 +1325,7 @@ class TelegramBotService : Service() {
                 chatId = chatId,
                 text = text,
                 parseMode = PARSE_MODE_HTML,
-                replyMarkup = buildApprovalKeyboard(tool.toolCallId),
+                replyMarkup = buildApprovalKeyboard(tool.toolCallId, tool.toolName),
             )
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "approval prompt send failed", e)
@@ -1391,8 +1413,17 @@ class TelegramBotService : Service() {
         } catch (_: Throwable) {}
     }
 
-    /** Build the 2x2 inline keyboard the user taps to approve / deny a Pending tool. */
-    private fun buildApprovalKeyboard(toolCallId: String): JsonObject = buildJsonObject {
+    /**
+     * Build the 2x2 inline keyboard the user taps to approve / deny a Pending tool.
+     *
+     * Tool names in [me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.NO_ALWAYS_ALLOW]
+     * (e.g. mcp_add / mcp_update — adding an MCP server is a privilege-escalation surface)
+     * collapse to a 3-button layout that drops "Always Allow", so the user has to confirm
+     * every single call.
+     */
+    private fun buildApprovalKeyboard(toolCallId: String, toolName: String? = null): JsonObject = buildJsonObject {
+        val allowAlways = toolName == null ||
+            me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.allowsAlwaysAllow(toolName)
         put("inline_keyboard", buildJsonArray {
             // Row 1: positive scopes
             addJsonArray {
@@ -1400,9 +1431,11 @@ class TelegramBotService : Service() {
                     put("text", "✅ Allow")
                     put("callback_data", "$APPROVAL_CB_PREFIX${APPROVAL_CB_ONCE}:$toolCallId")
                 }
-                addJsonObject {
-                    put("text", "∞ Always Allow")
-                    put("callback_data", "$APPROVAL_CB_PREFIX${APPROVAL_CB_ALWAYS}:$toolCallId")
+                if (allowAlways) {
+                    addJsonObject {
+                        put("text", "∞ Always Allow")
+                        put("callback_data", "$APPROVAL_CB_PREFIX${APPROVAL_CB_ALWAYS}:$toolCallId")
+                    }
                 }
             }
             // Row 2: chat-scope + deny
@@ -1695,7 +1728,19 @@ class TelegramBotService : Service() {
         // approval iterations). Without this, the per-chat mutex stays held forever.
         turnJobs.remove(chatId)?.cancelAndJoin()
         cancelStaleApprovalKeyboards(chatId, reason = "/stop")
-        try { client.sendMessage(chatId, "🛑 Generation cancelled. Send a new message when you're ready.") } catch (_: Throwable) {}
+        // Phase 11: cascading /stop. Cancel every active sub-agent dispatched from this
+        // parent conversation. Spec hard constraint 8: "every model stops" — single tick.
+        val cancelledSubAgents = runCatching {
+            org.koin.java.KoinJavaComponent.getKoin()
+                .get<me.rerere.rikkahub.subagent.SubAgentRegistry>()
+                .cancelAllForParent(convId.toString())
+        }.getOrDefault(0)
+        val msg = if (cancelledSubAgents > 0) {
+            "🛑 Generation cancelled (also stopped $cancelledSubAgents sub-agent${if (cancelledSubAgents == 1) "" else "s"}). Send a new message when you're ready."
+        } else {
+            "🛑 Generation cancelled. Send a new message when you're ready."
+        }
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
     }
 
     private suspend fun handleStatusCommand(chatId: Long) {

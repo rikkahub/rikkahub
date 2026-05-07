@@ -119,7 +119,50 @@ object ToolApprovalDefaults {
         "telegram_set_assistant",
         "telegram_set_commands",
         "telegram_delete_commands",
+
+        // MCP control — all side-effecting MCP tools require approval.
+        // mcp_add and mcp_update are also flagged with "no always-allow" below because a
+        // hostile MCP server can exfiltrate everything the LLM has access to and we want
+        // a per-call confirmation each time, not a one-shot blanket grant.
+        "mcp_add",
+        "mcp_update",
+        "mcp_delete",
+        "mcp_set_enabled",
+        "mcp_set_tool_approval",
+
+        // External Automation Intent API — flipping any of these changes who can fire
+        // the assistant from outside the app. Privilege-escalation surface, requires
+        // approval. Reads (`external_automation_status`) are free.
+        "external_automation_set_enabled",
+        "external_automation_add_trusted_package",
+        "external_automation_remove_trusted_package",
+
+        // Reliability bundle — generate_bug_report writes a file to disk that includes
+        // a redacted logcat dump. The redactor catches the common token shapes; we still
+        // gate so the user can review what's being created and decide whether to share.
+        // check_app_updates is read-only and has no entry here.
+        "generate_bug_report",
+
+        // Sub-agents — subagent_dispatch spawns an autonomous LLM run with the parent's
+        // tool surface. Approval-required so the user sees the task + tools before
+        // delegation happens. list / get / cancel are read-only or user-controlling and
+        // have no entry here.
+        "subagent_dispatch",
     )
+
+    /**
+     * Tools whose approval prompt MUST drop the "Always Allow" button so the user has to
+     * confirm every single call. Reserved for tools that are inherently privilege-escalation
+     * surfaces — adding an MCP server is exactly that, since a hostile server can exfiltrate
+     * anything reachable through the assistant's tool set. Both in-app and Telegram surfaces
+     * read this set when rendering the keyboard.
+     */
+    val NO_ALWAYS_ALLOW: Set<String> = setOf(
+        "mcp_add",
+        "mcp_update",
+    )
+
+    fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW
 
     /**
      * True if [toolName] requires approval. Local tools are looked up in [ALWAYS_ASK];

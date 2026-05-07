@@ -156,6 +156,36 @@
       android:excludeFromRecents="true"
       android:theme="@style/Theme.Rikkahub.ToolHost" />
 
+    <!-- Phase 13: External Automation Intent API. Exported activity that accepts
+         RUN_TASK / RUN_CHAT intents from Tasker / MacroDroid / Locale / app callers.
+         Translucent + NoTitleBar so trusted-caller fires don't flash a window. The
+         feature is OFF by default — even with the activity registered here, the
+         dispatcher rejects every call until ExternalAutomationConfig.enabled is true. -->
+    <activity
+      android:name=".automation.ExternalAutomationActivity"
+      android:exported="true"
+      android:excludeFromRecents="true"
+      android:noHistory="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.RUN_TASK" />
+        <action android:name="me.rerere.rikkahub.RUN_CHAT" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+    </activity>
+
+    <!-- ADB-shell entry point for the same RUN_TASK flow. App callers should target the
+         activity above instead — Android 14+ blocks manifest receivers from launching
+         activities in the background. Default-deny: rejects with `untrusted_caller`
+         until the user explicitly opts in via Settings. -->
+    <receiver
+      android:name=".automation.ExternalAutomationReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.RUN_TASK" />
+      </intent-filter>
+    </receiver>
+
     <service
       android:name=".service.TelegramBotService"
       android:exported="false"

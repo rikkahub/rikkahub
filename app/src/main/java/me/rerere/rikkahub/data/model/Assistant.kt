@@ -42,6 +42,17 @@ data class Assistant(
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
+    // Phase 11 — Sub-agents settings. Defaults to "inherit from main" (null model id +
+    // empty system prompt → built-in focused-sub-agent prompt). Each assistant has its
+    // own concurrency cap; we hard-cap globally at 16 across all assistants in the engine.
+    val subAgentModelId: Uuid? = null,
+    val subAgentSystemPrompt: String = "",
+    val maxConcurrentSubAgents: Int = 3,
+    // Phase 15 — Per-task token budget. Both null = no budget enforcement. The LLM
+    // checks via `check_token_usage`; auto-stop integration into GenerationHandler is
+    // Phase 15.5 follow-up.
+    val tokenBudgetSoftCap: Int? = null,
+    val tokenBudgetHardCap: Int? = null,
 )
 
 @Serializable
