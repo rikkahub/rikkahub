@@ -97,40 +97,6 @@ If you have Termux installed, the AI can run real Linux commands on your phone: 
 </td>
 </tr>
 <tr>
-<td colspan="2" valign="top">
-
-### Workflows
-
-Tell the AI "when X happens, do Y" and it builds the automation. Triggers cover wifi connects/disconnects, bluetooth pairs, headphones plug, geofences (you arrive at home), schedules, low battery, screen on/off, notifications arriving, app launches. Conditions filter when it actually fires (only after sunset, only if charging, only on weekdays). Actions are any tools the AI can already use. Approve once at create-time, walk away — fires keep running headlessly with the same dangerous-command shield as everything else.
-
-</td>
-</tr>
-<tr>
-<td colspan="2" valign="top">
-
-### System integrations
-
-Open the right Android app pre-filled, every time. "Schedule lunch with Bob next Thursday at 1" → Calendar app opens with a draft event, you tap save. "Email Anna the address" → Gmail composer pre-filled, you press send. Same for SMS, contacts, WiFi settings, and Maps. Nothing is sent or saved without your explicit tap in the destination app — the AI does the staging, you stay in control of the action.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### Skills
-
-Reusable playbooks the AI can follow. Four built-in skills out of the box: auto-reply (read incoming messages, draft replies, send), morning briefing (calendar + weather + comms summary), smart-forward (catch a notification, forward the gist to a contact), notification-summarise-and-act (group, summarise, suggest next steps). Plus **JS skills** that run inside a hidden WebView — query Wikipedia, generate QR codes, render an interactive map, calculate hashes, anything you'd build with HTML+JS. **Compatible with skills written for Google AI Edge Gallery — drop them into your skills folder and they just work.** All skills are plain markdown — edit them in-app. Install from a URL or pipe them in from your own server (native, openclaw, and Hermes formats supported, with tool-name auto-mapping). Per-skill API key storage encrypted on-device.
-
-</td>
-<td valign="top">
-
-### Fast-path router
-
-Skip the AI entirely for simple things. Ask "what's my battery", "what time is it", "list my workflows" — the matching tool runs directly and you get an answer in milliseconds, no token cost. Conservative on purpose: anything ambiguous still goes to the model. Off by default; enable per-assistant in Settings → Assistants → (assistant) → Basic.
-
-</td>
-</tr>
-<tr>
 <td colspan="2" align="center" valign="top">
 
 ### Safety + privacy
