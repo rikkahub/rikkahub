@@ -58,8 +58,21 @@ val appModule = module {
     single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
     single { NotificationListenerPreferences(get()) }
 
+    // Phase 13: External Automation Intent API
+    single { me.rerere.rikkahub.automation.ExternalAutomationConfig(get()) }
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        me.rerere.rikkahub.automation.ExternalAutomationDispatcher(
+            context = get(),
+            config = get(),
+            chatService = get(),
+            conversationRepo = get(),
+            settingsStore = get(),
+            appScope = get(),
+        )
+    }
+
+    single {
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

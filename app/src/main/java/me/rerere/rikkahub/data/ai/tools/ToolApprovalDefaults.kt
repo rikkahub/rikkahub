@@ -129,6 +129,13 @@ object ToolApprovalDefaults {
         "mcp_delete",
         "mcp_set_enabled",
         "mcp_set_tool_approval",
+
+        // External Automation Intent API — flipping any of these changes who can fire
+        // the assistant from outside the app. Privilege-escalation surface, requires
+        // approval. Reads (`external_automation_status`) are free.
+        "external_automation_set_enabled",
+        "external_automation_add_trusted_package",
+        "external_automation_remove_trusted_package",
     )
 
     /**

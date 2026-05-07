@@ -165,6 +165,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
     @Serializable @SerialName("files")               data object Files              : LocalToolOption()
     @Serializable @SerialName("mcp_control")         data object McpControl         : LocalToolOption()
+    @Serializable @SerialName("external_automation") data object ExternalAutomation : LocalToolOption()
 }
 
 class LocalTools(
@@ -182,6 +183,7 @@ class LocalTools(
     private val telegramBotClient: me.rerere.rikkahub.data.telegram.TelegramBotClient,
     private val notificationListenerPreferences: me.rerere.rikkahub.data.notifications.NotificationListenerPreferences,
     private val mcpManager: me.rerere.rikkahub.data.ai.mcp.McpManager,
+    private val externalAutomationConfig: me.rerere.rikkahub.automation.ExternalAutomationConfig,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -631,6 +633,12 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpTestTool(settingsStore, mcpManager))
             tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListToolsTool(settingsStore, mcpManager))
             tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpSetToolApprovalTool(settingsStore))
+        }
+        if (options.contains(LocalToolOption.ExternalAutomation)) {
+            tools.add(me.rerere.rikkahub.automation.externalAutomationStatusTool(externalAutomationConfig))
+            tools.add(me.rerere.rikkahub.automation.externalAutomationSetEnabledTool(externalAutomationConfig))
+            tools.add(me.rerere.rikkahub.automation.externalAutomationAddTrustedPackageTool(externalAutomationConfig))
+            tools.add(me.rerere.rikkahub.automation.externalAutomationRemoveTrustedPackageTool(externalAutomationConfig))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of
