@@ -403,7 +403,9 @@ private fun ChatPageContent(
                 },
                 onClickSuggestion = { suggestion ->
                     inputState.editingMessage = null
-                    inputState.setMessageText(suggestion)
+                    if (suggestion.isNotBlank()) {
+                        vm.handleMessageSend(listOf(UIMessagePart.Text(suggestion)))
+                    }
                 },
                 onTranslate = { message, locale ->
                     vm.translateMessage(message, locale)
