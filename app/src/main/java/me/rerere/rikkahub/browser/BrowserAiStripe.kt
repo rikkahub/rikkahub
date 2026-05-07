@@ -33,9 +33,10 @@ import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
 
 /**
- * Bottom AI-status stripe. Always visible — even with no actions, the user sees a
- * "AI ready" footer so they know what surface they're on. Tap header to expand into
- * a recent-actions list.
+ * Bottom AI-status stripe. Hidden entirely when the AI hasn't recorded any actions yet
+ * so the WebView gets the full bottom of the screen for the user's manual browsing.
+ * Once the AI starts driving (Pass 2), the stripe slides in with the latest action and
+ * the user can tap to expand the recent-actions list.
  *
  * Pass 1 surfaces the [BrowserController.recentActionsFlow] feed. Pass 2 will start
  * populating that feed via tool execution. Pass 2 will also add the step counter
@@ -46,11 +47,9 @@ fun BrowserAiStripe() {
     val actions by BrowserController.recentActionsFlow().collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf(false) }
 
-    val headlineText = if (actions.isEmpty()) {
-        stringResource(R.string.browser_ai_stripe_idle)
-    } else {
-        stringResource(R.string.browser_ai_stripe_active, actions.first())
-    }
+    if (actions.isEmpty()) return
+
+    val headlineText = stringResource(R.string.browser_ai_stripe_active, actions.first())
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
