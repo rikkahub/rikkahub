@@ -1101,12 +1101,21 @@
   <string name="assistant_page_local_tools_termux_title">Termux integration</string>
   <string name="assistant_page_local_tools_termux_status_not_installed">Termux not installed - install from github.com/termux/termux-app/releases</string>
   <string name="assistant_page_local_tools_termux_status_no_permission">Toggle on to grant the RUN_COMMAND permission</string>
-  <string name="assistant_page_local_tools_termux_status_untested">Run shell commands and read output</string>
+  <string name="assistant_page_local_tools_termux_status_untested">Almost ready. Open Termux and run: mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties — then force-stop Termux and reopen. Tap to verify.</string>
   <string name="assistant_page_local_tools_termux_status_ok">Connected - commands run with captured output</string>
   <string name="assistant_page_local_tools_termux_verify">tap to verify</string>
   <string name="assistant_page_local_tools_termux_verifying">Verifying integration…</string>
   <string name="assistant_page_local_tools_termux_verify_ok">Termux integration verified.</string>
   <string name="assistant_page_local_tools_termux_verify_props_missing">Termux did not respond. Open Termux and run: mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties — then force-stop Termux and reopen it.</string>
+  <string name="assistant_page_local_tools_termux_postgrant_title">One more step for Termux</string>
+  <string name="assistant_page_local_tools_termux_postgrant_message">RUN_COMMAND permission is granted. Termux still needs `allow-external-apps=true` in `~/.termux/termux.properties` before the assistant can run commands.\n\nOpen Termux and paste the command below, then force-stop Termux from app info and reopen it.\n\nThe row will turn green after you tap Verify.</string>
+  <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
+  <string name="assistant_page_local_tools_termux_postgrant_copy">Copy command</string>
+  <string name="assistant_page_local_tools_termux_postgrant_copied">Command copied — paste it into Termux.</string>
+  <string name="assistant_page_local_tools_telegram_notoken_title">Telegram bot needs a token</string>
+  <string name="assistant_page_local_tools_telegram_notoken_message">The toggle is on, but no bot token is set yet.\n\nEasy way: ask the assistant in chat — &quot;Set up the Telegram bot, my token is …, my user id is …, set me as default chat, enable it.&quot;\n\nManual way: message @BotFather on Telegram with /newbot for a token, and @userinfobot with /start for your numeric user id. Then ask the assistant or paste them in Settings → Telegram bot.</string>
+  <string name="assistant_page_local_tools_cron_jobs_toast_hint">Heads up: scheduled jobs use the tools you have enabled. If a job calls SSH, Telegram, or any other tool, those toggles must also be on.</string>
+  <string name="assistant_page_local_tools_dialog_dismiss">Got it</string>
   <string name="assistant_page_local_tools_termux_verify_no_permission">RUN_COMMAND permission not granted. Toggle Termux off then on to retry the system prompt.</string>
   <string name="assistant_page_local_tools_termux_verify_unexpected">Termux replied but with unexpected output: %1$s</string>
   <string name="assistant_page_local_tools_files_title">Files</string>

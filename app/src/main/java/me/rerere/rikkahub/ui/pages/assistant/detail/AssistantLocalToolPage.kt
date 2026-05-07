@@ -27,6 +27,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,11 +45,14 @@ import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
 import me.rerere.rikkahub.data.ai.tools.local.TermuxIntegration
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 @Composable
@@ -98,6 +102,78 @@ private fun AssistantLocalToolContent(
             assistant.localTools - option
         }
         onUpdate(assistant.copy(localTools = newLocalTools))
+    }
+
+    // Setup-hint popups for toggles whose successful enable depends on user setup the
+    // toggle itself can't perform: Termux's allow-external-apps property, the Telegram
+    // bot token, and the cross-tool dependency hint for cron. Each is gated to fire at
+    // most once per visit to this screen, and only when the missing thing is actually
+    // missing (e.g. Termux dialog is suppressed if the integration was already verified
+    // recently; Telegram dialog is suppressed if a token is on file).
+    val ctx = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    val telegramBotPreferences = koinInject<TelegramBotPreferences>()
+
+    var showTermuxPostGrantDialog by remember { mutableStateOf(false) }
+    var showTelegramNoTokenDialog by remember { mutableStateOf(false) }
+    var termuxDialogShownThisVisit by remember { mutableStateOf(false) }
+    var telegramDialogShownThisVisit by remember { mutableStateOf(false) }
+    var cronToastShownThisVisit by remember { mutableStateOf(false) }
+
+    val cronHintText = stringResource(R.string.assistant_page_local_tools_cron_jobs_toast_hint)
+    val termuxCommand = stringResource(R.string.assistant_page_local_tools_termux_postgrant_command)
+    val termuxCopiedText = stringResource(R.string.assistant_page_local_tools_termux_postgrant_copied)
+
+    if (showTermuxPostGrantDialog) {
+        AlertDialog(
+            onDismissRequest = { showTermuxPostGrantDialog = false },
+            title = { Text(stringResource(R.string.assistant_page_local_tools_termux_postgrant_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.assistant_page_local_tools_termux_postgrant_message))
+                    androidx.compose.material3.Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.small,
+                    ) {
+                        Text(
+                            text = termuxCommand,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            ),
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    ctx.writeClipboardText(termuxCommand)
+                    toaster.show(termuxCopiedText)
+                    showTermuxPostGrantDialog = false
+                }) {
+                    Text(stringResource(R.string.assistant_page_local_tools_termux_postgrant_copy))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTermuxPostGrantDialog = false }) {
+                    Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
+                }
+            },
+        )
+    }
+
+    if (showTelegramNoTokenDialog) {
+        AlertDialog(
+            onDismissRequest = { showTelegramNoTokenDialog = false },
+            title = { Text(stringResource(R.string.assistant_page_local_tools_telegram_notoken_title)) },
+            text = { Text(stringResource(R.string.assistant_page_local_tools_telegram_notoken_message)) },
+            confirmButton = {
+                TextButton(onClick = { showTelegramNoTokenDialog = false }) {
+                    Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
+                }
+            },
+        )
     }
 
     Column(
@@ -618,7 +694,13 @@ private fun AssistantLocalToolContent(
                 trailingContent = {
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.CronJobs),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.CronJobs, it) }
+                        onCheckedChange = { newValue ->
+                            toggleLocalTool(LocalToolOption.CronJobs, newValue)
+                            if (newValue && !cronToastShownThisVisit) {
+                                cronToastShownThisVisit = true
+                                toaster.show(cronHintText)
+                            }
+                        }
                     )
                 }
             )
@@ -689,7 +771,17 @@ private fun AssistantLocalToolContent(
                 trailingContent = {
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.TelegramBot),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.TelegramBot, it) }
+                        onCheckedChange = { newValue ->
+                            toggleLocalTool(LocalToolOption.TelegramBot, newValue)
+                            if (newValue && !telegramDialogShownThisVisit) {
+                                scope.launch {
+                                    if (telegramBotPreferences.current().token.isBlank()) {
+                                        telegramDialogShownThisVisit = true
+                                        showTelegramNoTokenDialog = true
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
             )
@@ -812,7 +904,19 @@ private fun AssistantLocalToolContent(
                 trailingContent = {
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.Termux),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.Termux, it) },
+                        onCheckedChange = { newValue ->
+                            toggleLocalTool(LocalToolOption.Termux, newValue)
+                            if (newValue && !termuxDialogShownThisVisit) {
+                                // Skip the dialog if a recent successful verify proves the
+                                // property file is already in place — nothing new to teach.
+                                val recentlyVerified = TermuxIntegration.lastVerifiedOkAtMs > 0 &&
+                                    (System.currentTimeMillis() - TermuxIntegration.lastVerifiedOkAtMs) < 24L * 60 * 60 * 1000
+                                if (!recentlyVerified) {
+                                    termuxDialogShownThisVisit = true
+                                    showTermuxPostGrantDialog = true
+                                }
+                            }
+                        },
                         // Termux's RUN_COMMAND service is gated behind a dangerous-level
                         // custom permission. Requesting it through the standard runtime flow
                         // pops the system dialog so termux_run_command works without an adb
