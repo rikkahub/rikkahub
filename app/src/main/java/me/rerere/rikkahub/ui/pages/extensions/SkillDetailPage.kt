@@ -204,7 +204,7 @@ private fun SkillTesterSheet(skillName: String, onDismiss: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.skill_tester_title, skillName),
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onDismiss) {
@@ -221,14 +221,27 @@ private fun SkillTesterSheet(skillName: String, onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // Disable across the whole "in flight" window — from the moment the user
+            // taps Run until the runner emits Done/Error — so a fast double-tap can't
+            // spawn a second concurrent run before state transitions to Running.
+            var isEnqueued by remember { mutableStateOf(false) }
+            LaunchedEffect(state) {
+                if (state is SkillTestRunner.TestRunState.Done
+                    || state is SkillTestRunner.TestRunState.Error
+                    || state is SkillTestRunner.TestRunState.Idle
+                ) {
+                    isEnqueued = false
+                }
+            }
             FilledTonalButton(
                 onClick = {
                     val current = prompt
+                    isEnqueued = true
                     scope.launch {
                         runner.runOnce(skillName, current).collect { stateFlow.value = it }
                     }
                 },
-                enabled = prompt.isNotBlank()
+                enabled = prompt.isNotBlank() && !isEnqueued
                     && state !is SkillTestRunner.TestRunState.Running,
                 modifier = Modifier.fillMaxWidth(),
             ) {

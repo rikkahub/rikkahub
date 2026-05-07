@@ -243,7 +243,7 @@ fun SkillsPage() {
         FeaturedCatalogSheet(
             entries = vm.catalog.skills,
             installedNames = installedNames,
-            onInstall = { entry ->
+            onInstall = { entry, onDone ->
                 vm.installFromCatalog(entry) { success, message ->
                     if (success) {
                         toaster.show(context.getString(R.string.skills_page_import_success, message))
@@ -251,6 +251,7 @@ fun SkillsPage() {
                         val key = mapImportErrorKeyToString(context, message)
                         toaster.show(context.getString(R.string.skill_catalog_install_failed, key))
                     }
+                    onDone()
                 }
             },
             onDismiss = { showCatalog = false },
@@ -263,10 +264,11 @@ fun SkillsPage() {
 private fun FeaturedCatalogSheet(
     entries: List<CatalogEntry>,
     installedNames: Set<String>,
-    onInstall: (CatalogEntry) -> Unit,
+    onInstall: (CatalogEntry, onResult: () -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var installing by remember { mutableStateOf<Set<String>>(emptySet()) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -281,7 +283,7 @@ private fun FeaturedCatalogSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.skill_catalog_title),
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onDismiss) {
@@ -303,7 +305,13 @@ private fun FeaturedCatalogSheet(
                         CatalogRow(
                             entry = entry,
                             installed = entry.name in installedNames,
-                            onInstall = { onInstall(entry) },
+                            installing = entry.name in installing,
+                            onInstall = {
+                                installing = installing + entry.name
+                                onInstall(entry) {
+                                    installing = installing - entry.name
+                                }
+                            },
                         )
                     }
                 }
@@ -313,7 +321,12 @@ private fun FeaturedCatalogSheet(
 }
 
 @Composable
-private fun CatalogRow(entry: CatalogEntry, installed: Boolean, onInstall: () -> Unit) {
+private fun CatalogRow(
+    entry: CatalogEntry,
+    installed: Boolean,
+    installing: Boolean,
+    onInstall: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
@@ -341,14 +354,17 @@ private fun CatalogRow(entry: CatalogEntry, installed: Boolean, onInstall: () ->
             )
             FilledTonalButton(
                 onClick = onInstall,
-                enabled = !installed,
+                enabled = !installed && !installing,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
             ) {
                 Text(
-                    if (installed) stringResource(R.string.skill_catalog_installed)
-                    else stringResource(R.string.skill_catalog_install)
+                    when {
+                        installed -> stringResource(R.string.skill_catalog_installed)
+                        installing -> stringResource(R.string.skill_tester_running)
+                        else -> stringResource(R.string.skill_catalog_install)
+                    }
                 )
             }
         }

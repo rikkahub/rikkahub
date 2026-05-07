@@ -259,6 +259,9 @@ class SkillsVM(
             out.toByteArray()
         } ?: return false to "skill_import_unsupported_file_type"
         val text = bytes.toString(Charsets.UTF_8)
+        if (text.isBlank()) {
+            return false to "skill_import_unsupported_file_type"
+        }
         val sourceLabel = queryDisplayName(uri) ?: "local_file"
         val result = urlImporter.importFromText(text, sourceLabel = sourceLabel)
         return when (result) {

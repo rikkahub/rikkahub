@@ -162,4 +162,69 @@ class SkillZipImporterTest {
         val result = SkillZipImporter.extractZipToDir(ByteArrayInputStream(zip), destDir)
         assertTrue("expected success, got $result", result.isSuccess)
     }
+
+    // Audit-pass adversarial coverage for path-traversal robustness.
+
+    @Test fun `path traversal - dot-slash dotdot escape rejected`() {
+        val zip = buildZip(listOf(
+            "legit/./../../etc/passwd" to "ROOT".toByteArray(Charsets.UTF_8),
+        ))
+        val result = SkillZipImporter.extractZipToDir(ByteArrayInputStream(zip), destDir)
+        assertTrue("expected failure, got $result", result.isFailure)
+        assertTrue(result.exceptionOrNull() is SkillZipError.PathTraversal)
+    }
+
+    @Test fun `path traversal - leading backslash rejected`() {
+        val zip = buildZip(listOf(
+            "\\etc\\passwd" to "ROOT".toByteArray(Charsets.UTF_8),
+        ))
+        val result = SkillZipImporter.extractZipToDir(ByteArrayInputStream(zip), destDir)
+        assertTrue("expected failure, got $result", result.isFailure)
+        assertTrue(result.exceptionOrNull() is SkillZipError.PathTraversal)
+    }
+
+    @Test fun `path traversal - URL-encoded entry name does NOT decode through ZipEntry`() {
+        // The zip spec stores entry names as raw UTF-8; ZipEntry.getName does NOT URL-
+        // decode. So `..%2f..%2fetc%2fpasswd` is a single literal segment that
+        // canonicalises inside destDir + ".." literal subdir, not an escape. Verify the
+        // happy path: it extracts without rejection (since it's not actually traversing).
+        val zip = buildZip(listOf(
+            "skill/SKILL.md" to sampleSkillMd.toByteArray(Charsets.UTF_8),
+            "skill/odd%2fname.txt" to "literal".toByteArray(Charsets.UTF_8),
+        ))
+        val result = SkillZipImporter.extractZipToDir(ByteArrayInputStream(zip), destDir)
+        assertTrue("expected success, got $result", result.isSuccess)
+    }
+
+    @Test fun `empty entry name rejected`() {
+        val zip = buildZip(listOf(
+            "" to "x".toByteArray(Charsets.UTF_8),
+            "SKILL.md" to sampleSkillMd.toByteArray(Charsets.UTF_8),
+        ))
+        val result = SkillZipImporter.extractZipToDir(ByteArrayInputStream(zip), destDir)
+        assertTrue("expected failure, got $result", result.isFailure)
+        assertTrue(result.exceptionOrNull() is SkillZipError.PathTraversal)
+    }
+
+    @Test fun `entries with spaces in legitimate filenames are accepted`() {
+        // Real-world GitHub-shaped zips often have spaces in nested filenames; these
+        // must NOT trip the up-front rejection. The canonical-path check is the safety
+        // floor; spaces alone are legitimate.
+        val zip = buildZip(listOf(
+            "rikka skill/SKILL.md" to sampleSkillMd.toByteArray(Charsets.UTF_8),
+            "rikka skill/notes file.txt" to "with space".toByteArray(Charsets.UTF_8),
+        ))
+        val result = SkillZipImporter.extractZipToDir(ByteArrayInputStream(zip), destDir)
+        // Note: current code rejects ANY entry containing a NUL byte (correct) but the
+        // up-front filter does not reject spaces. This test pins that contract: legit
+        // filenames with spaces extract successfully.
+        // If a future change re-introduces a spaces-rejection, this test fails loud.
+        assertTrue(
+            "legitimate filenames with spaces must extract; got ${result.exceptionOrNull()}",
+            result.isSuccess,
+        )
+        val skillDir = result.getOrNull()!!
+        assertTrue(skillDir.resolve("SKILL.md").exists())
+        assertTrue(skillDir.resolve("notes file.txt").exists())
+    }
 }
