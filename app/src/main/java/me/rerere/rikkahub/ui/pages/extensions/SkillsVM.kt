@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -10,14 +13,26 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.skills.SkillUrlImporter
+import me.rerere.rikkahub.skills.SkillZipError
+import me.rerere.rikkahub.skills.SkillZipImporter
 import java.util.LinkedHashMap
 import org.json.JSONArray
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.Files
 
 class SkillsVM(
+    private val context: Context,
     private val skillManager: SkillManager,
+    private val urlImporter: SkillUrlImporter,
 ) : ViewModel() {
+
+    companion object {
+        private const val TAG = "SkillsVM"
+        private const val MAX_MD_BYTES = 1L * 1024 * 1024 // 1 MB cap on local .md
+    }
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
 
@@ -104,6 +119,138 @@ class SkillsVM(
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }
             }
+        }
+    }
+
+    /**
+     * Phase 19C — install a skill from a local file picked via SAF (`OpenDocument`).
+     *
+     * Accepts:
+     *  - `.md` / `.markdown` (or `text/markdown` MIME): read up to [MAX_MD_BYTES] of UTF-8
+     *    text, then run through [SkillUrlImporter.importFromText] (same format detection
+     *    + HTML guard + transcoder pipeline as the GitHub URL path).
+     *  - `.zip` (or `application/zip` MIME): extract via [SkillZipImporter] to a temp dir
+     *    inside the app's cache, locate the SKILL.md, copy every file inside that root
+     *    into the SkillManager via [SkillManager.saveSkillFilesAtomically].
+     *
+     * On failure, [onResult] receives `false` + a localised-string-key (`skill_import_*`)
+     * the UI looks up via stringResource. On success, [onResult] receives `true` + the
+     * installed skill's name.
+     */
+    fun importFromLocalFile(uri: Uri, onResult: (success: Boolean, message: String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val type = detectFileType(uri)
+            try {
+                val outcome: Pair<Boolean, String> = when (type) {
+                    LocalFileType.Markdown -> importLocalMarkdown(uri)
+                    LocalFileType.Zip -> importLocalZip(uri)
+                    LocalFileType.Unsupported -> false to "skill_import_unsupported_file_type"
+                }
+                _skills.value = skillManager.listSkills()
+                withContext(Dispatchers.Main) { onResult(outcome.first, outcome.second) }
+            } catch (t: Throwable) {
+                Log.w(TAG, "importFromLocalFile failed for $uri", t)
+                withContext(Dispatchers.Main) {
+                    onResult(false, t.message ?: "skill_import_unsupported_file_type")
+                }
+            }
+        }
+    }
+
+    private enum class LocalFileType { Markdown, Zip, Unsupported }
+
+    private fun detectFileType(uri: Uri): LocalFileType {
+        val mime = context.contentResolver.getType(uri)?.lowercase()
+        if (mime != null) {
+            if (mime == "text/markdown" || mime == "text/x-markdown" || mime == "text/plain") {
+                return LocalFileType.Markdown
+            }
+            if (mime == "application/zip" || mime == "application/x-zip-compressed") {
+                return LocalFileType.Zip
+            }
+        }
+        // Fall back to the displayed filename. Some pickers (e.g. Files by Google) don't
+        // attach a MIME type for `.md` and surface it as `application/octet-stream`.
+        val name = queryDisplayName(uri)?.lowercase().orEmpty()
+        return when {
+            name.endsWith(".md") || name.endsWith(".markdown") -> LocalFileType.Markdown
+            name.endsWith(".zip") -> LocalFileType.Zip
+            else -> LocalFileType.Unsupported
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return runCatching {
+            context.contentResolver.query(uri, arrayOf("_display_name"), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull()
+    }
+
+    private fun importLocalMarkdown(uri: Uri): Pair<Boolean, String> {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+            // Read up to MAX_MD_BYTES + 1 to detect overflow without materialising the
+            // whole stream blindly.
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(8 * 1024)
+            var total = 0L
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                total += n
+                if (total > MAX_MD_BYTES) {
+                    return false to "skill_import_zip_too_large"
+                }
+                out.write(buf, 0, n)
+            }
+            out.toByteArray()
+        } ?: return false to "skill_import_unsupported_file_type"
+        val text = bytes.toString(Charsets.UTF_8)
+        val sourceLabel = queryDisplayName(uri) ?: "local_file"
+        val result = urlImporter.importFromText(text, sourceLabel = sourceLabel)
+        return when (result) {
+            is SkillUrlImporter.Result.Ok -> true to result.metadata.name
+            is SkillUrlImporter.Result.Err -> false to result.detail
+        }
+    }
+
+    private fun importLocalZip(uri: Uri): Pair<Boolean, String> {
+        // Extract into a uniquely-named temp dir under cache so we never collide with
+        // another import-in-flight. We delete it on success or failure.
+        val tempRoot = File(context.cacheDir, "skill-zip-import")
+        tempRoot.mkdirs()
+        val workDir = Files.createTempDirectory(tempRoot.toPath(), "extract-").toFile()
+        try {
+            val skillRoot = context.contentResolver.openInputStream(uri)?.use { input ->
+                SkillZipImporter.extractZipToDir(input, workDir)
+            } ?: return false to "skill_import_unsupported_file_type"
+            if (skillRoot.isFailure) {
+                val err = skillRoot.exceptionOrNull()
+                val key = when (err) {
+                    is SkillZipError.MissingSkillMd -> "skill_import_missing_skill_md"
+                    is SkillZipError.PathTraversal -> "skill_import_path_traversal"
+                    is SkillZipError.TooLarge -> "skill_import_zip_too_large"
+                    else -> "skill_import_unsupported_file_type"
+                }
+                return false to key
+            }
+            val rootDir = skillRoot.getOrThrow()
+            val skillMd = rootDir.resolve("SKILL.md").takeIf { it.exists() }
+                ?: rootDir.listFiles()?.firstOrNull { it.isFile && it.name.equals("SKILL.md", ignoreCase = true) }
+                ?: return false to "skill_import_missing_skill_md"
+            val frontmatter = SkillFrontmatterParser.parse(skillMd.readText())
+            val skillName = frontmatter["name"]?.takeIf { it.isNotBlank() }
+                ?: return false to "skill_import_missing_skill_md"
+            // Collect every file into a relativePath -> content map, then atomic-save.
+            val files = LinkedHashMap<String, String>()
+            rootDir.walkTopDown().filter { it.isFile }.forEach { f ->
+                val rel = f.relativeTo(rootDir).path.replace(File.separatorChar, '/')
+                files[rel] = f.readText()
+            }
+            val saved = skillManager.saveSkillFilesAtomically(skillName, files)
+            return if (saved) true to skillName else false to "skill_import_unsupported_file_type"
+        } finally {
+            runCatching { workDir.deleteRecursively() }
         }
     }
 

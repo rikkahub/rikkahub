@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
@@ -159,6 +162,25 @@ fun SkillsPage() {
         )
     }
 
+    // Phase 19C — local-file picker. Lifted to screen scope so the launcher survives
+    // dialog dismiss/recreate (per Compose docs: `rememberLauncherForActivityResult`
+    // belongs at the highest stable composable, NOT inside a dialog body).
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            vm.importFromLocalFile(uri) { success, message ->
+                showImportDialog = false
+                if (success) {
+                    toaster.show(context.getString(R.string.skills_page_import_success, message))
+                } else {
+                    val key = mapImportErrorKeyToString(context, message)
+                    toaster.show(context.getString(R.string.skills_page_import_failed, key))
+                }
+            }
+        }
+    }
+
     if (showImportDialog) {
         ImportSkillDialog(
             onDismiss = { showImportDialog = false },
@@ -171,6 +193,14 @@ fun SkillsPage() {
                         toaster.show(context.getString(R.string.skills_page_import_failed, message))
                     }
                 }
+            },
+            onPickFile = {
+                openDocumentLauncher.launch(arrayOf(
+                    "text/markdown",
+                    "text/plain",
+                    "application/zip",
+                    "application/octet-stream",
+                ))
             },
         )
     }
@@ -329,6 +359,7 @@ private fun AddSkillDialog(
 private fun ImportSkillDialog(
     onDismiss: () -> Unit,
     onConfirm: (repoUrl: String) -> Unit,
+    onPickFile: () -> Unit,
 ) {
     var url by rememberSaveable { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -354,6 +385,16 @@ private fun ImportSkillDialog(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // Phase 19C — secondary action that defers to the screen-level file
+                // launcher. The dialog passes through; SkillsPage handles the SAF
+                // OpenDocument result and routes to the VM.
+                OutlinedButton(
+                    onClick = onPickFile,
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.skill_import_from_file_label))
+                }
                 if (loading) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -383,4 +424,23 @@ private fun ImportSkillDialog(
             TextButton(onClick = onDismiss, enabled = !loading) { Text(stringResource(R.string.cancel)) }
         },
     )
+}
+
+/**
+ * Map a VM-emitted error key (one of the `skill_import_*` resource names) to its
+ * localized string. We use this rather than passing string-resource IDs out of the VM
+ * because the VM has no `Context` callback path for stringResource lookups.
+ */
+private fun mapImportErrorKeyToString(context: android.content.Context, key: String): String {
+    return when (key) {
+        "skill_import_unsupported_file_type" ->
+            context.getString(R.string.skill_import_unsupported_file_type)
+        "skill_import_missing_skill_md" ->
+            context.getString(R.string.skill_import_missing_skill_md)
+        "skill_import_path_traversal" ->
+            context.getString(R.string.skill_import_path_traversal)
+        "skill_import_zip_too_large" ->
+            context.getString(R.string.skill_import_zip_too_large)
+        else -> key  // already a free-form message (e.g. importer's "html_response" detail)
+    }
 }
