@@ -108,20 +108,30 @@ fun runJsTool(
                     }
                 }
                 // Webview as a Text part with metadata; chat renderer (Phase 18B) detects
-                // and shows an embed. v1 fallback: the metadata-aware renderer falls back
-                // to a plain link if the embed Composable can't load.
+                // and shows an embed. Relative URLs from the JS skill are resolved against
+                // the script file's parent directory and rewritten to `file://` so the
+                // embed Composable can load them without knowing the skill layout.
+                // Absolute http(s)/file/data URIs pass through unchanged.
                 parsed.webviewUrl?.let { url ->
-                    parts.add(UIMessagePart.Text(
-                        text = parsed.text ?: "Open in a viewer",
-                        metadata = buildJsonObject {
-                            put("rikkahub.webview", buildJsonObject {
-                                put("url", url)
-                                put("iframe", parsed.webviewIframe)
-                                put("aspect_ratio", parsed.webviewAspectRatio.toDouble())
-                                put("source", "js_skill:$skillName")
-                            })
+                    val resolvedUrl = resolveSkillWebviewUrl(url, scriptFile, skillDir)
+                    if (resolvedUrl != null) {
+                        parts.add(UIMessagePart.Text(
+                            text = parsed.text ?: "Open in a viewer",
+                            metadata = buildJsonObject {
+                                put("rikkahub.webview", buildJsonObject {
+                                    put("url", resolvedUrl)
+                                    put("iframe", parsed.webviewIframe)
+                                    put("aspect_ratio", parsed.webviewAspectRatio.toDouble())
+                                    put("source", "js_skill:$skillName")
+                                })
+                            }
+                        ))
+                    } else {
+                        val fallback = parsed.text
+                        if (!fallback.isNullOrBlank()) {
+                            parts.add(UIMessagePart.Text(fallback))
                         }
-                    ))
+                    }
                 } ?: parsed.text?.takeIf { it.isNotBlank() }?.let { t ->
                     parts.add(UIMessagePart.Text(t))
                 }
@@ -140,3 +150,35 @@ private fun err(code: String, detail: String): List<UIMessagePart> =
         put("error", code)
         put("detail", detail)
     }.toString()))
+
+/**
+ * Resolve a webview URL emitted by a JS skill. Absolute URIs (http/https/file/data) pass
+ * through unchanged. Relative paths are resolved against the script file's parent
+ * directory, rewritten to `file://` URIs, and verified to stay inside [skillDir] (path
+ * traversal defence). Returns null if the resolved path escapes the skill dir.
+ */
+internal fun resolveSkillWebviewUrl(
+    url: String,
+    scriptFile: java.io.File,
+    skillDir: java.io.File,
+): String? {
+    val raw = url.trim()
+    if (raw.isEmpty()) return null
+    if (raw.startsWith("http://", ignoreCase = true)
+        || raw.startsWith("https://", ignoreCase = true)
+        || raw.startsWith("file://", ignoreCase = true)
+        || raw.startsWith("data:", ignoreCase = true)
+    ) return raw
+
+    val pathOnly = raw.substringBefore('?').substringBefore('#')
+    val query = raw.substring(pathOnly.length) // includes leading ? or # if present
+    val parent = scriptFile.parentFile ?: skillDir
+    val target = java.io.File(parent, pathOnly)
+    val targetCanonical = runCatching { target.canonicalPath }.getOrNull() ?: return null
+    val skillCanonical = runCatching { skillDir.canonicalPath }.getOrNull() ?: return null
+    val expectedPrefix = skillCanonical + java.io.File.separator
+    if (targetCanonical != skillCanonical && !targetCanonical.startsWith(expectedPrefix)) {
+        return null
+    }
+    return "file://$targetCanonical$query"
+}

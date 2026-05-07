@@ -26,11 +26,11 @@ limitations under the License.
   </head>
   <body>
     <script>
-      window['ai_edge_gallery_get_result'] = async (data) => {
+      window['ai_edge_gallery_get_result'] = async (data, secret) => {
         const jsonObj = JSON.parse(data);
         return JSON.stringify({
           webview: {
-            url: `webview.html?label=${jsonObj.label}`
+            url: `../assets/webview.html?label=${jsonObj.label}`
           }
         })
       };
