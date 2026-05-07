@@ -93,6 +93,9 @@ class BrowserActivity : ComponentActivity() {
                     onForwardTap = { webView?.takeIf { it.canGoForward() }?.goForward() },
                     onRefreshTap = { webView?.reload() },
                     onStopAi = { BrowserController.stopCurrentTask() },
+                    onNavigate = { raw ->
+                        webView?.loadUrl(normalizeBrowserQuery(raw))
+                    },
                     initialUrl = intent?.getStringExtra(EXTRA_INITIAL_URL) ?: "about:blank",
                 )
             }

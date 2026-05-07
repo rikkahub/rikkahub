@@ -48,6 +48,7 @@ fun BrowserView(
     onForwardTap: () -> Unit,
     onRefreshTap: () -> Unit,
     onStopAi: () -> Unit,
+    onNavigate: (String) -> Unit,
     initialUrl: String,
 ) {
     Scaffold(
@@ -61,6 +62,7 @@ fun BrowserView(
                 onForward = onForwardTap,
                 onRefresh = onRefreshTap,
                 onStopAi = onStopAi,
+                onNavigate = onNavigate,
             )
         },
         bottomBar = {
