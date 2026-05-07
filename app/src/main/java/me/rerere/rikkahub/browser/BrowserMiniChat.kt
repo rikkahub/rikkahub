@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -107,7 +109,13 @@ fun BrowserMiniChat(
     var expanded by remember { mutableStateOf(false) }
 
     Box(
-        modifier = modifier,
+        // imePadding lifts the entire overlay above the soft keyboard when it slides up;
+        // navigationBarsPadding clears the gesture bar when the keyboard is hidden so the
+        // pill / card never sits under the system handles. Combined modifiers run in
+        // outer-first order — the IME inset wins when it's larger than the nav bar inset.
+        modifier = modifier
+            .imePadding()
+            .navigationBarsPadding(),
         contentAlignment = Alignment.BottomEnd,
     ) {
         AnimatedVisibility(
