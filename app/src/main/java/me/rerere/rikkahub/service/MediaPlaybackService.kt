@@ -53,6 +53,25 @@ class MediaPlaybackService : Service() {
         // Singleton accessor for tool polling — populated while the service is alive.
         @Volatile var instance: MediaPlaybackService? = null
 
+        /**
+         * Snapshot of "the track that was playing when stop_media fired", kept around so
+         * resume_media can recover from the common case where the user said "stop" but
+         * functionally meant "pause" (e.g. "stop, I need to go to the bathroom"). Cleared
+         * when a fresh play_media starts a different track. Process-scoped, so survives
+         * service death but not full process death.
+         */
+        data class StoppedSnapshot(
+            val source: String,
+            val title: String?,
+            val artist: String?,
+            val album: String?,
+            val artworkUri: String?,
+            val positionMs: Long,
+            val stoppedAtMs: Long,
+        )
+
+        @Volatile var lastStoppedSnapshot: StoppedSnapshot? = null
+
         fun buildPlayIntent(
             context: Context,
             source: String,
@@ -60,6 +79,7 @@ class MediaPlaybackService : Service() {
             artist: String? = null,
             album: String? = null,
             artworkUri: String? = null,
+            startPositionMs: Long = 0L,
         ): Intent = Intent(context, MediaPlaybackService::class.java).apply {
             action = ACTION_PLAY
             putExtra(EXTRA_SOURCE, source)
@@ -67,6 +87,7 @@ class MediaPlaybackService : Service() {
             artist?.let { putExtra(EXTRA_ARTIST, it) }
             album?.let { putExtra(EXTRA_ALBUM, it) }
             artworkUri?.let { putExtra(EXTRA_ARTWORK_URI, it) }
+            if (startPositionMs > 0L) putExtra(EXTRA_POSITION_MS, startPositionMs)
         }
     }
 
@@ -82,6 +103,7 @@ class MediaPlaybackService : Service() {
     @Volatile var currentTitle: String? = null
     @Volatile var currentArtist: String? = null
     @Volatile var currentAlbum: String? = null
+    @Volatile var currentArtworkUri: String? = null
     @Volatile var isPlaying: Boolean = false
     @Volatile var positionMs: Long = 0L
     @Volatile var durationMs: Long = 0L
@@ -110,7 +132,8 @@ class MediaPlaybackService : Service() {
                     val artist = intent.getStringExtra(EXTRA_ARTIST)
                     val album = intent.getStringExtra(EXTRA_ALBUM)
                     val artworkUri = intent.getStringExtra(EXTRA_ARTWORK_URI)
-                    startPlayback(source, title, artist, album, artworkUri)
+                    val startPos = intent.getLongExtra(EXTRA_POSITION_MS, 0L)
+                    startPlayback(source, title, artist, album, artworkUri, startPos)
                 } else {
                     // resume
                     resumePlayback()
@@ -174,6 +197,7 @@ class MediaPlaybackService : Service() {
         artist: String?,
         album: String?,
         artworkUri: String?,
+        startPositionMs: Long = 0L,
     ) {
         // Stop any current player cleanly
         releaseMediaPlayer()
@@ -206,6 +230,11 @@ class MediaPlaybackService : Service() {
         currentTitle = resolvedTitle
         currentArtist = resolvedArtist
         currentAlbum = resolvedAlbum
+        currentArtworkUri = artworkUri
+        // Starting fresh playback invalidates any old "stopped at" snapshot — the user
+        // is moving on to something else. Snapshot is only useful as a fallback for
+        // resume_media after stop_media wiped the live session.
+        lastStoppedSnapshot = null
 
         // Build MediaMetadata
         val meta = MediaMetadataCompat.Builder().apply {
@@ -228,6 +257,12 @@ class MediaPlaybackService : Service() {
                 )
                 setDataSource(this@MediaPlaybackService, Uri.parse(source))
                 setOnPreparedListener { player ->
+                    // Honor a requested resume position so callers (resume_media's
+                    // post-stop-snapshot recovery) can pick up where the user left off.
+                    if (startPositionMs > 0L && startPositionMs < player.duration) {
+                        player.seekTo(startPositionMs.toInt())
+                        this@MediaPlaybackService.positionMs = startPositionMs
+                    }
                     player.start()
                     this@MediaPlaybackService.durationMs = player.duration.toLong()
 
@@ -238,7 +273,10 @@ class MediaPlaybackService : Service() {
                     this@MediaPlaybackService.mediaSession.setMetadata(metaWithDuration)
 
                     this@MediaPlaybackService.isPlaying = true
-                    this@MediaPlaybackService.setPlaybackState(PlaybackStateCompat.STATE_PLAYING, 0L)
+                    this@MediaPlaybackService.setPlaybackState(
+                        PlaybackStateCompat.STATE_PLAYING,
+                        if (startPositionMs > 0L) startPositionMs else 0L,
+                    )
                     this@MediaPlaybackService.postForegroundNotification()
                 }
                 setOnCompletionListener {
@@ -287,6 +325,25 @@ class MediaPlaybackService : Service() {
     }
 
     private fun stopPlayback() {
+        // Snapshot the current track BEFORE we tear it down so resume_media has a
+        // fallback if the user said "stop" but meant "I'll be right back" — common
+        // English-mapping mismatch where the model picks stop_media for what
+        // functionally should have been pause_media. The snapshot survives service
+        // death because it's process-scoped (companion-object). A fresh play_media
+        // (different track) clears it.
+        val currentMs = mediaPlayer?.currentPosition?.toLong() ?: positionMs
+        val src = currentSource
+        if (!src.isNullOrBlank()) {
+            lastStoppedSnapshot = StoppedSnapshot(
+                source = src,
+                title = currentTitle,
+                artist = currentArtist,
+                album = currentAlbum,
+                artworkUri = currentArtworkUri,
+                positionMs = currentMs.coerceAtLeast(0L),
+                stoppedAtMs = System.currentTimeMillis(),
+            )
+        }
         isPlaying = false
         setPlaybackState(PlaybackStateCompat.STATE_STOPPED, 0L)
         abandonAudioFocus()

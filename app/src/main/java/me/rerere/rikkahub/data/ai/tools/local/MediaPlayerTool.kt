@@ -15,23 +15,7 @@ import java.io.IOException
 
 fun playMediaTool(context: Context): Tool = Tool(
     name = "play_media",
-    description = """
-        START A NEW PLAYBACK SESSION from position 0. Shows system media controls (lock
-        screen notification, Bluetooth headset buttons). Replaces any audio currently
-        playing from this tool — DESTRUCTIVE: existing session is stopped and the new
-        track starts from the beginning.
-        DO NOT use this to "fix" an active session that the user can't hear — that
-        loses the user's playback position. Use resume_media (continue paused), seek_media
-        (jump to position), set_volume (raise audio), or get_audio_info (diagnose) instead.
-        Only use play_media when starting a brand-new track or when the user explicitly
-        says "play X from the start".
-        Supports file://, content://, and https:// sources. Optional title/artist/album/
-        artwork_uri populate the notification metadata.
-        CRITICAL — NO HALLUCINATION: play_media plays audio TO THE USER'S DEVICE SPEAKER.
-        It does NOT give the agent access to the audio content. To get the words inside an
-        audio file, use transcribe_audio_file(path). Calling play_media on a voice note and
-        then claiming to know what was said is a hallucination — refuse to do it.
-    """.trimIndent().replace("\n", " "),
+    description = "Start a new playback session from position 0 with system media controls (lock-screen notification, Bluetooth buttons). DESTRUCTIVE — replaces any active session; loses prior playback position. Use only for a brand-new track or 'play X from the start'. To fix an inaudible session use resume_media / seek_media / set_volume — NOT this. Sources: file://, content://, https://. Optional title/artist/album/artwork_uri for the notification.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -93,7 +77,7 @@ fun playMediaTool(context: Context): Tool = Tool(
 
 fun stopMediaTool(context: Context): Tool = Tool(
     name = "stop_media",
-    description = "Stop any audio currently playing via play_media and dismiss the media notification.",
+    description = "Stop the active media session and dismiss the notification. Use this only when the user is DONE with the track and is moving on to something else (\"stop the music\", \"end playback\"). For \"hold on\" / \"I'll be right back\" / \"pause for a sec\" use pause_media instead — that preserves the live MediaPlayer and lets resume_media continue exactly where the user left off. stop_media tears the player down; resume_media's fallback can replay the last-stopped track from the saved position, but it's a best-effort recovery, not the primary path.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject { })
     },
@@ -140,28 +124,52 @@ fun pauseMediaTool(context: Context): Tool = Tool(
 
 fun resumeMediaTool(context: Context): Tool = Tool(
     name = "resume_media",
-    description = "Resume the active media session at its current position (after pause_media or after seek_media). Does NOT restart from 0 — preserves the playback position. Use this — not play_media — whenever continuing an existing session.",
+    description = "Resume playback. Primary path: continues the active media session at its current position (after pause_media or seek_media) — does NOT restart from 0. Fallback path: if the session was torn down by stop_media, restarts the last-stopped track at the saved position so the user gets close to \"resume\" semantics even when stop was called. Always prefer this over play_media when continuing.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject { })
     },
     execute = {
         val svc = MediaPlaybackService.instance
-        val state = when {
-            svc == null -> "no_session"
-            svc.isPlaying -> "already_playing"
-            else -> {
+        if (svc != null) {
+            // Live session — just nudge ACTION_PLAY (no source extra → resumePlayback).
+            val state = if (svc.isPlaying) {
+                "already_playing"
+            } else {
                 val intent = android.content.Intent(context, MediaPlaybackService::class.java).apply {
                     action = MediaPlaybackService.ACTION_PLAY
                 }
                 context.startService(intent)
                 "playing"
             }
+            return@Tool listOf(UIMessagePart.Text(buildJsonObject {
+                put("success", true)
+                put("state", state)
+            }.toString()))
         }
-        val payload = buildJsonObject {
-            put("success", state != "no_session")
-            put("state", state)
+        // No live session — fall back to the post-stop snapshot if we have one.
+        val snap = MediaPlaybackService.lastStoppedSnapshot
+        if (snap != null) {
+            val intent = MediaPlaybackService.buildPlayIntent(
+                context = context,
+                source = snap.source,
+                title = snap.title,
+                artist = snap.artist,
+                album = snap.album,
+                artworkUri = snap.artworkUri,
+                startPositionMs = snap.positionMs,
+            )
+            ContextCompat.startForegroundService(context, intent)
+            return@Tool listOf(UIMessagePart.Text(buildJsonObject {
+                put("success", true)
+                put("state", "resumed_from_snapshot")
+                put("source", snap.source)
+                put("position_ms", snap.positionMs)
+            }.toString()))
         }
-        listOf(UIMessagePart.Text(payload.toString()))
+        listOf(UIMessagePart.Text(buildJsonObject {
+            put("success", false)
+            put("state", "no_session")
+        }.toString()))
     }
 )
 
