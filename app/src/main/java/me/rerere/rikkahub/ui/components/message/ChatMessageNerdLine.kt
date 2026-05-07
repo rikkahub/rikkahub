@@ -1,18 +1,28 @@
 package me.rerere.rikkahub.ui.components.message
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.ui.UIMessage
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Clock02
+import me.rerere.hugeicons.stroke.Download04
+import me.rerere.hugeicons.stroke.Upload02
+import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.toFixed
 import java.time.Duration
@@ -32,45 +42,77 @@ fun ChatMessageNerdLine(
         CompositionLocalProvider(LocalContentColor provides color) {
             val usage = message.usage
             if (settings.showTokenUsage && usage != null) {
-                Text(
-                    text = buildStatsText(message),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = color,
-                    style = MaterialTheme.typography.labelSmall,
+                Row(
                     modifier = modifier.padding(horizontal = 4.dp),
-                )
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatItem(
+                        icon = HugeIcons.Upload02,
+                        text = buildInputText(usage.promptTokens, usage.cachedTokens),
+                    )
+                    StatItem(
+                        icon = HugeIcons.Download04,
+                        text = compactTokenCount(usage.completionTokens),
+                    )
+
+                    val finishedAt = message.finishedAt
+                    if (finishedAt != null) {
+                        val duration = Duration.between(
+                            message.createdAt.toJavaLocalDateTime(),
+                            finishedAt.toJavaLocalDateTime()
+                        )
+                        val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
+                        val seconds = (duration.toMillis() / 1000f).toFixed(1)
+                        StatItem(
+                            icon = HugeIcons.Zap,
+                            text = "${tps.toFixed(1)}/s",
+                        )
+                        StatItem(
+                            icon = HugeIcons.Clock02,
+                            text = "${seconds}s",
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-private fun buildStatsText(message: UIMessage): String {
-    val usage = message.usage ?: return ""
-    val input = buildString {
-        append("↑")
-        append(compactTokenCount(usage.promptTokens))
-        if (usage.cachedTokens > 0) {
-            append("(c")
-            append(compactTokenCount(usage.cachedTokens))
-            append(")")
-        }
-    }
-    val parts = mutableListOf(input, "↓${compactTokenCount(usage.completionTokens)}")
-
-    val finishedAt = message.finishedAt
-    if (finishedAt != null) {
-        val duration = Duration.between(
-            message.createdAt.toJavaLocalDateTime(),
-            finishedAt.toJavaLocalDateTime()
+@Composable
+private fun StatItem(
+    icon: ImageVector,
+    text: String,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(12.dp),
+            tint = LocalContentColor.current,
         )
-        val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
-        val seconds = (duration.toMillis() / 1000f).toFixed(1)
-        parts += "${tps.toFixed(1)}/s"
-        parts += "${seconds}s"
+        Text(
+            text = text,
+            maxLines = 1,
+            color = LocalContentColor.current,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
+}
 
-    return parts.joinToString(" ")
+private fun buildInputText(
+    promptTokens: Number,
+    cachedTokens: Number,
+): String = buildString {
+    append(compactTokenCount(promptTokens))
+    if (cachedTokens.toLong() > 0) {
+        append("(c")
+        append(compactTokenCount(cachedTokens))
+        append(")")
+    }
 }
 
 private fun compactTokenCount(value: Number): String {
