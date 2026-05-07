@@ -357,6 +357,15 @@ object BrowserControllerHandle {
      * front — browser_open re-arms it via [BrowserController.startTaskWindow] and
      * browser_done clears it via [BrowserController.clearTaskWindow] (both routed through
      * tool factories, so they remain reachable inside the cap).
+     *
+     * The block runs on [Dispatchers.Main]. WebView APIs are main-thread-only and will
+     * throw `WebViewMethodCalledOnWrongThreadViolation` from any other dispatcher, so
+     * baking the bridge in here means every tool author gets safe direct access to
+     * `webView.url`, `webView.title`, `webView.canGoBack()`, etc. without re-wrapping.
+     * For network or heavy CPU work that must run off-main, suspend out of [block] via
+     * `withContext(Dispatchers.IO)` explicitly. The async JS helpers
+     * ([evaluateJavascriptAsync], [awaitReadyState]) post via the WebView's looper and
+     * suspend on a `CompletableDeferred`, so they stay non-blocking even from main.
      */
     suspend fun withController(
         block: suspend WithControllerScope.() -> JsonObject,
@@ -365,7 +374,9 @@ object BrowserControllerHandle {
         if (!BrowserController.isWithinTaskWindow()) {
             return BrowserController.taskTimeoutEnvelope()
         }
-        return WithControllerScope(BrowserController, wv).block()
+        return withContext(Dispatchers.Main) {
+            WithControllerScope(BrowserController, wv).block()
+        }
     }
 }
 
