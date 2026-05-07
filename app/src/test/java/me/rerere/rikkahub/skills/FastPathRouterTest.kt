@@ -1,8 +1,11 @@
 package me.rerere.rikkahub.skills
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FastPathRouterTest {
@@ -120,5 +123,42 @@ class FastPathRouterTest {
     @Test fun `empty and blank fall through`() {
         assertNull(FastPathRouter.route(""))
         assertNull(FastPathRouter.route("   "))
+    }
+
+    // -- Format closures: assert each intent reads the keys its tool actually emits ----
+    // Regression guard for an earlier bug where the router read level_percent / is_charging
+    // / internal_free_mb / is_connected, but the tools emit percent / charging / nested
+    // internal.{free,total}_bytes / connected. When a key doesn't match the closure renders
+    // "?" or zero — the user sees "Battery is at ?%." in chat.
+
+    private fun parse(s: String): JsonObject = Json.parseToJsonElement(s) as JsonObject
+
+    @Test fun `battery format substitutes the percent and charging keys actually emitted`() {
+        val m = FastPathRouter.route("battery")!!
+        // BatteryTool.kt emits {"percent": 67, "charging": true, ...}
+        val out = m.format!!(parse("""{"percent":67,"charging":true,"plugged":"ac","health":"good"}"""))
+        assertEquals("Battery is at 67% and charging.", out)
+
+        val notCharging = m.format!!(parse("""{"percent":42,"charging":false,"plugged":"none","health":"good"}"""))
+        assertEquals("Battery is at 42%.", notCharging)
+    }
+
+    @Test fun `storage format reads nested internal free_bytes and total_bytes`() {
+        val m = FastPathRouter.route("storage")!!
+        // StorageTool.kt nests bytes under "internal".
+        val raw = """{"internal":{"total_bytes":${64L * 1024 * 1024 * 1024},"free_bytes":${16L * 1024 * 1024 * 1024},"used_bytes":${48L * 1024 * 1024 * 1024}},"external":null}"""
+        val out = m.format!!(parse(raw))
+        // 16 GB free of 64 GB — should render with one decimal.
+        assertTrue("expected '16.0 GB free of 64.0 GB.', got '$out'", out.contains("16.0 GB free") && out.contains("64.0 GB"))
+    }
+
+    @Test fun `wifi format reads connected and ssid keys actually emitted`() {
+        val m = FastPathRouter.route("wifi")!!
+        // WifiInfoTool.kt emits {"connected": true, "ssid": "...", ...}
+        val online = m.format!!(parse("""{"connected":true,"ssid":"HomeNet","bssid":"aa:bb","ip":"10.0.0.1"}"""))
+        assertEquals("Connected to HomeNet.", online)
+
+        val offline = m.format!!(parse("""{"connected":false}"""))
+        assertEquals("WiFi is off or not connected.", offline)
     }
 }

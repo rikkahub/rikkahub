@@ -126,7 +126,7 @@ class SubAgentEngine(
         registry.addPending(initialRun)
 
         val executionJob = appScope.launch(Dispatchers.IO) {
-            executeRun(runId, parentAssistantId, cleaned)
+            executeRun(runId, parentAssistantId, parentChatId, cleaned)
         }
         registry.setJob(runId, executionJob)
 
@@ -156,6 +156,7 @@ class SubAgentEngine(
     private suspend fun executeRun(
         runId: String,
         parentAssistantId: String,
+        parentChatId: String?,
         request: SubAgentRequest,
     ) {
         registry.update(runId) { it.copy(status = SubAgentStatus.RUNNING) }
@@ -174,12 +175,30 @@ class SubAgentEngine(
         chatService.initializeConversation(conv.id)
         HeadlessConversations.mark(conv.id)
         try {
-            chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(request.task)))
-            val finished = withTimeoutOrNull(request.timeoutSeconds * 1000L) {
-                chatService.getGenerationJobStateFlow(conv.id).first { it == null }
+            // Prepend a wrap-up instruction. Some models naturally write a summary paragraph
+            // after their tool-call sequence; others stop after the last tool result and emit
+            // no closing text. Without explicit text the parent has nothing to harvest and
+            // the sub-agent's findings are lost.
+            val taskWithWrapup = buildString {
+                append(request.task)
+                appendLine()
+                appendLine()
+                append("When you have finished, end with one short paragraph in plain text that summarises what you did and what you found. Do NOT stop on a tool call — finish with assistant text. The dispatcher harvests only your final text reply, so this paragraph is the entire response the parent sees.")
             }
-            if (finished == null) {
+            chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(taskWithWrapup)))
+            // The naive form `withTimeoutOrNull { …first { it == null } }` followed by a
+            // `finished == null` check is BROKEN: `.first { it == null }` returns the matched
+            // value — which IS null on successful completion (the Job? went to null when the
+            // LLM finished). So `finished == null` was true on BOTH timeout AND success, and
+            // every sub-agent looked TIMED_OUT despite actually finishing. Use a Unit sentinel
+            // so the two outcomes are distinguishable.
+            val completed: Unit? = withTimeoutOrNull(request.timeoutSeconds * 1000L) {
+                chatService.getGenerationJobStateFlow(conv.id).first { it == null }
+                Unit
+            }
+            if (completed == null) {
                 markTerminal(runId, SubAgentStatus.TIMED_OUT, "exceeded ${request.timeoutSeconds}-second cap")
+                notifyParentIfBackground(parentChatId, registry.get(runId))
                 return
             }
             // Harvest the assistant's final text from the conversation. Best-effort —
@@ -194,11 +213,13 @@ class SubAgentEngine(
                     finishedAtMs = System.currentTimeMillis(),
                 )
             }
+            notifyParentIfBackground(parentChatId, registry.get(runId))
         } catch (t: Throwable) {
             Log.w(TAG, "sub-agent run failed", t)
             // CancellationException → CANCELLED, anything else → FAILED.
             val terminal = if (t is kotlinx.coroutines.CancellationException) SubAgentStatus.CANCELLED else SubAgentStatus.FAILED
             markTerminal(runId, terminal, "${t::class.simpleName}: ${t.message.orEmpty()}")
+            notifyParentIfBackground(parentChatId, registry.get(runId))
         } finally {
             HeadlessConversations.unmark(conv.id)
             registry.clearJob(runId)
@@ -215,23 +236,84 @@ class SubAgentEngine(
         }
     }
 
+    /**
+     * Wake the parent conversation when a backgrounded sub-agent finishes — the parent's
+     * LLM gets a synthetic user message describing the completion and naturally synthesises
+     * a reply. Without this, the parent has no way to know the sub-agent finished except by
+     * the user manually asking "what happened?".
+     *
+     * Skip rules:
+     *  - Foreground runs: dispatch is synchronous (executionJob.join() in dispatch()), so the
+     *    tool result already carries the final state. No wake needed.
+     *  - Parents in headless mode: would loop / fork weirdly with cron + sub-agent + workflow
+     *    runs. The parent must be a regular interactive (in-app or Telegram-bot) conversation.
+     *  - parentChatId / runs missing: defensive.
+     *
+     * Cancellation hygiene: ChatService.sendMessage cancels any in-flight generation in the
+     * target conversation. To avoid stomping on a turn the user is engaged with, we wait up
+     * to 5 minutes for the parent to be idle before posting. After 5 minutes we post anyway
+     * — better to interrupt than to silently lose the completion.
+     */
+    private suspend fun notifyParentIfBackground(parentChatId: String?, run: SubAgentRun?) {
+        if (parentChatId == null || run == null || !run.runInBackground) return
+        val parentUuid = runCatching { Uuid.parse(parentChatId) }.getOrNull() ?: return
+        if (HeadlessConversations.isHeadless(parentUuid)) return
+
+        val message = buildString {
+            appendLine("[Sub-agent ${run.label} — ${run.status.name}]")
+            run.error?.takeIf { it.isNotBlank() }?.let {
+                appendLine("Error: $it")
+            }
+            run.result?.takeIf { it.isNotBlank() }?.let {
+                appendLine()
+                append(it)
+            }
+        }.trimEnd()
+
+        runCatching {
+            withTimeoutOrNull(5 * 60_000L) {
+                chatService.getGenerationJobStateFlow(parentUuid).first { it == null }
+                Unit
+            }
+            chatService.sendMessage(parentUuid, listOf(UIMessagePart.Text(message)))
+        }.onFailure {
+            Log.w(TAG, "failed to notify parent $parentChatId of subagent completion", it)
+        }
+    }
+
     private suspend fun harvestFinalText(conversationId: Uuid): String {
         // The Conversation persisted by the generation pipeline contains the full message
         // history (messageNodes). Each MessageNode holds parallel branches in
         // `messages: List<UIMessage>` keyed by `selectIndex`. Walk the currently-selected
-        // branch and return the text of the last assistant message — that's the
-        // sub-agent's final summary.
+        // branch and pull text from the last assistant message — that's the sub-agent's
+        // final summary.
+        //
+        // Robustness: if the last assistant message has NO Text part (some models stop
+        // after a tool call and emit no closing text), walk back through previous assistant
+        // messages and concatenate their Text parts so we don't return empty. Better to
+        // surface partial intermediate text than to return "" and lose the sub-agent's
+        // work entirely.
         return runCatching {
             val conv = conversationRepo.getConversationById(conversationId) ?: return@runCatching ""
             val selectedMessages = conv.messageNodes.mapNotNull { node ->
                 node.messages.getOrNull(node.selectIndex)
             }
-            val lastAssistant = selectedMessages.lastOrNull { msg ->
+            val assistantMessages = selectedMessages.filter { msg ->
                 msg.role.name.equals("assistant", ignoreCase = true)
-            } ?: return@runCatching ""
-            lastAssistant.parts
+            }
+            if (assistantMessages.isEmpty()) return@runCatching ""
+
+            // Try the last assistant message's text first.
+            val lastTexts = assistantMessages.last().parts
                 .filterIsInstance<UIMessagePart.Text>()
-                .joinToString("\n") { part -> part.text }
+                .joinToString("\n") { it.text }
+                .trim()
+            if (lastTexts.isNotBlank()) return@runCatching lastTexts
+
+            // Fallback: collect text from all assistant messages (preserve order).
+            assistantMessages
+                .flatMap { it.parts.filterIsInstance<UIMessagePart.Text>() }
+                .joinToString("\n") { it.text }
                 .trim()
         }.getOrDefault("")
     }

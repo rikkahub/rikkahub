@@ -162,6 +162,14 @@ class WorkflowRepository(
         workflowRunDao.trim(workflowId, WorkflowConstants.MAX_RUNS_HISTORY)
     }
 
+    /**
+     * Most-recent SUCCESS/FAILED fire — used by the cooldown gate. The projected
+     * `lastRunAtMs` column is bumped on every attempt (including skips) so it can't be
+     * used here without breaking cooldown semantics.
+     */
+    suspend fun lastActualFireAtMs(workflowId: String): Long? =
+        workflowRunDao.lastActualFireAtMs(workflowId)
+
     suspend fun lastRuns(workflowId: String, limit: Int = 20): List<WorkflowRun> =
         workflowRunDao.lastN(workflowId, limit).map { row ->
             WorkflowRun(

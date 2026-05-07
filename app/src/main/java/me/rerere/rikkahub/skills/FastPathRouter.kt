@@ -75,10 +75,9 @@ object FastPathRouter {
                     toolName = "get_battery_status",
                     args = buildJsonObject { },
                     format = { result ->
-                        val pct = result["level_percent"]?.jsonPrimitive?.contentOrNull
-                            ?: result["levelPercent"]?.jsonPrimitive?.contentOrNull ?: "?"
-                        val charging = result["is_charging"]?.jsonPrimitive?.contentOrNull?.toBoolean()
-                            ?: result["isCharging"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
+                        // get_battery_status emits "percent" + "charging" — see BatteryTool.kt.
+                        val pct = result["percent"]?.jsonPrimitive?.contentOrNull ?: "?"
+                        val charging = result["charging"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
                         if (charging) "Battery is at $pct% and charging."
                         else "Battery is at $pct%."
                     },
@@ -130,14 +129,18 @@ object FastPathRouter {
                     toolName = "get_storage_info",
                     args = buildJsonObject { },
                     format = { result ->
-                        val freeMb = result["internal_free_mb"]?.jsonPrimitive?.contentOrNull
-                            ?: result["internalFreeMb"]?.jsonPrimitive?.contentOrNull ?: "?"
-                        val totalMb = result["internal_total_mb"]?.jsonPrimitive?.contentOrNull
-                            ?: result["internalTotalMb"]?.jsonPrimitive?.contentOrNull ?: "?"
-                        val freeGb = freeMb.toDoubleOrNull()?.let { (it / 1024.0) } ?: 0.0
-                        val totalGb = totalMb.toDoubleOrNull()?.let { (it / 1024.0) } ?: 0.0
-                        if (totalGb > 0.0) "%.1f GB free of %.1f GB.".format(freeGb, totalGb)
-                        else "%.1f GB free.".format(freeGb)
+                        // get_storage_info nests under "internal": { total_bytes, free_bytes }.
+                        val internal = result["internal"] as? JsonObject
+                        val freeBytes = internal?.get("free_bytes")?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+                        val totalBytes = internal?.get("total_bytes")?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+                        val gb = 1024.0 * 1024 * 1024
+                        val freeGb = freeBytes?.let { it / gb } ?: 0.0
+                        val totalGb = totalBytes?.let { it / gb } ?: 0.0
+                        when {
+                            freeBytes == null -> "Storage info unavailable."
+                            totalGb > 0.0 -> "%.1f GB free of %.1f GB.".format(freeGb, totalGb)
+                            else -> "%.1f GB free.".format(freeGb)
+                        }
                     },
                 )
             }
@@ -152,10 +155,13 @@ object FastPathRouter {
                     toolName = "get_wifi_info",
                     args = buildJsonObject { },
                     format = { result ->
+                        // get_wifi_info emits "connected" + (when connected) "ssid".
+                        // The "error" branch (no permission / no service) returns just an error key.
+                        val err = result["error"]?.jsonPrimitive?.contentOrNull
                         val ssid = result["ssid"]?.jsonPrimitive?.contentOrNull
-                        val connected = result["is_connected"]?.jsonPrimitive?.contentOrNull?.toBoolean()
-                            ?: result["isConnected"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
+                        val connected = result["connected"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
                         when {
+                            err != null -> "WiFi info unavailable: $err."
                             !connected -> "WiFi is off or not connected."
                             !ssid.isNullOrBlank() && ssid != "<unknown ssid>" -> "Connected to $ssid."
                             else -> "Connected to WiFi (SSID hidden)."

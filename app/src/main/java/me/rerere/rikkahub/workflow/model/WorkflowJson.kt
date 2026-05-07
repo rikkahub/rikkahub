@@ -268,10 +268,20 @@ object WorkflowJson {
     private fun decodeTrigger(triggerObj: JsonObject): DecodeOutcome {
         val type = triggerObj["type"]?.jsonPrimitive?.contentOrNull
             ?: return DecodeErr(ParseResult.Err("missing_trigger_type", "trigger.type is required"))
-        val params = (triggerObj["params"] as? JsonObject) ?: buildJsonObject { }
+        // Accept either nested {type, params:{...}} OR flat {type, ...keys}. The nested
+        // form is canonical and what encodeTrigger emits, but most LLMs default to the
+        // flat shape (it's the natural JSON for a single object). Without this leniency
+        // any trigger with required params (time_cron's time_of_day, geofence_*'s lat/lng,
+        // battery_*'s threshold_percent) gets rejected with a confusing serializer error.
+        val nestedParams = triggerObj["params"] as? JsonObject
         val flat = buildJsonObject {
             put("type", JsonPrimitive(type))
-            for ((k, v) in params) put(k, v)
+            if (nestedParams != null) {
+                for ((k, v) in nestedParams) put(k, v)
+            } else {
+                // Flat form: every key other than "type" is a param.
+                for ((k, v) in triggerObj) if (k != "type") put(k, v)
+            }
         }
         return runCatching {
             DecodeOk(strict.decodeFromJsonElement(TriggerSpec.serializer(), flat))
@@ -294,10 +304,16 @@ object WorkflowJson {
     private fun decodeCondition(condObj: JsonObject): DecodeOutcome {
         val type = condObj["type"]?.jsonPrimitive?.contentOrNull
             ?: return DecodeErr(ParseResult.Err("missing_condition_type", "condition.type is required"))
-        val params = (condObj["params"] as? JsonObject) ?: buildJsonObject { }
+        // Accept either nested {type, params:{...}} OR flat {type, ...keys}. See the
+        // matching comment in decodeTrigger for the rationale.
+        val nestedParams = condObj["params"] as? JsonObject
         val flat = buildJsonObject {
             put("type", JsonPrimitive(type))
-            for ((k, v) in params) put(k, v)
+            if (nestedParams != null) {
+                for ((k, v) in nestedParams) put(k, v)
+            } else {
+                for ((k, v) in condObj) if (k != "type") put(k, v)
+            }
         }
         return runCatching {
             DecodeOk(strict.decodeFromJsonElement(ConditionSpec.serializer(), flat))

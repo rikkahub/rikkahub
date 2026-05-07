@@ -126,12 +126,14 @@ class WorkflowEngine(
             return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.FAILED, reason, "")
         }
 
-        // Cooldown gate
-        if (def.cooldownSeconds > 0 && entity.lastRunAtMs != null) {
-            val nextAllowed = entity.lastRunAtMs + def.cooldownSeconds * 1000L
-            if (firedAtMs < nextAllowed) {
-                return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_COOLDOWN, null, "")
-            }
+        // Cooldown gate. NOTE: must use `lastActualFireAtMs` (most-recent SUCCESS/FAILED
+        // from history) — NOT `entity.lastRunAtMs`, which gets overwritten on every
+        // attempt INCLUDING skips. Using the projected column would let SKIPPED_COOLDOWN
+        // fires push the cooldown window forward indefinitely; the cooldown could never
+        // be satisfied by waiting.
+        val lastActualFireMs = if (def.cooldownSeconds > 0) repository.lastActualFireAtMs(workflowId) else null
+        if (CooldownGate.isWithinCooldown(def.cooldownSeconds, lastActualFireMs, firedAtMs)) {
+            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_COOLDOWN, null, "")
         }
 
         // Daily-cap gate
@@ -282,6 +284,20 @@ class WorkflowEngine(
         val error: String?,
         val summary: String,
     )
+}
+
+/**
+ * Cooldown decision in isolation so the (load-bearing) gate logic can be unit-tested
+ * without spinning up Room + the engine. The rule: use the most-recent SUCCESS/FAILED
+ * fire time, not the workflow row's projected lastRunAtMs (the projected column is
+ * bumped on every attempt — including skips — so it can't be the cooldown anchor).
+ */
+internal object CooldownGate {
+    fun isWithinCooldown(cooldownSeconds: Int, lastActualFireMs: Long?, nowMs: Long): Boolean {
+        if (cooldownSeconds <= 0) return false
+        if (lastActualFireMs == null) return false
+        return nowMs < lastActualFireMs + cooldownSeconds * 1000L
+    }
 }
 
 /**

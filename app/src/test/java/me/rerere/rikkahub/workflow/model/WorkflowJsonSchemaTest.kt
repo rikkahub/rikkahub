@@ -170,4 +170,43 @@ class WorkflowJsonSchemaTest {
         assertNotNull("parseStored must NOT silently drop overlong-name stored rows", def)
         assertEquals(longName, def!!.name)
     }
+
+    // ------- Trigger / condition param-shape leniency (regression) ------
+    // The decoders historically required the canonical `{type, params:{...}}` envelope.
+    // Most LLMs default to flat `{type, key1, key2}` and silently mis-authored every
+    // workflow that needed required params. Both shapes must now parse.
+
+    @Test fun `time_cron flat shape with time_of_day parses`() {
+        val raw = """{"name":"daily","trigger":{"type":"time_cron","time_of_day":"09:00"},"actions":[{"tool":"show_toast","args":{}}]}"""
+        val r = WorkflowJson.parse(raw, knownTools)
+        assertTrue("flat trigger params must parse, got: $r", r is WorkflowJson.ParseResult.Ok)
+    }
+
+    @Test fun `time_cron nested params shape still parses`() {
+        val raw = """{"name":"daily","trigger":{"type":"time_cron","params":{"time_of_day":"09:00"}},"actions":[{"tool":"show_toast","args":{}}]}"""
+        val r = WorkflowJson.parse(raw, knownTools)
+        assertTrue("nested trigger params must still parse, got: $r", r is WorkflowJson.ParseResult.Ok)
+    }
+
+    @Test fun `time_between condition flat shape parses`() {
+        val raw = """
+            {"name":"night","trigger":{"type":"manual"},
+             "conditions":[{"type":"time_between","start":"23:00","end":"06:00"}],
+             "actions":[{"tool":"show_toast","args":{}}]}
+        """.trimIndent()
+        val r = WorkflowJson.parse(raw, knownTools)
+        assertTrue("flat condition params must parse (LLM default), got: $r", r is WorkflowJson.ParseResult.Ok)
+        val def = (r as WorkflowJson.ParseResult.Ok).definition
+        assertEquals(1, def.conditions.size)
+    }
+
+    @Test fun `time_between condition nested params shape still parses`() {
+        val raw = """
+            {"name":"night","trigger":{"type":"manual"},
+             "conditions":[{"type":"time_between","params":{"start":"23:00","end":"06:00"}}],
+             "actions":[{"tool":"show_toast","args":{}}]}
+        """.trimIndent()
+        val r = WorkflowJson.parse(raw, knownTools)
+        assertTrue("nested condition params must still parse, got: $r", r is WorkflowJson.ParseResult.Ok)
+    }
 }

@@ -41,11 +41,48 @@ fun workflowCreateTool(
 ): Tool = Tool(
     name = "workflow_create",
     description = """
-        Create a new workflow. Workflows are LLM-authored automations that run when their
-        trigger fires (and conditions pass). The user reviews and approves the trigger +
-        actions before persistence; HARDLINE applies at fire time.
-        Provide the full workflow as a single 'definition' JSON object (see schema).
-    """.trimIndent().replace("\n", " "),
+        Create a new event-driven workflow. Workflows fire when their trigger fires AND
+        every condition passes, then run the actions in order through the existing tool
+        dispatcher (HARDLINE applies at fire time, every action goes through the same
+        approval-bypass headless path scheduled jobs use).
+
+        ALL WORKFLOW TRIGGERS ARE RECURRING (event-driven). There is NO one-shot mode.
+        For one-shot "fire once at X time" the user wants the schedule_job tool instead
+        (schedule_type: "once") — a separate cron-jobs system, not workflows.
+
+        SUPPORTED TRIGGER TYPES (use these exact strings in trigger.type):
+          time_cron — recurring schedule. Either:
+              cron: "<5-field cron>"  (max once per minute), OR
+              time_of_day: "HH:mm" — fires every day at that time (and every day in
+                  days_of_week if provided, [1..7] ISO 1=Mon).
+              ALWAYS RECURRING. To run once, delete the workflow after the first fire,
+              or use the schedule_job tool with schedule_type:"once" instead.
+          wifi_connected / wifi_disconnected — params: ssid (optional, null = any)
+          bluetooth_device_connected / bluetooth_device_disconnected — params: device_address (optional)
+          headphones_plugged / headphones_unplugged — no params
+          power_connected / power_disconnected — no params (charger plug/unplug)
+          battery_below / battery_above — params: threshold_percent (1..100), fires on transition
+          geofence_enter / geofence_exit — params: lat, lng, radius_m (50..5000), label (optional)
+          app_launched / app_closed — params: package_name
+          notification_received — params: at least one of package_name, title_contains, text_contains
+          boot_completed — no params
+          screen_on / screen_off — no params
+          manual — only fires via workflow_run tool or "Run now" button
+
+        SUPPORTED CONDITION TYPES (AND-combined, all optional):
+          time_between (start "HH:mm", end "HH:mm", wraps midnight)
+          time_after_sunset / time_before_sunrise (offset_minutes)
+          day_of_week_in (days [1..7] ISO, 1=Mon)
+          wifi_ssid_is / wifi_ssid_in
+          battery_above / battery_below (percent)
+          is_charging / is_not_charging
+          foreground_app_is / foreground_app_in
+          screen_is_on / screen_is_off
+
+        ACTIONS: each is { tool: <existing tool name>, args: { ... }, timeout_seconds?: int }.
+        Use any tool currently registered for this assistant. workflow_run is NOT allowed
+        as an action (no chaining in v1).
+    """.trimIndent(),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -186,8 +223,12 @@ fun workflowUpdateTool(
 ): Tool = Tool(
     name = "workflow_update",
     description = """
-        Replace an existing workflow's full definition. The id field in the definition
-        must match an existing workflow; otherwise the call is rejected.
+        Replace an existing workflow's full definition. The id field must match an existing
+        workflow; otherwise the call is rejected. Same trigger / condition / action schema
+        as workflow_create — see that tool's description for the full enumeration of
+        supported trigger types (time_cron, wifi_*, bluetooth_*, headphones_*, power_*,
+        battery_*, geofence_*, app_*, notification_received, boot_completed, screen_*,
+        manual) and condition types.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
