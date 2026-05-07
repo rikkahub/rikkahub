@@ -721,7 +721,7 @@ class ChatService(
                         settings.suggestionPrompt.applyPlaceholders(
                             "locale" to Locale.getDefault().displayName,
                             "content" to conversation.currentMessages
-                                .takeLast(8).joinToString("\n\n") { it.summaryAsText() }),
+                                .joinToString("\n\n") { it.summaryAsText() }),
                     )
                 ),
                 params = TextGenerationParams(
