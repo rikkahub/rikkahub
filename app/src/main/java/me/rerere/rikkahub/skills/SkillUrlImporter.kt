@@ -87,6 +87,20 @@ class SkillUrlImporter(
     fun importFromText(rawBody: String, sourceLabel: String? = null, overrideName: String? = null): Result {
         val raw = rawBody
         if (raw.isBlank()) return Result.Err("empty_body", "skill body is empty")
+        // Reject HTML pages early. clawhub.ai and similar landing pages return a full
+        // HTML document instead of the raw SKILL.md, and our openclaw fallback parser
+        // happily extracted the first non-blank line of <!doctype html>… as the skill
+        // name — silently registering a broken skill the LLM then couldn't use_skill on.
+        // A real skill body never starts with HTML, so sniff the first non-blank line.
+        val sniff = raw.trimStart().take(256).lowercase()
+        if (sniff.startsWith("<!doctype") || sniff.startsWith("<html") ||
+            sniff.startsWith("<head") || sniff.startsWith("<body") ||
+            sniff.startsWith("<?xml")) {
+            return Result.Err(
+                "html_response",
+                "URL returned HTML, not a skill file. Use the raw SKILL.md URL (e.g. raw.githubusercontent.com path), not the web page URL."
+            )
+        }
         if (raw.length > MAX_BODY_BYTES) return Result.Err("body_too_large",
             "skill body exceeds ${MAX_BODY_BYTES / 1024}KB cap (got ${raw.length / 1024}KB)")
 

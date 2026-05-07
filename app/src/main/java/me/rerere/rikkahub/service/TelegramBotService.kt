@@ -469,16 +469,29 @@ class TelegramBotService : Service() {
         // in the queue forever — the user has no idea their second message wasn't dropped
         // and not received.
         val mutex = mutexFor(m.chatId)
-        val acquired = mutex.tryLock()
+        var acquired = mutex.tryLock()
         if (!acquired) {
-            try {
-                client.sendMessage(
-                    chatId = m.chatId,
-                    text = "⏳ A previous turn is waiting on tool approval. Tap a button on the approval keyboard, or send /stop to abandon it.",
-                    replyToMessageId = m.messageId,
-                )
-            } catch (_: Throwable) {}
-            return
+            // The prior turn is parked. If it's parked on a Pending tool approval, the
+            // user sending a fresh text message is the implicit "I want to abandon that
+            // and ask something else" — auto-stop the prior turn and proceed instead of
+            // bouncing the new message off the mutex with the "previous turn waiting"
+            // hint. If the prior turn is genuinely generating tokens, keep the bounce
+            // since cancelling could throw away in-flight work the user wants.
+            val stuckOnApproval = ApprovalPromptRegistry.snapshotForChat(m.chatId).isNotEmpty()
+            if (stuckOnApproval) {
+                autoCancelStuckTurn(m.chatId)
+                acquired = mutex.tryLock()
+            }
+            if (!acquired) {
+                try {
+                    client.sendMessage(
+                        chatId = m.chatId,
+                        text = "⏳ A previous turn is still generating. Send /stop to cancel it.",
+                        replyToMessageId = m.messageId,
+                    )
+                } catch (_: Throwable) {}
+                return
+            }
         }
         // Register THIS coroutine as the chat's active turn so /stop and /new can cancel
         // it. Capture the parent Job from the running coroutine context. On exit (normal,
@@ -681,6 +694,32 @@ class TelegramBotService : Service() {
                 for (tool in pendingTools) {
                     if (tool.toolCallId in promptedToolCallIds) continue
                     promptedToolCallIds += tool.toolCallId
+                    // Retry circuit breaker: if the same tool has already returned an
+                    // error envelope >=3 times in this turn, auto-deny the next call
+                    // instead of asking the user to approve another doomed retry. The
+                    // model gets back a synthetic envelope and is forced to give up +
+                    // report. Stops approval-flood when a smaller model ignores the
+                    // "one failed call is information, not a retry" rule from SOUL.
+                    val recentFailures = recentFailedRunsOf(convId, tool.toolName, baselineMessageCount)
+                    if (recentFailures >= 3) {
+                        scope.launch {
+                            chatService.handleToolApproval(
+                                conversationId = convId,
+                                toolCallId = tool.toolCallId,
+                                approved = false,
+                                reason = "aborted_repeated_failure: ${tool.toolName} returned an error $recentFailures times in this turn — stop retrying and report to the user.",
+                                toolName = tool.toolName,
+                            )
+                            try {
+                                client.sendMessage(
+                                    m.chatId,
+                                    "⛔ Auto-denied: <code>${TelegramHtmlRenderer.escape(tool.toolName)}</code> already failed ${recentFailures}× this turn. Telling the model to stop retrying.",
+                                    parseMode = PARSE_MODE_HTML,
+                                )
+                            } catch (_: Throwable) {}
+                        }
+                        continue
+                    }
                     scope.launch { sendApprovalPrompt(m.chatId, tool) }
                 }
                 iteration++
@@ -2038,6 +2077,59 @@ class TelegramBotService : Service() {
         val msg = if (newCap == null) "⚡ Max-token cap removed."
         else "⚡ Max output tokens set to $newCap."
         try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
+    }
+
+    /**
+     * Count tool runs in the current turn that returned an error envelope for [toolName].
+     * Walks the assistant messages from [baselineMessageCount] onward; for each Tool part
+     * matching [toolName] that has executed, looks at its first text output and treats it
+     * as a failure if the JSON has an "error" key (the standard error-envelope shape used
+     * across local tools) or the un-parsed text starts with the literal "error".
+     *
+     * Returns the count of distinct failed runs in this turn — fed into the retry-circuit-
+     * breaker before the next approval prompt is sent.
+     */
+    private fun recentFailedRunsOf(
+        convId: kotlin.uuid.Uuid,
+        toolName: String,
+        baselineMessageCount: Int,
+    ): Int {
+        val conv = chatService.getConversationFlow(convId).value
+        val assistantTools = conv.currentMessages.drop(baselineMessageCount)
+            .flatMap { it.parts.filterIsInstance<UIMessagePart.Tool>() }
+            .filter { it.toolName == toolName && it.isExecuted }
+        var failures = 0
+        for (t in assistantTools) {
+            val outText = t.output.filterIsInstance<UIMessagePart.Text>()
+                .joinToString("") { it.text }.trim()
+            if (outText.isEmpty()) continue
+            val isError = runCatching {
+                val obj = kotlinx.serialization.json.Json.parseToJsonElement(outText)
+                    as? kotlinx.serialization.json.JsonObject
+                obj?.containsKey("error") == true
+            }.getOrDefault(false) || outText.startsWith("{\"error\"") || outText.startsWith("error", ignoreCase = true)
+            if (isError) failures++
+        }
+        return failures
+    }
+
+    /**
+     * Quietly cancel the prior turn for [chatId] without sending a "🛑 Cancelled" message.
+     * Used by the auto-/stop path when the user sends a new text message while a Pending
+     * tool approval is parked — they're implicitly asking us to drop the stuck turn and
+     * answer the new question instead, so we cancel without noise.
+     */
+    private suspend fun autoCancelStuckTurn(chatId: Long) {
+        val mapping = chatRepo.getByChatId(chatId) ?: return
+        val convId = runCatching { Uuid.parse(mapping.conversationId) }.getOrNull() ?: return
+        chatService.stopGeneration(convId)
+        turnJobs.remove(chatId)?.let { runCatching { it.cancelAndJoin() } }
+        cancelStaleApprovalKeyboards(chatId, reason = "auto-cancelled by new message")
+        runCatching {
+            org.koin.java.KoinJavaComponent.getKoin()
+                .get<me.rerere.rikkahub.subagent.SubAgentRegistry>()
+                .cancelAllForParent(convId.toString())
+        }
     }
 
     /**
