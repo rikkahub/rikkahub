@@ -18,6 +18,7 @@ import me.rerere.rikkahub.ui.pages.extensions.SkillDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
+import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
 import me.rerere.rikkahub.ui.pages.setting.doctor.DoctorViewModel
@@ -82,4 +83,14 @@ val viewModelModule = module {
     viewModelOf(::ScheduledJobsViewModel)
     viewModelOf(::DoctorViewModel)
     viewModelOf(::SettingBrowserViewModel)
+
+    // Phase 22A: parameterised by LocalRuntime — one VM instance per provider tile.
+    viewModel<SettingLocalLlmViewModel> { params ->
+        SettingLocalLlmViewModel(
+            runtime = params.get(),
+            context = get(),
+            prefs = get(),
+            httpClient = get(),
+        )
+    }
 }
