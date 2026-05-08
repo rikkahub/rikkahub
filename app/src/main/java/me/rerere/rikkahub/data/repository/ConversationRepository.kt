@@ -323,10 +323,9 @@ class ConversationRepository(
     }
 
     suspend fun togglePinStatus(conversationId: Uuid) {
-        conversationDAO.updatePinStatus(
-            id = conversationId.toString(),
-            isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
-        )
+        // Single atomic UPDATE — avoids the read→write TOCTOU that existed when
+        // we read isPinned with getConversationById() and then flipped it.
+        conversationDAO.togglePinStatus(conversationId.toString())
     }
 
     private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {

@@ -71,8 +71,13 @@ val Migration_6_7 = object : Migration(6, 7) {
                         )
                     )
                 } catch (e: Exception) {
-                    // 如果解析失败，可能已经是新格式或者数据损坏，跳过
-                    error("Failed to migrate messages for conversation $id: ${e.message}")
+                    // Parsing failed — old format corrupt or already new format.
+                    // Preserve the row as an empty node list rather than aborting the
+                    // entire migration (which would leave the user permanently bricked).
+                    Log.w(TAG, "migrate: could not migrate conversation $id — keeping as empty nodes: ${e.message}")
+                    updates.add(
+                        arrayOf(id, assistantId, title, "[]", usage, createAt, updateAt, truncateIndex)
+                    )
                 }
             }
             cursor.close()
