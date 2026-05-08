@@ -104,8 +104,14 @@ class JsSkillRunner(private val context: Context) {
                     settings.allowFileAccessFromFileURLs = true           // file:// can fetch siblings
                     settings.allowUniversalAccessFromFileURLs = true      // so cross-origin XHR works for Wikipedia etc
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                    settings.domStorageEnabled = true           // localStorage for skills that store state
                     settings.javaScriptCanOpenWindowsAutomatically = false
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    // Skills run in a hidden 1×1 sandboxed WebView. ALWAYS_ALLOW lets skills
+                    // that load CDN libraries (e.g. qr-code → qrcodejs) or reach external APIs
+                    // (query-wikipedia → fetch) work without CORS/mixed-content errors while
+                    // the page is served from file://. This WebView never navigates freely, so
+                    // the security trade-off is narrow and deliberate.
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     layoutParams = ViewGroup.LayoutParams(1, 1)
                 }
                 wv.addJavascriptInterface(BridgeImpl(deferred), JS_INTERFACE_NAME)

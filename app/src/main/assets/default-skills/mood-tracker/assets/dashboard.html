@@ -387,6 +387,27 @@ limitations under the License.
     const urlDateString = urlParams.get('date');
     const plotDays = parseInt(urlParams.get('days')) || 0;
 
+    // When this page is opened from file:// via BrowserActivity the origin differs from
+    // the execution WebView that wrote to localStorage. The index.html fix encodes the
+    // full dataset as a base64 URL param so we can render without shared storage.
+    // If the param is present we seed localStorage from it (best-effort) so the
+    // in-page edit controls (delete, copy) still work within this session.
+    (function seedFromUrlParam() {
+      const encoded = urlParams.get('data');
+      if (!encoded) return;
+      try {
+        const json = decodeURIComponent(escape(atob(encoded)));
+        const parsed = JSON.parse(json);
+        if (parsed && typeof parsed === 'object') {
+          // Merge into localStorage: URL param wins on conflict so the viewer always
+          // shows the data the LLM just wrote, even if a stale localStorage entry exists.
+          const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+          const merged = Object.assign({}, existing, parsed);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        }
+      } catch (_) { /* URL param malformed — fall through to whatever localStorage has */ }
+    })();
+
     if (urlDateString) {
       currentDate = parseISODate(urlDateString);
     }
