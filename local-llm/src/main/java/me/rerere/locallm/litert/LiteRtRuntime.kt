@@ -41,6 +41,13 @@ class LiteRtRuntime(private val context: Context) {
     private val mutex = Mutex()
     private var loaded: LoadedModel? = null
 
+    /**
+     * In-session fallback accelerator. If the preferred/probed accelerator failed and we
+     * successfully fell back to CPU, remember that result for the rest of this session so
+     * subsequent loads skip the GPU-init attempt. Resets on app restart (acceptable for v1).
+     */
+    @Volatile private var sessionFallbackAccelerator: String? = null
+
     private data class LoadedModel(
         val modelPath: String,
         val accelerator: String,
@@ -60,10 +67,19 @@ class LiteRtRuntime(private val context: Context) {
      *
      * Callers should hold off on streamGenerate until this suspending function returns.
      * The `Engine.initialize()` call inside can take 10-60 s on first cold-load.
+     *
+     * When the preferred/probed accelerator fails (e.g. GPU OpenGL backend error on a device
+     * that lacks a working OpenCL/OpenGL stack), this function automatically retries with CPU.
+     * The fallback is remembered in-session so subsequent loads skip the failed GPU attempt.
+     * The persistent accelerator preference in LocalRuntimePreferences is NOT modified — the
+     * user can trigger Re-detect to update it explicitly.
      */
     suspend fun ensureLoaded(modelPath: String, preferredAccel: String? = null): String =
         mutex.withLock {
-            val accel = preferredAccel ?: AcceleratorProbe.probeLiteRt(context)
+            // Use in-session fallback if a prior GPU→CPU retry already succeeded this session.
+            val accel = sessionFallbackAccelerator
+                ?: preferredAccel
+                ?: AcceleratorProbe.probeLiteRt(context)
             val current = loaded
             if (current != null && current.modelPath == modelPath && current.accelerator == accel) {
                 return@withLock accel
@@ -72,51 +88,90 @@ class LiteRtRuntime(private val context: Context) {
             try { current?.conversation?.close() } catch (_: Throwable) {}
             try { current?.engine?.close() } catch (_: Throwable) {}
 
-            val backend = acceleratorToBackend(accel)
-            val engineConfig = EngineConfig(
-                modelPath = modelPath,
-                backend = backend,
-                visionBackend = null,
-                audioBackend = null,
-                maxNumTokens = 1024,
-                cacheDir = context.getExternalFilesDir(null)?.absolutePath,
-            )
-            val engine = withContext(Dispatchers.IO) {
-                val e = Engine(engineConfig)
-                try {
-                    e.initialize()
-                } catch (t: Throwable) {
-                    // Re-throw with an actionable message. Common failures:
-                    //   FAILED_PRECONDITION: No KV cache inputs found — model was built for a
-                    //     different LiteRT-LM version. Delete the file and use a model from the
-                    //     Gallery allowlist (Settings → Local AI → Install default).
-                    //   INVALID_ARGUMENT: tokenizer … exceeds — model's vocab size is larger
-                    //     than the runtime's built-in limit; use a smaller / re-quantised model.
+            // Try the preferred accelerator first; fall back to CPU if it is not already CPU.
+            val firstAttempt = runCatching { tryLoadWithBackend(modelPath, accel) }
+            val (engine, conv, finalAccel) = firstAttempt.getOrElse { firstError ->
+                if (accel == "CPU") {
+                    // CPU was already tried. Don't retry; surface the error.
                     throw RuntimeException(
-                        "LiteRT engine could not load this model. " +
-                        "The file may be packaged for a different runtime version. " +
-                        "Delete the model and install one from the Gallery allowlist " +
-                        "(tap Install default, or paste a litert-community/ HuggingFace URL). " +
-                        "Underlying error: ${t.message}",
-                        t,
+                        "LiteRT engine could not load this model on this device's GPU OR CPU. " +
+                        "This usually means the model file is packaged for a different runtime version. " +
+                        "Try a different model from the Gallery allowlist (tap Install default, or " +
+                        "paste a litert-community/ HuggingFace URL). " +
+                        "Underlying: ${firstError.message}",
+                        firstError,
                     )
                 }
-                e
-            }
-            val conv = engine.createConversation(
-                ConversationConfig(
-                    samplerConfig = SamplerConfig(
-                        topK = 64,
-                        topP = 0.95,
-                        temperature = 1.0,
-                    ),
-                    systemInstruction = null,
-                    tools = listOf(),
+                // Non-CPU failed. Log + retry with CPU.
+                android.util.Log.w(
+                    "LiteRtRuntime",
+                    "Engine init failed on $accel (${firstError.message}); retrying on CPU",
                 )
-            )
-            loaded = LoadedModel(modelPath, accel, engine, conv)
-            accel
+                try {
+                    tryLoadWithBackend(modelPath, "CPU")
+                } catch (cpuError: Throwable) {
+                    throw RuntimeException(
+                        "LiteRT engine could not load this model on this device's GPU OR CPU. " +
+                        "This usually means the model file is packaged for a different runtime version. " +
+                        "Try a different model from the Gallery allowlist (tap Install default, or " +
+                        "paste a litert-community/ HuggingFace URL). " +
+                        "Underlying: ${cpuError.message}",
+                        cpuError,
+                    )
+                }
+            }
+
+            // If we fell back to CPU from a non-CPU accelerator, cache that decision in-session.
+            if (finalAccel != accel) {
+                sessionFallbackAccelerator = finalAccel
+            }
+
+            loaded = LoadedModel(modelPath, finalAccel, engine, conv)
+            finalAccel
         }
+
+    /**
+     * Attempt to create + initialize an Engine and open a Conversation using the given
+     * accelerator label. Throws if the engine fails to initialize.
+     */
+    private suspend fun tryLoadWithBackend(
+        modelPath: String,
+        accel: String,
+    ): Triple<Engine, Conversation, String> {
+        val backend = acceleratorToBackend(accel)
+        val engineConfig = EngineConfig(
+            modelPath = modelPath,
+            backend = backend,
+            visionBackend = null,
+            audioBackend = null,
+            maxNumTokens = 1024,
+            cacheDir = context.getExternalFilesDir(null)?.absolutePath,
+        )
+        val engine = withContext(Dispatchers.IO) {
+            Engine(engineConfig).also { e ->
+                // Common failures:
+                //   FAILED_PRECONDITION: No KV cache inputs found — model was built for a
+                //     different LiteRT-LM version.
+                //   INVALID_ARGUMENT: tokenizer … exceeds — model's vocab size is larger
+                //     than the runtime's built-in limit.
+                //   INTERNAL: GPU backend error — OpenCL/OpenGL stack not supported; caller
+                //     retries with CPU automatically.
+                e.initialize()
+            }
+        }
+        val conv = engine.createConversation(
+            ConversationConfig(
+                samplerConfig = SamplerConfig(
+                    topK = 64,
+                    topP = 0.95,
+                    temperature = 1.0,
+                ),
+                systemInstruction = null,
+                tools = listOf(),
+            )
+        )
+        return Triple(engine, conv, accel)
+    }
 
     /**
      * Stream a generation. Each partial token / chunk arrives as a String element.
