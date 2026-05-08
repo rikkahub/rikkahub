@@ -3,8 +3,6 @@ package me.rerere.rikkahub.utils
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.util.Log
 import okhttp3.OkHttpClient
 import java.lang.ref.WeakReference
@@ -13,17 +11,22 @@ private const val TAG = "NetworkChangeMonitor"
 
 /**
  * Phase-17 stability fix — when the app is backgrounded (e.g. user opens Termux's
- * interactive terminal for `htop`) and Android changes the active network OR puts the
- * app's network into a restricted state, OkHttp's connection pool can hold onto stale
- * sockets and the JVM's DNS negative-cache can persist a transient `UnknownHostException`.
+ * interactive terminal for `htop`) and Android changes the active default network OR
+ * puts the app's network into a restricted state, OkHttp's connection pool can hold
+ * onto stale sockets and the JVM's DNS negative-cache can persist a transient
+ * `UnknownHostException`.
  *
  * On return to the app the next LLM request fails with `Unable to resolve host "..."`
  * even though the network is back and a fresh `nslookup` would succeed.
  *
- * Standard fix: register a default-network callback. On every network state transition
- * (onAvailable, onCapabilitiesChanged with INTERNET capability), call
- * `connectionPool.evictAll()` on every registered OkHttp client so the next request
- * opens a fresh socket and the DNS resolver re-runs from scratch.
+ * Fix: register a **default-network** callback (not the more general
+ * `registerNetworkCallback`, which also fires for non-default networks like a
+ * simultaneously-connected cellular when on Wi-Fi). Track the last default-network
+ * handle and only evict OkHttp connection pools when the handle actually changes
+ * (real Wi-Fi ↔ cell handoff, or recovery after a `onLost`). Capability ticks like
+ * signal-strength changes and validation-bit toggles do NOT trigger eviction; before
+ * the fix those caused multiple-times-per-minute eviction storms that killed every
+ * keep-alive socket and forced fresh TCP+TLS handshakes for every subsequent request.
  *
  * Registry pattern: anyone holding a long-lived OkHttp client (LLM provider singleton,
  * MCP manager, Telegram bot client, skill URL importer) can call [register] to opt in.
@@ -33,6 +36,17 @@ object NetworkChangeMonitor {
 
     @Volatile private var started: Boolean = false
     @Volatile private var callback: ConnectivityManager.NetworkCallback? = null
+
+    /**
+     * Handle of the last default network we evicted for. `Network.getNetworkHandle()`
+     * returns a stable id for a given network instance. We compare it across
+     * `onAvailable` callbacks so a re-announcement of the same default network (which
+     * happens transiently when the OS reissues default after a settled-down period)
+     * doesn't fire eviction. Cleared on `onLost` so the next `onAvailable` always
+     * evicts even if the same physical network comes back with the same handle.
+     */
+    @Volatile private var lastDefaultHandle: Long? = null
+
     private val clients: MutableList<WeakReference<OkHttpClient>> = mutableListOf()
 
     /** Register a client for eviction on network change. Safe to call any time. */
@@ -68,28 +82,36 @@ object NetworkChangeMonitor {
                 as? ConnectivityManager ?: return
             val cb = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    Log.i(TAG, "default network available: $network — evicting OkHttp connection pools to force DNS re-resolution")
-                    evictAll()
-                }
-                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                    // Internet-capability flip is the symptom of switching wifi → cell or
-                    // vice-versa, OR the network being restricted while backgrounded.
-                    if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-                        Log.d(TAG, "network gained INTERNET capability — evicting pools")
+                    val handle = network.networkHandle
+                    val prev = lastDefaultHandle
+                    if (handle != prev) {
+                        Log.i(TAG, "default network changed ($prev -> $handle), evicting OkHttp pools to force DNS re-resolution")
+                        lastDefaultHandle = handle
                         evictAll()
                     }
+                    // Same handle re-announcement: settled-down rebroadcast, no-op.
                 }
+                override fun onLost(network: Network) {
+                    // Clear so the next onAvailable evicts unconditionally, even when
+                    // the same physical network reappears with the same handle id (the
+                    // post-Termux-backgrounding case the monitor exists to fix).
+                    if (lastDefaultHandle == network.networkHandle) {
+                        lastDefaultHandle = null
+                    }
+                }
+                // Intentionally NO override of onCapabilitiesChanged. Capability ticks
+                // (signal strength, validation, RSSI) used to trigger eviction storms
+                // that killed every keep-alive socket multiple times per minute. The
+                // post-Termux DNS regression we're guarding against is a network-
+                // handoff symptom, which onAvailable + onLost catch correctly.
             }
             try {
-                val request = NetworkRequest.Builder()
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    .build()
-                cm.registerNetworkCallback(request, cb)
+                cm.registerDefaultNetworkCallback(cb)
                 callback = cb
                 started = true
                 Log.i(TAG, "registered default network callback for ${clients.size} OkHttp client(s)")
             } catch (t: Throwable) {
-                Log.w(TAG, "registerNetworkCallback failed", t)
+                Log.w(TAG, "registerDefaultNetworkCallback failed", t)
             }
         }
     }
