@@ -1,6 +1,7 @@
 package me.rerere.locallm
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -9,13 +10,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 
+private const val TAG = "ModelInstall"
+
 /**
  * Downloads a local-LLM model file from a URL into app-private storage.
  *
- * Resume-aware: if a `<filename>.partial` exists, sends a `Range:` header to pick up
- * where it stopped. Atomic rename to the final filename only after the byte count
- * matches the server-reported `Content-Length`. Cancel-safe: a cancelled coroutine
- * leaves the partial file in place so the next attempt resumes.
+ * No resume in v1 (Phase 22A) — always starts fresh; any leftover `.partial` file is
+ * deleted before the request is issued. Resume with `Range:` header comes in Phase 22B.
+ *
+ * Atomic rename to the final filename only on success, after a magic-byte integrity
+ * check. Cancel-safe: a cancelled coroutine leaves no partial file (it is deleted on
+ * failure paths and never renamed on cancellation before [Progress.Done]).
  *
  * Files land under `${context.filesDir}/local-models/{litert|llamacpp}/<basename>`.
  */
@@ -49,9 +54,9 @@ object ModelInstall {
      */
     fun normalizeHuggingFaceUrl(url: String): String {
         if (!url.contains("huggingface.co")) return url
-        return url
-            .replace("/blob/main/", "/resolve/main/")
-            .replace(Regex("/blob/([^/]+)/")) { m -> "/resolve/${m.groupValues[1]}/" }
+        // Single regex handles all branches (main, dev, v1, etc.); the earlier literal
+        // replace for /blob/main/ was redundant since the regex already covers it.
+        return url.replace(Regex("/blob/([^/]+)/")) { m -> "/resolve/${m.groupValues[1]}/" }
     }
 
     fun isValidDownloadUrl(url: String): Boolean {
@@ -170,6 +175,7 @@ object ModelInstall {
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
+                Log.w(TAG, "Download failed: HTTP ${response.code} for $normalized")
                 emit(Progress.Failed(IllegalStateException("HTTP ${response.code}")))
                 return@flow
             }
@@ -178,6 +184,7 @@ object ModelInstall {
             // Cloudflare error pages, etc. would otherwise land silently as an HTML file.
             val contentType = response.header("Content-Type").orEmpty()
             if (contentType.startsWith("text/html") || contentType.startsWith("application/xhtml")) {
+                Log.w(TAG, "Download rejected: HTML content-type '$contentType' for $normalized")
                 emit(Progress.Failed(IllegalStateException(
                     "Server returned an HTML page, not a model file. " +
                     "Use a /resolve/ URL — for HuggingFace, /blob/ paths auto-rewrite to /resolve/."
@@ -218,6 +225,7 @@ object ModelInstall {
 
             if (bailed) {
                 runCatching { partial.delete() }
+                Log.w(TAG, "Download aborted: HTML magic bytes detected in response body for $normalized")
                 emit(Progress.Failed(IllegalStateException(
                     "Server returned an HTML page (magic-byte check failed). Check the URL."
                 )))
@@ -231,17 +239,30 @@ object ModelInstall {
             val firstBytes = ByteArray(16)
             val bytesRead = partial.inputStream().use { it.read(firstBytes) }
             if (bytesRead > 0 && !isValidMagicForExtension(ext, firstBytes.copyOf(bytesRead))) {
+                val hexDump = firstBytes.take(8).joinToString(" ") { "%02x".format(it.toInt() and 0xff) }
+                Log.w(TAG, "Magic-byte check failed for .$ext — first bytes: $hexDump ($normalized)")
                 runCatching { partial.delete() }
                 emit(Progress.Failed(IllegalStateException(
                     "Downloaded file does not have the expected magic bytes for .$ext " +
-                    "(starts with: ${firstBytes.take(8).joinToString(" ") { "%02x".format(it.toInt() and 0xff) }}). " +
+                    "(starts with: $hexDump). " +
                     "The server may have served the wrong content, or the download was corrupted."
                 )))
                 return@flow
             }
 
             if (target.exists()) target.delete()
-            partial.renameTo(target)
+            val renamed = partial.renameTo(target)
+            if (!renamed) {
+                // renameTo() returns false silently on cross-partition moves or permission errors.
+                Log.e(TAG, "Rename failed: ${partial.absolutePath} -> ${target.absolutePath}")
+                runCatching { partial.delete() }
+                emit(Progress.Failed(IllegalStateException(
+                    "Failed to move downloaded file to its final location: ${target.absolutePath}. " +
+                    "Check available storage and permissions."
+                )))
+                return@flow
+            }
+            Log.i(TAG, "Download complete: ${target.absolutePath}")
             emit(Progress.Done(target))
         }
     }.flowOn(Dispatchers.IO)

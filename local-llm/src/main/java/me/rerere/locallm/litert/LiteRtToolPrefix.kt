@@ -1,11 +1,14 @@
 package me.rerere.locallm.litert
 
+import android.util.Log
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.Tool
+
+private const val TAG = "LiteRtToolPrefix"
 
 /**
  * Prompt-engineered tool calling for LiteRT models. The model is taught the
@@ -24,9 +27,15 @@ object LiteRtToolPrefix {
         allowTrailingComma = true
     }
 
+    // Capture everything between <tool_call> and </tool_call> and hand the raw text to
+    // the lenient JSON parser.  Using a greedy [\s\S]* here is intentional: the closing
+    // tag "</tool_call>" is the real terminator, so there's no risk of run-on matching.
+    // An earlier non-greedy \{[\s\S]*?\} would stop at the first "}" — breaking nested
+    // argument objects like {"key": {"nested": 1}}.
+    // RegexOption.MULTILINE only affects ^ and $ anchors which this pattern doesn't use,
+    // so it's been removed to avoid confusion.
     private val toolCallPattern = Regex(
-        pattern = "<tool_call>\\s*(\\{[\\s\\S]*?\\})\\s*</tool_call>",
-        options = setOf(RegexOption.MULTILINE),
+        pattern = "<tool_call>\\s*([\\s\\S]*?)\\s*</tool_call>",
     )
 
     data class ParsedCall(val name: String, val arguments: JsonObject)
@@ -65,6 +74,12 @@ Only emit tool calls when actually needed. Otherwise reply with normal text.
                 val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
                 val args = (obj["arguments"] as? JsonObject) ?: JsonObject(emptyMap())
                 ParsedCall(name, args)
+            }.onFailure { t ->
+                // Log parse failures so model quality issues are diagnosable in logcat.
+                // Silent drops are fine UX (the model will just produce text output instead),
+                // but the log helps distinguish "model didn't call a tool" from
+                // "model called a tool but emitted malformed JSON".
+                Log.w(TAG, "Failed to parse tool_call block — raw=[$raw]: ${t.message}")
             }.getOrNull()
         }.toList()
     }

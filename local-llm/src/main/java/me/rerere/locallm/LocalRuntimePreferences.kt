@@ -78,10 +78,17 @@ class LocalRuntimePreferences(private val context: Context) {
             val raw = prefs[installedModelsKey(runtime)]
             val current = decodeInstalledMap(raw).toMutableMap()
             current.remove(fileName)
-            prefs[installedModelsKey(runtime)] = json.encodeToString(
-                MapSerializer(String.serializer(), String.serializer()),
-                current,
-            )
+            if (current.isEmpty()) {
+                // Remove the key entirely rather than writing an empty JSON object; this keeps the
+                // DataStore clean and makes the "no models installed" path symmetric with the
+                // initial state (key absent == empty map via decodeInstalledMap).
+                prefs.remove(installedModelsKey(runtime))
+            } else {
+                prefs[installedModelsKey(runtime)] = json.encodeToString(
+                    MapSerializer(String.serializer(), String.serializer()),
+                    current,
+                )
+            }
         }
     }
 }

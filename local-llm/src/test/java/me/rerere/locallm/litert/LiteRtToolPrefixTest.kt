@@ -83,4 +83,30 @@ class LiteRtToolPrefixTest {
         val response = "I'm not sure how to do that yet."
         assertEquals(0, LiteRtToolPrefix.extractToolCalls(response).size)
     }
+
+    @Test fun `extractToolCalls handles nested objects inside arguments`() {
+        // Regression: an earlier \{[\s\S]*?\} regex stopped at the first "}" — breaking
+        // nested argument objects.  The outer </tool_call> tag is now the real terminator.
+        val response = """<tool_call>{"name": "set_config", "arguments": {"options": {"retry": true, "timeout": 30}}}</tool_call>"""
+        val calls = LiteRtToolPrefix.extractToolCalls(response)
+        assertEquals(1, calls.size)
+        assertEquals("set_config", calls[0].name)
+        // The outer "options" key should be present
+        assertNotNull(calls[0].arguments["options"])
+    }
+
+    @Test fun `extractToolCalls returns empty when name field is missing`() {
+        // A malformed emission without a "name" key should be silently skipped.
+        val response = """<tool_call>{"arguments": {"x": 1}}</tool_call>"""
+        assertEquals(0, LiteRtToolPrefix.extractToolCalls(response).size)
+    }
+
+    @Test fun `extractToolCalls defaults to empty arguments when arguments field is absent`() {
+        // Model may omit "arguments" for no-arg tools; should default to an empty JsonObject.
+        val response = """<tool_call>{"name": "get_time"}</tool_call>"""
+        val calls = LiteRtToolPrefix.extractToolCalls(response)
+        assertEquals(1, calls.size)
+        assertEquals("get_time", calls[0].name)
+        assertEquals(0, calls[0].arguments.size)
+    }
 }

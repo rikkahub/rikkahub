@@ -7,9 +7,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -17,6 +23,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import me.rerere.ai.provider.Model
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Edit01
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ProviderSetting
@@ -747,6 +758,22 @@ private fun ColumnScope.ProviderConfigureLiteRT(
         }
     }
 
+    // Manage installed files — rename or delete each downloaded .litertlm.
+    if (provider.models.isNotEmpty()) {
+        Text(
+            stringResource(R.string.local_llm_manage_files_title),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        provider.models.forEach { model ->
+            InstalledModelRow(
+                model = model,
+                onRename = { newName -> vm.renameModel(model.modelId, newName) },
+                onDelete = { vm.deleteModel(model.modelId) },
+            )
+        }
+    }
+
     // Accelerator row with re-detect button.
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -774,7 +801,7 @@ private fun ColumnScope.ProviderConfigureLiteRT(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             Text(
-                text = "Downloading… ${progress.percent}%",
+                text = stringResource(R.string.local_llm_download_progress, progress.percent),
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -818,4 +845,85 @@ private fun ColumnScope.ProviderConfigureLlamaCpp(
         text = stringResource(R.string.local_llm_llamacpp_not_yet_implemented),
         style = MaterialTheme.typography.bodyMedium,
     )
+}
+
+@Composable
+private fun InstalledModelRow(
+    model: Model,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var renaming by remember { mutableStateOf(false) }
+    var renameText by remember(model.id) { mutableStateOf(model.displayName) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    if (renaming) {
+        OutlinedTextField(
+            value = renameText,
+            onValueChange = { renameText = it },
+            label = { Text(stringResource(R.string.local_llm_rename_label)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            TextButton(onClick = { renaming = false }) {
+                Text(stringResource(R.string.cancel))
+            }
+            Spacer(Modifier.weight(1f))
+            Button(
+                onClick = {
+                    onRename(renameText)
+                    renaming = false
+                },
+                enabled = renameText.isNotBlank() && renameText != model.displayName,
+            ) {
+                Text(stringResource(R.string.local_llm_rename_save))
+            }
+        }
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(model.displayName, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    model.modelId,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LocalContentColor.current.copy(alpha = 0.6f),
+                )
+            }
+            IconButton(onClick = { renaming = true }) {
+                Icon(HugeIcons.Edit01, stringResource(R.string.local_llm_rename))
+            }
+            IconButton(onClick = { confirmDelete = true }) {
+                Icon(HugeIcons.Delete01, stringResource(R.string.local_llm_delete))
+            }
+        }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.local_llm_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.local_llm_delete_confirm_message, model.displayName)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete()
+                }) {
+                    Text(stringResource(R.string.local_llm_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 }

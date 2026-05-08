@@ -16,8 +16,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    testOptions {
+        // Return default values (null / 0 / false) for Android framework calls in JVM unit
+        // tests instead of throwing "not mocked" exceptions. Required because production
+        // code (e.g. LiteRtToolPrefix) calls android.util.Log which isn't available on JVM.
+        unitTests.isReturnDefaultValues = true
+    }
     sourceSets {
-        getByName("main").jniLibs.srcDirs("src/main/jniLibs")
+        getByName("main").jniLibs.setSrcDirs(listOf("src/main/jniLibs"))
     }
     packaging {
         jniLibs {

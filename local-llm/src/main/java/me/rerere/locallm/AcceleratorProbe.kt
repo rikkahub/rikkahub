@@ -47,14 +47,22 @@ object AcceleratorProbe {
         val isQualcomm = Build.HARDWARE.contains("qcom", ignoreCase = true) ||
             Build.MANUFACTURER.equals("Qualcomm", ignoreCase = true)
         val qnnLibrarySupported = isQualcomm && runCatching {
-            // The QNN delegate ships as part of the MediaPipe AAR. Attempting to
-            // load it eagerly fails fast on devices that lack the right ABI.
+            // The QNN delegate is bundled in the LiteRT-LM AAR (litertlm-android). Attempting to
+            // load it eagerly fails fast on non-Qualcomm devices or where the right ABI is absent.
+            // A failed load leaves the class loader in a partially-initialised state for that
+            // library name, but Android's JNI loader is idempotent for subsequent real loads of the
+            // same name by the actual runtime — the side effect is acceptable.
             System.loadLibrary("qnn_delegate_jni")
             true
         }.getOrDefault(false)
+        // FEATURE_OPENGLES_EXTENSION_PACK is a reasonable proxy for GPU-delegate capability but
+        // is only advisory — the LiteRT-LM runtime may still fail to initialise the GPU backend
+        // at model-load time even if this returns true. The AcceleratorProbe is therefore
+        // intentionally optimistic: prefer GPU when the feature flag suggests it's present, and
+        // let the runtime's own error path trigger a re-probe if load fails.
         val gpuDelegateSupported = context.packageManager.hasSystemFeature(
             PackageManager.FEATURE_OPENGLES_EXTENSION_PACK,
-        ) || true // default true; real failures surface from the MediaPipe runtime init
+        )
         val nnapiSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1
         return pickLiteRt(
             LiteRtCapabilities(

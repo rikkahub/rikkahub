@@ -161,4 +161,42 @@ class ModelInstallTest {
         val bytes = ByteArray(16)
         assertFalse(ModelInstall.isValidMagicForExtension("gguf", bytes))
     }
+
+    @Test fun `isValidMagicForExtension rejects buffer shorter than 4 bytes`() {
+        // Any buffer < 4 bytes returns false regardless of extension.
+        assertFalse(ModelInstall.isValidMagicForExtension("gguf", byteArrayOf(0x47, 0x47, 0x55)))
+        assertFalse(ModelInstall.isValidMagicForExtension("litertlm", byteArrayOf()))
+        assertFalse(ModelInstall.isValidMagicForExtension("litertlm", byteArrayOf(0x4c)))
+    }
+
+    @Test fun `isValidMagicForExtension unknown extension rejects all-zero bytes`() {
+        // The else branch: all-zero bytes should be rejected (looks like sparse-fill).
+        val zeros = ByteArray(16)
+        assertFalse(ModelInstall.isValidMagicForExtension("bin", zeros))
+    }
+
+    @Test fun `isValidMagicForExtension unknown extension accepts non-zero non-html bytes`() {
+        // The else branch: a non-zero, non-HTML buffer should be accepted.
+        val bytes = byteArrayOf(0xDE.toByte(), 0xAD.toByte(), 0xBE.toByte(), 0xEF.toByte()) + ByteArray(12)
+        assertTrue(ModelInstall.isValidMagicForExtension("bin", bytes))
+    }
+
+    @Test fun `looksLikeHtml returns false for empty count`() {
+        // count=0 means no bytes were read — not HTML.
+        val buf = ByteArray(64)
+        assertFalse(ModelInstall.looksLikeHtml(buf, 0))
+    }
+
+    @Test fun `extractFileNameFromUrl returns empty string for bare domain URL`() {
+        // Edge case: URL with no file path segment after the last slash.
+        assertEquals("", ModelInstall.extractFileNameFromUrl("https://example.com/"))
+    }
+
+    @Test fun `normalizeHuggingFaceUrl handles blob with main branch via regex only`() {
+        // Verify the single-regex path correctly transforms /blob/main/ (regression guard
+        // after removing the redundant literal string replace).
+        val blob = "https://huggingface.co/user/repo/blob/main/file.gguf"
+        val expected = "https://huggingface.co/user/repo/resolve/main/file.gguf"
+        assertEquals(expected, ModelInstall.normalizeHuggingFaceUrl(blob))
+    }
 }
