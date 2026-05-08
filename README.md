@@ -6,7 +6,7 @@
 
 **Your phone, automated.**
 
-A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native Android LLM chat client into a real on-device agent: 60+ device tools, scheduled jobs, SSH, screen automation, file manager, voice transcription, and a remote Telegram bot. All opt-in.
+A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native Android LLM chat client into a real on-device agent: 70+ device tools, AI-authored workflows, scheduled jobs, an in-app browser the AI drives, SSH, screen automation, file manager, music player, voice transcription, and a remote Telegram bot. All opt-in.
 
 <p>
   <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/v/release/ExTV/rikkahub-agent?include_prereleases&style=flat-square&label=release&color=blue" alt="Release" /></a>
@@ -40,6 +40,12 @@ Vanilla LLM chat apps can answer questions. They can't open your apps, send your
 > *"Take a screenshot every 30 minutes for the next 4 hours so I can see what I actually did all afternoon."*
 >
 > *"Use Termux to build me a webpage listing everything you can do, then open it in my browser."*
+>
+> *"When I plug in headphones at home WiFi after 7pm, start my evening playlist."*
+>
+> *"Open my router's admin page, sign in with the saved password, and tell me which devices are eating the most bandwidth right now."*
+>
+> *"Spin up two researches in parallel: one finds the cheapest one-way flight to Tokyo this month, the other lists hotels in Shibuya under $100. Tell me when both finish."*
 
 Each of those is a one-line setup. The phone runs them in the background while you live your life.
 
@@ -61,6 +67,22 @@ Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the to
 ### Telegram bot
 
 Talk to your assistant from anywhere. Set up a private Telegram bot in a minute, then chat with it like a contact. Send a question, a photo, a PDF, or a voice note. It can run on your behalf while you're at work, while you sleep, or while you're driving. Approval prompts use simple Yes/No buttons in the chat.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### In-app browser
+
+The agent has a real browser built into the app. Watch it open URLs, click through cookie banners, fill in search boxes, scroll, and read the page back to you. Or send it on errands from Telegram. It streams a fresh screenshot to your chat after every step. There's a floating chat pill on the browser screen so you can keep talking to the AI without ever leaving the page. Built-in article extraction and diff-after-action keep the token cost low even on long browse sessions.
+
+</td>
+<td valign="top">
+
+### Workflows
+
+Tasker-style automation, but the AI writes the rules for you. Just describe the trigger and the action: *"when I get home, turn the ringer off"*; *"every weekday at 8am if battery is over 50%, check my email and ping me if anything's urgent"*. 19 triggers (WiFi, Bluetooth, headphones, geofence, app launch, notifications received, time, charging, screen on/off, and more) and 14 conditions (battery thresholds, sunrise/sunset, day-of-week, current foreground app, screen state) decide when each one fires. Receivers register only when a workflow actually needs them, so battery drain stays minimal.
 
 </td>
 </tr>
@@ -93,6 +115,38 @@ Save your servers once and the AI can SSH into any of them on demand. Run a comm
 ### Termux + voice transcription
 
 If you have Termux installed, the AI can run real Linux commands on your phone: installing packages, building software, running scripts. On top of that, voice notes you send in Telegram get transcribed automatically. Everything runs on your phone, no cloud transcription, no API key, no internet needed.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### Music + media
+
+Ask for music and the AI plays it through Android's normal media controls: lock-screen art, headphone keys, the works. Pause, resume, lower the volume for a meeting and bring it back later, all from chat or Telegram. Even after a force-stop the AI can pick up where you left off, same track, same position, via a snapshot fallback. No "you killed the player so it's gone forever". Your queue survives.
+
+</td>
+<td valign="top">
+
+### Skills
+
+Drop a Markdown skill file into the app and the AI gains a new playbook it'll follow step-by-step: auto-reply to a contact, summarise a notification stack, or run a JavaScript mini-app whose result opens right in the in-app browser. A bundled featured catalog ships with a QR generator, a Wikipedia query box, a piano you can play, an interactive map, and more. Add new skills from a URL, a markdown file you share into the app, or pick from the bundled catalog.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### Sub-agents
+
+For long tasks the main assistant can dispatch a focused **sub-agent** into a clean side-context, optionally on a smaller and cheaper model. Two or more run in parallel: one researches a topic while another updates your server. Each result comes back as a single summary so the main chat doesn't drown in irrelevant tool output, and `/stop` cascades cancellation through every active child in one tick.
+
+</td>
+<td valign="top">
+
+### Doctor
+
+A built-in health checkup for the app. Tap Settings, then Doctor, and it runs a top-to-bottom audit of permissions, background services, database integrity, network, Termux, and diagnostics. Missing something? Tap the auto-fix button next to the row to grant the permission, restart the service, or rebuild the chat search index. The same report runs from Telegram via `/doctor` for remote troubleshooting. Smart enough to skip permissions you haven't enabled any tools for.
 
 </td>
 </tr>
@@ -141,7 +195,7 @@ If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.
 
 ## 🔧 Building from source
 
-Requires the [bun](https://bun.sh) JavaScript runtime on PATH — the build chain
+Requires the [bun](https://bun.sh) JavaScript runtime on PATH. The build chain
 runs `bun install` and `bun run build` in `web-ui/` to produce the in-app web
 UI bundle before packaging the APK.
 
