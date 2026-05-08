@@ -1440,5 +1440,6 @@
   <string name="local_llm_tool_calling_litert">Tool calling: prompt-engineered. Accuracy varies per model.</string>
   <string name="local_llm_tool_calling_llamacpp">Tool calling: grammar-constrained. Reliable JSON output on any GGUF that supports llama.cpp grammars.</string>
   <string name="local_llm_llamacpp_coming_soon">Coming soon — runtime ships in the next update.</string>
+  <string name="local_llm_enable_label">Enable</string>
 </resources>
 

@@ -6,12 +6,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -77,7 +77,7 @@ fun LocalLlmProviderTile(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Top row: avatar + inline toggle
+            // Top row: avatar only
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -85,21 +85,6 @@ fun LocalLlmProviderTile(
                 AutoAIIcon(
                     name = provider.name,
                     modifier = Modifier.size(36.dp),
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Switch(
-                    checked = provider.enabled,
-                    enabled = !isDownloading,
-                    onCheckedChange = { newValue ->
-                        when {
-                            newValue && state is SettingLocalLlmViewModel.UiState.Idle ->
-                                showDialog = true
-                            newValue && isReady ->
-                                viewModel.setProviderEnabled(true)
-                            !newValue && provider.enabled ->
-                                viewModel.setProviderEnabled(false)
-                        }
-                    },
                 )
             }
 
@@ -160,6 +145,39 @@ fun LocalLlmProviderTile(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp),
+                    )
+                }
+
+                // Enable row — prominent labeled toggle at the bottom of the card
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = 4.dp),
+                    thickness = 0.5.dp,
+                    color = LocalContentColor.current.copy(alpha = 0.2f),
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.local_llm_enable_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = provider.enabled,
+                        enabled = !isDownloading,
+                        onCheckedChange = { newValue ->
+                            when {
+                                newValue && state is SettingLocalLlmViewModel.UiState.Idle ->
+                                    showDialog = true
+                                newValue && isReady ->
+                                    viewModel.setProviderEnabled(true)
+                                !newValue && provider.enabled ->
+                                    viewModel.setProviderEnabled(false)
+                            }
+                        },
                     )
                 }
             }
