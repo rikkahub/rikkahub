@@ -14,6 +14,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 
 private const val CHANNEL_ID = "rikkahub_ai_tool"
 private const val CHANNEL_NAME = "AI tool notifications"
@@ -28,7 +29,11 @@ private fun ensureChannel(context: Context) {
     NotificationManagerCompat.from(context).createNotificationChannel(channel)
 }
 
-fun notificationTool(context: Context): Tool = Tool(
+fun notificationTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "post_notification",
     description = """
         Post an Android notification on behalf of the user.
@@ -54,6 +59,7 @@ fun notificationTool(context: Context): Tool = Tool(
         )
     },
     execute = {
+        wakeScreenIfNeeded(context)
         val params = it.jsonObject
         val title = params["title"]?.jsonPrimitive?.contentOrNull
             ?: error("title is required")
@@ -90,6 +96,7 @@ fun notificationTool(context: Context): Tool = Tool(
         } catch (_: SecurityException) {
             buildJsonObject { put("error", "notification permission not granted") }
         }
+        streamer.streamIfHeadless(invocationContext, "PostNotification: ${title.take(50)}")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

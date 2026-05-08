@@ -10,10 +10,15 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.MediaPlaybackService
 import java.io.IOException
 
-fun playMediaTool(context: Context): Tool = Tool(
+fun playMediaTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "play_media",
     description = "Start a new playback session from position 0 with system media controls (lock-screen notification, Bluetooth buttons). DESTRUCTIVE — replaces any active session; loses prior playback position. Use only for a brand-new track or 'play X from the start'. To fix an inaudible session use resume_media / seek_media / set_volume — NOT this. Sources: file://, content://, https://. Optional title/artist/album/artwork_uri for the notification.",
     parameters = {
@@ -44,6 +49,7 @@ fun playMediaTool(context: Context): Tool = Tool(
         )
     },
     execute = {
+        wakeScreenIfNeeded(context)
         val params = it.jsonObject
         val source = params["source"]?.jsonPrimitive?.contentOrNull
             ?: error("source is required")
@@ -71,6 +77,7 @@ fun playMediaTool(context: Context): Tool = Tool(
         } catch (e: SecurityException) {
             buildJsonObject { put("error", e.message ?: "security error") }
         }
+        streamer.streamIfHeadless(invocationContext, "PlayMedia: ${source.take(60)}")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.MediaPlayerHolder
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
 import me.rerere.rikkahub.data.repository.SshHostRepository
 import me.rerere.rikkahub.data.repository.TelegramChatRepository
@@ -61,6 +62,12 @@ val appModule = module {
     // through TelegramBotClient → TelegramBotPreferences → ... → LocalTools → controller.
     single<me.rerere.rikkahub.browser.BrowserScreenshotStreamer> {
         me.rerere.rikkahub.data.telegram.TelegramBrowserScreenshotStreamer(get(), get())
+    }
+    // Interactive-tool post-action screenshot streamer for headless mode (Telegram bot /
+    // cron / sub-agent). Resolves lazily inside each interactive tool's execute lambda so
+    // there's no DI cycle through LocalTools → ChatService → ... → TelegramBotClient.
+    single<InteractiveToolStreamer> {
+        me.rerere.rikkahub.data.telegram.TelegramInteractiveToolStreamer(get(), get(), get())
     }
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
     single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
@@ -148,7 +155,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

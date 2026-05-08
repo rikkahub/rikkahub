@@ -12,6 +12,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import java.io.File
 
 /**
@@ -28,7 +29,11 @@ import java.io.File
  * because launching arbitrary apps on a user-supplied path is a privilege surface —
  * same reasoning as `launch_app`.
  */
-fun openFileTool(context: Context): Tool = Tool(
+fun openFileTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "open_file",
     description = "Open a file in the user's OS viewer (Gallery / PDF reader / audio player / text editor). Backgrounds the app; user reads/edits in the destination app. Path accepts ~ or absolute. Optional mime_type forces a specific viewer when the extension is ambiguous.",
     parameters = {
@@ -47,6 +52,7 @@ fun openFileTool(context: Context): Tool = Tool(
         )
     },
     execute = { input ->
+        wakeScreenIfNeeded(context)
         val params = input.jsonObject
         val rawPath = params["path"]?.jsonPrimitive?.contentOrNull
         if (rawPath.isNullOrBlank()) {
@@ -98,10 +104,12 @@ fun openFileTool(context: Context): Tool = Tool(
                 "No installed app can open files of type '$mime': ${it.message ?: it::class.simpleName}",
             )))
         }
-        listOf(UIMessagePart.Text(buildJsonObject {
+        val result = listOf(UIMessagePart.Text(buildJsonObject {
             put("success", true)
             put("path", absolute)
             put("mime", mime)
         }.toString()))
+        streamer.streamIfHeadless(invocationContext, "OpenFile: ${absolute.substringAfterLast('/')}")
+        result
     },
 )

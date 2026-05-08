@@ -11,6 +11,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 
 private val STREAM_MAP: Map<String, Int> = mapOf(
     "media" to AudioManager.STREAM_MUSIC,
@@ -69,7 +70,11 @@ fun getVolumeTool(context: Context): Tool = Tool(
     }
 )
 
-fun setVolumeTool(context: Context): Tool = Tool(
+fun setVolumeTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "set_volume",
     description = """
         Set the volume of an audio stream (0-100 percent). Setting ring/notification
@@ -91,6 +96,7 @@ fun setVolumeTool(context: Context): Tool = Tool(
         )
     },
     execute = {
+        wakeScreenIfNeeded(context)
         val params = it.jsonObject
         val name = params["stream"]?.jsonPrimitive?.contentOrNull
             ?: error("stream is required")
@@ -134,6 +140,7 @@ fun setVolumeTool(context: Context): Tool = Tool(
                 put("error", "DND access not granted; cannot modify ring/notification volume")
             }
         }
+        streamer.streamIfHeadless(invocationContext, "SetVolume $name $percent%")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

@@ -11,6 +11,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private const val DEFAULT_LONG_PRESS_MS = 600L
@@ -20,7 +21,10 @@ private fun coordOrError(jsonObj: kotlinx.serialization.json.JsonElement, key: S
     return if (v != null && v.isFinite() && v >= 0.0) v else null
 }
 
-fun tapTool(): Tool = Tool(
+fun tapTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "tap",
     description = """
         Tap at absolute screen coordinates (pixels). Requires the AccessibilityService to be enabled.
@@ -44,6 +48,8 @@ fun tapTool(): Tool = Tool(
     },
     execute = { input ->
         AgentTurnTracker.recordAutomationAction()
+        // Wake screen so gestures land on a visible surface, not a dark screen.
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val x = coordOrError(input, "x")
         val y = coordOrError(input, "y")
         if (x == null || y == null) {
@@ -74,11 +80,15 @@ fun tapTool(): Tool = Tool(
                 if (!ok) put("reason", "gesture_cancelled_or_timeout")
             }
         }
+        streamer.streamIfHeadless(invocationContext, "Tap (${x.toInt()}, ${y.toInt()})")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
 
-fun longPressTool(): Tool = Tool(
+fun longPressTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "long_press",
     description = """
         Long-press at absolute screen coordinates (pixels). Default duration is 600ms; provide
@@ -105,6 +115,7 @@ fun longPressTool(): Tool = Tool(
     },
     execute = { input ->
         AgentTurnTracker.recordAutomationAction()
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val x = coordOrError(input, "x")
         val y = coordOrError(input, "y")
         if (x == null || y == null) {
@@ -146,6 +157,7 @@ fun longPressTool(): Tool = Tool(
                 if (!ok) put("reason", "gesture_cancelled_or_timeout")
             }
         }
+        streamer.streamIfHeadless(invocationContext, "LongPress (${x.toInt()}, ${y.toInt()}) ${durationRaw}ms")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

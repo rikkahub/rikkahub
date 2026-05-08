@@ -15,6 +15,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private const val DEFAULT_MAX_NODES = 500
@@ -53,7 +54,10 @@ internal fun defaultFilter(n: AccessibilityNodeInfo, depth: Int): Boolean {
     return text.isNotEmpty() || cd.isNotEmpty()
 }
 
-fun readWindowTreeTool(): Tool = Tool(
+fun readWindowTreeTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "read_window_tree",
     description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 500, max 2000). package_name optionally restricts + errors if the foreground app doesn't match.",
     parameters = {
@@ -75,6 +79,7 @@ fun readWindowTreeTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val verbose = input.jsonObject["verbose"]?.jsonPrimitive?.booleanOrNull ?: false
         val maxNodesRaw = input.jsonObject["max_nodes"]?.jsonPrimitive?.intOrNull ?: DEFAULT_MAX_NODES
         val maxNodes = maxNodesRaw.coerceIn(1, MAX_NODES_HARD_CEILING)
@@ -137,6 +142,7 @@ fun readWindowTreeTool(): Tool = Tool(
                 root.window?.title?.toString()?.let { put("window_title", it) } ?: put("window_title", "")
             }
         }
+        streamer.streamIfHeadless(invocationContext, "ReadWindowTree")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

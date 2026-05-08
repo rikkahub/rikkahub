@@ -17,6 +17,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 
 private suspend fun waitForForegroundPackage(
@@ -43,7 +44,11 @@ private suspend fun waitForForegroundPackage(
  * The companion list_installed_apps tool exposes available package names so the model does
  * not have to guess.
  */
-fun launchAppTool(context: Context): Tool = Tool(
+fun launchAppTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "launch_app",
     description = """
         Open an installed app on the device by its package name (e.g. com.termux, com.android.settings).
@@ -92,7 +97,7 @@ fun launchAppTool(context: Context): Tool = Tool(
         val keySecure = ScreenWaker.isKeyguardSecure(context)
 
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
+        val result = try {
             context.startActivity(intent)
             // Confirm the launched app actually took focus. If the user is physically
             // in another app (e.g. RikkaHub's own chat), the launch can be silently
@@ -105,7 +110,7 @@ fun launchAppTool(context: Context): Tool = Tool(
             } else null
             val confirmed = finalForeground == pkg
             if (accessibilityRunning && !keyLocked && !confirmed) {
-                return@Tool listOf(
+                listOf(
                     UIMessagePart.Text(
                         buildJsonObject {
                             put("error", "launch_did_not_focus")
@@ -119,29 +124,30 @@ fun launchAppTool(context: Context): Tool = Tool(
                         }.toString()
                     )
                 )
-            }
-            AgentTurnTracker.recordNavigatedAway(pkg)
-            AgentTurnTracker.touchPackage(pkg)
-            listOf(
-                UIMessagePart.Text(
-                    buildJsonObject {
-                        put("success", true)
-                        put("package", pkg)
-                        put("confirmed_foreground", confirmed)
-                        if (!accessibilityRunning) {
-                            put("note", "AccessibilityService not bound — could not verify foreground. Treat success as best-effort.")
-                        }
-                        if (wasOff) put("woke_screen", woke)
-                        if (keyLocked) {
-                            put("keyguard_locked", true)
-                            put("keyguard_secure", keySecure)
-                            if (keySecure) {
-                                put("warn", "Screen is woken but PIN/biometric keyguard is up. The user must unlock for the launched app to be visible and drivable.")
+            } else {
+                AgentTurnTracker.recordNavigatedAway(pkg)
+                AgentTurnTracker.touchPackage(pkg)
+                listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("success", true)
+                            put("package", pkg)
+                            put("confirmed_foreground", confirmed)
+                            if (!accessibilityRunning) {
+                                put("note", "AccessibilityService not bound — could not verify foreground. Treat success as best-effort.")
                             }
-                        }
-                    }.toString()
+                            if (wasOff) put("woke_screen", woke)
+                            if (keyLocked) {
+                                put("keyguard_locked", true)
+                                put("keyguard_secure", keySecure)
+                                if (keySecure) {
+                                    put("warn", "Screen is woken but PIN/biometric keyguard is up. The user must unlock for the launched app to be visible and drivable.")
+                                }
+                            }
+                        }.toString()
+                    )
                 )
-            )
+            }
         } catch (t: Throwable) {
             listOf(
                 UIMessagePart.Text(
@@ -152,6 +158,8 @@ fun launchAppTool(context: Context): Tool = Tool(
                 )
             )
         }
+        streamer.streamIfHeadless(invocationContext, "LaunchApp $pkg")
+        result
     }
 )
 
@@ -281,7 +289,11 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
  * The package_name override exists for cases where the user explicitly names a non-default
  * browser; otherwise the system shows whatever default is configured.
  */
-fun openUrlTool(context: Context): Tool = Tool(
+fun openUrlTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "open_url",
     description = """
         Open a URL in the system's default handler app (browser for http/https, dialer for
@@ -344,7 +356,7 @@ fun openUrlTool(context: Context): Tool = Tool(
                 )
             )
         }
-        try {
+        val result = try {
             context.startActivity(intent)
             val handlerPkg = resolved.activityInfo?.packageName
             AgentTurnTracker.recordNavigatedAway(handlerPkg)
@@ -376,5 +388,7 @@ fun openUrlTool(context: Context): Tool = Tool(
                 )
             )
         }
+        streamer.streamIfHeadless(invocationContext, "OpenUrl ${url.take(60)}")
+        result
     }
 )

@@ -18,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
+import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
 import me.rerere.rikkahub.data.ai.tools.local.MediaPlayerHolder
 import me.rerere.rikkahub.data.ai.tools.local.audioInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.batteryTool
@@ -210,6 +211,9 @@ class LocalTools(
     // toggle ([LocalToolOption.Browser]) acts as the group on/off; per-tool toggles act as
     // a sub-allow-list. Both must be true for a tool to register.
     private val browserPreferences: me.rerere.rikkahub.browser.BrowserPreferences,
+    // Post-action screenshot streamer for headless mode (Telegram bot / cron / sub-agent).
+    // Injected rather than Koin-resolved inside each factory so JVM tests can pass a mock.
+    private val interactiveToolStreamer: InteractiveToolStreamer,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -507,13 +511,13 @@ class LocalTools(
             tools.add(storageTool(context))
         }
         if (options.contains(LocalToolOption.Toast)) {
-            tools.add(toastTool(context))
+            tools.add(toastTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.Notification)) {
-            tools.add(notificationTool(context))
+            tools.add(notificationTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.Share)) {
-            tools.add(shareTool(context))
+            tools.add(shareTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.Torch)) {
             tools.add(torchTool(context))
@@ -523,14 +527,14 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Brightness)) {
             tools.add(getBrightnessTool(context))
-            tools.add(setBrightnessTool(context))
+            tools.add(setBrightnessTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.Volume)) {
             tools.add(getVolumeTool(context))
-            tools.add(setVolumeTool(context))
+            tools.add(setVolumeTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.MediaPlayer)) {
-            tools.add(playMediaTool(context))
+            tools.add(playMediaTool(context, invocationContext, interactiveToolStreamer))
             tools.add(stopMediaTool(context))
             tools.add(pauseMediaTool(context))
             tools.add(resumeMediaTool(context))
@@ -607,22 +611,22 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.data.ai.tools.local.getJobHistoryTool(scheduledJobRepository, scheduledJobRunRepository))
         }
         if (options.contains(LocalToolOption.ScreenAutomation)) {
-            tools.add(tapTool())
-            tools.add(longPressTool())
-            tools.add(swipeTool())
-            tools.add(readWindowTreeTool())
-            tools.add(findNodeTool())
-            tools.add(clickNodeTool())
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.setTextTool())
-            tools.add(scrollTool())
-            tools.add(globalActionTool())
-            tools.add(takeScreenshotTool(context))
+            tools.add(tapTool(invocationContext, interactiveToolStreamer))
+            tools.add(longPressTool(invocationContext, interactiveToolStreamer))
+            tools.add(swipeTool(invocationContext, interactiveToolStreamer))
+            tools.add(readWindowTreeTool(invocationContext, interactiveToolStreamer))
+            tools.add(findNodeTool(invocationContext, interactiveToolStreamer))
+            tools.add(clickNodeTool(invocationContext, interactiveToolStreamer))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.setTextTool(invocationContext, interactiveToolStreamer))
+            tools.add(scrollTool(invocationContext, interactiveToolStreamer))
+            tools.add(globalActionTool(invocationContext, interactiveToolStreamer))
+            tools.add(takeScreenshotTool(context))  // take_screenshot IS the screenshot; skip auto-stream
             tools.add(me.rerere.rikkahub.data.ai.tools.local.wakeScreenTool(context))
         }
         if (options.contains(LocalToolOption.AppLauncher)) {
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context, invocationContext, interactiveToolStreamer))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listInstalledAppsTool(context))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.openUrlTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.openUrlTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.Termux)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.termuxRunCommandTool(context))
@@ -651,8 +655,8 @@ class LocalTools(
             tools.add(createDirectoryTool())
             tools.add(fileInfoTool())
             tools.add(findFilesTool())
-            tools.add(showImageTool(context))
-            tools.add(openFileTool(context))
+            tools.add(showImageTool(context))  // inline image display; no separate auto-stream needed
+            tools.add(openFileTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.McpControl)) {
             tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListTool(settingsStore, mcpManager))
@@ -698,12 +702,12 @@ class LocalTools(
             ))
         }
         if (options.contains(LocalToolOption.SystemIntents)) {
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.createCalendarEventTool(context))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.createContactTool(context))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.sendEmailIntentTool(context))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.sendSmsIntentTool(context))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.openWifiSettingsTool(context))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.showLocationOnMapTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.createCalendarEventTool(context, invocationContext, interactiveToolStreamer))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.createContactTool(context, invocationContext, interactiveToolStreamer))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.sendEmailIntentTool(context, invocationContext, interactiveToolStreamer))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.sendSmsIntentTool(context, invocationContext, interactiveToolStreamer))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.openWifiSettingsTool(context, invocationContext, interactiveToolStreamer))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.showLocationOnMapTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.Workflows)) {
             // workflow_create persists the authoringAssistantId from [context] so the
