@@ -97,7 +97,14 @@ fun BrowserMiniChat(
         .collectAsStateWithLifecycle()
 
     val isGenerating = processingStatus != null
-    val latestAssistantText = remember(conversation) {
+    // Keying remember on the whole `conversation` object re-fires the lambda on every
+    // recomposition (the StateFlow emits a new instance per update). Key on stable,
+    // identity-cheap signals — message count + last message id — so the lambda only
+    // re-runs when there's actually a new assistant message to extract text from.
+    val latestAssistantText = remember(
+        conversation.currentMessages.size,
+        conversation.currentMessages.lastOrNull()?.id,
+    ) {
         conversation.currentMessages
             .lastOrNull { it.role == MessageRole.ASSISTANT }
             ?.parts

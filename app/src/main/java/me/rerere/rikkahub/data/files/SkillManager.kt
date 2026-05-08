@@ -204,19 +204,23 @@ class SkillManager(
      * Compute a stable hash over every file in the bundled skill (recursively, in sorted
      * order so the result is deterministic across runs). Used as the "version" of the
      * bundled core skill so we know when to re-seed the user's local copy.
+     *
+     * Asset-read failures are mixed into the digest as a stable marker rather than
+     * silently skipped so a transient read failure can't change the hash on a later
+     * successful read (which would trigger a spurious re-seed and clobber user edits).
      */
     private fun computeBundledSkillHash(assetRoot: String, skillName: String): String {
         val md = java.security.MessageDigest.getInstance("SHA-256")
+        val readFailMarker = "<<read-failed>>".toByteArray()
         fun walk(path: String) {
             val children = context.assets.list(path).orEmpty().toList().sorted()
             for (child in children) {
                 val childPath = "$path/$child"
-                val isDir = context.assets.list(childPath).orEmpty().isNotEmpty()
-                if (isDir) {
+                if (isAssetDirectory(childPath)) {
                     walk(childPath)
                 } else {
                     md.update(child.toByteArray())  // include name so renames bump the hash
-                    runCatching {
+                    val ok = runCatching {
                         context.assets.open(childPath).use { input ->
                             val buf = ByteArray(8 * 1024)
                             while (true) {
@@ -224,6 +228,10 @@ class SkillManager(
                                 md.update(buf, 0, n)
                             }
                         }
+                    }.isSuccess
+                    if (!ok) {
+                        Log.w(TAG, "computeBundledSkillHash: read failed for $childPath; marker mixed into digest")
+                        md.update(readFailMarker)
                     }
                 }
             }
@@ -238,8 +246,10 @@ class SkillManager(
         val children = assetMgr.list("$assetRoot/$skillName").orEmpty()
         for (child in children) {
             val source = "$assetRoot/$skillName/$child"
-            val nested = assetMgr.list(source).orEmpty()
-            if (nested.isNotEmpty()) {
+            if (isAssetDirectory(source)) {
+                // Recurse into directories — including the genuinely-empty case where
+                // listing returns []. The recursive call mkdirs the empty target
+                // and exits cleanly without copying anything.
                 copyAssetSkill("$assetRoot/$skillName", child, targetDir.resolve(child))
                 continue
             }
@@ -248,6 +258,19 @@ class SkillManager(
                 outFile.outputStream().use { out -> input.copyTo(out) }
             }
         }
+    }
+
+    /**
+     * Reliably distinguish an asset directory from an asset file. `AssetManager.list`
+     * returns an empty array for both files and empty directories, which the previous
+     * heuristic confused — any bundled skill shipping an empty placeholder subdir would
+     * crash the seed when we later tried to `assetMgr.open` it as a file.
+     *
+     * The trick: try to open it as a file. Files succeed; directories throw. This is
+     * the same approach AOSP's sample code recommends.
+     */
+    private fun isAssetDirectory(path: String): Boolean {
+        return runCatching { context.assets.open(path).close() }.isFailure
     }
 
     fun resolveSkillFile(skillName: String, relativePath: String): File? {

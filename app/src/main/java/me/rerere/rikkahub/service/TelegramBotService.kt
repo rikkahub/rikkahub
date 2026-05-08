@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -2154,14 +2155,21 @@ class TelegramBotService : Service() {
     }
 
     /**
-     * Rescue an image artifact (take_screenshot / take_photo) when the model called the
-     * tool but forgot to chain into telegram_send_photo. Returns true if we actually
-     * dispatched a photo to Telegram, false if there was nothing to rescue.
+     * Rescue an image artifact when the model called an image-producing tool but forgot
+     * to chain into `telegram_send_photo`. Returns true if we actually dispatched a
+     * photo to Telegram, false if there was nothing to rescue.
      *
-     * Looks at the most recent assistant message's tool calls, finds the latest one whose
-     * output JSON has `success: true` and a `gallery_path` (or `file_path`) pointing at an
-     * existing local image file. Sends that file via the Telegram Bot API with a caption
-     * that explains the rescue.
+     * Covered tools (and the JSON-output key they each use for the file path):
+     *  - `take_screenshot` — writes `gallery_path` (Pictures/RikkaHub/Screenshots) +
+     *    `file_path` (cache).
+     *  - `take_photo` — writes `gallery_path` (cache).
+     *  - `browser_screenshot` — writes `file_path` (cache/browser-shots).
+     *  - `show_image` — writes `path`.
+     *
+     * Walks the most recent assistant message's tool calls newest-first, finds the
+     * first one matching the allowlist whose output JSON has `success: true` and any of
+     * the recognised path keys pointing at an existing local image file, then sends
+     * that file via the Telegram Bot API with a caption that explains the rescue.
      */
     private suspend fun tryRescueImageFromTurn(
         convId: kotlin.uuid.Uuid,
@@ -2175,27 +2183,49 @@ class TelegramBotService : Service() {
         }.getOrNull() ?: return false
         val tools = lastAssistant.parts.filterIsInstance<UIMessagePart.Tool>()
         if (tools.isEmpty()) return false
+        // Tools that produce a single image file we can re-upload as a photo. Order
+        // doesn't matter — we walk the assistant's tool calls newest-first.
+        val rescueable = setOf(
+            "take_screenshot",
+            "take_photo",
+            "browser_screenshot",
+            "show_image",
+        )
         // Walk newest-first so if the model took multiple screenshots we send the last one.
         for (tool in tools.reversed()) {
-            if (tool.toolName !in setOf("take_screenshot", "take_photo")) continue
+            if (tool.toolName !in rescueable) continue
             val outText = tool.output.filterIsInstance<UIMessagePart.Text>()
                 .joinToString("") { it.text }
             val parsed = runCatching {
                 kotlinx.serialization.json.Json.parseToJsonElement(outText)
                     as? kotlinx.serialization.json.JsonObject
             }.getOrNull() ?: continue
-            val ok = parsed["success"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true
+            // Tools emit success either as a JSON boolean (`put("success", true)`) or
+            // a quoted-string boolean. JsonPrimitive.booleanOrNull handles the boolean
+            // case; toBooleanStrictOrNull catches the string case. Either path = ok.
+            val ok = parsed["success"]?.jsonPrimitive?.let { p ->
+                p.booleanOrNull ?: p.contentOrNull?.toBooleanStrictOrNull()
+            } == true
             if (!ok) continue
             val path = parsed["gallery_path"]?.jsonPrimitive?.contentOrNull
                 ?.takeIf { it.isNotBlank() && !it.startsWith("(") }
                 ?: parsed["file_path"]?.jsonPrimitive?.contentOrNull
+                ?: parsed["path"]?.jsonPrimitive?.contentOrNull
                 ?: continue
             val file = java.io.File(path)
             if (!file.exists() || !file.isFile) continue
-            val caption = if (tool.toolName == "take_screenshot")
-                "📸 (rescued — model took the screenshot but didn't reply with a description)"
-            else
-                "📸 (rescued — model captured the photo but didn't reply with a description)"
+            val caption = when (tool.toolName) {
+                "take_screenshot" ->
+                    "📸 (rescued — model took the screenshot but didn't reply with a description)"
+                "take_photo" ->
+                    "📸 (rescued — model captured the photo but didn't reply with a description)"
+                "browser_screenshot" ->
+                    "📸 (rescued — model captured the browser page but didn't reply with a description)"
+                "show_image" ->
+                    "📸 (rescued — model surfaced an image but didn't reply with a description)"
+                else ->
+                    "📸 (rescued — model captured an image but didn't reply with a description)"
+            }
             return runCatching {
                 client.sendPhoto(chatId, file, caption)
                 android.util.Log.i(TAG, "tryRescueImageFromTurn: sent ${tool.toolName} artifact to chat=$chatId path=$path")

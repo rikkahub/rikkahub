@@ -52,7 +52,13 @@ class HeadlessBrowserSession(private val context: Context) {
      * so a multi-tool task reuses cookies + history. The width/height are spec-mandated
      * (1080x1920 — phone-portrait) so screenshots feed the LLM at a reasonable size and
      * sites that use `window.innerWidth` / media-queries don't fall back to mobile-mini.
+     *
+     * `@Synchronized` is defense in depth: callers in production go through
+     * [HeadlessBrowserSessionPool.getOrCreate] which already serialises access on a
+     * per-pool lock. The annotation guards the direct-call path (a future refactor or a
+     * unit test) so two threads can never both pass the null-check and leak a WebView.
      */
+    @Synchronized
     fun start(callerConvId: String): WebView {
         val existing = webView
         if (existing != null) return existing
@@ -76,14 +82,13 @@ class HeadlessBrowserSession(private val context: Context) {
         }
 
         val wv = WebView(context).apply {
-            // Same WebSettings as foreground — keep behaviour parity so the LLM's tool
-            // calls work identically across modes. JS, dom storage, third-party cookies
-            // are all required by the modern web; if the user is uncomfortable they
-            // disable the master Browser toggle in Settings.
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.databaseEnabled = true
-            settings.userAgentString = settings.userAgentString  // touch to materialise default
+            // Shared with foreground — every render-related setting (mixedContentMode,
+            // hardware layer, autoplay, UA strip, file:// access) lives in
+            // configureWebViewForRikka. Before this helper existed, headless mode lacked
+            // the white-page render fixes from `1ac54c4b` / `3ac3b4b4` / `a1db859c` and
+            // silently streamed all-white PNGs to the user's Telegram chat on the long
+            // tail of mainstream sites. See BrowserWebViewConfig.kt for the history.
+            configureWebViewForRikka(this)
             // Visibility shim — re-injected on every page start. WebViewClient.onPageStarted
             // fires before page JS runs, which is the only window where overriding the
             // descriptor changes future reads.

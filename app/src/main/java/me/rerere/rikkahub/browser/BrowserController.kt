@@ -118,6 +118,11 @@ object BrowserController {
         if (!bindDeferred.isCompleted) {
             bindDeferred.complete(Unit)
         }
+        // Trim stale screenshots from any prior session (including ones killed by
+        // process-stop). Doing this on bind catches both the clean-end and crash-end
+        // cases — by the time the new session writes its first capture, there are at
+        // most `keepLast` files in each cache subdir.
+        runCatching { BrowserCacheSweeper.sweep(webView.context.applicationContext) }
     }
 
     /** Activity calls this in onDestroy. Only clears if the live ref still points at the same WebView. */
@@ -157,6 +162,10 @@ object BrowserController {
         if (!bindDeferred.isCompleted) {
             bindDeferred.complete(Unit)
         }
+        // Trim stale screenshots — same reasoning as bindForeground. Headless sessions
+        // produce streamer PNGs in `browser-stream/` after every state-changing tool, so
+        // a long bot conversation can put real pressure on cacheDir without this.
+        runCatching { BrowserCacheSweeper.sweep(webView.context.applicationContext) }
     }
 
     /**
@@ -381,10 +390,18 @@ object BrowserControllerHandle {
 }
 
 /**
- * Run [code] in the WebView's main looper and return the JSON-encoded result string the
- * page produced (or "null" on any error / timeout). All WebView APIs must run on the
- * main thread — this helper hides the post() / CompletableDeferred plumbing every tool
- * would otherwise re-implement.
+ * Run [code] on the WebView's required main thread and return the JSON-encoded result
+ * string the page produced (or "null" on any error / timeout). `evaluateJavascript`
+ * itself is documented as main-thread only and routes its result callback onto the UI
+ * thread; the [withContext] gets us there and the [CompletableDeferred] bridges the
+ * callback back into a coroutine.
+ *
+ * **Why no `webView.post { ... }` wrapper.** The earlier version posted into the
+ * WebView's run-queue. For an unattached WebView (the headless `HeadlessBrowserSession`
+ * parent LinearLayout never reaches a Window), `View.post` queues the runnable until
+ * attach — which never happens, so `evaluateJavascript` was never called and the
+ * deferred timed out at 8 s on every call. Calling `evaluateJavascript` directly from
+ * the main-thread context fixes both attached and unattached cases.
  *
  * The result is the raw string evaluateJavascript returns: a valid JSON value (number,
  * "string", true, null, [...], {...}). Callers parse it themselves, since JSON shape
@@ -393,12 +410,10 @@ object BrowserControllerHandle {
 suspend fun WebView.evaluateJavascriptAsync(code: String, timeoutMs: Long = 8_000L): String? {
     val deferred = CompletableDeferred<String?>()
     withContext(Dispatchers.Main) {
-        post {
-            try {
-                evaluateJavascript(code) { result -> deferred.complete(result) }
-            } catch (t: Throwable) {
-                deferred.complete(null)
-            }
+        try {
+            evaluateJavascript(code) { result -> deferred.complete(result) }
+        } catch (t: Throwable) {
+            deferred.complete(null)
         }
     }
     return withTimeoutOrNull(timeoutMs) { deferred.await() }
@@ -414,10 +429,11 @@ suspend fun WebView.awaitReadyState(timeoutMs: Long = 8_000L): Boolean {
     val deadline = System.currentTimeMillis() + timeoutMs
     while (System.currentTimeMillis() < deadline) {
         val raw = evaluateJavascriptAsync("(function(){return document.readyState;})()", 1_500L)
-        // evaluateJavascript wraps strings in JSON quotes — "complete" comes back as the
-        // 10-char "\"complete\"". Compare on the unquoted contains to avoid string-quote
-        // games across WebView versions.
-        if (raw != null && raw.contains("complete")) return true
+        // evaluateJavascript wraps string returns in JSON quotes — `"complete"` comes
+        // back as the 10-char literal `"\"complete\""`. Match the exact form so a page
+        // that overrides document.readyState to a string merely containing "complete"
+        // (e.g. "incomplete", or some adversarial value) doesn't trip the early-exit.
+        if (raw != null && raw.trim() == "\"complete\"") return true
         kotlinx.coroutines.delay(200)
     }
     return false
