@@ -40,15 +40,16 @@ val DEFAULT_PROVIDERS = listOf(
         },
     ),
     ProviderSetting.LiteRtLocal(
-        // LiteRT (MediaPipe tasks-genai) on-device provider. Disabled by default — the user
-        // must install at least one .task model file before the toggle is useful.
+        // LiteRT-LM on-device provider. Disabled by default — downloads the default model
+        // (Qwen3.5 2B Q4, ~1.5 GB) on first enable. Uses the LiteRT-LM runtime (.litertlm
+        // format), not MediaPipe tasks-genai (.task). Enable switch triggers the download dialog.
         enabled = false,
         builtIn = true,
         description = {
-            Text("Runs LiteRT (.task) models on-device via MediaPipe tasks-genai. Requires a compatible model file installed in the app's local model directory.")
+            Text("Runs .litertlm models on-device via LiteRT-LM. Downloads Qwen3.5 2B Q4 (~1.5 GB) on first enable.")
         },
         shortDescription = {
-            Text("On-device — LiteRT via MediaPipe")
+            Text("On-device — LiteRT-LM")
         },
     ),
     ProviderSetting.LlamaCppLocal(

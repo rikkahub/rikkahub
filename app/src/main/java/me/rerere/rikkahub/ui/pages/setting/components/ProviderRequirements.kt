@@ -35,7 +35,7 @@ data class ProviderRequirement(
             )
             is ProviderSetting.LiteRtLocal -> listOf(
                 ProviderRequirement(
-                    label = "On-device · ~614 MB",
+                    label = "On-device · ~1.5 GB",
                     severity = TagType.INFO,
                 ),
             )

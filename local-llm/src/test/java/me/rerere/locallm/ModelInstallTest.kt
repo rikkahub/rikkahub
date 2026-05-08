@@ -61,4 +61,41 @@ class ModelInstallTest {
             out.absolutePath,
         )
     }
+
+    // normalizeHuggingFaceUrl ---------------------------------------------------
+
+    @Test fun `normalizeHuggingFaceUrl transforms blob-main to resolve-main`() {
+        val blob = "https://huggingface.co/paulsp94/Qwen3.5-2B-LiteRT-LM/blob/main/qwen35_2b_q4.litertlm"
+        val expected = "https://huggingface.co/paulsp94/Qwen3.5-2B-LiteRT-LM/resolve/main/qwen35_2b_q4.litertlm"
+        assertEquals(expected, ModelInstall.normalizeHuggingFaceUrl(blob))
+    }
+
+    @Test fun `normalizeHuggingFaceUrl does not alter a resolve URL`() {
+        val resolve = "https://huggingface.co/paulsp94/Qwen3.5-2B-LiteRT-LM/resolve/main/qwen35_2b_q4.litertlm"
+        assertEquals(resolve, ModelInstall.normalizeHuggingFaceUrl(resolve))
+    }
+
+    @Test fun `normalizeHuggingFaceUrl transforms blob with non-main branch`() {
+        val blob = "https://huggingface.co/foo/bar/blob/dev/model.gguf"
+        val expected = "https://huggingface.co/foo/bar/resolve/dev/model.gguf"
+        assertEquals(expected, ModelInstall.normalizeHuggingFaceUrl(blob))
+    }
+
+    @Test fun `normalizeHuggingFaceUrl passes through non-huggingface URLs unchanged`() {
+        val url = "https://example.com/models/blob/main/model.gguf"
+        assertEquals(url, ModelInstall.normalizeHuggingFaceUrl(url))
+    }
+
+    @Test fun `normalizeHuggingFaceUrl passes through already-valid GGUF resolve URL`() {
+        val url = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+        assertEquals(url, ModelInstall.normalizeHuggingFaceUrl(url))
+    }
+
+    @Test fun `isValidDownloadUrl accepts blob-form HF URL (normalised before download)`() {
+        // blob URLs are valid https; validation passes, then normalizeHuggingFaceUrl converts
+        // /blob/ → /resolve/ before the HTTP call. Test that validation does NOT reject them.
+        assertTrue(ModelInstall.isValidDownloadUrl(
+            "https://huggingface.co/paulsp94/Qwen3.5-2B-LiteRT-LM/blob/main/qwen35_2b_q4.litertlm"
+        ))
+    }
 }

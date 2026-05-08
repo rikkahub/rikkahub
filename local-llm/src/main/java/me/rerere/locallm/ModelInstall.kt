@@ -33,6 +33,27 @@ object ModelInstall {
         data class Failed(val cause: Throwable) : Progress()
     }
 
+    /**
+     * Normalise a HuggingFace URL so that both the viewer (blob) form and the direct
+     * download (resolve) form work.
+     *
+     * HuggingFace "view file" URLs look like:
+     *   https://huggingface.co/<user>/<repo>/blob/main/<file>
+     * The actual download URL is:
+     *   https://huggingface.co/<user>/<repo>/resolve/main/<file>
+     *
+     * Pasting the viewer URL into the manual-install field would previously succeed
+     * HTTP-wise (200 OK) but return an HTML page, not the model binary. This transform
+     * converts blob → resolve for any huggingface.co path. Non-HF URLs are returned
+     * unchanged.
+     */
+    fun normalizeHuggingFaceUrl(url: String): String {
+        if (!url.contains("huggingface.co")) return url
+        return url
+            .replace("/blob/main/", "/resolve/main/")
+            .replace(Regex("/blob/([^/]+)/")) { m -> "/resolve/${m.groupValues[1]}/" }
+    }
+
     fun isValidDownloadUrl(url: String): Boolean {
         if (url.isBlank()) return false
         return runCatching {
@@ -66,6 +87,9 @@ object ModelInstall {
     /**
      * Download [url] into [target], emitting progress as it goes. Resume-aware via
      * `Range:` header on `<target>.partial`. Atomic rename to [target] only on success.
+     *
+     * HuggingFace blob URLs are automatically normalised to resolve URLs before the
+     * request is issued. Callers may also pre-normalise with [normalizeHuggingFaceUrl].
      */
     fun download(
         client: OkHttpClient,
@@ -76,7 +100,8 @@ object ModelInstall {
         val partial = File(target.absolutePath + ".partial")
         val existing = if (partial.exists()) partial.length() else 0L
 
-        val builder = Request.Builder().url(url)
+        val resolvedUrl = normalizeHuggingFaceUrl(url)
+        val builder = Request.Builder().url(resolvedUrl)
         if (existing > 0L) builder.addHeader("Range", "bytes=$existing-")
         val request = builder.build()
 

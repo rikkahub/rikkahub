@@ -1,6 +1,7 @@
 package me.rerere.locallm.litert
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.ImageGenerationParams
@@ -77,6 +78,11 @@ class LiteRtProvider(
         val modelPath = installed[params.model.modelId]
             ?: throw IllegalStateException("Model ${params.model.modelId} not installed")
 
+        // Pass the cached accelerator so ensureLoaded does not re-probe on every turn.
+        // Probe runs once at install/re-detect time and is persisted; reading it here
+        // avoids the System.loadLibrary("qnn_delegate_jni") call on every generation.
+        val cachedAccel = prefs.acceleratorFlow(LocalRuntime.LiteRT).first()
+
         val toolPrefix = LiteRtToolPrefix.buildPrefix(params.tools)
         val systemTexts = messages
             .filter { it.role == MessageRole.SYSTEM }
@@ -99,7 +105,8 @@ class LiteRtProvider(
         }
 
         // New LiteRT-LM pattern: ensure model+conversation are loaded before streaming.
-        runtime.ensureLoaded(modelPath)
+        // Pass cachedAccel (may be null on very first run) so we avoid re-probing every turn.
+        runtime.ensureLoaded(modelPath, preferredAccel = cachedAccel)
 
         val streamId = "litert-${System.currentTimeMillis()}"
         runtime.streamGenerate(prompt).collect { partial ->

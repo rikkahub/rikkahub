@@ -66,17 +66,16 @@ class SettingLocalLlmViewModel(
      * The default model URL per runtime. The implementer pins these at build time per
      * the Phase 22A spec; they may shift if upstream HF paths change between releases.
      *
-     * LiteRT default: litert-community/Qwen3-0.6B — Qwen3 generation (current as of 2026-05),
-     * ~614 MB on disk, public and ungated. File extension is .litertlm (LiteRT-LM format;
-     * not compatible with MediaPipe tasks-genai). Previously Gemma3-1B-IT which became
-     * auth-gated in the litert-community org.
+     * LiteRT default: paulsp94/Qwen3.5-2B-LiteRT-LM — Qwen3.5 2B Q4 (current as of 2026-05),
+     * ~1.4 GB on disk, public and ungated (Apache-2.0). File extension is .litertlm (LiteRT-LM
+     * format). Previously Qwen3-0.6B from litert-community at ~614 MB.
      *
      * llama.cpp default: Qwen 2.5 1.5B Instruct GGUF Q4_K_M.
      */
     private val defaultModelUrl: String
         get() = when (runtime) {
             LocalRuntime.LiteRT ->
-                "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm"
+                "https://huggingface.co/paulsp94/Qwen3.5-2B-LiteRT-LM/resolve/main/qwen35_2b_q4.litertlm"
             LocalRuntime.LlamaCpp ->
                 "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
         }
@@ -225,15 +224,19 @@ class SettingLocalLlmViewModel(
     }
 
     fun startManualDownload(url: String) {
-        if (!ModelInstall.isValidDownloadUrl(url)) {
+        // Normalise HuggingFace blob URLs → resolve URLs before validation and download.
+        // A user pasting the HF viewer URL (/blob/main/<file>) gets a 200 OK that returns
+        // HTML, not the model binary. Normalising first makes both URL forms work.
+        val normalizedUrl = ModelInstall.normalizeHuggingFaceUrl(url)
+        if (!ModelInstall.isValidDownloadUrl(normalizedUrl)) {
             _state.value = UiState.Error("Invalid URL: must be https and well-formed")
             return
         }
         viewModelScope.launch {
-            val fileName = ModelInstall.extractFileNameFromUrl(url)
+            val fileName = ModelInstall.extractFileNameFromUrl(normalizedUrl)
             val baseDir = ModelInstall.localModelsDir(context)
             val target = ModelInstall.targetFile(baseDir, runtime, fileName)
-            ModelInstall.download(httpClient, url, target).collect { p ->
+            ModelInstall.download(httpClient, normalizedUrl, target).collect { p ->
                 when (p) {
                     is ModelInstall.Progress.Started ->
                         _state.value = UiState.Downloading(0, 0L, p.totalBytes)
@@ -269,7 +272,7 @@ class SettingLocalLlmViewModel(
     }
 
     private fun estimatedSize(rt: LocalRuntime): Long = when (rt) {
-        LocalRuntime.LiteRT -> 750_000_000L    // Qwen3-0.6B.litertlm ~614 MB + 136 MB safety pad
+        LocalRuntime.LiteRT -> 1_500_000_000L   // Qwen3.5-2B Q4.litertlm ~1.4 GB + 100 MB safety pad
         LocalRuntime.LlamaCpp -> 1_000_000_000L // Qwen 2.5 1.5B Q4 ~1 GB
     }
 }
