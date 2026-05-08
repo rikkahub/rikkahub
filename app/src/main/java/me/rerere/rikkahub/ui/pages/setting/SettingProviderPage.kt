@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -235,9 +236,45 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 }
                             }
                             is ProviderSetting.LlamaCppLocal -> {
-                                // Placeholder until Task 18 (llama.cpp runtime + provider). Render
-                                // nothing so the tile doesn't appear before its provider is wired.
-                                // The DEFAULT_PROVIDERS entry stays so user prefs survive.
+                                // Coming-soon tile. Toggle is permanently disabled until Task 18
+                                // wires the llama.cpp runtime. The DEFAULT_PROVIDERS entry stays so
+                                // user prefs survive the upgrade.
+                                Card(
+                                    modifier = Modifier
+                                        .scale(if (isDragging) 0.95f else 1f)
+                                        .fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = CustomColors.listItemColors.containerColor,
+                                    ),
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = stringResource(R.string.local_llm_llamacpp_name),
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                )
+                                                Text(
+                                                    text = stringResource(R.string.local_llm_llamacpp_coming_soon),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
+                                            }
+                                            Switch(
+                                                checked = false,
+                                                onCheckedChange = null,
+                                                enabled = false,
+                                            )
+                                        }
+                                    }
+                                }
                             }
                             else -> {
                                 ProviderItem(
