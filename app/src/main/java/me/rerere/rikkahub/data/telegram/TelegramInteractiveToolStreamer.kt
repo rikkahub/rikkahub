@@ -36,6 +36,7 @@ class TelegramInteractiveToolStreamer(
     private val context: Context,
     private val client: TelegramBotClient,
     private val chatRepo: TelegramChatRepository,
+    private val prefs: TelegramBotPreferences,
 ) : InteractiveToolStreamer {
 
     override suspend fun streamIfHeadless(
@@ -45,9 +46,14 @@ class TelegramInteractiveToolStreamer(
         // Gate 1: only stream for headless invocations.
         if (invocationContext == null || !invocationContext.isHeadless) return
 
+        // Gate 2: honour the user's `/stream off` toggle. Read every send so the new value
+        // takes effect on the next tool firing without restarting the bot.
+        val enabled = runCatching { prefs.current().streamScreenshots }.getOrDefault(true)
+        if (!enabled) return
+
         val convId = invocationContext.callerConversationId ?: return
 
-        // Gate 2: resolve the Telegram chat id. Missing mapping = not a Telegram conversation.
+        // Gate 3: resolve the Telegram chat id. Missing mapping = not a Telegram conversation.
         val mapping = runCatching { chatRepo.getByConversationId(convId) }
             .onFailure { Log.w(TAG, "streamIfHeadless: chatRepo lookup failed for $convId", it) }
             .getOrNull() ?: return

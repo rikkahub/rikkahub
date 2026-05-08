@@ -20,6 +20,7 @@ class TelegramBotPreferences(private val context: Context) {
     private val K_WHITELIST = stringPreferencesKey("whitelist")
     private val K_ASSISTANT_ID = stringPreferencesKey("assistant_id")
     private val K_CUSTOM_COMMANDS = stringPreferencesKey("custom_commands")
+    private val K_STREAM_SCREENSHOTS = booleanPreferencesKey("stream_screenshots")
 
     val flow = store.data.map { p -> readConfig(p) }
 
@@ -39,6 +40,7 @@ class TelegramBotPreferences(private val context: Context) {
             if (next.customCommands.isNotEmpty()) {
                 p[K_CUSTOM_COMMANDS] = serializeCustomCommands(next.customCommands)
             } else p.remove(K_CUSTOM_COMMANDS)
+            p[K_STREAM_SCREENSHOTS] = next.streamScreenshots
         }
     }
 
@@ -50,6 +52,9 @@ class TelegramBotPreferences(private val context: Context) {
             whitelist = parseWhitelist(p[K_WHITELIST].orEmpty()),
             assistantId = p[K_ASSISTANT_ID],
             customCommands = parseCustomCommands(p[K_CUSTOM_COMMANDS].orEmpty()),
+            // Default to true — preference key absent on first launch means "stream on",
+            // matching the default in TelegramBotConfig.
+            streamScreenshots = p[K_STREAM_SCREENSHOTS] != false,
         )
 
     private fun parseWhitelist(s: String): Set<Long> =

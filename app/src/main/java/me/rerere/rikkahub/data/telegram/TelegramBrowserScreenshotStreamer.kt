@@ -26,6 +26,7 @@ private const val MAX_CAPTION_CHARS = 1024  // Telegram's hard photo-caption cap
 class TelegramBrowserScreenshotStreamer(
     private val client: TelegramBotClient,
     private val chatRepo: TelegramChatRepository,
+    private val prefs: TelegramBotPreferences,
 ) : BrowserScreenshotStreamer {
 
     override suspend fun send(
@@ -34,6 +35,11 @@ class TelegramBrowserScreenshotStreamer(
         actionLabel: String,
         currentUrl: String?,
     ) {
+        // Honour the user's `/stream off` toggle. Read every send so the user gets the new
+        // value next action without restarting the bot.
+        val enabled = runCatching { prefs.current().streamScreenshots }.getOrDefault(true)
+        if (!enabled) return
+
         // Resolve the Telegram chat id from the conversation id. If the mapping doesn't
         // exist the convId came from cron / sub-agent / external automation — not a
         // Telegram conversation — and there's nothing to send. That's not an error; just

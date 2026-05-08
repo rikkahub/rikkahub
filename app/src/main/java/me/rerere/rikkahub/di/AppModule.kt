@@ -61,13 +61,13 @@ val appModule = module {
     // can resolve it lazily via Koin without taking a constructor dep — avoids a cycle
     // through TelegramBotClient → TelegramBotPreferences → ... → LocalTools → controller.
     single<me.rerere.rikkahub.browser.BrowserScreenshotStreamer> {
-        me.rerere.rikkahub.data.telegram.TelegramBrowserScreenshotStreamer(get(), get())
+        me.rerere.rikkahub.data.telegram.TelegramBrowserScreenshotStreamer(get(), get(), get())
     }
     // Interactive-tool post-action screenshot streamer for headless mode (Telegram bot /
     // cron / sub-agent). Resolves lazily inside each interactive tool's execute lambda so
     // there's no DI cycle through LocalTools → ChatService → ... → TelegramBotClient.
     single<InteractiveToolStreamer> {
-        me.rerere.rikkahub.data.telegram.TelegramInteractiveToolStreamer(get(), get(), get())
+        me.rerere.rikkahub.data.telegram.TelegramInteractiveToolStreamer(get(), get(), get(), get())
     }
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
     single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
