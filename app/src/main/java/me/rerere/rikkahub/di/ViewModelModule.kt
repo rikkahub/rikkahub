@@ -91,6 +91,7 @@ val viewModelModule = module {
             context = get(),
             prefs = get(),
             httpClient = get(),
+            settingsStore = get(),
         )
     }
 }

@@ -8,12 +8,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.LITERT_PROVIDER_ID
+import me.rerere.ai.provider.LLAMACPP_PROVIDER_ID
 import me.rerere.locallm.AcceleratorProbe
 import me.rerere.locallm.LocalRuntime
 import me.rerere.locallm.LocalRuntimePreferences
 import me.rerere.locallm.MemoryGuard
 import me.rerere.locallm.ModelInstall
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.OkHttpClient
+import kotlin.uuid.Uuid
 
 /**
  * Drives one provider tile (the runtime is supplied per VM instance).
@@ -29,6 +35,7 @@ class SettingLocalLlmViewModel(
     private val context: Context,
     private val prefs: LocalRuntimePreferences,
     private val httpClient: OkHttpClient,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     sealed class UiState {
@@ -89,6 +96,34 @@ class SettingLocalLlmViewModel(
         return accel
     }
 
+    /**
+     * Mutates the LiteRtLocal / LlamaCppLocal ProviderSetting in the persisted settings store.
+     * Identity is established by the stable provider ID constant, not by position.
+     */
+    private suspend fun updateMyProvider(transform: (ProviderSetting) -> ProviderSetting) {
+        val targetId = when (runtime) {
+            LocalRuntime.LiteRT -> LITERT_PROVIDER_ID
+            LocalRuntime.LlamaCpp -> LLAMACPP_PROVIDER_ID
+        }
+        settingsStore.update { old ->
+            old.copy(providers = old.providers.map { p ->
+                if (p.id == targetId) transform(p) else p
+            })
+        }
+    }
+
+    fun setProviderEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            updateMyProvider { p ->
+                when (p) {
+                    is ProviderSetting.LiteRtLocal -> p.copy(enabled = enabled)
+                    is ProviderSetting.LlamaCppLocal -> p.copy(enabled = enabled)
+                    else -> p
+                }
+            }
+        }
+    }
+
     fun startDefaultDownload() {
         viewModelScope.launch {
             val url = defaultModelUrl
@@ -115,6 +150,19 @@ class SettingLocalLlmViewModel(
                     }
                     is ModelInstall.Progress.Done -> {
                         prefs.addInstalledModel(runtime, fileName, p.file.absolutePath)
+                        val model = Model(
+                            modelId = fileName,
+                            displayName = fileName,
+                        )
+                        updateMyProvider { provider -> provider.addModel(model) }
+                        // Enable the provider automatically after first successful download.
+                        updateMyProvider { provider ->
+                            when (provider) {
+                                is ProviderSetting.LiteRtLocal -> provider.copy(enabled = true)
+                                is ProviderSetting.LlamaCppLocal -> provider.copy(enabled = true)
+                                else -> provider
+                            }
+                        }
                         refreshFromDisk()
                     }
                     is ModelInstall.Progress.Failed -> {
@@ -137,6 +185,10 @@ class SettingLocalLlmViewModel(
             val installed = prefs.installedModels(runtime)
             installed[fileName]?.let { path -> java.io.File(path).delete() }
             prefs.removeInstalledModel(runtime, fileName)
+            updateMyProvider { p ->
+                val modelToRemove = p.models.firstOrNull { it.modelId == fileName }
+                if (modelToRemove != null) p.delModel(modelToRemove) else p
+            }
             refreshFromDisk()
         }
     }
@@ -162,6 +214,19 @@ class SettingLocalLlmViewModel(
                     }
                     is ModelInstall.Progress.Done -> {
                         prefs.addInstalledModel(runtime, fileName, p.file.absolutePath)
+                        val model = Model(
+                            modelId = fileName,
+                            displayName = fileName,
+                        )
+                        updateMyProvider { provider -> provider.addModel(model) }
+                        // Enable the provider automatically after first successful download.
+                        updateMyProvider { provider ->
+                            when (provider) {
+                                is ProviderSetting.LiteRtLocal -> provider.copy(enabled = true)
+                                is ProviderSetting.LlamaCppLocal -> provider.copy(enabled = true)
+                                else -> provider
+                            }
+                        }
                         refreshFromDisk()
                     }
                     is ModelInstall.Progress.Failed -> {

@@ -218,63 +218,31 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 val vm = koinViewModel<SettingLocalLlmViewModel>(
                                     key = provider.id.toString(),
                                 ) { parametersOf(LocalRuntime.LiteRT) }
-                                Card(
+                                LocalLlmProviderTile(
                                     modifier = Modifier
                                         .scale(if (isDragging) 0.95f else 1f)
                                         .fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = CustomColors.listItemColors.containerColor,
-                                    ),
-                                ) {
-                                    LocalLlmProviderTile(
-                                        headline = stringResource(R.string.local_llm_litert_name),
-                                        viewModel = vm,
-                                        onTapDetail = {
-                                            navController.navigate(Screen.SettingLocalLlm(runtime = "litert"))
-                                        },
-                                    )
-                                }
+                                    provider = provider,
+                                    viewModel = vm,
+                                    onTapDetail = {
+                                        navController.navigate(Screen.SettingLocalLlm(runtime = "litert"))
+                                    },
+                                )
                             }
                             is ProviderSetting.LlamaCppLocal -> {
-                                // Coming-soon tile. Toggle is permanently disabled until Task 18
-                                // wires the llama.cpp runtime. The DEFAULT_PROVIDERS entry stays so
-                                // user prefs survive the upgrade.
-                                Card(
+                                val vm = koinViewModel<SettingLocalLlmViewModel>(
+                                    key = provider.id.toString(),
+                                ) { parametersOf(LocalRuntime.LlamaCpp) }
+                                LocalLlmProviderTile(
                                     modifier = Modifier
                                         .scale(if (isDragging) 0.95f else 1f)
                                         .fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = CustomColors.listItemColors.containerColor,
-                                    ),
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = stringResource(R.string.local_llm_llamacpp_name),
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                )
-                                                Text(
-                                                    text = stringResource(R.string.local_llm_llamacpp_coming_soon),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                )
-                                            }
-                                            Switch(
-                                                checked = false,
-                                                onCheckedChange = null,
-                                                enabled = false,
-                                            )
-                                        }
-                                    }
-                                }
+                                    provider = provider,
+                                    viewModel = vm,
+                                    onTapDetail = {
+                                        navController.navigate(Screen.SettingLocalLlm(runtime = "llamacpp"))
+                                    },
+                                )
                             }
                             else -> {
                                 ProviderItem(
