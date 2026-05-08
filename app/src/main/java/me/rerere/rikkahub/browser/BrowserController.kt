@@ -53,19 +53,26 @@ object BrowserController {
      *  swept independently if it ever grows unbounded. */
     private const val STREAM_CACHE_SUBDIR = "browser-stream"
 
-    /** Skip a stream send if URL matches the previous send within this window. */
-    private const val STREAM_DEDUPE_WINDOW_MS = 8_000L
+    /**
+     * Skip a stream send if URL matches the previous send within this window. 8 s was the
+     * first cut but live testing with slow models (minimax-m2.7 at 0.7 tok/s) showed a
+     * single LLM turn easily spans 30+ s while bouncing back to the same URL multiple
+     * times. 30 s catches all the practical "model retrying the same page" cases without
+     * suppressing legitimate revisits later in the conversation (different turn = mostly
+     * a new URL anyway).
+     */
+    private const val STREAM_DEDUPE_WINDOW_MS = 30_000L
 
     /**
      * After `awaitReadyState` returns (`document.readyState === "complete"`), the WebView
      * has parsed HTML and finished resource loads but still hasn't painted its first frame.
      * `webView.draw(canvas)` at that exact moment captures the empty/white initial backing
-     * — the bug the user reported on cold `browser_open`. A small main-thread yield gives
-     * the WebView's render loop time to flush at least one frame to its software layer.
-     * 250 ms is conservative; further actions on the same page hit the de-dupe window so
-     * this delay only ever fires once per navigation.
+     * — the bug the user reported on cold `browser_open`. 250 ms wasn't enough on slower
+     * pages (kali.org/docs/ rendered the first 2 streams white). 600 ms handles the long
+     * tail; further actions on the same page hit the de-dupe window so this delay only
+     * fires once per real navigation.
      */
-    private const val PAINT_SETTLE_MS = 250L
+    private const val PAINT_SETTLE_MS = 600L
     private const val TAG = "BrowserController"
 
     /**
