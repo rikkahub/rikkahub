@@ -732,6 +732,14 @@ class TelegramBotService : Service() {
                 // Loop back; the next first { it != null } waits indefinitely for the
                 // user's tap (which restarts generation via handleToolApproval).
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Coroutine was cancelled (e.g. /stop or /new) — re-throw so the coroutine
+            // machinery marks this job as cancelled. The finally below still runs for cleanup.
+            // We must NOT swallow CancellationException: if we do, the post-loop finalisation
+            // block (renderAssistantStream → sendChunked) fires on stale state after cancel,
+            // potentially sending a partial/incorrect reply to Telegram.
+            android.util.Log.i(TAG, "handleIncoming: cancelled (CancellationException) — not sending final reply")
+            throw e
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "handleIncoming: generation flow ended with error", e)
         } finally {
@@ -2059,18 +2067,34 @@ class TelegramBotService : Service() {
             try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
             return
         }
-        val newCap: Int? = when {
-            arg.equals("clear", ignoreCase = true) || arg.equals("none", ignoreCase = true) ||
-                arg.equals("off", ignoreCase = true) || arg.equals("0", ignoreCase = true) -> null
-            else -> arg.toIntOrNull()?.takeIf { it in 1..200_000 }
+        // Resolve the arg to either:
+        //   null  → "clear" (remove cap)  — covers "clear"/"none"/"off"/"0"
+        //   Int   → the requested cap value
+        //   -1    → parse error (unrecognised string)
+        //   -2    → out of range numeric
+        val isClearKeyword = arg.equals("clear", ignoreCase = true) ||
+            arg.equals("none", ignoreCase = true) ||
+            arg.equals("off", ignoreCase = true) ||
+            arg == "0"
+        val parsedInt = if (isClearKeyword) null else arg.toIntOrNull()
+        val newCap: Int?
+        val parseError: String?
+        when {
+            isClearKeyword -> { newCap = null; parseError = null }
+            parsedInt != null && parsedInt in 1..200_000 -> { newCap = parsedInt; parseError = null }
+            parsedInt != null -> {
+                // Numeric but out of range.
+                newCap = null
+                parseError = "⚡ Value out of range. Use 1..200000, or 'clear' to remove the cap."
+            }
+            else -> {
+                // Not a number, not a keyword. Truncate arg in case it's very long.
+                newCap = null
+                parseError = "⚡ Could not parse \"${arg.take(40)}\". Use a number or 'clear'."
+            }
         }
-        if (arg.toIntOrNull() != null && newCap == null) {
-            try { client.sendMessage(chatId, "⚡ Value out of range. Use 1..200000, or 'clear' to remove the cap.") } catch (_: Throwable) {}
-            return
-        }
-        if (arg.toIntOrNull() == null && newCap != null) {
-            // Defensive — should not happen given the when above.
-            try { client.sendMessage(chatId, "⚡ Could not parse \"$arg\". Use a number or 'clear'.") } catch (_: Throwable) {}
+        if (parseError != null) {
+            try { client.sendMessage(chatId, parseError) } catch (_: Throwable) {}
             return
         }
         settingsStore.update { settings ->
@@ -2395,13 +2419,21 @@ class TelegramBotService : Service() {
             // concurrent reads, so we pair the concurrent map with a synchronised deque.
             private val insertionOrder = java.util.concurrent.LinkedBlockingDeque<String>()
             fun register(toolCallId: String, chatId: Long, messageId: Long) {
-                if (byCallId.put(toolCallId, Entry(chatId, messageId)) == null) {
+                val wasNew = byCallId.put(toolCallId, Entry(chatId, messageId)) == null
+                if (wasNew) {
                     insertionOrder.addLast(toolCallId)
+                    // Evict oldest entries while we're over the cap. If pollFirst returns a
+                    // key that was already removed from byCallId (e.g. after a clear()), the
+                    // remove is a no-op — that's fine, we keep looping until we're under cap.
                     while (byCallId.size > MAX_ENTRIES) {
                         val oldest = insertionOrder.pollFirst() ?: break
                         byCallId.remove(oldest)
                     }
                 }
+                // If the key was already present, byCallId is updated in-place above. The
+                // existing position in insertionOrder is still correct for FIFO eviction
+                // (re-registering the same toolCallId re-uses the original slot). No
+                // structural change to insertionOrder needed.
             }
             fun get(toolCallId: String): Entry? = byCallId[toolCallId]
             fun clear(toolCallId: String) {
@@ -2458,15 +2490,21 @@ class TelegramBotService : Service() {
          */
         object SlashCommandLog {
             private const val MAX_PER_CHAT = 8
+            // MutableList values are always accessed under the list's own monitor. CHM
+            // provides safe get/putIfAbsent so we can obtain the list atomically; all
+            // mutations then go through synchronized(list) so record() and recent() never
+            // interleave on the same entry. Using compute() directly was incorrect because
+            // it held the CHM bucket lock — not list's monitor — while mutating the list,
+            // allowing a concurrent recent() call holding list's monitor to see a
+            // partially-updated list.
             private val byChat = java.util.concurrent.ConcurrentHashMap<Long, MutableList<Pair<String, Long>>>()
 
             fun record(chatId: Long, display: String) {
                 val now = System.currentTimeMillis()
-                byChat.compute(chatId) { _, prev ->
-                    val list = prev ?: mutableListOf()
+                val list = byChat.getOrPut(chatId) { mutableListOf() }
+                synchronized(list) {
                     list.add(display to now)
                     while (list.size > MAX_PER_CHAT) list.removeAt(0)
-                    list
                 }
             }
 
