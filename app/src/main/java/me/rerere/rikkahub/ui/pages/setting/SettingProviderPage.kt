@@ -84,6 +84,10 @@ import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
+import me.rerere.locallm.LocalRuntime
+import me.rerere.rikkahub.ui.pages.setting.locallm.LocalLlmProviderTile
+import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
 import java.util.Locale
@@ -208,38 +212,68 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                         state = reorderableState,
                         key = provider.id
                     ) { isDragging ->
-                        ProviderItem(
-                            modifier = Modifier
-                                .scale(if (isDragging) 0.95f else 1f)
-                                .fillMaxWidth(),
-                            provider = provider,
-                            dragHandle = {
-                                val haptic = LocalHapticFeedback.current
-                                IconButton(
-                                    onClick = {},
+                        when (provider) {
+                            is ProviderSetting.LiteRtLocal -> {
+                                val vm = koinViewModel<SettingLocalLlmViewModel>(
+                                    key = provider.id.toString(),
+                                ) { parametersOf(LocalRuntime.LiteRT) }
+                                Card(
                                     modifier = Modifier
-                                        .longPressDraggableHandle(
-                                            onDragStarted = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            },
-                                            onDragStopped = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            }
-                                        )
+                                        .scale(if (isDragging) 0.95f else 1f)
+                                        .fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = CustomColors.listItemColors.containerColor,
+                                    ),
                                 ) {
-                                    Icon(
-                                        imageVector = HugeIcons.DragDropHorizontal,
-                                        contentDescription = null
+                                    LocalLlmProviderTile(
+                                        headline = stringResource(R.string.local_llm_litert_name),
+                                        viewModel = vm,
+                                        onTapDetail = {
+                                            // Detail page nav target lands in Task 14. No-op for now.
+                                        },
                                     )
                                 }
-                            },
-                            onClick = {
-                                navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
-                            },
-                            onLongClick = {
-                                providerToDelete = provider
                             }
-                        )
+                            is ProviderSetting.LlamaCppLocal -> {
+                                // Placeholder until Task 18 (llama.cpp runtime + provider). Render
+                                // nothing so the tile doesn't appear before its provider is wired.
+                                // The DEFAULT_PROVIDERS entry stays so user prefs survive.
+                            }
+                            else -> {
+                                ProviderItem(
+                                    modifier = Modifier
+                                        .scale(if (isDragging) 0.95f else 1f)
+                                        .fillMaxWidth(),
+                                    provider = provider,
+                                    dragHandle = {
+                                        val haptic = LocalHapticFeedback.current
+                                        IconButton(
+                                            onClick = {},
+                                            modifier = Modifier
+                                                .longPressDraggableHandle(
+                                                    onDragStarted = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                                    },
+                                                    onDragStopped = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                                    }
+                                                )
+                                        ) {
+                                            Icon(
+                                                imageVector = HugeIcons.DragDropHorizontal,
+                                                contentDescription = null
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
+                                    },
+                                    onLongClick = {
+                                        providerToDelete = provider
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
