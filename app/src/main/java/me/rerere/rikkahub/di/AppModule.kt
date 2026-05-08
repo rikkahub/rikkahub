@@ -183,6 +183,10 @@ val appModule = module {
         AILoggingManager()
     }
 
+    // Phase 22A: Local-LLM on-device providers
+    single { me.rerere.locallm.LocalRuntimePreferences(get()) }
+    single { me.rerere.locallm.litert.LiteRtRuntime(get()) }
+
     single {
         ChatService(
             context = get(),

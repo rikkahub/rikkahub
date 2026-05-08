@@ -127,6 +127,8 @@ object CherryStudioProviderImporter {
             is ProviderSetting.Google -> "google|${provider.baseUrl}|${provider.apiKey}"
             is ProviderSetting.Claude -> "claude|${provider.baseUrl}|${provider.apiKey}"
             is ProviderSetting.AICore -> "aicore|${provider.id}"
+            is ProviderSetting.LiteRtLocal -> "local_litert|${provider.id}"
+            is ProviderSetting.LlamaCppLocal -> "local_llamacpp|${provider.id}"
         }
     }
 }

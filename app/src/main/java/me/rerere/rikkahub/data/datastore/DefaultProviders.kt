@@ -39,6 +39,29 @@ val DEFAULT_PROVIDERS = listOf(
             Text("On-device — no API key, no network")
         },
     ),
+    ProviderSetting.LiteRtLocal(
+        // LiteRT (MediaPipe tasks-genai) on-device provider. Disabled by default — the user
+        // must install at least one .task model file before the toggle is useful.
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text("Runs LiteRT (.task) models on-device via MediaPipe tasks-genai. Requires a compatible model file installed in the app's local model directory.")
+        },
+        shortDescription = {
+            Text("On-device — LiteRT via MediaPipe")
+        },
+    ),
+    ProviderSetting.LlamaCppLocal(
+        // llama.cpp on-device provider. Disabled by default — runtime not yet wired (Task 18).
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text("Runs GGUF models on-device via llama.cpp. Runtime wiring arrives in a later phase.")
+        },
+        shortDescription = {
+            Text("On-device — llama.cpp (coming soon)")
+        },
+    ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("a8d2d463-e8c0-41f2-b89e-f5eb8e716cce"),
         name = "RikkaHub",

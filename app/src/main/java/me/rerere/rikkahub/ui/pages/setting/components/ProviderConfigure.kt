@@ -87,6 +87,15 @@ fun ProviderConfigure(
             is ProviderSetting.AICore -> {
                 ProviderConfigureAICore(provider, onEdit)
             }
+
+            is ProviderSetting.LiteRtLocal -> {
+                // No additional configuration UI for LiteRT in Phase 22A.
+                // Model management arrives in the local-model browser (Task 14+).
+            }
+
+            is ProviderSetting.LlamaCppLocal -> {
+                // No additional configuration UI for llama.cpp in Phase 22A.
+            }
         }
     }
 }
@@ -101,6 +110,8 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Google -> this.apiKey
         is ProviderSetting.Claude -> this.apiKey
         is ProviderSetting.AICore -> "" // on-device, no API key
+        is ProviderSetting.LiteRtLocal -> "" // on-device, no API key
+        is ProviderSetting.LlamaCppLocal -> "" // on-device, no API key
     }
 
     val sourceBaseUrl = when (this) {
@@ -108,6 +119,8 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
         is ProviderSetting.AICore -> "" // on-device, no base URL
+        is ProviderSetting.LiteRtLocal -> "" // on-device, no base URL
+        is ProviderSetting.LlamaCppLocal -> "" // on-device, no base URL
     }
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
@@ -180,7 +193,9 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
             is ProviderSetting.OpenAI -> if (defaultProvider is ProviderSetting.OpenAI) return defaultProvider.baseUrl
             is ProviderSetting.Google -> if (defaultProvider is ProviderSetting.Google) return defaultProvider.baseUrl
             is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
-            is ProviderSetting.AICore -> return ""
+            is ProviderSetting.AICore -> return "" // on-device, no base URL
+            is ProviderSetting.LiteRtLocal -> return "" // on-device, no base URL
+            is ProviderSetting.LlamaCppLocal -> return "" // on-device, no base URL
         }
     }
 
@@ -189,6 +204,8 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
         is ProviderSetting.Google -> ProviderSetting.Google().baseUrl
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
         is ProviderSetting.AICore -> ""
+        is ProviderSetting.LiteRtLocal -> ""
+        is ProviderSetting.LlamaCppLocal -> ""
     }
 }
 
@@ -199,6 +216,8 @@ internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
         is ProviderSetting.Google -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.AICore -> this // no base URL to reset
+        is ProviderSetting.LiteRtLocal -> this // no base URL to reset
+        is ProviderSetting.LlamaCppLocal -> this // no base URL to reset
     }
 }
 
@@ -208,6 +227,8 @@ internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
         is ProviderSetting.AICore -> return true // no base URL concept
+        is ProviderSetting.LiteRtLocal -> return true // no base URL concept
+        is ProviderSetting.LlamaCppLocal -> return true // no base URL concept
     }
     return baseUrl == defaultBaseUrlForReset()
 }

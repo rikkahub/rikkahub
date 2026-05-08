@@ -190,7 +190,15 @@ val dataSourceModule = module {
     }
 
     single {
-        ProviderManager(client = get(), context = get())
+        ProviderManager(client = get(), context = get()).also { pm ->
+            pm.registerProvider(
+                "local_litert",
+                me.rerere.locallm.litert.LiteRtProvider(
+                    runtime = get(),
+                    prefs = get(),
+                ),
+            )
+        }
     }
 
     single {
