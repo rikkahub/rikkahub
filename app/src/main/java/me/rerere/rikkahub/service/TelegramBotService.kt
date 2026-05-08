@@ -34,6 +34,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.db.entity.TelegramChatEntity
@@ -528,6 +529,12 @@ class TelegramBotService : Service() {
         // UX: tell Telegram "the bot is typing" so the user sees activity while we generate.
         try { client.sendChatAction(m.chatId, "typing") } catch (_: Throwable) {}
         chatService.initializeConversation(convId)
+        // Mark this conv headless so browser tools route through HeadlessBrowserSessionPool
+        // (no Activity launch on the user's phone) and `streamScreenshotIfHeadless` actually
+        // streams to Telegram. Every other headless caller (cron, sub-agent, workflow,
+        // skill-tester, automation API) does this; the bot was the only one missing it,
+        // so browser_open was opening BrowserActivity visibly and the streamer was a no-op.
+        HeadlessConversations.mark(convId)
         // Register the agent-context preamble as a SYSTEM addendum (sent once per
         // generation by GenerationHandler) instead of prepending it to the user message.
         // The previous design persisted the preamble inside `UIMessagePart.Text` so it
@@ -609,6 +616,11 @@ class TelegramBotService : Service() {
         // resolves it.
         val promptedToolCallIds = mutableSetOf<String>()
         var iteration = 0
+        // Captured when the generation flow throws (e.g. provider returns 4xx with a body
+        // like "this model does not support image input"). Surfaced in the empty-reply
+        // branch so the user sees the actual cause instead of the generic
+        // "(model called tools but didn't reply)" hint.
+        var generationError: Throwable? = null
         try {
             // Loop: wait for the current generation to finish, look for any tool calls in
             // Pending state (LLM wants approval to run them), send approval prompts with
@@ -732,11 +744,21 @@ class TelegramBotService : Service() {
                 // Loop back; the next first { it != null } waits indefinitely for the
                 // user's tap (which restarts generation via handleToolApproval).
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Coroutine was cancelled (e.g. /stop or /new) — re-throw so the coroutine
+            // machinery marks this job as cancelled. The finally below still runs for cleanup.
+            // We must NOT swallow CancellationException: if we do, the post-loop finalisation
+            // block (renderAssistantStream → sendChunked) fires on stale state after cancel,
+            // potentially sending a partial/incorrect reply to Telegram.
+            android.util.Log.i(TAG, "handleIncoming: cancelled (CancellationException) — not sending final reply")
+            throw e
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "handleIncoming: generation flow ended with error", e)
+            generationError = e
         } finally {
             chatService.removeConversationReference(convId)
             activeHandleIncomingConvs.remove(convId)
+            HeadlessConversations.unmark(convId)
         }
 
         val finalReply = renderAssistantStream(convId, finalizing = true, baselineMessageCount)
@@ -758,7 +780,18 @@ class TelegramBotService : Service() {
                 )
                 val rescued = tryRescueImageFromTurn(convId, baselineMessageCount, m.chatId)
                 if (!rescued) {
-                    val fallback = "(model called tools but didn't reply — try saying \"continue\", switch model with /model, or reset with /new)"
+                    // If generation actually threw (provider 4xx, network error, hardline
+                    // block, etc.), surface the cause to the user instead of the generic
+                    // "no reply" hint. Most provider errors include a clear message body
+                    // like "this model does not support image input" — which is exactly
+                    // what the user needs to act on (switch model, drop attachment, etc.).
+                    val fallback = generationError?.let { e ->
+                        val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName ?: "unknown error"
+                        // Cap to leave room for the prefix and not blow Telegram's 4096
+                        // limit on an unbounded provider-error blob.
+                        val capped = if (msg.length <= 600) msg else msg.take(600) + "…"
+                        "⚠️ Generation failed: $capped"
+                    } ?: "(model called tools but didn't reply — try saying \"continue\", switch model with /model, or reset with /new)"
                     if (placeholderId != null) {
                         try { client.editMessageText(m.chatId, placeholderId, fallback) } catch (_: Throwable) {}
                     } else {
@@ -1760,6 +1793,7 @@ class TelegramBotService : Service() {
             "/model" -> { handleModelCommand(m.chatId, arg); true }
             "/ratelimit" -> { handleRateLimitCommand(m.chatId, arg); true }
             "/doctor" -> { handleDoctorCommand(m.chatId); true }
+            "/stream" -> { handleStreamCommand(m.chatId, arg); true }
             else -> false
         }
         if (handled) {
@@ -1799,6 +1833,8 @@ class TelegramBotService : Service() {
             "status" to "📊",
             "model" to "🧠",
             "ratelimit" to "⚡",
+            "doctor" to "🩺",
+            "stream" to "🖼️",
         )
         val msg = buildString {
             appendLine("📖 Built-in commands (handled by the app, no LLM cost):")
@@ -1859,6 +1895,14 @@ class TelegramBotService : Service() {
                 // Drop the in-memory ChatService session entry so a straggler can't
                 // resurrect the conversation by writing back via getOrCreateSession.
                 chatService.dropSession(convId)
+                // Release any headless browser session held for this conv — browser_done no
+                // longer auto-releases (so sessions persist across LLM turns), so /new is
+                // the user's explicit close signal. Releases ~30 MB and unbinds the
+                // BrowserController so the next browser_open starts fresh.
+                runCatching {
+                    me.rerere.rikkahub.browser.BrowserController.unbindHeadless(convId.toString())
+                    me.rerere.rikkahub.browser.HeadlessBrowserSessionPool.release(convId.toString())
+                }
             }
         }
         // Cancel the parked handleLlmTurn coroutine if any so the per-chat mutex
@@ -2059,18 +2103,34 @@ class TelegramBotService : Service() {
             try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
             return
         }
-        val newCap: Int? = when {
-            arg.equals("clear", ignoreCase = true) || arg.equals("none", ignoreCase = true) ||
-                arg.equals("off", ignoreCase = true) || arg.equals("0", ignoreCase = true) -> null
-            else -> arg.toIntOrNull()?.takeIf { it in 1..200_000 }
+        // Resolve the arg to either:
+        //   null  → "clear" (remove cap)  — covers "clear"/"none"/"off"/"0"
+        //   Int   → the requested cap value
+        //   -1    → parse error (unrecognised string)
+        //   -2    → out of range numeric
+        val isClearKeyword = arg.equals("clear", ignoreCase = true) ||
+            arg.equals("none", ignoreCase = true) ||
+            arg.equals("off", ignoreCase = true) ||
+            arg == "0"
+        val parsedInt = if (isClearKeyword) null else arg.toIntOrNull()
+        val newCap: Int?
+        val parseError: String?
+        when {
+            isClearKeyword -> { newCap = null; parseError = null }
+            parsedInt != null && parsedInt in 1..200_000 -> { newCap = parsedInt; parseError = null }
+            parsedInt != null -> {
+                // Numeric but out of range.
+                newCap = null
+                parseError = "⚡ Value out of range. Use 1..200000, or 'clear' to remove the cap."
+            }
+            else -> {
+                // Not a number, not a keyword. Truncate arg in case it's very long.
+                newCap = null
+                parseError = "⚡ Could not parse \"${arg.take(40)}\". Use a number or 'clear'."
+            }
         }
-        if (arg.toIntOrNull() != null && newCap == null) {
-            try { client.sendMessage(chatId, "⚡ Value out of range. Use 1..200000, or 'clear' to remove the cap.") } catch (_: Throwable) {}
-            return
-        }
-        if (arg.toIntOrNull() == null && newCap != null) {
-            // Defensive — should not happen given the when above.
-            try { client.sendMessage(chatId, "⚡ Could not parse \"$arg\". Use a number or 'clear'.") } catch (_: Throwable) {}
+        if (parseError != null) {
+            try { client.sendMessage(chatId, parseError) } catch (_: Throwable) {}
             return
         }
         settingsStore.update { settings ->
@@ -2271,6 +2331,39 @@ class TelegramBotService : Service() {
     }
 
     /**
+     * `/stream` — show or toggle whether tool screenshots auto-stream to this chat.
+     * No arg = show + toggle. Arg `on` / `off` = set explicitly. Stored globally on the
+     * bot config (not per-chat) since users with one Telegram account → one bot expect
+     * one knob; both streamers read the same flag.
+     */
+    private suspend fun handleStreamCommand(chatId: Long, arg: String) {
+        val current = runCatching { prefs.current().streamScreenshots }.getOrDefault(true)
+        val target: Boolean? = when (arg.trim().lowercase()) {
+            "" -> !current  // toggle
+            "on", "true", "yes", "1", "enable", "enabled" -> true
+            "off", "false", "no", "0", "disable", "disabled" -> false
+            else -> null
+        }
+        if (target == null) {
+            try {
+                client.sendMessage(
+                    chatId,
+                    "🖼️ Auto-stream is currently ${if (current) "ON" else "OFF"}. " +
+                        "Use /stream on or /stream off to set explicitly, or /stream alone to toggle.",
+                )
+            } catch (_: Throwable) {}
+            return
+        }
+        runCatching { prefs.update { it.copy(streamScreenshots = target) } }
+        val msg = if (target) {
+            "🖼️ Auto-stream ON. Screenshots will be sent here after each browser action and after every interactive tool fires."
+        } else {
+            "🖼️ Auto-stream OFF. Tool screenshots will NOT be sent. Re-enable with /stream on."
+        }
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
+    }
+
+    /**
      * Push the canonical built-in command list to Telegram + any custom commands the LLM
      * has previously persisted via telegram_set_commands. Called once on bot service
      * start. Without merging the custom commands here, every app restart would silently
@@ -2395,13 +2488,21 @@ class TelegramBotService : Service() {
             // concurrent reads, so we pair the concurrent map with a synchronised deque.
             private val insertionOrder = java.util.concurrent.LinkedBlockingDeque<String>()
             fun register(toolCallId: String, chatId: Long, messageId: Long) {
-                if (byCallId.put(toolCallId, Entry(chatId, messageId)) == null) {
+                val wasNew = byCallId.put(toolCallId, Entry(chatId, messageId)) == null
+                if (wasNew) {
                     insertionOrder.addLast(toolCallId)
+                    // Evict oldest entries while we're over the cap. If pollFirst returns a
+                    // key that was already removed from byCallId (e.g. after a clear()), the
+                    // remove is a no-op — that's fine, we keep looping until we're under cap.
                     while (byCallId.size > MAX_ENTRIES) {
                         val oldest = insertionOrder.pollFirst() ?: break
                         byCallId.remove(oldest)
                     }
                 }
+                // If the key was already present, byCallId is updated in-place above. The
+                // existing position in insertionOrder is still correct for FIFO eviction
+                // (re-registering the same toolCallId re-uses the original slot). No
+                // structural change to insertionOrder needed.
             }
             fun get(toolCallId: String): Entry? = byCallId[toolCallId]
             fun clear(toolCallId: String) {
@@ -2458,15 +2559,21 @@ class TelegramBotService : Service() {
          */
         object SlashCommandLog {
             private const val MAX_PER_CHAT = 8
+            // MutableList values are always accessed under the list's own monitor. CHM
+            // provides safe get/putIfAbsent so we can obtain the list atomically; all
+            // mutations then go through synchronized(list) so record() and recent() never
+            // interleave on the same entry. Using compute() directly was incorrect because
+            // it held the CHM bucket lock — not list's monitor — while mutating the list,
+            // allowing a concurrent recent() call holding list's monitor to see a
+            // partially-updated list.
             private val byChat = java.util.concurrent.ConcurrentHashMap<Long, MutableList<Pair<String, Long>>>()
 
             fun record(chatId: Long, display: String) {
                 val now = System.currentTimeMillis()
-                byChat.compute(chatId) { _, prev ->
-                    val list = prev ?: mutableListOf()
+                val list = byChat.getOrPut(chatId) { mutableListOf() }
+                synchronized(list) {
                     list.add(display to now)
                     while (list.size > MAX_PER_CHAT) list.removeAt(0)
-                    list
                 }
             }
 
@@ -2497,6 +2604,7 @@ class TelegramBotService : Service() {
             "model" to "Show or switch the chat model. Usage: /model [name]",
             "ratelimit" to "Show or set the assistant's max output tokens. Usage: /ratelimit [number|clear]",
             "doctor" to "Run app diagnostics — perms, services, DB, network, Termux",
+            "stream" to "Show or toggle auto-streamed screenshots. Usage: /stream [on|off]",
         )
 
         /** Set whenever the service is alive AND its long-poll loop is running. */

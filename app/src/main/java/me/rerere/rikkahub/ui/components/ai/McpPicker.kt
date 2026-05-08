@@ -166,7 +166,7 @@ fun McpPicker(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        items(servers.fastFilter { it.commonOptions.enable }) { server ->
+        items(servers.fastFilter { it.commonOptions.enable }, key = { it.id }) { server ->
             val status by mcpManager.getStatus(server).collectAsStateWithLifecycle(McpStatus.Idle)
             Card {
                 Row(

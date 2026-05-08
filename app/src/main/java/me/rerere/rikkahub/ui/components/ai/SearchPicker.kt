@@ -234,7 +234,7 @@ private fun AppSearchSettings(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        itemsIndexed(settings.searchServices) { index, service ->
+        itemsIndexed(settings.searchServices, key = { _, service -> service.id }) { index, service ->
             val containerColor = animateColorAsState(
                 if (settings.searchServiceSelected == index) {
                     MaterialTheme.colorScheme.primaryContainer

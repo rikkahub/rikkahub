@@ -39,6 +39,32 @@ val DEFAULT_PROVIDERS = listOf(
             Text("On-device — no API key, no network")
         },
     ),
+    ProviderSetting.LiteRtLocal(
+        // LiteRT-LM on-device provider. Disabled by default — downloads the default model
+        // (Qwen2.5 1.5B Q8, ~1.5 GB) on first enable. Uses the LiteRT-LM runtime (.litertlm
+        // format), not MediaPipe tasks-genai (.task). Enable switch triggers the download dialog.
+        // Default model is from the Gallery allowlist for LiteRT-LM 0.11.0, so it is guaranteed
+        // compatible with the SDK version we ship.
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text("Runs .litertlm models on-device via LiteRT-LM. Downloads Qwen2.5 1.5B Q8 (~1.5 GB) on first enable.")
+        },
+        shortDescription = {
+            Text("On-device — LiteRT-LM")
+        },
+    ),
+    ProviderSetting.LlamaCppLocal(
+        // llama.cpp on-device provider. Disabled by default — runtime not yet wired (Task 18).
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text("Runs GGUF models on-device via llama.cpp. Runtime wiring arrives in a later phase.")
+        },
+        shortDescription = {
+            Text("On-device — llama.cpp (coming soon)")
+        },
+    ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("a8d2d463-e8c0-41f2-b89e-f5eb8e716cce"),
         name = "RikkaHub",

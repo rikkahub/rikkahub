@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 val Migration_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
         DatabaseMigrationTracker.onMigrationStart(14, 15)
+        db.beginTransaction()
         try {
             db.execSQL(
                 """
@@ -25,7 +26,9 @@ val Migration_14_15 = object : Migration(14, 15) {
             db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_favorites_ref_key ON favorites(ref_key)")
             db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_type ON favorites(type)")
             db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_created_at ON favorites(created_at)")
+            db.setTransactionSuccessful()
         } finally {
+            db.endTransaction()
             DatabaseMigrationTracker.onMigrationEnd()
         }
     }

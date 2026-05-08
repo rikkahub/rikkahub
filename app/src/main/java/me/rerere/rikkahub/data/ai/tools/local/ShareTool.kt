@@ -10,8 +10,13 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 
-fun shareTool(context: Context): Tool = Tool(
+fun shareTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "share",
     description = """
         Open the system share sheet so the user can send text or a URL to another app
@@ -36,6 +41,7 @@ fun shareTool(context: Context): Tool = Tool(
         )
     },
     execute = {
+        wakeScreenIfNeeded(context)
         val params = it.jsonObject
         val text = params["text"]?.jsonPrimitive?.contentOrNull?.takeIf { s -> s.isNotEmpty() }
         val url = params["url"]?.jsonPrimitive?.contentOrNull?.takeIf { s -> s.isNotEmpty() }
@@ -62,6 +68,8 @@ fun shareTool(context: Context): Tool = Tool(
         context.startActivity(chooser)
 
         val payload = buildJsonObject { put("success", true) }
+        val shareLabel = combined.take(50)
+        streamer.streamIfHeadless(invocationContext, "Share: $shareLabel")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

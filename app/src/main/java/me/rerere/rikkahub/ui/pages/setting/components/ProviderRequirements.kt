@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.ui.components.ui.TagType
-import kotlin.collections.listOf
 
 /**
  * A user-facing precondition the provider needs before it can actually run inference. Rendered
@@ -30,6 +29,18 @@ data class ProviderRequirement(
                 ),
                 ProviderRequirement(
                     label = "Pixel 8 / 9 / 10",
+                    severity = TagType.INFO,
+                ),
+            )
+            is ProviderSetting.LiteRtLocal -> listOf(
+                ProviderRequirement(
+                    label = "On-device · ~1.5 GB",
+                    severity = TagType.INFO,
+                ),
+            )
+            is ProviderSetting.LlamaCppLocal -> listOf(
+                ProviderRequirement(
+                    label = "On-device · ~1 GB",
                     severity = TagType.INFO,
                 ),
             )

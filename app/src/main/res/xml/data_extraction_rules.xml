@@ -30,6 +30,10 @@
     <exclude domain="file" path="known_hosts" />
     <!-- Pass 3: WebView cookies + localStorage. Auth tokens MUST not walk off the device. -->
     <exclude domain="file" path="browser-profile/" />
+    <!-- Phase 22A: on-device LLM weights (1 GB+). Never upload to cloud backup. -->
+    <exclude domain="file" path="local-models/" />
+    <!-- Jieba FTS dictionary: reproducible from assets, no user data. -->
+    <exclude domain="file" path="simple_dict/" />
   </cloud-backup>
   <device-transfer>
     <include domain="file" path="upload/" />
@@ -39,5 +43,10 @@
     <exclude domain="file" path="known_hosts" />
     <!-- Pass 3: same reasoning as cloud-backup; never transfer browser auth state. -->
     <exclude domain="file" path="browser-profile/" />
+    <!-- Phase 22A: on-device LLM weights. Transferring multi-GB model files on device
+         swap causes the transfer to stall or fail silently. User re-downloads on new device. -->
+    <exclude domain="file" path="local-models/" />
+    <!-- Jieba FTS dictionary: reproducible from assets. -->
+    <exclude domain="file" path="simple_dict/" />
   </device-transfer>
 </data-extraction-rules>

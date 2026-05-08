@@ -15,8 +15,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,11 +68,11 @@ fun SettingAccessibilityPage() {
     // Pull StateFlows from the live service if present; otherwise show empty defaults.
     val runningFlow: StateFlow<Boolean> = svc?.running
         ?: remember { MutableStateFlow(false) }
-    val running by runningFlow.collectAsState()
+    val running by runningFlow.collectAsStateWithLifecycle()
 
     val actionsFlow: StateFlow<List<ActionLogEntry>> = svc?.lastActions
         ?: remember { MutableStateFlow(emptyList()) }
-    val actions by actionsFlow.collectAsState()
+    val actions by actionsFlow.collectAsStateWithLifecycle()
 
     val captureOkFmt = stringResource(R.string.setting_page_accessibility_capture_ok_toast)
     val captureFailFmt = stringResource(R.string.setting_page_accessibility_capture_fail_toast)

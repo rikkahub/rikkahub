@@ -17,6 +17,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 
 /**
  * Phase 18 — first-class native-intent tools matching Google AI Edge Gallery's Mobile
@@ -37,7 +38,11 @@ import me.rerere.ai.ui.UIMessagePart
  * over once the intent fires.
  */
 
-fun createCalendarEventTool(context: Context): Tool = Tool(
+fun createCalendarEventTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "create_calendar_event",
     description = """
         Open the system Calendar app pre-filled with a new event the user can review and save.
@@ -78,6 +83,7 @@ fun createCalendarEventTool(context: Context): Tool = Tool(
     },
     needsApproval = true,
     execute = { args ->
+        wakeScreenIfNeeded(context)
         val params = args.jsonObject
         val title = params["title"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool err("missing_title", "title is required")
@@ -101,11 +107,17 @@ fun createCalendarEventTool(context: Context): Tool = Tool(
             }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        fireIntent(context, intent, action = "create_calendar_event", summary = "Calendar event: $title")
+        val result = fireIntent(context, intent, action = "create_calendar_event", summary = "Calendar event: $title")
+        streamer.streamIfHeadless(invocationContext, "CreateCalendarEvent: $title")
+        result
     },
 )
 
-fun createContactTool(context: Context): Tool = Tool(
+fun createContactTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "create_contact",
     description = """
         Open the system Contacts app pre-filled with a new contact the user can review and save.
@@ -139,6 +151,7 @@ fun createContactTool(context: Context): Tool = Tool(
     },
     needsApproval = true,
     execute = { args ->
+        wakeScreenIfNeeded(context)
         val params = args.jsonObject
         val firstName = params["first_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val lastName = params["last_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -157,14 +170,20 @@ fun createContactTool(context: Context): Tool = Tool(
             }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        fireIntent(
+        val result = fireIntent(
             context, intent, action = "create_contact",
             summary = "Contact draft: ${displayName.ifBlank { "(unnamed)" }}",
         )
+        streamer.streamIfHeadless(invocationContext, "CreateContact: ${displayName.ifBlank { "(unnamed)" }}")
+        result
     },
 )
 
-fun sendEmailIntentTool(context: Context): Tool = Tool(
+fun sendEmailIntentTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "send_email_intent",
     description = """
         Open the user's default email app composer pre-filled with recipient, subject, and body.
@@ -192,6 +211,7 @@ fun sendEmailIntentTool(context: Context): Tool = Tool(
     },
     needsApproval = true,
     execute = { args ->
+        wakeScreenIfNeeded(context)
         val params = args.jsonObject
         val to = params["to"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool err("missing_to", "to is required")
@@ -204,14 +224,20 @@ fun sendEmailIntentTool(context: Context): Tool = Tool(
             if (body.isNotEmpty()) putExtra(Intent.EXTRA_TEXT, body)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        fireIntent(
+        val result = fireIntent(
             context, intent, action = "send_email_intent",
             summary = "Email draft to $to" + if (subject.isNotEmpty()) " — $subject" else "",
         )
+        streamer.streamIfHeadless(invocationContext, "SendEmailIntent to $to")
+        result
     },
 )
 
-fun sendSmsIntentTool(context: Context): Tool = Tool(
+fun sendSmsIntentTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "send_sms_intent",
     description = """
         Open the system SMS composer pre-filled with recipient and message body. The user
@@ -234,6 +260,7 @@ fun sendSmsIntentTool(context: Context): Tool = Tool(
     },
     needsApproval = true,
     execute = { args ->
+        wakeScreenIfNeeded(context)
         val params = args.jsonObject
         val phone = params["phone_number"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool err("missing_phone_number", "phone_number is required")
@@ -243,14 +270,20 @@ fun sendSmsIntentTool(context: Context): Tool = Tool(
             if (body.isNotEmpty()) putExtra("sms_body", body)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        fireIntent(
+        val result = fireIntent(
             context, intent, action = "send_sms_intent",
             summary = "SMS draft to $phone" + if (body.isNotEmpty()) ": ${body.take(40)}" else "",
         )
+        streamer.streamIfHeadless(invocationContext, "SendSmsIntent to $phone")
+        result
     },
 )
 
-fun openWifiSettingsTool(context: Context): Tool = Tool(
+fun openWifiSettingsTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "open_wifi_settings",
     description = """
         Open the system WiFi Settings page so the user can connect to a network, forget one,
@@ -260,14 +293,21 @@ fun openWifiSettingsTool(context: Context): Tool = Tool(
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
     needsApproval = true,
     execute = { _ ->
+        wakeScreenIfNeeded(context)
         val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        fireIntent(context, intent, action = "open_wifi_settings", summary = "Opened WiFi Settings")
+        val result = fireIntent(context, intent, action = "open_wifi_settings", summary = "Opened WiFi Settings")
+        streamer.streamIfHeadless(invocationContext, "OpenWifiSettings")
+        result
     },
 )
 
-fun showLocationOnMapTool(context: Context): Tool = Tool(
+fun showLocationOnMapTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "show_location_on_map",
     description = """
         Open the user's default maps app showing the given place / address / coordinates.
@@ -286,16 +326,19 @@ fun showLocationOnMapTool(context: Context): Tool = Tool(
     },
     needsApproval = true,
     execute = { args ->
+        wakeScreenIfNeeded(context)
         val query = args.jsonObject["query"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool err("missing_query", "query is required")
         val intent = Intent(Intent.ACTION_VIEW).apply {
             data = "geo:0,0?q=${Uri.encode(query)}".toUri()
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        fireIntent(
+        val result = fireIntent(
             context, intent, action = "show_location_on_map",
             summary = "Map: $query",
         )
+        streamer.streamIfHeadless(invocationContext, "ShowLocationOnMap: ${query.take(50)}")
+        result
     },
 )
 

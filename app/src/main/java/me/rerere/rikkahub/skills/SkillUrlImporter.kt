@@ -137,12 +137,15 @@ class SkillUrlImporter(
     /** Replace the `name: <whatever>` line inside the YAML frontmatter, preserving the rest. */
     private fun rewriteFrontmatterName(body: String, newName: String): String {
         if (!body.startsWith("---")) return body
-        val end = body.indexOf("\n---", startIndex = 3)
-        if (end < 0) return body
+        // Accept both CRLF (\r\n---) and LF (\n---) end-fence so Windows-exported
+        // skill files are handled correctly.
+        val end = body.indexOf("\r\n---", startIndex = 3).takeIf { it >= 0 }
+            ?: body.indexOf("\n---", startIndex = 3).takeIf { it >= 0 }
+            ?: return body
         val frontmatter = body.substring(0, end)
         val rest = body.substring(end)
         val rewritten = frontmatter.lines().joinToString("\n") { line ->
-            if (line.startsWith("name:")) "name: $newName" else line
+            if (line.trimEnd('\r').startsWith("name:")) "name: $newName" else line
         }
         return rewritten + rest
     }
@@ -261,8 +264,11 @@ class SkillUrlImporter(
         if (frontmatter["source-url"]?.isNotBlank() == true) return nativeMd
         // Splice into the existing frontmatter block. The parser ensures it starts with `---`.
         if (!nativeMd.startsWith("---")) return nativeMd  // shouldn't happen — early-return
-        val end = nativeMd.indexOf("\n---", startIndex = 3)
-        if (end < 0) return nativeMd
+        // Accept both CRLF (\r\n---) and LF (\n---) end-fence so Windows-exported
+        // skill files are handled correctly.
+        val end = nativeMd.indexOf("\r\n---", startIndex = 3).takeIf { it >= 0 }
+            ?: nativeMd.indexOf("\n---", startIndex = 3).takeIf { it >= 0 }
+            ?: return nativeMd
         return nativeMd.substring(0, end) + "\nsource-url: $sourceUrl" + nativeMd.substring(end)
     }
 

@@ -22,8 +22,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,8 +62,8 @@ import org.koin.compose.koinInject
 @Composable
 fun SettingToolApprovalsPage() {
     val prefs: ToolApprovalPreferences = koinInject()
-    val granted by prefs.alwaysAllowFlow.collectAsState(initial = emptySet())
-    val yolo by prefs.globalYoloFlow.collectAsState(initial = false)
+    val granted by prefs.alwaysAllowFlow.collectAsStateWithLifecycle(initialValue = emptySet())
+    val yolo by prefs.globalYoloFlow.collectAsStateWithLifecycle(initialValue = false)
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
 

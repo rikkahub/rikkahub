@@ -581,7 +581,10 @@ private fun ChatListPreview(
     var searchQuery by remember { mutableStateOf("") }
 
     // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
-    val filteredMessages = remember(conversation.messageNodes, searchQuery) {
+    // Key by node-count + last-node id to avoid list-reference comparison on every recomp.
+    val nodesKey = conversation.messageNodes.size.toString() +
+        (conversation.messageNodes.lastOrNull()?.id?.toString() ?: "")
+    val filteredMessages = remember(nodesKey, searchQuery) {
         if (searchQuery.isBlank()) {
             conversation.messageNodes.mapIndexed { index, node -> index to node }
         } else {

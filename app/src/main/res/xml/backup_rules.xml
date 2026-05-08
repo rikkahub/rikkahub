@@ -31,4 +31,12 @@
   <exclude
     domain="file"
     path="browser-profile/" />
+  <!-- Phase 22A: on-device LLM weights. Can be 1 GB+; never back up to cloud. -->
+  <exclude
+    domain="file"
+    path="local-models/" />
+  <!-- Jieba FTS dictionary extracted from assets — fully reproducible, no user data. -->
+  <exclude
+    domain="file"
+    path="simple_dict/" />
 </full-backup-content>

@@ -509,6 +509,7 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Stats> {
                                 StatsPage()
                             }
+
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -714,4 +715,5 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Stats : Screen
+
 }

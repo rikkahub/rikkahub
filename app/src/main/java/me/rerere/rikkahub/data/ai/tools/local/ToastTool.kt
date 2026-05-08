@@ -13,8 +13,13 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 
-fun toastTool(context: Context): Tool = Tool(
+fun toastTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "show_toast",
     description = """
         Show a brief toast popup over whatever is currently on screen.
@@ -36,6 +41,7 @@ fun toastTool(context: Context): Tool = Tool(
         )
     },
     execute = {
+        wakeScreenIfNeeded(context)
         val params = it.jsonObject
         val text = params["text"]?.jsonPrimitive?.contentOrNull
             ?: error("text is required")
@@ -48,6 +54,7 @@ fun toastTool(context: Context): Tool = Tool(
             ).show()
         }
         val payload = buildJsonObject { put("success", true) }
+        streamer.streamIfHeadless(invocationContext, "ShowToast: ${text.take(50)}")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

@@ -23,8 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -119,8 +119,8 @@ fun ColumnScope.ChatMessageActionButtons(
         if (message.role == MessageRole.ASSISTANT) {
             val tts = LocalTTSState.current
             val settings = LocalSettings.current
-            val isSpeaking by tts.isSpeaking.collectAsState()
-            val isAvailable by tts.isAvailable.collectAsState()
+            val isSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
+            val isAvailable by tts.isAvailable.collectAsStateWithLifecycle()
             Icon(
                 imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
                 contentDescription = stringResource(R.string.tts),

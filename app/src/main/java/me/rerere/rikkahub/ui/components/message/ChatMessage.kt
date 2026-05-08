@@ -309,7 +309,12 @@ private fun MessagePartsBlock(
     }
 
     // Render parts in original order (group thinking/tool as chain-of-thought)
-    val groupedParts = remember(parts) { parts.groupMessageParts() }
+    // Key by size + last-part identity to avoid Compose's O(N) list-comparison on every
+    // recomposition. During streaming the list grows one element at a time so size alone is
+    // sufficient to detect a meaningful change; the lastOrNull() hash catches in-place edits
+    // on the tail part (e.g. streaming text appended to the final Text part).
+    val partsKey = parts.size.toString() + (parts.lastOrNull()?.hashCode()?.toString() ?: "")
+    val groupedParts = remember(partsKey) { parts.groupMessageParts() }
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {

@@ -16,6 +16,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 
@@ -51,7 +52,10 @@ private fun findFirstScrollable(root: AccessibilityNodeInfo): AccessibilityNodeI
     return null
 }
 
-fun scrollTool(): Tool = Tool(
+fun scrollTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "scroll",
     description = """
         Scroll the active window in the given direction (up/down/left/right). If x and y are
@@ -76,6 +80,7 @@ fun scrollTool(): Tool = Tool(
     },
     execute = { input ->
         AgentTurnTracker.recordAutomationAction()
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val direction = input.jsonObject["direction"]?.jsonPrimitive?.contentOrNull
         if (direction == null || direction !in ALLOWED_DIRECTIONS) {
             return@Tool listOf(
@@ -140,6 +145,7 @@ fun scrollTool(): Tool = Tool(
                 if (!ok) put("reason", "no_scroll_action_accepted")
             }
         }
+        streamer.streamIfHeadless(invocationContext, "Scroll $direction")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

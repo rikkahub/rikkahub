@@ -13,7 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
@@ -42,10 +41,10 @@ fun Modifier.shimmer(
     durationMillis: Int = 1200,
     angle: Float = 20f, // 稍微倾斜的角度
     gradientWidthRatio: Float = 0.5f // 闪光宽度为组件宽度的一半
-): Modifier = composed { // 使用 composed 以便在 Modifier 内部使用 remember 和 LaunchedEffect 等
+): Modifier {
     if (!isLoading) {
         // 如果不处于加载状态，则不应用任何效果
-        this
+        return this
     } else {
         // 记住组件的尺寸，以便计算渐变
         var size by remember { mutableStateOf(IntSize.Zero) }
@@ -71,7 +70,7 @@ fun Modifier.shimmer(
             )
         }
         // 应用绘制效果
-        this
+        return this
             .onGloballyPositioned { layoutCoordinates ->
                 // 获取组件的实际尺寸
                 size = layoutCoordinates.size

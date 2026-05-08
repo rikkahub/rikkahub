@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.ai.tools.local.AccessibilityServiceHandle
 import me.rerere.rikkahub.data.ai.tools.local.NotificationListenerHandle
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
@@ -127,6 +128,7 @@ class DoctorChecks(
         buildList {
             addAll(permissionChecks(enabled))
             addAll(serviceChecks(enabled))
+            addAll(assistantChecks())
             addAll(databaseChecks())
             addAll(networkChecks())
             addAll(termuxChecks(enabled))
@@ -383,6 +385,88 @@ class DoctorChecks(
         }
     }
 
+    // ----- Active assistant ------------------------------------------------------------
+
+    /**
+     * Informational section. All rows are [Severity.INFO] — these are status rows, not
+     * problem rows. The single "default assistant" row surfaces the assistant that:
+     *   - New Telegram conversations use (when no explicit assistantId is configured).
+     *   - Cron jobs run as (their assistantId is locked at job creation time, but new jobs
+     *     inherit from the Settings default).
+     *   - New in-app chats default to.
+     *
+     * A WARN row fires when the global assistant list is empty — that's a sign the settings
+     * store was corrupted or a migration wiped the assistants list.
+     *
+     * A separate row shows the Telegram-bot-configured override if one is set.
+     */
+    private suspend fun assistantChecks(): List<DoctorCheck> = buildList {
+        runCatching {
+            val settings = settingsStore.settingsFlow.first()
+            val assistants = settings.assistants
+            val defaultAssistant = settings.getCurrentAssistant()
+
+            // Row 1: default assistant name + id
+            add(
+                DoctorCheck(
+                    id = "assistant.default",
+                    category = DoctorCategory.AssistantInfo,
+                    label = "Default assistant",
+                    detail = if (assistants.isEmpty())
+                        "No assistants configured — the app won't be able to start a conversation."
+                    else
+                        "\"${defaultAssistant.name.ifBlank { "(unnamed)" }}\" " +
+                        "(id: ${defaultAssistant.id.toString().take(8)}…). " +
+                        "Used for new chats, cron jobs, and Telegram when no override is set.",
+                    severity = if (assistants.isEmpty()) Severity.WARN else Severity.INFO,
+                    fix = FixAction.OpenAppRoute("Open Assistants", AppRouteKey.Assistant),
+                )
+            )
+
+            // Row 2: total assistant count
+            add(
+                DoctorCheck(
+                    id = "assistant.count",
+                    category = DoctorCategory.AssistantInfo,
+                    label = "Assistant count",
+                    detail = "${assistants.size} assistant(s) configured.",
+                    severity = Severity.INFO,
+                    fix = FixAction.OpenAppRoute("Open Assistants", AppRouteKey.Assistant),
+                )
+            )
+
+            // Row 3: Telegram-bot assistant override (if set)
+            val tg = telegramPrefs.current()
+            if (tg.enabled && tg.assistantId != null) {
+                val tgAssistant = tg.assistantId.let { id ->
+                    runCatching {
+                        val uuid = kotlin.uuid.Uuid.parse(id)
+                        assistants.find { it.id == uuid }
+                    }.getOrNull()
+                }
+                add(
+                    DoctorCheck(
+                        id = "assistant.telegram_override",
+                        category = DoctorCategory.AssistantInfo,
+                        label = "Telegram bot assistant override",
+                        detail = when {
+                            tgAssistant != null ->
+                                "Telegram inbound messages route to \"${tgAssistant.name.ifBlank { "(unnamed)" }}\" " +
+                                "(id: ${tgAssistant.id.toString().take(8)}…) — overriding the global default."
+                            else ->
+                                "Telegram assistant override is set (id: ${tg.assistantId.take(8)}…) but no matching " +
+                                "assistant was found. Messages will fall back to the global default."
+                        },
+                        severity = if (tgAssistant != null) Severity.INFO else Severity.WARN,
+                        fix = if (tgAssistant == null)
+                            FixAction.OpenAppRoute("Open Telegram settings", AppRouteKey.SettingTelegram)
+                        else null,
+                    )
+                )
+            }
+        }
+    }
+
     // ----- Database --------------------------------------------------------------------
 
     private suspend fun databaseChecks(): List<DoctorCheck> = buildList {
@@ -393,8 +477,10 @@ class DoctorChecks(
                 id = "db.version",
                 category = DoctorCategory.Database,
                 label = "Database schema version",
-                detail = if (version > 0) "v$version (current schema)."
-                else "Couldn't read DB version.",
+                // Room refuses to open the DB unless the stored version matches the compiled schema;
+                // if we got here, version is the live schema version (migrations ran successfully).
+                detail = if (version > 0) "v$version — migrations completed, schema is consistent."
+                else "Couldn't read DB version — Room may have failed to open the database.",
                 severity = if (version > 0) Severity.OK else Severity.WARN,
             )
         )
@@ -502,7 +588,11 @@ class DoctorChecks(
                     is me.rerere.ai.provider.ProviderSetting.Google -> p.apiKey.isNotBlank()
                     is me.rerere.ai.provider.ProviderSetting.Claude -> p.apiKey.isNotBlank()
                     is me.rerere.ai.provider.ProviderSetting.AICore -> p.enabled  // on-device, no API key
-                    else -> false
+                    // Local providers (LiteRT, llama.cpp): usable when enabled AND at least
+                    // one model has been loaded/downloaded. A disabled provider with no models
+                    // is the factory default — don't count it.
+                    is me.rerere.ai.provider.ProviderSetting.LiteRtLocal -> p.enabled && p.models.isNotEmpty()
+                    is me.rerere.ai.provider.ProviderSetting.LlamaCppLocal -> p.enabled && p.models.isNotEmpty()
                 }
             }
             add(
@@ -510,7 +600,7 @@ class DoctorChecks(
                     id = "net.providers",
                     category = DoctorCategory.Network,
                     label = "LLM providers configured",
-                    detail = "$configured provider(s) have an API key (or are AICore-enabled) out of ${provs.size} known.",
+                    detail = "$configured provider(s) configured (API key set, AICore enabled, or local model loaded) out of ${provs.size} total.",
                     severity = if (configured > 0) Severity.OK else Severity.WARN,
                     fix = FixAction.OpenAppRoute("Open Providers", AppRouteKey.SettingProvider),
                 )

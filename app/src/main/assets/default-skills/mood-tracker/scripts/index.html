@@ -135,6 +135,15 @@ limitations under the License.
           if (input.days) {
             url += `&days=${input.days}`;
           }
+          // Encode the full stored dataset as a URL param so dashboard.html can render
+          // it even when the execution WebView and the viewer WebView run on different
+          // file:// origins (which have separate localStorage buckets). The dashboard
+          // falls back to its own localStorage if this param is absent (e.g. Gallery
+          // native mode where both frames share the same appassets.androidplatform.net
+          // origin).
+          try {
+            url += `&data=${encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(allData)))))}`;
+          } catch (_) { /* leave out if serialisation fails */ }
           response.webview = { url: url };
         }
 

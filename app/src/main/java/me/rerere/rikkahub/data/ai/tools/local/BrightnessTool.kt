@@ -10,6 +10,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 
 fun getBrightnessTool(context: Context): Tool = Tool(
     name = "get_brightness",
@@ -41,7 +42,11 @@ fun getBrightnessTool(context: Context): Tool = Tool(
     }
 )
 
-fun setBrightnessTool(context: Context): Tool = Tool(
+fun setBrightnessTool(
+    context: Context,
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "set_brightness",
     description = """
         Set the device's screen brightness (1-255). Values below 1 are clamped to 1
@@ -60,6 +65,7 @@ fun setBrightnessTool(context: Context): Tool = Tool(
         )
     },
     execute = {
+        wakeScreenIfNeeded(context)
         val params = it.jsonObject
         val raw = params["value"]?.jsonPrimitive?.intOrNull
             ?: error("value is required")
@@ -86,6 +92,7 @@ fun setBrightnessTool(context: Context): Tool = Tool(
         } catch (_: SecurityException) {
             buildJsonObject { put("error", "WRITE_SETTINGS not granted") }
         }
+        streamer.streamIfHeadless(invocationContext, "SetBrightness $clamped")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

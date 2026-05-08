@@ -21,6 +21,14 @@ data class TelegramBotConfig(
      * in DataStore for simplicity (no JSON serializer dep needed for one tiny field).
      */
     val customCommands: List<Pair<String, String>> = emptyList(),
+    /**
+     * Auto-stream screenshots to Telegram after every state-changing browser tool and
+     * after every interactive tool fires from a headless (Telegram) conversation. Default
+     * on. Toggleable via the `/stream` slash command — users on metered data may want it
+     * off. The streamers (TelegramBrowserScreenshotStreamer, TelegramInteractiveToolStreamer)
+     * each read this flag at send-time and short-circuit when false.
+     */
+    val streamScreenshots: Boolean = true,
 ) {
     val isUsable: Boolean get() = token.isNotBlank() && enabled
 }

@@ -31,8 +31,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -79,16 +79,16 @@ fun SettingNotificationsPage() {
     val listenerPrefs: NotificationListenerPreferences = koinInject()
     val telegramPrefs: TelegramBotPreferences = koinInject()
 
-    val cfg by listenerPrefs.flow.collectAsState(initial = NotificationListenerConfig())
-    val tg by telegramPrefs.flow.collectAsState(initial = TelegramBotConfig())
+    val cfg by listenerPrefs.flow.collectAsStateWithLifecycle(initialValue = NotificationListenerConfig())
+    val tg by telegramPrefs.flow.collectAsStateWithLifecycle(initialValue = TelegramBotConfig())
 
     // Live service handle: collected via StateFlow when the service is bound; falls back to
     // empty defaults otherwise. Recompositions key off the listener's bound flag.
     val svc = remember { RikkaNotificationListenerService.instance }
     val boundFlow: StateFlow<Boolean> = svc?.bound ?: remember { MutableStateFlow(false) }
-    val bound by boundFlow.collectAsState()
+    val bound by boundFlow.collectAsStateWithLifecycle()
     val recentFlow: StateFlow<List<NotificationEntry>> = svc?.recent ?: remember { MutableStateFlow(emptyList()) }
-    val recent by recentFlow.collectAsState()
+    val recent by recentFlow.collectAsStateWithLifecycle()
 
     var pickerOpen by remember { mutableStateOf(false) }
 

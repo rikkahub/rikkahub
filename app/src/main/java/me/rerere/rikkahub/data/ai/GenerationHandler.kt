@@ -537,14 +537,38 @@ class GenerationHandler(
                     }
 
                     else -> {
-                        // Auto or Approved - execute the tool, but first check whether the
-                        // model has already called this exact tool with these exact args
-                        // multiple times in this turn. If so, refuse to spend another round-
-                        // trip and return a structured "you are looping" envelope so the
-                        // model has to either change strategy or hand back to the user.
-                        // This is the cost safety net: without it a stuck model can chew
-                        // through an entire model context (and the user's tokens) on the
-                        // same screen.
+                        // Auto or Approved - execute the tool.
+                        //
+                        // Defence-in-depth HARDLINE re-check: the primary check at line ~442
+                        // only runs when approvalState is Auto (the generation step that just
+                        // proposed the tool). On the resume path (pendingTools branch above)
+                        // tools arrive here with state=Approved and skip that block entirely.
+                        // Re-check here so that a hardline-matched tool persisted in Approved
+                        // state from an old DB row (pre-hardline schema, direct DB edit) can
+                        // never execute via the resume path.
+                        val resumeHardlineReason = me.rerere.rikkahub.data.ai.tools
+                            .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
+                        if (resumeHardlineReason != null) {
+                            Log.w(TAG, "generateText: resume-path hardline re-check blocked ${tool.toolName}: $resumeHardlineReason")
+                            executedTools += tool.copy(
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(buildJsonObject {
+                                            put("error", JsonPrimitive(
+                                                "blocked by safety floor (hardline): $resumeHardlineReason. " +
+                                                    "This command cannot run via the agent under any circumstances."
+                                            ))
+                                        })
+                                    )
+                                )
+                            )
+                            return@forEach
+                        }
+
+                        // Loop-guard: check whether the model has already called this exact
+                        // tool with the same args multiple times in this turn. Refuse a
+                        // repeat run and inject a "loop_detected" envelope so the model has
+                        // to pivot to a different approach. Cost safety net.
                         val signature = tool.toolName + "::" + tool.input
                         // "This turn" = since the most recent user message. Earlier
                         // identical calls in PREVIOUS turns aren't the model flailing

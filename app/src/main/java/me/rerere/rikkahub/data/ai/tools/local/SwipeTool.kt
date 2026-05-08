@@ -11,6 +11,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private const val DEFAULT_SWIPE_MS = 300L
@@ -18,7 +19,10 @@ private const val DEFAULT_SWIPE_MS = 300L
 private fun numOrNull(input: kotlinx.serialization.json.JsonElement, key: String): Double? =
     input.jsonObject[key]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 }
 
-fun swipeTool(): Tool = Tool(
+fun swipeTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "swipe",
     description = """
         Swipe between two absolute screen coordinates. Default duration is 300ms; provide
@@ -42,6 +46,7 @@ fun swipeTool(): Tool = Tool(
     },
     execute = { input ->
         AgentTurnTracker.recordAutomationAction()
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val sx = numOrNull(input, "start_x")
         val sy = numOrNull(input, "start_y")
         val ex = numOrNull(input, "end_x")
@@ -84,6 +89,7 @@ fun swipeTool(): Tool = Tool(
                 if (!ok) put("reason", "gesture_cancelled_or_timeout")
             }
         }
+        streamer.streamIfHeadless(invocationContext, "Swipe (${sx.toInt()},${sy.toInt()})->(${ex.toInt()},${ey.toInt()}) ${duration}ms")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

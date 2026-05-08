@@ -212,6 +212,7 @@ class ChatService(
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
+        sessionMutexes.clear()
     }
 
     // ---- Session 管理 ----
@@ -242,6 +243,11 @@ class ChatService(
         }
         if (sessions.remove(conversationId, session)) {
             session.cleanup()
+            // Evict the per-conversation mutex so it doesn't accumulate forever.
+            // dropSession() already removes it; removeSession() (idle eviction path)
+            // was previously missing this cleanup, causing a slow leak on heavy-use
+            // sessions where many conversations cycle in and out of memory.
+            sessionMutexes.remove(conversationId)
             _sessionsVersion.value++
             Log.i(TAG, "removeSession: $conversationId (remaining: ${sessions.size})")
         }

@@ -14,6 +14,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private val ALLOWED_BY = setOf("text", "content_description", "view_id_resource_name")
@@ -50,7 +51,10 @@ private fun parseSelector(input: kotlinx.serialization.json.JsonElement): Triple
     return Triple(by, value, pkg)
 }
 
-fun findNodeTool(): Tool = Tool(
+fun findNodeTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "find_node",
     description = """
         Find accessibility nodes in the active window matching a selector. by: text |
@@ -79,6 +83,7 @@ fun findNodeTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val (by, value, pkgFilter) = parseSelector(input)
         if (by == null || by !in ALLOWED_BY || value == null) {
             return@Tool listOf(
@@ -120,11 +125,15 @@ fun findNodeTool(): Tool = Tool(
                 })
             }
         }
+        streamer.streamIfHeadless(invocationContext, "FindNode $by=\"${value?.take(30).orEmpty()}\"")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
 
-fun clickNodeTool(): Tool = Tool(
+fun clickNodeTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "click_node",
     description = """
         Find an accessibility node by selector and tap it via ACTION_CLICK. If the matched node
@@ -151,6 +160,7 @@ fun clickNodeTool(): Tool = Tool(
     },
     execute = { input ->
         AgentTurnTracker.recordAutomationAction()
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val (by, value, pkgFilter) = parseSelector(input)
         val nth = input.jsonObject["nth"]?.jsonPrimitive?.intOrNull ?: 0
         if (by == null || by !in ALLOWED_BY || value == null) {
@@ -218,6 +228,7 @@ fun clickNodeTool(): Tool = Tool(
                 })
             }
         }
+        streamer.streamIfHeadless(invocationContext, "ClickNode $by=\"${value?.take(30).orEmpty()}\"")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
@@ -228,7 +239,10 @@ fun clickNodeTool(): Tool = Tool(
  * like Termux because they render to a Surface and do not expose editable nodes; for Termux
  * use termux_run_command instead.
  */
-fun setTextTool(): Tool = Tool(
+fun setTextTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "set_text",
     description = """
         Type or replace text in an editable input field on screen. Find the field by selector
@@ -267,6 +281,7 @@ fun setTextTool(): Tool = Tool(
     },
     execute = { input ->
         AgentTurnTracker.recordAutomationAction()
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val (by, value, pkgFilter) = parseSelector(input)
         val nth = input.jsonObject["nth"]?.jsonPrimitive?.intOrNull ?: 0
         val newText = input.jsonObject["text"]?.jsonPrimitive?.contentOrNull
@@ -340,6 +355,7 @@ fun setTextTool(): Tool = Tool(
                 put("set_to", newText)
             }
         }
+        streamer.streamIfHeadless(invocationContext, "SetText $by=\"${value?.take(20).orEmpty()}\" -> \"${newText?.take(20).orEmpty()}\"")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

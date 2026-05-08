@@ -168,7 +168,8 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                     // Foreground path (Pass 1+2 behaviour). browser_open is the ONLY tool
                     // allowed to launch the Activity. Any other tool returning
                     // browser_not_open is the LLM's signal to call this first.
-                    if (!BrowserController.isBound()) {
+                    val wasAlreadyBound = BrowserController.isBound()
+                    if (!wasAlreadyBound) {
                         context.startActivity(
                             me.rerere.rikkahub.browser.BrowserActivity.intent(
                                 context,
@@ -187,7 +188,13 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                     BrowserController.startTaskWindow()
                     BrowserController.appendAction("Open: $url")
                     BrowserControllerHandle.withController {
-                        withContext(Dispatchers.Main) { webView.loadUrl(url) }
+                        // When the Activity was just freshly launched, the URL was already
+                        // passed as EXTRA_INITIAL_URL and the WebView began loading it
+                        // before bind() returned. Skip a redundant second loadUrl — it
+                        // would abort the in-flight load and restart from the top.
+                        if (wasAlreadyBound) {
+                            withContext(Dispatchers.Main) { webView.loadUrl(url) }
+                        }
                         webView.awaitReadyState(8_000L)
                         buildJsonObject {
                             put("success", true)
@@ -245,12 +252,17 @@ fun browserScreenshotTool(context: Context): Tool = Tool(
                     webView.draw(canvas)
                     val cacheDir = File(context.cacheDir, SCREENSHOT_CACHE_SUBDIR).apply { mkdirs() }
                     val out = File(cacheDir, "screenshot-${System.currentTimeMillis()}.png")
-                    runCatching {
+                    // Recycle unconditionally in a finally block so the bitmap is freed
+                    // exactly once regardless of whether compress() succeeds or throws.
+                    // The prior pattern called recycle() in onFailure AND then again
+                    // unconditionally — a double-recycle causes IllegalStateException.
+                    try {
                         FileOutputStream(out).use { os ->
                             bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
                         }
-                    }.onFailure { bitmap.recycle() }
-                    bitmap.recycle()
+                    } finally {
+                        bitmap.recycle()
+                    }
                     Triple(out.absolutePath, width, height)
                 }
                 BrowserController.appendAction("Screenshot")
@@ -541,6 +553,16 @@ fun browserScrollTool(): Tool = Tool(
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.SCROLL)
         }
+        // Pass 3: browser_scroll is in WRITE_TOOLS and the TELEGRAM_HEADLESS_CUE describes
+        // "screenshots stream after each state-changing action." Stream the post-scroll view so
+        // the Telegram user can see the new viewport position (scroll is purely viewport movement
+        // — the diff helper won't capture it since body.innerText doesn't change).
+        if (out["success"]?.toString() == "true") {
+            val scrollY = out["scroll_y"]?.jsonPrimitive?.intOrNull
+            BrowserController.streamScreenshotIfHeadless(
+                if (scrollY != null) "Scrolled to y=$scrollY" else "Scrolled"
+            )
+        }
         textPart(out)
     },
 )
@@ -712,6 +734,14 @@ fun browserEvalJsTool(): Tool = Tool(
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.EVAL_JS)
         }
+        // Pass 3: browser_eval_js is in WRITE_TOOLS — it CAN mutate page state (e.g.
+        // click via JS, modify the DOM, submit a form programmatically). Stream a screenshot
+        // so the Telegram user sees the page after the script ran, consistent with every
+        // other write tool. Only stream on success — error envelopes (timeout, missing_code,
+        // browser_not_open) all carry an "error" key so we use that as the gate.
+        if (!out.containsKey("error")) {
+            BrowserController.streamScreenshotIfHeadless("Ran JS")
+        }
         textPart(out)
     },
 )
@@ -845,7 +875,7 @@ fun browserClickAndReadTool(): Tool = Tool(
 
 fun browserDoneTool(invocationContext: ToolInvocationContext? = null): Tool = Tool(
     name = BrowserToolDefaults.DONE,
-    description = "Signal that the AI has finished its current browser task. Clears the per-task 5-minute timer so the next browser_open starts fresh. result_url is optional; pass the page URL the user should look at if any. {success}.$TELEGRAM_HEADLESS_CUE",
+    description = "Signal that the AI has finished its current browser task. Clears the per-task 5-minute timer so the next browser_open starts fresh. The browser session ITSELF stays alive — subsequent turns can navigate, click, scroll without re-opening; only `/new` (Telegram) or the in-app reset closes it. result_url is optional; pass the page URL the user should look at if any. {success}.$TELEGRAM_HEADLESS_CUE",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("summary", buildJsonObject {
@@ -865,15 +895,14 @@ fun browserDoneTool(invocationContext: ToolInvocationContext? = null): Tool = To
         } else {
             BrowserController.appendAction("Done: $summary")
             BrowserController.clearTaskWindow()
-            // Pass 3: in headless mode, browser_done is also our "release the WebView"
-            // signal. Without it, the headless session would stay alive until the calling
-            // FGS dies (eg. Telegram bot stops). Foreground mode keeps the Activity alive
-            // by design — the user wants to keep using the page after the AI finishes.
-            val callerConvId = invocationContext?.callerConversationId
-            if (callerConvId != null && isHeadlessInvocation(invocationContext)) {
-                BrowserController.unbindHeadless(callerConvId)
-                HeadlessBrowserSessionPool.release(callerConvId)
-            }
+            // Pass 3 design originally released the headless WebView here. Live-test feedback
+            // (2026-05-08): users want the session to persist across LLM turns so a follow-up
+            // "click the next link" doesn't have to re-open from scratch — that broke the
+            // page state, cookies-in-flight, and the read screenshots stayed white because
+            // we paid the page-load tax twice. browser_done now ONLY clears the per-task
+            // 5-minute timer; the session stays alive until `/new` (TelegramBotService.handleResetCommand)
+            // or the calling FGS dies. Foreground mode behaves identically — Activity keeps
+            // running as before.
             buildJsonObject { put("success", true) }
         }
         textPart(out)

@@ -12,6 +12,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private val ACTION_MAP: Map<String, Int> = mapOf(
@@ -24,7 +25,10 @@ private val ACTION_MAP: Map<String, Int> = mapOf(
     "power_dialog" to AccessibilityService.GLOBAL_ACTION_POWER_DIALOG,
 )
 
-fun globalActionTool(): Tool = Tool(
+fun globalActionTool(
+    invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
+): Tool = Tool(
     name = "global_action",
     description = """
         Perform an Android system-level action: back / home / recents / notifications /
@@ -45,6 +49,7 @@ fun globalActionTool(): Tool = Tool(
     },
     execute = { input ->
         AgentTurnTracker.recordAutomationAction()
+        me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val action = input.jsonObject["action"]?.jsonPrimitive?.contentOrNull
         val code = action?.let { ACTION_MAP[it] }
         if (action == null || code == null) {
@@ -71,6 +76,7 @@ fun globalActionTool(): Tool = Tool(
                 if (!ok) put("reason", "rejected_by_os")
             }
         }
+        streamer.streamIfHeadless(invocationContext, "GlobalAction $action")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
