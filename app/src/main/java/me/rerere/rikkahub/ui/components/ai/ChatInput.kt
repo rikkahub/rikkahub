@@ -64,8 +64,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -797,7 +797,7 @@ private fun MediaFileInputRow(
     state: ChatInputState,
 ) {
     val filesManager: FilesManager = koinInject()
-    val managedFiles by filesManager.observe().collectAsState(initial = emptyList())
+    val managedFiles by filesManager.observe().collectAsStateWithLifecycle(initialValue = emptyList())
     val displayNameByRelativePath = remember(managedFiles) {
         managedFiles.associate { it.relativePath to it.displayName }
     }

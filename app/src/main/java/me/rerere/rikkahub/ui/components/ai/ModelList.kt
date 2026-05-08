@@ -560,7 +560,7 @@ private fun ColumnScope.ModelList(
             contentPadding = PaddingValues(horizontal = 8.dp),
             state = providerBadgeListState
         ) {
-            items(providers) { provider ->
+            items(providers, key = { it.id }) { provider ->
                 AssistChip(
                     onClick = {
                         val position = providerPositions[provider.id] ?: 0

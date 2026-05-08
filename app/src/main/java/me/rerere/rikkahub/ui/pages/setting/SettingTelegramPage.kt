@@ -23,8 +23,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,7 +65,7 @@ import org.koin.compose.koinInject
 @Composable
 fun SettingTelegramPage() {
     val prefs: TelegramBotPreferences = koinInject()
-    val cfg by prefs.flow.collectAsState(initial = TelegramBotConfig())
+    val cfg by prefs.flow.collectAsStateWithLifecycle(initialValue = TelegramBotConfig())
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current

@@ -39,7 +39,7 @@ fun ModeInjectionsContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(modeInjections) { injection ->
+        items(modeInjections, key = { it.id }) { injection ->
             ListItem(
                 headlineContent = {
                     Text(injection.name.ifBlank { stringResource(R.string.extension_content_unnamed) })
@@ -67,7 +67,7 @@ fun LorebooksContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(lorebooks) { lorebook ->
+        items(lorebooks, key = { it.id }) { lorebook ->
             ListItem(
                 headlineContent = {
                     Text(lorebook.name.ifBlank { stringResource(R.string.extension_content_unnamed_lorebook) })
