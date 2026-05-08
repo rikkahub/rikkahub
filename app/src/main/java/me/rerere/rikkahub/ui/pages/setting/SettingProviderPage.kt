@@ -229,7 +229,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                         headline = stringResource(R.string.local_llm_litert_name),
                                         viewModel = vm,
                                         onTapDetail = {
-                                            // Detail page nav target lands in Task 14. No-op for now.
+                                            navController.navigate(Screen.SettingLocalLlm(runtime = "litert"))
                                         },
                                     )
                                 }
