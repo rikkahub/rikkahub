@@ -45,17 +45,16 @@ class SettingLocalLlmViewModel(
      * The default model URL per runtime. The implementer pins these at build time per
      * the Phase 22A spec; they may shift if upstream HF paths change between releases.
      *
-     * LiteRT default: google/gemma-3n-E2B-it-litert-preview — Google's official int4-quantised
-     * LiteRT build of Gemma-3n E2B IT. Confirmed file: gemma-3n-E2B-it-int4.task (~1.5 GB).
-     * The litert-community/Gemma-3n-E2B-it repo requires HF auth; the google/-litert-preview
-     * repos are publicly accessible without a token.
+     * LiteRT default: litert-community/Gemma3-1B-IT — smallest model in Gallery's allowlist,
+     * int4-quantised, ~580 MB on disk. Fits on devices with 2–4 GB RAM. File extension is
+     * .litertlm (LiteRT-LM 0.11.0 format; not compatible with MediaPipe tasks-genai).
      *
      * llama.cpp default: Qwen 2.5 1.5B Instruct GGUF Q4_K_M.
      */
     private val defaultModelUrl: String
         get() = when (runtime) {
             LocalRuntime.LiteRT ->
-                "https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/gemma-3n-E2B-it-int4.task"
+                "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.litertlm"
             LocalRuntime.LlamaCpp ->
                 "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
         }
@@ -173,7 +172,7 @@ class SettingLocalLlmViewModel(
     }
 
     private fun estimatedSize(rt: LocalRuntime): Long = when (rt) {
-        LocalRuntime.LiteRT -> 1_500_000_000L  // gemma-3n-E2B-it-int4.task ~1.5 GB
+        LocalRuntime.LiteRT -> 600_000_000L    // gemma3-1b-it-int4.litertlm ~580 MB
         LocalRuntime.LlamaCpp -> 1_000_000_000L // Qwen 2.5 1.5B Q4 ~1 GB
     }
 }

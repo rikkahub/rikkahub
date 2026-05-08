@@ -41,9 +41,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.okhttp)
-    // MediaPipe LLM Inference: the LiteRT path. Pinned to the tasks-genai 0.10.x line so
-    // upgrades happen deliberately, never on a `+` floating-version bump.
-    implementation("com.google.mediapipe:tasks-genai:0.10.21")
+    // LiteRT-LM runtime: loads .litertlm model files produced by the LiteRT-LM toolchain.
+    // Pinned to 0.11.0 to match the Gallery reference app's dependency; upgrade deliberately.
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
 
     testImplementation(libs.junit)
 }

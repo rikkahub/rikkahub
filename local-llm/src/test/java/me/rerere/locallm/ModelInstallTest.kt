@@ -22,14 +22,15 @@ class ModelInstallTest {
         assertEquals(false, ModelInstall.isValidDownloadUrl("file:///etc/passwd"))
     }
 
-    @Test fun `runtimeForExtension routes task to LiteRT and gguf to llama-cpp`() {
-        assertEquals(LocalRuntime.LiteRT, ModelInstall.runtimeForExtension("task"))
-        assertEquals(LocalRuntime.LiteRT, ModelInstall.runtimeForExtension("tflite"))
+    @Test fun `runtimeForExtension routes litertlm to LiteRT and gguf to llama-cpp`() {
+        assertEquals(LocalRuntime.LiteRT, ModelInstall.runtimeForExtension("litertlm"))
         assertEquals(LocalRuntime.LlamaCpp, ModelInstall.runtimeForExtension("gguf"))
+        assertEquals(null, ModelInstall.runtimeForExtension("task"))
+        assertEquals(null, ModelInstall.runtimeForExtension("tflite"))
     }
 
     @Test fun `runtimeForExtension is case-insensitive`() {
-        assertEquals(LocalRuntime.LiteRT, ModelInstall.runtimeForExtension("TASK"))
+        assertEquals(LocalRuntime.LiteRT, ModelInstall.runtimeForExtension("LITERTLM"))
         assertEquals(LocalRuntime.LlamaCpp, ModelInstall.runtimeForExtension("GGUF"))
     }
 

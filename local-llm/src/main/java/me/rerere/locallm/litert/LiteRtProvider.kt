@@ -98,8 +98,11 @@ class LiteRtProvider(
             append("\nAssistant: ")
         }
 
+        // New LiteRT-LM pattern: ensure model+conversation are loaded before streaming.
+        runtime.ensureLoaded(modelPath)
+
         val streamId = "litert-${System.currentTimeMillis()}"
-        runtime.streamGenerate(prompt, modelPath = modelPath).collect { partial ->
+        runtime.streamGenerate(prompt).collect { partial ->
             emit(
                 MessageChunk(
                     id = streamId,

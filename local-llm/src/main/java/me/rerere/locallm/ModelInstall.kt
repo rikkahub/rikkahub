@@ -42,7 +42,7 @@ object ModelInstall {
     }
 
     fun runtimeForExtension(extension: String): LocalRuntime? = when (extension.lowercase()) {
-        "task", "tflite" -> LocalRuntime.LiteRT
+        "litertlm" -> LocalRuntime.LiteRT
         "gguf" -> LocalRuntime.LlamaCpp
         else -> null
     }

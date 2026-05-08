@@ -12,6 +12,6 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 sealed class LocalRuntime(val displayName: String, val fileExtension: String) {
-    @Serializable data object LiteRT : LocalRuntime(displayName = "LiteRT", fileExtension = "task")
+    @Serializable data object LiteRT : LocalRuntime(displayName = "LiteRT", fileExtension = "litertlm")
     @Serializable data object LlamaCpp : LocalRuntime(displayName = "llama.cpp", fileExtension = "gguf")
 }

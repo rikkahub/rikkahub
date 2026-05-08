@@ -1423,9 +1423,9 @@
 
   <string name="local_llm_litert_name">Local · LiteRT</string>
   <string name="local_llm_llamacpp_name">Local · llama.cpp</string>
-  <string name="local_llm_default_disabled">Run small open models on this device. ~1.5 GB download required.</string>
+  <string name="local_llm_default_disabled">Run small open models on this device. ~580 MB download required.</string>
   <string name="local_llm_download_title">Download default model</string>
-  <string name="local_llm_download_message">RikkaHub needs to download a starter model for this provider. The download is large (~1.5 GB) and requires WiFi. Continue?</string>
+  <string name="local_llm_download_message">RikkaHub needs to download a starter model for this provider. The download is ~580 MB. Continue?</string>
   <string name="local_llm_download_continue">Download</string>
   <string name="local_llm_download_cancel">Cancel</string>
   <string name="local_llm_downloading_format">Downloading… %1$d%% (%2$s / %3$s)</string>
