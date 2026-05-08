@@ -89,6 +89,23 @@ class SettingLocalLlmViewModel(
 
     private suspend fun refreshFromDisk() {
         val installed = prefs.installedModels(runtime)
+
+        // Reconcile: any disk-side model that isn't in provider.models gets added.
+        // Backfills downloads that landed before the persistence fix at commit 75ea6443.
+        val targetId = when (runtime) {
+            LocalRuntime.LiteRT -> LITERT_PROVIDER_ID
+            LocalRuntime.LlamaCpp -> LLAMACPP_PROVIDER_ID
+        }
+        val currentProvider = settingsStore.settingsFlow.value.providers.firstOrNull { it.id == targetId }
+        if (currentProvider != null) {
+            val knownModelIds = currentProvider.models.map { it.modelId }.toSet()
+            val missing = installed.keys.filter { it !in knownModelIds }
+            for (fileName in missing) {
+                val model = Model(modelId = fileName, displayName = fileName)
+                updateMyProvider { provider -> provider.addModel(model) }
+            }
+        }
+
         if (installed.isEmpty()) {
             _state.value = UiState.Idle
         } else {
