@@ -780,13 +780,30 @@ private fun ColumnScope.ProviderConfigureLiteRT(
         }
     }
 
-    // Error text with dismiss.
+    // Error text + optional "Delete model" action when a model file is the likely culprit.
     errorMessage?.let { msg ->
         Text(
             text = stringResource(R.string.local_llm_status_error_format, msg),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
+        // If there are installed models, offer to delete them so the user can clear a
+        // broken file (e.g. wrong runtime version) without navigating away.
+        if (provider.models.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                provider.models.forEach { model ->
+                    OutlinedButton(onClick = { vm.deleteModel(model.modelId) }) {
+                        Text(
+                            text = stringResource(R.string.local_llm_delete_model) +
+                                if (provider.models.size > 1) " ${model.modelId}" else "",
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

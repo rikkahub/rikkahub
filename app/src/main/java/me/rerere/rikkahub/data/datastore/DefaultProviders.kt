@@ -41,12 +41,14 @@ val DEFAULT_PROVIDERS = listOf(
     ),
     ProviderSetting.LiteRtLocal(
         // LiteRT-LM on-device provider. Disabled by default — downloads the default model
-        // (Qwen3.5 2B Q4, ~1.5 GB) on first enable. Uses the LiteRT-LM runtime (.litertlm
+        // (Qwen2.5 1.5B Q8, ~1.5 GB) on first enable. Uses the LiteRT-LM runtime (.litertlm
         // format), not MediaPipe tasks-genai (.task). Enable switch triggers the download dialog.
+        // Default model is from the Gallery allowlist for LiteRT-LM 0.11.0, so it is guaranteed
+        // compatible with the SDK version we ship.
         enabled = false,
         builtIn = true,
         description = {
-            Text("Runs .litertlm models on-device via LiteRT-LM. Downloads Qwen3.5 2B Q4 (~1.5 GB) on first enable.")
+            Text("Runs .litertlm models on-device via LiteRT-LM. Downloads Qwen2.5 1.5B Q8 (~1.5 GB) on first enable.")
         },
         shortDescription = {
             Text("On-device — LiteRT-LM")

@@ -82,7 +82,26 @@ class LiteRtRuntime(private val context: Context) {
                 cacheDir = context.getExternalFilesDir(null)?.absolutePath,
             )
             val engine = withContext(Dispatchers.IO) {
-                Engine(engineConfig).also { it.initialize() }
+                val e = Engine(engineConfig)
+                try {
+                    e.initialize()
+                } catch (t: Throwable) {
+                    // Re-throw with an actionable message. Common failures:
+                    //   FAILED_PRECONDITION: No KV cache inputs found — model was built for a
+                    //     different LiteRT-LM version. Delete the file and use a model from the
+                    //     Gallery allowlist (Settings → Local AI → Install default).
+                    //   INVALID_ARGUMENT: tokenizer … exceeds — model's vocab size is larger
+                    //     than the runtime's built-in limit; use a smaller / re-quantised model.
+                    throw RuntimeException(
+                        "LiteRT engine could not load this model. " +
+                        "The file may be packaged for a different runtime version. " +
+                        "Delete the model and install one from the Gallery allowlist " +
+                        "(tap Install default, or paste a litert-community/ HuggingFace URL). " +
+                        "Underlying error: ${t.message}",
+                        t,
+                    )
+                }
+                e
             }
             val conv = engine.createConversation(
                 ConversationConfig(

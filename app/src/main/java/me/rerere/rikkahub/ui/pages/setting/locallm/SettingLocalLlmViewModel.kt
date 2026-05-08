@@ -67,15 +67,19 @@ class SettingLocalLlmViewModel(
     /**
      * The default model URL per runtime.
      *
-     * LiteRT default: paulsp94/Qwen3.5-2B-LiteRT-LM — Qwen3.5 2B Q4 (~1.4 GB on disk),
-     * public and ungated (Apache-2.0). Extension .litertlm (LiteRT-LM format).
+     * LiteRT default: litert-community/Qwen2.5-1.5B-Instruct — q8 multi-prefill variant
+     * (~1.5 GB on disk). Present in Google Gallery's 1_0_13 allowlist, which is built
+     * against LiteRT-LM 0.11.0 — the same version we ship. Public and ungated (Apache-2.0).
+     *
+     * paulsp94/Qwen3.5-2B-LiteRT-LM was dropped: that model is packaged for a different
+     * runtime version and throws FAILED_PRECONDITION: No KV cache inputs found on 0.11.0.
      *
      * llama.cpp default: Qwen 2.5 1.5B Instruct GGUF Q4_K_M.
      */
     private val defaultModelUrl: String
         get() = when (runtime) {
             LocalRuntime.LiteRT ->
-                "https://huggingface.co/paulsp94/Qwen3.5-2B-LiteRT-LM/resolve/main/qwen35_2b_q4.litertlm"
+                "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
             LocalRuntime.LlamaCpp ->
                 "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
         }
@@ -307,8 +311,30 @@ class SettingLocalLlmViewModel(
         _errorMessage.value = null
     }
 
+    /**
+     * Delete an installed model file from disk and remove it from the provider's model list.
+     * Intended for the "Delete model" action surfaced when the engine reports an error loading
+     * a model (e.g. FAILED_PRECONDITION: No KV cache inputs found).
+     */
+    fun deleteModel(fileName: String) {
+        viewModelScope.launch {
+            val installed = prefs.installedModels(runtime)
+            val path = installed[fileName]
+            if (path != null) {
+                runCatching { java.io.File(path).delete() }
+            }
+            prefs.removeInstalledModel(runtime, fileName)
+            updateMyProvider { p ->
+                val modelToRemove = p.models.firstOrNull { it.modelId == fileName }
+                if (modelToRemove != null) p.delModel(modelToRemove) else p
+            }
+            _errorMessage.value = null
+        }
+    }
+
     private fun estimatedSize(rt: LocalRuntime): Long = when (rt) {
-        LocalRuntime.LiteRT -> 1_500_000_000L   // Qwen3.5-2B Q4.litertlm ~1.4 GB + 100 MB safety pad
+        // Gallery allowlist sizeInBytes = 1_597_931_520 (~1.49 GB) + 200 MB safety pad.
+        LocalRuntime.LiteRT -> 1_800_000_000L
         LocalRuntime.LlamaCpp -> 1_000_000_000L // Qwen 2.5 1.5B Q4 ~1 GB
     }
 }
