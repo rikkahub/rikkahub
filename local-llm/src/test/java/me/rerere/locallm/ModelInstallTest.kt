@@ -133,4 +133,32 @@ class ModelInstallTest {
         val bin = byteArrayOf(0x47, 0x47, 0x55, 0x46, 0x03, 0x00, 0x00, 0x00)
         assertFalse(ModelInstall.looksLikeHtml(bin, bin.size))
     }
+
+    // isValidMagicForExtension -------------------------------------------------
+
+    @Test fun `isValidMagicForExtension accepts LITERTLM magic for litertlm`() {
+        val bytes = "LITERTLM      ".toByteArray().copyOf(16)
+        assertTrue(ModelInstall.isValidMagicForExtension("litertlm", bytes))
+        assertTrue(ModelInstall.isValidMagicForExtension("LITERTLM", bytes))  // case-insensitive
+    }
+
+    @Test fun `isValidMagicForExtension rejects all-zero file for litertlm`() {
+        val bytes = ByteArray(16)  // all zeros
+        assertFalse(ModelInstall.isValidMagicForExtension("litertlm", bytes))
+    }
+
+    @Test fun `isValidMagicForExtension rejects HTML file for litertlm`() {
+        val bytes = "<!DOCTYPE html><html>".toByteArray().copyOf(16)
+        assertFalse(ModelInstall.isValidMagicForExtension("litertlm", bytes))
+    }
+
+    @Test fun `isValidMagicForExtension accepts GGUF magic`() {
+        val bytes = "GGUF   ".toByteArray().copyOf(16)
+        assertTrue(ModelInstall.isValidMagicForExtension("gguf", bytes))
+    }
+
+    @Test fun `isValidMagicForExtension rejects all-zero for gguf`() {
+        val bytes = ByteArray(16)
+        assertFalse(ModelInstall.isValidMagicForExtension("gguf", bytes))
+    }
 }

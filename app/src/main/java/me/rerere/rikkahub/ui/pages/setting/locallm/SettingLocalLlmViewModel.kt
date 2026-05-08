@@ -89,9 +89,10 @@ class SettingLocalLlmViewModel(
     private suspend fun refreshFromDisk() {
         val installed = prefs.installedModels(runtime)
 
-        // Scan for stale HTML files masquerading as model binaries.
-        // These land when a previous download received an HTML error page (e.g. HF viewer URL).
-        val brokenFiles = installed.entries.filter { (_, path) ->
+        // Scan for stale HTML files or files with invalid magic bytes masquerading as model
+        // binaries. HTML files land when a previous download received an HTML error page
+        // (e.g. HF viewer URL). All-zero prefixes land from the old sparse-fill resume bug.
+        val brokenFiles = installed.entries.filter { (fileName, path) ->
             runCatching {
                 val f = java.io.File(path)
                 if (!f.exists()) return@runCatching false
@@ -99,7 +100,15 @@ class SettingLocalLlmViewModel(
                     val buf = ByteArray(64)
                     val n = stream.read(buf)
                     if (n <= 0) return@runCatching false
-                    ModelInstall.looksLikeHtml(buf, n)
+                    val sample = String(buf, 0, n, Charsets.UTF_8).trimStart().lowercase()
+                    val isHtml = sample.startsWith("<!doctype") ||
+                        sample.startsWith("<html") ||
+                        sample.startsWith("<head") ||
+                        sample.startsWith("<?xml")
+                    if (isHtml) return@runCatching true
+                    // Magic-byte check: file must look like a valid model for its extension.
+                    val ext = fileName.substringAfterLast('.', "").lowercase()
+                    !ModelInstall.isValidMagicForExtension(ext, buf.copyOf(n))
                 }
             }.getOrDefault(false)
         }
@@ -113,7 +122,7 @@ class SettingLocalLlmViewModel(
                 }
             }
             _errorMessage.value =
-                "Removed ${brokenFiles.size} broken model file(s) (server returned HTML, not a model). Re-download to retry."
+                "Removed ${brokenFiles.size} broken model file(s) (HTML response or invalid magic bytes). Re-download to retry."
             return
         }
 

@@ -100,8 +100,56 @@ object ModelInstall {
     }
 
     /**
-     * Download [url] into [target], emitting progress as it goes. Resume-aware via
-     * `Range:` header on `<target>.partial`. Atomic rename to [target] only on success.
+     * Returns true if [firstBytes] looks like a valid file of the type implied by
+     * [extension]. Used as a post-download integrity check to refuse files that
+     * downloaded successfully but whose contents are wrong (sparse-fill, server
+     * misroute, partial corruption, etc.).
+     */
+    fun isValidMagicForExtension(extension: String, firstBytes: ByteArray): Boolean {
+        if (firstBytes.size < 4) return false
+        return when (extension.lowercase()) {
+            "litertlm", "tflite", "task" -> {
+                // LiteRT-LM files start with ASCII "LITERTLM"
+                // (0x4c 0x49 0x54 0x45 0x52 0x54 0x4c 0x4d).
+                // .tflite / .task files start with TFL3 (0x54 0x46 0x4c 0x33) at offset 4 in the
+                // FlatBuffer header (offset 0..3 is the size prefix). The simplest check: first
+                // 8 bytes are "LITERTLM" OR bytes 4..7 are "TFL3". Reject all-zero, all-FF,
+                // or HTML-like first bytes.
+                val isLitertlm = firstBytes.size >= 8 &&
+                    firstBytes[0] == 0x4c.toByte() && firstBytes[1] == 0x49.toByte() &&
+                    firstBytes[2] == 0x54.toByte() && firstBytes[3] == 0x45.toByte() &&
+                    firstBytes[4] == 0x52.toByte() && firstBytes[5] == 0x54.toByte() &&
+                    firstBytes[6] == 0x4c.toByte() && firstBytes[7] == 0x4d.toByte()
+                val isTflite = firstBytes.size >= 8 &&
+                    firstBytes[4] == 0x54.toByte() && firstBytes[5] == 0x46.toByte() &&
+                    firstBytes[6] == 0x4c.toByte() && firstBytes[7] == 0x33.toByte()
+                isLitertlm || isTflite
+            }
+            "gguf" -> {
+                // GGUF files start with ASCII "GGUF" (0x47 0x47 0x55 0x46).
+                firstBytes[0] == 0x47.toByte() && firstBytes[1] == 0x47.toByte() &&
+                    firstBytes[2] == 0x55.toByte() && firstBytes[3] == 0x46.toByte()
+            }
+            else -> {
+                // Unknown extension — accept by default but reject obvious zeros / HTML.
+                !looksLikeHtml(firstBytes, firstBytes.size) && firstBytes.any { it != 0x00.toByte() }
+            }
+        }
+    }
+
+    /**
+     * Download [url] into [target], emitting progress as it goes. Atomic rename to
+     * [target] only on success after a magic-byte integrity check.
+     *
+     * Resume logic is intentionally omitted in v1 (Phase 22A). Always starts fresh —
+     * any leftover .partial file is deleted before the request is issued. Resume with
+     * proper FileOutputStream(file, append=true) handling comes in 22B.
+     *
+     * Root cause of the previous sparse-file corruption: the old resume path called
+     * File.outputStream() (which is FileOutputStream(file, append=false) — truncates to
+     * zero on open) and then seeked the resulting FileChannel to `existing` bytes past
+     * EOF. This produced a file of the right total length where bytes 0..existing were
+     * all-zero (sparse fill) and the real data started at offset `existing`.
      *
      * HuggingFace blob URLs are automatically normalised to resolve URLs before the
      * request is issued. Callers may also pre-normalise with [normalizeHuggingFaceUrl].
@@ -113,15 +161,15 @@ object ModelInstall {
     ): Flow<Progress> = flow {
         target.parentFile?.mkdirs()
         val partial = File(target.absolutePath + ".partial")
-        val existing = if (partial.exists()) partial.length() else 0L
+        // No resume in v1 — always start fresh. Delete any leftover partial from a prior
+        // interrupted attempt so we can't accidentally write past it.
+        runCatching { partial.delete() }
 
-        val resolvedUrl = normalizeHuggingFaceUrl(url)
-        val builder = Request.Builder().url(resolvedUrl)
-        if (existing > 0L) builder.addHeader("Range", "bytes=$existing-")
-        val request = builder.build()
+        val normalized = normalizeHuggingFaceUrl(url)
+        val request = Request.Builder().url(normalized).build()
 
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 206) {
+            if (!response.isSuccessful) {
                 emit(Progress.Failed(IllegalStateException("HTTP ${response.code}")))
                 return@flow
             }
@@ -132,14 +180,12 @@ object ModelInstall {
             if (contentType.startsWith("text/html") || contentType.startsWith("application/xhtml")) {
                 emit(Progress.Failed(IllegalStateException(
                     "Server returned an HTML page, not a model file. " +
-                    "Use the raw download URL — for HuggingFace, the /resolve/ form " +
-                    "(we auto-rewrite /blob/ to /resolve/, but other sites may need explicit URLs)."
+                    "Use a /resolve/ URL — for HuggingFace, /blob/ paths auto-rewrite to /resolve/."
                 )))
                 return@flow
             }
 
             val total = response.header("Content-Length")?.toLongOrNull()
-                ?.let { if (existing > 0L) it + existing else it }
             emit(Progress.Started(total))
 
             val body = response.body ?: run {
@@ -147,43 +193,56 @@ object ModelInstall {
                 return@flow
             }
 
-            partial.outputStream().channel.use { fileChan ->
-                if (existing > 0L) fileChan.position(existing)
+            var sniffed = false
+            var bailed = false
+            partial.outputStream().use { out ->
                 body.byteStream().use { input ->
                     val buf = ByteArray(64 * 1024)
-                    var totalRead = existing
-                    var sniffed = false
+                    var totalRead = 0L
                     while (true) {
                         val n = input.read(buf)
                         if (n <= 0) break
-                        // Sniff the very first chunk for HTML preamble regardless of Content-Type.
                         if (!sniffed) {
                             sniffed = true
-                            if (existing == 0L && looksLikeHtml(buf, n)) {
-                                runCatching { partial.delete() }
-                                emit(Progress.Failed(IllegalStateException(
-                                    "Server returned an HTML page, not a model file. " +
-                                    "Check the URL — for HuggingFace, paste the /blob/ or /resolve/ " +
-                                    "form (auto-normalized)."
-                                )))
-                                return@use
+                            if (looksLikeHtml(buf, n)) {
+                                bailed = true
+                                break
                             }
                         }
-                        java.nio.ByteBuffer.wrap(buf, 0, n).also { fileChan.write(it) }
+                        out.write(buf, 0, n)
                         totalRead += n
                         emit(Progress.Tick(totalRead, total))
                     }
                 }
             }
 
-            // Only rename partial → target if we completed without bailing.
-            // If looksLikeHtml triggered return@use above, partial was already deleted
-            // and state was set to Failed, so skip the rename/Done emit.
-            if (partial.exists()) {
-                if (target.exists()) target.delete()
-                partial.renameTo(target)
-                emit(Progress.Done(target))
+            if (bailed) {
+                runCatching { partial.delete() }
+                emit(Progress.Failed(IllegalStateException(
+                    "Server returned an HTML page (magic-byte check failed). Check the URL."
+                )))
+                return@flow
             }
+
+            // Post-download magic-byte validation: ensure the file we just wrote is
+            // actually a valid model file. Catches sparse-file / partial-write
+            // corruption, server misroutes, and other ways the bytes can go wrong.
+            val ext = target.name.substringAfterLast('.', "").lowercase()
+            val firstBytes = ByteArray(16)
+            val bytesRead = partial.inputStream().use { it.read(firstBytes) }
+            if (bytesRead > 0 && !isValidMagicForExtension(ext, firstBytes.copyOf(bytesRead))) {
+                runCatching { partial.delete() }
+                emit(Progress.Failed(IllegalStateException(
+                    "Downloaded file does not have the expected magic bytes for .$ext " +
+                    "(starts with: ${firstBytes.take(8).joinToString(" ") { "%02x".format(it.toInt() and 0xff) }}). " +
+                    "The server may have served the wrong content, or the download was corrupted."
+                )))
+                return@flow
+            }
+
+            if (target.exists()) target.delete()
+            partial.renameTo(target)
+            emit(Progress.Done(target))
         }
     }.flowOn(Dispatchers.IO)
 }
