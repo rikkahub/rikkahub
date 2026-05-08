@@ -1420,5 +1420,24 @@
   <string name="browser_ai_stripe_active">AI: %1$s</string>
   <string name="browser_ai_stripe_expand">Show recent</string>
   <string name="browser_ai_stripe_collapse">Hide</string>
+
+  <string name="local_llm_litert_name">Local · LiteRT</string>
+  <string name="local_llm_llamacpp_name">Local · llama.cpp</string>
+  <string name="local_llm_default_disabled">Run small open models on this device. ~1.3 GB download required.</string>
+  <string name="local_llm_download_title">Download default model</string>
+  <string name="local_llm_download_message">RikkaHub needs to download a starter model for this provider. The download is large (~1.3 GB) and requires WiFi. Continue?</string>
+  <string name="local_llm_download_continue">Download</string>
+  <string name="local_llm_download_cancel">Cancel</string>
+  <string name="local_llm_downloading_format">Downloading… %1$d%% (%2$s / %3$s)</string>
+  <string name="local_llm_status_ready_format">%1$s · %2$s</string>
+  <string name="local_llm_status_error_format">Last error: %1$s</string>
+  <string name="local_llm_retry">Retry</string>
+  <string name="local_llm_re_detect">Re-detect accelerator</string>
+  <string name="local_llm_delete_model">Delete model</string>
+  <string name="local_llm_insufficient_memory_format">This model needs %1$d MB but only %2$d MB is available. Close other apps or pick a smaller model.</string>
+  <string name="local_llm_install_url_label">Or paste a HuggingFace download URL</string>
+  <string name="local_llm_install_url_action">Install</string>
+  <string name="local_llm_tool_calling_litert">Tool calling: prompt-engineered. Accuracy varies per model.</string>
+  <string name="local_llm_tool_calling_llamacpp">Tool calling: grammar-constrained. Reliable JSON output on any GGUF that supports llama.cpp grammars.</string>
 </resources>
 
