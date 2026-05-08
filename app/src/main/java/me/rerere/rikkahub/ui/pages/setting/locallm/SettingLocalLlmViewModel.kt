@@ -45,15 +45,15 @@ class SettingLocalLlmViewModel(
      * The default model URL per runtime. The implementer pins these at build time per
      * the Phase 22A spec; they may shift if upstream HF paths change between releases.
      *
-     * LiteRT default: Gemma-4-E4B-it (the mobile-optimised Edge 4B variant) in .task format.
-     * Verify the canonical filename in the litert-community HF org at implementation time.
+     * LiteRT default: Gemma-3n-E2B-it (the mobile-optimised Edge 2B variant) in .task format.
+     * ~1.5 GB; fits within the MemoryGuard budget on the A063 test device (3022 MB free).
      *
      * llama.cpp default: Qwen 2.5 1.5B Instruct GGUF Q4_K_M.
      */
     private val defaultModelUrl: String
         get() = when (runtime) {
             LocalRuntime.LiteRT ->
-                "https://huggingface.co/litert-community/Gemma-4-E4B-it/resolve/main/Gemma-4-E4B-it.task"
+                "https://huggingface.co/litert-community/Gemma-3n-E2B-it/resolve/main/Gemma-3n-E2B-it.task"
             LocalRuntime.LlamaCpp ->
                 "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
         }
@@ -171,7 +171,7 @@ class SettingLocalLlmViewModel(
     }
 
     private fun estimatedSize(rt: LocalRuntime): Long = when (rt) {
-        LocalRuntime.LiteRT -> 3_200_000_000L  // Gemma-4-E4B-it ~3 GB
+        LocalRuntime.LiteRT -> 1_500_000_000L  // Gemma-3n-E2B-it ~1.5 GB
         LocalRuntime.LlamaCpp -> 1_000_000_000L // Qwen 2.5 1.5B Q4 ~1 GB
     }
 }

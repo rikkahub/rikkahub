@@ -254,12 +254,30 @@ class SettingsStore(
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
                 if (defaultProvider.id in deletedDefaultIds) return@forEach
                 if (providers.none { it.id == defaultProvider.id }) {
-                    // AICore is the only built-in we hoist to the top — other defaults
-                    // continue to append at the end so existing users see no reordering.
-                    if (defaultProvider is ProviderSetting.AICore) {
-                        providers.add(0, defaultProvider.copyProvider())
-                    } else {
-                        providers.add(defaultProvider.copyProvider())
+                    // On-device built-in providers (AICore, LiteRT, llama.cpp) are pinned
+                    // to the top of the list in the order they appear in DEFAULT_PROVIDERS.
+                    // Remote provider defaults continue to append at the end so existing
+                    // users see no reordering of their configured remote providers.
+                    when (defaultProvider) {
+                        is ProviderSetting.AICore -> providers.add(0, defaultProvider.copyProvider())
+                        is ProviderSetting.LiteRtLocal -> {
+                            // Insert right after AICore (index 1), or at 0 if AICore is absent.
+                            val insertAt = (providers.indexOfFirst { it is ProviderSetting.AICore } + 1)
+                                .coerceAtLeast(0)
+                            providers.add(insertAt, defaultProvider.copyProvider())
+                        }
+                        is ProviderSetting.LlamaCppLocal -> {
+                            // Insert right after LiteRT (or after AICore if LiteRT is absent).
+                            val afterLiteRt = providers.indexOfFirst { it is ProviderSetting.LiteRtLocal }
+                            val afterAiCore = providers.indexOfFirst { it is ProviderSetting.AICore }
+                            val insertAt = when {
+                                afterLiteRt >= 0 -> afterLiteRt + 1
+                                afterAiCore >= 0 -> afterAiCore + 1
+                                else -> 0
+                            }
+                            providers.add(insertAt, defaultProvider.copyProvider())
+                        }
+                        else -> providers.add(defaultProvider.copyProvider())
                     }
                 }
             }
