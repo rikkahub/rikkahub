@@ -875,7 +875,7 @@ fun browserClickAndReadTool(): Tool = Tool(
 
 fun browserDoneTool(invocationContext: ToolInvocationContext? = null): Tool = Tool(
     name = BrowserToolDefaults.DONE,
-    description = "Signal that the AI has finished its current browser task. Clears the per-task 5-minute timer so the next browser_open starts fresh. result_url is optional; pass the page URL the user should look at if any. {success}.$TELEGRAM_HEADLESS_CUE",
+    description = "Signal that the AI has finished its current browser task. Clears the per-task 5-minute timer so the next browser_open starts fresh. The browser session ITSELF stays alive — subsequent turns can navigate, click, scroll without re-opening; only `/new` (Telegram) or the in-app reset closes it. result_url is optional; pass the page URL the user should look at if any. {success}.$TELEGRAM_HEADLESS_CUE",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("summary", buildJsonObject {
@@ -895,15 +895,14 @@ fun browserDoneTool(invocationContext: ToolInvocationContext? = null): Tool = To
         } else {
             BrowserController.appendAction("Done: $summary")
             BrowserController.clearTaskWindow()
-            // Pass 3: in headless mode, browser_done is also our "release the WebView"
-            // signal. Without it, the headless session would stay alive until the calling
-            // FGS dies (eg. Telegram bot stops). Foreground mode keeps the Activity alive
-            // by design — the user wants to keep using the page after the AI finishes.
-            val callerConvId = invocationContext?.callerConversationId
-            if (callerConvId != null && isHeadlessInvocation(invocationContext)) {
-                BrowserController.unbindHeadless(callerConvId)
-                HeadlessBrowserSessionPool.release(callerConvId)
-            }
+            // Pass 3 design originally released the headless WebView here. Live-test feedback
+            // (2026-05-08): users want the session to persist across LLM turns so a follow-up
+            // "click the next link" doesn't have to re-open from scratch — that broke the
+            // page state, cookies-in-flight, and the read screenshots stayed white because
+            // we paid the page-load tax twice. browser_done now ONLY clears the per-task
+            // 5-minute timer; the session stays alive until `/new` (TelegramBotService.handleResetCommand)
+            // or the calling FGS dies. Foreground mode behaves identically — Activity keeps
+            // running as before.
             buildJsonObject { put("success", true) }
         }
         textPart(out)
