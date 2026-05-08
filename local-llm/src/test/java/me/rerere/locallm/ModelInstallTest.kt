@@ -1,6 +1,7 @@
 package me.rerere.locallm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -97,5 +98,39 @@ class ModelInstallTest {
         assertTrue(ModelInstall.isValidDownloadUrl(
             "https://huggingface.co/paulsp94/Qwen3.5-2B-LiteRT-LM/blob/main/qwen35_2b_q4.litertlm"
         ))
+    }
+
+    // looksLikeHtml ------------------------------------------------------------
+
+    @Test fun `looksLikeHtml detects DOCTYPE preamble`() {
+        val html = "<!DOCTYPE html><html>".toByteArray()
+        assertTrue(ModelInstall.looksLikeHtml(html, html.size))
+    }
+
+    @Test fun `looksLikeHtml detects lowercase doctype`() {
+        val html = "<!doctype html><html>".toByteArray()
+        assertTrue(ModelInstall.looksLikeHtml(html, html.size))
+    }
+
+    @Test fun `looksLikeHtml ignores leading whitespace`() {
+        val html = "  \n\n<html>".toByteArray()
+        assertTrue(ModelInstall.looksLikeHtml(html, html.size))
+    }
+
+    @Test fun `looksLikeHtml detects xml preamble`() {
+        val xml = "<?xml version=\"1.0\"?>".toByteArray()
+        assertTrue(ModelInstall.looksLikeHtml(xml, xml.size))
+    }
+
+    @Test fun `looksLikeHtml false for binary model magic bytes`() {
+        // "LMFF" + arbitrary bytes — binary model header, not HTML
+        val bin = byteArrayOf(0x4C, 0x4D, 0x46, 0x46, 0x00, 0x01, 0x02, 0x03)
+        assertFalse(ModelInstall.looksLikeHtml(bin, bin.size))
+    }
+
+    @Test fun `looksLikeHtml false for GGUF magic bytes`() {
+        // GGUF magic: 0x47475546 ("GGUF") little-endian
+        val bin = byteArrayOf(0x47, 0x47, 0x55, 0x46, 0x03, 0x00, 0x00, 0x00)
+        assertFalse(ModelInstall.looksLikeHtml(bin, bin.size))
     }
 }

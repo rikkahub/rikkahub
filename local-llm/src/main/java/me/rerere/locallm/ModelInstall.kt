@@ -85,6 +85,21 @@ object ModelInstall {
         File(context.filesDir, LOCAL_MODELS_DIRNAME).apply { mkdirs() }
 
     /**
+     * Returns true if the first [count] bytes of [buf] look like an HTML document.
+     * Used to abort downloads that succeeded HTTP-wise but returned an error page.
+     */
+    fun looksLikeHtml(buf: ByteArray, count: Int): Boolean {
+        val sample = String(buf, 0, count.coerceAtMost(256), Charsets.UTF_8)
+            .trimStart()
+            .lowercase()
+        return sample.startsWith("<!doctype") ||
+               sample.startsWith("<html") ||
+               sample.startsWith("<head") ||
+               sample.startsWith("<body") ||
+               sample.startsWith("<?xml")
+    }
+
+    /**
      * Download [url] into [target], emitting progress as it goes. Resume-aware via
      * `Range:` header on `<target>.partial`. Atomic rename to [target] only on success.
      *
@@ -110,6 +125,19 @@ object ModelInstall {
                 emit(Progress.Failed(IllegalStateException("HTTP ${response.code}")))
                 return@flow
             }
+
+            // Reject HTML responses immediately — a 200 OK from HuggingFace viewer pages,
+            // Cloudflare error pages, etc. would otherwise land silently as an HTML file.
+            val contentType = response.header("Content-Type").orEmpty()
+            if (contentType.startsWith("text/html") || contentType.startsWith("application/xhtml")) {
+                emit(Progress.Failed(IllegalStateException(
+                    "Server returned an HTML page, not a model file. " +
+                    "Use the raw download URL — for HuggingFace, the /resolve/ form " +
+                    "(we auto-rewrite /blob/ to /resolve/, but other sites may need explicit URLs)."
+                )))
+                return@flow
+            }
+
             val total = response.header("Content-Length")?.toLongOrNull()
                 ?.let { if (existing > 0L) it + existing else it }
             emit(Progress.Started(total))
@@ -124,9 +152,23 @@ object ModelInstall {
                 body.byteStream().use { input ->
                     val buf = ByteArray(64 * 1024)
                     var totalRead = existing
+                    var sniffed = false
                     while (true) {
                         val n = input.read(buf)
                         if (n <= 0) break
+                        // Sniff the very first chunk for HTML preamble regardless of Content-Type.
+                        if (!sniffed) {
+                            sniffed = true
+                            if (existing == 0L && looksLikeHtml(buf, n)) {
+                                runCatching { partial.delete() }
+                                emit(Progress.Failed(IllegalStateException(
+                                    "Server returned an HTML page, not a model file. " +
+                                    "Check the URL — for HuggingFace, paste the /blob/ or /resolve/ " +
+                                    "form (auto-normalized)."
+                                )))
+                                return@use
+                            }
+                        }
                         java.nio.ByteBuffer.wrap(buf, 0, n).also { fileChan.write(it) }
                         totalRead += n
                         emit(Progress.Tick(totalRead, total))
@@ -134,9 +176,14 @@ object ModelInstall {
                 }
             }
 
-            if (target.exists()) target.delete()
-            partial.renameTo(target)
-            emit(Progress.Done(target))
+            // Only rename partial → target if we completed without bailing.
+            // If looksLikeHtml triggered return@use above, partial was already deleted
+            // and state was set to Failed, so skip the rename/Done emit.
+            if (partial.exists()) {
+                if (target.exists()) target.delete()
+                partial.renameTo(target)
+                emit(Progress.Done(target))
+            }
         }
     }.flowOn(Dispatchers.IO)
 }

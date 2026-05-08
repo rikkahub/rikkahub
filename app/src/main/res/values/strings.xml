@@ -1440,6 +1440,12 @@
   <string name="local_llm_tool_calling_litert">Tool calling: prompt-engineered. Accuracy varies per model.</string>
   <string name="local_llm_tool_calling_llamacpp">Tool calling: grammar-constrained. Reliable JSON output on any GGUF that supports llama.cpp grammars.</string>
   <string name="local_llm_llamacpp_coming_soon">Coming soon — runtime ships in the next update.</string>
+  <string name="local_llm_llamacpp_not_yet_implemented">llama.cpp runtime is not yet implemented. The download flow will activate in a follow-up release that ships the GGUF runtime.</string>
   <string name="local_llm_enable_label">Enable</string>
+  <string name="local_llm_install_url_hint">HuggingFace /blob/ or /resolve/ URLs both work.</string>
+  <string name="local_llm_download_default">Download default model</string>
+  <string name="local_llm_installed_models_count">%1$d model(s) installed. Manage them in the Models tab.</string>
+  <string name="local_llm_accelerator_label">Accelerator: %1$s</string>
+  <string name="local_llm_test_model">Test</string>
 </resources>
 

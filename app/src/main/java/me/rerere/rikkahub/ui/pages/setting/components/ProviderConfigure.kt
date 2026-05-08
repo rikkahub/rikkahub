@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -16,22 +18,31 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.locallm.LocalRuntime
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import kotlin.reflect.KClass
 
 @Composable
@@ -89,12 +100,11 @@ fun ProviderConfigure(
             }
 
             is ProviderSetting.LiteRtLocal -> {
-                // No additional configuration UI for LiteRT in Phase 22A.
-                // Model management arrives in the local-model browser (Task 14+).
+                ProviderConfigureLiteRT(provider, onEdit)
             }
 
             is ProviderSetting.LlamaCppLocal -> {
-                // No additional configuration UI for llama.cpp in Phase 22A.
+                ProviderConfigureLlamaCpp(provider, onEdit)
             }
         }
     }
@@ -667,5 +677,128 @@ private fun ColumnScope.ProviderConfigureAICore(
         text = stringResource(R.string.setting_provider_aicore_status_help),
         style = MaterialTheme.typography.labelSmall,
         modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun ColumnScope.ProviderConfigureLiteRT(
+    provider: ProviderSetting.LiteRtLocal,
+    onEdit: (ProviderSetting.LiteRtLocal) -> Unit,
+) {
+    val vm = koinViewModel<SettingLocalLlmViewModel>(
+        key = "configure-${LocalRuntime.LiteRT.displayName}",
+        parameters = { parametersOf(LocalRuntime.LiteRT) },
+    )
+    val downloadProgress by vm.downloadProgress.collectAsStateWithLifecycle()
+    val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
+    val accelerator by vm.accelerator.collectAsStateWithLifecycle()
+
+    provider.description()
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(id = R.string.setting_provider_page_enable), modifier = Modifier.weight(1f))
+        Checkbox(
+            checked = provider.enabled,
+            onCheckedChange = { onEdit(provider.copy(enabled = it)) },
+        )
+    }
+
+    OutlinedTextField(
+        value = provider.name,
+        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+        label = { Text(stringResource(id = R.string.setting_provider_page_name)) },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+    )
+
+    // Installed model count — model management is on the Models tab (page 1).
+    Text(
+        text = stringResource(R.string.local_llm_installed_models_count, provider.models.size),
+        style = MaterialTheme.typography.bodySmall,
+    )
+
+    // URL install field — paste an HF URL, hit Install.
+    var manualUrl by remember { mutableStateOf("") }
+    OutlinedTextField(
+        value = manualUrl,
+        onValueChange = { manualUrl = it },
+        label = { Text(stringResource(R.string.local_llm_install_url_label)) },
+        supportingText = { Text(stringResource(R.string.local_llm_install_url_hint)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Button(
+            onClick = {
+                vm.startManualDownload(manualUrl)
+                manualUrl = ""
+            },
+            enabled = manualUrl.isNotBlank() && downloadProgress == null,
+        ) {
+            Text(stringResource(R.string.local_llm_install_url_action))
+        }
+        OutlinedButton(
+            onClick = { vm.startDefaultDownload() },
+            enabled = downloadProgress == null,
+        ) {
+            Text(stringResource(R.string.local_llm_download_default))
+        }
+    }
+
+    // Accelerator row with re-detect button.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            stringResource(R.string.local_llm_accelerator_label, accelerator ?: "auto"),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(onClick = { vm.reDetectAccelerator() }) {
+            Text(stringResource(R.string.local_llm_re_detect))
+        }
+    }
+
+    // Download progress indicator.
+    downloadProgress?.let { progress ->
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (progress.totalBytes != null && progress.totalBytes > 0) {
+                LinearProgressIndicator(
+                    progress = { progress.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            Text(
+                text = "Downloading… ${progress.percent}%",
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+
+    // Error text with dismiss.
+    errorMessage?.let { msg ->
+        Text(
+            text = stringResource(R.string.local_llm_status_error_format, msg),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+@Composable
+private fun ColumnScope.ProviderConfigureLlamaCpp(
+    provider: ProviderSetting.LlamaCppLocal,
+    @Suppress("UNUSED_PARAMETER") onEdit: (ProviderSetting.LlamaCppLocal) -> Unit,
+) {
+    provider.description()
+
+    Text(
+        text = stringResource(R.string.local_llm_llamacpp_not_yet_implemented),
+        style = MaterialTheme.typography.bodyMedium,
     )
 }

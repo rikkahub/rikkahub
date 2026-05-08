@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.LITERT_PROVIDER_ID
 import me.rerere.ai.provider.LLAMACPP_PROVIDER_ID
@@ -22,34 +23,35 @@ import me.rerere.locallm.MemoryGuard
 import me.rerere.locallm.ModelInstall
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.OkHttpClient
-import kotlin.uuid.Uuid
 
 /**
- * Drives one provider tile (the runtime is supplied per VM instance).
+ * Drives the LiteRT / llama.cpp provider configure pane inside the standard
+ * SettingProviderDetailPage pipeline (tab 0).
  *
- * State is a sealed class so the tile can render off a single observable:
- *  - Idle (toggled off, no models installed)
- *  - Downloading (showing progress)
- *  - Ready (model installed, accelerator known)
- *  - Error (download failed; user sees retry button)
+ * State is split into individual flows so ProviderConfigureLiteRT can observe
+ * exactly what it needs:
+ *  - [downloadProgress]: non-null while a download is running
+ *  - [errorMessage]: non-null when the last action failed
+ *  - [accelerator]: the cached accelerator string (null = never probed)
  */
 class SettingLocalLlmViewModel(
-    private val runtime: LocalRuntime,
+    val runtime: LocalRuntime,
     private val context: Context,
     private val prefs: LocalRuntimePreferences,
     private val httpClient: OkHttpClient,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
-    sealed class UiState {
-        data object Idle : UiState()
-        data class Downloading(val percent: Int, val bytesRead: Long, val totalBytes: Long?) : UiState()
-        data class Ready(val installedModelName: String, val accelerator: String) : UiState()
-        data class Error(val message: String) : UiState()
-    }
+    data class Progress(val percent: Int, val bytesRead: Long, val totalBytes: Long?)
 
-    private val _state = MutableStateFlow<UiState>(UiState.Idle)
-    val state: StateFlow<UiState> = _state.asStateFlow()
+    private val _downloadProgress = MutableStateFlow<Progress?>(null)
+    val downloadProgress: StateFlow<Progress?> = _downloadProgress.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    private val _accelerator = MutableStateFlow<String?>(null)
+    val accelerator: StateFlow<String?> = _accelerator.asStateFlow()
 
     /** Whether the provider is currently enabled in persisted settings. */
     val providerEnabled: StateFlow<Boolean> = settingsStore.settingsFlow
@@ -63,12 +65,10 @@ class SettingLocalLlmViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /**
-     * The default model URL per runtime. The implementer pins these at build time per
-     * the Phase 22A spec; they may shift if upstream HF paths change between releases.
+     * The default model URL per runtime.
      *
-     * LiteRT default: paulsp94/Qwen3.5-2B-LiteRT-LM — Qwen3.5 2B Q4 (current as of 2026-05),
-     * ~1.4 GB on disk, public and ungated (Apache-2.0). File extension is .litertlm (LiteRT-LM
-     * format). Previously Qwen3-0.6B from litert-community at ~614 MB.
+     * LiteRT default: paulsp94/Qwen3.5-2B-LiteRT-LM — Qwen3.5 2B Q4 (~1.4 GB on disk),
+     * public and ungated (Apache-2.0). Extension .litertlm (LiteRT-LM format).
      *
      * llama.cpp default: Qwen 2.5 1.5B Instruct GGUF Q4_K_M.
      */
@@ -89,6 +89,37 @@ class SettingLocalLlmViewModel(
     private suspend fun refreshFromDisk() {
         val installed = prefs.installedModels(runtime)
 
+        // Scan for stale HTML files masquerading as model binaries.
+        // These land when a previous download received an HTML error page (e.g. HF viewer URL).
+        val brokenFiles = installed.entries.filter { (_, path) ->
+            runCatching {
+                val f = java.io.File(path)
+                if (!f.exists()) return@runCatching false
+                f.inputStream().use { stream ->
+                    val buf = ByteArray(64)
+                    val n = stream.read(buf)
+                    if (n <= 0) return@runCatching false
+                    ModelInstall.looksLikeHtml(buf, n)
+                }
+            }.getOrDefault(false)
+        }
+        if (brokenFiles.isNotEmpty()) {
+            for ((fileName, path) in brokenFiles) {
+                runCatching { java.io.File(path).delete() }
+                prefs.removeInstalledModel(runtime, fileName)
+                updateMyProvider { p ->
+                    val modelToRemove = p.models.firstOrNull { it.modelId == fileName }
+                    if (modelToRemove != null) p.delModel(modelToRemove) else p
+                }
+            }
+            _errorMessage.value =
+                "Removed ${brokenFiles.size} broken model file(s) (server returned HTML, not a model). Re-download to retry."
+            return
+        }
+
+        // Re-read installed after potential removals above (brokenFiles was empty here, so safe).
+        val finalInstalled = if (brokenFiles.isNotEmpty()) prefs.installedModels(runtime) else installed
+
         // Reconcile: any disk-side model that isn't in provider.models gets added.
         // Backfills downloads that landed before the persistence fix at commit 75ea6443.
         val targetId = when (runtime) {
@@ -98,20 +129,19 @@ class SettingLocalLlmViewModel(
         val currentProvider = settingsStore.settingsFlow.value.providers.firstOrNull { it.id == targetId }
         if (currentProvider != null) {
             val knownModelIds = currentProvider.models.map { it.modelId }.toSet()
-            val missing = installed.keys.filter { it !in knownModelIds }
+            val missing = finalInstalled.keys.filter { it !in knownModelIds }
             for (fileName in missing) {
-                val model = Model(modelId = fileName, displayName = fileName)
+                val model = Model(
+                    modelId = fileName,
+                    displayName = fileName,
+                    abilities = listOf(ModelAbility.TOOL),
+                )
                 updateMyProvider { provider -> provider.addModel(model) }
             }
         }
 
-        if (installed.isEmpty()) {
-            _state.value = UiState.Idle
-        } else {
-            val first = installed.entries.first()
-            val accel = prefs.acceleratorFlow(runtime).first() ?: probeAndCache()
-            _state.value = UiState.Ready(first.key, accel)
-        }
+        // Restore cached accelerator so the UI can display it without re-probing.
+        _accelerator.value = prefs.acceleratorFlow(runtime).first()
     }
 
     private suspend fun probeAndCache(): String {
@@ -119,10 +149,11 @@ class SettingLocalLlmViewModel(
             LocalRuntime.LiteRT -> AcceleratorProbe.probeLiteRt(context)
             LocalRuntime.LlamaCpp -> AcceleratorProbe.probeLlamaCpp(
                 context,
-                jniReportsVulkan = false, // Wired up properly in Task 18 once the JNI binding lands.
+                jniReportsVulkan = false,
             )
         }
         prefs.setAccelerator(runtime, accel)
+        _accelerator.value = accel
         return accel
     }
 
@@ -142,19 +173,20 @@ class SettingLocalLlmViewModel(
         }
     }
 
-    fun setProviderEnabled(enabled: Boolean) {
+    fun reDetectAccelerator() {
         viewModelScope.launch {
-            updateMyProvider { p ->
-                when (p) {
-                    is ProviderSetting.LiteRtLocal -> p.copy(enabled = enabled)
-                    is ProviderSetting.LlamaCppLocal -> p.copy(enabled = enabled)
-                    else -> p
-                }
-            }
+            prefs.clearAccelerator(runtime)
+            _accelerator.value = null
+            probeAndCache()
         }
     }
 
     fun startDefaultDownload() {
+        if (runtime == LocalRuntime.LlamaCpp) {
+            _errorMessage.value = "llama.cpp runtime is not yet implemented."
+            return
+        }
+        _errorMessage.value = null
         viewModelScope.launch {
             val url = defaultModelUrl
             val fileName = ModelInstall.extractFileNameFromUrl(url)
@@ -163,26 +195,28 @@ class SettingLocalLlmViewModel(
 
             val mem = MemoryGuard.canLoad(context, modelFileBytes = estimatedSize(runtime))
             if (mem is MemoryGuard.Decision.TooLarge) {
-                _state.value = UiState.Error(
+                _errorMessage.value =
                     "Model needs ${mem.modelFileBytes / 1_000_000} MB; only ${mem.availMemBytes / 1_000_000} MB available."
-                )
                 return@launch
             }
 
             ModelInstall.download(httpClient, url, target).collect { p ->
                 when (p) {
-                    is ModelInstall.Progress.Started -> _state.value = UiState.Downloading(0, 0L, p.totalBytes)
+                    is ModelInstall.Progress.Started ->
+                        _downloadProgress.value = Progress(0, 0L, p.totalBytes)
                     is ModelInstall.Progress.Tick -> {
                         val total = p.totalBytes
                         val pct = if (total != null && total > 0)
                             ((p.bytesRead * 100) / total).toInt() else 0
-                        _state.value = UiState.Downloading(pct, p.bytesRead, total)
+                        _downloadProgress.value = Progress(pct, p.bytesRead, total)
                     }
                     is ModelInstall.Progress.Done -> {
+                        _downloadProgress.value = null
                         prefs.addInstalledModel(runtime, fileName, p.file.absolutePath)
                         val model = Model(
                             modelId = fileName,
                             displayName = fileName,
+                            abilities = listOf(ModelAbility.TOOL),
                         )
                         updateMyProvider { provider -> provider.addModel(model) }
                         // Enable the provider automatically after first successful download.
@@ -196,42 +230,28 @@ class SettingLocalLlmViewModel(
                         refreshFromDisk()
                     }
                     is ModelInstall.Progress.Failed -> {
-                        _state.value = UiState.Error(p.cause.message.orEmpty())
+                        _downloadProgress.value = null
+                        _errorMessage.value = p.cause.message.orEmpty()
                     }
                 }
             }
         }
     }
 
-    fun reDetectAccelerator() {
-        viewModelScope.launch {
-            prefs.clearAccelerator(runtime)
-            refreshFromDisk()
-        }
-    }
-
-    fun deleteInstalledModel(fileName: String) {
-        viewModelScope.launch {
-            val installed = prefs.installedModels(runtime)
-            installed[fileName]?.let { path -> java.io.File(path).delete() }
-            prefs.removeInstalledModel(runtime, fileName)
-            updateMyProvider { p ->
-                val modelToRemove = p.models.firstOrNull { it.modelId == fileName }
-                if (modelToRemove != null) p.delModel(modelToRemove) else p
-            }
-            refreshFromDisk()
-        }
-    }
-
     fun startManualDownload(url: String) {
+        if (runtime == LocalRuntime.LlamaCpp) {
+            _errorMessage.value = "llama.cpp runtime is not yet implemented."
+            return
+        }
         // Normalise HuggingFace blob URLs → resolve URLs before validation and download.
         // A user pasting the HF viewer URL (/blob/main/<file>) gets a 200 OK that returns
         // HTML, not the model binary. Normalising first makes both URL forms work.
         val normalizedUrl = ModelInstall.normalizeHuggingFaceUrl(url)
         if (!ModelInstall.isValidDownloadUrl(normalizedUrl)) {
-            _state.value = UiState.Error("Invalid URL: must be https and well-formed")
+            _errorMessage.value = "Invalid URL: must be https and well-formed"
             return
         }
+        _errorMessage.value = null
         viewModelScope.launch {
             val fileName = ModelInstall.extractFileNameFromUrl(normalizedUrl)
             val baseDir = ModelInstall.localModelsDir(context)
@@ -239,18 +259,20 @@ class SettingLocalLlmViewModel(
             ModelInstall.download(httpClient, normalizedUrl, target).collect { p ->
                 when (p) {
                     is ModelInstall.Progress.Started ->
-                        _state.value = UiState.Downloading(0, 0L, p.totalBytes)
+                        _downloadProgress.value = Progress(0, 0L, p.totalBytes)
                     is ModelInstall.Progress.Tick -> {
                         val total = p.totalBytes
                         val pct = if (total != null && total > 0)
                             ((p.bytesRead * 100) / total).toInt() else 0
-                        _state.value = UiState.Downloading(pct, p.bytesRead, total)
+                        _downloadProgress.value = Progress(pct, p.bytesRead, total)
                     }
                     is ModelInstall.Progress.Done -> {
+                        _downloadProgress.value = null
                         prefs.addInstalledModel(runtime, fileName, p.file.absolutePath)
                         val model = Model(
                             modelId = fileName,
                             displayName = fileName,
+                            abilities = listOf(ModelAbility.TOOL),
                         )
                         updateMyProvider { provider -> provider.addModel(model) }
                         // Enable the provider automatically after first successful download.
@@ -264,11 +286,16 @@ class SettingLocalLlmViewModel(
                         refreshFromDisk()
                     }
                     is ModelInstall.Progress.Failed -> {
-                        _state.value = UiState.Error(p.cause.message.orEmpty())
+                        _downloadProgress.value = null
+                        _errorMessage.value = p.cause.message.orEmpty()
                     }
                 }
             }
         }
+    }
+
+    fun clearError() {
+        _errorMessage.value = null
     }
 
     private fun estimatedSize(rt: LocalRuntime): Long = when (rt) {

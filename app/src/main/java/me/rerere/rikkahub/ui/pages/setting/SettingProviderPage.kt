@@ -234,14 +234,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 }
                             },
                             onClick = {
-                                when (provider) {
-                                    is ProviderSetting.LiteRtLocal ->
-                                        navController.navigate(Screen.SettingLocalLlm(runtime = "litert"))
-                                    is ProviderSetting.LlamaCppLocal ->
-                                        navController.navigate(Screen.SettingLocalLlm(runtime = "llamacpp"))
-                                    else ->
-                                        navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
-                                }
+                                navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
                             },
                             onLongClick = {
                                 providerToDelete = provider

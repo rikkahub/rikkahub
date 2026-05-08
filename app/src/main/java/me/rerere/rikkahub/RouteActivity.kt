@@ -108,8 +108,6 @@ import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
-import me.rerere.locallm.LocalRuntime
-import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTelegramPage
@@ -512,11 +510,6 @@ class RouteActivity : ComponentActivity() {
                                 StatsPage()
                             }
 
-                            entry<Screen.SettingLocalLlm> { key ->
-                                val rt = if (key.runtime == "litert") LocalRuntime.LiteRT
-                                         else LocalRuntime.LlamaCpp
-                                SettingLocalLlmPage(runtime = rt)
-                            }
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -723,6 +716,4 @@ sealed interface Screen : NavKey {
     @Serializable
     data object Stats : Screen
 
-    @Serializable
-    data class SettingLocalLlm(val runtime: String) : Screen
 }
