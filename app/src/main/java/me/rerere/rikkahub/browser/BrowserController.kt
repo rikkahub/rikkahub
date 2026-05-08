@@ -52,6 +52,20 @@ object BrowserController {
      *  subdir the explicit browser_screenshot tool writes into so the streamer pipe can be
      *  swept independently if it ever grows unbounded. */
     private const val STREAM_CACHE_SUBDIR = "browser-stream"
+
+    /** Skip a stream send if URL matches the previous send within this window. */
+    private const val STREAM_DEDUPE_WINDOW_MS = 8_000L
+
+    /**
+     * After `awaitReadyState` returns (`document.readyState === "complete"`), the WebView
+     * has parsed HTML and finished resource loads but still hasn't painted its first frame.
+     * `webView.draw(canvas)` at that exact moment captures the empty/white initial backing
+     * — the bug the user reported on cold `browser_open`. A small main-thread yield gives
+     * the WebView's render loop time to flush at least one frame to its software layer.
+     * 250 ms is conservative; further actions on the same page hit the de-dupe window so
+     * this delay only ever fires once per navigation.
+     */
+    private const val PAINT_SETTLE_MS = 250L
     private const val TAG = "BrowserController"
 
     /**
@@ -96,6 +110,20 @@ object BrowserController {
      */
     @Volatile
     var pendingTaskJob: Job? = null
+
+    /**
+     * De-dupe state for [streamScreenshotIfHeadless]. When the LLM bounces between the
+     * same/very-similar URL (e.g. minimax-m2.7 occasionally calls browser_open 5x in a
+     * row trying to find a page) every state-changing tool fires the streamer, flooding
+     * the user's Telegram chat with near-identical PNGs. Skip the send when the URL is
+     * the same as the last stream AND the last stream was within [STREAM_DEDUPE_WINDOW_MS].
+     * A click that didn't change the URL is also caught by this rule (URL stays equal).
+     */
+    @Volatile
+    private var lastStreamedUrl: String? = null
+
+    @Volatile
+    private var lastStreamedAtMs: Long = 0L
 
     private val _recentActions = MutableStateFlow<List<String>>(emptyList())
 
@@ -159,6 +187,10 @@ object BrowserController {
      */
     fun bindHeadless(callerConvId: String, webView: WebView) {
         mode = Mode.Headless(callerConvId, webView)
+        // Fresh session — drop the de-dupe memory so the first stream of a new task
+        // isn't suppressed by a URL match against the previous session.
+        lastStreamedUrl = null
+        lastStreamedAtMs = 0L
         if (!bindDeferred.isCompleted) {
             bindDeferred.complete(Unit)
         }
@@ -306,8 +338,35 @@ object BrowserController {
         if (m !is Mode.Headless) return
         val webView = m.webView
         val context = webView.context.applicationContext ?: return
-        // Capture on the main thread (WebView APIs all require it). Failures here mean the
-        // session is mid-teardown — log a single line and bail rather than re-trying.
+        // Capture on the main thread (WebView APIs all require it). Read webView.url here
+        // too — accessing it off the main thread tripped StrictMode and threw, which the
+        // outer runCatching silently swallowed; the user saw "no screenshot in chat" with
+        // no obvious error.
+        data class Capture(val path: String, val url: String?)
+        // Read the current URL on the main thread first. If it matches the last streamed
+        // URL within STREAM_DEDUPE_WINDOW_MS, skip everything — bitmap allocation, file
+        // write, and Telegram upload. Catches three real-world cases that flood the user's
+        // chat with redundant PNGs:
+        //   1. Click that didn't navigate (URL unchanged → diff helper marks it unchanged
+        //      but the streamer still fires for the action label).
+        //   2. browser_open + immediately some other write tool on the same page.
+        //   3. Confused model that calls browser_open 5x in a row trying to find a page.
+        val currentUrl = runCatching {
+            withContext(Dispatchers.Main) { webView.url }
+        }.getOrNull()
+        val now = System.currentTimeMillis()
+        if (
+            currentUrl != null &&
+            currentUrl == lastStreamedUrl &&
+            (now - lastStreamedAtMs) < STREAM_DEDUPE_WINDOW_MS
+        ) {
+            android.util.Log.d(TAG, "streamScreenshotIfHeadless: skipping duplicate URL $currentUrl within ${STREAM_DEDUPE_WINDOW_MS}ms")
+            return
+        }
+        // Paint settle: awaitReadyState ensures HTML+resources, NOT first paint. Without
+        // this delay, the very first browser_open screenshot streams an empty white frame
+        // because draw(canvas) ran before the renderer flushed.
+        kotlinx.coroutines.delay(PAINT_SETTLE_MS)
         val capture = runCatching {
             withContext(Dispatchers.Main) {
                 val w = webView.width.coerceAtLeast(1)
@@ -328,17 +387,21 @@ object BrowserController {
                 } finally {
                     bitmap.recycle()
                 }
-                out.absolutePath
+                Capture(out.absolutePath, currentUrl)
             }
         }.onFailure { android.util.Log.w(TAG, "streamScreenshotIfHeadless: capture failed", it) }
             .getOrNull() ?: return
+        // Record what we just streamed AFTER the bitmap path succeeds so a transient
+        // capture failure doesn't lock out a subsequent attempt for the next 8s.
+        lastStreamedUrl = capture.url
+        lastStreamedAtMs = now
 
         val streamer: BrowserScreenshotStreamer? = runCatching {
             org.koin.java.KoinJavaComponent.getKoin().getOrNull<BrowserScreenshotStreamer>()
         }.getOrNull()
         runCatching {
             (streamer ?: BrowserScreenshotStreamer.NoOp)
-                .send(m.callerConvId, capture, actionLabel, webView.url)
+                .send(m.callerConvId, capture.path, actionLabel, capture.url)
         }.onFailure { android.util.Log.w(TAG, "streamScreenshotIfHeadless: streamer.send failed", it) }
     }
 }

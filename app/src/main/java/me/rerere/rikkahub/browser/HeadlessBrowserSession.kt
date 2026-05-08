@@ -89,6 +89,14 @@ class HeadlessBrowserSession(private val context: Context) {
             // silently streamed all-white PNGs to the user's Telegram chat on the long
             // tail of mainstream sites. See BrowserWebViewConfig.kt for the history.
             configureWebViewForRikka(this)
+            // Headless mode renders via WebView.draw(canvas), which CANNOT capture
+            // hardware-accelerated layers — those go straight from the WebView's HW layer to
+            // the GPU compositor without ever touching a software canvas. configureWebViewForRikka
+            // sets LAYER_TYPE_HARDWARE for the foreground Compose-AndroidView interop case.
+            // Override here: the headless WebView is offscreen, has no Compose host, and must
+            // paint into a software bitmap. Without this override the streamed PNG is all
+            // white. Foreground mode keeps HARDWARE because it still renders to a real screen.
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             // Visibility shim — re-injected on every page start. WebViewClient.onPageStarted
             // fires before page JS runs, which is the only window where overriding the
             // descriptor changes future reads.
