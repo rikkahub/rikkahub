@@ -88,7 +88,7 @@ class SkillsVM(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val info = parseGitHubUrl(repoUrl) ?: run {
-                    withContext(Dispatchers.Main) { onResult(false, "无效的 GitHub 仓库链接") }
+                    withContext(Dispatchers.Main) { onResult(false, "Invalid GitHub repository URL") }
                     return@launch
                 }
 
@@ -96,24 +96,24 @@ class SkillsVM(
                 val files = mutableListOf<Pair<String, String>>() // relativePath -> downloadUrl
                 val listed = listFilesRecursively(info.owner, info.repo, info.branch, info.path, info.path, files)
                 if (!listed) {
-                    withContext(Dispatchers.Main) { onResult(false, "读取 GitHub 目录失败") }
+                    withContext(Dispatchers.Main) { onResult(false, "Failed to list GitHub directory contents") }
                     return@launch
                 }
 
                 val skillMdEntry = files.find { it.first == "SKILL.md" } ?: run {
-                    withContext(Dispatchers.Main) { onResult(false, "目录中未找到 SKILL.md") }
+                    withContext(Dispatchers.Main) { onResult(false, "No SKILL.md found in the directory") }
                     return@launch
                 }
 
                 val skillMdContent = downloadText(skillMdEntry.second) ?: run {
-                    withContext(Dispatchers.Main) { onResult(false, "下载 SKILL.md 失败，请检查链接或网络") }
+                    withContext(Dispatchers.Main) { onResult(false, "Failed to download SKILL.md — check the URL and your network") }
                     return@launch
                 }
 
                 val frontmatter = SkillFrontmatterParser.parse(skillMdContent)
                 val name = frontmatter["name"]
                 if (name.isNullOrBlank()) {
-                    withContext(Dispatchers.Main) { onResult(false, "SKILL.md 格式错误：缺少 name 字段") }
+                    withContext(Dispatchers.Main) { onResult(false, "SKILL.md is missing the required 'name' field") }
                     return@launch
                 }
 
@@ -121,7 +121,7 @@ class SkillsVM(
                 for ((relativePath, downloadUrl) in files) {
                     val content = downloadText(downloadUrl)
                     if (content == null) {
-                        withContext(Dispatchers.Main) { onResult(false, "下载文件失败：$relativePath") }
+                        withContext(Dispatchers.Main) { onResult(false, "Failed to download file: $relativePath") }
                         return@launch
                     }
                     fileContents[relativePath] = content
@@ -129,14 +129,14 @@ class SkillsVM(
 
                 val saved = skillManager.saveSkillFilesAtomically(name, fileContents)
                 if (!saved) {
-                    withContext(Dispatchers.Main) { onResult(false, "保存失败") }
+                    withContext(Dispatchers.Main) { onResult(false, "Failed to save skill files") }
                     return@launch
                 }
 
                 _skills.value = skillManager.listSkills()
                 withContext(Dispatchers.Main) { onResult(true, name) }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }
+                withContext(Dispatchers.Main) { onResult(false, e.message ?: "Unknown error") }
             }
         }
     }
@@ -252,7 +252,8 @@ class SkillsVM(
                 if (n <= 0) break
                 total += n
                 if (total > MAX_MD_BYTES) {
-                    return false to "skill_import_zip_too_large"
+                    // Use the markdown-specific cap error, not the zip cap key.
+                    return false to "skill_import_md_too_large"
                 }
                 out.write(buf, 0, n)
             }
@@ -260,7 +261,7 @@ class SkillsVM(
         } ?: return false to "skill_import_unsupported_file_type"
         val text = bytes.toString(Charsets.UTF_8)
         if (text.isBlank()) {
-            return false to "skill_import_unsupported_file_type"
+            return false to "skill_import_empty_file"
         }
         val sourceLabel = queryDisplayName(uri) ?: "local_file"
         val result = urlImporter.importFromText(text, sourceLabel = sourceLabel)

@@ -271,7 +271,7 @@ private fun SkillTesterSheet(skillName: String, onDismiss: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            text = s.text.ifBlank { stringResource(R.string.skill_tester_running) },
+                            text = s.text.ifBlank { stringResource(R.string.skill_tester_done_no_text) },
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         if (s.imageUrls.isNotEmpty()) {

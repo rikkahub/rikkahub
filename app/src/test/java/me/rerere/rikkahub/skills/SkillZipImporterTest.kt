@@ -215,10 +215,13 @@ class SkillZipImporterTest {
             "rikka skill/notes file.txt" to "with space".toByteArray(Charsets.UTF_8),
         ))
         val result = SkillZipImporter.extractZipToDir(ByteArrayInputStream(zip), destDir)
-        // Note: current code rejects ANY entry containing a NUL byte (correct) but the
-        // up-front filter does not reject spaces. This test pins that contract: legit
-        // filenames with spaces extract successfully.
-        // If a future change re-introduces a spaces-rejection, this test fails loud.
+        // The up-front filter must NOT reject spaces — only leading slashes, backslashes,
+        // and empty names are rejected at this stage. The canonical-path check is the
+        // safety floor for traversal. This test pins that contract and will fail loud if
+        // a future change re-introduces a spaces-rejection.
+        // (A previous version of SkillZipImporter had `|| name.contains(' ')` in the
+        // up-front check, which incorrectly rejected legitimate zip entries. Fixed: the
+        // contains-space clause was removed; canonical-path check is sufficient.)
         assertTrue(
             "legitimate filenames with spaces must extract; got ${result.exceptionOrNull()}",
             result.isSuccess,

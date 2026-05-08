@@ -338,11 +338,19 @@ data class SkillMetadata(
 object SkillFrontmatterParser {
     private val frontmatterEndRegex = Regex("""\r?\n---(?:\r?\n|$)""")
 
+    /**
+     * UTF-8 BOM character. Some editors (notably Windows Notepad, VS Code on Windows with
+     * certain settings) prepend this to UTF-8 files. Strip it before parsing so that
+     * `﻿---` is treated the same as `---`.
+     */
+    private const val BOM = '﻿'
+
     fun parse(content: String): Map<String, String> {
+        val normalised = if (content.startsWith(BOM)) content.substring(1) else content
         val result = mutableMapOf<String, String>()
-        if (!content.startsWith("---")) return result
-        val endRange = findFrontmatterEndRange(content) ?: return result
-        val yaml = content.substring(3, endRange.first).trim()
+        if (!normalised.startsWith("---")) return result
+        val endRange = findFrontmatterEndRange(normalised) ?: return result
+        val yaml = normalised.substring(3, endRange.first).trim()
         yaml.lines().forEach { line ->
             val colonIdx = line.indexOf(':')
             if (colonIdx > 0) {
@@ -357,9 +365,10 @@ object SkillFrontmatterParser {
     }
 
     fun extractBody(content: String): String {
-        if (!content.startsWith("---")) return content
-        val endRange = findFrontmatterEndRange(content) ?: return content
-        return content.substring(endRange.last + 1).trimStart('\r', '\n')
+        val normalised = if (content.startsWith(BOM)) content.substring(1) else content
+        if (!normalised.startsWith("---")) return normalised
+        val endRange = findFrontmatterEndRange(normalised) ?: return normalised
+        return normalised.substring(endRange.last + 1).trimStart('\r', '\n')
     }
 
     private fun findFrontmatterEndRange(content: String): IntRange? {

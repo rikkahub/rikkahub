@@ -362,7 +362,7 @@ private fun CatalogRow(
                 Text(
                     when {
                         installed -> stringResource(R.string.skill_catalog_installed)
-                        installing -> stringResource(R.string.skill_tester_running)
+                        installing -> stringResource(R.string.skill_catalog_installing)
                         else -> stringResource(R.string.skill_catalog_install)
                     }
                 )
@@ -473,7 +473,7 @@ private fun AddSkillDialog(
                 label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
                 placeholder = {
                     Text(
-                        "---\nname: my-skill\ndescription: \"...\"\n---\n\n指令内容...",
+                        "---\nname: my-skill\ndescription: \"...\"\n---\n\nSkill body goes here...",
                         fontFamily = FontFamily.Monospace,
                     )
                 },
@@ -592,6 +592,10 @@ private fun mapImportErrorKeyToString(context: android.content.Context, key: Str
             context.getString(R.string.skill_import_path_traversal)
         "skill_import_zip_too_large" ->
             context.getString(R.string.skill_import_zip_too_large)
+        "skill_import_md_too_large" ->
+            context.getString(R.string.skill_import_md_too_large)
+        "skill_import_empty_file" ->
+            context.getString(R.string.skill_import_empty_file)
         else -> key  // already a free-form message (e.g. importer's "html_response" detail)
     }
 }

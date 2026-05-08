@@ -990,6 +990,7 @@
   <string name="skill_detail_page_new_file">New File</string>
   <string name="skill_detail_page_save">Save</string>
   <string name="skill_catalog_install">Install</string>
+  <string name="skill_catalog_installing">Installing…</string>
   <string name="skill_catalog_install_failed">Install failed: %s</string>
   <string name="skill_catalog_installed">Installed</string>
   <string name="skill_catalog_title">Featured skills</string>
@@ -999,9 +1000,12 @@
   <string name="skill_import_path_traversal">Zip contains an unsafe path; refusing to extract.</string>
   <string name="skill_import_unsupported_file_type">Unsupported file. Use a .md file or a .zip with SKILL.md inside.</string>
   <string name="skill_import_zip_too_large">Zip is too large (cap 20 MB / 200 files).</string>
+  <string name="skill_import_md_too_large">File is too large (cap 1 MB for .md files).</string>
+  <string name="skill_import_empty_file">The file is empty — nothing to import.</string>
   <string name="skill_tester_prompt_placeholder">Type a prompt to test this skill…</string>
   <string name="skill_tester_run">Run</string>
   <string name="skill_tester_running">Running skill…</string>
+  <string name="skill_tester_done_no_text">(No text response — see image parts above.)</string>
   <string name="skill_tester_timeout_error">Timed out after 2 minutes. The skill is still running in the background.</string>
   <string name="skill_tester_title">Test %s</string>
   <string name="skills_page_add_title">Add Skill</string>
@@ -1447,5 +1451,15 @@
   <string name="local_llm_installed_models_count">%1$d model(s) installed. Manage them in the Models tab.</string>
   <string name="local_llm_accelerator_label">Accelerator: %1$s</string>
   <string name="local_llm_test_model">Test</string>
+  <string name="local_llm_manage_files_title">Installed model files</string>
+  <string name="local_llm_rename">Rename</string>
+  <string name="local_llm_rename_label">Display name</string>
+  <string name="local_llm_rename_save">Save</string>
+  <string name="local_llm_delete">Delete</string>
+  <string name="local_llm_delete_confirm_title">Delete model?</string>
+  <string name="local_llm_delete_confirm_message">Remove \"%1$s\" from your device? This deletes the file (you\'ll need to download it again to use it).</string>
+  <string name="local_llm_llamacpp_not_implemented">llama.cpp runtime is not yet implemented.</string>
+  <string name="local_llm_invalid_url">Invalid URL: must be https and well-formed</string>
+  <string name="local_llm_download_progress">Downloading… %1$d%%</string>
 </resources>
 
