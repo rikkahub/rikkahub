@@ -46,7 +46,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -85,10 +84,6 @@ import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
 import org.koin.androidx.compose.koinViewModel
-import org.koin.core.parameter.parametersOf
-import me.rerere.locallm.LocalRuntime
-import me.rerere.rikkahub.ui.pages.setting.locallm.LocalLlmProviderTile
-import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
 import java.util.Locale
@@ -213,72 +208,45 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                         state = reorderableState,
                         key = provider.id
                     ) { isDragging ->
-                        when (provider) {
-                            is ProviderSetting.LiteRtLocal -> {
-                                val vm = koinViewModel<SettingLocalLlmViewModel>(
-                                    key = provider.id.toString(),
-                                ) { parametersOf(LocalRuntime.LiteRT) }
-                                LocalLlmProviderTile(
+                        ProviderItem(
+                            modifier = Modifier
+                                .scale(if (isDragging) 0.95f else 1f)
+                                .fillMaxWidth(),
+                            provider = provider,
+                            dragHandle = {
+                                val haptic = LocalHapticFeedback.current
+                                IconButton(
+                                    onClick = {},
                                     modifier = Modifier
-                                        .scale(if (isDragging) 0.95f else 1f)
-                                        .fillMaxWidth(),
-                                    provider = provider,
-                                    viewModel = vm,
-                                    onTapDetail = {
+                                        .longPressDraggableHandle(
+                                            onDragStarted = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            },
+                                            onDragStopped = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                            }
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = HugeIcons.DragDropHorizontal,
+                                        contentDescription = null
+                                    )
+                                }
+                            },
+                            onClick = {
+                                when (provider) {
+                                    is ProviderSetting.LiteRtLocal ->
                                         navController.navigate(Screen.SettingLocalLlm(runtime = "litert"))
-                                    },
-                                )
-                            }
-                            is ProviderSetting.LlamaCppLocal -> {
-                                val vm = koinViewModel<SettingLocalLlmViewModel>(
-                                    key = provider.id.toString(),
-                                ) { parametersOf(LocalRuntime.LlamaCpp) }
-                                LocalLlmProviderTile(
-                                    modifier = Modifier
-                                        .scale(if (isDragging) 0.95f else 1f)
-                                        .fillMaxWidth(),
-                                    provider = provider,
-                                    viewModel = vm,
-                                    onTapDetail = {
+                                    is ProviderSetting.LlamaCppLocal ->
                                         navController.navigate(Screen.SettingLocalLlm(runtime = "llamacpp"))
-                                    },
-                                )
-                            }
-                            else -> {
-                                ProviderItem(
-                                    modifier = Modifier
-                                        .scale(if (isDragging) 0.95f else 1f)
-                                        .fillMaxWidth(),
-                                    provider = provider,
-                                    dragHandle = {
-                                        val haptic = LocalHapticFeedback.current
-                                        IconButton(
-                                            onClick = {},
-                                            modifier = Modifier
-                                                .longPressDraggableHandle(
-                                                    onDragStarted = {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                                    },
-                                                    onDragStopped = {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                                    }
-                                                )
-                                        ) {
-                                            Icon(
-                                                imageVector = HugeIcons.DragDropHorizontal,
-                                                contentDescription = null
-                                            )
-                                        }
-                                    },
-                                    onClick = {
+                                    else ->
                                         navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
-                                    },
-                                    onLongClick = {
-                                        providerToDelete = provider
-                                    }
-                                )
+                                }
+                            },
+                            onLongClick = {
+                                providerToDelete = provider
                             }
-                        }
+                        )
                     }
                 }
             }

@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
@@ -47,6 +50,17 @@ class SettingLocalLlmViewModel(
 
     private val _state = MutableStateFlow<UiState>(UiState.Idle)
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /** Whether the provider is currently enabled in persisted settings. */
+    val providerEnabled: StateFlow<Boolean> = settingsStore.settingsFlow
+        .map { settings ->
+            val targetId = when (runtime) {
+                LocalRuntime.LiteRT -> LITERT_PROVIDER_ID
+                LocalRuntime.LlamaCpp -> LLAMACPP_PROVIDER_ID
+            }
+            settings.providers.firstOrNull { it.id == targetId }?.enabled ?: false
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /**
      * The default model URL per runtime. The implementer pins these at build time per

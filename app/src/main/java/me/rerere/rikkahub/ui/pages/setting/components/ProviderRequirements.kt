@@ -33,6 +33,18 @@ data class ProviderRequirement(
                     severity = TagType.INFO,
                 ),
             )
+            is ProviderSetting.LiteRtLocal -> listOf(
+                ProviderRequirement(
+                    label = "On-device · ~614 MB",
+                    severity = TagType.INFO,
+                ),
+            )
+            is ProviderSetting.LlamaCppLocal -> listOf(
+                ProviderRequirement(
+                    label = "On-device · ~1 GB",
+                    severity = TagType.INFO,
+                ),
+            )
             else -> emptyList()
         }
     }

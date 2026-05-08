@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -52,6 +54,8 @@ fun SettingLocalLlmPage(
     ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val providerEnabled by viewModel.providerEnabled.collectAsStateWithLifecycle()
+    var showDownloadDialog by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -83,6 +87,33 @@ fun SettingLocalLlmPage(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // Enable / disable toggle
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.local_llm_enable_label),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = providerEnabled,
+                    enabled = state !is SettingLocalLlmViewModel.UiState.Downloading,
+                    onCheckedChange = { newValue ->
+                        when {
+                            newValue && state is SettingLocalLlmViewModel.UiState.Idle ->
+                                showDownloadDialog = true
+                            newValue && state is SettingLocalLlmViewModel.UiState.Ready ->
+                                viewModel.setProviderEnabled(true)
+                            !newValue ->
+                                viewModel.setProviderEnabled(false)
+                        }
+                    },
+                )
+            }
+            HorizontalDivider()
+
             // Status / model section
             when (val s = state) {
                 is SettingLocalLlmViewModel.UiState.Ready -> {
@@ -168,5 +199,17 @@ fun SettingLocalLlmPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+
+    if (showDownloadDialog) {
+        LocalLlmDownloadDialog(
+            title = stringResource(R.string.local_llm_download_title),
+            message = stringResource(R.string.local_llm_download_message),
+            onConfirm = {
+                showDownloadDialog = false
+                viewModel.startDefaultDownload()
+            },
+            onDismiss = { showDownloadDialog = false },
+        )
     }
 }
