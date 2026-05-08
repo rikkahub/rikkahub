@@ -107,8 +107,14 @@ class ConversationSession(
     }
 
     fun cleanup() {
-        _generationJob.value?.cancel()
-        _generationJob.value = null
+        // Use getAndUpdate (same as setJob) so cleanup() is consistent with the atomic
+        // swap used elsewhere. Direct .value = null would bypass the CAS and could
+        // theoretically race with a concurrent setJob that's running post-removal
+        // (e.g., a coroutine that had already acquired a session reference before
+        // dropSession removed it from the map). In practice the risk is tiny because
+        // cleanup() is only called after removal, but correctness still matters.
+        val job = _generationJob.getAndUpdate { null }
+        job?.cancel()
         idleCheckJob?.cancel()
         idleCheckJob = null
     }
