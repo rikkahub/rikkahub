@@ -45,16 +45,17 @@ class SettingLocalLlmViewModel(
      * The default model URL per runtime. The implementer pins these at build time per
      * the Phase 22A spec; they may shift if upstream HF paths change between releases.
      *
-     * LiteRT default: litert-community/Gemma3-1B-IT — smallest model in Gallery's allowlist,
-     * int4-quantised, ~580 MB on disk. Fits on devices with 2–4 GB RAM. File extension is
-     * .litertlm (LiteRT-LM 0.11.0 format; not compatible with MediaPipe tasks-genai).
+     * LiteRT default: litert-community/Qwen3-0.6B — Qwen3 generation (current as of 2026-05),
+     * ~614 MB on disk, public and ungated. File extension is .litertlm (LiteRT-LM format;
+     * not compatible with MediaPipe tasks-genai). Previously Gemma3-1B-IT which became
+     * auth-gated in the litert-community org.
      *
      * llama.cpp default: Qwen 2.5 1.5B Instruct GGUF Q4_K_M.
      */
     private val defaultModelUrl: String
         get() = when (runtime) {
             LocalRuntime.LiteRT ->
-                "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.litertlm"
+                "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm"
             LocalRuntime.LlamaCpp ->
                 "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
         }
@@ -172,7 +173,7 @@ class SettingLocalLlmViewModel(
     }
 
     private fun estimatedSize(rt: LocalRuntime): Long = when (rt) {
-        LocalRuntime.LiteRT -> 600_000_000L    // gemma3-1b-it-int4.litertlm ~580 MB
+        LocalRuntime.LiteRT -> 750_000_000L    // Qwen3-0.6B.litertlm ~614 MB + 136 MB safety pad
         LocalRuntime.LlamaCpp -> 1_000_000_000L // Qwen 2.5 1.5B Q4 ~1 GB
     }
 }
