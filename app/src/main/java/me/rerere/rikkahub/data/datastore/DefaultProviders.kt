@@ -40,37 +40,34 @@ val DEFAULT_PROVIDERS = listOf(
         },
     ),
     ProviderSetting.LiteRtLocal(
-        // LiteRT-LM on-device provider. Disabled by default — downloads the default model
-        // (Qwen2.5 1.5B Q8, ~1.5 GB) on first enable. Uses the LiteRT-LM runtime (.litertlm
-        // format), not MediaPipe tasks-genai (.task). Enable switch triggers the download dialog.
-        // Default model is from the Gallery allowlist for LiteRT-LM 0.11.0, so it is guaranteed
-        // compatible with the SDK version we ship.
+        // LiteRT-LM on-device provider. Disabled by default. Settings → Local · LiteRT
+        // shows a curated picker (LiteRtCatalog) with Google AI Edge Gallery's recommended
+        // models — Gemma 4 E2B / Gemma3-1B-IT / Qwen2.5-1.5B / DeepSeek-R1 distill / etc.
+        // — each with the per-model sampler + length defaults Gallery curates for them.
+        // The runtime mirrors Gallery's exact SDK call sequence (engine.initialize() +
+        // maxNumTokens + systemInstruction via ConversationConfig + speculative decoding
+        // probe via Capabilities) so on-device inference behaves the same as Gallery.
         enabled = false,
         builtIn = true,
         description = {
-            Text("Runs .litertlm models on-device via LiteRT-LM. Downloads Qwen2.5 1.5B Q8 (~1.5 GB) on first enable.")
+            Text("Runs .litertlm models on-device via LiteRT-LM. Pick a curated model from Settings → Local · LiteRT (Google AI Edge Gallery's allowlist) — no API key, no network at inference.")
         },
         shortDescription = {
             Text("On-device — LiteRT-LM")
         },
     ),
-    ProviderSetting.LlamaCppLocal(
-        // llama.cpp on-device provider. Disabled by default — runtime not yet wired (Task 18).
-        enabled = false,
-        builtIn = true,
-        description = {
-            Text("Runs GGUF models on-device via llama.cpp. Runtime wiring arrives in a later phase.")
-        },
-        shortDescription = {
-            Text("On-device — llama.cpp (coming soon)")
-        },
-    ),
+    // All built-in providers ship DISABLED by default. New installs start with zero
+    // network-egress paths so a freshly-installed app can never make an LLM call (or
+    // bill any account) until the user explicitly enables a provider AND adds an API
+    // key. Existing users keep their per-provider enabled state — PreferencesStore's
+    // merge only re-copies builtIn/description/shortDescription back from defaults,
+    // not enabled (same pattern as the AICore default-off comment above).
     ProviderSetting.OpenAI(
         id = Uuid.parse("a8d2d463-e8c0-41f2-b89e-f5eb8e716cce"),
         name = "RikkaHub",
         baseUrl = "https://api.rikka-ai.com/v1",
         apiKey = "",
-        enabled = true,
+        enabled = false,
         builtIn = true,
         description = {
             Text(stringResource(R.string.rikkahub_provider_description))
@@ -91,13 +88,14 @@ val DEFAULT_PROVIDERS = listOf(
         name = "OpenAI",
         baseUrl = "https://api.openai.com/v1",
         apiKey = "",
+        enabled = false,
         builtIn = true
     ),
     ProviderSetting.Google(
         id = Uuid.parse("6ab18148-c138-4394-a46f-1cd8c8ceaa6d"),
         name = "Gemini",
         apiKey = "",
-        enabled = true,
+        enabled = false,
         builtIn = true
     ),
     ProviderSetting.OpenAI(
@@ -105,7 +103,7 @@ val DEFAULT_PROVIDERS = listOf(
         name = "AiHubMix",
         baseUrl = "https://aihubmix.com/v1",
         apiKey = "",
-        enabled = true,
+        enabled = false,
         builtIn = true,
         description = {
             Text(
@@ -139,6 +137,7 @@ val DEFAULT_PROVIDERS = listOf(
         name = "硅基流动",
         baseUrl = "https://api.siliconflow.cn/v1",
         apiKey = "",
+        enabled = false,
         builtIn = true,
         description = {
             MarkdownBlock(
@@ -159,6 +158,7 @@ val DEFAULT_PROVIDERS = listOf(
         name = "DeepSeek",
         baseUrl = "https://api.deepseek.com/v1",
         apiKey = "",
+        enabled = false,
         builtIn = true,
         balanceOption = BalanceOption(
             enabled = true,
@@ -171,6 +171,7 @@ val DEFAULT_PROVIDERS = listOf(
         name = "OpenRouter",
         baseUrl = "https://openrouter.ai/api/v1",
         apiKey = "",
+        enabled = false,
         builtIn = true,
         balanceOption = BalanceOption(
             enabled = true,

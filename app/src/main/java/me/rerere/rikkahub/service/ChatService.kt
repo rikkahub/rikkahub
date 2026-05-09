@@ -686,7 +686,28 @@ class ChatService(
         messageRange: ClosedRange<Int>? = null
     ) {
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.getCurrentChatModel() ?: return
+        val model = settings.getCurrentChatModel()
+            ?: throw IllegalStateException(
+                "No chat model selected. Pick one in Settings → Default models, or send /model in Telegram."
+            )
+        // Defence against an upstream-Settings bug where disabling all providers can leave
+        // the assistant's chatModelId pointing at a model whose provider has enabled=false:
+        // the model lookup walks every provider regardless of state, so without this gate
+        // inference fires (and bills) against the "disabled" provider's API key. Surface
+        // the disabled state clearly instead of silently spending tokens.
+        val resolvedProvider = model.findProvider(settings.providers)
+        if (resolvedProvider == null) {
+            throw IllegalStateException(
+                "Selected model '${model.displayName.ifBlank { model.modelId }}' has no matching provider. " +
+                    "Pick a different model in Settings or with /model."
+            )
+        }
+        if (!resolvedProvider.enabled) {
+            throw IllegalStateException(
+                "Provider '${resolvedProvider.name}' is disabled — refusing to send. " +
+                    "Re-enable it in Settings → Providers, or pick a different model with /model."
+            )
+        }
 
         val assistant = settings.getCurrentAssistant()
         val senderName = if (assistant.useAssistantAvatar) {
@@ -980,6 +1001,8 @@ class ChatService(
             val settings = settingsStore.settingsFlow.first()
             val model = settings.findModelById(settings.titleModelId) ?: return
             val provider = model.findProvider(settings.providers) ?: return
+            // Same defence as handleLlmTurn: don't burn tokens on a disabled provider.
+            if (!provider.enabled) return
 
             val providerHandler = providerManager.getProviderByType(provider)
             val result = providerHandler.generateText(
@@ -1006,8 +1029,13 @@ class ChatService(
                 )
             }
         }.onFailure {
-            it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generate_title))
+            // Title generation is auxiliary — a failure here doesn't block the chat
+            // and surfaces visibly as a blank conversation title in the list. Don't
+            // push it onto the user-facing error stream: when the title model 429s,
+            // the next message sees title.isBlank()==true, tries again, 429s again,
+            // and the user gets a popup per message until they switch models. Match
+            // the generateSuggestion pattern (log only) to keep the surface quiet.
+            Log.w(TAG, "generateTitle failed", it)
         }
     }
 
@@ -1018,6 +1046,8 @@ class ChatService(
             val settings = settingsStore.settingsFlow.first()
             val model = settings.findModelById(settings.suggestionModelId) ?: return
             val provider = model.findProvider(settings.providers) ?: return
+            // Same defence as handleLlmTurn: don't burn tokens on a disabled provider.
+            if (!provider.enabled) return
 
             sessions[conversationId]?.let { session ->
                 updateConversation(
@@ -1077,6 +1107,13 @@ class ChatService(
             ?: throw IllegalStateException("No model available for compression")
         val provider = model.findProvider(settings.providers)
             ?: throw IllegalStateException("Provider not found")
+        // Same defence as handleLlmTurn — refuse to compress against a disabled provider.
+        if (!provider.enabled) {
+            throw IllegalStateException(
+                "Provider '${provider.name}' is disabled — cannot compress. " +
+                    "Re-enable it in Settings → Providers, or set a different compression model."
+            )
+        }
 
         val providerHandler = providerManager.getProviderByType(provider)
 
