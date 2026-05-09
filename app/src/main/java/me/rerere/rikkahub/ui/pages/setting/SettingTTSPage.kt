@@ -558,6 +558,14 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
                     showBottomSheet = true
                 }
             )
+            DropdownMenuItem(
+                text = { Text("Volcengine") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.Volcengine()
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
         }
     }
 
@@ -819,6 +827,7 @@ private fun ASRProviderItem(
                         text = when (provider) {
                             is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
                             is ASRProviderSetting.DashScope -> "DashScope"
+                            is ASRProviderSetting.Volcengine -> "Volcengine"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

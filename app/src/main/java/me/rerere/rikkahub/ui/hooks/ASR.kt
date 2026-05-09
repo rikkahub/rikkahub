@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.asr.ASRState
 import me.rerere.rikkahub.data.asr.DashScopeASRController
 import me.rerere.rikkahub.data.asr.OpenAIRealtimeASRController
+import me.rerere.rikkahub.data.asr.VolcengineASRController
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import okhttp3.OkHttpClient
@@ -92,6 +93,11 @@ private class CustomAsrStateImpl(
             is ASRProviderSetting.DashScope -> {
                 if (provider.apiKey.isBlank()) return null
                 DashScopeASRController(context, httpClient, provider)
+            }
+
+            is ASRProviderSetting.Volcengine -> {
+                if (provider.apiKey.isBlank()) return null
+                VolcengineASRController(context, httpClient, provider)
             }
         }
     }

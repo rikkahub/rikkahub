@@ -32,6 +32,7 @@ fun ASRProviderConfigure(
                 value = when (setting) {
                     is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
                     is ASRProviderSetting.DashScope -> "DashScope"
+                    is ASRProviderSetting.Volcengine -> "Volcengine"
                 },
                 onValueChange = {},
                 readOnly = true,
@@ -54,6 +55,7 @@ fun ASRProviderConfigure(
         when (setting) {
             is ASRProviderSetting.OpenAIRealtime -> OpenAIRealtimeASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.DashScope -> DashScopeASRConfiguration(setting, onValueChange)
+            is ASRProviderSetting.Volcengine -> VolcengineASRConfiguration(setting, onValueChange)
         }
     }
 }
@@ -255,6 +257,60 @@ private fun DashScopeASRConfiguration(
             },
             modifier = Modifier.fillMaxWidth(),
             label = "Silence Duration"
+        )
+    }
+}
+
+@Composable
+private fun VolcengineASRConfiguration(
+    setting: ASRProviderSetting.Volcengine,
+    onValueChange: (ASRProviderSetting) -> Unit
+) {
+    FormItem(
+        label = { Text("API Key") },
+        description = { Text("Volcengine API key (X-Api-Key)") }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("your-api-key") }
+        )
+    }
+
+    FormItem(
+        label = { Text("WebSocket URL") },
+        description = { Text("Volcengine streaming ASR endpoint") }
+    ) {
+        OutlinedTextField(
+            value = setting.websocketUrl,
+            onValueChange = { onValueChange(setting.copy(websocketUrl = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel") }
+        )
+    }
+
+    FormItem(
+        label = { Text("Resource ID") },
+        description = { Text("X-Api-Resource-Id for billing") }
+    ) {
+        OutlinedTextField(
+            value = setting.resourceId,
+            onValueChange = { onValueChange(setting.copy(resourceId = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("volc.bigasr.sauc.duration") }
+        )
+    }
+
+    FormItem(
+        label = { Text("Language") },
+        description = { Text("Optional language code, e.g. zh-CN, en-US, ja-JP") }
+    ) {
+        OutlinedTextField(
+            value = setting.language,
+            onValueChange = { onValueChange(setting.copy(language = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("auto") }
         )
     }
 }
