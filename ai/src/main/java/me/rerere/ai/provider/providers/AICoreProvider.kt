@@ -387,7 +387,18 @@ private fun buildAiCoreMiniSystemPrefix(tools: List<Tool>): String = buildString
     if (tools.isNotEmpty()) {
         appendLine("If a tool is needed, output ONLY: <tool_call>{\"name\":\"<n>\",\"input\":{<obj>}}</tool_call> then stop. Do not write <tool_result>; the system writes that.")
         appendLine("Example: <tool_call>{\"name\":\"termux_run_command\",\"input\":{\"command\":\"echo hi\"}}</tool_call>")
-        appendLine("After launch_app or open_url returns success, reply with ONE short confirmation line and stop. Do NOT call read_window_tree, take_screenshot, find_node, click_node, or any verification tool — the user will see the launched app immediately.")
+        // Generalised "stop after success" rule. Previously only named launch_app/open_url
+        // — Nano then looped on termux_run_command, set_brightness, etc., re-emitting the
+        // SAME tool_call after each {"success":true} response because nothing told it the
+        // turn was over. The loop-guard catches this at trip 3 but the user sees 3 redundant
+        // tool runs first. Naming "any" tool here lets Nano finalise on turn 2.
+        appendLine("After ANY tool returns {\"success\":true} (or any non-error result), the work is DONE. Reply with ONE short confirmation line and stop. NEVER re-emit the same tool_call. NEVER call a verification tool (read_window_tree, take_screenshot, find_node, etc.) to double-check.")
+        appendLine("If you see <tool_result> for a tool you already called, that tool ran — do not call it again. Read the result and either summarise for the user OR call a DIFFERENT tool that builds on it.")
+        // Anti-lock-in rule. Nano (and similar small models) keep repeating "I cannot..."
+        // when they previously said it, even after the user enables a new tool mid-chat.
+        // Make the rule explicit: the tool list IS the ground truth for THIS turn — past
+        // refusals are stale the moment the list below changes.
+        appendLine("CURRENT-TURN GROUND TRUTH: the tool list below is what you have RIGHT NOW. If a tool is listed, you can call it — even if you said \"I cannot\" or \"I don't have that tool\" earlier in the conversation. The user may have just enabled it. Re-evaluate every turn against this list, not against your prior replies.")
         for (tool in tools) {
             val desc = tool.description.lineSequence().firstOrNull()?.trim().orEmpty()
             append("- ").append(tool.name).append(": ").appendLine(desc.take(100))
