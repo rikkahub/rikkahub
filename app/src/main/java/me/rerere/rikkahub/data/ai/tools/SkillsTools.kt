@@ -86,22 +86,60 @@ fun createSkillTools(
                 )
             },
             execute = {
+                // Return structured error envelopes instead of throwing. AICore /
+                // small models hit `use_skill` with `{}` (no name) regularly; before
+                // this fix the LLM saw a 20-frame Java stack trace and gave up. The
+                // recovery hint + available_skills list lets the model self-correct
+                // on its next call.
+                fun err(code: String, detail: String): List<UIMessagePart> = listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("error", code)
+                            put("detail", detail)
+                            put("recovery", "Re-call use_skill with one of the listed skill names in `name`.")
+                            put(
+                                "available_skills",
+                                kotlinx.serialization.json.buildJsonArray {
+                                    enabledSkills.forEach {
+                                        add(kotlinx.serialization.json.JsonPrimitive(it))
+                                    }
+                                },
+                            )
+                        }.toString()
+                    )
+                )
                 val name = it.jsonObject["name"]?.jsonPrimitive?.content
-                    ?: error("name is required")
+                    ?: return@Tool err(
+                        "missing_required_arg",
+                        "use_skill requires a 'name' argument identifying which skill to load.",
+                    )
                 if (name !in enabledSkills) {
-                    error("Skill '$name' is not available. Available skills: ${enabledSkills.joinToString()}")
+                    return@Tool err(
+                        "skill_not_enabled",
+                        "Skill '$name' is not in the enabled-skills set for this assistant.",
+                    )
                 }
                 val path = it.jsonObject["path"]?.jsonPrimitive?.content
-                val content = if (path.isNullOrBlank()) {
-                    skillManager.readSkillBody(name)
-                        ?: error("Skill '$name' not found")
-                } else {
-                    val target = skillManager.resolveSkillFile(name, path)
-                        ?: error("Path '$path' is outside the skill directory")
-                    require(target.exists()) { "File '$path' not found in skill '$name'" }
-                    target.readText()
+                if (path.isNullOrBlank()) {
+                    val content = skillManager.readSkillBody(name)
+                        ?: return@Tool err(
+                            "skill_body_not_found",
+                            "Skill '$name' is enabled but its SKILL.md body could not be read on disk.",
+                        )
+                    return@Tool listOf(UIMessagePart.Text(content))
                 }
-                listOf(UIMessagePart.Text(content))
+                val target = skillManager.resolveSkillFile(name, path)
+                    ?: return@Tool err(
+                        "path_outside_skill",
+                        "Path '$path' resolves outside the '$name' skill directory.",
+                    )
+                if (!target.exists()) {
+                    return@Tool err(
+                        "skill_file_not_found",
+                        "File '$path' does not exist in skill '$name'. Use only paths from Markdown links inside SKILL.md.",
+                    )
+                }
+                listOf(UIMessagePart.Text(target.readText()))
             }
         )
     )

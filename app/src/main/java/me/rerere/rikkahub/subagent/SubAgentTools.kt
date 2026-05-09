@@ -80,7 +80,10 @@ fun subagentDispatchTool(
                 put("label", buildJsonObject { put("type", "string") })
                 put("model_id", buildJsonObject { put("type", "string") })
                 put("system_prompt", buildJsonObject { put("type", "string") })
-                put("tools", buildJsonObject { put("type", "array") })
+                put("tools", buildJsonObject {
+                    put("type", "array")
+                    put("items", buildJsonObject { put("type", "string") })
+                })
                 put("run_in_background", buildJsonObject { put("type", "boolean") })
                 put("timeout_seconds", buildJsonObject { put("type", "integer") })
                 put("max_trips", buildJsonObject { put("type", "integer") })

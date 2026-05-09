@@ -688,18 +688,30 @@ class GenerationHandler(
                             }
                             executedTools += markedTool.copy(output = result)
                         }.onFailure {
-                            it.printStackTrace()
+                            // Stack trace stays in logcat for debugging; the JSON envelope
+                            // sent BACK to the LLM gets just the exception's message and a
+                            // short class hint. Stuffing the full multi-frame R8-obfuscated
+                            // trace into `error` (the prior behaviour) burned hundreds of
+                            // tokens per failure, confused the model, and surfaced
+                            // user-visible "java.lang.IllegalStateException at ..." walls
+                            // for what was usually a one-line "name is required" problem.
+                            Log.w(TAG, "tool ${tool.toolName} threw", it)
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
                                         json.encodeToString(
                                             buildJsonObject {
+                                                put("error", JsonPrimitive("tool_failed"))
                                                 put(
-                                                    "error",
-                                                    JsonPrimitive(buildString {
-                                                        append("[${it.javaClass.name}] ${it.message}")
-                                                        append("\n${it.stackTraceToString()}")
-                                                    })
+                                                    "detail",
+                                                    JsonPrimitive(it.message ?: it.javaClass.simpleName),
+                                                )
+                                                // Class name as a separate hint so the LLM can
+                                                // distinguish validation (IllegalStateException /
+                                                // IllegalArgumentException) from runtime issues.
+                                                put(
+                                                    "exception",
+                                                    JsonPrimitive(it.javaClass.simpleName),
                                                 )
                                             }
                                         )

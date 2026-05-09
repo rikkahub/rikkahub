@@ -167,6 +167,63 @@ private suspend fun awaitTerminal(manager: McpManager, serverId: Uuid, timeoutMs
     } ?: manager.syncingStatus.value[serverId]
 }
 
+/**
+ * Classify a raw McpStatus.Error message into a normalized `error_kind` plus a short
+ * actionable hint. The MCP SDK and underlying transport (OkHttp / kotlinx-serialization)
+ * surface failures as opaque exception messages — without classification the LLM can't
+ * tell a network problem from a malformed-tool-def from an auth failure, and tells the
+ * user the wrong thing to fix.
+ *
+ * Returns (error_kind, hint). Both end up in the rollback envelope.
+ */
+internal fun classifyMcpError(message: String): Pair<String, String> {
+    val m = message.lowercase()
+    return when {
+        // kotlinx-serialization shape: "Field 'X' is required for type with serial name 'io.modelcontextprotocol...'"
+        m.contains("field '") && m.contains("is required for type") -> {
+            "remote_invalid_tool_def" to
+                "The server returned a tool definition missing a required field. " +
+                "Fix the server so each tool entry has all required MCP fields (name, description, inputSchema)."
+        }
+        m.contains("missingfieldexception") || m.contains("serializationexception") -> {
+            "remote_invalid_response" to
+                "The server's response did not match the MCP protocol. Check that the server " +
+                "implements the MCP spec and returns the expected JSON shapes."
+        }
+        m.contains("failed to connect to") || m.contains("connectexception") ||
+            m.contains("connection refused") -> {
+            "connect_failed" to
+                "Couldn't open a TCP connection to the URL. If the server runs on this device, " +
+                "make sure it's bound to 0.0.0.0 (or the LAN IP) — not 127.0.0.1 — and that the " +
+                "port matches the URL."
+        }
+        m.contains("sockettimeoutexception") || m.contains("read timed out") ||
+            m.contains("connect timed out") -> {
+            "request_timeout" to
+                "The server didn't respond before the timeout. Try a longer connect_timeout_seconds " +
+                "or check that the server is actually serving requests."
+        }
+        m.contains("unknownhostexception") || m.contains("no address associated") -> {
+            "host_not_found" to
+                "DNS couldn't resolve the host. Check the URL spelling and that the device can reach this hostname."
+        }
+        m.contains(" 401") || m.contains("unauthorized") -> {
+            "auth_required" to
+                "The server returned 401. Check that the right Authorization / API-key header is set."
+        }
+        m.contains(" 403") || m.contains("forbidden") -> {
+            "auth_forbidden" to
+                "The server returned 403. The credentials are recognised but not allowed to access this endpoint."
+        }
+        m.contains(" 404") || m.contains("not found") -> {
+            "endpoint_not_found" to
+                "The server returned 404. Verify the URL points at the MCP endpoint (often /mcp or /sse)."
+        }
+        else -> "connect_failed" to
+            "Server didn't reach Connected state. Check the URL, transport, and headers, then retry."
+    }
+}
+
 /** ---------- Tool factories ---------- */
 
 fun mcpListTool(settingsStore: SettingsStore, manager: McpManager): Tool = Tool(
@@ -270,6 +327,14 @@ fun mcpAddTool(settingsStore: SettingsStore, manager: McpManager): Tool = Tool(
                 put("headers", buildJsonObject {
                     put("type", "array")
                     put("description", "Optional HTTP headers as [{name, value}, ...]. Max 32 entries.")
+                    put("items", buildJsonObject {
+                        put("type", "object")
+                        put("properties", buildJsonObject {
+                            put("name", buildJsonObject { put("type", "string") })
+                            put("value", buildJsonObject { put("type", "string") })
+                        })
+                        put("required", buildJsonArray { add("name"); add("value") })
+                    })
                 })
                 put("connect_timeout_seconds", buildJsonObject {
                     put("type", "integer")
@@ -325,9 +390,28 @@ fun mcpAddTool(settingsStore: SettingsStore, manager: McpManager): Tool = Tool(
             manager.addClient(config)
             awaitTerminal(manager, newId, timeoutSec * 1000L)
         }
+        val finalStatus = manager.syncingStatus.value[newId]
+        // Rollback on permanent failure (Error). Without this the failed config sits in
+        // settings; the next mcp_add with the same name hits name_already_in_use and the
+        // user has to manually mcp_delete first. Connecting/null timeouts are KEPT
+        // because the LLM is told to poll with mcp_test — pulling the row out from
+        // under the next poll would be a worse UX than leaving a row marked CONNECTING.
+        if (finalStatus is McpStatus.Error) {
+            manager.removeClient(config)
+            settingsStore.update { s -> s.copy(mcpServers = s.mcpServers.filter { it.id != newId }) }
+            val (kind, hint) = classifyMcpError(finalStatus.message)
+            return@Tool errEnv(
+                kind,
+                "MCP add failed: ${finalStatus.message}. $hint Server config rolled back; you can retry with the same name.",
+                extra = mapOf(
+                    "raw_error" to kotlinx.serialization.json.JsonPrimitive(finalStatus.message),
+                    "name" to kotlinx.serialization.json.JsonPrimitive(name),
+                    "url" to kotlinx.serialization.json.JsonPrimitive(rawUrl.trim()),
+                ),
+            )
+        }
         // Re-read after sync — sync mutates tool list.
         val finalConfig = settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == newId } ?: config
-        val finalStatus = manager.syncingStatus.value[newId]
         listOf(UIMessagePart.Text(serverViewEnvelope(finalConfig, finalStatus).toString()))
     },
 )
@@ -351,7 +435,17 @@ fun mcpUpdateTool(settingsStore: SettingsStore, manager: McpManager): Tool = Too
                 put("name", buildJsonObject { put("type", "string") })
                 put("url", buildJsonObject { put("type", "string") })
                 put("enabled", buildJsonObject { put("type", "boolean") })
-                put("headers", buildJsonObject { put("type", "array") })
+                put("headers", buildJsonObject {
+                    put("type", "array")
+                    put("items", buildJsonObject {
+                        put("type", "object")
+                        put("properties", buildJsonObject {
+                            put("name", buildJsonObject { put("type", "string") })
+                            put("value", buildJsonObject { put("type", "string") })
+                        })
+                        put("required", buildJsonArray { add("name"); add("value") })
+                    })
+                })
                 put("connect_timeout_seconds", buildJsonObject { put("type", "integer") })
             },
             required = listOf("id", "transport", "name", "url"),
