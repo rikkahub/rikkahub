@@ -22,6 +22,16 @@ class MemoryGuardTest {
         decision as MemoryGuard.Decision.TooLarge
         assertEquals(1_900_000_000L, decision.modelFileBytes)
         assertEquals(2_400_000_000L, decision.availMemBytes)
+        // requiredFreeBytes ≈ 1.9 GB / 0.7 = ~2.71 GB. Must always exceed avail in the
+        // TooLarge branch so the UI message reads correctly.
+        assertTrue(
+            "requiredFreeBytes (${decision.requiredFreeBytes}) must exceed availMemBytes (${decision.availMemBytes})",
+            decision.requiredFreeBytes > decision.availMemBytes,
+        )
+        assertTrue(
+            "requiredFreeBytes (${decision.requiredFreeBytes}) must exceed modelFileBytes (${decision.modelFileBytes})",
+            decision.requiredFreeBytes > decision.modelFileBytes,
+        )
     }
 
     @Test fun `zero available memory returns TooLarge for any non-zero model`() {
@@ -50,5 +60,25 @@ class MemoryGuardTest {
         decision as MemoryGuard.Decision.TooLarge
         assertEquals(modelBytes, decision.modelFileBytes)
         assertEquals(availBytes, decision.availMemBytes)
+    }
+
+    @Test fun `requiredFreeBytes lines up with the 1800 MB on a 2105 MB device repro`() {
+        // The exact case that surfaced the inverted UI message on 2026-05-09. The user
+        // saw "needs 1800 MB but only 2105 MB available" — looked contradictory because
+        // the 30% headroom budget was hidden. Required-free should be ~2571 MB so the
+        // refusal "need 2571 MB but only 2105 MB" reads consistently.
+        val decision = MemoryGuard.decide(
+            modelFileBytes = 1_800_000_000L,
+            availMemBytes = 2_105_000_000L,
+        )
+        assertTrue(decision is MemoryGuard.Decision.TooLarge)
+        decision as MemoryGuard.Decision.TooLarge
+        // 1.8 GB / 0.7 ≈ 2.571 GB; allow ±5 MB tolerance for the rounding.
+        val expected = 2_571_000_000L
+        val tolerance = 5_000_000L
+        assertTrue(
+            "requiredFreeBytes ${decision.requiredFreeBytes} should be near $expected (±$tolerance)",
+            kotlin.math.abs(decision.requiredFreeBytes - expected) <= tolerance,
+        )
     }
 }

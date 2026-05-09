@@ -1426,7 +1426,6 @@
   <string name="browser_ai_stripe_collapse">Hide</string>
 
   <string name="local_llm_litert_name">Local · LiteRT</string>
-  <string name="local_llm_llamacpp_name">Local · llama.cpp</string>
   <string name="local_llm_default_disabled">Run open models on this device. ~1.5 GB download required (Qwen2.5 1.5B Q8).</string>
   <string name="local_llm_download_title">Download default model</string>
   <string name="local_llm_download_message">RikkaHub needs to download a starter model for this provider. The download is ~1.5 GB (Qwen2.5 1.5B Q8). Continue?</string>
@@ -1437,14 +1436,18 @@
   <string name="local_llm_status_error_format">Last error: %1$s</string>
   <string name="local_llm_retry">Retry</string>
   <string name="local_llm_re_detect">Re-detect accelerator</string>
+  <string name="local_llm_try_gpu_label">Try GPU acceleration</string>
+  <string name="local_llm_try_gpu_desc">Off by default. Some devices crash during inference on the GPU/NPU backend with this runtime — leave off if you hit a crash. CPU-only is slower but reliable.</string>
+  <string name="local_llm_max_tokens_label">Max context (tokens)</string>
+  <string name="local_llm_max_tokens_desc">Override the curated default. The model file\'s KV cache is the hard ceiling — Qwen ekv4096 caps at 4096 regardless. Capable models (Gemma 4 E2B = 32000) benefit from a larger value. Leave blank to use the curated default.</string>
+  <string name="local_llm_max_tokens_placeholder">curated default</string>
+  <string name="local_llm_max_tokens_reset">Reset</string>
+  <string name="local_llm_crash_recovery_format">Recovered: the local model crashed last session on %1$s — switched to CPU automatically. Tap to dismiss; toggle &#8220;Try GPU acceleration&#8221; below to retry.</string>
   <string name="local_llm_delete_model">Delete model</string>
-  <string name="local_llm_insufficient_memory_format">This model needs %1$d MB but only %2$d MB is available. Close other apps or pick a smaller model.</string>
+  <string name="local_llm_insufficient_memory_format">Need about %1$d MB of free RAM (model is %2$d MB plus runtime headroom) but only %3$d MB is available. Close other apps or pick a smaller model.</string>
   <string name="local_llm_install_url_label">Or paste a HuggingFace URL (/blob/ or /resolve/ both work)</string>
   <string name="local_llm_install_url_action">Install</string>
   <string name="local_llm_tool_calling_litert">Tool calling: prompt-engineered. Accuracy varies per model.</string>
-  <string name="local_llm_tool_calling_llamacpp">Tool calling: grammar-constrained. Reliable JSON output on any GGUF that supports llama.cpp grammars.</string>
-  <string name="local_llm_llamacpp_coming_soon">Coming soon — runtime ships in the next update.</string>
-  <string name="local_llm_llamacpp_not_yet_implemented">llama.cpp runtime is not yet implemented. The download flow will activate in a follow-up release that ships the GGUF runtime.</string>
   <string name="local_llm_enable_label">Enable</string>
   <string name="local_llm_install_url_hint">HuggingFace /blob/ or /resolve/ URLs both work.</string>
   <string name="local_llm_download_default">Download default model</string>
@@ -1458,8 +1461,16 @@
   <string name="local_llm_delete">Delete</string>
   <string name="local_llm_delete_confirm_title">Delete model?</string>
   <string name="local_llm_delete_confirm_message">Remove \"%1$s\" from your device? This deletes the file (you\'ll need to download it again to use it).</string>
-  <string name="local_llm_llamacpp_not_implemented">llama.cpp runtime is not yet implemented.</string>
   <string name="local_llm_invalid_url">Invalid URL: must be https and well-formed</string>
   <string name="local_llm_download_progress">Downloading… %1$d%%</string>
+  <string name="local_llm_catalog_title">Recommended models</string>
+  <string name="local_llm_catalog_subtitle">Curated by Google AI Edge Gallery. Pick one for one-tap install.</string>
+  <string name="local_llm_catalog_install">Install</string>
+  <string name="local_llm_catalog_installed">Installed</string>
+  <string name="local_llm_catalog_recommended">Recommended</string>
+  <string name="local_llm_catalog_size_format">%1$.1f GB · needs %2$d GB RAM</string>
+  <string name="local_llm_catalog_tag_multimodal">Multimodal</string>
+  <string name="local_llm_catalog_tag_thinking">Thinking</string>
+  <string name="local_llm_catalog_tag_speculative">Speculative decoding</string>
 </resources>
 

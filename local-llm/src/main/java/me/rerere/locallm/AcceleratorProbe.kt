@@ -7,10 +7,10 @@ import android.os.Build
 /**
  * Decides which accelerator to use for each runtime. Two layers:
  *
- *  - Pure decision functions ([pickLiteRt], [pickLlamaCpp]) take a capability
- *    snapshot and return the chosen label. JVM unit-testable.
- *  - Production probes ([probeLiteRt], [probeLlamaCpp]) read live device state
- *    and feed the decision function.
+ *  - Pure decision function ([pickLiteRt]) takes a capability snapshot and
+ *    returns the chosen label. JVM unit-testable.
+ *  - Production probe ([probeLiteRt]) reads live device state and feeds the
+ *    decision function.
  *
  * The cached choice persists in [LocalRuntimePreferences]; the probe runs once
  * on first model load and again only when the user taps "Re-detect".
@@ -24,10 +24,6 @@ object AcceleratorProbe {
         val nnapiSupported: Boolean,
     )
 
-    data class LlamaCppCapabilities(
-        val vulkanSupported: Boolean,
-    )
-
     fun pickLiteRt(caps: LiteRtCapabilities): String = when {
         caps.isQualcomm && caps.qnnLibrarySupported -> "QNN"
         caps.gpuDelegateSupported -> "GPU"
@@ -35,15 +31,17 @@ object AcceleratorProbe {
         else -> "CPU"
     }
 
-    fun pickLlamaCpp(caps: LlamaCppCapabilities): String =
-        if (caps.vulkanSupported) "Vulkan" else "CPU"
-
     /**
      * Read the live device capabilities for the LiteRT runtime. Production callers
      * use this; unit tests pass synthesised [LiteRtCapabilities] to [pickLiteRt]
      * directly.
+     *
+     * @param forceCpu short-circuits to "CPU" without probing — set when the user has
+     *   the "Try GPU acceleration" toggle off, OR when the auto-recovery sweep saw a
+     *   prior native crash inside liblitertlm and flipped the flag for us.
      */
-    fun probeLiteRt(context: Context): String {
+    fun probeLiteRt(context: Context, forceCpu: Boolean = false): String {
+        if (forceCpu) return "CPU"
         val isQualcomm = Build.HARDWARE.contains("qcom", ignoreCase = true) ||
             Build.MANUFACTURER.equals("Qualcomm", ignoreCase = true)
         val qnnLibrarySupported = isQualcomm && runCatching {
@@ -73,11 +71,4 @@ object AcceleratorProbe {
             )
         )
     }
-
-    /**
-     * Read the live device capabilities for the llama.cpp runtime. Vulkan support
-     * is reported by the JNI binding once it loads.
-     */
-    fun probeLlamaCpp(context: Context, jniReportsVulkan: Boolean): String =
-        pickLlamaCpp(LlamaCppCapabilities(vulkanSupported = jniReportsVulkan))
 }

@@ -56,11 +56,6 @@ class ProviderManager(client: OkHttpClient, context: Context) {
             is ProviderSetting.Claude -> getProvider("claude")
             is ProviderSetting.AICore -> getProvider("aicore")
             is ProviderSetting.LiteRtLocal -> getProvider("local_litert")
-            is ProviderSetting.LlamaCppLocal -> providers["local_llamacpp"]
-                ?: throw UnsupportedOperationException(
-                    "llama.cpp runtime is not yet wired (Task 18). " +
-                    "Register a LlamaCppProvider under \"local_llamacpp\" to enable this provider."
-                )
         } as Provider<T>
     }
 }

@@ -15,7 +15,6 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.LITERT_PROVIDER_ID
-import me.rerere.ai.provider.LLAMACPP_PROVIDER_ID
 import me.rerere.locallm.AcceleratorProbe
 import me.rerere.locallm.LocalRuntime
 import me.rerere.locallm.LocalRuntimePreferences
@@ -26,7 +25,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.OkHttpClient
 
 /**
- * Drives the LiteRT / llama.cpp provider configure pane inside the standard
+ * Drives the LiteRT provider configure pane inside the standard
  * SettingProviderDetailPage pipeline (tab 0).
  *
  * State is split into individual flows so ProviderConfigureLiteRT can observe
@@ -34,6 +33,9 @@ import okhttp3.OkHttpClient
  *  - [downloadProgress]: non-null while a download is running
  *  - [errorMessage]: non-null when the last action failed
  *  - [accelerator]: the cached accelerator string (null = never probed)
+ *
+ * The [runtime] parameter is preserved so a future second runtime can land without
+ * breaking the koinViewModel call site. Currently only LiteRT is supported.
  */
 class SettingLocalLlmViewModel(
     val runtime: LocalRuntime,
@@ -54,19 +56,41 @@ class SettingLocalLlmViewModel(
     private val _accelerator = MutableStateFlow<String?>(null)
     val accelerator: StateFlow<String?> = _accelerator.asStateFlow()
 
+    /** True (default) when the runtime is locked to CPU. Off lets the probe pick GPU/NNAPI/QNN.
+     *  Auto-flipped to true by [me.rerere.rikkahub.RikkaHubApp] when the prior process exited
+     *  with a native crash inside the runtime's JNI lib (see crashRecoveryAccelerator). */
+    val forceCpu: StateFlow<Boolean> = prefs.forceCpuFlow(runtime)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    /** Override for `EngineConfig.maxNumTokens`. null = use the per-model curated default
+     *  from `LiteRtModelDefaults`. Persisted in `LocalRuntimePreferences`. */
+    val maxNumTokensOverride: StateFlow<Int?> = prefs.maxNumTokensOverrideFlow(runtime)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Non-null when the prior process crashed inside the runtime; carries the accelerator
+     *  label that crashed so the UI banner can name it. Cleared via [dismissCrashRecovery]. */
+    val crashRecoveryAccelerator: StateFlow<String?> = prefs.crashRecoveryFlow(runtime)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Whether the provider is currently enabled in persisted settings. */
     val providerEnabled: StateFlow<Boolean> = settingsStore.settingsFlow
         .map { settings ->
-            val targetId = when (runtime) {
-                LocalRuntime.LiteRT -> LITERT_PROVIDER_ID
-                LocalRuntime.LlamaCpp -> LLAMACPP_PROVIDER_ID
-            }
-            settings.providers.firstOrNull { it.id == targetId }?.enabled ?: false
+            settings.providers.firstOrNull { it.id == providerIdForRuntime() }?.enabled ?: false
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** File names of every model currently registered on the provider. The catalog UI
+     *  uses this to render an "Installed" badge instead of an Install button when the
+     *  catalog entry's `modelFile` already lives in `provider.models` (modelId == file
+     *  name in the LiteRT case). */
+    val installedModelFiles: StateFlow<Set<String>> = settingsStore.settingsFlow
+        .map { settings ->
+            settings.providers.firstOrNull { it.id == providerIdForRuntime() }?.models?.map { it.modelId }?.toSet() ?: emptySet()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
     /**
-     * The default model URL per runtime.
+     * The default model URL for the runtime.
      *
      * LiteRT default: litert-community/Qwen2.5-1.5B-Instruct — q8 multi-prefill variant
      * (~1.5 GB on disk). Present in Google Gallery's 1_0_13 allowlist, which is built
@@ -74,16 +98,15 @@ class SettingLocalLlmViewModel(
      *
      * paulsp94/Qwen3.5-2B-LiteRT-LM was dropped: that model is packaged for a different
      * runtime version and throws FAILED_PRECONDITION: No KV cache inputs found on 0.11.0.
-     *
-     * llama.cpp default: Qwen 2.5 1.5B Instruct GGUF Q4_K_M.
      */
-    private val defaultModelUrl: String
-        get() = when (runtime) {
-            LocalRuntime.LiteRT ->
-                "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
-            LocalRuntime.LlamaCpp ->
-                "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
-        }
+    private val defaultModelUrl: String =
+        "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
+
+    /** Currently only LiteRT is wired; the helper exists so a future runtime can fan out
+     *  by adding a `when` arm without touching every flow above. */
+    private fun providerIdForRuntime(): kotlin.uuid.Uuid = when (runtime) {
+        LocalRuntime.LiteRT -> LITERT_PROVIDER_ID
+    }
 
     init {
         viewModelScope.launch {
@@ -136,10 +159,7 @@ class SettingLocalLlmViewModel(
 
         // Reconcile: any disk-side model that isn't in provider.models gets added.
         // Backfills downloads that landed before the persistence fix at commit 75ea6443.
-        val targetId = when (runtime) {
-            LocalRuntime.LiteRT -> LITERT_PROVIDER_ID
-            LocalRuntime.LlamaCpp -> LLAMACPP_PROVIDER_ID
-        }
+        val targetId = providerIdForRuntime()
         val currentProvider = settingsStore.settingsFlow.value.providers.firstOrNull { it.id == targetId }
         if (currentProvider != null) {
             val knownModelIds = currentProvider.models.map { it.modelId }.toSet()
@@ -159,27 +179,44 @@ class SettingLocalLlmViewModel(
     }
 
     private suspend fun probeAndCache(): String {
+        val forceCpuNow = prefs.forceCpu(runtime)
         val accel = when (runtime) {
-            LocalRuntime.LiteRT -> AcceleratorProbe.probeLiteRt(context)
-            LocalRuntime.LlamaCpp -> AcceleratorProbe.probeLlamaCpp(
-                context,
-                jniReportsVulkan = false,
-            )
+            LocalRuntime.LiteRT -> AcceleratorProbe.probeLiteRt(context, forceCpu = forceCpuNow)
         }
         prefs.setAccelerator(runtime, accel)
         _accelerator.value = accel
         return accel
     }
 
+    /** Flip the runtime's force-CPU override AND re-probe so the cached accelerator
+     *  flips with it. Off → next probe picks GPU/NNAPI/QNN; on → CPU. Called from the
+     *  "Try GPU acceleration" toggle on the LiteRT settings page. */
+    fun setForceCpu(force: Boolean) {
+        viewModelScope.launch {
+            prefs.setForceCpu(runtime, force)
+            prefs.clearAccelerator(runtime)
+            _accelerator.value = null
+            probeAndCache()
+        }
+    }
+
+    /** Acknowledge the crash-recovery banner — clears the persisted notice so it
+     *  doesn't show again on the next launch. */
+    fun dismissCrashRecovery() {
+        viewModelScope.launch { prefs.clearCrashRecovery(runtime) }
+    }
+
+    /** Set the max-context override. Pass null to clear and revert to the curated default. */
+    fun setMaxNumTokensOverride(value: Int?) {
+        viewModelScope.launch { prefs.setMaxNumTokensOverride(runtime, value) }
+    }
+
     /**
-     * Mutates the LiteRtLocal / LlamaCppLocal ProviderSetting in the persisted settings store.
+     * Mutates the LiteRtLocal ProviderSetting in the persisted settings store.
      * Identity is established by the stable provider ID constant, not by position.
      */
     private suspend fun updateMyProvider(transform: (ProviderSetting) -> ProviderSetting) {
-        val targetId = when (runtime) {
-            LocalRuntime.LiteRT -> LITERT_PROVIDER_ID
-            LocalRuntime.LlamaCpp -> LLAMACPP_PROVIDER_ID
-        }
+        val targetId = providerIdForRuntime()
         settingsStore.update { old ->
             old.copy(providers = old.providers.map { p ->
                 if (p.id == targetId) transform(p) else p
@@ -196,10 +233,6 @@ class SettingLocalLlmViewModel(
     }
 
     fun startDefaultDownload() {
-        if (runtime == LocalRuntime.LlamaCpp) {
-            _errorMessage.value = context.getString(R.string.local_llm_llamacpp_not_implemented)
-            return
-        }
         _errorMessage.value = null
         viewModelScope.launch {
             val url = defaultModelUrl
@@ -207,6 +240,7 @@ class SettingLocalLlmViewModel(
             if (mem is MemoryGuard.Decision.TooLarge) {
                 _errorMessage.value = context.getString(
                     R.string.local_llm_insufficient_memory_format,
+                    mem.requiredFreeBytes / 1_000_000,
                     mem.modelFileBytes / 1_000_000,
                     mem.availMemBytes / 1_000_000,
                 )
@@ -217,10 +251,6 @@ class SettingLocalLlmViewModel(
     }
 
     fun startManualDownload(url: String) {
-        if (runtime == LocalRuntime.LlamaCpp) {
-            _errorMessage.value = context.getString(R.string.local_llm_llamacpp_not_implemented)
-            return
-        }
         // Normalise HuggingFace blob URLs → resolve URLs before validation and download.
         // A user pasting the HF viewer URL (/blob/main/<file>) gets a 200 OK that returns
         // HTML, not the model binary. Normalising first makes both URL forms work.
@@ -242,6 +272,26 @@ class SettingLocalLlmViewModel(
         val fileName = ModelInstall.extractFileNameFromUrl(url)
         val baseDir = ModelInstall.localModelsDir(context)
         val target = ModelInstall.targetFile(baseDir, runtime, fileName)
+        // Belt-and-braces against any future throw from inside the flow layers we
+        // don't fully control (OkHttp interceptors, Coroutine cancellation racing the
+        // socket close, ...). The flow itself catches IOException and emits Progress.Failed,
+        // but a CancellationException or RuntimeException from a deeper layer would
+        // propagate through .collect{} to this Main-context coroutine and crash the
+        // process. Treat any non-cancellation throw as a download failure.
+        try {
+            collectDownloadProgress(url, fileName, target)
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            // Cancellation is normal — user navigated away or hit Cancel. Don't surface.
+            _downloadProgress.value = null
+            throw cancel
+        } catch (t: Throwable) {
+            android.util.Log.w("LocalLlmVM", "Uncaught download failure", t)
+            _downloadProgress.value = null
+            _errorMessage.value = "Download failed: ${t::class.simpleName}: ${t.message ?: ""}"
+        }
+    }
+
+    private suspend fun collectDownloadProgress(url: String, fileName: String, target: java.io.File) {
         ModelInstall.download(httpClient, url, target).collect { p ->
             when (p) {
                 is ModelInstall.Progress.Started ->
@@ -265,7 +315,6 @@ class SettingLocalLlmViewModel(
                     updateMyProvider { provider ->
                         when (provider) {
                             is ProviderSetting.LiteRtLocal -> provider.copy(enabled = true)
-                            is ProviderSetting.LlamaCppLocal -> provider.copy(enabled = true)
                             else -> provider
                         }
                     }
@@ -323,6 +372,5 @@ class SettingLocalLlmViewModel(
     private fun estimatedSize(rt: LocalRuntime): Long = when (rt) {
         // Gallery allowlist sizeInBytes = 1_597_931_520 (~1.49 GB) + 200 MB safety pad.
         LocalRuntime.LiteRT -> 1_800_000_000L
-        LocalRuntime.LlamaCpp -> 1_000_000_000L // Qwen 2.5 1.5B Q4 ~1 GB
     }
 }

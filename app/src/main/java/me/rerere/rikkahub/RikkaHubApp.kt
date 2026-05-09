@@ -127,7 +127,60 @@ class RikkaHubApp : Application() {
         // next onAvailable forces a fresh DNS lookup + new socket on the next request.
         startNetworkChangeMonitor()
 
+        // Auto-recover from a prior native crash inside a local-runtime JNI lib
+        // (LiteRT-LM 0.11.0 has known SIGSEGVs on the GPU/NNAPI backend during
+        // inference on Pixel Tensor-G). If we detect one, force the runtime to
+        // CPU on the next load and stamp a recovery banner the LiteRT settings
+        // page picks up — so users see "Recovered: switched to CPU" instead of
+        // a silent re-crash.
+        sweepLocalLlmNativeCrashes()
+
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
+    }
+
+    /**
+     * Inspect the package's recent ApplicationExitInfo records for a native crash whose
+     * stack/description points at a local-runtime JNI library. When one is found, set the
+     * matching runtime's force-CPU flag so the next inference runs on CPU, and record the
+     * crashed accelerator label so the settings UI can surface a "switched to CPU" notice.
+     *
+     * Best-effort: errors are logged, never thrown — a stuck app start is worse than a
+     * skipped recovery sweep.
+     */
+    private fun sweepLocalLlmNativeCrashes() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return  // ApplicationExitInfo is API 30+
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val am = getSystemService(android.app.ActivityManager::class.java) ?: return@runCatching
+                // Look at the last ~5 exits: more than enough to spot a recent crash even if
+                // the user opened the app a few times since (each open = one exit record).
+                val recentExits = am.getHistoricalProcessExitReasons(packageName, 0, 5)
+                val nativeCrash = recentExits.firstOrNull { exit ->
+                    exit.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE &&
+                        // ApplicationExitInfo.description includes the offending shared library
+                        // for native crashes. Match the JNI sidekick of each runtime.
+                        (exit.description?.contains("liblitertlm", ignoreCase = true) == true)
+                } ?: return@runCatching
+                val prefs = get<me.rerere.locallm.LocalRuntimePreferences>()
+                val runtime = me.rerere.locallm.LocalRuntime.LiteRT
+                // Don't double-stamp if the user has already seen and dismissed an earlier
+                // crash banner — the prior dismiss cleared the recovery key, but if a NEW
+                // crash happened after, we want a fresh notice.
+                val crashedAccel = prefs.acceleratorFlow(runtime).first() ?: "GPU/NPU"
+                if (!prefs.forceCpu(runtime)) {
+                    prefs.setForceCpu(runtime, true)
+                    prefs.clearAccelerator(runtime)
+                }
+                prefs.setCrashRecovery(runtime, crashedAccel)
+                Log.w(
+                    TAG,
+                    "sweepLocalLlmNativeCrashes: detected native crash in liblitertlm at " +
+                        "${nativeCrash.timestamp} (accel=$crashedAccel) — forcing CPU + stamping recovery banner"
+                )
+            }.onFailure {
+                Log.w(TAG, "sweepLocalLlmNativeCrashes failed", it)
+            }
+        }
     }
 
     private fun startWorkflowRegistry() {

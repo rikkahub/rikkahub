@@ -588,11 +588,10 @@ class DoctorChecks(
                     is me.rerere.ai.provider.ProviderSetting.Google -> p.apiKey.isNotBlank()
                     is me.rerere.ai.provider.ProviderSetting.Claude -> p.apiKey.isNotBlank()
                     is me.rerere.ai.provider.ProviderSetting.AICore -> p.enabled  // on-device, no API key
-                    // Local providers (LiteRT, llama.cpp): usable when enabled AND at least
-                    // one model has been loaded/downloaded. A disabled provider with no models
-                    // is the factory default — don't count it.
+                    // Local provider (LiteRT): usable when enabled AND at least one model has
+                    // been loaded/downloaded. A disabled provider with no models is the factory
+                    // default — don't count it.
                     is me.rerere.ai.provider.ProviderSetting.LiteRtLocal -> p.enabled && p.models.isNotEmpty()
-                    is me.rerere.ai.provider.ProviderSetting.LlamaCppLocal -> p.enabled && p.models.isNotEmpty()
                 }
             }
             add(

@@ -1,6 +1,7 @@
 package me.rerere.locallm.litert
 
 import android.util.Log
+import com.google.ai.edge.litertlm.Contents
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -154,39 +155,233 @@ class LiteRtProvider(
         // Probe runs once at install/re-detect time and is persisted; reading it here
         // avoids the System.loadLibrary("qnn_delegate_jni") call on every generation.
         val cachedAccel = prefs.acceleratorFlow(LocalRuntime.LiteRT).first()
+        // Honor the per-runtime force-CPU override. Default true after the LiteRT-LM
+        // 0.11.0 GPU/NNAPI native crashes; users opt back in via the settings toggle.
+        val forceCpu = prefs.forceCpu(LocalRuntime.LiteRT)
 
-        val toolPrefix = LiteRtToolPrefix.buildPrefix(params.tools)
-        val systemTexts = messages
+        // Per-model defaults curated to mirror Gallery's `model_allowlists/1_0_13.json`
+        // (topK / topP / temperature / maxTokens / multimodal flags / speculative decoding).
+        // For HF-pasted models that aren't in the table, this returns the FALLBACK config.
+        val config = LiteRtModelDefaults.forModelFile(params.model.modelId)
+        // Pre-flight: multimodal models REQUIRE a GPU vision backend (Gallery's mandate
+        // — see LiteRtRuntime.tryLoadWithBackend's visionBackend logic). With Force CPU
+        // on, the runtime would still configure visionBackend=GPU.Backend, the SDK's
+        // vision executor would fail on init, the fallback to CPU would also fail (still
+        // GPU vision needed), and the user would see the generic "engine could not load"
+        // error. Refuse upfront with a clear, actionable message instead.
+        if (config.supportsImage && forceCpu) {
+            throw IllegalStateException(
+                "Model \"${params.model.modelId}\" is multimodal (vision support) and " +
+                    "requires the GPU backend, but \"Try GPU acceleration\" is currently " +
+                    "off in Settings → Local · LiteRT. Either enable GPU and retry, or " +
+                    "switch to a text-only model (Gemma3-1B-IT, Qwen2.5-1.5B-Instruct, " +
+                    "DeepSeek-R1-Distill-Qwen-1.5B) which runs fine on CPU."
+            )
+        }
+        // User-set max-context override. Lets capable models (Gemma 4 E2B = 32k) use more
+        // than Gallery's curated default; the underlying KV cache size still caps it
+        // (Qwen `ekv4096` cannot exceed 4096 regardless of this setting).
+        val maxNumTokensOverride = prefs.maxNumTokensOverride(LocalRuntime.LiteRT)
+        val effectiveMaxNumTokens = maxNumTokensOverride ?: config.maxTokens
+
+        // ---- System instruction (RADICALLY TRIMMED for small-context local models) ----
+        //
+        // Cloud providers happily accept full system prompts: agent-core skill body
+        // (~3-5k tokens of persona + tool docs) + every tool's JSON schema (~5-10k more)
+        // fits comfortably inside a 32k–200k context window. LiteRT models max out at
+        // 1-32k TOTAL, often 4k. A fresh "hi" against the default Qwen 4k model SDK-aborts
+        // with "Input token ids are too long: 18031 >= 4096" because we forwarded the same
+        // bulky system instruction the cloud path uses.
+        //
+        // For LiteRT we therefore:
+        //  - Use [buildCompactPrefix] (one-line `- name: desc` per tool, NO schemas).
+        //  - Drop bulky auto-loaded skill bodies — keep at most the first
+        //    [SYSTEM_MESSAGE_CHAR_BUDGET] chars of system text (room for the user's
+        //    custom system prompt + a short identity line, not for skill prose).
+        //
+        // A 1.5B model can't usefully consume agent-core's persona docs anyway — the
+        // model lacks the capacity to follow that level of instruction.
+        val systemTextsRaw = messages
             .filter { it.role == MessageRole.SYSTEM }
-            .joinToString("\n") { msg ->
+            .map { msg ->
                 msg.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
             }
-        val convoText = messages.filter { it.role != MessageRole.SYSTEM }.joinToString("\n") { msg ->
-            val text = msg.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
-            when (msg.role) {
-                MessageRole.USER -> "User: $text"
-                MessageRole.ASSISTANT -> "Assistant: $text"
-                else -> text
-            }
-        }
-        val prompt = buildString {
-            if (toolPrefix.isNotEmpty()) appendLine(toolPrefix)
-            if (systemTexts.isNotEmpty()) appendLine(systemTexts)
-            append(convoText)
-            append("\nAssistant: ")
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+        val trimmedSystemTexts = if (systemTextsRaw.length > SYSTEM_MESSAGE_CHAR_BUDGET) {
+            systemTextsRaw.take(SYSTEM_MESSAGE_CHAR_BUDGET) + "\n…(truncated for local model context)"
+        } else {
+            systemTextsRaw
         }
 
-        // New LiteRT-LM pattern: ensure model+conversation are loaded before streaming.
-        // Pass cachedAccel (may be null on very first run) so we avoid re-probing every turn.
-        // If the model file is structurally broken, self-heal and surface a user-readable error.
+        // Compact tool prefix only — full-schema dump would re-blow the context budget
+        // (every tool's schema is ~200-500 chars, ×50 tools = ~15k chars on its own).
+        // Caps further: at most 25 tools, at most 2000 chars total. Prefill on CPU is
+        // ~1-3 tok/s; every tool we shave off knocks ~30s off "time to first token".
+        val toolPrefix = LiteRtToolPrefix.buildCompactPrefix(
+            params.tools,
+            maxTools = MAX_TOOLS_IN_PREFIX,
+            maxChars = TOOL_PREFIX_CHAR_BUDGET,
+        )
+
+        val combinedSystem = buildString {
+            if (toolPrefix.isNotEmpty()) {
+                append(toolPrefix.trimEnd())
+                append("\n\n")
+            }
+            if (trimmedSystemTexts.isNotEmpty()) append(trimmedSystemTexts)
+        }.trim()
+
+        val effectiveSystemInstruction: Contents? =
+            if (combinedSystem.isNotBlank()) Contents.of(combinedSystem) else null
+
+        // ---- User input: full multi-turn history rendered as one Content.Text ----
+        //
+        // Why we render the full history into a single user input despite the SDK's
+        // Conversation being stateful:
+        //
+        //   1. RikkaHub's Provider contract is STATELESS — every streamText() call gets
+        //      the full message list. The caller has no concept of "this is turn N of an
+        //      ongoing Conversation"; it just hands us everything-so-far.
+        //   2. LiteRtRuntime's Conversation may or may not still be loaded with a matching
+        //      EngineKey, and even when the Engine is reused across turns, ensureLoaded()
+        //      always recreates the Conversation (because per-call sampler / system /
+        //      tools knobs may differ). So the SDK's internal turn state isn't reliable
+        //      from our side anyway.
+        //   3. Sending one combined ChatML-shaped string still routes through the model's
+        //      chat template (Qwen/Gemma will wrap it in their role tokens), which is
+        //      strictly better than the old "User: ... Assistant: ..." plaintext that
+        //      bypassed the template entirely.
+        //
+        // A future upgrade would maintain Conversation continuity across turns and send
+        // only the new user message — but that requires the runtime layer to track
+        // "which messages has this Conversation already seen" and is out of scope here.
+        val userInput = run {
+            // Drop oldest non-system turns one at a time until the rendered history fits
+            // under HISTORY_CHAR_BUDGET. Leaves the most-recent turns intact (the user's
+            // current message + any in-flight tool exchange right before it). On a cold
+            // chat with a single "hi" this is a no-op; on a long chat it gracefully
+            // degrades by forgetting the earliest exchanges instead of SDK-aborting.
+            val nonSystem = messages.filter { it.role != MessageRole.SYSTEM }
+            var trimmed = nonSystem
+            var rendered = renderHistoryAsChatML(trimmed)
+            while (rendered.length > HISTORY_CHAR_BUDGET && trimmed.size > 1) {
+                trimmed = trimmed.drop(1)
+                rendered = renderHistoryAsChatML(trimmed)
+            }
+            rendered
+        }
+
+        // ---- Engine load with full per-model + per-call config ----
         try {
-            runtime.ensureLoaded(modelPath, preferredAccel = cachedAccel)
+            runtime.ensureLoaded(
+                modelPath = modelPath,
+                preferredAccel = cachedAccel,
+                forceCpu = forceCpu,
+                maxNumTokens = effectiveMaxNumTokens,
+                supportImage = config.supportsImage,
+                supportAudio = config.supportsAudio,
+                speculativeDecoding = config.supportsSpeculativeDecoding,
+                systemInstruction = effectiveSystemInstruction,
+                tools = emptyList(), // Native tool registration deferred; we use prompt-engineered tools.
+                constrainedDecoding = false, // Future upgrade.
+                topK = config.topK,
+                topP = config.topP,
+                temperature = config.temperature,
+            )
         } catch (corrupt: LiteRtModelCorruptException) {
             handleCorruptModel(corrupt)
         }
 
+        // ---- Stream + cumulative→delta conversion ----
+        //
+        // The SDK's MessageCallback.onMessage emits the CUMULATIVE response so far
+        // (Gallery's `partialResult` is consumed via a REPLACE-the-content path). But
+        // RikkaHub's downstream chunk-handling APPENDS each Text part (see
+        // UIMessage.appendChunk in ai/ui/Message.kt: incoming Text parts are concatenated
+        // onto the previous Text part). Emitting cumulative chunks straight through would
+        // duplicate the response geometrically. So we hold the previous cumulative and
+        // emit only the new suffix as the delta.
+        //
+        // We also collect the full cumulative response so we can extract tool-call blocks
+        // at end-of-stream (see the comment block right after the collect{} below for why
+        // we do this once at the end rather than incrementally like AICoreProvider does).
         val streamId = "litert-${System.currentTimeMillis()}"
-        runtime.streamGenerate(prompt).collect { partial ->
+        var previousCumulative = ""
+        val fullResponseBuilder = StringBuilder()
+
+        try {
+            runtime.streamGenerate(userInput).collect { cumulative ->
+                // Defensive: if the SDK ever emits a non-monotonic cumulative (e.g. after
+                // an internal retry or template re-tokenisation), treat the new payload as a
+                // fresh start — emit it whole as the delta rather than computing a negative-
+                // length suffix that would silently drop characters.
+                val delta = if (cumulative.startsWith(previousCumulative)) {
+                    cumulative.substring(previousCumulative.length)
+                } else {
+                    cumulative
+                }
+                previousCumulative = cumulative
+                fullResponseBuilder.setLength(0)
+                fullResponseBuilder.append(cumulative)
+
+                if (delta.isNotEmpty()) {
+                    emit(
+                        MessageChunk(
+                            id = streamId,
+                            model = params.model.modelId,
+                            choices = listOf(
+                                UIMessageChoice(
+                                    index = 0,
+                                    delta = UIMessage(
+                                        role = MessageRole.ASSISTANT,
+                                        parts = listOf(UIMessagePart.Text(delta)),
+                                    ),
+                                    message = null,
+                                    finishReason = null,
+                                )
+                            ),
+                        )
+                    )
+                }
+            }
+        } catch (t: Throwable) {
+            // Translate the LiteRT-LM SDK's raw native-error text into something the user
+            // and the chat error surface can act on. The most common one — "Input token
+            // ids are too long. Exceeding the maximum number of tokens allowed: N >= M"
+            // — looks scary but means "your conversation is bigger than this model can
+            // hold". Surface that with a recovery hint.
+            throw translateSdkError(t, effectiveMaxNumTokens)
+        }
+
+        // ---- Tool-call extraction at end-of-stream ----
+        //
+        // AICoreProvider does this incrementally with ToolTagParser.feed() so the visible
+        // text never momentarily contains the raw <tool_call> block. We do it once at end
+        // of stream because (a) LiteRT's onMessage gives cumulative text, not deltas, so a
+        // streaming parser would have to constantly diff and re-scan the same prefix, and
+        // (b) the visible-text leak window is small and the alternative is significantly
+        // more state to maintain. If a tool call is detected, we emit a corrective chunk
+        // that adds the Tool part AND signals finishReason="tool_calls" so the
+        // GenerationHandler dispatches the tool and resumes generation on the next turn.
+        //
+        // Note: the raw <tool_call>...</tool_call> text already streamed to the user.
+        // Stripping it from the visible text in retrospect is non-trivial without the
+        // chunk protocol supporting "remove last N characters", so we leave it visible —
+        // the appended Tool part below is what makes the behaviour CORRECT (the tool
+        // actually fires) even if the visible text is slightly noisy. A future upgrade
+        // would port AICoreProvider's incremental ToolTagParser.
+        val fullResponse = fullResponseBuilder.toString()
+        val parsedCalls = LiteRtToolPrefix.extractToolCalls(fullResponse)
+        if (parsedCalls.isNotEmpty()) {
+            val toolParts = parsedCalls.map { call ->
+                UIMessagePart.Tool(
+                    toolCallId = "litert-tool-${System.nanoTime()}",
+                    toolName = call.name,
+                    input = call.arguments.toString(),
+                    output = emptyList(),
+                )
+            }
             emit(
                 MessageChunk(
                     id = streamId,
@@ -196,37 +391,172 @@ class LiteRtProvider(
                             index = 0,
                             delta = UIMessage(
                                 role = MessageRole.ASSISTANT,
-                                parts = listOf(UIMessagePart.Text(partial)),
+                                parts = toolParts,
                             ),
                             message = null,
-                            finishReason = null,
+                            finishReason = "tool_calls",
+                        )
+                    ),
+                )
+            )
+        } else {
+            // Normal completion — emit the terminal chunk with finishReason = "stop".
+            emit(
+                MessageChunk(
+                    id = streamId,
+                    model = params.model.modelId,
+                    choices = listOf(
+                        UIMessageChoice(
+                            index = 0,
+                            delta = UIMessage(
+                                role = MessageRole.ASSISTANT,
+                                parts = emptyList(),
+                            ),
+                            message = null,
+                            finishReason = "stop",
                         )
                     ),
                 )
             )
         }
-        // Emit the terminal chunk with finishReason = "stop"
-        emit(
-            MessageChunk(
-                id = streamId,
-                model = params.model.modelId,
-                choices = listOf(
-                    UIMessageChoice(
-                        index = 0,
-                        delta = UIMessage(
-                            role = MessageRole.ASSISTANT,
-                            parts = emptyList(),
-                        ),
-                        message = null,
-                        finishReason = "stop",
-                    )
-                ),
-            )
-        )
+    }
+
+    /**
+     * Render the full message history (everything except SYSTEM messages, which are passed
+     * separately as systemInstruction) into a single ChatML-like string suitable for the
+     * SDK's `Content.Text` user input. The runtime's chat template will wrap this as a
+     * single user turn from the model's perspective, which is acceptable because:
+     *
+     *  - Qwen/Gemma chat templates apply role tokens around the OUTER content. The inner
+     *    "User:"/"Assistant:" markers we emit are recognisable to the model from its
+     *    instruction-tuning data even when not parsed natively by the template.
+     *  - Tool calls and tool outputs are kept in the same `<tool_call>...</tool_call>` /
+     *    `<tool_result>...</tool_result>` shape the prompt prefix teaches the model. This
+     *    preserves continuity for prompt-engineered tool calling across turns.
+     *  - TOOL role messages are intentionally skipped: their content is already represented
+     *    inline in the immediately-preceding ASSISTANT message's `Tool` part output.
+     */
+    private fun renderHistoryAsChatML(messages: List<UIMessage>): String = buildString {
+        var first = true
+        for (msg in messages) {
+            if (msg.role == MessageRole.SYSTEM || msg.role == MessageRole.TOOL) continue
+            if (!first) append("\n")
+            first = false
+            when (msg.role) {
+                MessageRole.USER -> {
+                    val text = msg.parts.filterIsInstance<UIMessagePart.Text>()
+                        .joinToString("") { it.text }
+                    append("User: ").append(text)
+                }
+                MessageRole.ASSISTANT -> {
+                    append("Assistant: ")
+                    // Walk the parts in order so an assistant turn that interleaves text +
+                    // tool calls is reconstructed faithfully.
+                    for (part in msg.parts) {
+                        when (part) {
+                            is UIMessagePart.Text -> append(part.text)
+                            is UIMessagePart.Tool -> {
+                                val callJson = """{"name":"${part.toolName}","arguments":${part.input.ifBlank { "{}" }}}"""
+                                append("<tool_call>").append(callJson).append("</tool_call>")
+                                if (part.isExecuted) {
+                                    val outText = part.output
+                                        .filterIsInstance<UIMessagePart.Text>()
+                                        .joinToString("") { it.text }
+                                    if (outText.isNotEmpty()) {
+                                        append("\n<tool_result>").append(outText).append("</tool_result>")
+                                    }
+                                }
+                            }
+                            else -> { /* image/audio/document parts not yet wired into LiteRT input */ }
+                        }
+                    }
+                }
+                else -> { /* unreachable — filtered above */ }
+            }
+        }
+        // Trailing assistant cue gives the model a clear "your turn" signal even after the
+        // chat template wraps the input. Cheap belt-and-braces vs. the model going silent.
+        if (isNotEmpty()) append("\nAssistant: ")
     }
 
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
     ): ImageGenerationResult = error("LiteRT does not support image generation in 22A")
+
+    /**
+     * Translate the LiteRT-LM SDK's raw native error message into a user-actionable
+     * exception. The SDK throws bare `RuntimeException` with messages like
+     * "Status Code: 3. Message: Input token ids are too long. Exceeding the maximum
+     * number of tokens allowed: 4610 >= 4096" — technically correct but unhelpful for
+     * users on a chat surface.
+     */
+    private fun translateSdkError(t: Throwable, effectiveMaxNumTokens: Int): Throwable {
+        // Walk the cause chain too — LiteRtRuntime wraps the SDK error inside a
+        // RuntimeException of its own ("LiteRT engine could not load this model on
+        // this device's GPU OR CPU. … Underlying: …"), so the SDK's own text only
+        // appears in the inner cause. Concatenate so the regex catches either layer.
+        val joined = generateSequence<Throwable>(t) { it.cause }
+            .map { it.message.orEmpty() }
+            .joinToString("\n")
+
+        // Context-length overflow. The numbers in the message tell us the actual
+        // input vs. the limit; surface both plus what to do next.
+        val overflow = Regex("""(\d+)\s*>=\s*(\d+)""").find(joined)
+        if (joined.contains("Input token ids are too long", ignoreCase = true) ||
+            (joined.contains("Status Code: 3", ignoreCase = true) && overflow != null)) {
+            val (have, limit) = overflow?.let { it.groupValues[1] to it.groupValues[2] }
+                ?: ("?" to effectiveMaxNumTokens.toString())
+            return RuntimeException(
+                "This model can only hold $limit tokens of context, but the conversation " +
+                    "needs $have. Tap /new to start a fresh chat, switch to a model with a " +
+                    "larger context (e.g. Gemma 4 E2B = 32k), OR raise \"Max context\" in " +
+                    "Settings → Local · LiteRT if your model file supports it.",
+                t,
+            )
+        }
+
+        // Vision-executor failure. The SDK's stack trace points at
+        // `vision_litert_compiled_model_executor.cc` when the model has vision
+        // tensors but the runtime couldn't allocate the GPU vision encoder. The
+        // pre-flight check covers force-CPU, but this catches the case where the
+        // user has GPU enabled and it STILL fails (older device, GPU compute path
+        // not supported for the model's vision config). Recovery: pick text-only.
+        if (joined.contains("vision_litert_compiled_model_executor", ignoreCase = true) ||
+            joined.contains("vision_litert", ignoreCase = true)) {
+            return RuntimeException(
+                "This model is multimodal (vision) and the GPU vision executor failed " +
+                    "to initialise on this device. The most reliable workaround on devices " +
+                    "without compatible GPU compute is to pick a text-only model: " +
+                    "Gemma3-1B-IT, Qwen2.5-1.5B-Instruct, or DeepSeek-R1-Distill-Qwen-1.5B " +
+                    "from the catalog in Settings → Local · LiteRT.",
+                t,
+            )
+        }
+
+        // Anything else — keep the original; GenerationHandler's wrapper already
+        // strips the stack trace from the LLM-facing envelope.
+        return t
+    }
+
+    companion object {
+        /** Hard char-cap for the joined SYSTEM-message text. Tight on purpose: we
+         *  want the user's actual system prompt ("You are X") to land, but NOT
+         *  agent-core's auto-loaded skill body (~3-5k tokens of persona + tool
+         *  docs that small models can't usefully consume). 500 chars ≈ 125 tokens. */
+        private const val SYSTEM_MESSAGE_CHAR_BUDGET = 500
+
+        /** Hard char-cap for the rendered ChatML history. ~3000 chars ≈ 750 tokens. */
+        private const val HISTORY_CHAR_BUDGET = 3000
+
+        /** Max tools surfaced in the compact tool prefix. Beyond ~30 tools the
+         *  prefix alone consumes more context than a 4k model can spare for
+         *  system + history + output. The compact prefix is ordered by the caller;
+         *  later tools are dropped first (with a "and N more" note) so the user
+         *  can still call the most important ones. */
+        private const val MAX_TOOLS_IN_PREFIX = 25
+
+        /** Hard char-cap for the compact tool prefix. ~2000 chars ≈ 500 tokens. */
+        private const val TOOL_PREFIX_CHAR_BUDGET = 2000
+    }
 }

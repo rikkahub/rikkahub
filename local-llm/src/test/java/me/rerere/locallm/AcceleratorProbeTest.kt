@@ -54,14 +54,4 @@ class AcceleratorProbeTest {
         )
         assertEquals("CPU", AcceleratorProbe.pickLiteRt(caps))
     }
-
-    @Test fun `llama-cpp picks Vulkan when supported`() {
-        val caps = AcceleratorProbe.LlamaCppCapabilities(vulkanSupported = true)
-        assertEquals("Vulkan", AcceleratorProbe.pickLlamaCpp(caps))
-    }
-
-    @Test fun `llama-cpp falls back to CPU when Vulkan absent`() {
-        val caps = AcceleratorProbe.LlamaCppCapabilities(vulkanSupported = false)
-        assertEquals("CPU", AcceleratorProbe.pickLlamaCpp(caps))
-    }
 }

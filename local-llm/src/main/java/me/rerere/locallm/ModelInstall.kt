@@ -15,14 +15,16 @@ private const val TAG = "ModelInstall"
 /**
  * Downloads a local-LLM model file from a URL into app-private storage.
  *
- * No resume in v1 (Phase 22A) — always starts fresh; any leftover `.partial` file is
- * deleted before the request is issued. Resume with `Range:` header comes in Phase 22B.
+ * Resume-aware: a leftover `.partial` from a prior interrupted attempt triggers a
+ * `Range: bytes=<existing-size>-` request, the server's 206 Partial Content response is
+ * appended in place, and progress emits start at the resumed offset. Server-side fall-
+ * backs: 200 OK → silently overwrite from 0; 416 → delete + signal restart-needed.
  *
  * Atomic rename to the final filename only on success, after a magic-byte integrity
  * check. Cancel-safe: a cancelled coroutine leaves no partial file (it is deleted on
  * failure paths and never renamed on cancellation before [Progress.Done]).
  *
- * Files land under `${context.filesDir}/local-models/{litert|llamacpp}/<basename>`.
+ * Files land under `${context.filesDir}/local-models/litert/<basename>`.
  */
 object ModelInstall {
 
@@ -69,7 +71,6 @@ object ModelInstall {
 
     fun runtimeForExtension(extension: String): LocalRuntime? = when (extension.lowercase()) {
         "litertlm" -> LocalRuntime.LiteRT
-        "gguf" -> LocalRuntime.LlamaCpp
         else -> null
     }
 
@@ -81,7 +82,6 @@ object ModelInstall {
     fun targetFile(baseDir: File, runtime: LocalRuntime, fileName: String): File {
         val sub = when (runtime) {
             LocalRuntime.LiteRT -> "litert"
-            LocalRuntime.LlamaCpp -> "llamacpp"
         }
         return File(File(baseDir, sub), fileName)
     }
@@ -130,11 +130,6 @@ object ModelInstall {
                     firstBytes[6] == 0x4c.toByte() && firstBytes[7] == 0x33.toByte()
                 isLitertlm || isTflite
             }
-            "gguf" -> {
-                // GGUF files start with ASCII "GGUF" (0x47 0x47 0x55 0x46).
-                firstBytes[0] == 0x47.toByte() && firstBytes[1] == 0x47.toByte() &&
-                    firstBytes[2] == 0x55.toByte() && firstBytes[3] == 0x46.toByte()
-            }
             else -> {
                 // Unknown extension — accept by default but reject obvious zeros / HTML.
                 !looksLikeHtml(firstBytes, firstBytes.size) && firstBytes.any { it != 0x00.toByte() }
@@ -166,14 +161,36 @@ object ModelInstall {
     ): Flow<Progress> = flow {
         target.parentFile?.mkdirs()
         val partial = File(target.absolutePath + ".partial")
-        // No resume in v1 — always start fresh. Delete any leftover partial from a prior
-        // interrupted attempt so we can't accidentally write past it.
-        runCatching { partial.delete() }
+        // Resume support: if a `.partial` survives from a prior interrupted attempt, ask
+        // the server for `Range: bytes=<existing-size>-`. HuggingFace's `/resolve/` URLs
+        // serve immutable per-commit files so the partial bytes are guaranteed to match
+        // the rest of the response. If the server returns 206 we append; if it returns
+        // 200 (Range not honored) we silently overwrite the partial; if 416 (partial >=
+        // server's file size, e.g. server file shrank or partial corrupt-trailing) we
+        // delete + restart from zero. Without this, leaving the Settings page mid-
+        // download cancelled the coroutine and the next tap re-downloaded the entire
+        // multi-GB file from scratch.
+        val resumeFrom = if (partial.exists() && partial.length() > 0) partial.length() else 0L
 
         val normalized = normalizeHuggingFaceUrl(url)
-        val request = Request.Builder().url(normalized).build()
+        val requestBuilder = Request.Builder().url(normalized)
+        if (resumeFrom > 0) {
+            requestBuilder.header("Range", "bytes=$resumeFrom-")
+        }
+        val request = requestBuilder.build()
 
         client.newCall(request).execute().use { response ->
+            // 416 Range Not Satisfiable — partial bigger than server file (corruption or
+            // server-side replacement). Restart fresh.
+            if (response.code == 416 && resumeFrom > 0) {
+                Log.w(TAG, "Server returned 416 (Range Not Satisfiable) — partial=$resumeFrom; restarting from 0")
+                runCatching { partial.delete() }
+                // Fall through to a clean retry by emitting Failed + letting the caller retry.
+                emit(Progress.Failed(IllegalStateException(
+                    "Existing partial file no longer matches server. Tap Install again to restart."
+                )))
+                return@flow
+            }
             if (!response.isSuccessful) {
                 Log.w(TAG, "Download failed: HTTP ${response.code} for $normalized")
                 emit(Progress.Failed(IllegalStateException("HTTP ${response.code}")))
@@ -192,35 +209,90 @@ object ModelInstall {
                 return@flow
             }
 
-            val total = response.header("Content-Length")?.toLongOrNull()
+            // 206 Partial Content means the server honoured our Range header → append to
+            // the existing partial. 200 OK means the server ignored the Range header (or
+            // we didn't send one) → overwrite the partial from byte 0. Total file size
+            // comes from Content-Range when resuming (`bytes 1024-4095/4096`); from
+            // Content-Length when fresh.
+            val isResume = response.code == 206 && resumeFrom > 0
+            val total: Long? = if (isResume) {
+                response.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
+            } else {
+                response.header("Content-Length")?.toLongOrNull()
+            }
             emit(Progress.Started(total))
+
+            val effectiveResumeFrom = if (isResume) resumeFrom else 0L
+            if (effectiveResumeFrom > 0) {
+                // Surface the current bytes-on-disk so the UI's first tick shows the
+                // right starting percentage instead of jumping from 0% to the resumed
+                // figure on the next data chunk.
+                emit(Progress.Tick(effectiveResumeFrom, total))
+            } else if (resumeFrom > 0) {
+                // We sent Range but server returned 200 — clear the partial so we don't
+                // double-write its old contents.
+                Log.w(TAG, "Server returned 200 (Range not honoured); restarting partial from 0")
+                runCatching { partial.delete() }
+            }
 
             val body = response.body ?: run {
                 emit(Progress.Failed(IllegalStateException("empty body")))
                 return@flow
             }
 
-            var sniffed = false
+            // Skip the HTML magic-byte sniff when resuming — those bytes are already on
+            // disk from the prior attempt, and the body now starts mid-file. A false
+            // positive would otherwise nuke valid partials.
+            var sniffed = isResume
             var bailed = false
-            partial.outputStream().use { out ->
-                body.byteStream().use { input ->
-                    val buf = ByteArray(64 * 1024)
-                    var totalRead = 0L
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n <= 0) break
-                        if (!sniffed) {
-                            sniffed = true
-                            if (looksLikeHtml(buf, n)) {
-                                bailed = true
-                                break
+            // FileOutputStream(file, append=true) when resuming so we extend rather than
+            // truncate. partial.outputStream() truncates implicitly.
+            val out = if (isResume) {
+                java.io.FileOutputStream(partial, /* append = */ true)
+            } else {
+                partial.outputStream()
+            }
+            // Wrap the read loop. SocketException ("Software caused connection abort"),
+            // SSL handshake errors, and IOException all happen mid-stream when the OS
+            // tears down the socket — user backgrounded the app, WiFi flipped, server
+            // closed the connection, etc. Without this catch the throw propagates up
+            // through .collect{}, lands on whatever dispatcher the collector runs on
+            // (Main, in our case), and crashes the process. The partial bytes already
+            // on disk are intact and resumable on the next Install tap because of the
+            // Range-resume logic above.
+            val ioFailure: Throwable? = try {
+                out.use { sink ->
+                    body.byteStream().use { input ->
+                        val buf = ByteArray(64 * 1024)
+                        var totalRead = effectiveResumeFrom
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n <= 0) break
+                            if (!sniffed) {
+                                sniffed = true
+                                if (looksLikeHtml(buf, n)) {
+                                    bailed = true
+                                    break
+                                }
                             }
+                            sink.write(buf, 0, n)
+                            totalRead += n
+                            emit(Progress.Tick(totalRead, total))
                         }
-                        out.write(buf, 0, n)
-                        totalRead += n
-                        emit(Progress.Tick(totalRead, total))
                     }
                 }
+                null
+            } catch (e: java.io.IOException) {
+                e
+            }
+            if (ioFailure != null) {
+                Log.w(TAG, "Download read interrupted: ${ioFailure::class.simpleName}: ${ioFailure.message}")
+                emit(Progress.Failed(java.io.IOException(
+                    "Download interrupted (${ioFailure::class.simpleName}: ${ioFailure.message}). " +
+                    "Tap Install again to resume from where it stopped.",
+                    ioFailure,
+                )))
+                return@flow
             }
 
             if (bailed) {

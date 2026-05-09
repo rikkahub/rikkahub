@@ -10,7 +10,7 @@ class ModelInstallTest {
 
     @Test fun `validUrl accepts well-formed https URLs`() {
         assertTrue(ModelInstall.isValidDownloadUrl("https://huggingface.co/foo/bar/resolve/main/model.task"))
-        assertTrue(ModelInstall.isValidDownloadUrl("https://example.com/path/to/model.gguf"))
+        assertTrue(ModelInstall.isValidDownloadUrl("https://example.com/path/to/model.litertlm"))
     }
 
     @Test fun `validUrl rejects http URLs`() {
@@ -23,16 +23,15 @@ class ModelInstallTest {
         assertEquals(false, ModelInstall.isValidDownloadUrl("file:///etc/passwd"))
     }
 
-    @Test fun `runtimeForExtension routes litertlm to LiteRT and gguf to llama-cpp`() {
+    @Test fun `runtimeForExtension routes litertlm to LiteRT and unknowns to null`() {
         assertEquals(LocalRuntime.LiteRT, ModelInstall.runtimeForExtension("litertlm"))
-        assertEquals(LocalRuntime.LlamaCpp, ModelInstall.runtimeForExtension("gguf"))
+        assertEquals(null, ModelInstall.runtimeForExtension("gguf"))
         assertEquals(null, ModelInstall.runtimeForExtension("task"))
         assertEquals(null, ModelInstall.runtimeForExtension("tflite"))
     }
 
     @Test fun `runtimeForExtension is case-insensitive`() {
         assertEquals(LocalRuntime.LiteRT, ModelInstall.runtimeForExtension("LITERTLM"))
-        assertEquals(LocalRuntime.LlamaCpp, ModelInstall.runtimeForExtension("GGUF"))
     }
 
     @Test fun `runtimeForExtension returns null for unrecognised extension`() {
@@ -42,8 +41,8 @@ class ModelInstallTest {
 
     @Test fun `extractFileNameFromUrl pulls the last path segment`() {
         assertEquals(
-            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            ModelInstall.extractFileNameFromUrl("https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"),
+            "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+            ModelInstall.extractFileNameFromUrl("https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"),
         )
     }
 
@@ -77,18 +76,13 @@ class ModelInstallTest {
     }
 
     @Test fun `normalizeHuggingFaceUrl transforms blob with non-main branch`() {
-        val blob = "https://huggingface.co/foo/bar/blob/dev/model.gguf"
-        val expected = "https://huggingface.co/foo/bar/resolve/dev/model.gguf"
+        val blob = "https://huggingface.co/foo/bar/blob/dev/model.litertlm"
+        val expected = "https://huggingface.co/foo/bar/resolve/dev/model.litertlm"
         assertEquals(expected, ModelInstall.normalizeHuggingFaceUrl(blob))
     }
 
     @Test fun `normalizeHuggingFaceUrl passes through non-huggingface URLs unchanged`() {
-        val url = "https://example.com/models/blob/main/model.gguf"
-        assertEquals(url, ModelInstall.normalizeHuggingFaceUrl(url))
-    }
-
-    @Test fun `normalizeHuggingFaceUrl passes through already-valid GGUF resolve URL`() {
-        val url = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+        val url = "https://example.com/models/blob/main/model.litertlm"
         assertEquals(url, ModelInstall.normalizeHuggingFaceUrl(url))
     }
 
@@ -128,12 +122,6 @@ class ModelInstallTest {
         assertFalse(ModelInstall.looksLikeHtml(bin, bin.size))
     }
 
-    @Test fun `looksLikeHtml false for GGUF magic bytes`() {
-        // GGUF magic: 0x47475546 ("GGUF") little-endian
-        val bin = byteArrayOf(0x47, 0x47, 0x55, 0x46, 0x03, 0x00, 0x00, 0x00)
-        assertFalse(ModelInstall.looksLikeHtml(bin, bin.size))
-    }
-
     // isValidMagicForExtension -------------------------------------------------
 
     @Test fun `isValidMagicForExtension accepts LITERTLM magic for litertlm`() {
@@ -152,19 +140,8 @@ class ModelInstallTest {
         assertFalse(ModelInstall.isValidMagicForExtension("litertlm", bytes))
     }
 
-    @Test fun `isValidMagicForExtension accepts GGUF magic`() {
-        val bytes = "GGUF   ".toByteArray().copyOf(16)
-        assertTrue(ModelInstall.isValidMagicForExtension("gguf", bytes))
-    }
-
-    @Test fun `isValidMagicForExtension rejects all-zero for gguf`() {
-        val bytes = ByteArray(16)
-        assertFalse(ModelInstall.isValidMagicForExtension("gguf", bytes))
-    }
-
     @Test fun `isValidMagicForExtension rejects buffer shorter than 4 bytes`() {
         // Any buffer < 4 bytes returns false regardless of extension.
-        assertFalse(ModelInstall.isValidMagicForExtension("gguf", byteArrayOf(0x47, 0x47, 0x55)))
         assertFalse(ModelInstall.isValidMagicForExtension("litertlm", byteArrayOf()))
         assertFalse(ModelInstall.isValidMagicForExtension("litertlm", byteArrayOf(0x4c)))
     }
@@ -195,8 +172,8 @@ class ModelInstallTest {
     @Test fun `normalizeHuggingFaceUrl handles blob with main branch via regex only`() {
         // Verify the single-regex path correctly transforms /blob/main/ (regression guard
         // after removing the redundant literal string replace).
-        val blob = "https://huggingface.co/user/repo/blob/main/file.gguf"
-        val expected = "https://huggingface.co/user/repo/resolve/main/file.gguf"
+        val blob = "https://huggingface.co/user/repo/blob/main/file.litertlm"
+        val expected = "https://huggingface.co/user/repo/resolve/main/file.litertlm"
         assertEquals(expected, ModelInstall.normalizeHuggingFaceUrl(blob))
     }
 }

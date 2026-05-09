@@ -5,13 +5,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -22,6 +27,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,10 +36,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.provider.Model
 import me.rerere.hugeicons.HugeIcons
@@ -42,6 +52,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.locallm.LocalRuntime
+import me.rerere.locallm.litert.LiteRtCatalog
+import me.rerere.locallm.litert.LiteRtCatalogEntry
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -113,10 +125,6 @@ fun ProviderConfigure(
             is ProviderSetting.LiteRtLocal -> {
                 ProviderConfigureLiteRT(provider, onEdit)
             }
-
-            is ProviderSetting.LlamaCppLocal -> {
-                ProviderConfigureLlamaCpp(provider, onEdit)
-            }
         }
     }
 }
@@ -132,7 +140,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Claude -> this.apiKey
         is ProviderSetting.AICore -> "" // on-device, no API key
         is ProviderSetting.LiteRtLocal -> "" // on-device, no API key
-        is ProviderSetting.LlamaCppLocal -> "" // on-device, no API key
     }
 
     val sourceBaseUrl = when (this) {
@@ -141,7 +148,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Claude -> this.baseUrl
         is ProviderSetting.AICore -> "" // on-device, no base URL
         is ProviderSetting.LiteRtLocal -> "" // on-device, no base URL
-        is ProviderSetting.LlamaCppLocal -> "" // on-device, no base URL
     }
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
@@ -216,7 +222,6 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
             is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
             is ProviderSetting.AICore -> return "" // on-device, no base URL
             is ProviderSetting.LiteRtLocal -> return "" // on-device, no base URL
-            is ProviderSetting.LlamaCppLocal -> return "" // on-device, no base URL
         }
     }
 
@@ -226,7 +231,6 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
         is ProviderSetting.AICore -> ""
         is ProviderSetting.LiteRtLocal -> ""
-        is ProviderSetting.LlamaCppLocal -> ""
     }
 }
 
@@ -238,7 +242,6 @@ internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
         is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.AICore -> this // no base URL to reset
         is ProviderSetting.LiteRtLocal -> this // no base URL to reset
-        is ProviderSetting.LlamaCppLocal -> this // no base URL to reset
     }
 }
 
@@ -249,7 +252,6 @@ internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
         is ProviderSetting.Claude -> this.baseUrl
         is ProviderSetting.AICore -> return true // no base URL concept
         is ProviderSetting.LiteRtLocal -> return true // no base URL concept
-        is ProviderSetting.LlamaCppLocal -> return true // no base URL concept
     }
     return baseUrl == defaultBaseUrlForReset()
 }
@@ -703,8 +705,31 @@ private fun ColumnScope.ProviderConfigureLiteRT(
     val downloadProgress by vm.downloadProgress.collectAsStateWithLifecycle()
     val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
     val accelerator by vm.accelerator.collectAsStateWithLifecycle()
+    val forceCpu by vm.forceCpu.collectAsStateWithLifecycle()
+    val maxNumTokensOverride by vm.maxNumTokensOverride.collectAsStateWithLifecycle()
+    val crashRecoveryAccel by vm.crashRecoveryAccelerator.collectAsStateWithLifecycle()
+    val installedModelFiles by vm.installedModelFiles.collectAsStateWithLifecycle()
 
     provider.description()
+
+    // Friendly post-crash banner. Default tone is "we handled it", not "panic".
+    crashRecoveryAccel?.let { accel ->
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { vm.dismissCrashRecovery() },
+        ) {
+            Text(
+                text = stringResource(R.string.local_llm_crash_recovery_format, accel),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+    }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(id = R.string.setting_provider_page_enable), modifier = Modifier.weight(1f))
@@ -774,6 +799,29 @@ private fun ColumnScope.ProviderConfigureLiteRT(
         }
     }
 
+    // Recommended-models curated picker. Sourced from Google AI Edge Gallery's allowlist
+    // (LiteRtCatalog.ENTRIES). Per-entry Install button calls the same startManualDownload
+    // path the URL-paste field uses, so the install flow is identical.
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+        Text(
+            stringResource(R.string.local_llm_catalog_title),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            stringResource(R.string.local_llm_catalog_subtitle),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LiteRtCatalog.ENTRIES.forEach { entry ->
+            LiteRtCatalogEntryCard(
+                entry = entry,
+                installed = entry.modelFile in installedModelFiles,
+                downloadInProgress = downloadProgress != null,
+                onInstall = { vm.startManualDownload(entry.resolveUrl()) },
+            )
+        }
+    }
+
     // Accelerator row with re-detect button.
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -786,6 +834,73 @@ private fun ColumnScope.ProviderConfigureLiteRT(
         )
         OutlinedButton(onClick = { vm.reDetectAccelerator() }) {
             Text(stringResource(R.string.local_llm_re_detect))
+        }
+    }
+
+    // GPU opt-in toggle. Default OFF (forceCpu=true) because LiteRT-LM 0.11.0's GPU/NNAPI
+    // backend SIGSEGVs during inference on Pixel Tensor-G hardware. Surfacing it as an
+    // opt-in keeps the safe path default while letting confident users get GPU speed
+    // when their device handles it.
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.local_llm_try_gpu_label),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                stringResource(R.string.local_llm_try_gpu_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = !forceCpu,
+            onCheckedChange = { wantGpu -> vm.setForceCpu(!wantGpu) },
+        )
+    }
+
+    // Max-context override. Lets users push capable models (Gemma 4 E2B = 32k) past
+    // Gallery's curated defaults — the model's underlying KV cache size is still the
+    // hard ceiling (Qwen `ekv4096` rejects values above 4096 regardless of this).
+    var maxTokensInput by remember(maxNumTokensOverride) {
+        mutableStateOf(maxNumTokensOverride?.toString() ?: "")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            stringResource(R.string.local_llm_max_tokens_label),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            stringResource(R.string.local_llm_max_tokens_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = maxTokensInput,
+                onValueChange = { newValue ->
+                    // Accept digits-only input; empty string = use curated default.
+                    if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                        maxTokensInput = newValue
+                        val parsed = newValue.toIntOrNull()?.takeIf { it in 1..131072 }
+                        vm.setMaxNumTokensOverride(parsed)
+                    }
+                },
+                placeholder = {
+                    Text(stringResource(R.string.local_llm_max_tokens_placeholder))
+                },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            OutlinedButton(
+                onClick = {
+                    maxTokensInput = ""
+                    vm.setMaxNumTokensOverride(null)
+                },
+                enabled = maxNumTokensOverride != null,
+            ) {
+                Text(stringResource(R.string.local_llm_max_tokens_reset))
+            }
         }
     }
 
@@ -835,16 +950,117 @@ private fun ColumnScope.ProviderConfigureLiteRT(
 }
 
 @Composable
-private fun ColumnScope.ProviderConfigureLlamaCpp(
-    provider: ProviderSetting.LlamaCppLocal,
-    @Suppress("UNUSED_PARAMETER") onEdit: (ProviderSetting.LlamaCppLocal) -> Unit,
+private fun LiteRtCatalogEntryCard(
+    entry: LiteRtCatalogEntry,
+    installed: Boolean,
+    downloadInProgress: Boolean,
+    onInstall: () -> Unit,
 ) {
-    provider.description()
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(12.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    entry.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                if (entry.recommended) {
+                    Text(
+                        text = stringResource(R.string.local_llm_catalog_recommended),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
 
-    Text(
-        text = stringResource(R.string.local_llm_llamacpp_not_yet_implemented),
-        style = MaterialTheme.typography.bodyMedium,
-    )
+            Text(
+                entry.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            if (entry.tags.isNotEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    entry.tags.forEach { tag ->
+                        val labelRes = when (tag) {
+                            "multimodal" -> R.string.local_llm_catalog_tag_multimodal
+                            "thinking" -> R.string.local_llm_catalog_tag_thinking
+                            "speculative-decoding" -> R.string.local_llm_catalog_tag_speculative
+                            else -> null
+                        }
+                        val label = labelRes?.let { stringResource(it) } ?: tag
+                        SuggestionChip(
+                            onClick = {},
+                            enabled = false,
+                            label = {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                disabledContainerColor = MaterialTheme.colorScheme.surface,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = String.format(
+                    java.util.Locale.US,
+                    stringResource(R.string.local_llm_catalog_size_format),
+                    entry.sizeBytes / 1_000_000_000.0,
+                    entry.minDeviceMemoryGb,
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (installed) {
+                    Text(
+                        text = stringResource(R.string.local_llm_catalog_installed),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    Button(
+                        onClick = onInstall,
+                        enabled = !downloadInProgress,
+                    ) {
+                        Text(stringResource(R.string.local_llm_catalog_install))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
