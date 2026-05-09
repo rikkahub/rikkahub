@@ -9,7 +9,10 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.VolumeHigh
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -36,7 +39,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -46,6 +50,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,14 +61,17 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.DEFAULT_SYSTEM_TTS_ID
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalTTSState
+import me.rerere.rikkahub.ui.pages.setting.components.ASRProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.TTSProviderConfigure
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -75,26 +83,39 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @Composable
 fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val navController = LocalNavController.current
-    var editingProvider by remember { mutableStateOf<TTSProviderSetting?>(null) }
+    var editingTTSProvider by remember { mutableStateOf<TTSProviderSetting?>(null) }
+    var editingASRProvider by remember { mutableStateOf<ASRProviderSetting?>(null) }
+    val pagerState = rememberPagerState { 2 }
+    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    Text(text = stringResource(R.string.setting_tts_page_title))
+                    Text(text = "Speech")
                 },
                 navigationIcon = {
                     BackButton()
                 },
                 actions = {
-                    AddTTSProviderButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                ttsProviders = listOf(it) + settings.ttsProviders
+                    if (pagerState.currentPage == 0) {
+                        AddTTSProviderButton {
+                            vm.updateSettings(
+                                settings.copy(
+                                    ttsProviders = listOf(it) + settings.ttsProviders
+                                )
                             )
-                        )
+                        }
+                    } else {
+                        AddASRProviderButton {
+                            vm.updateSettings(
+                                settings.copy(
+                                    asrProviders = listOf(it) + settings.asrProviders,
+                                    selectedASRProviderId = settings.selectedASRProviderId ?: it.id
+                                )
+                            )
+                        }
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -104,70 +125,44 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        val lazyListState = rememberLazyListState()
-        val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-            val newProviders = settings.ttsProviders.toMutableList().apply {
-                add(to.index, removeAt(from.index))
-            }
-            vm.updateSettings(settings.copy(ttsProviders = newProviders))
-        }
-
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding(),
-            contentPadding = innerPadding + PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            state = lazyListState
+                .padding(innerPadding)
         ) {
-            items(settings.ttsProviders, key = { it.id }) { provider ->
-                ReorderableItem(
-                    state = reorderableState,
-                    key = provider.id
-                ) { isDragging ->
-                    TTSProviderItem(
-                        modifier = Modifier
-                            .scale(if (isDragging) 0.95f else 1f)
-                            .fillMaxWidth(),
-                        provider = provider,
-                        dragHandle = {
-                            val haptic = LocalHapticFeedback.current
-                            IconButton(
-                                onClick = {},
-                                modifier = Modifier
-                                    .longPressDraggableHandle(
-                                        onDragStarted = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                        },
-                                        onDragStopped = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                        }
-                                    )
-                            ) {
-                                Icon(
-                                    imageVector = HugeIcons.DragDropHorizontal,
-                                    contentDescription = null
-                                )
-                            }
-                        },
-                        isSelected = settings.selectedTTSProviderId == provider.id,
-                        onSelect = {
-                            vm.updateSettings(settings.copy(selectedTTSProviderId = provider.id))
-                        },
-                        onEdit = {
-                            editingProvider = provider
-                        },
-                        onDelete = {
-                            val newProviders = settings.ttsProviders - provider
-                            val newSelectedId =
-                                if (settings.selectedTTSProviderId == provider.id) DEFAULT_SYSTEM_TTS_ID else settings.selectedTTSProviderId
-                            vm.updateSettings(
-                                settings.copy(
-                                    ttsProviders = newProviders,
-                                    selectedTTSProviderId = newSelectedId
-                                )
-                            )
-                        }
+            SecondaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+                containerColor = CustomColors.topBarColors.containerColor
+            ) {
+                Tab(
+                    selected = pagerState.currentPage == 0,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    text = { Text("TTS") }
+                )
+                Tab(
+                    selected = pagerState.currentPage == 1,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                    text = { Text("ASR") }
+                )
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) { page ->
+                when (page) {
+                    0 -> TTSProviderList(
+                        settings = settings,
+                        onUpdateSettings = vm::updateSettings,
+                        onEdit = { editingTTSProvider = it }
+                    )
+
+                    1 -> ASRProviderList(
+                        settings = settings,
+                        onUpdateSettings = vm::updateSettings,
+                        onEdit = { editingASRProvider = it }
                     )
                 }
             }
@@ -175,13 +170,13 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
     }
 
     // Edit TTS Provider Bottom Sheet
-    editingProvider?.let { provider ->
+    editingTTSProvider?.let { provider ->
         val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         var currentProvider by remember(provider) { mutableStateOf(provider) }
 
         ModalBottomSheet(
             onDismissRequest = {
-                editingProvider = null
+                editingTTSProvider = null
             },
             sheetState = bottomSheetState,
             dragHandle = {
@@ -214,7 +209,7 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
                 ) {
                     TextButton(
                         onClick = {
-                            editingProvider = null
+                            editingTTSProvider = null
                         },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -227,13 +222,232 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
                                 if (it.id == provider.id) currentProvider else it
                             }
                             vm.updateSettings(settings.copy(ttsProviders = newProviders))
-                            editingProvider = null
+                            editingTTSProvider = null
                         },
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(stringResource(R.string.chat_page_save))
                     }
                 }
+            }
+        }
+    }
+
+    editingASRProvider?.let { provider ->
+        val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        var currentProvider by remember(provider) { mutableStateOf(provider) }
+
+        ModalBottomSheet(
+            onDismissRequest = {
+                editingASRProvider = null
+            },
+            sheetState = bottomSheetState,
+            dragHandle = {
+                BottomSheetDefaults.DragHandle()
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .fillMaxHeight(0.8f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Edit ASR Provider",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+
+                ASRProviderConfigure(
+                    setting = currentProvider,
+                    onValueChange = { newState ->
+                        currentProvider = newState
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            editingASRProvider = null
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+
+                    TextButton(
+                        onClick = {
+                            val newProviders = settings.asrProviders.map {
+                                if (it.id == provider.id) currentProvider else it
+                            }
+                            vm.updateSettings(settings.copy(asrProviders = newProviders))
+                            editingASRProvider = null
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.chat_page_save))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TTSProviderList(
+    settings: Settings,
+    onUpdateSettings: (Settings) -> Unit,
+    onEdit: (TTSProviderSetting) -> Unit
+) {
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val newProviders = settings.ttsProviders.toMutableList().apply {
+            add(to.index, removeAt(from.index))
+        }
+        onUpdateSettings(settings.copy(ttsProviders = newProviders))
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        state = lazyListState
+    ) {
+        items(settings.ttsProviders, key = { it.id }) { provider ->
+            ReorderableItem(
+                state = reorderableState,
+                key = provider.id
+            ) { isDragging ->
+                TTSProviderItem(
+                    modifier = Modifier
+                        .scale(if (isDragging) 0.95f else 1f)
+                        .fillMaxWidth(),
+                    provider = provider,
+                    dragHandle = {
+                        val haptic = LocalHapticFeedback.current
+                        IconButton(
+                            onClick = {},
+                            modifier = Modifier
+                                .longPressDraggableHandle(
+                                    onDragStarted = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                    },
+                                    onDragStopped = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                    }
+                                )
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.DragDropHorizontal,
+                                contentDescription = null
+                            )
+                        }
+                    },
+                    isSelected = settings.selectedTTSProviderId == provider.id,
+                    onSelect = {
+                        onUpdateSettings(settings.copy(selectedTTSProviderId = provider.id))
+                    },
+                    onEdit = {
+                        onEdit(provider)
+                    },
+                    onDelete = {
+                        val newProviders = settings.ttsProviders - provider
+                        val newSelectedId =
+                            if (settings.selectedTTSProviderId == provider.id) DEFAULT_SYSTEM_TTS_ID else settings.selectedTTSProviderId
+                        onUpdateSettings(
+                            settings.copy(
+                                ttsProviders = newProviders,
+                                selectedTTSProviderId = newSelectedId
+                            )
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ASRProviderList(
+    settings: Settings,
+    onUpdateSettings: (Settings) -> Unit,
+    onEdit: (ASRProviderSetting) -> Unit
+) {
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val newProviders = settings.asrProviders.toMutableList().apply {
+            add(to.index, removeAt(from.index))
+        }
+        onUpdateSettings(settings.copy(asrProviders = newProviders))
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        state = lazyListState
+    ) {
+        items(settings.asrProviders, key = { it.id }) { provider ->
+            ReorderableItem(
+                state = reorderableState,
+                key = provider.id
+            ) { isDragging ->
+                ASRProviderItem(
+                    modifier = Modifier
+                        .scale(if (isDragging) 0.95f else 1f)
+                        .fillMaxWidth(),
+                    provider = provider,
+                    dragHandle = {
+                        val haptic = LocalHapticFeedback.current
+                        IconButton(
+                            onClick = {},
+                            modifier = Modifier
+                                .longPressDraggableHandle(
+                                    onDragStarted = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                    },
+                                    onDragStopped = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                    }
+                                )
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.DragDropHorizontal,
+                                contentDescription = null
+                            )
+                        }
+                    },
+                    isSelected = settings.selectedASRProviderId == provider.id,
+                    onSelect = {
+                        onUpdateSettings(settings.copy(selectedASRProviderId = provider.id))
+                    },
+                    onEdit = {
+                        onEdit(provider)
+                    },
+                    onDelete = {
+                        val newProviders = settings.asrProviders - provider
+                        val newSelectedId =
+                            if (settings.selectedASRProviderId == provider.id) {
+                                newProviders.firstOrNull()?.id
+                            } else {
+                                settings.selectedASRProviderId
+                            }
+                        onUpdateSettings(
+                            settings.copy(
+                                asrProviders = newProviders,
+                                selectedASRProviderId = newSelectedId
+                            )
+                        )
+                    }
+                )
             }
         }
     }
@@ -277,6 +491,100 @@ private fun AddTTSProviderButton(onAdd: (TTSProviderSetting) -> Unit) {
                 )
 
                 TTSProviderConfigure(
+                    setting = currentProvider,
+                    onValueChange = { newState ->
+                        currentProvider = newState
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            showBottomSheet = false
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+
+                    TextButton(
+                        onClick = {
+                            onAdd(currentProvider)
+                            showBottomSheet = false
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.setting_tts_page_add))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
+    var showBottomSheet by remember { mutableStateOf(false) }
+    var showTypeMenu by remember { mutableStateOf(false) }
+    var currentProvider: ASRProviderSetting by remember { mutableStateOf(ASRProviderSetting.OpenAIRealtime()) }
+
+    Box {
+        IconButton(
+            onClick = { showTypeMenu = true }
+        ) {
+            Icon(HugeIcons.Add01, "Add ASR Provider")
+        }
+        DropdownMenu(
+            expanded = showTypeMenu,
+            onDismissRequest = { showTypeMenu = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("OpenAI Realtime") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.OpenAIRealtime()
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("DashScope") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.DashScope()
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
+        }
+    }
+
+    if (showBottomSheet) {
+        val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                showBottomSheet = false
+            },
+            sheetState = bottomSheetState,
+            dragHandle = {
+                BottomSheetDefaults.DragHandle()
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .fillMaxHeight(0.8f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Add ASR Provider",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+
+                ASRProviderConfigure(
                     setting = currentProvider,
                     onValueChange = { newState ->
                         currentProvider = newState
@@ -451,6 +759,122 @@ private fun TTSProviderItem(
                                 Icon(HugeIcons.Delete01, contentDescription = null)
                             },
                             enabled = provider.id != DEFAULT_SYSTEM_TTS_ID
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ASRProviderItem(
+    provider: ASRProviderSetting,
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    dragHandle: @Composable () -> Unit,
+    onSelect: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDropdownMenu by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                CustomColors.listItemColors.containerColor
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AutoAIIcon(
+                    name = provider.name.ifEmpty { "ASR" },
+                    modifier = Modifier.size(32.dp)
+                )
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = provider.name.ifEmpty { "ASR" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+
+                    Text(
+                        text = when (provider) {
+                            is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
+                            is ASRProviderSetting.DashScope -> "DashScope"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                RadioButton(
+                    selected = isSelected,
+                    onClick = onSelect
+                )
+
+                dragHandle()
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isSelected) {
+                    Tag(type = TagType.SUCCESS) {
+                        Text(stringResource(R.string.setting_tts_page_selected))
+                    }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                IconButton(
+                    onClick = { showDropdownMenu = true }
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Tools,
+                        contentDescription = stringResource(R.string.setting_tts_page_more_options_content_description)
+                    )
+                    DropdownMenu(
+                        expanded = showDropdownMenu,
+                        onDismissRequest = { showDropdownMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.edit)) },
+                            onClick = {
+                                showDropdownMenu = false
+                                onEdit()
+                            },
+                            leadingIcon = {
+                                Icon(HugeIcons.PencilEdit01, contentDescription = null)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.delete)) },
+                            onClick = {
+                                showDropdownMenu = false
+                                onDelete()
+                            },
+                            leadingIcon = {
+                                Icon(HugeIcons.Delete01, contentDescription = null)
+                            }
                         )
                     }
                 }

@@ -439,6 +439,8 @@
   <string name="permission_go_to_settings">Go to Setting</string>
   <string name="permission_local_network">Local Network</string>
   <string name="permission_local_network_desc">Allow the web server to be accessed from devices on the same local network</string>
+  <string name="permission_microphone">Microphone</string>
+  <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
@@ -984,4 +986,3 @@
   <string name="assistant_page_temperature_warning">Usually 1. Not recommended to change for reasoning models.</string>
   <string name="chat_page_check_title_model_settings">Check title model settings</string>
 </resources>
-

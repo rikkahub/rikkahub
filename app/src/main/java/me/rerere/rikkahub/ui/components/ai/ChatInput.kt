@@ -9,6 +9,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -53,6 +58,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
@@ -75,6 +81,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -117,6 +124,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Files02
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.Mic01
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Package01
@@ -124,6 +132,8 @@ import me.rerere.hugeicons.stroke.Video01
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.asr.ASRState
+import me.rerere.rikkahub.data.asr.ASRStatus
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -138,6 +148,8 @@ import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
+import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -209,6 +221,16 @@ fun ChatInput(
 
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
+    val asr = LocalASRState.current
+    val asrState by asr.state.collectAsState()
+    val asrPermission = rememberPermissionState(PermissionRecordAudio)
+    PermissionManager(permissionState = asrPermission)
+    var asrBaseText by remember { mutableStateOf("") }
+    LaunchedEffect(asrState.errorMessage) {
+        asrState.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            toaster.show(message = message, type = ToastType.Error)
+        }
+    }
 
     // Camera launcher
     var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
@@ -483,6 +505,26 @@ fun ChatInput(
                                     },
                                 )
                             }
+
+                            if (asrState.isAvailable || asrState.isRecording) {
+                                AsrButton(
+                                    state = asrState,
+                                    onClick = {
+                                        if (asrState.isRecording) {
+                                            asr.stop()
+                                        } else if (!asrPermission.allRequiredPermissionsGranted) {
+                                            asrPermission.requestPermissions()
+                                        } else {
+                                            asrBaseText = state.textContent.text.toString()
+                                            asr.start { transcript ->
+                                                val spacer =
+                                                    if (asrBaseText.isBlank() || transcript.isBlank()) "" else " "
+                                                state.setMessageText(asrBaseText + spacer + transcript)
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
 
                         ActionIconButton(
@@ -612,6 +654,100 @@ private fun ActionIconButton(
             modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
         ) {
             content()
+        }
+    }
+}
+
+@Composable
+private fun AsrButton(
+    state: ASRState,
+    onClick: () -> Unit,
+) {
+    val isIdle = state.status == ASRStatus.Idle
+    val containerColor = when (state.status) {
+        ASRStatus.Idle -> Color.Transparent
+        ASRStatus.Connecting -> MaterialTheme.colorScheme.secondaryContainer
+        ASRStatus.Listening -> MaterialTheme.colorScheme.errorContainer
+        ASRStatus.Stopping -> MaterialTheme.colorScheme.tertiaryContainer
+        ASRStatus.Error -> MaterialTheme.colorScheme.errorContainer
+    }
+    val contentColor = when (state.status) {
+        ASRStatus.Idle -> LocalContentColor.current
+        ASRStatus.Connecting -> MaterialTheme.colorScheme.onSecondaryContainer
+        ASRStatus.Listening -> MaterialTheme.colorScheme.onErrorContainer
+        ASRStatus.Stopping -> MaterialTheme.colorScheme.onTertiaryContainer
+        ASRStatus.Error -> MaterialTheme.colorScheme.onErrorContainer
+    }
+    val isListening = state.status == ASRStatus.Listening
+    val pulseAlpha = if (isListening) {
+        val transition = rememberInfiniteTransition(label = "asr_pulse")
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.3f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "asr_pulse_alpha"
+        ).value
+    } else {
+        1f
+    }
+    val statusText = when (state.status) {
+        ASRStatus.Idle -> ""
+        ASRStatus.Connecting -> "连接中"
+        ASRStatus.Listening -> "识别中"
+        ASRStatus.Stopping -> "停止中"
+        ASRStatus.Error -> "错误"
+    }
+
+    Surface(
+        onClick = onClick,
+        modifier = if (isIdle) {
+            Modifier.size(36.dp)
+        } else {
+            Modifier
+                .height(36.dp)
+                .widthIn(min = 36.dp)
+        },
+        shape = CircleShape,
+        tonalElevation = if (isIdle) 0.dp else 2.dp,
+        color = containerColor,
+    ) {
+        if (isIdle) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Mic01,
+                    contentDescription = "ASR",
+                    tint = contentColor
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Mic01,
+                    contentDescription = "ASR",
+                    tint = contentColor,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .graphicsLayer { alpha = pulseAlpha }
+                )
+                Text(
+                    text = statusText,
+                    color = contentColor,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
