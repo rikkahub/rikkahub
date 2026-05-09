@@ -160,6 +160,8 @@ class OpenAIRealtimeASRController(
                 while (isActive) {
                     val read = recorder.read(buffer, 0, buffer.size)
                     if (read > 0) {
+                        val amplitude = calculateRmsAmplitude(buffer, read)
+                        _state.update { it.copy(amplitudes = it.amplitudes.appendAmplitude(amplitude)) }
                         val encoded = Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP)
                         val event = JSONObject()
                             .put("type", "input_audio_buffer.append")

@@ -266,6 +266,8 @@ class VolcengineASRController(
                 while (isActive) {
                     val read = recorder.read(buffer, 0, buffer.size)
                     if (read > 0) {
+                        val amplitude = calculateRmsAmplitude(buffer, read)
+                        _state.update { it.copy(amplitudes = it.amplitudes.appendAmplitude(amplitude)) }
                         val frame = buildFrame(
                             messageType = MSG_AUDIO_ONLY,
                             flags = 0x00,

@@ -8,12 +8,16 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -81,7 +85,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -664,90 +667,124 @@ private fun AsrButton(
     onClick: () -> Unit,
 ) {
     val isIdle = state.status == ASRStatus.Idle
-    val containerColor = when (state.status) {
+    val targetContainerColor = when (state.status) {
         ASRStatus.Idle -> Color.Transparent
         ASRStatus.Connecting -> MaterialTheme.colorScheme.secondaryContainer
-        ASRStatus.Listening -> MaterialTheme.colorScheme.errorContainer
+        ASRStatus.Listening -> MaterialTheme.colorScheme.primaryContainer
         ASRStatus.Stopping -> MaterialTheme.colorScheme.tertiaryContainer
         ASRStatus.Error -> MaterialTheme.colorScheme.errorContainer
     }
-    val contentColor = when (state.status) {
+    val targetContentColor = when (state.status) {
         ASRStatus.Idle -> LocalContentColor.current
         ASRStatus.Connecting -> MaterialTheme.colorScheme.onSecondaryContainer
-        ASRStatus.Listening -> MaterialTheme.colorScheme.onErrorContainer
+        ASRStatus.Listening -> MaterialTheme.colorScheme.onPrimaryContainer
         ASRStatus.Stopping -> MaterialTheme.colorScheme.onTertiaryContainer
         ASRStatus.Error -> MaterialTheme.colorScheme.onErrorContainer
     }
-    val isListening = state.status == ASRStatus.Listening
-    val pulseAlpha = if (isListening) {
-        val transition = rememberInfiniteTransition(label = "asr_pulse")
-        transition.animateFloat(
-            initialValue = 1f,
-            targetValue = 0.3f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(600),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "asr_pulse_alpha"
-        ).value
-    } else {
-        1f
-    }
-    val statusText = when (state.status) {
-        ASRStatus.Idle -> ""
-        ASRStatus.Connecting -> "连接中"
-        ASRStatus.Listening -> "识别中"
-        ASRStatus.Stopping -> "停止中"
-        ASRStatus.Error -> "错误"
-    }
+    val containerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(300),
+        label = "asr_container"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = targetContentColor,
+        animationSpec = tween(300),
+        label = "asr_content"
+    )
 
     Surface(
         onClick = onClick,
-        modifier = if (isIdle) {
-            Modifier.size(36.dp)
-        } else {
-            Modifier
-                .height(36.dp)
-                .widthIn(min = 36.dp)
-        },
+        modifier = Modifier
+            .height(36.dp)
+            .widthIn(min = 36.dp)
+            .animateContentSize(animationSpec = spring(stiffness = 500f)),
         shape = CircleShape,
         tonalElevation = if (isIdle) 0.dp else 2.dp,
         color = containerColor,
     ) {
-        if (isIdle) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = HugeIcons.Mic01,
-                    contentDescription = "ASR",
-                    tint = contentColor
-                )
-            }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .padding(horizontal = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = HugeIcons.Mic01,
-                    contentDescription = "ASR",
-                    tint = contentColor,
+        AnimatedContent(
+            targetState = isIdle,
+            transitionSpec = {
+                (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
+                    .using(SizeTransform(clip = false))
+            },
+            label = "asr_content_switch"
+        ) { idle ->
+            if (idle) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Mic01,
+                        contentDescription = "ASR",
+                        tint = contentColor
+                    )
+                }
+            } else {
+                Row(
                     modifier = Modifier
-                        .size(16.dp)
-                        .graphicsLayer { alpha = pulseAlpha }
-                )
-                Text(
-                    text = statusText,
-                    color = contentColor,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1
-                )
+                        .fillMaxHeight()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AudioLevelDots(
+                        amplitudes = state.amplitudes,
+                        color = contentColor,
+                    )
+                    Text(
+                        text = "Stop",
+                        color = contentColor,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun AudioLevelDots(
+    amplitudes: List<Float>,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val recent = amplitudes.takeLast(3)
+    val values = when {
+        recent.size >= 3 -> recent
+        recent.size == 2 -> listOf(recent[0] * 0.6f, recent[1], recent[1] * 0.8f)
+        recent.size == 1 -> listOf(recent[0] * 0.5f, recent[0], recent[0] * 0.7f)
+        else -> listOf(0f, 0f, 0f)
+    }
+
+    val barWidth = 3.5.dp
+    val minHeight = 4.dp
+    val maxHeight = 16.dp
+
+    Row(
+        modifier = modifier.height(maxHeight),
+        horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        values.forEachIndexed { index, amp ->
+            val animatedAmp by animateFloatAsState(
+                targetValue = amp.coerceIn(0f, 1f),
+                animationSpec = spring(
+                    dampingRatio = 0.6f,
+                    stiffness = 400f,
+                ),
+                label = "bar_$index"
+            )
+            val barHeight = minHeight + (maxHeight - minHeight) * animatedAmp
+            Box(
+                modifier = Modifier
+                    .width(barWidth)
+                    .height(barHeight)
+                    .clip(RoundedCornerShape(barWidth / 2))
+                    .background(color)
+            )
         }
     }
 }

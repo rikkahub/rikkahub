@@ -13,6 +13,7 @@ data class ASRState(
     val isAvailable: Boolean = false,
     val transcript: String = "",
     val errorMessage: String? = null,
+    val amplitudes: List<Float> = emptyList(),
 ) {
     val isRecording: Boolean
         get() = status == ASRStatus.Connecting || status == ASRStatus.Listening || status == ASRStatus.Stopping
