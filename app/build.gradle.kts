@@ -115,6 +115,18 @@ android {
             useLegacyPackaging = true
         }
     }
+    lint {
+        // FullBackupContent insists every <exclude> path lives under a previously
+        // <include>'d root. Our backup_rules.xml + data_extraction_rules.xml use
+        // include="upload/" + explicit excludes for databases / sharedpref /
+        // datastore/ / known_hosts / browser-profile/ / local-models/ as
+        // belt-and-suspenders defence: if anyone later adds a broader <include>
+        // (e.g. domain="root"), the excludes still keep credentials and
+        // multi-GB local LLM weights off the cloud-backup path. Lint reads that
+        // pattern as redundant; the runtime accepts it. Keep the rules; mute
+        // the check.
+        disable.add("FullBackupContent")
+    }
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
         compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")

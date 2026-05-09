@@ -26,3 +26,6 @@ app/google-services.json
 # Release artifacts staged for GitHub release uploads — debug-signed APKs are
 # regenerated each release; no need to track them in git.
 /release-artifacts/
+
+# Release signing keystore — never commit
+/rikkahub-release.jks

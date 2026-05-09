@@ -45,3 +45,52 @@
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keep class com.fasterxml.jackson.** { *; }
 -keep class com.auth0.jwt.** { *; }
+
+# JSch: SSH client loads crypto providers (com.jcraft.jsch.jce.*) reflectively
+# from a static init table, so R8 can't see the dependency at compile time and
+# strips them — release builds then crash with ClassNotFoundException on the
+# first ssh_exec. Keep the whole package; it's small.
+-keep class com.jcraft.jsch.** { *; }
+
+# JSch ships optional integrations that reference desktop/JVM-only packages
+# never present on Android — Pageant (Windows SSH agent → JNA + win32),
+# Log4j2 logger backend, Kerberos GSS-API, and junixsocket Unix domain sockets.
+# Our SSH tool path uses password/keyfile auth over TCP, so none of these are
+# reachable at runtime. Tell R8 not to fail the build over the missing refs.
+-dontwarn com.sun.jna.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn org.ietf.jgss.**
+-dontwarn org.newsclub.net.unix.**
+
+# LiteRT-LM (com.google.ai.edge.litertlm:litertlm-android): the native side does
+# JNI GetMethodID lookups by name against the Kotlin SamplerConfig / Conversation
+# / Engine / etc. classes to read their fields. R8 strips/renames those methods
+# on release, JNI gets a null jmethodID, and the next CallIntMethodV aborts the
+# process with "JNI DETECTED ERROR IN APPLICATION: mid == null" the first time
+# the user sends a message to a local LiteRT model. Keep the whole package; the
+# Google AI Edge SDK is small and the cost is negligible vs. the crash.
+-keep class com.google.ai.edge.litertlm.** { *; }
+-keep class com.google.ai.edge.litert.** { *; }
+
+# requery sqlite-android (forked as com.github.rikkahub:sqlite-android, used for the
+# FTS-enabled SQLite that backs message search). Same shape as JSch + LiteRT-LM —
+# the native SQLite shim does GetMethodID lookups by name on
+# io.requery.android.database.*. JitPack-built AARs can ship inconsistent
+# consumer-rules; explicit keeps make the next FTS query / DB open survive R8.
+# Plus: DatabaseUtil.kt reflects on CursorWindow.sDefaultCursorWindowSize at startup
+# to set the 32MB cursor window — R8 renaming that field would silently break it.
+-keep class io.requery.android.database.** { *; }
+-keepclasseswithmembers class io.requery.android.database.** {
+    native <methods>;
+}
+-keepclassmembers class io.requery.android.database.CursorWindow {
+    static int sDefaultCursorWindowSize;
+}
+
+# SLF4J 2.x service-loader binding. Without these rules the ServiceLoader<SLF4JServiceProvider>
+# lookup can return empty in release (R8 keeps the META-INF/services file but the implementing
+# class itself gets stripped) — Ktor / jmDNS / cron-utils logs then disappear, making future
+# bug reports much harder. Cheap insurance.
+-keep class * implements org.slf4j.spi.SLF4JServiceProvider
+-keepclassmembers class * implements org.slf4j.spi.SLF4JServiceProvider { <init>(); }
+-keep class uk.uuid.slf4j.android.** { *; }
