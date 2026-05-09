@@ -84,7 +84,13 @@ fun AssistantLocalToolPage(id: String) {
         AssistantLocalToolContent(
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
-            onUpdate = { vm.update(it) }
+            onUpdate = { vm.update(it) },
+            // Transform-based path used by the per-tool toggles. Each tap runs inside
+            // SettingsStore.update's mutex against the genuinely-current Assistant, so
+            // rapid taps no longer race + clobber each other (was: tap A then B then C
+            // could land with only C persisted because each tap snapshotted the same
+            // pre-A Assistant from `assistant.value`).
+            onUpdateAssistant = { transform -> vm.updateAssistant(transform) },
         )
     }
 }
@@ -93,15 +99,19 @@ fun AssistantLocalToolPage(id: String) {
 private fun AssistantLocalToolContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
-    onUpdate: (Assistant) -> Unit
+    onUpdate: (Assistant) -> Unit,
+    onUpdateAssistant: ((Assistant) -> Assistant) -> Unit,
 ) {
     fun toggleLocalTool(option: LocalToolOption, enabled: Boolean) {
-        val newLocalTools = if (enabled) {
-            assistant.localTools + option
-        } else {
-            assistant.localTools - option
+        // Use the transform path so rapid taps (especially through a permission-grant
+        // round-trip to system Settings) all serialise against the actual current state
+        // instead of whatever stale snapshot the recomposition was holding.
+        onUpdateAssistant { current ->
+            current.copy(
+                localTools = if (enabled) current.localTools + option
+                else current.localTools - option,
+            )
         }
-        onUpdate(assistant.copy(localTools = newLocalTools))
     }
 
     // Setup-hint popups for toggles whose successful enable depends on user setup the

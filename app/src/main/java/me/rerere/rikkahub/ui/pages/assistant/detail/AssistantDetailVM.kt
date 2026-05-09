@@ -167,6 +167,33 @@ class AssistantDetailVM(
         }
     }
 
+    /**
+     * Atomic transform-based update for the active assistant. Use this for any rapid
+     * mutator (per-tool toggles, per-skill toggles, per-MCP toggles) where two taps in
+     * quick succession would otherwise both snapshot the SAME stale Assistant from
+     * `assistant.value` — last writer winning would silently drop the earlier toggle.
+     *
+     * The transform runs INSIDE [SettingsStore.update]'s mutex so concurrent calls
+     * serialise; each transform sees the result of the previous one. Avatar / background
+     * cleanup runs against the genuinely-prior assistant (read inside the lock).
+     */
+    fun updateAssistant(transform: (Assistant) -> Assistant) {
+        viewModelScope.launch {
+            settingsStore.update { current ->
+                val prior = current.assistants.firstOrNull { it.id == assistantId }
+                    ?: return@update current
+                val next = transform(prior)
+                checkAvatarDelete(old = prior, new = next)
+                checkBackgroundDelete(old = prior, new = next)
+                current.copy(
+                    assistants = current.assistants.map {
+                        if (it.id == assistantId) next else it
+                    }
+                )
+            }
+        }
+    }
+
     fun addMemory(memory: AssistantMemory) {
         viewModelScope.launch {
             val memoryAssistantId = if (assistant.value.useGlobalMemory) {

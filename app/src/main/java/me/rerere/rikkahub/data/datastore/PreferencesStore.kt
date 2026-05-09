@@ -15,8 +15,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.decodeFromJsonElement
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
@@ -51,6 +55,37 @@ import org.koin.core.component.get
 import kotlin.uuid.Uuid
 
 private const val TAG = "PreferencesStore"
+
+/**
+ * Per-entry tolerant decode for the persisted `providers` list.
+ *
+ * Why this exists: the providers list is stored in DataStore as a single JSON array of
+ * polymorphic [ProviderSetting] entries. A single-shot `decodeFromString<List<ProviderSetting>>`
+ * throws on the entire list as soon as one element has an unknown polymorphic discriminator.
+ *
+ * Concrete trigger that motivated this: the never-shipped Phase-22A scaffolding seeded a
+ * `"type":"local_llamacpp"` entry into DEFAULT_PROVIDERS for early test installs. Deleting
+ * the `LlamaCppLocal` subclass would otherwise make decode-of-list throw on those entries
+ * → user loses ALL their saved providers (API keys, custom models, the lot).
+ *
+ * Per-entry decode lets surviving entries land while the unknown one is logged and skipped.
+ * Keep this even after `local_llamacpp` is fully gone — it's good hygiene for any future
+ * polymorphic schema change (renamed types, removed types, etc).
+ */
+private fun decodeProvidersTolerant(raw: String): List<ProviderSetting> {
+    if (raw.isBlank()) return emptyList()
+    val array = runCatching {
+        JsonInstant.parseToJsonElement(raw) as? JsonArray
+    }.getOrNull() ?: return emptyList()
+    return array.mapNotNull { element ->
+        try {
+            JsonInstant.decodeFromJsonElement<ProviderSetting>(element)
+        } catch (e: SerializationException) {
+            Log.w(TAG, "Skipping unrecognised provider entry during decode: ${e.message}")
+            null
+        }
+    }
+}
 
 private val Context.settingsStore by preferencesDataStore(
     name = "settings",
@@ -182,7 +217,7 @@ class SettingsStore(
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
+                providers = decodeProvidersTolerant(preferences[PROVIDERS] ?: "[]"),
                 deletedBuiltInProviderIds = preferences[DELETED_BUILTIN_PROVIDER_IDS]
                     ?.let { raw ->
                         runCatching {
@@ -254,27 +289,16 @@ class SettingsStore(
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
                 if (defaultProvider.id in deletedDefaultIds) return@forEach
                 if (providers.none { it.id == defaultProvider.id }) {
-                    // On-device built-in providers (AICore, LiteRT, llama.cpp) are pinned
-                    // to the top of the list in the order they appear in DEFAULT_PROVIDERS.
-                    // Remote provider defaults continue to append at the end so existing
-                    // users see no reordering of their configured remote providers.
+                    // On-device built-in providers (AICore, LiteRT) are pinned to the top of
+                    // the list in the order they appear in DEFAULT_PROVIDERS. Remote provider
+                    // defaults continue to append at the end so existing users see no
+                    // reordering of their configured remote providers.
                     when (defaultProvider) {
                         is ProviderSetting.AICore -> providers.add(0, defaultProvider.copyProvider())
                         is ProviderSetting.LiteRtLocal -> {
                             // Insert right after AICore, or at 0 if AICore is absent.
                             // indexOfFirst returns -1 when absent; -1 + 1 = 0, so insert at 0.
                             val insertAt = providers.indexOfFirst { it is ProviderSetting.AICore } + 1
-                            providers.add(insertAt, defaultProvider.copyProvider())
-                        }
-                        is ProviderSetting.LlamaCppLocal -> {
-                            // Insert right after LiteRT (or after AICore if LiteRT is absent).
-                            val afterLiteRt = providers.indexOfFirst { it is ProviderSetting.LiteRtLocal }
-                            val afterAiCore = providers.indexOfFirst { it is ProviderSetting.AICore }
-                            val insertAt = when {
-                                afterLiteRt >= 0 -> afterLiteRt + 1
-                                afterAiCore >= 0 -> afterAiCore + 1
-                                else -> 0
-                            }
                             providers.add(insertAt, defaultProvider.copyProvider())
                         }
                         else -> providers.add(defaultProvider.copyProvider())
@@ -344,10 +368,6 @@ class SettingsStore(
                         )
 
                         is ProviderSetting.LiteRtLocal -> provider.copy(
-                            models = provider.models.distinctBy { model -> model.id }
-                        )
-
-                        is ProviderSetting.LlamaCppLocal -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
                     }
@@ -451,8 +471,18 @@ class SettingsStore(
         }
     }
 
+    /** Serialises rapid-fire transform-based updates so concurrent callers don't race
+     *  each other. Without this lock, two `update {fn}` calls dispatched in quick
+     *  succession both snapshot `settingsFlow.value` BEFORE either has written, then
+     *  each writes its own delta off the same stale base — last writer wins, the
+     *  earlier change is silently dropped. The most-visible repro: rapid-fire taps on
+     *  per-assistant tool toggles where every other tap appeared to revert. */
+    private val transformLock = kotlinx.coroutines.sync.Mutex()
+
     suspend fun update(fn: (Settings) -> Settings) {
-        update(fn(settingsFlow.value))
+        transformLock.withLock {
+            update(fn(settingsFlow.value))
+        }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
