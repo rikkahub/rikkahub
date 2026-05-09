@@ -191,12 +191,14 @@ class TelegramBotClient(
         messageId: Long,
         text: String,
         parseMode: String? = null,
+        replyMarkup: JsonObject? = null,
     ): JsonObject? = try {
         call(shortClient, "editMessageText", buildJsonObject {
             put("chat_id", chatId)
             put("message_id", messageId)
             put("text", text)
             if (parseMode != null) put("parse_mode", parseMode)
+            if (replyMarkup != null) put("reply_markup", replyMarkup)
         }).jsonObject
     } catch (e: TelegramApiException) {
         // 400 with "message is not modified" / "message_too_long" — surface as null so the

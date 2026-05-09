@@ -1517,38 +1517,224 @@ class TelegramBotService : Service() {
     }
 
     /**
-     * Build the inline keyboard for the /model interactive picker. One button per model,
-     * one button per row so labels can include both the display name and the provider
-     * without truncation. The current model is marked ✅; others get ◯.
+     * Build the inline keyboard for the /model interactive picker — step 2 of the
+     * two-step flow (or the only step when only one provider is enabled). One button
+     * per model, one button per row, paginated at MODEL_PICKER_PAGE_SIZE.
      *
-     * Telegram caps callback_data at 64 bytes, but our model IDs can be longer than the
-     * "mdl:" prefix + remaining budget allows. ModelPickRegistry maps each visible button
-     * to a short numeric token, and the callback handler resolves the token back to the
-     * full model id. The registry is process-local and re-populated on every /model call.
+     * Telegram caps callback_data at 64 bytes; provider/model UUIDs would overflow with
+     * the prefix, so ModelPickRegistry / ProviderPickRegistry map them to short tokens.
+     * Caller manages registry lifetime: re-clear ModelPickRegistry between renders of
+     * different pages so stale model tokens from a prior page can't fire; ProviderPick
+     * tokens stay valid through the whole picker session so back/prev/next all resolve.
+     *
+     * Pagination row (when totalPages > 1) reuses the PROVIDER_CB_PREFIX with the form
+     * `mdp:<provider-token>:<page>` — handleProviderPickCallback parses both legacy
+     * `mdp:<token>` (page 0) and the paged form.
+     *
+     * @param allModels full chat-model list for the provider; the function slices to
+     *   the requested page and emits prev/next as needed.
+     * @param page 0-indexed page to render. Out-of-range gets clamped by the caller.
+     * @param providerToken token from ProviderPickRegistry — embedded in prev/next
+     *   callbacks. Must be valid throughout the picker session.
+     * @param showBackButton if true, append a "← Back to providers" row; only set
+     *   when there are 2+ enabled providers.
      */
     private fun buildModelKeyboard(
-        models: List<Pair<me.rerere.ai.provider.ProviderSetting, me.rerere.ai.provider.Model>>,
+        allModels: List<Pair<me.rerere.ai.provider.ProviderSetting, me.rerere.ai.provider.Model>>,
+        page: Int,
+        providerToken: String,
         currentModelId: kotlin.uuid.Uuid?,
+        showBackButton: Boolean,
     ): JsonObject {
-        // Reset the per-call mapping. The picker is single-use — once the user taps a
-        // button, the message is rewritten and old tokens are no longer reachable from
-        // the chat UI, so it's safe to wipe.
-        ModelPickRegistry.clear()
+        val pageStart = page * MODEL_PICKER_PAGE_SIZE
+        val pageSlice = allModels.drop(pageStart).take(MODEL_PICKER_PAGE_SIZE)
+        val hasPrev = page > 0
+        val hasNext = pageStart + MODEL_PICKER_PAGE_SIZE < allModels.size
         return buildJsonObject {
             put("inline_keyboard", buildJsonArray {
-                models.forEachIndexed { idx, (provider, model) ->
+                pageSlice.forEach { (_, model) ->
                     val name = model.displayName.ifBlank { model.modelId }
                     val marker = if (model.id == currentModelId) "✅" else "◯"
                     val token = ModelPickRegistry.register(model.id.toString())
                     addJsonArray {
                         addJsonObject {
-                            put("text", "$marker $name (${provider.name})")
+                            put("text", "$marker $name")
                             put("callback_data", "$MODEL_CB_PREFIX$token")
+                        }
+                    }
+                }
+                if (hasPrev || hasNext) {
+                    // Prev + Next on the SAME row so the keyboard stays compact even on
+                    // small phone screens; absent buttons are simply omitted (Telegram
+                    // renders the surviving button(s) full-width).
+                    addJsonArray {
+                        if (hasPrev) {
+                            addJsonObject {
+                                put("text", "← Prev")
+                                put("callback_data", "$PROVIDER_CB_PREFIX$providerToken:${page - 1}")
+                            }
+                        }
+                        if (hasNext) {
+                            addJsonObject {
+                                put("text", "Next →")
+                                put("callback_data", "$PROVIDER_CB_PREFIX$providerToken:${page + 1}")
+                            }
+                        }
+                    }
+                }
+                if (showBackButton) {
+                    addJsonArray {
+                        addJsonObject {
+                            put("text", "← Back to providers")
+                            put("callback_data", PROVIDER_CB_BACK)
                         }
                     }
                 }
             })
         }
+    }
+
+    /** Build the "Models in <provider> — page X/Y — tap to switch:" header. Page count
+     *  is suppressed when totalPages == 1 so users with small model lists don't see
+     *  noise. */
+    private fun buildModelPickerText(
+        currentHeader: String,
+        providerName: String?,  // null in single-provider mode (header doesn't repeat the name)
+        modelCount: Int,
+        page: Int,
+    ): String {
+        val totalPages = maxOf(1, (modelCount + MODEL_PICKER_PAGE_SIZE - 1) / MODEL_PICKER_PAGE_SIZE)
+        return buildString {
+            append(currentHeader)
+            if (providerName != null) {
+                append("Models in <b>")
+                append(TelegramHtmlRenderer.escape(providerName))
+                append("</b>")
+            } else {
+                append("Tap to switch")
+            }
+            if (totalPages > 1) {
+                append(" — page ")
+                append(page + 1)
+                append("/")
+                append(totalPages)
+            }
+            append(":")
+        }
+    }
+
+    /**
+     * Build the step-1 keyboard for the two-step /model picker — one button per
+     * enabled chat-model-bearing provider. Tapping fires PROVIDER_CB_PREFIX + token.
+     * Same registry/token rationale as [buildModelKeyboard]: provider IDs are UUIDs
+     * and would overflow callback_data when combined with the prefix.
+     */
+    private fun buildProviderKeyboard(
+        providers: List<me.rerere.ai.provider.ProviderSetting>,
+        currentProviderId: kotlin.uuid.Uuid?,
+    ): JsonObject {
+        return buildJsonObject {
+            put("inline_keyboard", buildJsonArray {
+                providers.forEach { p ->
+                    val marker = if (p.id == currentProviderId) "✅" else "◯"
+                    val token = ProviderPickRegistry.register(p.id.toString())
+                    addJsonArray {
+                        addJsonObject {
+                            put("text", "$marker ${p.name} (${p.models.count { it.type == me.rerere.ai.provider.ModelType.CHAT }})")
+                            put("callback_data", "$PROVIDER_CB_PREFIX$token")
+                        }
+                    }
+                }
+            })
+        }
+    }
+
+    /**
+     * Handle a /model provider-picker tap (step 1 of the two-step flow). Resolves the
+     * token → provider id, then re-renders the message in place as that provider's
+     * model list with a "← Back to providers" footer button. PROVIDER_CB_BACK fires
+     * a re-render in the other direction.
+     *
+     * This callback is the second-half of the issue-#1 fix — without it the user can't
+     * see any models after picking a provider.
+     */
+    private suspend fun handleProviderPickCallback(cq: TelegramCallbackQuery) {
+        val s = settingsStore.settingsFlow.value
+        val assistant = s.getCurrentAssistant()
+        val effectiveModelId = assistant.chatModelId ?: s.chatModelId
+        val enabledProviders = s.providers
+            .filter { it.enabled }
+            .filter { p -> p.models.any { it.type == me.rerere.ai.provider.ModelType.CHAT } }
+        val currentPair = enabledProviders
+            .flatMap { p -> p.models.map { p to it } }
+            .firstOrNull { (_, m) -> m.id == effectiveModelId }
+        val currentHeader = if (currentPair != null) {
+            val name = currentPair.second.displayName.ifBlank { currentPair.second.modelId }
+            "🧠 Current model: <b>${TelegramHtmlRenderer.escape(name)}</b> (${TelegramHtmlRenderer.escape(currentPair.first.name)})\n\n"
+        } else "🧠 Current model: <i>not set</i>\n\n"
+
+        if (cq.data == PROVIDER_CB_BACK) {
+            // Re-render step 1. Drop stale model tokens; keep provider tokens valid so
+            // the new keyboard's buttons still resolve.
+            ModelPickRegistry.clear()
+            client.answerCallbackQuery(cq.callbackQueryId, "")
+            try {
+                client.editMessageText(
+                    cq.chatId,
+                    cq.messageId,
+                    currentHeader + "Tap a provider to see its models:",
+                    parseMode = PARSE_MODE_HTML,
+                    replyMarkup = buildProviderKeyboard(enabledProviders, currentPair?.first?.id),
+                )
+            } catch (_: Throwable) {}
+            return
+        }
+
+        // Parse `mdp:<token>[:<page>]`. Page absent → 0 (initial provider tap).
+        // Page present → user tapped Prev/Next from the model list.
+        val rest = cq.data.removePrefix(PROVIDER_CB_PREFIX)
+        val parts = rest.split(":", limit = 2)
+        val token = parts[0]
+        val requestedPage = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        val providerId = ProviderPickRegistry.resolve(token) ?: run {
+            client.answerCallbackQuery(cq.callbackQueryId, "model picker has expired — send /model again")
+            return
+        }
+        val provider = enabledProviders.firstOrNull { it.id.toString() == providerId } ?: run {
+            client.answerCallbackQuery(cq.callbackQueryId, "provider no longer available")
+            return
+        }
+        val providerModels = provider.models
+            .filter { it.type == me.rerere.ai.provider.ModelType.CHAT }
+            .map { provider to it }
+        if (providerModels.isEmpty()) {
+            client.answerCallbackQuery(cq.callbackQueryId, "no chat models in ${provider.name}")
+            return
+        }
+        // Clamp page to valid range — guards against stale Prev/Next callbacks if the
+        // model list shrunk between renders (provider rotated keys, etc.).
+        val totalPages = maxOf(1, (providerModels.size + MODEL_PICKER_PAGE_SIZE - 1) / MODEL_PICKER_PAGE_SIZE)
+        val page = requestedPage.coerceIn(0, totalPages - 1)
+        // Reset model tokens — every page render mints fresh ones; old tokens from the
+        // previous page (or the previous provider) won't resolve.
+        ModelPickRegistry.clear()
+        client.answerCallbackQuery(cq.callbackQueryId, "")
+        val newText = buildModelPickerText(
+            currentHeader = currentHeader,
+            providerName = provider.name,
+            modelCount = providerModels.size,
+            page = page,
+        )
+        val keyboard = buildModelKeyboard(
+            allModels = providerModels,
+            page = page,
+            providerToken = token,
+            currentModelId = effectiveModelId,
+            showBackButton = enabledProviders.size >= 2,
+        )
+        try {
+            client.editMessageText(cq.chatId, cq.messageId, newText, parseMode = PARSE_MODE_HTML, replyMarkup = keyboard)
+        } catch (_: Throwable) {}
     }
 
     /**
@@ -1652,6 +1838,9 @@ class TelegramBotService : Service() {
         when {
             cq.data.startsWith(MODEL_CB_PREFIX) -> {
                 handleModelPickCallback(cq); return
+            }
+            cq.data.startsWith(PROVIDER_CB_PREFIX) -> {
+                handleProviderPickCallback(cq); return
             }
             cq.data.startsWith(APPROVAL_CB_PREFIX) -> {
                 // Falls through to the approval-handling block below.
@@ -2006,19 +2195,19 @@ class TelegramBotService : Service() {
     private suspend fun handleModelCommand(chatId: Long, arg: String) {
         val s = settingsStore.settingsFlow.value
         val assistant = s.getCurrentAssistant()
-        val allModels = s.providers
+        val enabledProviders = s.providers
             .filter { it.enabled }
+            .filter { p -> p.models.any { it.type == me.rerere.ai.provider.ModelType.CHAT } }
+        val allModels = enabledProviders
             .flatMap { p -> p.models.map { p to it } }
             .filter { (_, m) -> m.type == me.rerere.ai.provider.ModelType.CHAT }
 
         if (arg.isBlank()) {
-            // No arg — interactive picker. Send a message with one inline-keyboard button
-            // per chat model so the user can switch with a single tap. Same UX shape as
-            // the tool-approval flow. For larger model lists (>30) we cap and show a hint
-            // to filter via /model <substring> since Telegram inline keyboards get
-            // visually unwieldy past that.
-            val effectiveModelId = assistant.chatModelId ?: s.chatModelId
-            val current = allModels.firstOrNull { (_, m) -> m.id == effectiveModelId }
+            // No arg — interactive picker. Two-step when 2+ providers expose chat models
+            // (issue #1: a flat keyboard with all models hits Telegram's per-message
+            // inline-keyboard cap when the user has many providers × models, and the bot
+            // silently sends nothing). Single-provider stays one-step so a small setup
+            // doesn't pay the extra tap.
             if (allModels.isEmpty()) {
                 try {
                     client.sendMessage(
@@ -2028,28 +2217,54 @@ class TelegramBotService : Service() {
                 } catch (_: Throwable) {}
                 return
             }
-            val capped = allModels.take(MODEL_PICKER_BUTTON_CAP)
-            val text = buildString {
-                if (current != null) {
-                    val name = current.second.displayName.ifBlank { current.second.modelId }
-                    append("🧠 Current model: <b>")
-                    append(TelegramHtmlRenderer.escape(name))
-                    append("</b> (")
-                    append(TelegramHtmlRenderer.escape(current.first.name))
-                    append(")\n\n")
-                } else {
-                    append("🧠 Current model: <i>not set</i>\n\n")
-                }
-                append("Tap to switch:")
-                if (allModels.size > MODEL_PICKER_BUTTON_CAP) {
-                    append("\n\n<i>Showing ")
-                    append(MODEL_PICKER_BUTTON_CAP)
-                    append(" of ")
-                    append(allModels.size)
-                    append(" — use /model <substring> to filter.</i>")
-                }
+
+            // Reset both registries — fresh /model invocation invalidates any stale tokens
+            // from a prior picker still in scrollback.
+            ModelPickRegistry.clear()
+            ProviderPickRegistry.clear()
+
+            val effectiveModelId = assistant.chatModelId ?: s.chatModelId
+            val currentPair = allModels.firstOrNull { (_, m) -> m.id == effectiveModelId }
+            val currentHeader = if (currentPair != null) {
+                val name = currentPair.second.displayName.ifBlank { currentPair.second.modelId }
+                "🧠 Current model: <b>${TelegramHtmlRenderer.escape(name)}</b> (${TelegramHtmlRenderer.escape(currentPair.first.name)})\n\n"
+            } else "🧠 Current model: <i>not set</i>\n\n"
+
+            if (enabledProviders.size >= 2) {
+                // Step 1 — provider picker. Counts include all chat models per provider so
+                // the user can preview which provider has what without tapping in.
+                val text = currentHeader + "Tap a provider to see its models:"
+                val keyboard = buildProviderKeyboard(enabledProviders, currentPair?.first?.id)
+                try {
+                    client.sendMessage(
+                        chatId = chatId,
+                        text = text,
+                        parseMode = PARSE_MODE_HTML,
+                        replyMarkup = keyboard,
+                    )
+                } catch (_: Throwable) {}
+                return
             }
-            val keyboard = buildModelKeyboard(capped, effectiveModelId)
+
+            // Single-provider shortcut — skip the provider step but still register
+            // the provider so Prev/Next callbacks resolve. No back-to-providers row
+            // since there's nowhere to go back to.
+            val onlyProvider = enabledProviders.first()
+            val providerModels = allModels.filter { (p, _) -> p.id == onlyProvider.id }
+            val providerToken = ProviderPickRegistry.register(onlyProvider.id.toString())
+            val text = buildModelPickerText(
+                currentHeader = currentHeader,
+                providerName = null,  // header doesn't repeat the provider name in single-provider mode
+                modelCount = providerModels.size,
+                page = 0,
+            )
+            val keyboard = buildModelKeyboard(
+                allModels = providerModels,
+                page = 0,
+                providerToken = providerToken,
+                currentModelId = effectiveModelId,
+                showBackButton = false,
+            )
             try {
                 client.sendMessage(
                     chatId = chatId,
@@ -2432,6 +2647,14 @@ class TelegramBotService : Service() {
          *  some provider model_ids are too long to fit Telegram's 64-byte cap directly. */
         const val MODEL_CB_PREFIX: String = "mdl:"
 
+        /** Inline-keyboard prefix for the /model provider step (two-step picker). callback_data
+         *  is "mdp:<short-token>" → ProviderPickRegistry resolves to a provider id. A trailing
+         *  "mdp:back" entry re-shows the provider step from the model step. The two-step layout
+         *  exists because users with many models per provider blew past Telegram's per-message
+         *  inline-keyboard cap (#1) and got no response at all. */
+        const val PROVIDER_CB_PREFIX: String = "mdp:"
+        const val PROVIDER_CB_BACK: String = "mdp:back"
+
         /** Maximum file size for auto-downloading inbound non-photo attachments.
          *  Telegram allows up to 2 GB; we cap at 50 MB to avoid surprise storage use. */
         const val INBOUND_ATTACHMENT_SIZE_CAP_BYTES: Long = 50L * 1024 * 1024   // 50 MB
@@ -2440,9 +2663,12 @@ class TelegramBotService : Service() {
          *  this is exceeded. */
         private const val INBOUND_ATTACHMENT_INBOX_CAP_BYTES: Long = 500L * 1024 * 1024  // 500 MB
 
-        /** Max model buttons to render in a single picker. Beyond ~30 the inline keyboard
-         *  starts feeling cluttered; the picker text tells the user to /model <substring>. */
-        const val MODEL_PICKER_BUTTON_CAP: Int = 30
+        /** How many models to show per page in the /model picker. Issue #1 escalation:
+         *  one user reported a provider with ~256 models was rendered as a 30-row vertical
+         *  wall (the prior `MODEL_PICKER_BUTTON_CAP` truncated to 30 with no way to see
+         *  the rest from inside Telegram). 10 per page keeps the keyboard short and adds
+         *  prev/next navigation that scales to arbitrary model counts. */
+        const val MODEL_PICKER_PAGE_SIZE: Int = 10
 
         /**
          * Process-scoped registry mapping short numeric tokens to full model IDs. The
@@ -2457,6 +2683,24 @@ class TelegramBotService : Service() {
             fun register(modelId: String): String {
                 val token = nextId.incrementAndGet().toString()
                 byToken[token] = modelId
+                return token
+            }
+            fun resolve(token: String): String? = byToken[token]
+            fun clear() { byToken.clear() }
+        }
+
+        /**
+         * Process-scoped registry mapping short numeric tokens to provider IDs for the
+         * /model two-step picker. Same shape and rationale as ModelPickRegistry — provider
+         * IDs are UUIDs and would overflow Telegram's 64-byte callback_data cap when
+         * combined with the prefix. Reset on every fresh /model invocation.
+         */
+        object ProviderPickRegistry {
+            private val byToken = java.util.concurrent.ConcurrentHashMap<String, String>()
+            private val nextId = java.util.concurrent.atomic.AtomicInteger(0)
+            fun register(providerId: String): String {
+                val token = nextId.incrementAndGet().toString()
+                byToken[token] = providerId
                 return token
             }
             fun resolve(token: String): String? = byToken[token]
