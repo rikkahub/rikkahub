@@ -989,5 +989,36 @@
   <string name="speech_tab_asr">Распознавание речи</string>
   <string name="asr_button_content_description">Распознавание речи</string>
   <string name="asr_button_stop">Стоп</string>
+  <string name="speech_page_title">Речь</string>
+  <string name="setting_asr_page_edit_provider">Изменить поставщика ASR</string>
+  <string name="setting_asr_page_add_provider">Добавить поставщика ASR</string>
+  <string name="setting_asr_configure_provider_type">Тип поставщика</string>
+  <string name="setting_asr_configure_provider_type_desc">Поставщик распознавания речи в реальном времени</string>
+  <string name="setting_asr_configure_name">Имя</string>
+  <string name="setting_asr_configure_name_desc">Пользовательское имя для этого поставщика ASR</string>
+  <string name="setting_asr_configure_api_key">Ключ API</string>
+  <string name="setting_asr_configure_websocket_url">URL WebSocket</string>
+  <string name="setting_asr_configure_model">Модель</string>
+  <string name="setting_asr_configure_model_desc">Модель транскрибирования в реальном времени</string>
+  <string name="setting_asr_configure_language">Язык</string>
+  <string name="setting_asr_configure_language_iso_desc">Необязательный код языка ISO, например zh или en</string>
+  <string name="setting_asr_configure_language_code_desc">Необязательный код языка, например zh-CN, en-US, ja-JP</string>
+  <string name="setting_asr_configure_prompt">Подсказка</string>
+  <string name="setting_asr_configure_prompt_desc">Необязательная подсказка для имён, терминов или форматирования</string>
+  <string name="setting_asr_configure_vad_threshold">Порог VAD</string>
+  <string name="setting_asr_configure_vad_desc">Чувствительность VAD сервера, обычно 0,3–0,8</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">Чувствительность VAD на сервере, установите 0 для отключения VAD</string>
+  <string name="setting_asr_configure_prefix_padding">Префиксный отступ</string>
+  <string name="setting_asr_configure_prefix_padding_desc">Аудио, сохраняемое до обнаружения речи, в миллисекундах</string>
+  <string name="setting_asr_configure_silence_duration">Длительность тишины</string>
+  <string name="setting_asr_configure_silence_duration_desc">Длительность тишины, завершающей реплику, в миллисекундах</string>
+  <string name="setting_asr_configure_openai_api_key_desc">Ключ API OpenAI, используемый для веб-сокета в реальном времени</string>
+  <string name="setting_asr_configure_openai_websocket_desc">Конечная точка веб-сокета OpenAI realtime</string>
+  <string name="setting_asr_configure_dashscope_api_key_desc">Ключ API DashScope</string>
+  <string name="setting_asr_configure_dashscope_websocket_desc">Конечная точка веб-сокета DashScope в реальном времени</string>
+  <string name="setting_asr_configure_volcengine_api_key_desc">Ключ API Volcengine (X-Api-Key)</string>
+  <string name="setting_asr_configure_volcengine_websocket_desc">Конечная точка потокового ASR Volcengine</string>
+  <string name="setting_asr_configure_resource_id">ID ресурса</string>
+  <string name="setting_asr_configure_resource_id_desc">X-Api-Resource-Id для биллинга</string>
 </resources>
 

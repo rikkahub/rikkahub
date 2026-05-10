@@ -989,5 +989,37 @@
   <string name="chat_page_check_title_model_settings">Check title model settings</string>
   <string name="asr_button_content_description">Speech Recognition</string>
   <string name="asr_button_stop">Stop</string>
+  <string name="speech_page_title">Speech</string>
+  <string name="setting_asr_page_edit_provider">Edit ASR Provider</string>
+  <string name="setting_asr_page_add_provider">Add ASR Provider</string>
+  <string name="setting_asr_page_default_name">ASR</string>
+  <string name="setting_asr_configure_provider_type">Provider Type</string>
+  <string name="setting_asr_configure_provider_type_desc">Realtime speech recognition provider</string>
+  <string name="setting_asr_configure_name">Name</string>
+  <string name="setting_asr_configure_name_desc">Custom name for this ASR provider</string>
+  <string name="setting_asr_configure_api_key">API Key</string>
+  <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
+  <string name="setting_asr_configure_model">Model</string>
+  <string name="setting_asr_configure_model_desc">Realtime transcription model</string>
+  <string name="setting_asr_configure_language">Language</string>
+  <string name="setting_asr_configure_language_iso_desc">Optional ISO language code, such as zh or en</string>
+  <string name="setting_asr_configure_language_code_desc">Optional language code, e.g. zh-CN, en-US, ja-JP</string>
+  <string name="setting_asr_configure_prompt">Prompt</string>
+  <string name="setting_asr_configure_prompt_desc">Optional hint for names, terms, or formatting</string>
+  <string name="setting_asr_configure_vad_threshold">VAD Threshold</string>
+  <string name="setting_asr_configure_vad_desc">Server VAD sensitivity, usually 0.3 - 0.8</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">Server VAD sensitivity, set 0 to disable VAD</string>
+  <string name="setting_asr_configure_prefix_padding">Prefix Padding</string>
+  <string name="setting_asr_configure_prefix_padding_desc">Audio kept before detected speech, in milliseconds</string>
+  <string name="setting_asr_configure_silence_duration">Silence Duration</string>
+  <string name="setting_asr_configure_silence_duration_desc">Silence duration that ends a turn, in milliseconds</string>
+  <string name="setting_asr_configure_openai_api_key_desc">OpenAI API key used by the realtime websocket</string>
+  <string name="setting_asr_configure_openai_websocket_desc">OpenAI realtime websocket endpoint</string>
+  <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API key</string>
+  <string name="setting_asr_configure_dashscope_websocket_desc">DashScope realtime websocket endpoint</string>
+  <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine API key (X-Api-Key)</string>
+  <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine streaming ASR endpoint</string>
+  <string name="setting_asr_configure_resource_id">Resource ID</string>
+  <string name="setting_asr_configure_resource_id_desc">X-Api-Resource-Id for billing</string>
 </resources>
 

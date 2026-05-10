@@ -989,5 +989,37 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="speech_tab_asr">音声認識</string>
   <string name="asr_button_content_description">音声認識</string>
   <string name="asr_button_stop">停止</string>
+  <string name="speech_page_title">スピーチ</string>
+  <string name="setting_asr_page_edit_provider">ASRプロバイダーを編集</string>
+  <string name="setting_asr_page_add_provider">ASRプロバイダーを追加</string>
+  <string name="setting_asr_page_default_name">ASR</string>
+  <string name="setting_asr_configure_provider_type">プロバイダータイプ</string>
+  <string name="setting_asr_configure_provider_type_desc">リアルタイム音声認識プロバイダー</string>
+  <string name="setting_asr_configure_name">名前</string>
+  <string name="setting_asr_configure_name_desc">このASRプロバイダーのカスタム名</string>
+  <string name="setting_asr_configure_api_key">APIキー</string>
+  <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
+  <string name="setting_asr_configure_model">モデル</string>
+  <string name="setting_asr_configure_model_desc">リアルタイム文字起こしモデル</string>
+  <string name="setting_asr_configure_language">言語</string>
+  <string name="setting_asr_configure_language_iso_desc">オプションのISO言語コード（例：zhまたはen）</string>
+  <string name="setting_asr_configure_language_code_desc">オプションの言語コード、例: zh-CN、en-US、ja-JP</string>
+  <string name="setting_asr_configure_prompt">プロンプト</string>
+  <string name="setting_asr_configure_prompt_desc">名前、用語、またはフォーマットのヒント（任意）</string>
+  <string name="setting_asr_configure_vad_threshold">VAD閾値</string>
+  <string name="setting_asr_configure_vad_desc">サーバーVAD感度、通常は0.3〜0.8</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">サーバーVAD感度、0でVAD無効</string>
+  <string name="setting_asr_configure_prefix_padding">プレフィックスパディング</string>
+  <string name="setting_asr_configure_prefix_padding_desc">検出された音声の前に保持される音声（ミリ秒単位）</string>
+  <string name="setting_asr_configure_silence_duration">無音時間</string>
+  <string name="setting_asr_configure_silence_duration_desc">ターンを終了する無音時間（ミリ秒）</string>
+  <string name="setting_asr_configure_openai_api_key_desc">リアルタイムWebSocketで使用するOpenAI APIキー</string>
+  <string name="setting_asr_configure_openai_websocket_desc">OpenAIリアルタイムWebSocketエンドポイント</string>
+  <string name="setting_asr_configure_dashscope_api_key_desc">DashScope APIキー</string>
+  <string name="setting_asr_configure_dashscope_websocket_desc">DashScopeリアルタイムWebSocketエンドポイント</string>
+  <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine APIキー (X-Api-Key)</string>
+  <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine ストリーミング ASR エンドポイント</string>
+  <string name="setting_asr_configure_resource_id">リソースID</string>
+  <string name="setting_asr_configure_resource_id_desc">課金用のX-Api-Resource-Id</string>
 </resources>
 

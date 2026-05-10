@@ -90,7 +90,7 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    Text(text = "Speech")
+                    Text(text = stringResource(R.string.speech_page_title))
                 },
                 navigationIcon = {
                     BackButton()
@@ -240,7 +240,7 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Edit ASR Provider",
+                    text = stringResource(R.string.setting_asr_page_edit_provider),
                     style = MaterialTheme.typography.headlineSmall
                 )
 
@@ -524,7 +524,7 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
         IconButton(
             onClick = { showTypeMenu = true }
         ) {
-            Icon(HugeIcons.Add01, "Add ASR Provider")
+            Icon(HugeIcons.Add01, stringResource(R.string.setting_asr_page_add_provider))
         }
         DropdownMenu(
             expanded = showTypeMenu,
@@ -576,7 +576,7 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Add ASR Provider",
+                    text = stringResource(R.string.setting_asr_page_add_provider),
                     style = MaterialTheme.typography.headlineSmall
                 )
 
@@ -794,7 +794,7 @@ private fun ASRProviderItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AutoAIIcon(
-                    name = provider.name.ifEmpty { "ASR" },
+                    name = provider.name.ifEmpty { stringResource(R.string.setting_asr_page_default_name) },
                     modifier = Modifier.size(32.dp)
                 )
 
@@ -802,7 +802,7 @@ private fun ASRProviderItem(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = provider.name.ifEmpty { "ASR" },
+                        text = provider.name.ifEmpty { stringResource(R.string.setting_asr_page_default_name) },
                         style = MaterialTheme.typography.titleMedium,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.onPrimaryContainer

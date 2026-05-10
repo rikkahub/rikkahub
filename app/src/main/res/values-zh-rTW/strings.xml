@@ -987,5 +987,37 @@
   <string name="speech_tab_asr">語音辨識</string>
   <string name="asr_button_content_description">語音辨識</string>
   <string name="asr_button_stop">停止</string>
+  <string name="speech_page_title">語音</string>
+  <string name="setting_asr_page_edit_provider">編輯 ASR 供應商</string>
+  <string name="setting_asr_page_add_provider">新增 ASR 供應商</string>
+  <string name="setting_asr_page_default_name">ASR</string>
+  <string name="setting_asr_configure_provider_type">提供者類型</string>
+  <string name="setting_asr_configure_provider_type_desc">即時語音辨識供應商</string>
+  <string name="setting_asr_configure_name">名稱</string>
+  <string name="setting_asr_configure_name_desc">此 ASR 提供者的自訂名稱</string>
+  <string name="setting_asr_configure_api_key">API 金鑰</string>
+  <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
+  <string name="setting_asr_configure_model">模型</string>
+  <string name="setting_asr_configure_model_desc">即時轉錄模型</string>
+  <string name="setting_asr_configure_language">語言</string>
+  <string name="setting_asr_configure_language_iso_desc">選填的 ISO 語言代碼，例如 zh 或 en</string>
+  <string name="setting_asr_configure_language_code_desc">選填的語言代碼，例如 zh-CN、en-US、ja-JP</string>
+  <string name="setting_asr_configure_prompt">提示</string>
+  <string name="setting_asr_configure_prompt_desc">可選提示，用於名稱、術語或格式</string>
+  <string name="setting_asr_configure_vad_threshold">VAD 閾值</string>
+  <string name="setting_asr_configure_vad_desc">伺服器 VAD 靈敏度，通常為 0.3 - 0.8</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">伺服器 VAD 靈敏度，設為 0 可停用 VAD</string>
+  <string name="setting_asr_configure_prefix_padding">前綴填充</string>
+  <string name="setting_asr_configure_prefix_padding_desc">偵測到語音前保留的音訊長度，以毫秒為單位</string>
+  <string name="setting_asr_configure_silence_duration">靜音持續時間</string>
+  <string name="setting_asr_configure_silence_duration_desc">結束語音輸入的靜音持續時間，以毫秒為單位</string>
+  <string name="setting_asr_configure_openai_api_key_desc">即時 websocket 使用的 OpenAI API 金鑰</string>
+  <string name="setting_asr_configure_openai_websocket_desc">OpenAI 即時 websocket 端點</string>
+  <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API 金鑰</string>
+  <string name="setting_asr_configure_dashscope_websocket_desc">DashScope 即時 websocket 端點</string>
+  <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine API 金鑰 (X-Api-Key)</string>
+  <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine 串流語音辨識端點</string>
+  <string name="setting_asr_configure_resource_id">資源 ID</string>
+  <string name="setting_asr_configure_resource_id_desc">計費用的 X-Api-Resource-Id</string>
 </resources>
 

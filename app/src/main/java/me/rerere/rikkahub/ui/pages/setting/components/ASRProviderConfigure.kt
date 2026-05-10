@@ -9,8 +9,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.rerere.asr.ASRProviderSetting
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 
@@ -25,8 +27,8 @@ fun ASRProviderConfigure(
         modifier = modifier.verticalScroll(rememberScrollState())
     ) {
         FormItem(
-            label = { Text("Provider Type") },
-            description = { Text("Realtime speech recognition provider") }
+            label = { Text(stringResource(R.string.setting_asr_configure_provider_type)) },
+            description = { Text(stringResource(R.string.setting_asr_configure_provider_type_desc)) }
         ) {
             OutlinedTextField(
                 value = when (setting) {
@@ -41,8 +43,8 @@ fun ASRProviderConfigure(
         }
 
         FormItem(
-            label = { Text("Name") },
-            description = { Text("Custom name for this ASR provider") }
+            label = { Text(stringResource(R.string.setting_asr_configure_name)) },
+            description = { Text(stringResource(R.string.setting_asr_configure_name_desc)) }
         ) {
             OutlinedTextField(
                 value = setting.name,
@@ -66,8 +68,8 @@ private fun OpenAIRealtimeASRConfiguration(
     onValueChange: (ASRProviderSetting) -> Unit
 ) {
     FormItem(
-        label = { Text("API Key") },
-        description = { Text("OpenAI API key used by the realtime websocket") }
+        label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_openai_api_key_desc)) }
     ) {
         OutlinedTextField(
             value = setting.apiKey,
@@ -78,8 +80,8 @@ private fun OpenAIRealtimeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("WebSocket URL") },
-        description = { Text("OpenAI realtime websocket endpoint") }
+        label = { Text(stringResource(R.string.setting_asr_configure_websocket_url)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_openai_websocket_desc)) }
     ) {
         OutlinedTextField(
             value = setting.websocketUrl,
@@ -90,8 +92,8 @@ private fun OpenAIRealtimeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Model") },
-        description = { Text("Realtime transcription model") }
+        label = { Text(stringResource(R.string.setting_asr_configure_model)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_model_desc)) }
     ) {
         OutlinedTextField(
             value = setting.model,
@@ -102,8 +104,8 @@ private fun OpenAIRealtimeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Language") },
-        description = { Text("Optional ISO language code, such as zh or en") }
+        label = { Text(stringResource(R.string.setting_asr_configure_language)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_language_iso_desc)) }
     ) {
         OutlinedTextField(
             value = setting.language,
@@ -114,8 +116,8 @@ private fun OpenAIRealtimeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Prompt") },
-        description = { Text("Optional hint for names, terms, or formatting") }
+        label = { Text(stringResource(R.string.setting_asr_configure_prompt)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_prompt_desc)) }
     ) {
         OutlinedTextField(
             value = setting.prompt,
@@ -127,8 +129,8 @@ private fun OpenAIRealtimeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("VAD Threshold") },
-        description = { Text("Server VAD sensitivity, usually 0.3 - 0.8") }
+        label = { Text(stringResource(R.string.setting_asr_configure_vad_threshold)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_vad_desc)) }
     ) {
         OutlinedNumberInput(
             value = setting.vadThreshold,
@@ -143,8 +145,8 @@ private fun OpenAIRealtimeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Prefix Padding") },
-        description = { Text("Audio kept before detected speech, in milliseconds") }
+        label = { Text(stringResource(R.string.setting_asr_configure_prefix_padding)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_prefix_padding_desc)) }
     ) {
         OutlinedNumberInput(
             value = setting.prefixPaddingMs,
@@ -159,8 +161,8 @@ private fun OpenAIRealtimeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Silence Duration") },
-        description = { Text("Silence duration that ends a turn, in milliseconds") }
+        label = { Text(stringResource(R.string.setting_asr_configure_silence_duration)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_silence_duration_desc)) }
     ) {
         OutlinedNumberInput(
             value = setting.silenceDurationMs,
@@ -181,8 +183,8 @@ private fun DashScopeASRConfiguration(
     onValueChange: (ASRProviderSetting) -> Unit
 ) {
     FormItem(
-        label = { Text("API Key") },
-        description = { Text("DashScope API key") }
+        label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_dashscope_api_key_desc)) }
     ) {
         OutlinedTextField(
             value = setting.apiKey,
@@ -193,8 +195,8 @@ private fun DashScopeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("WebSocket URL") },
-        description = { Text("DashScope realtime websocket endpoint") }
+        label = { Text(stringResource(R.string.setting_asr_configure_websocket_url)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_dashscope_websocket_desc)) }
     ) {
         OutlinedTextField(
             value = setting.websocketUrl,
@@ -205,8 +207,8 @@ private fun DashScopeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Model") },
-        description = { Text("Realtime transcription model") }
+        label = { Text(stringResource(R.string.setting_asr_configure_model)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_model_desc)) }
     ) {
         OutlinedTextField(
             value = setting.model,
@@ -217,8 +219,8 @@ private fun DashScopeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Language") },
-        description = { Text("Optional ISO language code, such as zh or en") }
+        label = { Text(stringResource(R.string.setting_asr_configure_language)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_language_iso_desc)) }
     ) {
         OutlinedTextField(
             value = setting.language,
@@ -229,8 +231,8 @@ private fun DashScopeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("VAD Threshold") },
-        description = { Text("Server VAD sensitivity, set 0 to disable VAD") }
+        label = { Text(stringResource(R.string.setting_asr_configure_vad_threshold)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_dashscope_vad_desc)) }
     ) {
         OutlinedNumberInput(
             value = setting.vadThreshold,
@@ -245,8 +247,8 @@ private fun DashScopeASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Silence Duration") },
-        description = { Text("Silence duration that ends a turn, in milliseconds") }
+        label = { Text(stringResource(R.string.setting_asr_configure_silence_duration)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_silence_duration_desc)) }
     ) {
         OutlinedNumberInput(
             value = setting.silenceDurationMs,
@@ -267,8 +269,8 @@ private fun VolcengineASRConfiguration(
     onValueChange: (ASRProviderSetting) -> Unit
 ) {
     FormItem(
-        label = { Text("API Key") },
-        description = { Text("Volcengine API key (X-Api-Key)") }
+        label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_volcengine_api_key_desc)) }
     ) {
         OutlinedTextField(
             value = setting.apiKey,
@@ -279,8 +281,8 @@ private fun VolcengineASRConfiguration(
     }
 
     FormItem(
-        label = { Text("WebSocket URL") },
-        description = { Text("Volcengine streaming ASR endpoint") }
+        label = { Text(stringResource(R.string.setting_asr_configure_websocket_url)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_volcengine_websocket_desc)) }
     ) {
         OutlinedTextField(
             value = setting.websocketUrl,
@@ -291,8 +293,8 @@ private fun VolcengineASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Resource ID") },
-        description = { Text("X-Api-Resource-Id for billing") }
+        label = { Text(stringResource(R.string.setting_asr_configure_resource_id)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_resource_id_desc)) }
     ) {
         OutlinedTextField(
             value = setting.resourceId,
@@ -303,8 +305,8 @@ private fun VolcengineASRConfiguration(
     }
 
     FormItem(
-        label = { Text("Language") },
-        description = { Text("Optional language code, e.g. zh-CN, en-US, ja-JP") }
+        label = { Text(stringResource(R.string.setting_asr_configure_language)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_language_code_desc)) }
     ) {
         OutlinedTextField(
             value = setting.language,
