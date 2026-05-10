@@ -101,8 +101,13 @@ data class ChatError(
     val title: String? = null,
     val error: Throwable,
     val conversationId: Uuid? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val solution: ChatErrorSolution? = null,
 )
+
+enum class ChatErrorSolution {
+    CheckTitleModelSettings,
+}
 
 private val inputTransformers by lazy {
     listOf(
@@ -174,9 +179,14 @@ class ChatService(
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
 
-    fun addError(error: Throwable, conversationId: Uuid? = null, title: String? = null) {
+    fun addError(
+        error: Throwable,
+        conversationId: Uuid? = null,
+        title: String? = null,
+        solution: ChatErrorSolution? = null,
+    ) {
         if (error is CancellationException) return
-        _errors.update { it + ChatError(title = title, error = error, conversationId = conversationId) }
+        _errors.update { it + ChatError(title = title, error = error, conversationId = conversationId, solution = solution) }
     }
 
     fun dismissError(id: Uuid) {
@@ -815,7 +825,7 @@ class ChatService(
                             )
                         )
                     }
-                    mcpManager.getAllAvailableTools().forEach { tool ->
+                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
                         val mcpToolName = "mcp__" + tool.name
                         add(
                             Tool(
@@ -834,7 +844,7 @@ class ChatService(
                                     .ToolApprovalDefaults.requiresApproval(mcpToolName) ||
                                     tool.needsApproval,
                                 execute = {
-                                    mcpManager.callTool(tool.name, it.jsonObject)
+                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
                                 },
                             )
                         )
