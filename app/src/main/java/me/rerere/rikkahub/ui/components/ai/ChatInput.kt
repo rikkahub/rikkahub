@@ -231,6 +231,9 @@ fun ChatInput(
     val asrState by asr.state.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
     val soundEffectPlayer: SoundEffectPlayer = koinInject()
+    LaunchedEffect(Unit) {
+        soundEffectPlayer.preload(R.raw.asr_start, R.raw.asr_stop)
+    }
     val asrPermission = rememberPermissionState(PermissionRecordAudio)
     PermissionManager(permissionState = asrPermission)
     var asrBaseText by remember { mutableStateOf("") }
