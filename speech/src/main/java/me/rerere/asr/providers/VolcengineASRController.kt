@@ -43,6 +43,7 @@ import java.util.zip.GZIPOutputStream
 import kotlin.uuid.Uuid
 
 private const val TAG = "VolcengineASR"
+private const val MAX_WEBSOCKET_QUEUE_BYTES = 100_000L
 
 class VolcengineASRController(
     private val context: Context,
@@ -257,7 +258,7 @@ class VolcengineASRController(
             val chunkSize = (SAMPLE_RATE * 2 * 200 / 1000).coerceAtLeast(minBufferSize)
 
             val recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
@@ -273,14 +274,20 @@ class VolcengineASRController(
                     if (read > 0) {
                         val amplitude = calculateRmsAmplitude(buffer, read)
                         _state.update { it.copy(amplitudes = it.amplitudes.appendAmplitude(amplitude)) }
-                        val frame = buildFrame(
-                            messageType = MSG_AUDIO_ONLY,
-                            flags = 0x00,
-                            serialization = SER_NONE,
-                            compression = COMP_NONE,
-                            payload = buffer.copyOfRange(0, read)
-                        )
-                        socket.send(frame.toByteString())
+                        if (socket.queueSize() < MAX_WEBSOCKET_QUEUE_BYTES) {
+                            val frame = buildFrame(
+                                messageType = MSG_AUDIO_ONLY,
+                                flags = 0x00,
+                                serialization = SER_NONE,
+                                compression = COMP_NONE,
+                                payload = buffer.copyOfRange(0, read)
+                            )
+                            socket.send(frame.toByteString())
+                        } else {
+                            Log.w(TAG, "WebSocket queue full, dropping audio frame")
+                        }
+                    } else if (read < 0) {
+                        throw IllegalStateException("AudioRecord read error: $read")
                     }
                 }
             } catch (e: Exception) {

@@ -38,6 +38,7 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "OpenAIRealtimeASR"
+private const val MAX_WEBSOCKET_QUEUE_BYTES = 100_000L
 
 class OpenAIRealtimeASRController(
     private val context: Context,
@@ -152,7 +153,7 @@ class OpenAIRealtimeASRController(
                 .coerceAtLeast(4096)
 
             val recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                 provider.sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
@@ -168,11 +169,17 @@ class OpenAIRealtimeASRController(
                     if (read > 0) {
                         val amplitude = calculateRmsAmplitude(buffer, read)
                         _state.update { it.copy(amplitudes = it.amplitudes.appendAmplitude(amplitude)) }
-                        val encoded = Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP)
-                        val event = JSONObject()
-                            .put("type", "input_audio_buffer.append")
-                            .put("audio", encoded)
-                        socket.send(event.toString())
+                        if (socket.queueSize() < MAX_WEBSOCKET_QUEUE_BYTES) {
+                            val encoded = Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP)
+                            val event = JSONObject()
+                                .put("type", "input_audio_buffer.append")
+                                .put("audio", encoded)
+                            socket.send(event.toString())
+                        } else {
+                            Log.w(TAG, "WebSocket queue full, dropping audio frame")
+                        }
+                    } else if (read < 0) {
+                        throw IllegalStateException("AudioRecord read error: $read")
                     }
                 }
             } catch (e: Exception) {
