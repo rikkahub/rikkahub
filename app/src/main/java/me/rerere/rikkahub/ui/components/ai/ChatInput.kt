@@ -190,10 +190,12 @@ fun ChatInput(
                 hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
                 soundEffectPlayer.play(R.raw.asr_start)
             }
+
             ASRStatus.Stopping -> {
                 hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
                 soundEffectPlayer.play(R.raw.asr_stop)
             }
+
             else -> {}
         }
     }
@@ -392,8 +394,8 @@ fun ChatInput(
                 color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     if (state.messageContent.isNotEmpty()) {
                         MediaFileInputRow(state = state)
@@ -409,13 +411,13 @@ fun ChatInput(
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Row(
                             modifier = Modifier
                                 .weight(1f)
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             // Model Picker
                             ModelSelector(
@@ -465,41 +467,6 @@ fun ChatInput(
                                 )
                             }
 
-                            // MCP
-                            if (settings.mcpServers.isNotEmpty()) {
-                                McpPickerButton(
-                                    assistant = assistant,
-                                    servers = settings.mcpServers,
-                                    mcpManager = mcpManager,
-                                    onUpdateAssistant = {
-                                        onUpdateAssistant(it)
-                                    },
-                                )
-                            }
-
-                            if (asrState.isAvailable || asrState.isRecording) {
-                                AsrButton(
-                                    state = asrState,
-                                    onClick = {
-                                        when (asrState.status) {
-                                            ASRStatus.Listening -> asr.stop()
-                                            ASRStatus.Idle, ASRStatus.Error -> {
-                                                if (!asrPermission.allRequiredPermissionsGranted) {
-                                                    asrPermission.requestPermissions()
-                                                } else {
-                                                    asrBaseText = state.textContent.text.toString()
-                                                    asr.start { transcript ->
-                                                        val spacer =
-                                                            if (asrBaseText.isBlank() || transcript.isBlank()) "" else " "
-                                                        state.setMessageText(asrBaseText + spacer + transcript)
-                                                    }
-                                                }
-                                            }
-                                            ASRStatus.Connecting, ASRStatus.Stopping -> {}
-                                        }
-                                    }
-                                )
-                            }
                         }
 
                         ActionIconButton(
@@ -512,50 +479,79 @@ fun ChatInput(
                             )
                         }
 
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .combinedClickable(
-                                    enabled = loading || !state.isEmpty(),
-                                    onClick = {
-                                        dismissExpand()
-                                        sendMessage()
-                                    }, onLongClick = {
-                                        dismissExpand()
-                                        sendMessageWithoutAnswer()
+                        if (asrState.isAvailable || asrState.isRecording) {
+                            AsrButton(
+                                state = asrState,
+                                onClick = {
+                                    when (asrState.status) {
+                                        ASRStatus.Listening -> asr.stop()
+                                        ASRStatus.Idle, ASRStatus.Error -> {
+                                            if (!asrPermission.allRequiredPermissionsGranted) {
+                                                asrPermission.requestPermissions()
+                                            } else {
+                                                asrBaseText = state.textContent.text.toString()
+                                                asr.start { transcript ->
+                                                    val spacer =
+                                                        if (asrBaseText.isBlank() || transcript.isBlank()) "" else " "
+                                                    state.setMessageText(asrBaseText + spacer + transcript)
+                                                }
+                                            }
+                                        }
+
+                                        ASRStatus.Connecting, ASRStatus.Stopping -> {}
                                     }
-                                )
-                        ) {
-                            val containerColor = when {
-                                loading -> MaterialTheme.colorScheme.errorContainer
-                                state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh
-                                else -> MaterialTheme.colorScheme.primary
-                            }
-                            val contentColor = when {
-                                loading -> MaterialTheme.colorScheme.onErrorContainer
-                                state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                else -> MaterialTheme.colorScheme.onPrimary
-                            }
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                shape = CircleShape,
-                                color = containerColor,
-                                content = {})
-                            if (loading) {
-                                KeepScreenOn()
-                                Icon(
-                                    imageVector = HugeIcons.Cancel01,
-                                    contentDescription = stringResource(R.string.stop),
-                                    tint = contentColor
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = HugeIcons.ArrowUp02,
-                                    contentDescription = stringResource(R.string.send),
-                                    tint = contentColor
-                                )
+                                }
+                            )
+                        }
+
+                        if (!asrState.isRecording) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .combinedClickable(
+                                        enabled = loading || !state.isEmpty(),
+                                        onClick = {
+                                            dismissExpand()
+                                            sendMessage()
+                                        }, onLongClick = {
+                                            dismissExpand()
+                                            sendMessageWithoutAnswer()
+                                        }
+                                    )
+                            ) {
+                                val containerColor = when {
+                                    loading -> MaterialTheme.colorScheme.errorContainer
+                                    state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh
+                                    else -> MaterialTheme.colorScheme.primary
+                                }
+                                val contentColor = when {
+                                    loading -> MaterialTheme.colorScheme.onErrorContainer
+                                    state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                    else -> MaterialTheme.colorScheme.onPrimary
+                                }
+                                Surface(
+                                    modifier = Modifier.fillMaxSize(),
+                                    shape = CircleShape,
+                                    color = containerColor,
+                                    content = {})
+                                if (loading) {
+                                    KeepScreenOn()
+                                    Icon(
+                                        imageVector = HugeIcons.Cancel01,
+                                        contentDescription = stringResource(R.string.stop),
+                                        tint = contentColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = HugeIcons.ArrowUp02,
+                                        contentDescription = stringResource(R.string.send),
+                                        tint = contentColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -593,6 +589,7 @@ fun ChatInput(
                             conversation = conversation,
                             state = state,
                             assistant = assistant,
+                            mcpManager = mcpManager,
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,
@@ -620,7 +617,7 @@ private fun ActionIconButton(
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(36.dp),
+        modifier = Modifier.size(30.dp),
         shape = CircleShape,
         tonalElevation = 0.dp,
         color = Color.Transparent,

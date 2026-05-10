@@ -4,7 +4,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -15,9 +20,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,12 +38,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import me.rerere.asr.ASRState
 import me.rerere.asr.ASRStatus
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Mic01
+import me.rerere.hugeicons.stroke.Voice
+
+private enum class AsrDisplayState {
+    Idle, Connecting, Active
+}
 
 @Composable
 internal fun AsrButton(
@@ -70,53 +81,88 @@ internal fun AsrButton(
         label = "asr_content"
     )
 
+    val displayState = when (state.status) {
+        ASRStatus.Idle, ASRStatus.Error -> AsrDisplayState.Idle
+        ASRStatus.Connecting -> AsrDisplayState.Connecting
+        ASRStatus.Listening, ASRStatus.Stopping -> AsrDisplayState.Active
+    }
+
     Surface(
         onClick = onClick,
         modifier = Modifier
             .height(36.dp)
             .widthIn(min = 36.dp)
-            .animateContentSize(animationSpec = spring(stiffness = 500f)),
+            .animateContentSize(animationSpec = MotionScheme.expressive().defaultSpatialSpec()),
         shape = CircleShape,
         tonalElevation = if (isIdle) 0.dp else 2.dp,
         color = containerColor,
     ) {
         AnimatedContent(
-            targetState = isIdle,
+            targetState = displayState,
             transitionSpec = {
                 (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
                     .using(SizeTransform(clip = false))
             },
             label = "asr_content_switch"
-        ) { idle ->
-            if (idle) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Mic01,
-                        contentDescription = "ASR",
-                        tint = contentColor
-                    )
+        ) { display ->
+            when (display) {
+                AsrDisplayState.Idle -> {
+                    Box(
+                        modifier = Modifier.size(36.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Voice,
+                            contentDescription = "ASR",
+                            tint = contentColor
+                        )
+                    }
                 }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AudioLevelDots(
-                        amplitudes = state.amplitudes,
-                        color = contentColor,
-                    )
-                    Text(
-                        text = "Stop",
-                        color = contentColor,
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = 1
-                    )
+
+                AsrDisplayState.Connecting -> {
+                    Box(
+                        modifier = Modifier.size(36.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val infiniteTransition = rememberInfiniteTransition(label = "asr_pulse")
+                        val scale by infiniteTransition.animateFloat(
+                            initialValue = 0.8f,
+                            targetValue = 1.2f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(600, easing = LinearEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "asr_pulse_scale"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .scale(scale)
+                                .clip(CircleShape)
+                                .background(contentColor)
+                        )
+                    }
+                }
+
+                AsrDisplayState.Active -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AudioLevelDots(
+                            amplitudes = state.amplitudes,
+                            color = contentColor,
+                        )
+                        Text(
+                            text = "Stop",
+                            color = contentColor,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
