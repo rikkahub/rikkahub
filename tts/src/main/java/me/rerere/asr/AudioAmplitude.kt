@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.asr
+package me.rerere.asr
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

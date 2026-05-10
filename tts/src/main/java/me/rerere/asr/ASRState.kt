@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.asr
+package me.rerere.asr
 
 enum class ASRStatus {
     Idle,
@@ -18,4 +18,3 @@ data class ASRState(
     val isRecording: Boolean
         get() = status == ASRStatus.Connecting || status == ASRStatus.Listening || status == ASRStatus.Stopping
 }
-

@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.asr
+package me.rerere.asr
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -33,7 +33,10 @@ sealed class ASRProviderSetting {
             id: Uuid,
             name: String,
         ): ASRProviderSetting {
-            return copy(id = id, name = name)
+            return this.copy(
+                id = id,
+                name = name,
+            )
         }
     }
 
@@ -43,9 +46,9 @@ sealed class ASRProviderSetting {
         override val id: Uuid = Uuid.random(),
         override val name: String = "DashScope ASR",
         val apiKey: String = "",
-        val websocketUrl: String = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
-        val model: String = "qwen3-asr-flash-realtime-2026-02-10",
-        val language: String = "zh",
+        val websocketUrl: String = "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+        val model: String = "qwen3-asr-flash-realtime",
+        val language: String = "",
         val sampleRate: Int = 16000,
         val vadThreshold: Float = 0.2f,
         val silenceDurationMs: Int = 800,
@@ -54,7 +57,10 @@ sealed class ASRProviderSetting {
             id: Uuid,
             name: String,
         ): ASRProviderSetting {
-            return copy(id = id, name = name)
+            return this.copy(
+                id = id,
+                name = name,
+            )
         }
     }
 
@@ -64,21 +70,28 @@ sealed class ASRProviderSetting {
         override val id: Uuid = Uuid.random(),
         override val name: String = "Volcengine ASR",
         val apiKey: String = "",
-        val websocketUrl: String = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
-        val resourceId: String = "volc.seedasr.sauc.duration",
+        val websocketUrl: String = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
+        val resourceId: String = "volc.bigasr.sauc.duration",
         val language: String = "",
     ) : ASRProviderSetting() {
         override fun copyProvider(
             id: Uuid,
             name: String,
         ): ASRProviderSetting {
-            return copy(id = id, name = name)
+            return this.copy(
+                id = id,
+                name = name,
+            )
         }
     }
 
     companion object {
         val Types by lazy {
-            listOf(OpenAIRealtime::class, DashScope::class, Volcengine::class)
+            listOf(
+                OpenAIRealtime::class,
+                DashScope::class,
+                Volcengine::class,
+            )
         }
     }
 }

@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.asr
+package me.rerere.asr.providers
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -22,22 +22,27 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import me.rerere.asr.ASRController
+import me.rerere.asr.ASRProviderSetting
+import me.rerere.asr.ASRState
+import me.rerere.asr.ASRStatus
+import me.rerere.asr.appendAmplitude
+import me.rerere.asr.calculateRmsAmplitude
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
-private const val TAG = "DashScopeASR"
+private const val TAG = "OpenAIRealtimeASR"
 
-class DashScopeASRController(
+class OpenAIRealtimeASRController(
     private val context: Context,
     private val httpClient: OkHttpClient,
-    private val provider: ASRProviderSetting.DashScope
+    private val provider: ASRProviderSetting.OpenAIRealtime
 ) : ASRController {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -75,14 +80,13 @@ class DashScopeASRController(
         val request = Request.Builder()
             .url(provider.websocketEndpoint())
             .addHeader("Authorization", "Bearer ${provider.apiKey}")
-            .addHeader("OpenAI-Beta", "realtime=v1")
             .build()
 
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(provider.sessionUpdateEvent().toString())
                 _state.update { it.copy(status = ASRStatus.Listening, errorMessage = null) }
-                startRecorder(webSocket)
+                startRecorder(provider, webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -90,7 +94,7 @@ class DashScopeASRController(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "DashScope ASR websocket failed", t)
+                Log.e(TAG, "Realtime ASR websocket failed", t)
                 releaseRecorder()
                 setError(t.message ?: "ASR websocket failed")
             }
@@ -132,7 +136,10 @@ class DashScopeASRController(
     }
 
     @SuppressLint("MissingPermission")
-    private fun startRecorder(socket: WebSocket) {
+    private fun startRecorder(
+        provider: ASRProviderSetting.OpenAIRealtime,
+        socket: WebSocket
+    ) {
         recorderJob?.cancel()
         recorderJob = scope.launch(Dispatchers.IO) {
             val minBufferSize = AudioRecord.getMinBufferSize(
@@ -163,7 +170,6 @@ class DashScopeASRController(
                         _state.update { it.copy(amplitudes = it.amplitudes.appendAmplitude(amplitude)) }
                         val encoded = Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP)
                         val event = JSONObject()
-                            .put("event_id", "evt_${System.currentTimeMillis()}")
                             .put("type", "input_audio_buffer.append")
                             .put("audio", encoded)
                         socket.send(event.toString())
@@ -190,15 +196,6 @@ class DashScopeASRController(
                 val delta = event.optString("delta")
                 if (delta.isNotEmpty()) {
                     partialTranscripts[itemId] = (partialTranscripts[itemId] ?: "") + delta
-                    publishTranscript()
-                }
-            }
-
-            "conversation.item.input_audio_transcription.text" -> {
-                val itemId = event.optString("item_id", "default")
-                val text = event.optString("text")
-                if (text.isNotEmpty()) {
-                    partialTranscripts[itemId] = text
                     publishTranscript()
                 }
             }
@@ -251,37 +248,53 @@ class DashScopeASRController(
     }
 }
 
-private fun ASRProviderSetting.DashScope.websocketEndpoint(): String {
-    val endpoint = websocketUrl.trim().trimEnd('/')
+private fun ASRProviderSetting.OpenAIRealtime.websocketEndpoint(): String {
+    val endpoint = websocketUrl.trim()
+    if (endpoint.contains("intent=transcription")) return endpoint
+    if (endpoint.contains("model=")) return endpoint
     val separator = if (endpoint.contains("?")) "&" else "?"
-    return if (endpoint.contains("model=")) endpoint
-    else "${endpoint}${separator}model=${model}"
+    return "${endpoint.trimEnd('/')}${separator}intent=transcription"
 }
 
-private fun ASRProviderSetting.DashScope.sessionUpdateEvent(): JSONObject {
+private fun ASRProviderSetting.OpenAIRealtime.sessionUpdateEvent(): JSONObject {
     val transcription = JSONObject()
+        .put("model", model)
     if (language.isNotBlank()) transcription.put("language", language)
-
-    val session = JSONObject()
-        .put("modalities", JSONArray().put("text"))
-        .put("input_audio_format", "pcm")
-        .put("sample_rate", sampleRate)
-        .put("input_audio_transcription", transcription)
-
-    if (vadThreshold > 0) {
-        session.put(
-            "turn_detection",
-            JSONObject()
-                .put("type", "server_vad")
-                .put("threshold", vadThreshold)
-                .put("silence_duration_ms", silenceDurationMs)
-        )
-    } else {
-        session.put("turn_detection", JSONObject.NULL)
-    }
+    if (prompt.isNotBlank()) transcription.put("prompt", prompt)
 
     return JSONObject()
-        .put("event_id", "evt_session_update")
         .put("type", "session.update")
-        .put("session", session)
+        .put(
+            "session",
+            JSONObject()
+                .put("type", "transcription")
+                .put(
+                    "audio",
+                    JSONObject()
+                        .put(
+                            "input",
+                            JSONObject()
+                                .put(
+                                    "format",
+                                    JSONObject()
+                                        .put("type", "audio/pcm")
+                                        .put("rate", sampleRate)
+                                )
+                                .put("transcription", transcription)
+                                .put(
+                                    "noise_reduction",
+                                    JSONObject()
+                                        .put("type", "near_field")
+                                )
+                                .put(
+                                    "turn_detection",
+                                    JSONObject()
+                                        .put("type", "server_vad")
+                                        .put("threshold", vadThreshold)
+                                        .put("prefix_padding_ms", prefixPaddingMs)
+                                        .put("silence_duration_ms", silenceDurationMs)
+                                )
+                        )
+                )
+        )
 }

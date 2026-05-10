@@ -137,8 +137,8 @@ import me.rerere.hugeicons.stroke.Video01
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.asr.ASRState
-import me.rerere.rikkahub.data.asr.ASRStatus
+import me.rerere.asr.ASRState
+import me.rerere.asr.ASRStatus
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.utils.SoundEffectPlayer

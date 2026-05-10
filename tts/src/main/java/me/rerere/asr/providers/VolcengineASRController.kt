@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.asr
+package me.rerere.asr.providers
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -21,6 +21,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import me.rerere.asr.ASRController
+import me.rerere.asr.ASRProviderSetting
+import me.rerere.asr.ASRState
+import me.rerere.asr.ASRStatus
+import me.rerere.asr.appendAmplitude
+import me.rerere.asr.calculateRmsAmplitude
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -248,7 +254,6 @@ class VolcengineASRController(
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
             )
-            // ~200ms chunks for optimal performance per docs
             val chunkSize = (SAMPLE_RATE * 2 * 200 / 1000).coerceAtLeast(minBufferSize)
 
             val recorder = AudioRecord(
@@ -316,7 +321,7 @@ class VolcengineASRController(
             payload: ByteArray
         ): ByteArray {
             val header = byteArrayOf(
-                0x11.toByte(), // version=1, header_size=1 (1*4=4 bytes)
+                0x11.toByte(),
                 ((messageType shl 4) or (flags and 0x0F)).toByte(),
                 ((serialization shl 4) or (compression and 0x0F)).toByte(),
                 0x00
