@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.ui.hooks
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +62,17 @@ private class CustomAsrStateImpl(
     private var controller: ASRController? = null
     private val idleState = MutableStateFlow(ASRState())
 
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        )
+        .setAcceptsDelayedFocusGain(false)
+        .build()
+
     override val state: StateFlow<ASRState>
         get() = controller?.state ?: idleState
 
@@ -71,16 +85,21 @@ private class CustomAsrStateImpl(
     }
 
     override fun start(onTranscriptChange: (String) -> Unit) {
-        controller?.start(onTranscriptChange)
+        val result = audioManager.requestAudioFocus(audioFocusRequest)
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            controller?.start(onTranscriptChange)
+        }
     }
 
     override fun stop() {
         controller?.stop()
+        audioManager.abandonAudioFocusRequest(audioFocusRequest)
     }
 
     override fun cleanup() {
         controller?.dispose()
         controller = null
+        audioManager.abandonAudioFocusRequest(audioFocusRequest)
     }
 
     private fun createController(provider: ASRProviderSetting): ASRController? {
