@@ -92,6 +92,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -139,6 +141,7 @@ import me.rerere.rikkahub.data.asr.ASRState
 import me.rerere.rikkahub.data.asr.ASRStatus
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -226,6 +229,8 @@ fun ChatInput(
     val filesManager: FilesManager = koinInject()
     val asr = LocalASRState.current
     val asrState by asr.state.collectAsState()
+    val hapticFeedback = LocalHapticFeedback.current
+    val soundEffectPlayer: SoundEffectPlayer = koinInject()
     val asrPermission = rememberPermissionState(PermissionRecordAudio)
     PermissionManager(permissionState = asrPermission)
     var asrBaseText by remember { mutableStateOf("") }
@@ -514,10 +519,14 @@ fun ChatInput(
                                     state = asrState,
                                     onClick = {
                                         if (asrState.isRecording) {
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                            soundEffectPlayer.play(R.raw.asr_stop)
                                             asr.stop()
                                         } else if (!asrPermission.allRequiredPermissionsGranted) {
                                             asrPermission.requestPermissions()
                                         } else {
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            soundEffectPlayer.play(R.raw.asr_start)
                                             asrBaseText = state.textContent.text.toString()
                                             asr.start { transcript ->
                                                 val spacer =
