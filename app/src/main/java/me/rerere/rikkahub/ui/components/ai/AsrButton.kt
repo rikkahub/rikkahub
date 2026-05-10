@@ -40,8 +40,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.rerere.asr.ASRState
+import me.rerere.rikkahub.R
 import me.rerere.asr.ASRStatus
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Voice
@@ -113,7 +115,7 @@ internal fun AsrButton(
                     ) {
                         Icon(
                             imageVector = HugeIcons.Voice,
-                            contentDescription = "ASR",
+                            contentDescription = stringResource(R.string.asr_button_content_description),
                             tint = contentColor
                         )
                     }
@@ -157,7 +159,7 @@ internal fun AsrButton(
                             color = contentColor,
                         )
                         Text(
-                            text = "Stop",
+                            text = stringResource(R.string.asr_button_stop),
                             color = contentColor,
                             style = MaterialTheme.typography.labelLarge,
                             maxLines = 1

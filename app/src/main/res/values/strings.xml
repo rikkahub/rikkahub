@@ -987,5 +987,7 @@
   <string name="setting_provider_page_claude_prompt_cache_ttl_5m">5 minutes</string>
   <string name="assistant_page_temperature_warning">Usually 1. Not recommended to change for reasoning models.</string>
   <string name="chat_page_check_title_model_settings">Check title model settings</string>
+  <string name="asr_button_content_description">Speech Recognition</string>
+  <string name="asr_button_stop">Stop</string>
 </resources>
 

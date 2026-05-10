@@ -985,5 +985,7 @@
   <string name="chat_page_check_title_model_settings">檢查標題模型設定</string>
   <string name="speech_tab_tts">文字轉語音</string>
   <string name="speech_tab_asr">語音辨識</string>
+  <string name="asr_button_content_description">語音辨識</string>
+  <string name="asr_button_stop">停止</string>
 </resources>
 

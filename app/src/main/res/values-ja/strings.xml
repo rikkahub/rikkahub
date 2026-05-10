@@ -987,5 +987,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_check_title_model_settings">タイトルモデル設定を確認</string>
   <string name="speech_tab_tts">テキスト読み上げ</string>
   <string name="speech_tab_asr">音声認識</string>
+  <string name="asr_button_content_description">音声認識</string>
+  <string name="asr_button_stop">停止</string>
 </resources>
 

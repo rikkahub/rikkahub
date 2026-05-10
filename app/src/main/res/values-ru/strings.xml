@@ -987,5 +987,7 @@
   <string name="chat_page_check_title_model_settings">Проверьте настройки модели заголовков</string>
   <string name="speech_tab_tts">Текст в речь</string>
   <string name="speech_tab_asr">Распознавание речи</string>
+  <string name="asr_button_content_description">Распознавание речи</string>
+  <string name="asr_button_stop">Стоп</string>
 </resources>
 
