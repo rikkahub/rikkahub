@@ -743,7 +743,7 @@
   <string name="setting_page_sponsor_alert_title">開発者を支援する</string>
   <string name="setting_page_theme_setting">テーマ設定</string>
   <string name="setting_page_tts_service">音声サービス</string>
-  <string name="setting_page_tts_service_desc">音声合成サービスプロバイダーを設定</string>
+  <string name="setting_page_tts_service_desc">音声合成と音声認識のプロバイダーを設定</string>
   <string name="setting_page_tts_settings">TTS設定</string>
   <string name="setting_page_web_server">Webサーバー</string>
   <string name="setting_page_web_server_address_note">アドレスメモ</string>
@@ -985,5 +985,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_claude_prompt_cache_ttl">プロンプトキャッシュ TTL</string>
   <string name="assistant_page_temperature_warning">通常は 1 です。推論モデルでは変更を推奨しません。</string>
   <string name="chat_page_check_title_model_settings">タイトルモデル設定を確認</string>
+  <string name="speech_tab_tts">テキスト読み上げ</string>
+  <string name="speech_tab_asr">音声認識</string>
 </resources>
 

@@ -985,5 +985,7 @@
   <string name="setting_provider_page_claude_prompt_cache_ttl">TTL кэша промпта</string>
   <string name="assistant_page_temperature_warning">Обычно 1. Для моделей рассуждения изменение не рекомендуется.</string>
   <string name="chat_page_check_title_model_settings">Проверьте настройки модели заголовков</string>
+  <string name="speech_tab_tts">Текст в речь</string>
+  <string name="speech_tab_asr">Распознавание речи</string>
 </resources>
 

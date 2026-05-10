@@ -746,8 +746,8 @@
   <string name="setting_page_sponsor_alert_dismiss">Not Now</string>
   <string name="setting_page_sponsor_alert_title">Support the Developer</string>
   <string name="setting_page_theme_setting">Theme Settings</string>
-  <string name="setting_page_tts_service">Text-to-Speech Service</string>
-  <string name="setting_page_tts_service_desc">Configure text-to-speech service providers</string>
+  <string name="setting_page_tts_service">Speech Services</string>
+  <string name="setting_page_tts_service_desc">Configure text-to-speech and speech recognition providers</string>
   <string name="setting_page_tts_settings">TTS Settings</string>
   <string name="setting_page_web_server">Web Server</string>
   <string name="setting_page_web_server_address_note">Address Notes</string>
@@ -883,6 +883,8 @@
   <string name="setting_tts_page_voice_name">Voice Name</string>
   <string name="setting_tts_page_voice_name_description">Name of the voice</string>
   <string name="setting_tts_page_voice_name_placeholder">Kore</string>
+  <string name="speech_tab_tts">Text to Speech</string>
+  <string name="speech_tab_asr">Speech Recognition</string>
   <string name="settings">Settings</string>
   <string name="share">Share</string>
   <string name="share_handler_page_title">Select an Assistant</string>
@@ -986,3 +988,4 @@
   <string name="assistant_page_temperature_warning">Usually 1. Not recommended to change for reasoning models.</string>
   <string name="chat_page_check_title_model_settings">Check title model settings</string>
 </resources>
+

@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "me.rerere.tts"
+    namespace = "me.rerere.speech"
     compileSdk = 37
 
     defaultConfig {

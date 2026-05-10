@@ -743,7 +743,7 @@
   <string name="setting_page_sponsor_alert_title">支援開發者</string>
   <string name="setting_page_theme_setting">主題設定</string>
   <string name="setting_page_tts_service">語音服務</string>
-  <string name="setting_page_tts_service_desc">配置語音合成服務提供商</string>
+  <string name="setting_page_tts_service_desc">配置語音合成與語音識別服務提供商</string>
   <string name="setting_page_tts_settings">TTS設定</string>
   <string name="setting_page_web_server">Web伺服器</string>
   <string name="setting_page_web_server_address_note">位址備註</string>
@@ -983,5 +983,7 @@
   <string name="setting_provider_page_claude_prompt_cache_ttl">提示快取時長</string>
   <string name="assistant_page_temperature_warning">通常為 1。對於推理模型不建議修改。</string>
   <string name="chat_page_check_title_model_settings">檢查標題模型設定</string>
+  <string name="speech_tab_tts">文字轉語音</string>
+  <string name="speech_tab_asr">語音辨識</string>
 </resources>
 

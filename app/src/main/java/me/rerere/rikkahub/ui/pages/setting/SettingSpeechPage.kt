@@ -6,11 +6,10 @@ import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.hugeicons.stroke.DragDropHorizontal
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Mic01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.VolumeHigh
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,10 +36,10 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -48,9 +47,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +60,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.DEFAULT_SYSTEM_TTS_ID
@@ -81,12 +79,11 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @Composable
-fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
+fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var editingTTSProvider by remember { mutableStateOf<TTSProviderSetting?>(null) }
     var editingASRProvider by remember { mutableStateOf<ASRProviderSetting?>(null) }
-    val pagerState = rememberPagerState { 2 }
-    val scope = rememberCoroutineScope()
+    var selectedPage by remember { mutableIntStateOf(0) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -99,7 +96,7 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
-                    if (pagerState.currentPage == 0) {
+                    if (selectedPage == 0) {
                         AddTTSProviderButton {
                             vm.updateSettings(
                                 settings.copy(
@@ -122,50 +119,39 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
                 colors = CustomColors.topBarColors
             )
         },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedPage == 0,
+                    onClick = { selectedPage = 0 },
+                    icon = { Icon(HugeIcons.VolumeHigh, contentDescription = null) },
+                    label = { Text(stringResource(R.string.speech_tab_tts)) }
+                )
+                NavigationBarItem(
+                    selected = selectedPage == 1,
+                    onClick = { selectedPage = 1 },
+                    icon = { Icon(HugeIcons.Mic01, contentDescription = null) },
+                    label = { Text(stringResource(R.string.speech_tab_asr)) }
+                )
+            }
+        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            SecondaryTabRow(
-                selectedTabIndex = pagerState.currentPage,
-                containerColor = CustomColors.topBarColors.containerColor
-            ) {
-                Tab(
-                    selected = pagerState.currentPage == 0,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    text = { Text("TTS") }
-                )
-                Tab(
-                    selected = pagerState.currentPage == 1,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    text = { Text("ASR") }
-                )
-            }
+        when (selectedPage) {
+            0 -> TTSProviderList(
+                settings = settings,
+                onUpdateSettings = vm::updateSettings,
+                onEdit = { editingTTSProvider = it },
+                modifier = Modifier.padding(innerPadding)
+            )
 
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) { page ->
-                when (page) {
-                    0 -> TTSProviderList(
-                        settings = settings,
-                        onUpdateSettings = vm::updateSettings,
-                        onEdit = { editingTTSProvider = it }
-                    )
-
-                    1 -> ASRProviderList(
-                        settings = settings,
-                        onUpdateSettings = vm::updateSettings,
-                        onEdit = { editingASRProvider = it }
-                    )
-                }
-            }
+            1 -> ASRProviderList(
+                settings = settings,
+                onUpdateSettings = vm::updateSettings,
+                onEdit = { editingASRProvider = it },
+                modifier = Modifier.padding(innerPadding)
+            )
         }
     }
 
@@ -301,7 +287,8 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
 private fun TTSProviderList(
     settings: Settings,
     onUpdateSettings: (Settings) -> Unit,
-    onEdit: (TTSProviderSetting) -> Unit
+    onEdit: (TTSProviderSetting) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -312,7 +299,7 @@ private fun TTSProviderList(
     }
 
     LazyColumn(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .imePadding(),
         contentPadding = PaddingValues(16.dp),
@@ -377,7 +364,8 @@ private fun TTSProviderList(
 private fun ASRProviderList(
     settings: Settings,
     onUpdateSettings: (Settings) -> Unit,
-    onEdit: (ASRProviderSetting) -> Unit
+    onEdit: (ASRProviderSetting) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -388,7 +376,7 @@ private fun ASRProviderList(
     }
 
     LazyColumn(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .imePadding(),
         contentPadding = PaddingValues(16.dp),
