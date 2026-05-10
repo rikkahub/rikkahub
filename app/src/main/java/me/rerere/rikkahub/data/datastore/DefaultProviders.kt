@@ -333,4 +333,28 @@ val DEFAULT_PROVIDERS = listOf(
             )
         }
     ),
+    // MiniMax via the Anthropic-compatible endpoint. Per Minimax docs the base
+    // URL is https://api.minimax.io/anthropic; the Anthropic SDK appends
+    // /v1/messages, and a probe of /anthropic/messages (no /v1) returns 404
+    // while /anthropic/v1/messages returns the proper Anthropic-style 401, so
+    // /anthropic/v1 is the correct baseUrl for ClaudeProvider's `${baseUrl}/messages`.
+    // Using the Anthropic-compat surface instead of the OpenAI one because tool-
+    // calling reliability is materially better for these models on the Anthropic
+    // shape than on the OpenAI translation layer (per the minimax-m2.7
+    // observations in the Telegram bot path).
+    // Models list left empty to match every other built-in: user picks which
+    // MiniMax model(s) they want via "+ Add new model" rather than us pinning
+    // a curated subset that may go stale as the lineup evolves.
+    // promptCaching defaults true on ProviderSetting.Claude but Minimax docs
+    // make no mention of cache_control support; default off to avoid sending
+    // headers Minimax may reject. User can flip it on if/when they confirm.
+    ProviderSetting.Claude(
+        id = Uuid.parse("b55716c7-e465-4666-a788-4243aab13fb3"),
+        name = "MiniMax",
+        baseUrl = "https://api.minimax.io/anthropic/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        promptCaching = false,
+    ),
 )

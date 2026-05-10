@@ -380,15 +380,26 @@ private fun ModelList(
     onUpdateProvider: (ProviderSetting) -> Unit
 ) {
     val providerManager = koinInject<ProviderManager>()
+    val toaster = LocalToaster.current
     val modelList by produceState(emptyList(), providerSetting) {
         runCatching {
-            println("loading models...")
             value = providerManager.getProviderByType(providerSetting)
                 .listModels(providerSetting)
                 .sortedBy { it.modelId }
                 .toList()
-        }.onFailure {
-            it.printStackTrace()
+        }.onFailure { error ->
+            // runCatching catches Throwable, which includes CancellationException
+            // (e.g. when the user navigates away from the Models tab mid-fetch
+            // and Compose cancels this produceState's coroutine). Re-throw so
+            // we don't print a stack trace + show a toast for normal teardown.
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            error.printStackTrace()
+            // Surface real failures (missing/invalid API key, providers like
+            // Minimax that return an HTTP 200 error envelope instead of a 4xx).
+            toaster.show(
+                error.message ?: "Failed to load models",
+                type = ToastType.Error
+            )
         }
     }
     var expanded by rememberSaveable { mutableStateOf(true) }

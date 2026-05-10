@@ -5,7 +5,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -37,6 +40,21 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+// Same shape as ClaudeProvider.MINIMAX_FALLBACK_MODELS — see comment there for
+// why a fallback is needed (Minimax's /v1/models returns `{"object":"","data":null}`
+// even with a valid key, despite their published OpenAPI spec). Duplicated rather
+// than shared because both providers are otherwise self-contained and a util
+// module just for this would be overkill.
+private val MINIMAX_FALLBACK_MODELS = listOf(
+    "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
+    "MiniMax-M2.5",
+    "MiniMax-M2.5-highspeed",
+    "MiniMax-M2.1",
+    "MiniMax-M2.1-highspeed",
+    "MiniMax-M2",
+).map { Model(modelId = it, displayName = it) }
+
 class OpenAIProvider(
     private val client: OkHttpClient,
     context: Context? = null
@@ -57,13 +75,36 @@ class OpenAIProvider(
                 .build()
 
             val response = client.newCall(request).await()
+            val bodyStr = response.body?.string() ?: ""
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body?.string()}")
+                error("Failed to get models: ${response.code} $bodyStr")
             }
 
-            val bodyStr = response.body?.string() ?: ""
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
+            // `as? JsonArray` handles both an absent `data` key (Kotlin null)
+            // and a JSON `null` value (`JsonNull`, which is a non-null Kotlin
+            // object that throws if you call `.jsonArray` on it).
+            val data = bodyJson["data"] as? JsonArray
+            if (data == null) {
+                // Some providers (Minimax, etc.) return HTTP 200 with an error
+                // envelope instead of a 4xx. Surface the error so the user sees
+                // why the model list is empty rather than a silent blank sheet.
+                val baseResp = bodyJson["base_resp"] as? JsonObject
+                val statusCode = baseResp?.get("status_code")?.jsonPrimitive?.intOrNull
+                if (statusCode != null && statusCode != 0) {
+                    val msg = baseResp["status_msg"]?.jsonPrimitive?.contentOrNull
+                    error("Failed to get models: ${msg ?: "status_code=$statusCode"}")
+                }
+                val errMsg = (bodyJson["error"] as? JsonObject)?.get("message")
+                    ?.jsonPrimitive?.contentOrNull
+                if (errMsg != null) {
+                    error("Failed to get models: $errMsg")
+                }
+                if (providerSetting.baseUrl.contains("api.minimax.io", ignoreCase = true)) {
+                    return@withContext MINIMAX_FALLBACK_MODELS
+                }
+                error("Failed to get models: response has no `data` field")
+            }
 
             data.mapNotNull { modelJson ->
                 val modelObj = modelJson.jsonObject

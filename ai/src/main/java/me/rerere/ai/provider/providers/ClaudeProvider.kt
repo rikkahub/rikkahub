@@ -59,6 +59,26 @@ import kotlin.time.Clock
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
+// Minimax's /anthropic/v1/models returns `{"data": null}` (and the OpenAI-shape
+// /v1/models returns `{"object":"","data":null}`) even with a valid API key,
+// despite their public OpenAPI spec documenting the OpenAI-compat list shape.
+// The endpoint is effectively unimplemented on their side. Surface their
+// documented model lineup in the "Available Models" picker so users can pick
+// which one(s) to add — the list is RETURNED FROM listModels, not seeded into
+// the user's saved provider state.
+//
+// Source: https://platform.minimax.io/docs/api-reference/models/openai/list-models
+// + the published model table on the Minimax models page.
+private val MINIMAX_FALLBACK_MODELS = listOf(
+    "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
+    "MiniMax-M2.5",
+    "MiniMax-M2.5-highspeed",
+    "MiniMax-M2.1",
+    "MiniMax-M2.1-highspeed",
+    "MiniMax-M2",
+).map { Model(modelId = it, displayName = it) }
+
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
@@ -72,13 +92,36 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 .build()
 
             val response = client.newCall(request).execute()
+            val bodyStr = response.body?.string() ?: ""
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body?.string()}")
+                error("Failed to get models: ${response.code} $bodyStr")
             }
 
-            val bodyStr = response.body?.string() ?: ""
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
+            // `as? JsonArray` handles both an absent `data` key (Kotlin null)
+            // and a JSON `null` value (JsonNull, which is a non-null Kotlin
+            // object that throws if you call `.jsonArray` on it). The latter
+            // surfaces e.g. when a user mis-types a Claude-shape provider at
+            // an OpenAI URL like https://api.minimax.io/v1 — Minimax responds
+            // 200 with `{"base_resp": {...}}` and we'd crash here otherwise.
+            val data = bodyJson["data"] as? JsonArray
+            if (data == null) {
+                val baseResp = bodyJson["base_resp"] as? JsonObject
+                val statusCode = baseResp?.get("status_code")?.jsonPrimitive?.intOrNull
+                if (statusCode != null && statusCode != 0) {
+                    val msg = baseResp["status_msg"]?.jsonPrimitive?.contentOrNull
+                    error("Failed to get models: ${msg ?: "status_code=$statusCode"}")
+                }
+                val errMsg = (bodyJson["error"] as? JsonObject)?.get("message")
+                    ?.jsonPrimitive?.contentOrNull
+                if (errMsg != null) {
+                    error("Failed to get models: $errMsg")
+                }
+                if (providerSetting.baseUrl.contains("api.minimax.io", ignoreCase = true)) {
+                    return@withContext MINIMAX_FALLBACK_MODELS
+                }
+                return@withContext emptyList()
+            }
 
             data.mapNotNull { modelJson ->
                 val modelObj = modelJson.jsonObject
