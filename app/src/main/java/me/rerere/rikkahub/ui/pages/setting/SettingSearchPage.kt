@@ -381,6 +381,13 @@ private fun SearchProviderCard(
                                 onUpdateService(options)
                             }
                         }
+
+                        is SearchServiceOptions.TinyfishOptions -> {
+                            TinyfishOptions(options as SearchServiceOptions.TinyfishOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
                     }
 
                     ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -1051,6 +1058,30 @@ private fun RikkaHubOptions(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TinyfishOptions(
+    options: SearchServiceOptions.TinyfishOptions,
+    onUpdateOptions: (SearchServiceOptions.TinyfishOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

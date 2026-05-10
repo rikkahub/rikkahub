@@ -42,6 +42,13 @@ interface Provider<T : ProviderSetting> {
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
     ): ImageGenerationResult
+
+    suspend fun editImage(
+        providerSetting: ProviderSetting,
+        params: ImageEditParams,
+    ): ImageGenerationResult {
+        error("Image edit is not supported")
+    }
 }
 
 @Serializable
@@ -60,6 +67,17 @@ data class TextGenerationParams(
 data class ImageGenerationParams(
     val model: Model,
     val prompt: String,
+    val numOfImages: Int = 1,
+    val aspectRatio: ImageAspectRatio = ImageAspectRatio.SQUARE,
+    val customHeaders: List<CustomHeader> = emptyList(),
+    val customBody: List<CustomBody> = emptyList(),
+)
+
+@Serializable
+data class ImageEditParams(
+    val model: Model,
+    val prompt: String,
+    val images: List<String>,
     val numOfImages: Int = 1,
     val aspectRatio: ImageAspectRatio = ImageAspectRatio.SQUARE,
     val customHeaders: List<CustomHeader> = emptyList(),

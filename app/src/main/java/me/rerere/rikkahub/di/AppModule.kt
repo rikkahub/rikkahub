@@ -25,6 +25,7 @@ import me.rerere.rikkahub.service.CronJobScheduler
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
@@ -184,6 +185,10 @@ val appModule = module {
 
     single {
         Firebase.analytics
+    }
+
+    single {
+        SoundEffectPlayer(get())
     }
 
     single {

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.transformers
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.utils.toLocalDateTime
 import java.time.ZoneId
@@ -31,16 +32,22 @@ internal fun applyTimeReminder(messages: List<UIMessage>): List<UIMessage> {
     val result = mutableListOf<UIMessage>()
     val tz = TimeZone.currentSystemDefault()
 
+    var firstUserFound = false
     for (i in messages.indices) {
         val current = messages[i]
-        if (i > 0) {
-            val previous = messages[i - 1]
-            val prevInstant = previous.createdAt.toInstant(tz)
+        if (current.role == MessageRole.USER) {
             val currInstant = current.createdAt.toInstant(tz)
-            val gapSeconds = (currInstant - prevInstant).inWholeSeconds
+            if (!firstUserFound) {
+                firstUserFound = true
+                result.add(buildTimeReminderMessage(null, currInstant))
+            } else {
+                val previous = messages[i - 1]
+                val prevInstant = previous.createdAt.toInstant(tz)
+                val gapSeconds = (currInstant - prevInstant).inWholeSeconds
 
-            if (gapSeconds > TIME_GAP_THRESHOLD_SECONDS) {
-                result.add(buildTimeReminderMessage(gapSeconds, currInstant))
+                if (gapSeconds > TIME_GAP_THRESHOLD_SECONDS) {
+                    result.add(buildTimeReminderMessage(gapSeconds, currInstant))
+                }
             }
         }
         result.add(current)
@@ -49,13 +56,17 @@ internal fun applyTimeReminder(messages: List<UIMessage>): List<UIMessage> {
     return result
 }
 
-private fun buildTimeReminderMessage(gapSeconds: Long, instant: Instant): UIMessage {
+private fun buildTimeReminderMessage(gapSeconds: Long?, instant: Instant): UIMessage {
     val javaInstant = instant.toJavaInstant()
     val dayOfWeek = javaInstant.atZone(ZoneId.systemDefault()).dayOfWeek
         .getDisplayName(TextStyle.FULL, Locale.getDefault())
     val timeStr = javaInstant.toLocalDateTime()
-    val gapText = formatGap(gapSeconds)
-    val content = "<time_reminder>Current time: $dayOfWeek, $timeStr ($gapText since last message)</time_reminder>"
+    val content = if (gapSeconds != null) {
+        val gapText = formatGap(gapSeconds)
+        "<time_reminder>Current time: $dayOfWeek, $timeStr ($gapText since last message)</time_reminder>"
+    } else {
+        "<time_reminder>Current time: $dayOfWeek, $timeStr</time_reminder>"
+    }
     return UIMessage.user(content)
 }
 

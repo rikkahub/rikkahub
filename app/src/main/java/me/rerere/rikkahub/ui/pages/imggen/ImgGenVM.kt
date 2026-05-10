@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.ui.ImageAspectRatio
@@ -78,6 +79,9 @@ class ImgGenVM(
     private val _currentGeneratedImages = MutableStateFlow<List<GeneratedImage>>(emptyList())
     val currentGeneratedImages: StateFlow<List<GeneratedImage>> = _currentGeneratedImages
 
+    private val _referenceImages = MutableStateFlow<List<String>>(emptyList())
+    val referenceImages: StateFlow<List<String>> = _referenceImages
+
     val pager = Pager(
         config = PagingConfig(pageSize = 20, enablePlaceholders = false),
         pagingSourceFactory = { genMediaRepository.getAllMedia() }
@@ -100,8 +104,31 @@ class ImgGenVM(
         _aspectRatio.value = aspectRatio
     }
 
+    fun addReferenceImages(paths: List<String>) {
+        _referenceImages.value = (_referenceImages.value + paths).distinct().take(MAX_REFERENCE_IMAGES)
+    }
+
+    fun removeReferenceImage(path: String) {
+        _referenceImages.value = _referenceImages.value.filterNot { it == path }
+        deleteReferenceFiles(listOf(path))
+    }
+
+    fun clearReferenceImages() {
+        deleteReferenceFiles(_referenceImages.value)
+        _referenceImages.value = emptyList()
+    }
+
     fun clearError() {
         _error.value = null
+    }
+
+    fun startNewSession() {
+        cancelJob?.cancel()
+        clearReferenceImages()
+        _prompt.value = ""
+        _currentGeneratedImages.value = emptyList()
+        _error.value = null
+        _isGenerating.value = false
     }
 
     fun generateImage() {
@@ -165,15 +192,83 @@ class ImgGenVM(
         }
     }
 
+    fun editImage() {
+        if (prompt.value.isBlank() || referenceImages.value.isEmpty()) return
+        cancelJob?.cancel()
+        cancelJob = viewModelScope.launch {
+            try {
+                _isGenerating.value = true
+                _error.value = null
+                _currentGeneratedImages.value = emptyList()
+
+                val settings = settingsStore.settingsFlow.first()
+                val model = settings.findModelById(settings.imageGenerationModelId)
+                    ?: throw IllegalStateException("No model selected")
+
+                val provider = model.findProvider(settings.providers)
+                    ?: throw IllegalStateException("Provider not found")
+
+                val providerSetting = settings.providers.find { it.id == provider.id }
+                    ?: throw IllegalStateException("Provider setting not found")
+
+                val sourceImages = _referenceImages.value
+                val params = ImageEditParams(
+                    model = model,
+                    prompt = _prompt.value,
+                    images = sourceImages,
+                    numOfImages = _numberOfImages.value,
+                    aspectRatio = _aspectRatio.value,
+                    customHeaders = model.customHeaders,
+                    customBody = model.customBodies
+                )
+
+                val result = providerManager.getProviderByType(provider)
+                    .editImage(providerSetting, params)
+
+                val newImages = mutableListOf<GeneratedImage>()
+
+                result.items.forEachIndexed { index, item ->
+                    val imageFile = saveImageToStorage(
+                        item = item,
+                        prompt = _prompt.value,
+                        modelName = model.displayName,
+                        index = index,
+                        type = GenMediaEntity.TYPE_IMAGE_EDIT,
+                    )
+                    val generatedImage = GeneratedImage(
+                        id = 0, // Will be updated after database insertion
+                        prompt = _prompt.value,
+                        filePath = imageFile.absolutePath,
+                        timestamp = System.currentTimeMillis(),
+                        model = model.displayName
+                    )
+                    newImages.add(generatedImage)
+                }
+
+                _currentGeneratedImages.value = newImages
+                clearReferenceImages()
+            } catch (e: Exception) {
+                if (e is CancellationException) return@launch
+                Log.e(TAG, "Failed to edit image", e)
+                _error.value = e.message ?: "Unknown error occurred"
+            } finally {
+                _isGenerating.value = false
+            }
+        }
+    }
+
     fun cancelGeneration() {
         cancelJob?.cancel()
+        clearReferenceImages()
     }
 
     private suspend fun saveImageToStorage(
         item: ImageGenerationItem,
         prompt: String,
         modelName: String,
-        index: Int
+        index: Int,
+        type: String = GenMediaEntity.TYPE_IMAGE_GENERATION,
+        sourcePaths: String? = null,
     ): File {
         val imagesDir = filesManager.getImagesDir()
 
@@ -189,7 +284,9 @@ class ImgGenVM(
             path = relativePath,
             modelId = modelName,
             prompt = prompt,
-            createAt = timestamp
+            createAt = timestamp,
+            type = type,
+            sourcePaths = sourcePaths,
         )
         genMediaRepository.insertMedia(entity)
 
@@ -214,7 +311,19 @@ class ImgGenVM(
         }
     }
 
+    private fun deleteReferenceFiles(paths: List<String>) {
+        viewModelScope.launch {
+            paths.forEach { path ->
+                val file = File(path)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "ImgGenVM"
+        private const val MAX_REFERENCE_IMAGES = 16
     }
 }

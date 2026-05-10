@@ -481,14 +481,18 @@ private fun ModeInjectionEditSheet(
                     )
                 }
 
-                Text(
-                    stringResource(R.string.prompt_page_injection_role),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionRoleSelector(
-                    role = injection.role,
-                    onSelect = { onEdit(injection.copy(role = it)) }
-                )
+                AnimatedVisibility(visible = injection.position.usesStandaloneMessage()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(
+                            stringResource(R.string.prompt_page_injection_role),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InjectionRoleSelector(
+                            role = injection.role,
+                            onSelect = { onEdit(injection.copy(role = it)) }
+                        )
+                    }
+                }
 
                 OutlinedTextField(
                     value = injection.content,
@@ -528,6 +532,15 @@ private fun InjectionPositionSelector(
         optionToString = { getPositionLabel(it) },
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+private fun InjectionPosition.usesStandaloneMessage(): Boolean = when (this) {
+    InjectionPosition.BEFORE_SYSTEM_PROMPT,
+    InjectionPosition.AFTER_SYSTEM_PROMPT -> false
+
+    InjectionPosition.TOP_OF_CHAT,
+    InjectionPosition.BOTTOM_OF_CHAT,
+    InjectionPosition.AT_DEPTH -> true
 }
 
 @Composable
@@ -1138,14 +1151,18 @@ private fun RegexInjectionEditDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
-                Text(
-                    stringResource(R.string.prompt_page_injection_role),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionRoleSelector(
-                    role = entry.role,
-                    onSelect = { onEdit(entry.copy(role = it)) }
-                )
+                AnimatedVisibility(visible = entry.position.usesStandaloneMessage()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            stringResource(R.string.prompt_page_injection_role),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InjectionRoleSelector(
+                            role = entry.role,
+                            onSelect = { onEdit(entry.copy(role = it)) }
+                        )
+                    }
+                }
 
                 OutlinedTextField(
                     value = entry.content,

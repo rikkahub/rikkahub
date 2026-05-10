@@ -186,18 +186,18 @@ private fun MarkdownPreview() {
 private data class MarkdownParseResult(
     val preprocessed: String,
     val astTree: ASTNode,
-    val hasHtmlBlocks: Boolean,
+    val hasHtml: Boolean,
 )
 
-private fun ASTNode.containsHtmlBlocks(): Boolean {
-    if (type == MarkdownElementTypes.HTML_BLOCK) return true
-    return children.any { it.containsHtmlBlocks() }
+private fun ASTNode.containsHtml(): Boolean {
+    if (type == MarkdownElementTypes.HTML_BLOCK || type == MarkdownTokenTypes.HTML_TAG) return true
+    return children.any { it.containsHtml() }
 }
 
 private fun parseMarkdown(content: String): MarkdownParseResult {
     val preprocessed = preProcess(content)
     val astTree = parser.buildMarkdownTreeFromString(preprocessed)
-    return MarkdownParseResult(preprocessed, astTree, astTree.containsHtmlBlocks())
+    return MarkdownParseResult(preprocessed, astTree, astTree.containsHtml())
 }
 
 @Composable
@@ -221,7 +221,7 @@ fun MarkdownBlock(
             .collect { setData(it) }
     }
 
-    if (data.hasHtmlBlocks) {
+    if (data.hasHtml) {
         MarkdownNew(
             content = content,
             modifier = modifier,

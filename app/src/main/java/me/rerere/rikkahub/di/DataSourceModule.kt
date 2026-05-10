@@ -167,7 +167,11 @@ val dataSourceModule = module {
             .addNetworkInterceptor { chain ->
                 val request = chain.request()
                 val contentTypeHeader = request.header("Content-Type")
-                if (contentTypeHeader != null && contentTypeHeader.contains(";")) {
+                if (
+                    contentTypeHeader != null &&
+                    contentTypeHeader.contains(";") &&
+                    contentTypeHeader.substringBefore(";").trim().equals("application/json", ignoreCase = true)
+                ) {
                     chain.proceed(
                         request.newBuilder()
                             .header("Content-Type", contentTypeHeader.substringBefore(";").trim())

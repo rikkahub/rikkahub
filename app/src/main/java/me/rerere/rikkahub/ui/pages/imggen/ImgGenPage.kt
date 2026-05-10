@@ -1,15 +1,11 @@
 package me.rerere.rikkahub.ui.pages.imggen
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Copy01
-import me.rerere.hugeicons.stroke.Image03
-import me.rerere.hugeicons.stroke.Colors
-import me.rerere.hugeicons.stroke.FloppyDisk
-import me.rerere.hugeicons.stroke.SendToMobile
-import me.rerere.hugeicons.stroke.Tools
-import me.rerere.hugeicons.stroke.Delete01
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +19,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,8 +36,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.CircularWavyProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +48,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -82,11 +80,25 @@ import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.ImageAspectRatio
+import me.rerere.common.android.appTempFolder
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowUp02
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Colors
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.FloppyDisk
+import me.rerere.hugeicons.stroke.Image03
+import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -94,9 +106,11 @@ import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.utils.ImageUtils
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.io.File
+import kotlin.uuid.Uuid
 
 @Composable
 fun ImageGenPage(
@@ -129,6 +143,14 @@ fun ImageGenPage(
                 },
                 navigationIcon = {
                     BackButton()
+                },
+                actions = {
+                    IconButton(onClick = vm::startNewSession) {
+                        Icon(
+                            imageVector = HugeIcons.Add01,
+                            contentDescription = "New session"
+                        )
+                    }
                 }
             )
         },
@@ -219,6 +241,7 @@ private fun ImageGenScreen(
     val aspectRatio by vm.aspectRatio.collectAsStateWithLifecycle()
     val isGenerating by vm.isGenerating.collectAsStateWithLifecycle()
     val currentGeneratedImages by vm.currentGeneratedImages.collectAsStateWithLifecycle()
+    val referenceImages by vm.referenceImages.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val settings by vm.settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -240,32 +263,41 @@ private fun ImageGenScreen(
             .padding(16.dp)
             .imePadding()
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            (0 until minOf(2, currentGeneratedImages.size)).forEach { index ->
-                val image = currentGeneratedImages[index]
-                var showPreview by remember { mutableStateOf(false) }
-                AsyncImage(
-                    model = File(image.filePath),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .weight(1f)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { showPreview = true },
-                    contentScale = ContentScale.Crop
+            if (isGenerating && currentGeneratedImages.isEmpty()) {
+                ContainedLoadingIndicator(
+                    modifier = Modifier.align(Alignment.Center)
                 )
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    (0 until minOf(2, currentGeneratedImages.size)).forEach { index ->
+                        val image = currentGeneratedImages[index]
+                        var showPreview by remember { mutableStateOf(false) }
+                        AsyncImage(
+                            model = File(image.filePath),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { showPreview = true },
+                            contentScale = ContentScale.Crop
+                        )
 
-                if (showPreview) {
-                    ImagePreviewDialog(
-                        images = listOf(image.filePath),
-                        onDismissRequest = { showPreview = false },
-                    )
+                        if (showPreview) {
+                            ImagePreviewDialog(
+                                images = listOf(image.filePath),
+                                onDismissRequest = { showPreview = false },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -273,6 +305,8 @@ private fun ImageGenScreen(
             prompt = prompt,
             vm = vm,
             isGenerating = isGenerating,
+            referenceImages = referenceImages,
+            settings = settings,
             onShowSettings = { showSettingsSheet = true },
             modifier = Modifier
         )
@@ -296,50 +330,182 @@ private fun InputBar(
     prompt: String,
     vm: ImgGenVM,
     isGenerating: Boolean,
+    referenceImages: List<String>,
+    settings: Settings,
     onShowSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val imagePickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
+            if (selectedUris.isNotEmpty()) {
+                scope.launch {
+                    val paths = selectedUris.mapNotNull { uri ->
+                        withContext(Dispatchers.IO) {
+                            runCatching {
+                                val bitmap = ImageUtils.loadOptimizedBitmap(context, uri, maxSize = 2048)
+                                    ?: error("Failed to decode image")
+                                val pngBytes = FileUtils.compressBitmapToPng(bitmap)
+                                bitmap.recycle()
+                                val file = File(context.appTempFolder, "imggen_ref_${Uuid.random()}.png")
+                                file.writeBytes(pngBytes)
+                                file.absolutePath
+                            }.getOrNull()
+                        }
+                    }
+                    vm.addReferenceImages(paths)
+                }
+            }
+        }
+
+    Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButton(
-            onClick = onShowSettings
-        ) {
-            Icon(HugeIcons.Tools, null)
+        if (referenceImages.isNotEmpty()) {
+            ReferenceImagesRow(
+                images = referenceImages,
+                onRemove = vm::removeReferenceImage
+            )
         }
 
         OutlinedTextField(
             value = prompt,
             onValueChange = vm::updatePrompt,
             placeholder = { Text(stringResource(R.string.imggen_page_prompt_placeholder)) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 140.dp),
             minLines = 1,
             maxLines = 5,
             shape = MaterialTheme.shapes.large,
             textStyle = MaterialTheme.typography.bodySmall,
         )
 
-        FilledTonalIconButton(
-            onClick = {
-                if (!isGenerating) {
-                    vm.generateImage()
-                } else {
-                    vm.cancelGeneration()
-                }
-            },
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (isGenerating) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp
-                )
-            } else {
+            ModelSelector(
+                modelId = settings.imageGenerationModelId,
+                providers = settings.providers,
+                type = ModelType.IMAGE,
+                onlyIcon = true,
+                onSelect = { model ->
+                    scope.launch {
+                        vm.settingsStore.update { oldSettings ->
+                            oldSettings.copy(imageGenerationModelId = model.id)
+                        }
+                    }
+                }
+            )
+
+            IconButton(
+                onClick = onShowSettings
+            ) {
+                Icon(HugeIcons.Tools, null)
+            }
+
+            IconButton(
+                onClick = { imagePickerLauncher.launch("image/*") }
+            ) {
                 Icon(
-                    imageVector = HugeIcons.SendToMobile,
-                    contentDescription = stringResource(R.string.imggen_page_generate_image)
+                    imageVector = HugeIcons.Add01,
+                    contentDescription = "Add reference image"
                 )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            val canSend = prompt.isNotBlank()
+            Surface(
+                onClick = {
+                    if (!isGenerating) {
+                        if (referenceImages.isEmpty()) {
+                            vm.generateImage()
+                        } else {
+                            vm.editImage()
+                        }
+                    } else {
+                        vm.cancelGeneration()
+                    }
+                },
+                enabled = isGenerating || canSend,
+                modifier = Modifier.size(40.dp),
+                shape = CircleShape,
+                color = when {
+                    isGenerating -> MaterialTheme.colorScheme.errorContainer
+                    !canSend -> MaterialTheme.colorScheme.surfaceContainerHigh
+                    else -> MaterialTheme.colorScheme.primary
+                },
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (isGenerating) HugeIcons.Cancel01 else HugeIcons.ArrowUp02,
+                        contentDescription = stringResource(R.string.imggen_page_generate_image),
+                        tint = when {
+                            isGenerating -> MaterialTheme.colorScheme.onErrorContainer
+                            !canSend -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            else -> MaterialTheme.colorScheme.onPrimary
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReferenceImagesRow(
+    images: List<String>,
+    onRemove: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        images.forEach { image ->
+            Surface(
+                modifier = Modifier.size(56.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Box {
+                    AsyncImage(
+                        model = File(image),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    Surface(
+                        onClick = { onRemove(image) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(3.dp)
+                            .size(20.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = HugeIcons.Delete01,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.inverseOnSurface,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }

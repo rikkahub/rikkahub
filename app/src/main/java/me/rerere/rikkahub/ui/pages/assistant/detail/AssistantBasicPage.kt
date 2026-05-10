@@ -2,13 +2,13 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -23,11 +23,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
@@ -37,8 +41,6 @@ import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
-import me.rerere.rikkahub.ui.components.ui.Tag
-import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.hooks.heroAnimation
@@ -225,6 +227,13 @@ internal fun AssistantBasicContent(
                 label = {
                     Text(stringResource(R.string.assistant_page_temperature))
                 },
+                description = {
+                    Text(
+                        text = buildAnnotatedString {
+                            append(stringResource(R.string.assistant_page_temperature_warning))
+                        }
+                    )
+                },
                 tail = {
                     Switch(
                         checked = assistant.temperature != null,
@@ -239,54 +248,30 @@ internal fun AssistantBasicContent(
                 }
             ) {
                 if (assistant.temperature != null) {
-                    Slider(
-                        value = assistant.temperature,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    temperature = it.toFixed(2).toFloatOrNull() ?: 0.6f
-                                )
-                            )
-                        },
-                        valueRange = 0f..2f,
-                        steps = 19,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        val currentTemperature = assistant.temperature
-                        val tagType = when (currentTemperature) {
-                            in 0.0f..0.3f -> TagType.INFO
-                            in 0.3f..1.0f -> TagType.SUCCESS
-                            in 1.0f..1.5f -> TagType.WARNING
-                            in 1.5f..2.0f -> TagType.ERROR
-                            else -> TagType.ERROR
-                        }
-                        Tag(
-                            type = TagType.INFO
-                        ) {
-                            Text(
-                                text = "$currentTemperature"
-                            )
-                        }
-
-                        Tag(
-                            type = tagType
-                        ) {
-                            Text(
-                                text = when (currentTemperature) {
-                                    in 0.0f..0.3f -> stringResource(R.string.assistant_page_strict)
-                                    in 0.3f..1.0f -> stringResource(R.string.assistant_page_balanced)
-                                    in 1.0f..1.5f -> stringResource(R.string.assistant_page_creative)
-                                    in 1.5f..2.0f -> stringResource(R.string.assistant_page_chaotic)
-                                    else -> "?"
-                                }
-                            )
-                        }
+                    var temperatureInput by remember(assistant.id) {
+                        mutableStateOf(assistant.temperature.toString())
                     }
+                    val temperatureValue = temperatureInput.toFloatOrNull()
+                    OutlinedTextField(
+                        value = temperatureInput,
+                        onValueChange = { value ->
+                            temperatureInput = value
+                            value.toFloatOrNull()?.takeIf { it in 0f..2f }?.let { temperature ->
+                                onUpdate(
+                                    assistant.copy(
+                                        temperature = temperature
+                                    )
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        isError = temperatureValue == null || temperatureValue !in 0f..2f,
+                        supportingText = {
+                            Text("0 - 2")
+                        }
+                    )
                 }
             }
             HorizontalDivider()
@@ -316,26 +301,29 @@ internal fun AssistantBasicContent(
                 }
             ) {
                 assistant.topP?.let { topP ->
-                    Slider(
-                        value = topP,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    topP = it.toFixed(2).toFloatOrNull() ?: 1.0f
+                    var topPInput by remember(assistant.id) {
+                        mutableStateOf(topP.toString())
+                    }
+                    val topPValue = topPInput.toFloatOrNull()
+                    OutlinedTextField(
+                        value = topPInput,
+                        onValueChange = { value ->
+                            topPInput = value
+                            value.toFloatOrNull()?.takeIf { it in 0f..1f }?.let { nextTopP ->
+                                onUpdate(
+                                    assistant.copy(
+                                        topP = nextTopP
+                                    )
                                 )
-                            )
+                            }
                         },
-                        valueRange = 0f..1f,
-                        steps = 0,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.assistant_page_top_p_value,
-                            topP.toString()
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        isError = topPValue == null || topPValue !in 0f..1f,
+                        supportingText = {
+                            Text("0 - 1")
+                        }
                     )
                 }
             }

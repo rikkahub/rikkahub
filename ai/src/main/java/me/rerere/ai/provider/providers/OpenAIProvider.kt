@@ -17,6 +17,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
+import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -35,10 +36,13 @@ import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.getByKey
+import okhttp3.MultipartBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 
 // Same shape as ClaudeProvider.MINIMAX_FALLBACK_MODELS — see comment there for
 // why a fallback is needed (Minimax's /v1/models returns `{"object":"","data":null}`
@@ -286,5 +290,94 @@ class OpenAIProvider(
         }
 
         ImageGenerationResult(items = items)
+    }
+
+    override suspend fun editImage(
+        providerSetting: ProviderSetting,
+        params: ImageEditParams
+    ): ImageGenerationResult = withContext(Dispatchers.IO) {
+        require(providerSetting is ProviderSetting.OpenAI) {
+            "Expected OpenAI provider setting"
+        }
+        require(params.images.isNotEmpty()) {
+            "At least one image is required"
+        }
+
+        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val bodyBuilder = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("model", params.model.modelId)
+            .addFormDataPart("prompt", params.prompt)
+            .addFormDataPart("n", params.numOfImages.toString())
+            .addFormDataPart(
+                "size", when (params.aspectRatio) {
+                    ImageAspectRatio.SQUARE -> "1024x1024"
+                    ImageAspectRatio.LANDSCAPE -> "1536x1024"
+                    ImageAspectRatio.PORTRAIT -> "1024x1536"
+                }
+            )
+
+        val imageFieldName = if (params.images.size == 1) "image" else "image[]"
+        params.images.forEach { path ->
+            val imageFile = File(path)
+            require(imageFile.exists()) {
+                "Image file does not exist: $path"
+            }
+            require(imageFile.extension.lowercase() in SUPPORTED_EDIT_IMAGE_EXTENSIONS) {
+                "Unsupported image file type for OpenAI edit: ${imageFile.extension}"
+            }
+            bodyBuilder.addFormDataPart(
+                imageFieldName,
+                imageFile.name,
+                imageFile.asRequestBody(imageFile.imageMediaType().toMediaType())
+            )
+        }
+
+        params.customBody.forEach { customBody ->
+            val value = when (val element = customBody.value) {
+                is JsonPrimitive -> element.contentOrNull ?: element.toString()
+                else -> element.toString()
+            }
+            bodyBuilder.addFormDataPart(customBody.key, value)
+        }
+
+        val request = Request.Builder()
+            .url("${providerSetting.baseUrl}/images/edits")
+            .headers(params.customHeaders.toHeaders())
+            .addHeader("Authorization", "Bearer $key")
+            .post(bodyBuilder.build())
+            .build()
+
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to edit image: ${response.code} ${response.body?.string()}")
+        }
+
+        val bodyStr = response.body?.string() ?: ""
+        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
+
+        val items = data.map { imageJson ->
+            val imageObj = imageJson.jsonObject
+            val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
+                ?: error("No b64_json in response")
+
+            ImageGenerationItem(
+                data = b64Json,
+                mimeType = "image/png"
+            )
+        }
+
+        ImageGenerationResult(items = items)
+    }
+
+    private fun File.imageMediaType(): String = when (extension.lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        else -> "image/png"
+    }
+
+    companion object {
+        private val SUPPORTED_EDIT_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
     }
 }

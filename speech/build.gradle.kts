@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "me.rerere.tts"
-    compileSdk = 36
+    namespace = "me.rerere.speech"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -49,6 +49,7 @@ android {
 dependencies {
     implementation(project(":common"))
 
+    implementation(libs.androidx.core.ktx)
     implementation(libs.okhttp)
 
     implementation(libs.kotlinx.serialization.json)

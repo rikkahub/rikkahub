@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
@@ -107,11 +108,13 @@ class ClaudeProviderPromptCacheTest {
         val system = request["system"]!!.jsonArray
         val systemCacheControl = system.last().jsonObject["cache_control"]!!.jsonObject
         assertEquals("ephemeral", systemCacheControl["type"]!!.jsonPrimitive.content)
+        assertNull(systemCacheControl["ttl"])
 
         // tools should have cache_control
         val tools = request["tools"]!!.jsonArray
         val toolsCacheControl = tools.last().jsonObject["cache_control"]!!.jsonObject
         assertEquals("ephemeral", toolsCacheControl["type"]!!.jsonPrimitive.content)
+        assertNull(toolsCacheControl["ttl"])
     }
 
     @Test
@@ -130,6 +133,47 @@ class ClaudeProviderPromptCacheTest {
         val tools = request["tools"]!!.jsonArray
         val cacheControl = tools.last().jsonObject["cache_control"]!!.jsonObject
         assertEquals("ephemeral", cacheControl["type"]!!.jsonPrimitive.content)
+        assertNull(cacheControl["ttl"])
+    }
+
+    @Test
+    fun `promptCaching=true with one hour ttl should add ttl to cache_control`() {
+        val providerSetting = ProviderSetting.Claude(
+            promptCaching = true,
+            promptCacheTtl = ClaudePromptCacheTtl.ONE_HOUR
+        )
+        val messages = listOf(
+            UIMessage.system("system prompt"),
+            UIMessage.user("first question"),
+            UIMessage.assistant("first answer"),
+            UIMessage.user("second question")
+        )
+        val params = TextGenerationParams(
+            model = Model(modelId = "claude-test", abilities = listOf(ModelAbility.TOOL)),
+            tools = listOf(dummyTool())
+        )
+
+        val request = buildRequest(providerSetting, messages, params)
+
+        val systemCacheControl = request["system"]!!.jsonArray.last().jsonObject["cache_control"]!!.jsonObject
+        assertEquals("ephemeral", systemCacheControl["type"]!!.jsonPrimitive.content)
+        assertEquals("1h", systemCacheControl["ttl"]!!.jsonPrimitive.content)
+
+        val toolCacheControl = request["tools"]!!.jsonArray.last().jsonObject["cache_control"]!!.jsonObject
+        assertEquals("ephemeral", toolCacheControl["type"]!!.jsonPrimitive.content)
+        assertEquals("1h", toolCacheControl["ttl"]!!.jsonPrimitive.content)
+
+        val messagesJson = request["messages"]!!.jsonArray
+        val firstUserMessage = messagesJson.first { msg ->
+            msg.jsonObject["role"]?.jsonPrimitive?.content == "user"
+        }.jsonObject
+        val messageCacheControl = firstUserMessage["content"]!!
+            .jsonArray
+            .last()
+            .jsonObject["cache_control"]!!
+            .jsonObject
+        assertEquals("ephemeral", messageCacheControl["type"]!!.jsonPrimitive.content)
+        assertEquals("1h", messageCacheControl["ttl"]!!.jsonPrimitive.content)
     }
 
     @Test
