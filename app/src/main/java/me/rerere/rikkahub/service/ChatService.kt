@@ -766,7 +766,7 @@ class ChatService(
                     // Pending → Approved transition.
                     toolApprovalPreferences.currentYolo() ||
                         me.rerere.rikkahub.data.ai.tools.HeadlessConversations
-                            .isHeadless(conversationId) ||
+                            .shouldAutoApprove(conversationId) ||
                         me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
                             .isAllowedForChat(conversationId, toolName) ||
                         toolApprovalPreferences.current().contains(toolName)

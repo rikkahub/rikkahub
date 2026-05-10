@@ -529,12 +529,15 @@ class TelegramBotService : Service() {
         // UX: tell Telegram "the bot is typing" so the user sees activity while we generate.
         try { client.sendChatAction(m.chatId, "typing") } catch (_: Throwable) {}
         chatService.initializeConversation(convId)
-        // Mark this conv headless so browser tools route through HeadlessBrowserSessionPool
-        // (no Activity launch on the user's phone) and `streamScreenshotIfHeadless` actually
-        // streams to Telegram. Every other headless caller (cron, sub-agent, workflow,
-        // skill-tester, automation API) does this; the bot was the only one missing it,
-        // so browser_open was opening BrowserActivity visibly and the streamer was a no-op.
-        HeadlessConversations.mark(convId)
+        // Mark this conv browser-headless so browser tools route through
+        // HeadlessBrowserSessionPool (no Activity launch on the user's phone) and
+        // `streamScreenshotIfHeadless` actually streams to Telegram. Use the
+        // browser-only variant — the bot HAS an approval channel (inline-keyboard
+        // prompts via promptForToolApproval), so tool calls must still flow through
+        // the per-tool approval gate. Using the full mark() here would silently
+        // bypass the approval flow because ChatService.isToolAutoApproved checks
+        // shouldAutoApprove(), which the full mark sets true.
+        HeadlessConversations.markBrowserHeadless(convId)
         // Register the agent-context preamble as a SYSTEM addendum (sent once per
         // generation by GenerationHandler) instead of prepending it to the user message.
         // The previous design persisted the preamble inside `UIMessagePart.Text` so it
