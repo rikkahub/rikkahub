@@ -234,6 +234,19 @@ fun ChatInput(
     val asrPermission = rememberPermissionState(PermissionRecordAudio)
     PermissionManager(permissionState = asrPermission)
     var asrBaseText by remember { mutableStateOf("") }
+    LaunchedEffect(asrState.status) {
+        when (asrState.status) {
+            ASRStatus.Listening -> {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                soundEffectPlayer.play(R.raw.asr_start)
+            }
+            ASRStatus.Stopping -> {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                soundEffectPlayer.play(R.raw.asr_stop)
+            }
+            else -> {}
+        }
+    }
     LaunchedEffect(asrState.errorMessage) {
         asrState.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
             toaster.show(message = message, type = ToastType.Error)
@@ -518,21 +531,21 @@ fun ChatInput(
                                 AsrButton(
                                     state = asrState,
                                     onClick = {
-                                        if (asrState.isRecording) {
-                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            soundEffectPlayer.play(R.raw.asr_stop)
-                                            asr.stop()
-                                        } else if (!asrPermission.allRequiredPermissionsGranted) {
-                                            asrPermission.requestPermissions()
-                                        } else {
-                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            soundEffectPlayer.play(R.raw.asr_start)
-                                            asrBaseText = state.textContent.text.toString()
-                                            asr.start { transcript ->
-                                                val spacer =
-                                                    if (asrBaseText.isBlank() || transcript.isBlank()) "" else " "
-                                                state.setMessageText(asrBaseText + spacer + transcript)
+                                        when (asrState.status) {
+                                            ASRStatus.Listening -> asr.stop()
+                                            ASRStatus.Idle, ASRStatus.Error -> {
+                                                if (!asrPermission.allRequiredPermissionsGranted) {
+                                                    asrPermission.requestPermissions()
+                                                } else {
+                                                    asrBaseText = state.textContent.text.toString()
+                                                    asr.start { transcript ->
+                                                        val spacer =
+                                                            if (asrBaseText.isBlank() || transcript.isBlank()) "" else " "
+                                                        state.setMessageText(asrBaseText + spacer + transcript)
+                                                    }
+                                                }
                                             }
+                                            ASRStatus.Connecting, ASRStatus.Stopping -> {}
                                         }
                                     }
                                 )
