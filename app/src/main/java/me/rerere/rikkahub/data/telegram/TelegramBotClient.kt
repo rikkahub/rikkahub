@@ -59,6 +59,14 @@ class TelegramBotClient(
     private val pollClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)   // server-side max 50s + headroom
+        // End-to-end cap on the whole call. readTimeout only catches gaps BETWEEN bytes;
+        // a hostile/buggy network path can keep the connection alive with periodic single
+        // bytes below the readTimeout window and the long-poll never returns. callTimeout
+        // is enforced regardless of byte arrival pattern, so the poll-loop can never sit
+        // silently for more than ~2 minutes — the catch in pollLoop bumps the backoff and
+        // retries. Without this the bot looks dead from the user's POV until the OS
+        // eventually evicts the socket.
+        .callTimeout(120, TimeUnit.SECONDS)
         .build()
         .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 

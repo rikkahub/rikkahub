@@ -1335,27 +1335,67 @@ class TelegramBotService : Service() {
     /** Telegram caps a single sendMessage at 4096 chars; split on newlines where possible. */
     private suspend fun sendChunked(chatId: Long, text: String, replyTo: Long?) {
         val chunks = chunk(text, MAX_CHARS)
+        // Track delivery so we can surface a single user-visible error if every fallback
+        // for some chunk fails. Silent drops were the root cause of the "model wrote a
+        // long reply but Telegram never received it" bug — diagnosing it required
+        // pulling logcat instead of seeing the failure in chat.
+        var anyChunkFailed = false
+        var lastFailure: Throwable? = null
         for ((idx, chunk) in chunks.withIndex()) {
             val html = TelegramHtmlRenderer.render(chunk)
-            val sent = try {
+            val htmlError: Throwable? = try {
                 client.sendMessage(
                     chatId = chatId,
                     text = html,
                     parseMode = PARSE_MODE_HTML,
                     replyToMessageId = if (idx == 0) replyTo else null,
                 )
-                true
-            } catch (_: Throwable) { false }
-            if (!sent) {
-                // HTML parse failed (truncation may have split a tag). Retry as plain text.
-                try {
-                    client.sendMessage(
-                        chatId = chatId,
-                        text = TelegramHtmlRenderer.stripHtml(html).ifBlank { chunk },
-                        parseMode = null,
-                        replyToMessageId = if (idx == 0) replyTo else null,
-                    )
-                } catch (_: Throwable) { /* best effort */ }
+                null
+            } catch (t: Throwable) { t }
+            if (htmlError == null) continue
+            // HTML parse failed (entity split, unclosed tag), or Telegram refused the
+            // chunk (length cap, rate limit, etc.). Log + retry as plain text. The
+            // pre-fix behaviour silently swallowed BOTH branches; we now record the
+            // exception so a future repeat leaves evidence in logcat.
+            android.util.Log.w(
+                TAG,
+                "sendChunked: HTML send failed for chunk ${idx + 1}/${chunks.size} (len=${html.length} src=${chunk.length}); retrying as plain text",
+                htmlError,
+            )
+            val plain = TelegramHtmlRenderer.stripHtml(html).ifBlank { chunk }
+            val plainError: Throwable? = try {
+                client.sendMessage(
+                    chatId = chatId,
+                    text = plain,
+                    parseMode = null,
+                    replyToMessageId = if (idx == 0) replyTo else null,
+                )
+                null
+            } catch (t: Throwable) { t }
+            if (plainError != null) {
+                android.util.Log.w(
+                    TAG,
+                    "sendChunked: plain-text fallback also failed for chunk ${idx + 1}/${chunks.size} (len=${plain.length})",
+                    plainError,
+                )
+                anyChunkFailed = true
+                lastFailure = plainError
+            }
+        }
+        // Surface ONE summary line to the chat so the user knows the reply was clipped.
+        // Without this the silent drop looks like a bot freeze and the user keeps
+        // re-prompting. Capped diagnostic — just the error class + first line of the
+        // message, so the bot token / chat content can't accidentally leak out.
+        if (anyChunkFailed) {
+            val cls = lastFailure?.javaClass?.simpleName.orEmpty()
+            val first = lastFailure?.message?.lineSequence()?.firstOrNull()?.take(120).orEmpty()
+            val notice = "⚠️ Reply too long for Telegram and the formatting was rejected by the API." +
+                (if (cls.isNotBlank()) " ($cls${if (first.isNotBlank()) ": $first" else ""})" else "") +
+                " Ask me to summarise, split the request, or save as a file."
+            runCatching {
+                client.sendMessage(chatId = chatId, text = notice, parseMode = null)
+            }.onFailure {
+                android.util.Log.w(TAG, "sendChunked: even the failure notice failed to deliver", it)
             }
         }
     }
@@ -1396,18 +1436,7 @@ class TelegramBotService : Service() {
         return "$sub\n…"
     }
 
-    private fun chunk(s: String, n: Int): List<String> {
-        if (s.length <= n) return listOf(s)
-        val out = mutableListOf<String>()
-        var rem = s
-        while (rem.length > n) {
-            val cut = rem.lastIndexOf('\n', n).let { if (it > n / 2) it else n }
-            out.add(rem.substring(0, cut))
-            rem = rem.substring(cut).trimStart('\n')
-        }
-        if (rem.isNotEmpty()) out.add(rem)
-        return out
-    }
+    private fun chunk(s: String, n: Int): List<String> = chunkForTelegram(s, n)
 
     /**
      * Send an inline-keyboard approval prompt for [tool]. The prompt is its OWN Telegram
@@ -2604,7 +2633,17 @@ class TelegramBotService : Service() {
         const val CHANNEL_ID = "rikkahub_telegram_bot"
         const val NOTIF_ID = 0xA1B2
 
-        const val MAX_CHARS = 4000   // Telegram limit is 4096; leave headroom
+        // Telegram's HARD per-message limit is 4096. We chunk at 3500 (was 4000) because
+        // chunks are markdown-rendered to HTML downstream and the rendered HTML can be
+        // LONGER than the source: `**foo**` (7) → `<b>foo</b>` (10), a single `[text](url)`
+        // can swell by 12+ chars per occurrence, and there's no upper bound on
+        // markdown→HTML expansion in pathological cases. A 4000-char chunk packed with
+        // bold + headers (e.g. a 25-paragraph story with `**Paragraph N:**` lines) easily
+        // pushed Telegram over the 4096 cap and got 400 MESSAGE_TOO_LONG, then the
+        // try-catches silently swallowed both the HTML and stripped-text retries leaving
+        // the user with no message at all. 3500 leaves ~600 bytes of headroom — enough
+        // for typical markdown-heavy text without making chunks needlessly small.
+        const val MAX_CHARS = 3500
 
         /** Long-poll request can take ~50s server-side + a few seconds for the client to
          *  handle inbound updates and dispatch them. 75s is comfortable headroom; the wake

@@ -545,7 +545,11 @@ class MediaPlaybackService : Service() {
     fun readCurrentPositionMs(): Long {
         return try {
             mediaPlayer?.currentPosition?.toLong() ?: positionMs
-        } catch (_: Throwable) {
+        } catch (_: Exception) {
+            // Narrowed from Throwable so JVM Errors (OOM, StackOverflowError) propagate
+            // instead of being swallowed and reported as the cached position. The only
+            // recoverable failure here is MediaPlayer.IllegalStateException when the
+            // player is mid-teardown — caught as Exception.
             positionMs
         }
     }
