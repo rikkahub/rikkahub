@@ -427,8 +427,22 @@ class LocalTools(
                 val action = params["action"]?.jsonPrimitive?.contentOrNull ?: error("action is required")
                 when (action) {
                     "read" -> {
+                        val text = context.readClipboardText()
+                        val hits = me.rerere.rikkahub.data.ai.tools.local
+                            .SensitiveContentDetector.scan(text)
                         val payload = buildJsonObject {
-                            put("text", context.readClipboardText())
+                            put("text", text)
+                            if (hits.isNotEmpty()) {
+                                put("sensitive_content_detected", true)
+                                put(
+                                    "warning",
+                                    "Clipboard appears to contain sensitive content " +
+                                        "(${hits.joinToString { it.name.lowercase() }}). " +
+                                        "Do NOT echo the value back to the user, log it, " +
+                                        "or include it in summaries or URLs unless they " +
+                                        "explicitly ask for it."
+                                )
+                            }
                         }
                         listOf(UIMessagePart.Text(payload.toString()))
                     }
