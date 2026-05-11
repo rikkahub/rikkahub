@@ -20,8 +20,18 @@ import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import org.koin.android.ext.android.inject
 
 private const val TAG = "RikkaNListener"
-private const val RING_SIZE = 100
+// Generous ring so a busy morning (school bus app + Slack + WhatsApp + Instagram +
+// dozen others piling notifications on while the user wakes up) does not silently roll
+// over within ~10 minutes. The ring is held in memory only; entries cost ~200 bytes
+// each so 500 entries is ~100KB — well below the per-process Java heap budget.
+private const val RING_SIZE = 500
 private const val MAX_TEXT_BYTES = 4096
+// Cache window for [RikkaNotificationListenerService.listActive]'s mapped entries.
+// Short enough that a freshly posted notification appears on the next user turn (loop
+// guard's freshness TTL is 5 s) but long enough that a single LLM tool turn that calls
+// list_active_notifications + dismiss_notification + list_active_notifications again
+// only pays the binder IPC + per-entry packageManager.getApplicationLabel() once.
+private const val ACTIVE_LIST_CACHE_TTL_MS = 1_000L
 
 /**
  * Reads notifications from every app the user has granted us access to. Maintains an
@@ -85,6 +95,9 @@ class RikkaNotificationListenerService : NotificationListenerService() {
         val entry = sbn.toEntry(packageManager) ?: return
         if (shouldDrop(entry)) return
 
+        // Active-list cache is now stale — force the next listActive() to re-fetch.
+        invalidateActiveCache()
+
         // Append / replace by key (dedup updates of the same notification).
         appendToRing(entry)
 
@@ -103,8 +116,10 @@ class RikkaNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        // Intentionally empty - the ring buffer is "history", removed notifications stay
-        // visible to the LLM's history lookup.
+        // Active-list cache no longer reflects reality — force re-fetch on the next read.
+        // (Ring buffer is intentionally retained — it's "history" and removed
+        // notifications stay visible to the LLM's history lookup.)
+        invalidateActiveCache()
     }
 
     private fun appendToRing(entry: NotificationEntry) {
@@ -211,9 +226,30 @@ class RikkaNotificationListenerService : NotificationListenerService() {
     }
 
     fun listActive(): List<NotificationEntry> {
+        // Short cache so back-to-back tool calls (the LLM often calls list_active +
+        // dismiss_notification in the same turn) and rapid Compose recomps don't each
+        // pay the binder IPC + the per-entry packageManager.getApplicationLabel().
+        // 1 second is short enough that a fresh post is visible by the next user
+        // turn (the loop guard's freshness TTL is 5s).
+        val now = android.os.SystemClock.elapsedRealtime()
+        val cached = activeListCache
+        if (cached != null && now - cached.cachedAtMs < ACTIVE_LIST_CACHE_TTL_MS) {
+            return cached.entries
+        }
         val active = activeNotifications ?: return emptyList()
-        return active.mapNotNull { it.toEntry(packageManager) }.filterNot { shouldDrop(it) }
+        val entries = active.mapNotNull { it.toEntry(packageManager) }.filterNot { shouldDrop(it) }
+        activeListCache = ActiveListCacheEntry(now, entries)
+        return entries
     }
+
+    /** Drop the cache so the next [listActive] call re-fetches via binder. Called from the
+     *  posted/removed callbacks so a fresh notification is reflected immediately. */
+    private fun invalidateActiveCache() {
+        activeListCache = null
+    }
+
+    private data class ActiveListCacheEntry(val cachedAtMs: Long, val entries: List<NotificationEntry>)
+    @Volatile private var activeListCache: ActiveListCacheEntry? = null
 
     sealed class TriggerResult {
         data class Success(val actionTitle: String) : TriggerResult()

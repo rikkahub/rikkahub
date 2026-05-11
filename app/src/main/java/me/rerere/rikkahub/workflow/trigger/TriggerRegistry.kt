@@ -5,6 +5,8 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -71,6 +73,7 @@ class TriggerRegistry(
 
     /** Start observing workflows. Idempotent — a second call is ignored. */
     @Volatile private var started = false
+    @OptIn(FlowPreview::class)
     fun start() {
         if (started) return
         started = true
@@ -78,6 +81,13 @@ class TriggerRegistry(
             workflowRepository.observeAll()
                 .map { loaded -> loaded.filter { it.entity.enabled }.map { it.definition } }
                 .distinctUntilChanged()
+                // 500 ms quiet window so a burst of edits in the workflow editor (10 rapid
+                // toggles, drag-to-reorder, paste-to-edit) coalesces into a single resync
+                // instead of paying 10 × (12 trigger families × register/unregister) of
+                // receiver churn. The first toggle to enable a previously-zero family
+                // still pays a one-off 500 ms latency before the receiver is live, which
+                // is well below user-perceptible and well above the OS broadcast delay.
+                .debounce(RESYNC_DEBOUNCE_MS)
                 .onEach { resync(it) }
                 .collect { /* drained via onEach */ }
         }
@@ -135,5 +145,8 @@ class TriggerRegistry(
     /** For diagnostics / tests. */
     fun debugFamilyState(): Map<String, Boolean> = families.associate { it.name to (it.handles(TriggerSpec.Manual)) }
 
-    companion object { private const val TAG = "WorkflowTrigger" }
+    companion object {
+        private const val TAG = "WorkflowTrigger"
+        private const val RESYNC_DEBOUNCE_MS = 500L
+    }
 }

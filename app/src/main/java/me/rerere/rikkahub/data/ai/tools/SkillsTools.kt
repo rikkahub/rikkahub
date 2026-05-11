@@ -35,13 +35,15 @@ fun createSkillTools(
                     val autoLoaded = available.filter { it.autoLoad }
                     autoLoaded.forEach { skill ->
                         val path = skill.autoLoadPath
+                        // Both branches go through SkillManager's mtime-aware cache so
+                        // the per-turn auto-load reads are O(stat) on cache hit rather
+                        // than O(file I/O) — N auto-load skills × every turn used to
+                        // re-read SOUL/HEARTBEAT/etc from disk every time.
                         val body = runCatching {
                             if (path.isNullOrBlank()) {
                                 skillManager.readSkillBody(skill.name)
                             } else {
-                                skillManager.resolveSkillFile(skill.name, path)
-                                    ?.takeIf { it.exists() }
-                                    ?.readText()
+                                skillManager.readSkillFileCached(skill.name, path)
                             }
                         }.getOrNull()
                         if (!body.isNullOrBlank()) {
