@@ -273,7 +273,9 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
         interactive=true to instead open a visible Termux session - useful when the user
         explicitly wants to watch output live or when the command needs an interactive prompt;
         in that mode no output is returned. Termux must have allow-external-apps=true set in
-        ~/.termux/termux.properties (one-time setup).
+        ~/.termux/termux.properties (one-time setup). In command mode, apt/apt-get are
+        automatically wrapped with DEBIAN_FRONTEND=noninteractive and safe dpkg defaults;
+        do not add extra -y flags unless the user specifically asked for unattended upgrades.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

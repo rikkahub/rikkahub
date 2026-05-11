@@ -139,9 +139,12 @@ val dataSourceModule = module {
             json = get(),
             memoryRepo = get(),
             conversationRepo = get(),
-            aiLoggingManager = get()
+            aiLoggingManager = get(),
+            systemPromptBuilder = get(),
         )
     }
+
+    single { me.rerere.rikkahub.data.ai.SystemPromptBuilder() }
 
     single<OkHttpClient> {
         val acceptLang = AcceptLanguageBuilder.fromAndroid(get())

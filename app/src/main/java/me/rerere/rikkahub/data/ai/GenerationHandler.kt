@@ -209,6 +209,7 @@ class GenerationHandler(
     private val memoryRepo: MemoryRepository,
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
+    private val systemPromptBuilder: SystemPromptBuilder,
 ) {
     fun generateText(
         settings: Settings,
@@ -821,36 +822,20 @@ class GenerationHandler(
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     ) {
         val internalMessages = buildList {
-            val system = buildString {
-                // 如果助手有系统提示，则添加到消息中
-                if (assistant.systemPrompt.isNotBlank()) {
-                    append(assistant.systemPrompt)
-                }
-
-                // 记忆
-                if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories = memories))
-                }
-                if (assistant.enableRecentChatsReference) {
-                    appendLine()
-                    append(buildRecentChatsPrompt(assistant, conversationRepo))
-                }
-
-                // 工具prompt
-                tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(model, messages))
-                }
-
-                // Per-call surface-specific addendum (Telegram preamble, etc.). Lives in
-                // the system prompt so it's sent ONCE per generation instead of being
-                // baked into the user message body and replayed every turn.
-                if (!systemAddendum.isNullOrBlank()) {
-                    appendLine()
-                    append(systemAddendum)
-                }
-            }
+            val memoryPrompt = if (assistant.enableMemory) {
+                buildMemoryPrompt(memories = memories)
+            } else ""
+            val recentChatsPrompt = if (assistant.enableRecentChatsReference) {
+                buildRecentChatsPrompt(assistant, conversationRepo)
+            } else ""
+            val toolPrompts = tools.map { tool -> tool.systemPrompt(model, messages) }
+            val system = systemPromptBuilder.build(
+                assistantPrompt = assistant.systemPrompt,
+                memoryPrompt = memoryPrompt,
+                recentChatsPrompt = recentChatsPrompt,
+                toolPrompts = toolPrompts,
+                systemAddendum = systemAddendum,
+            )
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
             addAll(messages.limitContext(assistant.contextMessageSize).ageOldToolImages())
         }.transforms(

@@ -175,6 +175,29 @@ class FileManagerToolTest {
         assertEquals("bad_base64", result["error"]?.jsonPrimitive?.content)
     }
 
+    // ========== write_text_file ==========
+
+    @Test fun `write_text_file auto creates RikkaHub shared-storage parents`() {
+        assertTrue(
+            shouldAutoCreateParent(
+                "/sdcard/Documents/RikkaHub/nested/note.txt",
+                "/sdcard/Documents/RikkaHub/nested/note.txt"
+            )
+        )
+        assertTrue(
+            shouldAutoCreateParent(
+                "/storage/emulated/0/Download/RikkaHub/nested/note.txt",
+                "/storage/emulated/0/Download/RikkaHub/nested/note.txt"
+            )
+        )
+        assertFalse(
+            shouldAutoCreateParent(
+                "/sdcard/Documents/OtherApp/note.txt",
+                "/sdcard/Documents/OtherApp/note.txt"
+            )
+        )
+    }
+
     // ========== delete_file ==========
 
     @Test fun `delete_file removes a file`() {

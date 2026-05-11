@@ -250,4 +250,22 @@ class ClaudeProviderPromptCacheTest {
             }
         }
     }
+
+    @Test
+    fun `system prompt text should be serialized into Claude system blocks`() {
+        val prompt = "Assistant prompt\n\nTool guidance"
+        val providerSetting = ProviderSetting.Claude(promptCaching = false)
+        val messages = listOf(
+            UIMessage.system(prompt),
+            UIMessage.user("hello")
+        )
+        val params = TextGenerationParams(
+            model = Model(modelId = "claude-test", abilities = emptyList()),
+            tools = emptyList()
+        )
+
+        val request = buildRequest(providerSetting, messages, params)
+        val system = request["system"]!!.jsonArray
+        assertEquals(prompt, system.single().jsonObject["text"]!!.jsonPrimitive.content)
+    }
 }

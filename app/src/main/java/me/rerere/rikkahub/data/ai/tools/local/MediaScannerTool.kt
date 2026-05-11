@@ -17,7 +17,9 @@ fun mediaScannerTool(context: Context): Tool = Tool(
     name = "scan_media",
     description = """
         Notify Android's media scanner about file paths so they appear in gallery / music apps.
-        Use after creating media files so they show up to other apps.
+        Use after creating media files so they show up to other apps. On Android 10+ scoped
+        storage may ignore paths your app cannot directly access; for newly created media,
+        prefer writing through MediaStore when available.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

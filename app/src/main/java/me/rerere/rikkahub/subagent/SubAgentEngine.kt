@@ -137,7 +137,9 @@ class SubAgentEngine(
             // Foreground — block until terminal.
             try {
                 executionJob.join()
-            } catch (_: Throwable) { /* swallow; status will reflect outcome */ }
+            } catch (t: Throwable) {
+                Log.w(TAG, "foreground sub-agent join failed for $runId", t)
+            }
             DispatchResult.Ok(registry.get(runId) ?: initialRun)
         }
     }

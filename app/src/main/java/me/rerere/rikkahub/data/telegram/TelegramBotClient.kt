@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.telegram
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -46,6 +47,7 @@ class TelegramApiException(val errorCode: Int, val description: String) :
 class TelegramBotClient(
     private val tokenProvider: () -> String,
 ) {
+    private val tag = "TelegramBotClient"
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
     private val shortClient: OkHttpClient = OkHttpClient.Builder()
@@ -71,14 +73,20 @@ class TelegramBotClient(
      */
     private fun redactToken(s: String?): String {
         if (s.isNullOrEmpty()) return s.orEmpty()
-        val token = try { tokenProvider() } catch (_: Throwable) { "" }
+        val token = try { tokenProvider() } catch (t: Throwable) {
+            Log.w(tag, "tokenProvider failed while redacting token", t)
+            ""
+        }
         return if (token.isNotBlank() && s.contains(token)) s.replace(token, "***REDACTED***") else s
     }
 
     /** Like [redactToken] but produces a fresh IOException so the (immutable) message is scrubbed. */
     private fun redactException(e: IOException): IOException {
         val msg = e.message
-        val token = try { tokenProvider() } catch (_: Throwable) { "" }
+        val token = try { tokenProvider() } catch (t: Throwable) {
+            Log.w(tag, "tokenProvider failed while redacting exception", t)
+            ""
+        }
         if (token.isBlank() || msg == null || !msg.contains(token)) return e
         return IOException(redactToken(msg), e.cause)
     }

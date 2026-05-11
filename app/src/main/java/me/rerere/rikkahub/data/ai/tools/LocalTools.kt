@@ -5,7 +5,9 @@ import com.whl.quickjs.wrapper.QuickJSContext
 import com.whl.quickjs.wrapper.QuickJSObject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -19,7 +21,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
-import me.rerere.rikkahub.data.ai.tools.local.MediaPlayerHolder
 import me.rerere.rikkahub.data.ai.tools.local.audioInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.batteryTool
 import me.rerere.rikkahub.data.ai.tools.local.callLogTool
@@ -179,10 +180,88 @@ sealed class LocalToolOption {
     @Serializable @SerialName("browser")             data object Browser            : LocalToolOption()
 }
 
+private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
+    "get_battery_status" to "get_battery_status()",
+    "get_audio_info" to "get_audio_info()",
+    "get_telephony_info" to "get_telephony_info()",
+    "get_wifi_info" to "get_wifi_info()",
+    "list_sensors" to "list_sensors()",
+    "read_sensor" to "read_sensor(type=\"accelerometer\", duration_ms=500)",
+    "get_storage_info" to "get_storage_info()",
+    "show_toast" to "show_toast(text=\"Done\")",
+    "post_notification" to "post_notification(title=\"Reminder\", body=\"Take a break\")",
+    "share" to "share(text=\"Hello\")",
+    "set_torch" to "set_torch(enabled=true)",
+    "vibrate" to "vibrate(duration_ms=250)",
+    "get_brightness" to "get_brightness()",
+    "set_brightness" to "set_brightness(value=160)",
+    "get_volume" to "get_volume(stream=\"media\")",
+    "set_volume" to "set_volume(stream=\"media\", percent=50)",
+    "play_media" to "play_media(source=\"file:///sdcard/Music/song.mp3\", title=\"Song\")",
+    "stop_media" to "stop_media()",
+    "pause_media" to "pause_media()",
+    "resume_media" to "resume_media()",
+)
+
+internal fun appendTopToolExample(tool: Tool): Tool {
+    val example = TOP_TOOL_EXAMPLES[tool.name] ?: return tool
+    if (tool.description.contains("Example:", ignoreCase = true)) return tool
+    return tool.copy(description = "${tool.description.trim()} Example: $example.")
+}
+
+internal fun appendHumanErrorToToolResult(part: UIMessagePart): UIMessagePart {
+    if (part !is UIMessagePart.Text) return part
+    val jsonObject = runCatching {
+        Json.parseToJsonElement(part.text).jsonObject
+    }.getOrNull() ?: return part
+    if ("error" !in jsonObject) return part
+
+    val detail = jsonObject["detail"] ?: jsonObject["reason"]
+    val recovery = jsonObject["recovery"]
+    val humanError = jsonObject["human_error"]?.jsonPrimitive?.contentOrNull
+        ?: humanizeToolError(jsonObject)
+
+    return part.copy(
+        text = buildJsonObject {
+            jsonObject["error"]?.let { put("error", it) }
+            detail?.let { put("detail", it) }
+            recovery?.let { put("recovery", it) }
+            put("human_error", humanError)
+            jsonObject.forEach { (key, value) ->
+                if (key !in STANDARD_ERROR_KEYS) {
+                    put(key, value)
+                }
+            }
+        }.toString()
+    )
+}
+
+internal fun addHumanErrorEnvelopes(tool: Tool): Tool = tool.copy(
+    execute = { input ->
+        tool.execute(input).map(::appendHumanErrorToToolResult)
+    }
+)
+
+private fun humanizeToolError(jsonObject: JsonObject): String {
+    val error = jsonObject["error"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    val detail = jsonObject["detail"]?.jsonPrimitive?.contentOrNull
+        ?: jsonObject["reason"]?.jsonPrimitive?.contentOrNull
+        ?: jsonObject["recovery"]?.jsonPrimitive?.contentOrNull
+    val readableError = error.replace('_', ' ').ifBlank { "Tool error" }
+    return if (detail.isNullOrBlank()) {
+        readableError.replaceFirstChar { char ->
+            if (char.isLowerCase()) char.titlecase(Locale.US) else char.toString()
+        }
+    } else {
+        "$readableError: $detail"
+    }
+}
+
+private val STANDARD_ERROR_KEYS = setOf("error", "detail", "reason", "recovery", "human_error")
+
 class LocalTools(
     private val context: Context,
     private val eventBus: AppEventBus,
-    private val mediaPlayerHolder: MediaPlayerHolder,
     private val cameraResultBuffer: CameraResultBuffer,
     private val biometricResultBuffer: BiometricResultBuffer,
     private val scheduledJobRepository: me.rerere.rikkahub.data.repository.ScheduledJobRepository,
@@ -751,9 +830,12 @@ class LocalTools(
         // whether their op is destructive — ToolApprovalDefaults is the single source of
         // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.
         return tools.map { t ->
-            if (!t.needsApproval && ToolApprovalDefaults.requiresApproval(t.name)) {
+            val withApproval = if (!t.needsApproval && ToolApprovalDefaults.requiresApproval(t.name)) {
                 t.copy(needsApproval = true)
-            } else t
+            } else {
+                t
+            }
+            addHumanErrorEnvelopes(appendTopToolExample(withApproval))
         }
     }
 }

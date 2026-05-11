@@ -45,10 +45,11 @@ class ResponseAPIMessageTest {
 
     private fun invokeBuildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
+        messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean = false
     ): JsonObject {
-        return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
+        return api.buildRequestBody(providerSetting, messages, params, stream)
     }
 
     private fun createReasoningParams(reasoningLevel: ReasoningLevel = ReasoningLevel.OFF): TextGenerationParams {
@@ -316,6 +317,7 @@ class ResponseAPIMessageTest {
         )
         val requestBody = invokeBuildRequestBody(
             providerSetting = providerSetting,
+            messages = listOf(UIMessage.user("hello")),
             params = createReasoningParams()
         )
 
@@ -331,6 +333,7 @@ class ResponseAPIMessageTest {
         )
         val requestBody = invokeBuildRequestBody(
             providerSetting = providerSetting,
+            messages = listOf(UIMessage.user("hello")),
             params = createReasoningParams()
         )
 
@@ -346,12 +349,28 @@ class ResponseAPIMessageTest {
         )
         val requestBody = invokeBuildRequestBody(
             providerSetting = providerSetting,
+            messages = listOf(UIMessage.user("hello")),
             params = createReasoningParams(reasoningLevel = ReasoningLevel.LOW)
         )
 
         val reasoning = requestBody["reasoning"]?.jsonObject
         assertTrue("reasoning should exist", reasoning != null)
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `system prompt text should be serialized into Response API instructions`() {
+        val prompt = "Assistant prompt\n\nTool guidance"
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(),
+            messages = listOf(
+                UIMessage.system(prompt),
+                UIMessage.user("hello")
+            ),
+            params = createReasoningParams()
+        )
+
+        assertEquals(prompt, requestBody["instructions"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

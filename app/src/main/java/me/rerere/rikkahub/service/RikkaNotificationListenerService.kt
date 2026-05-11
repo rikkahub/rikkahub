@@ -187,10 +187,11 @@ class RikkaNotificationListenerService : NotificationListenerService() {
             ?: return TriggerResult.NotFound
         val actions = sbn.notification.actions ?: emptyArray()
         if (actions.isEmpty()) return TriggerResult.NoAction
+        val normalizedActionTitle = actionTitle?.trim()
 
         val matched: Notification.Action = when {
-            !actionTitle.isNullOrBlank() ->
-                actions.firstOrNull { it.title?.toString()?.equals(actionTitle, ignoreCase = true) == true }
+            !normalizedActionTitle.isNullOrBlank() ->
+                actions.firstOrNull { matchesNotificationActionTitle(it.title?.toString(), normalizedActionTitle) }
             actionIndex != null -> actions.getOrNull(actionIndex)
             else -> null
         } ?: return TriggerResult.NoAction
@@ -235,6 +236,10 @@ class RikkaNotificationListenerService : NotificationListenerService() {
             private set
     }
 }
+
+internal fun matchesNotificationActionTitle(actual: String?, requested: String?): Boolean =
+    !requested.isNullOrBlank() &&
+        actual?.trim()?.equals(requested.trim(), ignoreCase = true) == true
 
 private fun StatusBarNotification.toEntry(pm: PackageManager): NotificationEntry? {
     val n = notification ?: return null

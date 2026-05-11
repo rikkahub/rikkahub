@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.browser
 
 import android.content.Context
+import android.util.Log
 import java.io.File
 
 /**
@@ -21,6 +22,7 @@ import java.io.File
  */
 internal object BrowserCacheSweeper {
 
+    private const val TAG = "BrowserCacheSweeper"
     private val CACHE_SUBDIRS = listOf("browser-stream", "browser-shots")
 
     /**
@@ -53,10 +55,9 @@ internal object BrowserCacheSweeper {
                 for (f in excess) {
                     if (runCatching { f.delete() }.getOrDefault(false)) totalDeleted++
                 }
+            }.onFailure {
+                Log.w(TAG, "sweep failed for $sub", it)
             }
-            // Failures swallowed — logging is best-effort and the sweep is idempotent so
-            // a failure here is corrected by the next bind. Avoiding android.util.Log
-            // keeps this class JVM-unit-testable without Robolectric.
         }
         return totalDeleted
     }

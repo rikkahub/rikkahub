@@ -1,10 +1,14 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
@@ -40,6 +44,19 @@ class GoogleProviderMessageTest {
         )
         method.isAccessible = true
         return method.invoke(provider, messages) as JsonArray
+    }
+
+    private fun invokeBuildCompletionRequestBody(
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+    ): JsonObject {
+        val method = GoogleProvider::class.java.getDeclaredMethod(
+            "buildCompletionRequestBody",
+            List::class.java,
+            TextGenerationParams::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(provider, messages, params) as JsonObject
     }
 
     @Test
@@ -413,6 +430,23 @@ class GoogleProviderMessageTest {
             response?.containsKey("result") == true)
         assertTrue("Result should contain expected output",
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
+    }
+
+    @Test
+    fun `system prompt text should be serialized into Gemini system instruction`() {
+        val prompt = "Assistant prompt\n\nTool guidance"
+        val messages = listOf(
+            UIMessage.system(prompt),
+            UIMessage.user("hello")
+        )
+        val params = TextGenerationParams(
+            model = Model(modelId = "gemini-test", abilities = listOf(ModelAbility.REASONING))
+        )
+
+        val request = invokeBuildCompletionRequestBody(messages, params)
+        val systemInstruction = request["systemInstruction"]!!.jsonObject
+        val parts = systemInstruction["parts"]!!.jsonArray
+        assertEquals(prompt, parts.single().jsonObject["text"]!!.jsonPrimitive.content)
     }
 
     // ==================== Helper Functions ====================
