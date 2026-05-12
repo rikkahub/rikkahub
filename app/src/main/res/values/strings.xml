@@ -428,6 +428,7 @@
   <string name="export_title">Export</string>
   <string name="export_to_file">Export to file</string>
   <string name="export_to_file_desc">Save as JSON file</string>
+  <string name="extension_content_manage">Manage</string>
   <string name="extension_content_unnamed">Unnamed</string>
   <string name="extension_content_unnamed_lorebook">Unnamed Lorebook</string>
   <string name="extension_selector_go_to_extensions">Manage Extensions</string>
