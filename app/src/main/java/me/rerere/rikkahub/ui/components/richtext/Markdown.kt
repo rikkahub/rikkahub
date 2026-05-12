@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -989,10 +990,13 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                 SpanStyle(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 0.95.em,
-                    background = colorScheme.secondaryContainer.copy(alpha = 0.2f),
+                    background = colorScheme.surfaceVariant,
+                    color = colorScheme.primary,
                 )
             ) {
+                append(' ')
                 append(code)
+                append(' ')
             }
         }
 
