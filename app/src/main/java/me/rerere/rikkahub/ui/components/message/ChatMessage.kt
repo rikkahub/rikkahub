@@ -377,8 +377,8 @@ private fun MessagePartsBlock(
                             if (role == MessageRole.USER) {
                                 Surface(
                                     modifier = Modifier.animateContentSize(),
-                                    shape = MaterialTheme.shapes.medium,
-                                    tonalElevation = 2.dp,
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
                                     onClick = { onUserMessageClick?.invoke() },
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
@@ -396,8 +396,8 @@ private fun MessagePartsBlock(
                                 if (settings.displaySetting.showAssistantBubble) {
                                     Surface(
                                         modifier = Modifier.animateContentSize(),
-                                        shape = MaterialTheme.shapes.medium,
-                                        tonalElevation = 2.dp,
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
                                             MarkdownBlock(
