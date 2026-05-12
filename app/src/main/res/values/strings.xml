@@ -183,6 +183,7 @@
   <string name="assistant_page_memory_desc">When memory is enabled, the model will try to actively record your information during conversations and use it in subsequent conversations. This feature requires the model to support tool calls to work properly</string>
   <string name="assistant_page_message_template">Message Content Template</string>
   <string name="assistant_page_message_template_desc">Controls the content format of chat messages before being sent to the LLM, usually no need to modify</string>
+  <string name="assistant_page_message_template_missing_message">Template does not contain {{ message }}, user messages will not be sent</string>
   <string name="assistant_page_name">Assistant Name</string>
   <string name="assistant_page_preset_messages">Preset Chat Messages</string>
   <string name="assistant_page_preset_messages_desc">Set initial conversation messages</string>

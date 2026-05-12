@@ -1021,5 +1021,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine ストリーミング ASR エンドポイント</string>
   <string name="setting_asr_configure_resource_id">リソースID</string>
   <string name="setting_asr_configure_resource_id_desc">課金用のX-Api-Resource-Id</string>
+  <string name="assistant_page_message_template_missing_message">テンプレートに{{ message }}が含まれていないため、ユーザーのメッセージは送信されません</string>
 </resources>
 

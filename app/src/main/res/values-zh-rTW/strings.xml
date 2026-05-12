@@ -1019,5 +1019,6 @@
   <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine 串流語音辨識端點</string>
   <string name="setting_asr_configure_resource_id">資源 ID</string>
   <string name="setting_asr_configure_resource_id_desc">計費用的 X-Api-Resource-Id</string>
+  <string name="assistant_page_message_template_missing_message">範本未包含 {{ message }}，使用者訊息將不會被傳送</string>
 </resources>
 

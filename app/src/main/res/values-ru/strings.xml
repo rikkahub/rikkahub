@@ -1020,5 +1020,6 @@
   <string name="setting_asr_configure_volcengine_websocket_desc">Конечная точка потокового ASR Volcengine</string>
   <string name="setting_asr_configure_resource_id">ID ресурса</string>
   <string name="setting_asr_configure_resource_id_desc">X-Api-Resource-Id для биллинга</string>
+  <string name="assistant_page_message_template_missing_message">Шаблон не содержит {{ message }}, сообщения пользователя не будут отправлены</string>
 </resources>
 
