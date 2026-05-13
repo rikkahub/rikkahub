@@ -232,7 +232,7 @@ fun MarkdownBlock(
     } else {
         ProvideTextStyle(style) {
             Column(
-                modifier = modifier.padding(start = 4.dp)
+                modifier = modifier.padding(horizontal = 4.dp)
             ) {
                 data.astTree.children.fastForEach { child ->
                     MarkdownNode(
