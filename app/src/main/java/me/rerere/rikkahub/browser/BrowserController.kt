@@ -376,6 +376,11 @@ object BrowserController {
         //   3. Confused model that calls browser_open 5x in a row trying to find a page.
         val currentUrl = runCatching {
             withContext(Dispatchers.Main) { webView.url }
+        }.onFailure {
+            // A throw reading webView.url (StrictMode off-main-thread, destroyed WebView)
+            // would otherwise vanish — the de-dupe check then treats the URL as null and
+            // streams anyway. Log so the cause is recoverable from logcat.
+            android.util.Log.w(TAG, "streamScreenshotIfHeadless: reading webView.url failed", it)
         }.getOrNull()
         val now = System.currentTimeMillis()
         if (
@@ -415,7 +420,7 @@ object BrowserController {
         }.onFailure { android.util.Log.w(TAG, "streamScreenshotIfHeadless: capture failed", it) }
             .getOrNull() ?: return
         // Record what we just streamed AFTER the bitmap path succeeds so a transient
-        // capture failure doesn't lock out a subsequent attempt for the next 8s.
+        // capture failure doesn't lock out a subsequent attempt for the dedupe window.
         lastStreamedUrl = capture.url
         lastStreamedAtMs = now
 
@@ -505,7 +510,12 @@ suspend fun WebView.evaluateJavascriptAsync(code: String, timeoutMs: Long = 8_00
     withContext(Dispatchers.Main) {
         try {
             evaluateJavascript(code) { result -> deferred.complete(result) }
-        } catch (t: Throwable) {
+        } catch (e: Exception) {
+            // evaluateJavascript can throw if the WebView has been destroyed underneath
+            // us (Activity finished, headless session stopped). Log so the cause is
+            // visible — the caller still gets a clean null and falls back. Narrowed from
+            // Throwable so JVM Errors (OOM etc.) still propagate.
+            android.util.Log.w("BrowserController", "evaluateJavascriptAsync: evaluateJavascript threw", e)
             deferred.complete(null)
         }
     }
