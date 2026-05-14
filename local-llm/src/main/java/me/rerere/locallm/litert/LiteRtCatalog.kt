@@ -20,7 +20,21 @@ data class LiteRtCatalogEntry(
 }
 
 object LiteRtCatalog {
-    /** Curated picker list — order matters (top of list shown first). */
+    /**
+     * Curated picker list — order matters (top of list shown first).
+     *
+     * Curation criteria — an entry stays ONLY if BOTH hold:
+     *  1. **Installable.** Its HuggingFace repo must be ungated. The app's downloader is a
+     *     plain HTTP client with no HF token, so a gated repo just returns 401 and the
+     *     install silently fails. Verified ungated: litert-community/gemma-4-E2B-it-litert-lm,
+     *     litert-community/gemma-4-E4B-it-litert-lm, litert-community/Qwen2.5-1.5B-Instruct.
+     *     Dropped as gated (401, un-installable): litert-community/Gemma3-1B-IT (gated=auto),
+     *     google/gemma-3n-E2B-it-litert-lm and google/gemma-3n-E4B-it-litert-lm (gated=manual).
+     *  2. **Tool-calling capable.** RikkaHub drives these models through the prompt-engineered
+     *     tool protocol in LiteRtToolPrefix, so the model must be instruction-tuned for tool /
+     *     function calling. Dropped on this rule: DeepSeek-R1-Distill-Qwen-1.5B (a reasoning
+     *     distillation — it does not emit the <tool_call> blocks the agent loop depends on).
+     */
     val ENTRIES: List<LiteRtCatalogEntry> = listOf(
         LiteRtCatalogEntry(
             displayName = "Gemma-4-E2B-it",
@@ -43,54 +57,14 @@ object LiteRtCatalog {
             tags = listOf("multimodal", "thinking", "speculative-decoding"),
         ),
         LiteRtCatalogEntry(
-            displayName = "Gemma-3n-E2B-it",
-            modelId = "google/gemma-3n-E2B-it-litert-lm",
-            modelFile = "gemma-3n-E2B-it-int4.litertlm",
-            description = "A variant of Gemma 3n E2B ready for deployment on Android using LiteRT-LM. It supports text, vision, and audio input, with 4096 context length.",
-            sizeBytes = 3655827456L,
-            minDeviceMemoryGb = 8,
-            recommended = false,
-            tags = listOf("multimodal"),
-        ),
-        LiteRtCatalogEntry(
-            displayName = "Gemma-3n-E4B-it",
-            modelId = "google/gemma-3n-E4B-it-litert-lm",
-            modelFile = "gemma-3n-E4B-it-int4.litertlm",
-            description = "A variant of Gemma 3n E4B ready for deployment on Android using LiteRT-LM. It supports text, vision, and audio input, with 4096 context length.",
-            sizeBytes = 4919541760L,
-            minDeviceMemoryGb = 12,
-            recommended = false,
-            tags = listOf("multimodal"),
-        ),
-        LiteRtCatalogEntry(
-            displayName = "Gemma3-1B-IT",
-            modelId = "litert-community/Gemma3-1B-IT",
-            modelFile = "gemma3-1b-it-int4.litertlm",
-            description = "A variant of google/Gemma-3-1B-IT with 4-bit quantization ready for deployment on Android using LiteRT-LM.",
-            sizeBytes = 584417280L,
-            minDeviceMemoryGb = 6,
-            recommended = true,
-            tags = emptyList(),
-        ),
-        LiteRtCatalogEntry(
             displayName = "Qwen2.5-1.5B-Instruct",
             modelId = "litert-community/Qwen2.5-1.5B-Instruct",
             modelFile = "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
             description = "A variant of Qwen/Qwen2.5-1.5B-Instruct ready for deployment on Android using LiteRT-LM.",
             sizeBytes = 1597931520L,
             minDeviceMemoryGb = 6,
-            recommended = false,
+            recommended = true,
             tags = emptyList(),
-        ),
-        LiteRtCatalogEntry(
-            displayName = "DeepSeek-R1-Distill-Qwen-1.5B",
-            modelId = "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
-            modelFile = "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
-            description = "A variant of deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B ready for deployment on Android using LiteRT-LM.",
-            sizeBytes = 1833451520L,
-            minDeviceMemoryGb = 6,
-            recommended = false,
-            tags = listOf("thinking"),
         ),
     )
 
