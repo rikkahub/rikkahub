@@ -29,3 +29,6 @@ app/google-services.json
 
 # Release signing keystore — never commit
 /rikkahub-release.jks
+
+# Local planning doc — not for the remote
+/enhance.md
