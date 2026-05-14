@@ -850,8 +850,11 @@ class GenerationHandler(
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         try {
             context.startActivity(intent)
-        } catch (t: Throwable) {
-            Log.w(TAG, "auto-return launch failed", t)
+        } catch (e: Exception) {
+            // startActivity throws ActivityNotFoundException / SecurityException —
+            // both Exception. Catching Throwable here would also swallow JVM errors
+            // (OOM, StackOverflowError); let those propagate.
+            Log.w(TAG, "auto-return launch failed", e)
         }
     }
 
