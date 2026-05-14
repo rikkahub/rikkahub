@@ -40,6 +40,32 @@ private const val PROBE_PER_NETWORK_TIMEOUT_MS = 2_500
 private const val SOCKET_CONNECT_TIMEOUT_MS = 10_000
 
 /**
+ * Keep-alive parameters for every JSch session. Without these, JSch sends nothing on an idle
+ * channel, so a long-running command (e.g. a build, a `tail -f`) sits silent long enough for
+ * an intermediate NAT/firewall to drop the connection's state table entry — the next byte
+ * then hits a black hole and the command "dies" with no error. 30s × 3 missed = ~90s before
+ * JSch itself declares the session dead, which keeps NATs warm while still failing fast on a
+ * genuinely-gone server.
+ */
+private const val SERVER_ALIVE_INTERVAL_MS = 30_000
+private const val SERVER_ALIVE_COUNT_MAX = 3
+
+/**
+ * Process-lifetime DNS cache shared by every SSH session-build path. 60s TTL — long enough
+ * to spare a 15-minute-interval workflow a fresh lookup on every run, short enough that a
+ * DHCP/DNS change is picked up quickly. Self-registers with NetworkChangeMonitor so a
+ * default-network handoff drops the cache (a cached IP from the old network's DNS could be
+ * wrong on the new one).
+ */
+internal val sshDnsCache: DnsCache = DnsCache().also { cache ->
+    runCatching {
+        me.rerere.rikkahub.utils.NetworkChangeMonitor.addNetworkChangeListener {
+            cache.invalidateAll()
+        }
+    }
+}
+
+/**
  * Caps on stdout / stderr returned to the LLM. Without these, `cat /var/log/syslog` /
  * `journalctl` / `ls -R /` push megabytes into the next prompt, blowing the context
  * budget on a single tool call. Mirrors the Termux tool's caps so behaviour is
@@ -60,9 +86,18 @@ private fun cap(s: String, max: Int): String =
  * JSch path on the same Pixel times out.
  *
  * Returns null if [host] is already a literal IP, if no IPv4 record exists, or if DNS fails.
- * Caller falls back to the original [host] string in that case. Single DNS round-trip.
+ * Caller falls back to the original [host] string in that case.
+ *
+ * Successful resolutions are memoised in [sshDnsCache] (60s TTL) so a workflow that SSHes to
+ * the same host on a tight interval doesn't pay a DNS round-trip every connect. A literal IP
+ * input bypasses the cache entirely — it's not a name, there's nothing to resolve or stale.
+ * Failures are never cached, so a transient DNS hiccup can't poison the next 60s of connects.
  */
 private fun resolveToIPv4(host: String): String? {
+    sshDnsCache.get(host)?.let { cached ->
+        Log.i(TAG_SSH, "resolveToIPv4: $host -> $cached (dns cache hit)")
+        return cached
+    }
     return try {
         val addrs = InetAddress.getAllByName(host)
         // Already a literal IP (v4 or v6)? getAllByName returns it as-is and the printed
@@ -70,6 +105,7 @@ private fun resolveToIPv4(host: String): String? {
         if (addrs.isNotEmpty() && addrs[0].hostAddress.equals(host, ignoreCase = true)) return null
         val v4 = addrs.firstOrNull { it is Inet4Address } ?: return null
         v4.hostAddress?.also {
+            sshDnsCache.put(host, it)
             Log.i(TAG_SSH, "resolveToIPv4: $host -> $it (skipping ${addrs.size - 1} other records)")
         }
     } catch (t: Throwable) {
@@ -182,6 +218,13 @@ internal fun openSshSession(
     // Network so SSH traffic stays on the chosen transport, bypassing Android's adaptive
     // routing that would otherwise re-route app traffic away from the chosen WiFi LAN.
     session.setSocketFactory(NetworkBoundSocketFactory(network, SOCKET_CONNECT_TIMEOUT_MS))
+    // Keep-alive: send a server-alive probe every 30s of channel idle, give up after 3
+    // unanswered. Without this an intermediate NAT/firewall silently drops the connection's
+    // state entry during a long-running command and the session black-holes. This is the
+    // single shared session-build path for ssh_exec, ssh_exec_saved, and SFTP
+    // upload/download, so setting it here covers every JSch session in the app.
+    session.serverAliveInterval = SERVER_ALIVE_INTERVAL_MS
+    session.serverAliveCountMax = SERVER_ALIVE_COUNT_MAX
     session.connect(timeoutMs)
     return session
 }
