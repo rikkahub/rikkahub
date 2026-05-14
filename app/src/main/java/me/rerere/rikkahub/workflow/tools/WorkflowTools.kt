@@ -64,7 +64,11 @@ fun workflowCreateTool(
           battery_below / battery_above — params: threshold_percent (1..100), fires on transition
           geofence_enter / geofence_exit — params: lat, lng, radius_m (50..5000), label (optional)
           app_launched / app_closed — params: package_name
-          notification_received — params: at least one of package_name, title_contains, text_contains
+          notification_received — params: at least one of package_name, title_contains,
+              text_contains, title_matches, text_matches. The *_contains fields match a
+              case-insensitive substring; the *_matches fields hold a Java regex tested
+              with find(). If both are set for the same field they are AND-combined (both
+              must pass). Invalid regex is rejected at create time.
           boot_completed — no params
           screen_on / screen_off — no params
           manual — only fires via workflow_run tool or "Run now" button
@@ -78,6 +82,11 @@ fun workflowCreateTool(
           is_charging / is_not_charging
           foreground_app_is / foreground_app_in
           screen_is_on / screen_is_off
+
+        Every condition also accepts an optional "invert": true (default false). When set,
+        that single condition's result is negated — e.g. wifi_ssid_is with invert:true
+        means "when NOT on that WiFi", is_charging with invert:true means "only if NOT
+        charging". Works for every condition type.
 
         ACTIONS: each is { tool: <existing tool name>, args: { ... }, timeout_seconds?: int }.
         Use any tool currently registered for this assistant. workflow_run is NOT allowed

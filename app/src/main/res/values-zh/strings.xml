@@ -1241,13 +1241,11 @@
   <string name="setting_browser_open">打开浏览器</string>
   <string name="setting_browser_open_desc">将浏览器启动到 about:blank — 适合在让 AI 接管之前先登录一次。</string>
   <string name="setting_browser_per_tool_timeout">单工具超时</string>
-  <string name="setting_browser_per_tool_timeout_value">30 秒</string>
   <string name="setting_browser_search_engine">搜索引擎</string>
   <string name="setting_browser_search_engine_desc">DuckDuckGo（默认）— 切换将在 browser_search 发布后生效。</string>
   <string name="setting_browser_section_browser">浏览器</string>
   <string name="setting_browser_section_defaults">默认值 &amp; 限制</string>
   <string name="setting_browser_single_task_timeout">单任务超时</string>
-  <string name="setting_browser_single_task_timeout_value">5 分钟</string>
   <string name="setting_browser_title">浏览器</string>
   <string name="setting_browser_tool_back_desc">在浏览器历史中后退。</string>
   <string name="setting_browser_tool_back_title">后退</string>

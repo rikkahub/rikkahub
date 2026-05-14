@@ -466,7 +466,12 @@ class SettingsStore(
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-            preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+            // maxOf(0, size - 1) guards the empty-list case: a persisted "[]" for
+            // search_services leaves searchServices empty (the ?: default only fires on a
+            // missing key, not on an empty array), and coerceIn(0, -1) throws
+            // IllegalArgumentException because min > max — crashing every settings write.
+            preferences[SEARCH_SELECTED] =
+                settings.searchServiceSelected.coerceIn(0, maxOf(0, settings.searchServices.size - 1))
 
             preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)

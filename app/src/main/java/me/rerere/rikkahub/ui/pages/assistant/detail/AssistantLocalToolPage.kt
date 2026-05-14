@@ -124,14 +124,22 @@ private fun AssistantLocalToolContent(
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val telegramBotPreferences = koinInject<TelegramBotPreferences>()
+    // Hardware-availability gate for the NFC toggle: a device with no NFC chip can never
+    // run the nfc tools, so the toggle is shown disabled with a "no NFC hardware" subtitle
+    // rather than letting the user enable a tool that would only ever error.
+    val hasNfc = remember {
+        ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_NFC)
+    }
 
     var showTermuxPostGrantDialog by remember { mutableStateOf(false) }
     var showTelegramNoTokenDialog by remember { mutableStateOf(false) }
     var showWorkflowsHintDialog by remember { mutableStateOf(false) }
+    var showKeyboardSetupDialog by remember { mutableStateOf(false) }
     var termuxDialogShownThisVisit by remember { mutableStateOf(false) }
     var telegramDialogShownThisVisit by remember { mutableStateOf(false) }
     var cronToastShownThisVisit by remember { mutableStateOf(false) }
     var workflowsDialogShownThisVisit by remember { mutableStateOf(false) }
+    var keyboardDialogShownThisVisit by remember { mutableStateOf(false) }
 
     val cronHintText = stringResource(R.string.assistant_page_local_tools_cron_jobs_toast_hint)
     val termuxCommand = stringResource(R.string.assistant_page_local_tools_termux_postgrant_command)
@@ -195,6 +203,19 @@ private fun AssistantLocalToolContent(
             text = { Text(stringResource(R.string.assistant_page_local_tools_workflows_hint_message)) },
             confirmButton = {
                 TextButton(onClick = { showWorkflowsHintDialog = false }) {
+                    Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
+                }
+            },
+        )
+    }
+
+    if (showKeyboardSetupDialog) {
+        AlertDialog(
+            onDismissRequest = { showKeyboardSetupDialog = false },
+            title = { Text(stringResource(R.string.assistant_page_local_tools_keyboard_setup_title)) },
+            text = { Text(stringResource(R.string.assistant_page_local_tools_keyboard_setup_message)) },
+            confirmButton = {
+                TextButton(onClick = { showKeyboardSetupDialog = false }) {
                     Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
                 }
             },
@@ -970,6 +991,120 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_web_fetch_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_web_fetch_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.WebFetch),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.WebFetch, it) },
+                    )
+                }
+            )
+        }
+
+        // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
+        Text(
+            text = stringResource(R.string.assistant_page_local_tools_section_privileged),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+        )
+        CardGroup {
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_sms_send_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_sms_send_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.SmsSend),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.SmsSend, it) },
+                        requiredRuntimePerms = listOf(Manifest.permission.SEND_SMS),
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_wallpaper_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_wallpaper_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Wallpaper),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Wallpaper, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_keystore_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_keystore_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Keystore),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Keystore, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_nfc_title))
+                },
+                supportingContent = {
+                    Text(
+                        if (hasNfc) stringResource(R.string.assistant_page_local_tools_nfc_desc)
+                        else stringResource(R.string.assistant_page_local_tools_nfc_unavailable)
+                    )
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = hasNfc && assistant.localTools.contains(LocalToolOption.Nfc),
+                        // Guard the callback too: even if the switch is somehow toggled,
+                        // a device with no NFC chip never gets the tool enabled.
+                        onCheckedChange = { if (hasNfc) toggleLocalTool(LocalToolOption.Nfc, it) },
+                        enabled = hasNfc,
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_storage_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_storage_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.ExternalStorage),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ExternalStorage, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_archive_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_archive_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Archive),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Archive, it) },
+                    )
+                }
+            )
         }
 
         Text(
@@ -1041,8 +1176,102 @@ private fun AssistantLocalToolContent(
                 }
             )
         }
+
+        // Keyboard control section — drives the active text field through the co-signed
+        // agent-keyboard IME. Setup-dependent toggle: needs agent-keyboard installed AND
+        // set as the active keyboard, neither of which the toggle can perform itself.
+        Text(
+            text = stringResource(R.string.assistant_page_local_tools_section_keyboard),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+        )
+        CardGroup {
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_keyboard_title))
+                },
+                supportingContent = {
+                    KeyboardStatusRowSubtitle()
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.KeyboardControl),
+                        onCheckedChange = { newValue ->
+                            toggleLocalTool(LocalToolOption.KeyboardControl, newValue)
+                            // One-time enable-time hint: the toggle can't install the
+                            // companion app or switch the active IME for the user.
+                            if (newValue && !keyboardDialogShownThisVisit) {
+                                keyboardDialogShownThisVisit = true
+                                showKeyboardSetupDialog = true
+                            }
+                        },
+                    )
+                }
+            )
+        }
     }
 }
+
+/**
+ * Status subtitle for the Keyboard control toggle. Shows a colored dot summarising whether
+ * the co-signed agent-keyboard app is installed and whether it is the active keyboard —
+ * both are required for the keyboard_* tools to do anything. Recomputed on every onResume
+ * so it reflects an install / IME switch the user just made in system settings.
+ */
+@Composable
+private fun KeyboardStatusRowSubtitle() {
+    val ctx = LocalContext.current
+
+    var resumeTick by remember { mutableStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
+    val installed = remember(resumeTick) {
+        runCatching {
+            ctx.packageManager.getPackageInfo(KEYBOARD_PACKAGE, 0)
+            true
+        }.getOrDefault(false)
+    }
+    val isActiveIme = remember(resumeTick) {
+        installed && runCatching {
+            android.provider.Settings.Secure.getString(
+                ctx.contentResolver,
+                android.provider.Settings.Secure.DEFAULT_INPUT_METHOD,
+            )?.startsWith("$KEYBOARD_PACKAGE/") == true
+        }.getOrDefault(false)
+    }
+
+    val (dotColor, label) = when {
+        !installed -> androidx.compose.ui.graphics.Color(0xFFEF4444) to
+            stringResource(R.string.assistant_page_local_tools_keyboard_status_not_installed)
+        !isActiveIme -> androidx.compose.ui.graphics.Color(0xFFF59E0B) to
+            stringResource(R.string.assistant_page_local_tools_keyboard_status_installed)
+        else -> androidx.compose.ui.graphics.Color(0xFF22C55E) to
+            stringResource(R.string.assistant_page_local_tools_keyboard_desc)
+    }
+
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp)) {
+            drawCircle(color = dotColor)
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private const val KEYBOARD_PACKAGE = "dev.patrickgold.florisboard"
 
 @Composable
 private fun PermissionedSwitch(
@@ -1054,6 +1283,7 @@ private fun PermissionedSwitch(
     requiresAccessibilityService: Boolean = false,
     requiresNotificationListener: Boolean = false,
     requiresAllFilesAccess: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val ctx = LocalContext.current
     val toaster = LocalToaster.current
@@ -1242,6 +1472,7 @@ private fun PermissionedSwitch(
     Column(horizontalAlignment = Alignment.End) {
         Switch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = { newChecked ->
                 if (!newChecked) {
                     onCheckedChange(false)

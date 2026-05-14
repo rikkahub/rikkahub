@@ -136,6 +136,8 @@ object WorkflowApprovalRenderer {
             t.packageName?.let { parts += "from $it" }
             t.titleContains?.let { parts += "title contains '$it'" }
             t.textContains?.let { parts += "text contains '$it'" }
+            t.titleMatches?.let { parts += "title matches /$it/" }
+            t.textMatches?.let { parts += "text matches /$it/" }
             "a notification arrives" + if (parts.isEmpty()) "" else " (${parts.joinToString("; ")})"
         }
         is TriggerSpec.BootCompleted -> "device boots"
@@ -144,21 +146,24 @@ object WorkflowApprovalRenderer {
         is TriggerSpec.Manual -> "you fire it manually (Run now)"
     }
 
-    private fun conditionSummary(c: ConditionSpec): String = when (c) {
-        is ConditionSpec.TimeBetween -> "between ${c.start} and ${c.end}"
-        is ConditionSpec.TimeAfterSunset -> "after sunset" + if (c.offsetMinutes != 0) " (${c.offsetMinutes}m offset)" else ""
-        is ConditionSpec.TimeBeforeSunrise -> "before sunrise" + if (c.offsetMinutes != 0) " (${c.offsetMinutes}m offset)" else ""
-        is ConditionSpec.DayOfWeekIn -> "on day(s) ${c.days.joinToString(",")}"
-        is ConditionSpec.WifiSsidIs -> "WiFi is ${c.ssid}"
-        is ConditionSpec.WifiSsidIn -> "WiFi in ${c.ssids.joinToString(",")}"
-        is ConditionSpec.BatteryAbove -> "battery > ${c.percent}%"
-        is ConditionSpec.BatteryBelow -> "battery < ${c.percent}%"
-        is ConditionSpec.IsCharging -> "charging"
-        is ConditionSpec.IsNotCharging -> "not charging"
-        is ConditionSpec.ForegroundAppIs -> "${c.packageName} is foreground"
-        is ConditionSpec.ForegroundAppIn -> "${c.packageNames.size}-app foreground match"
-        is ConditionSpec.ScreenIsOn -> "screen on"
-        is ConditionSpec.ScreenIsOff -> "screen off"
+    private fun conditionSummary(c: ConditionSpec): String {
+        val base = when (c) {
+            is ConditionSpec.TimeBetween -> "between ${c.start} and ${c.end}"
+            is ConditionSpec.TimeAfterSunset -> "after sunset" + if (c.offsetMinutes != 0) " (${c.offsetMinutes}m offset)" else ""
+            is ConditionSpec.TimeBeforeSunrise -> "before sunrise" + if (c.offsetMinutes != 0) " (${c.offsetMinutes}m offset)" else ""
+            is ConditionSpec.DayOfWeekIn -> "on day(s) ${c.days.joinToString(",")}"
+            is ConditionSpec.WifiSsidIs -> "WiFi is ${c.ssid}"
+            is ConditionSpec.WifiSsidIn -> "WiFi in ${c.ssids.joinToString(",")}"
+            is ConditionSpec.BatteryAbove -> "battery > ${c.percent}%"
+            is ConditionSpec.BatteryBelow -> "battery < ${c.percent}%"
+            is ConditionSpec.IsCharging -> "charging"
+            is ConditionSpec.IsNotCharging -> "not charging"
+            is ConditionSpec.ForegroundAppIs -> "${c.packageName} is foreground"
+            is ConditionSpec.ForegroundAppIn -> "${c.packageNames.size}-app foreground match"
+            is ConditionSpec.ScreenIsOn -> "screen on"
+            is ConditionSpec.ScreenIsOff -> "screen off"
+        }
+        return if (c.invert) "NOT ($base)" else base
     }
 
     private fun actionSummary(action: WorkflowAction): String {

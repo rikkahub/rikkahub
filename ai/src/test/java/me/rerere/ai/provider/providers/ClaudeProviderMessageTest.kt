@@ -5,6 +5,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
@@ -32,15 +33,18 @@ class ClaudeProviderMessageTest {
         provider = ClaudeProvider(OkHttpClient())
     }
 
-    // Helper to invoke private buildMessages method via reflection
+    // Helper to invoke private buildMessages method via reflection.
+    // Signature is (List, Boolean, ClaudePromptCacheTtl); we pass promptCaching=false
+    // so the TTL argument has no effect on the produced message array.
     private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
         val method = ClaudeProvider::class.java.getDeclaredMethod(
             "buildMessages",
             List::class.java,
-            Boolean::class.javaPrimitiveType
+            Boolean::class.javaPrimitiveType,
+            ClaudePromptCacheTtl::class.java
         )
         method.isAccessible = true
-        return method.invoke(provider, messages, false) as JsonArray
+        return method.invoke(provider, messages, false, ClaudePromptCacheTtl.FIVE_MINUTES) as JsonArray
     }
 
     @Test

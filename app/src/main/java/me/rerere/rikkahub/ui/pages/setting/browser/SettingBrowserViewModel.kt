@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.browser.BrowserPreferences
+import me.rerere.rikkahub.browser.BrowserToolDefaults
 import java.io.File
 
 class SettingBrowserViewModel(
@@ -24,8 +25,32 @@ class SettingBrowserViewModel(
         initialValue = emptyMap(),
     )
 
+    /** Per-tool timeout, in milliseconds. Always clamped into the supported range. */
+    val perToolTimeoutMs: StateFlow<Long> = prefs.perToolTimeoutFlow().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = BrowserToolDefaults.DEFAULT_PER_TOOL_TIMEOUT_MS,
+    )
+
+    /** Single-task timeout, in milliseconds. Always clamped into the supported range. */
+    val singleTaskTimeoutMs: StateFlow<Long> = prefs.singleTaskTimeoutFlow().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = BrowserToolDefaults.DEFAULT_SINGLE_TASK_TIMEOUT_MS,
+    )
+
     fun setToolEnabled(toolName: String, enabled: Boolean) {
         viewModelScope.launch { prefs.setToolEnabled(toolName, enabled) }
+    }
+
+    /** Persist a per-tool timeout given in seconds. Clamping happens in [BrowserPreferences]. */
+    fun setPerToolTimeoutSeconds(seconds: Long) {
+        viewModelScope.launch { prefs.setPerToolTimeoutMs(seconds * 1_000L) }
+    }
+
+    /** Persist a single-task timeout given in minutes. Clamping happens in [BrowserPreferences]. */
+    fun setSingleTaskTimeoutMinutes(minutes: Long) {
+        viewModelScope.launch { prefs.setSingleTaskTimeoutMs(minutes * 60_000L) }
     }
 
     /**

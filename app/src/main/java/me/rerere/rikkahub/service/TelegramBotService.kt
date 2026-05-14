@@ -80,10 +80,17 @@ class TelegramBotService : Service() {
     private val chatRepo: TelegramChatRepository by inject()
     private val settingsStore: SettingsStore by inject()
     private val doctorChecks: me.rerere.rikkahub.ui.pages.setting.doctor.DoctorChecks by inject()
+    private val agentRunRepo: me.rerere.rikkahub.data.agentrun.AgentRunRepository by inject()
+    // Phase 24 — shared long-poll stall tracker. The poll loop stamps it on every
+    // getUpdates; the stall checker reads it; DoctorChecks reads it.
+    private val pollStallTracker: me.rerere.rikkahub.data.telegram.TelegramPollStallTracker by inject()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
     private var externalGenPumpJob: Job? = null
+    // Phase 24 — the periodic poll-stall checker coroutine. Launched alongside the poll
+    // loop in onStartCommand, cancelled with the service scope.
+    private var pollStallCheckerJob: Job? = null
 
     /**
      * Per-chat serialization for non-built-in messages. The poll loop launches each
@@ -155,6 +162,20 @@ class TelegramBotService : Service() {
         }
         if (pollJob?.isActive != true) {
             pollJob = scope.launch { pollLoop() }
+        }
+        // Phase 24 — launch the poll-stall checker as a child of the service scope (so it
+        // is auto-cancelled on FGS teardown). It periodically asks the tracker whether
+        // getUpdates has gone silent inside a still-live FGS; on a stall it recycles JUST
+        // the poll loop (not the service). GUARDED like externalGenPumpJob below — every
+        // onStartCommand would otherwise spawn a duplicate checker.
+        if (pollStallCheckerJob?.isActive != true) {
+            pollStallTracker.markUpdate()  // fresh baseline so the checker doesn't fire on stale state
+            val checker = TelegramPollStallChecker(
+                tracker = pollStallTracker,
+                restartPollLoop = ::restartPollLoop,
+                onEscalate = ::escalatePollStallToFgsRestart,
+            )
+            pollStallCheckerJob = scope.launch { checker.monitor() }
         }
         // Refresh the slash-command menu Telegram shows users every time the bot starts
         // (and any time the BUILT_IN_COMMANDS list changes between releases). Idempotent
@@ -231,7 +252,11 @@ class TelegramBotService : Service() {
         try {
             val nm = getSystemService(NotificationManager::class.java) ?: return
             nm.notify(NOTIF_ID, buildForegroundNotification())
-        } catch (_: Throwable) { /* notifications can fail in restricted contexts; non-fatal */ }
+        } catch (e: Throwable) {
+            // Notifications can fail in restricted contexts (POST_NOTIFICATIONS revoked,
+            // channel blocked); non-fatal, but log so a vanished notification leaves a trace.
+            android.util.Log.w(TAG, "updateForegroundNotification failed", e)
+        }
     }
 
     /**
@@ -269,16 +294,25 @@ class TelegramBotService : Service() {
                 consecutiveErrors = 0
             }
             lastTokenSeen = cfg.token
-            // Held only for the duration of one long-poll cycle. Released in finally so a
-            // crash during getUpdates does not leak the wakelock.
-            val wakeLock = pm?.newWakeLock(
-                android.os.PowerManager.PARTIAL_WAKE_LOCK,
-                "rikkahub:telegram_long_poll",
-            )?.also { it.setReferenceCounted(false) }
+            // Held only for the duration of one long-poll cycle, and only when the screen
+            // is off - while the device is interactive the CPU stays awake on its own, so
+            // the lock is pure battery waste (see shouldHoldPollWakeLock). Released in
+            // finally so a crash during getUpdates does not leak the wakelock.
+            val wakeLock = if (shouldHoldPollWakeLock(pm?.isInteractive)) {
+                pm?.newWakeLock(
+                    android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                    "rikkahub:telegram_long_poll",
+                )?.also { it.setReferenceCounted(false) }
+            } else null
             try {
                 cycle++
                 wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
                 val updates = client.getUpdates(offset, 30)
+                // Phase 24 — stamp the stall tracker on every successful getUpdates round-
+                // trip (success OR empty result). A long-poll that returns at all — even
+                // with zero updates — proves the loop is alive; the stall checker only
+                // fires when this stamp goes stale for >90s.
+                pollStallTracker.markUpdate()
                 if (cycle <= 2 || updates.isNotEmpty()) {
                     android.util.Log.i(TAG, "pollLoop: cycle=$cycle offset=$offset updates=${updates.size}")
                 }
@@ -336,6 +370,40 @@ class TelegramBotService : Service() {
                 try { if (wakeLock?.isHeld == true) wakeLock.release() } catch (_: Throwable) {}
             }
         }
+    }
+
+    /**
+     * Phase 24 — recycle ONLY the long-poll coroutine, leaving the FGS alive. Called by
+     * [TelegramPollStallChecker] when getUpdates has gone silent. Cancelling and
+     * relaunching the poll job forces a fresh OkHttp connection + DNS lookup, which clears
+     * the common "stuck socket after a background network transition" stall without the
+     * cost of a full service restart (notification flash, OkHttp re-warm).
+     */
+    private fun restartPollLoop() {
+        android.util.Log.w(TAG, "restartPollLoop: recycling the long-poll coroutine")
+        runCatching { pollJob?.cancel() }
+        pollJob = scope.launch { pollLoop() }
+    }
+
+    /**
+     * Phase 24 — flapping-defence escalation. When the poll loop has been recycled past the
+     * flap ceiling within the flap window, a local recycle clearly isn't fixing it (network
+     * down, token issue, OEM freeze). Hand off to a full service restart via
+     * [TelegramBotHealthWorker]'s next pass — it re-arms the FGS from scratch. Silent
+     * recovery: no user notification (per spec).
+     */
+    private fun escalatePollStallToFgsRestart() {
+        android.util.Log.w(TAG, "escalatePollStallToFgsRestart: poll loop flapping — requesting FGS restart")
+        runCatching {
+            // The health worker is idempotent (ExistingPeriodicWorkPolicy.KEEP) and its
+            // next pass re-starts the service if it finds it unhealthy. Re-scheduling here
+            // ensures the worker is armed even if it had been cancelled.
+            TelegramBotHealthWorker.schedule(applicationContext)
+            // Also stop ourselves so the worker's next pass brings up a clean instance —
+            // START_NOT_STICKY means we won't auto-revive without a fresh foreground ticket,
+            // which the health worker provides via startForegroundService.
+            stopSelf()
+        }.onFailure { android.util.Log.w(TAG, "escalatePollStallToFgsRestart failed", it) }
     }
 
     /** Capped exponential backoff: 5s, 10s, 20s, 40s, 80s, 120s (capped). */
@@ -591,6 +659,18 @@ class TelegramBotService : Service() {
 
         chatService.sendMessage(convId, parts)
 
+        // Phase 24 — open a cross-pillar ledger row for THIS Telegram turn. kind=telegram,
+        // domain_id=conversation id; one row per turn (a fresh row each inbound message).
+        // Marked terminal in the finally block below. Best-effort — never breaks the turn.
+        val ledgerId = agentRunRepo.open(
+            kind = me.rerere.rikkahub.data.agentrun.AgentRunKind.Telegram,
+            domainId = convId.toString(),
+            metadata = buildJsonObject {
+                put("chat_id", m.chatId.toString())
+                put("conversation_created", wasCreated)
+            },
+        )
+
         // Send the streaming placeholder once. The per-iteration editJob below edits it
         // in place during active generation, then stops while we wait on the user (so we
         // don't burn battery firing edits every 600ms for hours if the user is away).
@@ -627,6 +707,9 @@ class TelegramBotService : Service() {
         // branch so the user sees the actual cause instead of the generic
         // "(model called tools but didn't reply)" hint.
         var generationError: Throwable? = null
+        // Phase 24 — set when the turn is cancelled (/stop, /new) so the ledger row is
+        // closed as `cancelled` rather than `succeeded` in the finally block.
+        var turnCancelled = false
         try {
             // Loop: wait for the current generation to finish, look for any tool calls in
             // Pending state (LLM wants approval to run them), send approval prompts with
@@ -757,6 +840,7 @@ class TelegramBotService : Service() {
             // block (renderAssistantStream → sendChunked) fires on stale state after cancel,
             // potentially sending a partial/incorrect reply to Telegram.
             android.util.Log.i(TAG, "handleIncoming: cancelled (CancellationException) — not sending final reply")
+            turnCancelled = true
             throw e
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "handleIncoming: generation flow ended with error", e)
@@ -765,6 +849,19 @@ class TelegramBotService : Service() {
             chatService.removeConversationReference(convId)
             activeHandleIncomingConvs.remove(convId)
             HeadlessConversations.unmark(convId)
+            // Phase 24 — mark the ledger row terminal. cancelled (/stop or /new) →
+            // cancelled; a generation error → failed; otherwise succeeded. Runs in the
+            // finally so the row is closed even on the CancellationException re-throw path.
+            val ledgerStatus = when {
+                turnCancelled -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.cancelled
+                generationError != null -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.failed
+                else -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.succeeded
+            }
+            agentRunRepo.markTerminal(
+                id = ledgerId,
+                status = ledgerStatus,
+                lastError = generationError?.let { "${it::class.simpleName}: ${it.message.orEmpty()}" },
+            )
         }
 
         val finalReply = renderAssistantStream(convId, finalizing = true, baselineMessageCount)
@@ -1185,13 +1282,6 @@ class TelegramBotService : Service() {
         val now = System.currentTimeMillis()
         chatRepo.upsert(TelegramChatEntity(chatId, convId.toString(), now, now))
         return convId to true
-    }
-
-    private suspend fun readLatestAssistantText(convId: kotlin.uuid.Uuid): String {
-        val conv = conversationRepo.getConversationById(convId) ?: return ""
-        val lastAssistant = conv.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
-            ?: return ""
-        return assistantTextOf(lastAssistant)
     }
 
     private fun assistantTextOf(m: UIMessage): String =
@@ -1753,7 +1843,9 @@ class TelegramBotService : Service() {
                     parseMode = PARSE_MODE_HTML,
                     replyMarkup = buildProviderKeyboard(enabledProviders, currentPair?.first?.id),
                 )
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+                android.util.Log.w(TAG, "handleProviderPickCallback: back-to-providers edit failed", e)
+            }
             return
         }
 
@@ -1801,7 +1893,9 @@ class TelegramBotService : Service() {
         )
         try {
             client.editMessageText(cq.chatId, cq.messageId, newText, parseMode = PARSE_MODE_HTML, replyMarkup = keyboard)
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            android.util.Log.w(TAG, "handleProviderPickCallback: model-list edit failed", e)
+        }
     }
 
     /**
@@ -1842,7 +1936,9 @@ class TelegramBotService : Service() {
                 append(")")
             }
             client.editMessageText(cq.chatId, cq.messageId, newText, parseMode = PARSE_MODE_HTML)
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            android.util.Log.w(TAG, "handleModelPickCallback: switched-confirmation edit failed", e)
+        }
     }
 
     /**
@@ -2685,6 +2781,21 @@ class TelegramBotService : Service() {
          *  lock is auto-released in finally before each next cycle so a longer hang cannot
          *  leak it. */
         const val WAKELOCK_TIMEOUT_MS: Long = 75_000L
+
+        /**
+         * Whether the long-poll cycle needs to hold a partial wake lock. The lock only
+         * matters when the CPU would otherwise suspend mid-poll, i.e. when the screen is
+         * off. While the device is interactive the CPU is already awake, so holding it
+         * then is pure waste - profiling showed the unconditional acquire kept the lock
+         * held ~100% of the time, which was the app's entire wake-lock budget. Gating on
+         * the non-interactive state preserves Doze survival (screen-off always gets the
+         * lock) while dropping the screen-on waste.
+         *
+         * @param isInteractive `PowerManager.isInteractive`, or `null` when no
+         *   PowerManager is available - in which case we default to holding the lock
+         *   (the safe choice: never weaker than the old unconditional behaviour).
+         */
+        fun shouldHoldPollWakeLock(isInteractive: Boolean?): Boolean = isInteractive != true
 
         /** Initial placeholder text the bot posts before streaming begins. */
         const val STREAM_PLACEHOLDER = "..."

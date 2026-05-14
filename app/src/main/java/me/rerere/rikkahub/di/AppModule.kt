@@ -42,6 +42,11 @@ val appModule = module {
 
     single { CameraResultBuffer() }
     single { BiometricResultBuffer() }
+    // Phase 25 — NFC reader-mode + SAF directory-picker Activity bridges, and the SAF
+    // tree-grant store backing the ExternalStorage tools.
+    single { me.rerere.rikkahub.data.ai.tools.local.NfcResultBuffer() }
+    single { me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer() }
+    single { me.rerere.rikkahub.data.storage.StorageVolumeGrantStore(get()) }
 
     single { ScheduledJobRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().scheduledJobDao()) }
     single { me.rerere.rikkahub.data.repository.ScheduledJobRunRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().scheduledJobRunDao()) }
@@ -66,6 +71,10 @@ val appModule = module {
     }
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
     single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
+    // Phase 24 — Telegram long-poll stall tracker. Shared singleton: TelegramBotService's
+    // poll loop calls markUpdate() on every getUpdates; the in-service stall checker and
+    // DoctorChecks read it. No cross-dependencies, so no DI-cycle risk.
+    single { me.rerere.rikkahub.data.telegram.TelegramPollStallTracker() }
     single { NotificationListenerPreferences(get()) }
 
     // Phase 13: External Automation Intent API
@@ -78,6 +87,8 @@ val appModule = module {
             conversationRepo = get(),
             settingsStore = get(),
             appScope = get(),
+            // Phase 24 — unified AgentRun ledger writer.
+            agentRunRepo = get(),
         )
     }
 
@@ -95,6 +106,9 @@ val appModule = module {
             conversationRepo = get(),
             settingsStore = get(),
             appScope = get(),
+            // Phase 24 — unified AgentRun ledger writer. No DI cycle: AgentRunRepository
+            // depends only on its DAO.
+            agentRunRepo = get(),
         )
     }
 
@@ -149,6 +163,8 @@ val appModule = module {
         )
     }
 
+    single { me.rerere.rikkahub.data.keyboard.KeyboardApiClient(get()) }
+
     single {
         LocalTools(
             context = get(),
@@ -178,6 +194,11 @@ val appModule = module {
             skillSecretsStore = get(),
             browserPreferences = get(),
             interactiveToolStreamer = get(),
+            nfcResultBuffer = get(),
+            safPickerResultBuffer = get(),
+            storageVolumeGrantStore = get(),
+            okHttpClient = get(),
+            keyboardApiClient = get(),
         )
     }
 
@@ -258,6 +279,8 @@ val appModule = module {
             database = get(),
             // Pass 3: surface the browser write-tools-enabled INFO row + profile-dir AutoFix.
             browserPreferences = get(),
+            // Phase 25: surface the SAF granted-directories live count.
+            storageVolumeGrantStore = get(),
         )
     }
 }

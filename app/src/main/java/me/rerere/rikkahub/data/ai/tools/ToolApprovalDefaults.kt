@@ -95,6 +95,7 @@ object ToolApprovalDefaults {
         // Notification listener side effects (read-only listing is free, mutating is not)
         "dismiss_notification",
         "notification_action_click",
+        "notification_reply",       // fires a notification's direct-reply RemoteInput action
 
         // File manager — all ops are side-effecting or read PII from arbitrary paths
         "list_files",
@@ -106,6 +107,12 @@ object ToolApprovalDefaults {
         "create_directory",
         "file_info",
         "find_files",
+        // Batch file ops (item 5.5) — list-or-glob copy / move / delete. Side-effecting
+        // over potentially many paths in one call, so each gets the same approval gate as
+        // the single-path file tools.
+        "batch_copy",
+        "batch_move",
+        "batch_delete",
 
         // Telegram outbound — the bot can DM other chats / change its own config
         "telegram_send_message",
@@ -202,6 +209,39 @@ object ToolApprovalDefaults {
         // side carries the same trust footprint as plain browser_click, so it
         // inherits the same approval gate.
         "browser_click_and_read",
+
+        // web_fetch (item 1.2) — network egress. A bare HTTP GET/POST can exfiltrate
+        // anything the LLM puts in the URL / body / headers, so it gets the same
+        // approval gate as every other outbound call.
+        "web_fetch",
+
+        // Phase 25 — Phase 3 second cut. Every mutating tool is approval-gated; the
+        // read-only tools (keystore_verify, keystore_list_keys, list_storage_volumes,
+        // list_granted_directories, list_zip_contents) are deliberately NOT in this set.
+        "send_sms",                 // sends a real SMS — costs money / leaves the device
+        "set_wallpaper",            // changes a visible device setting
+        "keystore_generate_key",    // creates a hardware key (NO_ALWAYS_ALLOW below)
+        "keystore_sign",            // signs arbitrary data with the user's key
+        "keystore_encrypt",         // encrypts with the user's key
+        "keystore_decrypt",         // decrypts ciphertext (NO_ALWAYS_ALLOW below)
+        "keystore_delete_key",      // destroys a key
+        "nfc_read_tag",             // opens a foreground reader session
+        "nfc_write_tag",            // writes NDEF to a physical tag (NO_ALWAYS_ALLOW below)
+        "grant_directory_access",   // persistent read+write to a whole tree (NO_ALWAYS_ALLOW below)
+        "zip_files",                // writes an archive to disk / a granted tree
+        "unzip_file",               // writes extracted files to disk / a granted tree
+
+        // agent-keyboard control — every tool that mutates the focused text field or cursor
+        // is side-effecting and approval-gated. The two read tools (keyboard_read_field,
+        // keyboard_editor_info) are deliberately NOT in this set. No HARDLINE arm is needed:
+        // typing a string into a focused field is not shell execution, and agent-keyboard
+        // itself refuses password / sensitive fields at the IME boundary.
+        "keyboard_type",
+        "keyboard_press_key",
+        "keyboard_delete",
+        "keyboard_clear",
+        "keyboard_set_cursor",
+        "keyboard_select_range",
     )
 
     /**
@@ -227,6 +267,16 @@ object ToolApprovalDefaults {
         // the residual surface is too broad to ever blanket-allow. Every invocation gets
         // an explicit per-call approval card, no exceptions.
         "browser_eval_js",
+        // Phase 25 — privilege-escalation surfaces that must confirm every single call:
+        //  - keystore_generate_key: mints a hardware key that later sign/encrypt calls trust
+        //  - keystore_decrypt: turns ciphertext back into plaintext the model then reads
+        //  - nfc_write_tag: permanently rewrites a physical tag's contents
+        //  - grant_directory_access: persistent read+write to an entire storage tree,
+        //    possibly cloud / Downloads / Pictures
+        "keystore_generate_key",
+        "keystore_decrypt",
+        "nfc_write_tag",
+        "grant_directory_access",
     )
 
     fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW

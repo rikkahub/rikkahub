@@ -33,8 +33,18 @@ object ConditionEvaluator {
         return Result.Pass
     }
 
-    /** True if [condition] holds against [ctx]. */
+    /**
+     * True if [condition] holds against [ctx]. If `condition.invert` is set, the raw
+     * per-type result is negated once here at the top level — so inversion works
+     * uniformly for every condition type without per-type special-casing.
+     */
     fun evaluate(condition: ConditionSpec, ctx: WorkflowContext, zone: ZoneId = ZoneId.systemDefault()): Boolean {
+        val raw = evaluateRaw(condition, ctx, zone)
+        return if (condition.invert) !raw else raw
+    }
+
+    /** The positive-only per-type evaluation, before [ConditionSpec.invert] is applied. */
+    private fun evaluateRaw(condition: ConditionSpec, ctx: WorkflowContext, zone: ZoneId): Boolean {
         val now = ZonedDateTime.ofInstant(Instant.ofEpochMilli(ctx.nowMs), zone)
         return when (condition) {
             is ConditionSpec.TimeBetween -> timeBetween(now.toLocalTime(), condition.start, condition.end)
@@ -96,21 +106,24 @@ object ConditionEvaluator {
         else -> DayOfWeek.SUNDAY
     }
 
-    private fun summary(c: ConditionSpec): String = when (c) {
-        is ConditionSpec.TimeBetween -> "between ${c.start} and ${c.end}"
-        is ConditionSpec.TimeAfterSunset -> "after sunset" + if (c.offsetMinutes != 0) " ${c.offsetMinutes}m" else ""
-        is ConditionSpec.TimeBeforeSunrise -> "before sunrise" + if (c.offsetMinutes != 0) " ${c.offsetMinutes}m" else ""
-        is ConditionSpec.DayOfWeekIn -> "day in ${c.days}"
-        is ConditionSpec.WifiSsidIs -> "WiFi is ${c.ssid}"
-        is ConditionSpec.WifiSsidIn -> "WiFi in ${c.ssids}"
-        is ConditionSpec.BatteryAbove -> "battery > ${c.percent}%"
-        is ConditionSpec.BatteryBelow -> "battery < ${c.percent}%"
-        is ConditionSpec.IsCharging -> "charging"
-        is ConditionSpec.IsNotCharging -> "not charging"
-        is ConditionSpec.ForegroundAppIs -> "foreground app = ${c.packageName}"
-        is ConditionSpec.ForegroundAppIn -> "foreground app in ${c.packageNames.size} pkgs"
-        is ConditionSpec.ScreenIsOn -> "screen on"
-        is ConditionSpec.ScreenIsOff -> "screen off"
+    private fun summary(c: ConditionSpec): String {
+        val base = when (c) {
+            is ConditionSpec.TimeBetween -> "between ${c.start} and ${c.end}"
+            is ConditionSpec.TimeAfterSunset -> "after sunset" + if (c.offsetMinutes != 0) " ${c.offsetMinutes}m" else ""
+            is ConditionSpec.TimeBeforeSunrise -> "before sunrise" + if (c.offsetMinutes != 0) " ${c.offsetMinutes}m" else ""
+            is ConditionSpec.DayOfWeekIn -> "day in ${c.days}"
+            is ConditionSpec.WifiSsidIs -> "WiFi is ${c.ssid}"
+            is ConditionSpec.WifiSsidIn -> "WiFi in ${c.ssids}"
+            is ConditionSpec.BatteryAbove -> "battery > ${c.percent}%"
+            is ConditionSpec.BatteryBelow -> "battery < ${c.percent}%"
+            is ConditionSpec.IsCharging -> "charging"
+            is ConditionSpec.IsNotCharging -> "not charging"
+            is ConditionSpec.ForegroundAppIs -> "foreground app = ${c.packageName}"
+            is ConditionSpec.ForegroundAppIn -> "foreground app in ${c.packageNames.size} pkgs"
+            is ConditionSpec.ScreenIsOn -> "screen on"
+            is ConditionSpec.ScreenIsOff -> "screen off"
+        }
+        return if (c.invert) "NOT ($base)" else base
     }
 
     sealed class Result {

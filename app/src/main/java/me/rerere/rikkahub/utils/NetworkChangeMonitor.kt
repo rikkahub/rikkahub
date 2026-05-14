@@ -49,6 +49,28 @@ object NetworkChangeMonitor {
 
     private val clients: MutableList<WeakReference<OkHttpClient>> = mutableListOf()
 
+    /**
+     * Non-OkHttp listeners that want to drop their own network-keyed caches on a
+     * default-network handoff. The SSH tool's DNS cache is the first user: a workflow that
+     * SSHes to the same host every 15 minutes should keep using a cached IP, but a Wi-Fi ↔
+     * cell handoff can move the device onto a network where that IP is wrong (different LAN,
+     * split-horizon DNS), so the cache must be invalidated on the same signal that evicts
+     * the OkHttp pools. Strong refs — these are process-lifetime singletons, not per-request
+     * objects, so there's nothing to garbage-collect.
+     */
+    private val networkChangeListeners: MutableList<() -> Unit> = mutableListOf()
+
+    /**
+     * Register a callback fired whenever the default network changes (same signal that
+     * evicts OkHttp pools). Use for non-OkHttp caches keyed on the active network. Idempotent
+     * on identity is NOT guaranteed — callers should register exactly once (e.g. from an
+     * `object` initializer).
+     */
+    @Synchronized
+    fun addNetworkChangeListener(listener: () -> Unit) {
+        networkChangeListeners.add(listener)
+    }
+
     /** Register a client for eviction on network change. Safe to call any time. */
     @Synchronized
     fun register(client: OkHttpClient) {
@@ -88,6 +110,7 @@ object NetworkChangeMonitor {
                         Log.i(TAG, "default network changed ($prev -> $handle), evicting OkHttp pools to force DNS re-resolution")
                         lastDefaultHandle = handle
                         evictAll()
+                        notifyNetworkChangeListeners()
                     }
                     // Same handle re-announcement: settled-down rebroadcast, no-op.
                 }
@@ -127,6 +150,14 @@ object NetworkChangeMonitor {
             }
             runCatching { c.connectionPool.evictAll() }
                 .onFailure { Log.w(TAG, "connectionPool.evictAll failed", it) }
+        }
+    }
+
+    @Synchronized
+    private fun notifyNetworkChangeListeners() {
+        for (listener in networkChangeListeners) {
+            runCatching { listener() }
+                .onFailure { Log.w(TAG, "network change listener failed", it) }
         }
     }
 }

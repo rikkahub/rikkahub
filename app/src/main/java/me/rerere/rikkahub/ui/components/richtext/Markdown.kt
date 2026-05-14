@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.Intent
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -86,6 +88,8 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
+
+private const val TAG = "Markdown"
 
 private val flavour by lazy {
     GFMFlavourDescriptor(
@@ -217,7 +221,7 @@ fun MarkdownBlock(
         snapshotFlow { updatedContent }
             .distinctUntilChanged()
             .mapLatest { parseMarkdown(it) }
-            .catch { exception -> exception.printStackTrace() }
+            .catch { exception -> Log.e(TAG, "MarkdownBlock: failed to parse markdown", exception) }
             .flowOn(Dispatchers.Default)
             .collect { setData(it) }
     }
@@ -241,14 +245,6 @@ fun MarkdownBlock(
                 }
             }
         }
-    }
-}
-
-// for debug
-private fun dumpAst(node: ASTNode, text: String, indent: String = "") {
-    println("$indent${node.type} ${if (node.children.isEmpty()) node.getTextInNode(text) else ""} | ${node.javaClass.simpleName}")
-    node.children.fastForEach {
-        dumpAst(it, text, "$indent  ")
     }
 }
 
@@ -743,6 +739,12 @@ private fun Paragraph(
 
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
+    // Per-paragraph direction: an Arabic/Hebrew paragraph renders RTL, a Latin
+    // one stays LTR, even within the same message. Derived from the first strong
+    // directional character of the paragraph's plain text.
+    val textDirection = remember(node, content) {
+        resolveTextDirection(node.getTextInNode(content))
+    }
     FlowRow(
         modifier = modifier.then(
             if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
@@ -773,7 +775,8 @@ private fun Paragraph(
             softWrap = true,
             overflow = TextOverflow.Visible,
             style = LocalTextStyle.current.copy(
-                lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
+                lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight,
+                textDirection = textDirection,
             )
         )
     }
@@ -1057,23 +1060,6 @@ private fun ASTNode.getTextInNode(text: String): String {
     return text.substring(startOffset, endOffset)
 }
 
-private fun ASTNode.getTextInNode(text: String, type: IElementType): String {
-    var startOffset = -1
-    var endOffset = -1
-    children.fastForEach {
-        if (it.type == type) {
-            if (startOffset == -1) {
-                startOffset = it.startOffset
-            }
-            endOffset = it.endOffset
-        }
-    }
-    if (startOffset == -1 || endOffset == -1) {
-        return ""
-    }
-    return text.substring(startOffset, endOffset)
-}
-
 private fun ASTNode.nextSibling(): ASTNode? {
     val brother = this.parent?.children ?: return null
     for (i in brother.indices) {
@@ -1093,15 +1079,6 @@ private fun ASTNode.findChildOfTypeRecursive(vararg types: IElementType): ASTNod
         if (result != null) return result
     }
     return null
-}
-
-private fun ASTNode.traverseChildren(
-    action: (ASTNode) -> Unit
-) {
-    children.fastForEach { child ->
-        action(child)
-        child.traverseChildren(action)
-    }
 }
 
 private fun List<ASTNode>.trim(type: IElementType, size: Int): List<ASTNode> {

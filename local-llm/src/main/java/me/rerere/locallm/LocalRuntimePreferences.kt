@@ -32,11 +32,29 @@ class LocalRuntimePreferences(private val context: Context) {
     private fun installedModelsKey(runtime: LocalRuntime) =
         stringPreferencesKey("installed_${runtime.displayName}")
 
-    /** Per-runtime force-CPU override. Defaults to true after the LiteRT-LM 0.11.0
-     *  GPU/NNAPI native crashes (Pixel Tensor-G, see proguard-rules.pro keep block).
-     *  Users opt-in to GPU via the "Try GPU acceleration" toggle. */
+    /** Per-runtime force-CPU override. The default is device-dependent (see
+     *  [defaultForceCpu]): CPU for the Google Tensor crash class, GPU everywhere else.
+     *  Users can flip it either way via the "Try GPU acceleration" toggle. */
     private fun forceCpuKey(runtime: LocalRuntime) =
         booleanPreferencesKey("force_cpu_${runtime.displayName}")
+
+    /** The default value for [forceCpuFlow] when the user has not set a preference.
+     *  Computed once from the SoC: GPU for capable devices, CPU for Google Tensor (where
+     *  LiteRT-LM 0.11.0's GPU path has a native SIGSEGV). [AcceleratorProbe.defaultForceCpu]
+     *  carries the rationale. The RikkaHubApp crash sweep + the runtime's GPU->CPU
+     *  fallback both still backstop a wrong guess. */
+    private val defaultForceCpu: Boolean by lazy {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            AcceleratorProbe.defaultForceCpu(
+                socManufacturer = android.os.Build.SOC_MANUFACTURER,
+                socModel = android.os.Build.SOC_MODEL,
+            )
+        } else {
+            // SOC_* is API 31+. No Google Tensor device runs an OS this old, so we
+            // cannot be on the crash class - default to the GPU fast path.
+            false
+        }
+    }
 
     /** Stamped by [RikkaHubApp]'s ApplicationExitInfo sweep when the previous process
      *  exited with REASON_CRASH_NATIVE inside liblitertlm_jni.so. The settings UI
@@ -66,10 +84,11 @@ class LocalRuntimePreferences(private val context: Context) {
         context.localRuntimeDataStore.edit { it.remove(acceleratorKey(runtime)) }
     }
 
-    /** True (default) means the probe ALWAYS returns "CPU" regardless of device
-     *  capabilities. Off means the probe picks GPU/NNAPI/QNN as before. */
+    /** True means the probe ALWAYS returns "CPU" regardless of device capabilities;
+     *  false lets the probe pick GPU/NNAPI/QNN. When the user has set no preference,
+     *  falls back to the device-dependent [defaultForceCpu]. */
     fun forceCpuFlow(runtime: LocalRuntime): Flow<Boolean> =
-        context.localRuntimeDataStore.data.map { it[forceCpuKey(runtime)] ?: true }
+        context.localRuntimeDataStore.data.map { it[forceCpuKey(runtime)] ?: defaultForceCpu }
 
     /** Per-runtime override for `EngineConfig.maxNumTokens`. Null (default) means use
      *  the per-model curated value from `LiteRtModelDefaults`. Setting it lets users

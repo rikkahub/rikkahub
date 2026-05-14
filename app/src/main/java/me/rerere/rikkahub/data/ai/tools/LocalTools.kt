@@ -104,7 +104,12 @@ import me.rerere.rikkahub.data.ai.tools.local.dismissNotificationTool
 import me.rerere.rikkahub.data.ai.tools.local.listActiveNotificationsTool
 import me.rerere.rikkahub.data.ai.tools.local.listRecentNotificationsTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationActionClickTool
+import me.rerere.rikkahub.data.ai.tools.local.notificationReplyTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationStatusTool
+import me.rerere.rikkahub.data.ai.tools.local.batchCopyTool
+import me.rerere.rikkahub.data.ai.tools.local.batchMoveTool
+import me.rerere.rikkahub.data.ai.tools.local.batchDeleteTool
+import me.rerere.rikkahub.data.ai.tools.local.webFetchTool
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
@@ -178,6 +183,16 @@ sealed class LocalToolOption {
     @Serializable @SerialName("js_skills")           data object JsSkills           : LocalToolOption()
     @Serializable @SerialName("system_intents")      data object SystemIntents      : LocalToolOption()
     @Serializable @SerialName("browser")             data object Browser            : LocalToolOption()
+    @Serializable @SerialName("web_fetch")           data object WebFetch           : LocalToolOption()
+
+    // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
+    @Serializable @SerialName("sms_send")             data object SmsSend             : LocalToolOption()
+    @Serializable @SerialName("wallpaper")            data object Wallpaper           : LocalToolOption()
+    @Serializable @SerialName("keystore")             data object Keystore            : LocalToolOption()
+    @Serializable @SerialName("nfc")                  data object Nfc                 : LocalToolOption()
+    @Serializable @SerialName("external_storage")     data object ExternalStorage     : LocalToolOption()
+    @Serializable @SerialName("archive")              data object Archive             : LocalToolOption()
+    @Serializable @SerialName("keyboard_control")     data object KeyboardControl     : LocalToolOption()
 }
 
 private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
@@ -293,6 +308,14 @@ class LocalTools(
     // Post-action screenshot streamer for headless mode (Telegram bot / cron / sub-agent).
     // Injected rather than Koin-resolved inside each factory so JVM tests can pass a mock.
     private val interactiveToolStreamer: InteractiveToolStreamer,
+    // Phase 25 — NFC / SAF Activity-bridge buffers + the SAF tree-grant store.
+    private val nfcResultBuffer: me.rerere.rikkahub.data.ai.tools.local.NfcResultBuffer,
+    private val safPickerResultBuffer: me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer,
+    private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore,
+    // Shared OkHttp singleton (NetworkChangeMonitor-registered) — backs the web_fetch tool.
+    private val okHttpClient: okhttp3.OkHttpClient,
+    // agent-keyboard IPC client — backs the keyboard_* tools (drives the active text field).
+    private val keyboardApiClient: me.rerere.rikkahub.data.keyboard.KeyboardApiClient,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -736,6 +759,7 @@ class LocalTools(
             tools.add(listActiveNotificationsTool())
             tools.add(dismissNotificationTool())
             tools.add(notificationActionClickTool())
+            tools.add(notificationReplyTool())
             tools.add(notificationStatusTool(notificationListenerPreferences, telegramBotPreferences))
         }
         if (options.contains(LocalToolOption.Files)) {
@@ -750,6 +774,11 @@ class LocalTools(
             tools.add(findFilesTool())
             tools.add(showImageTool(context, invocationContext.modelCanSeeImages))  // inline image display; no separate auto-stream needed
             tools.add(openFileTool(context, invocationContext, interactiveToolStreamer))
+            // Batch ops (item 5.5) — list-or-glob copy / move / delete. Same toggle group
+            // as the single-path file tools; every path still goes through PathSafetyGuard.
+            tools.add(batchCopyTool())
+            tools.add(batchMoveTool())
+            tools.add(batchDeleteTool())
         }
         if (options.contains(LocalToolOption.McpControl)) {
             tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListTool(settingsStore, mcpManager))
@@ -786,8 +815,8 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(settingsStore, conversationRepo))
         }
         if (options.contains(LocalToolOption.SkillImport)) {
-            tools.add(me.rerere.rikkahub.skills.skillInstallFromUrlTool(skillUrlImporter))
-            tools.add(me.rerere.rikkahub.skills.skillInstallFromTextTool(skillUrlImporter))
+            tools.add(me.rerere.rikkahub.skills.skillInstallFromUrlTool(skillUrlImporter, settingsStore, skillManager))
+            tools.add(me.rerere.rikkahub.skills.skillInstallFromTextTool(skillUrlImporter, settingsStore, skillManager))
         }
         if (options.contains(LocalToolOption.JsSkills)) {
             tools.add(me.rerere.rikkahub.skills.js.runJsTool(
@@ -839,6 +868,55 @@ class LocalTools(
                     )?.let { tools.add(it) }
                 }
             }
+        }
+        if (options.contains(LocalToolOption.WebFetch)) {
+            // Lightweight HTTP GET/POST (item 1.2) — backed by the shared OkHttp singleton.
+            tools.add(webFetchTool(okHttpClient))
+        }
+        // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
+        if (options.contains(LocalToolOption.SmsSend)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.smsSendTool(context))
+        }
+        if (options.contains(LocalToolOption.Wallpaper)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.setWallpaperTool(context))
+        }
+        if (options.contains(LocalToolOption.Keystore)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreGenerateKeyTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreSignTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreVerifyTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreEncryptTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreDecryptTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreDeleteKeyTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreListKeysTool())
+        }
+        if (options.contains(LocalToolOption.Nfc)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.nfcReadTagTool(context, nfcResultBuffer, invocationContext))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.nfcWriteTagTool(context, nfcResultBuffer, invocationContext))
+        }
+        if (options.contains(LocalToolOption.ExternalStorage)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listStorageVolumesTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listGrantedDirectoriesTool(context, storageVolumeGrantStore))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.grantDirectoryAccessTool(
+                context, storageVolumeGrantStore, safPickerResultBuffer, invocationContext,
+            ))
+        }
+        if (options.contains(LocalToolOption.Archive)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.zipFilesTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.unzipFileTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listZipContentsTool(context))
+        }
+        if (options.contains(LocalToolOption.KeyboardControl)) {
+            // Drives the active text field through the co-signed agent-keyboard IME.
+            // Write tools are approval-gated via ToolApprovalDefaults; the two read tools
+            // (keyboard_read_field, keyboard_editor_info) are not.
+            tools.add(keyboardTypeTool(keyboardApiClient))
+            tools.add(keyboardReadFieldTool(keyboardApiClient))
+            tools.add(keyboardPressKeyTool(keyboardApiClient))
+            tools.add(keyboardDeleteTool(keyboardApiClient))
+            tools.add(keyboardClearTool(keyboardApiClient))
+            tools.add(keyboardEditorInfoTool(keyboardApiClient))
+            tools.add(keyboardSetCursorTool(keyboardApiClient))
+            tools.add(keyboardSelectRangeTool(keyboardApiClient))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

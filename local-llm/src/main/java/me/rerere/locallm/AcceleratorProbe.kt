@@ -32,6 +32,33 @@ object AcceleratorProbe {
     }
 
     /**
+     * Whether LiteRT should DEFAULT to forcing CPU (GPU opt-in) on a device, before the
+     * user has expressed any preference in the "Try GPU acceleration" toggle.
+     *
+     * GPU is the fast path and works on the vast majority of devices - typically 3-10x
+     * faster than CPU for these models. The one known-bad class is Google Tensor (Pixel
+     * 6 and later): LiteRT-LM 0.11.0's GPU/NNAPI path has a native SIGSEGV there. For
+     * that SoC family we keep CPU as the safe default; every other device defaults to
+     * GPU and gets the speedup out of the box.
+     *
+     * This is only the *initial* default. The per-device crash sweep in RikkaHubApp still
+     * backstops any device that crashes anyway by persisting forceCpu=true, and the
+     * runtime's own GPU->CPU fallback handles a GPU that fails to initialise. So a wrong
+     * guess here self-corrects; it is never load-bearing for safety.
+     *
+     * @param socManufacturer `Build.SOC_MANUFACTURER` (API 31+), or null on older devices.
+     * @param socModel `Build.SOC_MODEL` (API 31+), or null on older devices.
+     */
+    fun defaultForceCpu(socManufacturer: String?, socModel: String?): Boolean {
+        // Google Tensor SoCs report SOC_MANUFACTURER = "Google"; SOC_MODEL is checked as a
+        // belt-and-braces signal ("Tensor G1".."Tensor G5"). Any positive match keeps the
+        // conservative CPU default. Everything else - including pre-API-31 devices where
+        // both args are null (no Google Tensor device runs an OS that old) - gets GPU.
+        return socManufacturer?.equals("Google", ignoreCase = true) == true ||
+            socModel?.contains("Tensor", ignoreCase = true) == true
+    }
+
+    /**
      * Read the live device capabilities for the LiteRT runtime. Production callers
      * use this; unit tests pass synthesised [LiteRtCapabilities] to [pickLiteRt]
      * directly.

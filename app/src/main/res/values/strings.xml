@@ -488,15 +488,18 @@
   <string name="imggen_page_save_failed">Save failed: %1$s</string>
   <string name="imggen_page_settings_title">Image Generation Settings</string>
   <string name="imggen_page_title">Image Generation</string>
+  <string name="language_arabic">🇸🇦 العربية</string>
   <string name="language_english">🇺🇸 English</string>
   <string name="language_french">🇫🇷 Français</string>
   <string name="language_german">🇩🇪 Deutsch</string>
   <string name="language_italian">🇮🇹 Italiano</string>
   <string name="language_japanese">🇯🇵 日本語</string>
   <string name="language_korean">🇰🇷 한국어</string>
+  <string name="language_persian">🇮🇷 فارسی</string>
   <string name="language_simplified_chinese">🇨🇳 简体中文</string>
   <string name="language_spanish">🇪🇸 Español</string>
   <string name="language_traditional_chinese">🇨🇳 繁體中文</string>
+  <string name="language_urdu">🇵🇰 اردو</string>
   <string name="mcp_picker_syncing">Syncing MCP servers...</string>
   <string name="mcp_picker_title">MCP Servers</string>
   <string name="menu">Menu</string>
@@ -1345,6 +1348,32 @@
   <string name="assistant_page_local_tools_section_browser">Browser</string>
   <string name="assistant_page_local_tools_browser_title">Browser</string>
   <string name="assistant_page_local_tools_browser_desc">AI-driven web browser. 17 individually-togglable tools — configure read/write access in Settings → Browser.</string>
+  <string name="assistant_page_local_tools_web_fetch_title">Web fetch</string>
+  <string name="assistant_page_local_tools_web_fetch_desc">Lightweight HTTP GET/POST tool. 30s timeout, response body capped at 8 KB. Requires approval on each call.</string>
+
+  <!-- Phase 25 — Phase 3 second cut + ExternalStorage + Archive. -->
+  <string name="assistant_page_local_tools_section_privileged">Privileged tools</string>
+  <string name="assistant_page_local_tools_sms_send_title">SMS send</string>
+  <string name="assistant_page_local_tools_sms_send_desc">Send SMS messages programmatically. Requires SEND_SMS permission. Approval required per call.</string>
+  <string name="assistant_page_local_tools_wallpaper_title">Wallpaper</string>
+  <string name="assistant_page_local_tools_wallpaper_desc">Set the home or lock screen wallpaper from a local image. Approval required per call.</string>
+  <string name="assistant_page_local_tools_keystore_title">Keystore</string>
+  <string name="assistant_page_local_tools_keystore_desc">Generate, sign, encrypt, and decrypt with hardware-backed keys (Android Keystore). 7 tools.</string>
+  <string name="assistant_page_local_tools_nfc_title">NFC</string>
+  <string name="assistant_page_local_tools_nfc_desc">Read and write NDEF records on NFC tags. Requires the app to be in foreground for tag detection.</string>
+  <string name="assistant_page_local_tools_nfc_unavailable">This device has no NFC hardware, so these tools cannot be enabled.</string>
+  <string name="assistant_page_local_tools_external_storage_title">External storage</string>
+  <string name="assistant_page_local_tools_external_storage_desc">Lets file tools work on USB drives, SD cards, Downloads, and cloud storage. Each tree requires a one-time grant via the SAF picker.</string>
+  <string name="assistant_page_local_tools_archive_title">Archive (zip)</string>
+  <string name="assistant_page_local_tools_archive_desc">Create and extract .zip archives directly. No password support in v1. Works on file:// and content:// URIs.</string>
+
+  <string name="assistant_page_local_tools_section_keyboard">Keyboard control</string>
+  <string name="assistant_page_local_tools_keyboard_title">Keyboard control</string>
+  <string name="assistant_page_local_tools_keyboard_desc">Drive the active text field through the co-signed agent-keyboard app: type, read, press keys, delete, move the cursor, and select text. 8 tools. Write tools require approval per call.</string>
+  <string name="assistant_page_local_tools_keyboard_setup_title">Set up agent-keyboard</string>
+  <string name="assistant_page_local_tools_keyboard_setup_message">Keyboard control needs the companion agent-keyboard app installed AND set as the active keyboard. Install it, then go to Settings &gt; System &gt; Languages &amp; input &gt; On-screen keyboard and switch to agent-keyboard. Without both, every keyboard tool will return an error.</string>
+  <string name="assistant_page_local_tools_keyboard_status_not_installed">agent-keyboard app not installed</string>
+  <string name="assistant_page_local_tools_keyboard_status_installed">agent-keyboard installed - set it as the active keyboard to use these tools</string>
 
   <string name="setting_browser_title">Browser</string>
   <string name="setting_browser_section_browser">Browser</string>
@@ -1401,9 +1430,11 @@
   <string name="setting_browser_search_engine">Search engine</string>
   <string name="setting_browser_search_engine_desc">DuckDuckGo (default) — switching takes effect once browser_search ships.</string>
   <string name="setting_browser_per_tool_timeout">Per-tool timeout</string>
-  <string name="setting_browser_per_tool_timeout_value">30 s</string>
+  <string name="setting_browser_per_tool_timeout_desc">Hard time budget for each browser tool call. Range 10 s to 10 min.</string>
+  <string name="setting_browser_per_tool_timeout_unit">seconds</string>
   <string name="setting_browser_single_task_timeout">Single-task timeout</string>
-  <string name="setting_browser_single_task_timeout_value">5 min</string>
+  <string name="setting_browser_single_task_timeout_desc">Hard cap on one AI-driven browser task to bound runaway loops. Range 1 min to 60 min.</string>
+  <string name="setting_browser_single_task_timeout_unit">minutes</string>
 
   <string name="browser_address_bar_close">Close browser</string>
   <string name="browser_address_bar_back">Browser back</string>

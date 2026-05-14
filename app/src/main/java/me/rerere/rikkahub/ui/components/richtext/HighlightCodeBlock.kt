@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.ClipData
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,6 +85,7 @@ import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.toDp
 import kotlin.time.Clock
 
+private const val TAG = "HighlightCodeBlock"
 private const val COLLAPSE_LINES = 10
 private val PREVIEWABLE_LANGUAGES = setOf("html", "svg")
 
@@ -128,7 +130,7 @@ fun HighlightCodeBlock(
                         outputStream.write(code.toByteArray())
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(TAG, "HighlightCodeBlock: failed to save code to document", e)
                 }
             }
         }
@@ -521,6 +523,7 @@ class HighlightCodeVisualTransformation(
                 }
             }
         } catch (e: Exception) {
+            Log.e(TAG, "HighlightCodeVisualTransformation: failed to highlight code", e)
             AnnotatedString(text.text)
         }
 

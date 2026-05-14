@@ -35,7 +35,7 @@ fun openFileTool(
     streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
 ): Tool = Tool(
     name = "open_file",
-    description = "Open a file in the user's OS viewer (Gallery / PDF reader / audio player / text editor). Backgrounds the app; user reads/edits in the destination app. Path accepts ~ or absolute. Optional mime_type forces a specific viewer when the extension is ambiguous.",
+    description = "Open a file in the user's OS viewer (Gallery / PDF reader / audio player / text editor). Backgrounds the app; user reads/edits in the destination app. Path accepts ~, an absolute file path, or a content:// URI (USB / SD / Downloads / cloud / shared media). Optional mime_type forces a specific viewer when the extension is ambiguous.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -60,6 +60,40 @@ fun openFileTool(
                 buildJsonObject { put("error", "missing_path"); put("detail", "path is required") }.toString()
             ))
         }
+        val mimeOverrideEarly = params["mime_type"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+
+        // content:// URI — fire ACTION_VIEW directly on the URI (no FileProvider needed;
+        // the DocumentsProvider already exposes a readable content:// URI).
+        if (ContentUriSafetyGuard.isContentUri(rawPath)) {
+            ContentUriSafetyGuard.check(rawPath)?.let { v ->
+                return@Tool listOf(UIMessagePart.Text(fmErrEnvelope(v.code, v.detail)))
+            }
+            val uri = android.net.Uri.parse(rawPath)
+            val mime = mimeOverrideEarly
+                ?: context.contentResolver.getType(uri)
+                ?: "*/*"
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            runCatching {
+                context.startActivity(intent)
+            }.onFailure {
+                return@Tool listOf(UIMessagePart.Text(fmErrEnvelope(
+                    "no_handler",
+                    "No installed app can open content of type '$mime': ${it.message ?: it::class.simpleName}",
+                )))
+            }
+            val result = listOf(UIMessagePart.Text(buildJsonObject {
+                put("success", true)
+                put("path", rawPath)
+                put("mime", mime)
+            }.toString()))
+            streamer.streamIfHeadless(invocationContext, "OpenFile: content URI")
+            return@Tool result
+        }
+
         val path = AgentWorkspace.expand(rawPath)
         PathSafetyGuard.check(path)?.let { v ->
             return@Tool listOf(UIMessagePart.Text(fmErrEnvelope(v.code, v.detail)))

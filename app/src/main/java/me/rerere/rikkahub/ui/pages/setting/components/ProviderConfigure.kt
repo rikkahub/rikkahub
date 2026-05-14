@@ -875,10 +875,11 @@ private fun ColumnScope.ProviderConfigureLiteRT(
         }
     }
 
-    // GPU opt-in toggle. Default OFF (forceCpu=true) because LiteRT-LM 0.11.0's GPU/NNAPI
-    // backend SIGSEGVs during inference on Pixel Tensor-G hardware. Surfacing it as an
-    // opt-in keeps the safe path default while letting confident users get GPU speed
-    // when their device handles it.
+    // GPU acceleration toggle. The default is now device-dependent (see
+    // LocalRuntimePreferences.defaultForceCpu): ON for capable devices, OFF only for the
+    // Google Tensor crash class where LiteRT-LM 0.11.0's GPU/NNAPI backend SIGSEGVs during
+    // inference. The toggle still lets the user override either way; the crash sweep and
+    // the runtime's GPU->CPU fallback backstop a wrong default.
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(

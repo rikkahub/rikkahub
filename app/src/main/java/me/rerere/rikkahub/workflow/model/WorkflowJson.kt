@@ -355,14 +355,26 @@ object WorkflowJson {
             ParseResult.Err("invalid_trigger", "app_launched.package_name must be non-blank") else null
         is TriggerSpec.AppClosed -> if (t.packageName.isBlank())
             ParseResult.Err("invalid_trigger", "app_closed.package_name must be non-blank") else null
-        is TriggerSpec.NotificationReceived ->
+        is TriggerSpec.NotificationReceived -> when {
             // At least one filter — otherwise the workflow fires on every notification.
-            if (t.packageName.isNullOrBlank() && t.titleContains.isNullOrBlank() && t.textContains.isNullOrBlank())
+            t.packageName.isNullOrBlank() && t.titleContains.isNullOrBlank()
+                && t.textContains.isNullOrBlank() && t.titleMatches.isNullOrBlank()
+                && t.textMatches.isNullOrBlank() ->
                 ParseResult.Err("invalid_trigger",
-                    "notification_received requires at least one filter (package_name, title_contains, or text_contains)")
-            else null
+                    "notification_received requires at least one filter (package_name, title_contains, text_contains, title_matches, or text_matches)")
+            // Reject uncompilable regex up front so the LLM gets a clear repair signal
+            // instead of a workflow that silently never matches.
+            !t.titleMatches.isNullOrBlank() && !isValidRegex(t.titleMatches) ->
+                ParseResult.Err("invalid_trigger", "notification_received.title_matches is not a valid regex")
+            !t.textMatches.isNullOrBlank() && !isValidRegex(t.textMatches) ->
+                ParseResult.Err("invalid_trigger", "notification_received.text_matches is not a valid regex")
+            else -> null
+        }
         else -> null
     }
+
+    private fun isValidRegex(pattern: String): Boolean =
+        runCatching { java.util.regex.Pattern.compile(pattern) }.isSuccess
 
     private fun validateGeofence(lat: Double, lng: Double, radiusM: Int): ParseResult.Err? {
         if (lat !in -90.0..90.0) return ParseResult.Err("invalid_trigger", "geofence.lat must be -90..90")

@@ -10,6 +10,7 @@ import android.location.LocationManager
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.content.ContextCompat
 import me.rerere.rikkahub.workflow.model.WorkflowContext
 
@@ -53,8 +54,9 @@ class ContextProvider(private val context: Context) {
             try {
                 val loc = lm.getLastKnownLocation(p) ?: continue
                 return loc.latitude to loc.longitude
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
                 // permission revoked between the check and the call — give up
+                Log.w(TAG, "lastKnownLocation: provider=$p lookup failed", e)
                 return null to null
             }
         }
@@ -79,10 +81,17 @@ class ContextProvider(private val context: Context) {
         wm?.connectionInfo?.ssid?.removeSurrounding("\"")?.takeIf {
             it.isNotBlank() && it != "<unknown ssid>"
         }
-    } catch (_: Throwable) { null }
+    } catch (e: Throwable) {
+        Log.w(TAG, "currentWifiSsid: lookup failed", e)
+        null
+    }
 
     private fun isScreenOn(): Boolean {
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
         return pm.isInteractive
+    }
+
+    private companion object {
+        private const val TAG = "WorkflowContextProvider"
     }
 }

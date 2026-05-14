@@ -46,8 +46,23 @@ import java.lang.ref.WeakReference
 object BrowserController {
 
     private const val MAX_RECENT_ACTIONS = 20
-    /** Pass 2: 5-minute hard cap on a single AI-driven task to bound runaway loops. */
-    private const val SINGLE_TASK_WINDOW_MS = 5L * 60L * 1000L
+
+    /**
+     * Hard cap on a single AI-driven task to bound runaway loops. User-configurable via
+     * Settings → Browser (GitHub issue #4) — [BrowserPreferences] writes the persisted value
+     * here at app start and on every edit. Defaults to 5 min until the first read settles.
+     * Always holds a value clamped into [BrowserToolDefaults]'s supported range.
+     */
+    @Volatile
+    var singleTaskTimeoutMs: Long = BrowserToolDefaults.DEFAULT_SINGLE_TASK_TIMEOUT_MS
+
+    /**
+     * Per-tool timeout — the `withTimeoutOrNull` budget every browser tool wraps its dispatch
+     * in. User-configurable via Settings → Browser (GitHub issue #4); kept in sync by
+     * [BrowserPreferences]. Defaults to 30 s until the first read settles. Always clamped.
+     */
+    @Volatile
+    var perToolTimeoutMs: Long = BrowserToolDefaults.DEFAULT_PER_TOOL_TIMEOUT_MS
     /** Cache subdir for streamed (headless) screenshots — separate from the `browser-shots`
      *  subdir the explicit browser_screenshot tool writes into so the streamer pipe can be
      *  swept independently if it ever grows unbounded. */
@@ -259,9 +274,10 @@ object BrowserController {
     }
 
     /**
-     * Start (or refresh) the 5-min single-task window. browser_open calls this on every
-     * successful navigation; once a task starts, every browser_* call after the window
-     * expires gets [taskTimeoutEnvelope] until browser_done fires (which clears the timer).
+     * Start (or refresh) the single-task window. browser_open calls this on every successful
+     * navigation; once a task starts, every browser_* call after the window expires gets
+     * [taskTimeoutEnvelope] until browser_done fires (which clears the timer). The window
+     * length is [singleTaskTimeoutMs] — user-configurable in Settings → Browser.
      */
     fun startTaskWindow() {
         currentTaskStartedAt = System.currentTimeMillis()
@@ -274,12 +290,12 @@ object BrowserController {
 
     /**
      * Returns true if no task is in flight OR the in-flight task hasn't yet exhausted its
-     * 5-minute budget. Tools call this BEFORE doing any work so a runaway loop costs at
-     * most one envelope per call after the cap.
+     * configured single-task budget ([singleTaskTimeoutMs]). Tools call this BEFORE doing any
+     * work so a runaway loop costs at most one envelope per call after the cap.
      */
     fun isWithinTaskWindow(): Boolean {
         val started = currentTaskStartedAt ?: return true
-        return System.currentTimeMillis() - started < SINGLE_TASK_WINDOW_MS
+        return System.currentTimeMillis() - started < singleTaskTimeoutMs
     }
 
     /**
@@ -360,6 +376,11 @@ object BrowserController {
         //   3. Confused model that calls browser_open 5x in a row trying to find a page.
         val currentUrl = runCatching {
             withContext(Dispatchers.Main) { webView.url }
+        }.onFailure {
+            // A throw reading webView.url (StrictMode off-main-thread, destroyed WebView)
+            // would otherwise vanish — the de-dupe check then treats the URL as null and
+            // streams anyway. Log so the cause is recoverable from logcat.
+            android.util.Log.w(TAG, "streamScreenshotIfHeadless: reading webView.url failed", it)
         }.getOrNull()
         val now = System.currentTimeMillis()
         if (
@@ -399,7 +420,7 @@ object BrowserController {
         }.onFailure { android.util.Log.w(TAG, "streamScreenshotIfHeadless: capture failed", it) }
             .getOrNull() ?: return
         // Record what we just streamed AFTER the bitmap path succeeds so a transient
-        // capture failure doesn't lock out a subsequent attempt for the next 8s.
+        // capture failure doesn't lock out a subsequent attempt for the dedupe window.
         lastStreamedUrl = capture.url
         lastStreamedAtMs = now
 
@@ -489,7 +510,12 @@ suspend fun WebView.evaluateJavascriptAsync(code: String, timeoutMs: Long = 8_00
     withContext(Dispatchers.Main) {
         try {
             evaluateJavascript(code) { result -> deferred.complete(result) }
-        } catch (t: Throwable) {
+        } catch (e: Exception) {
+            // evaluateJavascript can throw if the WebView has been destroyed underneath
+            // us (Activity finished, headless session stopped). Log so the cause is
+            // visible — the caller still gets a clean null and falls back. Narrowed from
+            // Throwable so JVM Errors (OOM etc.) still propagate.
+            android.util.Log.w("BrowserController", "evaluateJavascriptAsync: evaluateJavascript threw", e)
             deferred.complete(null)
         }
     }

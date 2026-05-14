@@ -37,6 +37,8 @@ class DirectModeActionRunner(
         data class Failed(val errorMessage: String) : StepResult()
         data object TimedOut : StepResult()
         data class HardlineBlocked(val reason: String) : StepResult()
+        /** The action's tool is not in the available-tools list at fire time (never
+         *  registered, or the assistant disabled it after the job was created). */
         data class UnknownTool(val toolName: String) : StepResult()
     }
 
@@ -57,7 +59,13 @@ class DirectModeActionRunner(
                 is StepResult.Failed         -> return SequenceResult("failed", "action $idx: ${result.errorMessage}")
                 is StepResult.TimedOut       -> return SequenceResult("timed_out", "action $idx: ${action.tool} exceeded 60s")
                 is StepResult.HardlineBlocked-> return SequenceResult("failed", "action $idx: hardline:${result.reason}")
-                is StepResult.UnknownTool    -> return SequenceResult("failed", "action $idx: unknown_tool:${result.toolName}")
+                // A direct-mode job validates its tool list at creation time, but the
+                // assistant's enabled-tools set can change afterwards. If a tool the job
+                // references is no longer in `availableTools` when the job fires, surface
+                // it as a NAMED failure ("tool_unavailable: <toolName>") so the failed
+                // run-history row tells the user exactly which tool to re-enable — rather
+                // than the job appearing to fail for an opaque reason.
+                is StepResult.UnknownTool    -> return SequenceResult("failed", "action $idx: tool_unavailable: ${result.toolName}")
             }
         }
         return SequenceResult("success", null)

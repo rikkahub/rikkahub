@@ -242,6 +242,78 @@ fun notificationActionClickTool(): Tool = Tool(
     }
 )
 
+fun notificationReplyTool(): Tool = Tool(
+    name = "notification_reply",
+    description = """
+        Reply to a notification in one call. Fills the notification's direct-reply action
+        (RemoteInput) with text and fires it — works for WhatsApp / Messages / Telegram and
+        any app exposing an inline reply. Pass notification_key (from a notifications list
+        call) and text. Returns {error: no_action} if the notification has no reply action
+        (fall back to launch_app + set_text via screen automation), {error: not_found} if
+        the notification is no longer active.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("notification_key", buildJsonObject {
+                    put("type", "string")
+                    put("description", "The .key field from a previous notifications list call")
+                })
+                put("text", buildJsonObject {
+                    put("type", "string")
+                    put("description", "The reply text to send")
+                })
+            },
+            required = listOf("notification_key", "text")
+        )
+    },
+    execute = { input ->
+        val key = input.jsonObject["notification_key"]?.jsonPrimitive?.contentOrNull
+        val text = input.jsonObject["text"]?.jsonPrimitive?.contentOrNull
+        if (key.isNullOrBlank()) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject { put("error", "notification_key is required") }.toString()
+                )
+            )
+        }
+        if (text.isNullOrEmpty()) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject { put("error", "text is required") }.toString()
+                )
+            )
+        }
+        val payload = NotificationListenerHandle.withListener { svc ->
+            when (val res = svc.triggerReplyAction(key, text)) {
+                is RikkaNotificationListenerService.TriggerResult.Success -> buildJsonObject {
+                    put("success", true)
+                    put("action_used", res.actionTitle)
+                }
+                RikkaNotificationListenerService.TriggerResult.NotFound -> buildJsonObject {
+                    put("error", "not_found")
+                    put("recovery", "The notification is no longer in the status bar. Re-list active notifications.")
+                }
+                RikkaNotificationListenerService.TriggerResult.NoAction -> buildJsonObject {
+                    put("error", "no_action")
+                    put("recovery", "This notification has no direct-reply action. Use launch_app + set_text + click_node from the screen automation tools.")
+                }
+                is RikkaNotificationListenerService.TriggerResult.RequiresInput -> buildJsonObject {
+                    // triggerReplyAction never returns RequiresInput, but the sealed class
+                    // demands exhaustiveness — treat it as a no-action fallback.
+                    put("error", "no_action")
+                    put("recovery", "Use launch_app + set_text + click_node from the screen automation tools.")
+                }
+                is RikkaNotificationListenerService.TriggerResult.SendFailed -> buildJsonObject {
+                    put("error", "send_failed")
+                    put("reason", res.reason)
+                }
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
 fun notificationStatusTool(
     listenerPrefs: NotificationListenerPreferences,
     telegramPrefs: TelegramBotPreferences,

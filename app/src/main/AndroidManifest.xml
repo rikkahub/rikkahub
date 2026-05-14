@@ -70,6 +70,21 @@
        allow-external-apps=true in ~/.termux/termux.properties on their side. -->
   <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
+  <!-- Phase 25 — Phase 3 second cut. SEND_SMS is a runtime (dangerous) permission granted
+       at toggle-on for the send_sms tool. SET_WALLPAPER and NFC are install-time. SAF and
+       the archive tools need no manifest change (SAF is grant-driven; zip is pure JDK). -->
+  <uses-permission android:name="android.permission.SEND_SMS" />
+  <uses-permission android:name="android.permission.SET_WALLPAPER" />
+  <uses-permission android:name="android.permission.NFC" />
+
+  <!-- Signature-protected permission exposed by the co-signed agent-keyboard IME. Granted
+       at install time because both apps are signed with the same key; lets RikkaHub bind
+       agent-keyboard's KeyboardApiService and drive the active text field over AIDL. -->
+  <uses-permission android:name="dev.patrickgold.florisboard.permission.AGENT_KEYBOARD_API" />
+
+  <uses-feature
+    android:name="android.hardware.nfc"
+    android:required="false" />
   <uses-feature
     android:name="android.hardware.camera"
     android:required="false" />
@@ -95,6 +110,9 @@
       <action android:name="android.intent.action.MAIN" />
       <category android:name="android.intent.category.LAUNCHER" />
     </intent>
+    <!-- Android 11+ package visibility: required so KeyboardApiClient can bindService into
+         the agent-keyboard package. Without this the bind silently fails on API 30+. -->
+    <package android:name="dev.patrickgold.florisboard" />
   </queries>
 
   <application

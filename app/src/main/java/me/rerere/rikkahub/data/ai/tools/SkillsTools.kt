@@ -19,6 +19,13 @@ fun createSkillTools(
     if (available.isEmpty()) return emptyList()
 
     return listOf(
+        // Phase 16 audit fix — read-only accessor so the LLM can show a skill's content
+        // without re-installing it. Sits under the same skills surface as use_skill.
+        skillGetContentTool(
+            enabledSkills = enabledSkills,
+            allSkills = allSkills,
+            contentReader = skillManager::getContent,
+        ),
         Tool(
             name = "use_skill",
             description = """

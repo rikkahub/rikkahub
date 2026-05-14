@@ -226,6 +226,10 @@ class ChatService(
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
         sessionMutexes.clear()
+    }.onFailure {
+        // Don't let a teardown hiccup escape, but don't swallow it silently either —
+        // a failure here can leave the lifecycle observer registered (slow leak).
+        Log.w(TAG, "cleanup failed", it)
     }
 
     // ---- Session 管理 ----
@@ -465,7 +469,9 @@ class ChatService(
                 kotlinx.serialization.json.Json.parseToJsonElement(rawText).jsonObject
             }.getOrNull()
             val formatted = if (match.format != null && parsed != null) {
-                runCatching { match.format.invoke(parsed) }.getOrNull()
+                runCatching { match.format.invoke(parsed) }
+                    .onFailure { Log.w("FastPathRouter", "formatter for intent=${match.intent} threw; falling back to raw text", it) }
+                    .getOrNull()
             } else null
             // Fall back to raw text if formatter throws or produces nothing.
             formatted?.takeIf { it.isNotBlank() } ?: rawText
@@ -1118,7 +1124,9 @@ class ChatService(
                 )
             )
         }.onFailure {
-            it.printStackTrace()
+            // Suggestion generation is auxiliary — log only, don't push onto the
+            // user-facing error stream (mirrors the generateTitle failure handling).
+            Log.w(TAG, "generateSuggestion failed", it)
         }
     }
 

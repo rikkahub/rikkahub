@@ -15,6 +15,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -22,6 +23,8 @@ import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
 import me.rerere.rikkahub.R
+
+private const val TAG = "MediaPlaybackSvc"
 
 /**
  * Foreground service for audio playback with MediaSession integration.
@@ -224,7 +227,7 @@ class MediaPlaybackService : Service() {
                     if (resolvedAlbum == null)
                         resolvedAlbum = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
                 }
-            } catch (_: Throwable) { /* best-effort */ }
+            } catch (t: Throwable) { Log.d(TAG, "metadata extraction failed (best-effort)", t) }
         }
 
         currentTitle = resolvedTitle
@@ -296,6 +299,10 @@ class MediaPlaybackService : Service() {
             }
             mediaPlayer = mp
         } catch (e: Exception) {
+            // Logged (was silently swallowed) so a "media won't play" report has a
+            // diagnostic — typically a bad source URI / unsupported scheme from
+            // setDataSource. Control flow is unchanged: error state, drop foreground, stop.
+            Log.w(TAG, "startPlayback failed for source=$source", e)
             setPlaybackState(PlaybackStateCompat.STATE_ERROR, 0L)
             stopForeground(STOP_FOREGROUND_DETACH)
             stopSelf()
@@ -409,8 +416,8 @@ class MediaPlaybackService : Service() {
 
     private fun releaseMediaPlayer() {
         mediaPlayer?.let {
-            try { if (it.isPlaying) it.stop() } catch (_: Throwable) {}
-            try { it.release() } catch (_: Throwable) {}
+            try { if (it.isPlaying) it.stop() } catch (t: Throwable) { Log.d(TAG, "stop during release", t) }
+            try { it.release() } catch (t: Throwable) { Log.d(TAG, "release failed", t) }
         }
         mediaPlayer = null
         isPlaying = false

@@ -130,10 +130,14 @@ class RikkaNotificationListenerService : NotificationListenerService() {
     }
 
     private suspend fun tryForwardToTelegram(entry: NotificationEntry) {
-        val cfg = try { whitelistPrefs.current() } catch (_: Throwable) { return }
+        val cfg = try { whitelistPrefs.current() } catch (t: Throwable) {
+            Log.w(TAG, "whitelist prefs read failed; skipping forward", t); return
+        }
         if (entry.packageName !in cfg.whitelist) return
 
-        val tg = try { telegramPrefs.current() } catch (_: Throwable) { return }
+        val tg = try { telegramPrefs.current() } catch (t: Throwable) {
+            Log.w(TAG, "telegram prefs read failed; skipping forward", t); return
+        }
         val chatId = tg.defaultChatId ?: return
         if (!tg.enabled) return
 
@@ -225,6 +229,37 @@ class RikkaNotificationListenerService : NotificationListenerService() {
         }
     }
 
+    /**
+     * Fill a notification's reply action's RemoteInput with [text] and fire its
+     * PendingIntent — the one-call equivalent of launch_app + set_text + click_node for
+     * apps that expose a direct-reply action (WhatsApp, Messages, Telegram, etc.).
+     * Picks the first action that carries at least one RemoteInput.
+     */
+    fun triggerReplyAction(key: String, text: String): TriggerResult {
+        val sbn = activeNotifications?.firstOrNull { it.key == key }
+            ?: return TriggerResult.NotFound
+        val actions = sbn.notification.actions ?: emptyArray()
+        if (actions.isEmpty()) return TriggerResult.NoAction
+
+        val matched = actions.firstOrNull { !it.remoteInputs.isNullOrEmpty() }
+            ?: return TriggerResult.NoAction
+        val remoteInputs = matched.remoteInputs ?: return TriggerResult.NoAction
+        val pi = matched.actionIntent ?: return TriggerResult.NoAction
+
+        return try {
+            val intent = android.content.Intent()
+            val bundle = android.os.Bundle()
+            for (ri in remoteInputs) {
+                bundle.putCharSequence(ri.resultKey, text)
+            }
+            android.app.RemoteInput.addResultsToIntent(remoteInputs, intent, bundle)
+            pi.send(this, 0, intent)
+            TriggerResult.Success(matched.title?.toString().orEmpty())
+        } catch (t: Throwable) {
+            TriggerResult.SendFailed(t.message ?: t::class.java.simpleName)
+        }
+    }
+
     fun listActive(): List<NotificationEntry> {
         // Short cache so back-to-back tool calls (the LLM often calls list_active +
         // dismiss_notification in the same turn) and rapid Compose recomps don't each
@@ -298,7 +333,9 @@ private fun StatusBarNotification.toEntry(pm: PackageManager): NotificationEntry
     val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
     val label = try {
         pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
-    } catch (_: Throwable) {
+    } catch (t: Throwable) {
+        // Uninstalled / restricted package — fall back to the raw package name.
+        Log.d(TAG, "getApplicationLabel failed for $packageName", t)
         packageName
     }
     val actionTitles = n.actions?.mapNotNull { it.title?.toString() } ?: emptyList()

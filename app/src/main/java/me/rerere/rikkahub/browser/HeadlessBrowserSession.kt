@@ -142,6 +142,11 @@ class HeadlessBrowserSession(private val context: Context) {
                 host?.removeView(wv)
                 wv.destroy()
             }
+        }.onFailure {
+            // Teardown is best-effort — a throw here (e.g. WebView already destroyed on a
+            // racing path) must not corrupt the pool's bookkeeping. Log so a genuine leak
+            // is visible rather than silently swallowed; the field nulling below still runs.
+            android.util.Log.w("HeadlessBrowserSession", "stop: WebView teardown threw", it)
         }
         webView = null
         host = null

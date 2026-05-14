@@ -32,3 +32,6 @@ app/google-services.json
 
 # Local planning doc — not for the remote
 /enhance.md
+
+# Separate companion repo - cloned locally, not part of this repo
+/agent-keyboard/

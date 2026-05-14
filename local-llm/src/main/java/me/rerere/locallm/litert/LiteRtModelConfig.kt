@@ -134,22 +134,8 @@ object LiteRtModelDefaults {
             minDeviceMemoryGb = 6,
             sizeBytes = 1597931520L,
         ),
-        // DeepSeek-R1-Distill-Qwen-1.5B
-        LiteRtModelConfig(
-            modelFile = "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
-            topK = 64,
-            topP = 0.95,
-            temperature = 1.0,
-            maxTokens = 4096,
-            maxContextLength = null,
-            preferredAccelerators = listOf("gpu", "cpu"),
-            visionAccelerator = null,
-            supportsImage = false,
-            supportsAudio = false,
-            supportsThinking = false,
-            supportsSpeculativeDecoding = false,
-            minDeviceMemoryGb = 6,
-            sizeBytes = 1833451520L,
-        ),
+        // DeepSeek-R1-Distill-Qwen-1.5B intentionally removed: it is a reasoning
+        // distillation, not instruction/tool tuned, so it does not support the
+        // prompt-engineered tool calling the agent loop depends on. See LiteRtCatalog.
     )
 }

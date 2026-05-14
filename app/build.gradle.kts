@@ -104,6 +104,8 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // agent-keyboard IPC: IKeyboardApi.aidl + EditorInfoBundle.aidl in src/main/aidl.
+        aidl = true
     }
     sourceSets {
         getByName("androidTest").assets.srcDirs("$projectDir/schemas")
@@ -302,6 +304,10 @@ dependencies {
 
     // AndroidX Media — MediaSessionCompat, MediaButtonReceiver, NotificationCompat.MediaStyle
     implementation("androidx.media:media:1.7.0")
+
+    // AndroidX DocumentFile — Phase 25 SAF tree traversal for the ExternalStorage tools
+    // (USB / SD / Downloads / cloud DocumentsProvider access via persisted tree grants).
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // modules
     implementation(project(":ai"))

@@ -33,6 +33,48 @@ private inline fun safeApi(block: () -> JsonObject): JsonObject = try {
     buildJsonObject { put("error", e.message ?: e::class.simpleName ?: "unknown") }
 }
 
+/**
+ * Classify the failure of a token-verification getMe() call into a structured
+ * `{error, detail, recovery}` envelope. The distinction matters because the LLM
+ * retry policy differs:
+ *
+ *  - HTTP 401 from the Telegram API => the token is permanently invalid. Retrying
+ *    the SAME token will always fail; the model must go get a fresh token from
+ *    @BotFather. error = "token_invalid".
+ *  - Anything else (network failure, timeout, DNS, non-401 HTTP error) => transient
+ *    or unknown. Retrying is reasonable. error = "network_error".
+ *
+ * Pure function: takes the thrown exception, returns the envelope. Unit-tested.
+ */
+internal fun classifyTokenVerifyError(t: Throwable): JsonObject {
+    val isInvalidToken = t is TelegramApiException && t.errorCode == 401
+    return if (isInvalidToken) {
+        buildJsonObject {
+            put("error", "token_invalid")
+            put("detail", "Telegram API rejected the token (HTTP 401: ${(t as TelegramApiException).description}).")
+            put(
+                "recovery",
+                "The token is permanently invalid — do NOT retry with the same value. " +
+                    "Get a fresh token from @BotFather and call telegram_set_token again with it."
+            )
+        }
+    } else {
+        val detail = when (t) {
+            is TelegramApiException -> "Telegram API error ${t.errorCode}: ${t.description}"
+            else -> t.message ?: t::class.simpleName ?: "unknown network failure"
+        }
+        buildJsonObject {
+            put("error", "network_error")
+            put("detail", detail)
+            put(
+                "recovery",
+                "Verification failed for a transient reason (network / timeout / non-401 server error). " +
+                    "The token may still be valid — retry telegram_set_token, optionally after a short delay."
+            )
+        }
+    }
+}
+
 /** Set/replace the bot token. Triggers a getMe to verify before persisting. */
 fun telegramSetTokenTool(prefs: TelegramBotPreferences, client: TelegramBotClient): Tool = Tool(
     name = "telegram_set_token",
@@ -50,12 +92,18 @@ fun telegramSetTokenTool(prefs: TelegramBotPreferences, client: TelegramBotClien
             ?: error("token is required")
         // Provisionally persist; the client uses tokenProvider() lazily so getMe will use it.
         prefs.update { it.copy(token = token) }
-        val payload = safeApi {
+        // Verify the token. A 401 from Telegram means the token is permanently invalid
+        // (don't retry); a network/timeout/non-401 failure is transient (retry OK). The
+        // classifier produces distinct {error, detail, recovery} envelopes so the model
+        // doesn't burn turns retrying a dead token.
+        val payload = try {
             val me = client.getMe()
             buildJsonObject {
                 put("success", true)
                 put("bot", me)
             }
+        } catch (t: Throwable) {
+            classifyTokenVerifyError(t)
         }
         // If verification failed, roll back the token so we don't leave a bad value behind.
         if (payload["error"] != null) {

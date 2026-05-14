@@ -3,6 +3,7 @@ package me.rerere.locallm.litert
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
@@ -108,5 +109,38 @@ class LiteRtToolPrefixTest {
         assertEquals(1, calls.size)
         assertEquals("get_time", calls[0].name)
         assertEquals(0, calls[0].arguments.size)
+    }
+
+    // -- unclosed-tag recovery: tiny local models drop the closing </tool_call> tag --
+
+    @Test fun `extractToolCalls recovers a tool call with no closing tag`() {
+        // Exactly the Qwen2.5-1.5B failure: emits <tool_call>{json} then stops, no </tool_call>.
+        val response = """<tool_call>{"name":"search_web","arguments":{"query":"nmap installed in termux"}}"""
+        val calls = LiteRtToolPrefix.extractToolCalls(response)
+        assertEquals(1, calls.size)
+        assertEquals("search_web", calls[0].name)
+        assertEquals("nmap installed in termux", calls[0].arguments["query"]?.jsonPrimitive?.content)
+    }
+
+    @Test fun `extractToolCalls recovers an unclosed call with prose before it`() {
+        val response = """Let me check that for you.
+<tool_call>{"name":"get_time","arguments":{}}"""
+        val calls = LiteRtToolPrefix.extractToolCalls(response)
+        assertEquals(1, calls.size)
+        assertEquals("get_time", calls[0].name)
+    }
+
+    @Test fun `extractToolCalls prefers the well-formed pass over recovery`() {
+        // A complete block must still be parsed by pass 1, not the fallback.
+        val response = """<tool_call>{"name":"a","arguments":{}}</tool_call> and then <tool_call>{"name":"b"""
+        val calls = LiteRtToolPrefix.extractToolCalls(response)
+        assertEquals(1, calls.size)
+        assertEquals("a", calls[0].name)
+    }
+
+    @Test fun `extractToolCalls returns empty when an unclosed call is truncated mid-JSON`() {
+        // No balanced object — the model cut off before finishing the JSON. Nothing to recover.
+        val response = """<tool_call>{"name":"search_web","arguments":{"query":"""
+        assertEquals(0, LiteRtToolPrefix.extractToolCalls(response).size)
     }
 }

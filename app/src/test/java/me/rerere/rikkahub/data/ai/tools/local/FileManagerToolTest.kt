@@ -342,4 +342,47 @@ class FileManagerToolTest {
             """{"root":"/nonexistent/xyz","query":"foo"}""")
         assertEquals("not_found", result["error"]?.jsonPrimitive?.content)
     }
+
+    // ========== Phase 25: content:// support ==========
+
+    @Test fun `content uri detection routes content scheme`() {
+        assertTrue(ContentUriSafetyGuard.isContentUri("content://com.android.externalstorage.documents/tree/x"))
+        assertFalse(ContentUriSafetyGuard.isContentUri("/sdcard/file.txt"))
+        assertFalse(ContentUriSafetyGuard.isContentUri("file:///sdcard/file.txt"))
+    }
+
+    @Test fun `content uri safety guard does structural validation only`() {
+        // Well-formed content URI from any DocumentsProvider passes — no authority allowlist.
+        assertNull(ContentUriSafetyGuard.check("content://com.dropbox.android.documents/tree/abc"))
+        assertNull(ContentUriSafetyGuard.check("content://media/external/images/media/123"))
+        // Malformed ones are blocked.
+        assertNotNull(ContentUriSafetyGuard.check("content:///tree/missing-authority"))
+        assertNotNull(ContentUriSafetyGuard.check("notcontent://x/y"))
+    }
+
+    @Test fun `not-granted envelope reports the authority`() {
+        val json = ContentUriResolver.notGrantedEnvelope(
+            "content://com.android.externalstorage.documents/tree/usb"
+        )
+        val obj = Json.parseToJsonElement(json).jsonObject
+        assertEquals("directory_not_granted", obj["error"]?.jsonPrimitive?.content)
+        assertEquals(
+            "com.android.externalstorage.documents",
+            obj["authority"]?.jsonPrimitive?.content,
+        )
+    }
+
+    @Test fun `file-manager tool descriptions advertise content uri support`() {
+        // Every extended file tool's description must tell the LLM it accepts content://.
+        listOf(
+            listFilesTool(), readFileTool(), writeBinaryFileTool(), deleteFileTool(),
+            moveFileTool(), copyFileTool(), createDirectoryTool(), fileInfoTool(),
+            findFilesTool(),
+        ).forEach { tool ->
+            assertTrue(
+                "${tool.name} description must mention content://",
+                tool.description.contains("content://"),
+            )
+        }
+    }
 }

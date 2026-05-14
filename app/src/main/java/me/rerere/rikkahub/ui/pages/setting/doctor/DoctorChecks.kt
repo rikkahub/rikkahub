@@ -71,6 +71,13 @@ private object Capability {
     val Browser: Set<LocalToolOption> = setOf(
         LocalToolOption.Browser,             // 17 browser tools (in-app WebView)
     )
+    // Phase 25 — Phase 3 second cut.
+    val SendSms: Set<LocalToolOption> = setOf(
+        LocalToolOption.SmsSend,
+    )
+    val Nfc: Set<LocalToolOption> = setOf(
+        LocalToolOption.Nfc,
+    )
 }
 
 /** Friendly name for the row's "needed by:" subtitle. */
@@ -88,6 +95,12 @@ private fun LocalToolOption.shortName(): String = when (this) {
     LocalToolOption.Notification -> "Notification"
     LocalToolOption.Files -> "Files"
     LocalToolOption.Browser -> "Browser"
+    LocalToolOption.SmsSend -> "SMS send"
+    LocalToolOption.Wallpaper -> "Wallpaper"
+    LocalToolOption.Keystore -> "Keystore"
+    LocalToolOption.Nfc -> "NFC"
+    LocalToolOption.ExternalStorage -> "External storage"
+    LocalToolOption.Archive -> "Archive (zip)"
     else -> this::class.simpleName ?: "?"
 }
 
@@ -116,6 +129,9 @@ class DoctorChecks(
     // Optional + nullable so callers that don't construct this DoctorChecks via the DI
     // graph (a few legacy tests) keep compiling — the row is silently skipped when null.
     private val browserPreferences: BrowserPreferences? = null,
+    // Phase 25 — SAF tree-grant store, backs the "granted directories" Doctor row.
+    // Nullable + defaulted so legacy test paths that don't build the full DI graph compile.
+    private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore? = null,
 ) {
     suspend fun runAll(): List<DoctorCheck> = withContext(Dispatchers.IO) {
         // Aggregate enabled tools across every assistant. A tool is "in use" if at least
@@ -129,7 +145,7 @@ class DoctorChecks(
             addAll(permissionChecks(enabled))
             addAll(serviceChecks(enabled))
             addAll(assistantChecks())
-            addAll(databaseChecks())
+            addAll(databaseChecks(enabled))
             addAll(networkChecks())
             addAll(termuxChecks(enabled))
             addAll(browserChecks(enabled))
@@ -242,6 +258,64 @@ class DoctorChecks(
                     ),
                 )
             )
+        }
+        // Phase 25 — SEND_SMS runtime permission row for the send_sms tool.
+        add(
+            capabilityRow(
+                id = "perm.send_sms",
+                category = DoctorCategory.Permissions,
+                label = "Send-SMS permission",
+                cap = Capability.SendSms,
+                enabled = enabled,
+                granted = PermissionHelper.hasRuntime(context, listOf(Manifest.permission.SEND_SMS)),
+                grantedDetail = "Granted.",
+                missingDetail = "send_sms tool needs this to send messages.",
+                fix = FixAction.OpenAppRoute("Open app permissions", AppRouteKey.SettingPermissions),
+            )
+        )
+        // Phase 25 — NFC combined hardware + system-toggle row. Tri-state: no hardware
+        // (INFO, no fix), hardware present but disabled (WARN, open NFC settings), on (OK).
+        run {
+            val adapter = android.nfc.NfcAdapter.getDefaultAdapter(context)
+            val nfcNeeders = requirersOf(Capability.Nfc, enabled)
+            when {
+                adapter == null -> add(
+                    DoctorCheck(
+                        id = "perm.nfc_enabled",
+                        category = DoctorCategory.Permissions,
+                        label = "NFC",
+                        detail = "Device has no NFC hardware.",
+                        severity = Severity.INFO,
+                    )
+                )
+                !adapter.isEnabled -> add(
+                    DoctorCheck(
+                        id = "perm.nfc_enabled",
+                        category = DoctorCategory.Permissions,
+                        label = "NFC",
+                        detail = if (nfcNeeders.isEmpty())
+                            "NFC is turned off in system settings. Not required by any enabled tool."
+                        else
+                            "NFC is turned off in system settings. Needed by: " +
+                                nfcNeeders.joinToString(", ") { it.shortName() } + ".",
+                        severity = if (nfcNeeders.isEmpty()) Severity.INFO else Severity.WARN,
+                        fix = if (nfcNeeders.isEmpty()) null else FixAction.OpenIntent(
+                            label = "Open NFC settings",
+                            intent = android.content.Intent(android.provider.Settings.ACTION_NFC_SETTINGS)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        ),
+                    )
+                )
+                else -> add(
+                    DoctorCheck(
+                        id = "perm.nfc_enabled",
+                        category = DoctorCategory.Permissions,
+                        label = "NFC",
+                        detail = "NFC hardware present and enabled.",
+                        severity = Severity.OK,
+                    )
+                )
+            }
         }
     }
 
@@ -469,7 +543,7 @@ class DoctorChecks(
 
     // ----- Database --------------------------------------------------------------------
 
-    private suspend fun databaseChecks(): List<DoctorCheck> = buildList {
+    private suspend fun databaseChecks(enabled: Set<LocalToolOption>): List<DoctorCheck> = buildList {
         // Migration version
         val version = runCatching { database.openHelper.readableDatabase.version }.getOrDefault(-1)
         add(
@@ -573,6 +647,33 @@ class DoctorChecks(
                     severity = if (stranded.isEmpty()) Severity.OK else Severity.WARN,
                 )
             )
+        }
+        // Phase 25 — SAF granted-directories live count for the ExternalStorage tool.
+        // Reconciles against the OS persisted-permission list so revoked grants drop off.
+        val store = storageVolumeGrantStore
+        if (store != null) {
+            runCatching {
+                val externalStorageEnabled = enabled.contains(LocalToolOption.ExternalStorage)
+                val grants = store.reconcile()
+                add(
+                    DoctorCheck(
+                        id = "storage.granted_directories",
+                        category = DoctorCategory.Database,
+                        label = "Granted directories",
+                        detail = when {
+                            !externalStorageEnabled && grants.isEmpty() ->
+                                "External Storage tool not enabled. Not required."
+                            grants.isEmpty() ->
+                                "No directories granted yet. Call grant_directory_access to add one."
+                            else ->
+                                "${grants.size} directory(ies) granted: " +
+                                    grants.joinToString(", ") { it.displayName } + "."
+                        },
+                        severity = if (externalStorageEnabled && grants.isNotEmpty())
+                            Severity.OK else Severity.INFO,
+                    )
+                )
+            }
         }
     }
 

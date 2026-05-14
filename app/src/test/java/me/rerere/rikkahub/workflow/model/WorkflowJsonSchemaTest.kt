@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.workflow.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -208,5 +209,56 @@ class WorkflowJsonSchemaTest {
         """.trimIndent()
         val r = WorkflowJson.parse(raw, knownTools)
         assertTrue("nested condition params must still parse, got: $r", r is WorkflowJson.ParseResult.Ok)
+    }
+
+    // ------- invert flag on conditions (item 10.2) ------
+
+    @Test fun `condition without invert defaults to false`() {
+        val raw = """{"name":"X","trigger":{"type":"manual"},
+            "conditions":[{"type":"is_charging"}],
+            "actions":[{"tool":"show_toast","args":{}}]}"""
+        val def = (WorkflowJson.parse(raw, knownTools) as WorkflowJson.ParseResult.Ok).definition
+        assertFalse(def.conditions[0].invert)
+    }
+
+    @Test fun `condition invert parses and round-trips`() {
+        val raw = """{"name":"X","trigger":{"type":"manual"},
+            "conditions":[{"type":"wifi_ssid_is","ssid":"Home","invert":true}],
+            "actions":[{"tool":"show_toast","args":{}}]}"""
+        val def = (WorkflowJson.parse(raw, knownTools) as WorkflowJson.ParseResult.Ok).definition
+        assertTrue(def.conditions[0].invert)
+        val reparsed = WorkflowJson.parseStored(WorkflowJson.encode(def))!!
+        assertTrue("invert must survive encode/parseStored round-trip", reparsed.conditions[0].invert)
+    }
+
+    // ------- regex notification trigger filters (item 10.5) ------
+
+    @Test fun `accept notification_received with title_matches regex`() {
+        val raw = """{"name":"N","trigger":{"type":"notification_received","params":{"title_matches":"^Alarm \\d+"}},
+            "actions":[{"tool":"show_toast","args":{}}]}"""
+        val r = WorkflowJson.parse(raw, knownTools)
+        assertTrue("valid regex filter must be accepted, got: $r", r is WorkflowJson.ParseResult.Ok)
+    }
+
+    @Test fun `reject notification_received with invalid title_matches regex`() {
+        val raw = """{"name":"N","trigger":{"type":"notification_received","params":{"title_matches":"[unclosed"}},
+            "actions":[{"tool":"show_toast","args":{}}]}"""
+        val r = WorkflowJson.parse(raw, knownTools) as WorkflowJson.ParseResult.Err
+        assertEquals("invalid_trigger", r.error)
+    }
+
+    @Test fun `reject notification_received with invalid text_matches regex`() {
+        val raw = """{"name":"N","trigger":{"type":"notification_received","params":{"text_matches":"a(b"}},
+            "actions":[{"tool":"show_toast","args":{}}]}"""
+        val r = WorkflowJson.parse(raw, knownTools) as WorkflowJson.ParseResult.Err
+        assertEquals("invalid_trigger", r.error)
+    }
+
+    @Test fun `notification_received regex filter round-trips`() {
+        val raw = """{"name":"N","trigger":{"type":"notification_received","params":{"text_matches":"order #\\d+"}},
+            "actions":[{"tool":"show_toast","args":{}}]}"""
+        val def = (WorkflowJson.parse(raw, knownTools) as WorkflowJson.ParseResult.Ok).definition
+        val reparsed = WorkflowJson.parseStored(WorkflowJson.encode(def))!!
+        assertEquals("order #\\d+", (reparsed.trigger as TriggerSpec.NotificationReceived).textMatches)
     }
 }

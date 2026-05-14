@@ -1241,13 +1241,11 @@
   <string name="setting_browser_open">Открыть браузер</string>
   <string name="setting_browser_open_desc">Запуск браузера на about:blank — удобно, чтобы войти один раз перед передачей управления ИИ.</string>
   <string name="setting_browser_per_tool_timeout">Тайм-аут на инструмент</string>
-  <string name="setting_browser_per_tool_timeout_value">30 с</string>
   <string name="setting_browser_search_engine">Поисковая система</string>
   <string name="setting_browser_search_engine_desc">DuckDuckGo (по умолчанию) — переключение вступит в силу после выпуска browser_search.</string>
   <string name="setting_browser_section_browser">Браузер</string>
   <string name="setting_browser_section_defaults">Значения по умолчанию и лимиты</string>
   <string name="setting_browser_single_task_timeout">Тайм-аут одной задачи</string>
-  <string name="setting_browser_single_task_timeout_value">5 мин</string>
   <string name="setting_browser_title">Браузер</string>
   <string name="setting_browser_tool_back_desc">Переход назад в истории браузера.</string>
   <string name="setting_browser_tool_back_title">Назад</string>

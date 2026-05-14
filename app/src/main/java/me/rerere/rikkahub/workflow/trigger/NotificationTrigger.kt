@@ -14,10 +14,13 @@ import me.rerere.rikkahub.workflow.model.WorkflowDefinition
  * one calls our dispatcher on every posted notification, and the family decides whether
  * any workflow matches.
  *
- * Filter logic (AND across non-null fields, all case-insensitive):
+ * Filter logic (AND across non-null fields):
  *   - package_name (exact match)
- *   - title_contains (substring)
- *   - text_contains (substring)
+ *   - title_contains / text_contains (case-insensitive substring)
+ *   - title_matches / text_matches (Java regex, tested with find())
+ * If both a `*_contains` and a `*_matches` are set for the same field, BOTH must pass.
+ * An uncompilable regex fails safe — treated as "no match" — so a bad pattern can never
+ * crash notification evaluation. workflow_create validates patterns at authoring time.
  * Validator already rejected workflows with no filters (would fire on every notification).
  */
 internal class NotificationTriggerFamily(
@@ -75,10 +78,31 @@ internal class NotificationTriggerFamily(
             if (text.isNullOrBlank()) return false
             if (!text.contains(t.textContains, ignoreCase = true)) return false
         }
+        if (!t.titleMatches.isNullOrBlank()) {
+            if (title.isNullOrBlank()) return false
+            if (!regexFind(t.titleMatches, title)) return false
+        }
+        if (!t.textMatches.isNullOrBlank()) {
+            if (text.isNullOrBlank()) return false
+            if (!regexFind(t.textMatches, text)) return false
+        }
         return true
     }
 
-    companion object { private const val TAG = "WorkflowTrigger" }
+    companion object {
+        private const val TAG = "WorkflowTrigger"
+
+        /**
+         * True if [pattern] (Java regex) finds a match in [input]. A pattern that fails to
+         * compile is treated as "no match" rather than throwing — a bad pattern must never
+         * crash notification dispatch for unrelated workflows. (workflow_create already
+         * rejects uncompilable patterns at authoring time via WorkflowJson.isValidRegex;
+         * this guard only covers stored rows authored before validation tightened.)
+         */
+        internal fun regexFind(pattern: String, input: String): Boolean =
+            runCatching { java.util.regex.Pattern.compile(pattern).matcher(input).find() }
+                .getOrDefault(false)
+    }
 }
 
 /** Bridge from RikkaNotificationListenerService.onNotificationPosted to the family. */

@@ -211,7 +211,7 @@ class CronJobWorkerInstrumentedTest {
     }
 
     // =========================================================================
-    // Test 3 — unknown tool → failed row with unknown_tool error
+    // Test 3 — unavailable tool → failed row that names the missing tool
     // =========================================================================
     @Test
     fun directMode_unknownTool_writesFailedRow() = runBlocking {
@@ -223,8 +223,9 @@ class CronJobWorkerInstrumentedTest {
         val row = executeDirectJob(job, emptyList())
 
         assertEquals("outcome should be failed", "failed", row.outcome)
-        val errMsg3 = requireNotNull(row.errorMessage) { "errorMessage should be populated for unknown tool" }
-        assertTrue("errorMessage should mention unknown_tool", errMsg3.contains("unknown_tool"))
+        val errMsg3 = requireNotNull(row.errorMessage) { "errorMessage should be populated for unavailable tool" }
+        assertTrue("errorMessage should mention tool_unavailable", errMsg3.contains("tool_unavailable"))
+        assertTrue("errorMessage should name the missing tool", errMsg3.contains("nonexistent_tool"))
     }
 
     // =========================================================================

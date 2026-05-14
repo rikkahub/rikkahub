@@ -55,4 +55,38 @@ class NotificationListenerToolTest {
         val result = execTool(tool, """{"action_index":0}""")
         assertTrue(result.contains("notification_key is required"))
     }
+
+    @Test
+    fun `notification_reply rejects missing key`() {
+        val tool = notificationReplyTool()
+        val result = execTool(tool, """{"text":"hi"}""")
+        assertTrue(
+            "expected key-required error, got: $result",
+            result.contains("notification_key is required")
+        )
+    }
+
+    @Test
+    fun `notification_reply rejects missing text`() {
+        val tool = notificationReplyTool()
+        val result = execTool(tool, """{"notification_key":"test"}""")
+        assertTrue(
+            "expected text-required error, got: $result",
+            result.contains("text is required")
+        )
+    }
+
+    @Test
+    fun `notification_reply rejects empty text`() {
+        val tool = notificationReplyTool()
+        val result = execTool(tool, """{"notification_key":"test","text":""}""")
+        assertTrue(result.contains("text is required"))
+    }
+
+    @Test
+    fun `notification_reply returns not-bound when offline with valid args`() {
+        val tool = notificationReplyTool()
+        val result = execTool(tool, """{"notification_key":"test","text":"hello"}""")
+        assertTrue(result.contains("notification_listener_not_bound"))
+    }
 }
