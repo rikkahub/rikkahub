@@ -1,9 +1,12 @@
 package me.rerere.ai.util
 
 import android.content.Context
+import android.util.Log
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+
+private const val TAG = "KeyRoulette"
 
 interface KeyRoulette {
     fun next(keys: String, providerId: String = ""): String
@@ -88,7 +91,8 @@ private class LruKeyRoulette(
             val file = File(context.cacheDir, LRU_CACHE_FILE)
             if (!file.exists()) return emptyMap()
             Json.decodeFromString(file.readText())
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "loadCache: failed to read LRU key cache, starting empty", e)
             emptyMap()
         }
     }
@@ -96,7 +100,8 @@ private class LruKeyRoulette(
     private fun saveCache(cache: LruCache) {
         try {
             File(context.cacheDir, LRU_CACHE_FILE).writeText(Json.encodeToString(cache))
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "saveCache: failed to persist LRU key cache", e)
         }
     }
 }
