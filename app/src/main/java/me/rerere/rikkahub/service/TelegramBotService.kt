@@ -550,13 +550,17 @@ class TelegramBotService : Service() {
             att.kind == AttachmentKind.AUDIO ||
             att.kind == AttachmentKind.VIDEO_NOTE
         }
+        val hasPhotoAttachment = m.photoFileIds.isNotEmpty()
         me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum.set(
             convId,
-            buildAgentContextPreamble(cfg, m.chatId, wasCreated, hasAudioAttachment),
+            buildAgentContextPreamble(cfg, m.chatId, wasCreated, hasAudioAttachment, hasPhotoAttachment),
         )
-        // Download any inbound photos to the app cache and attach as UIMessagePart.Image so
-        // the assistant's vision pipeline can see them (FileEncoder reads file:// only).
-        val imageParts = downloadInboundPhotos(m.photoFileIds)
+        // Download any inbound photos to the per-chat shared-storage inbox. They are attached as
+        // UIMessagePart.Image for the vision pipeline (FileEncoder reads file:// only) AND their
+        // saved paths are surfaced in the message text via buildPhotoNote, so a text-only model
+        // can still OCR / process them through file tools or Termux.
+        val (imageParts, photoPaths) = downloadInboundPhotos(m.chatId, m.photoFileIds)
+        val photoNote = buildPhotoNote(photoPaths)
 
         // Download non-photo attachments (documents, audio, video, voice, video_note) to
         // /sdcard/Download/telegram_inbox/<chatId>/ and build a structured note for the LLM.
@@ -565,13 +569,11 @@ class TelegramBotService : Service() {
 
         val parts = buildList<UIMessagePart> {
             addAll(imageParts)
-            // Build the user-visible text combining the typed message and the attachment note.
-            val combinedText = when {
-                m.text.isNotEmpty() && attachmentNote.isNotEmpty() -> "${m.text}\n\n$attachmentNote"
-                attachmentNote.isNotEmpty() -> attachmentNote
-                m.text.isNotEmpty() -> m.text
-                else -> ""
-            }
+            // Build the user-visible text by joining the typed message with the structured
+            // photo / attachment notes for whatever arrived alongside it.
+            val combinedText = listOf(m.text, photoNote, attachmentNote)
+                .filter { it.isNotEmpty() }
+                .joinToString("\n\n")
             // Only emit a Text part when there is actual content; an empty text triggers
             // the "no reply" UX downstream and confuses the LLM.
             if (combinedText.isNotEmpty()) add(UIMessagePart.Text(combinedText))
@@ -847,6 +849,7 @@ class TelegramBotService : Service() {
         chatId: Long,
         firstTurnOfChat: Boolean,
         hasAudioAttachment: Boolean = false,
+        hasPhotoAttachment: Boolean = false,
     ): String {
         val s = settingsStore.settingsFlow.value
         val assistant = s.getCurrentAssistant()
@@ -904,6 +907,12 @@ class TelegramBotService : Service() {
                 append("on the user's data plan. Wait for an explicit yes before running install commands. ")
                 append("If a tool errors, READ THE ENVELOPE — the recovery field tells you what to do; do not ")
                 append("retry the same tool with different args or pivot to manual termux commands.\n")
+            }
+            if (hasPhotoAttachment) {
+                append("IMAGE ATTACHMENT. This message includes one or more photos. Their saved ")
+                append("file path(s) are listed in the message text. If you have vision you can ")
+                append("view the image directly; otherwise process the file at that path ")
+                append("(e.g. OCR with `tesseract` via Termux).\n")
             }
             append("]\n\n")
         }
@@ -1178,20 +1187,48 @@ class TelegramBotService : Service() {
     private fun assistantTextOf(m: UIMessage): String =
         m.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
 
-    /**
-     * Resolve each Telegram photo file_id to a downloaded file in the app cache, then return
-     * UIMessagePart.Image entries pointing at file:// URIs. Failures on individual photos are
-     * logged and skipped (so a transient network blip on one image does not drop the whole
-     * message).
-     */
-    private suspend fun downloadInboundPhotos(fileIds: List<String>): List<UIMessagePart.Image> {
-        if (fileIds.isEmpty()) return emptyList()
-        val dir = java.io.File(cacheDir, "telegram-incoming").apply { mkdirs() }
-        // Prune anything older than 24h to keep cache bounded.
-        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
-        dir.listFiles()?.forEach { f -> if (f.lastModified() < cutoff) f.delete() }
+    /** The per-chat inbound-attachment inbox on shared storage. Termux / file tools can reach it. */
+    private fun inboxDirFor(chatId: Long): java.io.File =
+        java.io.File("/sdcard/Download/telegram_inbox/$chatId").apply { mkdirs() }
 
-        val out = mutableListOf<UIMessagePart.Image>()
+    /**
+     * Prune a per-chat inbox: drop files older than 24h, then cap total size at
+     * [INBOUND_ATTACHMENT_INBOX_CAP_BYTES] (oldest first). Shared by the photo and
+     * non-photo download paths so both kinds get the same hygiene.
+     */
+    private fun pruneInbox(inboxDir: java.io.File) {
+        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+        inboxDir.listFiles()?.forEach { f -> if (f.isFile && f.lastModified() < cutoff) f.delete() }
+
+        val allFiles = inboxDir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() }
+        if (allFiles != null) {
+            var totalSize = allFiles.sumOf { it.length() }
+            for (f in allFiles) {
+                if (totalSize <= INBOUND_ATTACHMENT_INBOX_CAP_BYTES) break
+                totalSize -= f.length()
+                f.delete()
+            }
+        }
+    }
+
+    /**
+     * Resolve each Telegram photo file_id to a downloaded file in the per-chat shared-storage
+     * inbox (so Termux / file tools can also reach it, not just the in-process vision pipeline),
+     * then return both the UIMessagePart.Image entries (file:// URIs, for vision-capable models)
+     * AND the saved absolute paths (so [buildPhotoNote] can surface them in the message text for
+     * text-only models). Failures on individual photos are logged and skipped so a transient
+     * network blip on one image does not drop the whole message.
+     */
+    private suspend fun downloadInboundPhotos(
+        chatId: Long,
+        fileIds: List<String>,
+    ): Pair<List<UIMessagePart.Image>, List<String>> {
+        if (fileIds.isEmpty()) return emptyList<UIMessagePart.Image>() to emptyList()
+        val inboxDir = inboxDirFor(chatId)
+        pruneInbox(inboxDir)
+
+        val images = mutableListOf<UIMessagePart.Image>()
+        val paths = mutableListOf<String>()
         for (fileId in fileIds) {
             try {
                 val info = client.getFile(fileId)
@@ -1201,15 +1238,17 @@ class TelegramBotService : Service() {
                     continue
                 }
                 val ext = filePath.substringAfterLast('.', "jpg")
-                val dest = java.io.File(dir, "tg-${System.currentTimeMillis()}-${fileId.takeLast(8)}.$ext")
+                // fileId suffix keeps two photos in the same message unique even within one ms.
+                val dest = uniqueFile(inboxDir, "photo_${System.currentTimeMillis()}_${fileId.takeLast(6)}.$ext")
                 client.downloadFile(filePath, dest)
-                out.add(UIMessagePart.Image(url = "file://${dest.absolutePath}"))
+                images.add(UIMessagePart.Image(url = "file://${dest.absolutePath}"))
+                paths.add(dest.absolutePath)
                 android.util.Log.i(TAG, "downloadInboundPhotos: saved ${dest.name} (${dest.length()} bytes)")
             } catch (e: Throwable) {
                 android.util.Log.w(TAG, "downloadInboundPhotos: failed for $fileId", e)
             }
         }
-        return out
+        return images to paths
     }
 
     /**
@@ -1241,22 +1280,8 @@ class TelegramBotService : Service() {
     ): List<DownloadedAttachment> {
         if (attachments.isEmpty()) return emptyList()
 
-        val inboxDir = java.io.File("/sdcard/Download/telegram_inbox/$chatId").apply { mkdirs() }
-
-        // Prune files older than 24 h.
-        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
-        inboxDir.listFiles()?.forEach { f -> if (f.isFile && f.lastModified() < cutoff) f.delete() }
-
-        // Cap total inbox size at 500 MB — delete oldest first.
-        val allFiles = inboxDir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() }?.toMutableList()
-        if (allFiles != null) {
-            var totalSize = allFiles.sumOf { it.length() }
-            for (f in allFiles) {
-                if (totalSize <= INBOUND_ATTACHMENT_INBOX_CAP_BYTES) break
-                totalSize -= f.length()
-                f.delete()
-            }
-        }
+        val inboxDir = inboxDirFor(chatId)
+        pruneInbox(inboxDir)
 
         val out = mutableListOf<DownloadedAttachment>()
         for (att in attachments) {
@@ -2960,4 +2985,22 @@ internal fun uniqueFile(dir: java.io.File, preferredName: String): java.io.File 
     val ext = if (preferredName.contains('.')) ".${preferredName.substringAfterLast('.')}" else ""
     val base = if (ext.isNotEmpty()) preferredName.substringBeforeLast('.') else preferredName
     return java.io.File(dir, "$base-$ts$ext")
+}
+
+/**
+ * Build the structured note appended to the user message when inbound photos arrive, so the
+ * LLM learns the saved file path(s). Mirrors [TelegramBotService.buildAttachmentNote] — it
+ * lets the model OCR / process the image via file tools or Termux even when the configured
+ * model has no vision pipeline. Returns "" when no photo was saved.
+ */
+internal fun buildPhotoNote(paths: List<String>): String {
+    if (paths.isEmpty()) return ""
+    val noun = if (paths.size == 1) "photo" else "photos"
+    val sb = StringBuilder()
+    sb.append("[User attached ${paths.size} $noun with this message:\n")
+    for (p in paths) {
+        sb.append("- photo → saved to $p\n")
+    }
+    sb.append("View it directly if you have vision, or process the file at that path (e.g. OCR with `tesseract` via Termux).]")
+    return sb.toString()
 }
