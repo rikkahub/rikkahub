@@ -42,6 +42,11 @@ val appModule = module {
 
     single { CameraResultBuffer() }
     single { BiometricResultBuffer() }
+    // Phase 25 — NFC reader-mode + SAF directory-picker Activity bridges, and the SAF
+    // tree-grant store backing the ExternalStorage tools.
+    single { me.rerere.rikkahub.data.ai.tools.local.NfcResultBuffer() }
+    single { me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer() }
+    single { me.rerere.rikkahub.data.storage.StorageVolumeGrantStore(get()) }
 
     single { ScheduledJobRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().scheduledJobDao()) }
     single { me.rerere.rikkahub.data.repository.ScheduledJobRunRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().scheduledJobRunDao()) }
@@ -178,6 +183,9 @@ val appModule = module {
             skillSecretsStore = get(),
             browserPreferences = get(),
             interactiveToolStreamer = get(),
+            nfcResultBuffer = get(),
+            safPickerResultBuffer = get(),
+            storageVolumeGrantStore = get(),
         )
     }
 
@@ -258,6 +266,8 @@ val appModule = module {
             database = get(),
             // Pass 3: surface the browser write-tools-enabled INFO row + profile-dir AutoFix.
             browserPreferences = get(),
+            // Phase 25: surface the SAF granted-directories live count.
+            storageVolumeGrantStore = get(),
         )
     }
 }

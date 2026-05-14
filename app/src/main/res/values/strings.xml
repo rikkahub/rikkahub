@@ -1349,6 +1349,21 @@
   <string name="assistant_page_local_tools_browser_title">Browser</string>
   <string name="assistant_page_local_tools_browser_desc">AI-driven web browser. 17 individually-togglable tools — configure read/write access in Settings → Browser.</string>
 
+  <!-- Phase 25 — Phase 3 second cut + ExternalStorage + Archive. -->
+  <string name="assistant_page_local_tools_section_privileged">Privileged tools</string>
+  <string name="assistant_page_local_tools_sms_send_title">SMS send</string>
+  <string name="assistant_page_local_tools_sms_send_desc">Send SMS messages programmatically. Requires SEND_SMS permission. Approval required per call.</string>
+  <string name="assistant_page_local_tools_wallpaper_title">Wallpaper</string>
+  <string name="assistant_page_local_tools_wallpaper_desc">Set the home or lock screen wallpaper from a local image. Approval required per call.</string>
+  <string name="assistant_page_local_tools_keystore_title">Keystore</string>
+  <string name="assistant_page_local_tools_keystore_desc">Generate, sign, encrypt, and decrypt with hardware-backed keys (Android Keystore). 7 tools.</string>
+  <string name="assistant_page_local_tools_nfc_title">NFC</string>
+  <string name="assistant_page_local_tools_nfc_desc">Read and write NDEF records on NFC tags. Requires the app to be in foreground for tag detection.</string>
+  <string name="assistant_page_local_tools_external_storage_title">External storage</string>
+  <string name="assistant_page_local_tools_external_storage_desc">Lets file tools work on USB drives, SD cards, Downloads, and cloud storage. Each tree requires a one-time grant via the SAF picker.</string>
+  <string name="assistant_page_local_tools_archive_title">Archive (zip)</string>
+  <string name="assistant_page_local_tools_archive_desc">Create and extract .zip archives directly. No password support in v1. Works on file:// and content:// URIs.</string>
+
   <string name="setting_browser_title">Browser</string>
   <string name="setting_browser_section_browser">Browser</string>
   <string name="setting_browser_open">Open browser</string>

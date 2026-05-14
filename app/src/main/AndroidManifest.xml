@@ -70,6 +70,16 @@
        allow-external-apps=true in ~/.termux/termux.properties on their side. -->
   <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
+  <!-- Phase 25 — Phase 3 second cut. SEND_SMS is a runtime (dangerous) permission granted
+       at toggle-on for the send_sms tool. SET_WALLPAPER and NFC are install-time. SAF and
+       the archive tools need no manifest change (SAF is grant-driven; zip is pure JDK). -->
+  <uses-permission android:name="android.permission.SEND_SMS" />
+  <uses-permission android:name="android.permission.SET_WALLPAPER" />
+  <uses-permission android:name="android.permission.NFC" />
+
+  <uses-feature
+    android:name="android.hardware.nfc"
+    android:required="false" />
   <uses-feature
     android:name="android.hardware.camera"
     android:required="false" />

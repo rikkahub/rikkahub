@@ -30,7 +30,7 @@ import java.io.File
  * as a bug during file-manager E2E testing — the model wrote to the right NAME but
  * the wrong PATH, breaking every subsequent read/copy/move.
  */
-fun writeTextFileTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = Tool(
+fun writeTextFileTool(context: Context): Tool = Tool(
     name = "write_text_file",
     description = """
         Save text content to a file at the given absolute path. The full path must be
@@ -39,6 +39,8 @@ fun writeTextFileTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = To
         refuses if the file exists; overwrite=true truncates; append=true appends to
         existing content (creates the file if missing). Creates missing parent directories
         automatically for app workspace paths and common shared-storage user folders.
+        Also accepts a content:// URI (USB / SD / Downloads / cloud via SAF grant);
+        append is not supported on content:// URIs.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -70,9 +72,37 @@ fun writeTextFileTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = To
         if (rawPath.isNullOrBlank()) {
             return@Tool errEnvelope("missing_path", "path is required (absolute path or ~/...)")
         }
-        val path = AgentWorkspace.expand(rawPath)
         val content = params["content"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errEnvelope("missing_content", "content is required")
+
+        // content:// path — route through the SAF resolver. append is unsupported on
+        // content:// (no universal seek-to-end), so append on a content:// URI is an error.
+        if (ContentUriSafetyGuard.isContentUri(rawPath)) {
+            ContentUriSafetyGuard.check(rawPath)?.let { v ->
+                return@Tool errEnvelope(v.code, v.detail)
+            }
+            if (params["append"]?.jsonPrimitive?.booleanOrNull == true) {
+                return@Tool errEnvelope("append_unsupported", "append is not supported on content:// URIs")
+            }
+            return@Tool try {
+                val os = ContentUriResolver.openOutput(context, rawPath)
+                    ?: return@Tool listOf(UIMessagePart.Text(ContentUriResolver.notGrantedEnvelope(rawPath)))
+                val bytes = content.toByteArray(Charsets.UTF_8)
+                os.use { it.write(bytes) }
+                listOf(UIMessagePart.Text(buildJsonObject {
+                    put("success", true)
+                    put("path", rawPath)
+                    put("bytes_written", bytes.size)
+                    put("appended", false)
+                }.toString()))
+            } catch (e: SecurityException) {
+                listOf(UIMessagePart.Text(ContentUriResolver.notGrantedEnvelope(rawPath)))
+            } catch (e: Throwable) {
+                errEnvelope("write_failed", "${e::class.simpleName}: ${e.message ?: "unknown"}")
+            }
+        }
+
+        val path = AgentWorkspace.expand(rawPath)
 
         val append = params["append"]?.jsonPrimitive?.booleanOrNull == true
         val overwrite = params["overwrite"]?.jsonPrimitive?.booleanOrNull == true

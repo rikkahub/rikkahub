@@ -972,6 +972,100 @@ private fun AssistantLocalToolContent(
             )
         }
 
+        // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
+        Text(
+            text = stringResource(R.string.assistant_page_local_tools_section_privileged),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+        )
+        CardGroup {
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_sms_send_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_sms_send_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.SmsSend),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.SmsSend, it) },
+                        requiredRuntimePerms = listOf(Manifest.permission.SEND_SMS),
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_wallpaper_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_wallpaper_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Wallpaper),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Wallpaper, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_keystore_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_keystore_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Keystore),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Keystore, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_nfc_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_nfc_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Nfc),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Nfc, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_storage_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_storage_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.ExternalStorage),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ExternalStorage, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_archive_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_archive_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Archive),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Archive, it) },
+                    )
+                }
+            )
+        }
+
         Text(
             text = stringResource(R.string.assistant_page_local_tools_section_screen_automation),
             style = MaterialTheme.typography.titleSmall,

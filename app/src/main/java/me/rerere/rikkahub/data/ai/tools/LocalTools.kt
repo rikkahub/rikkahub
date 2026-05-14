@@ -178,6 +178,14 @@ sealed class LocalToolOption {
     @Serializable @SerialName("js_skills")           data object JsSkills           : LocalToolOption()
     @Serializable @SerialName("system_intents")      data object SystemIntents      : LocalToolOption()
     @Serializable @SerialName("browser")             data object Browser            : LocalToolOption()
+
+    // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
+    @Serializable @SerialName("sms_send")             data object SmsSend             : LocalToolOption()
+    @Serializable @SerialName("wallpaper")            data object Wallpaper           : LocalToolOption()
+    @Serializable @SerialName("keystore")             data object Keystore            : LocalToolOption()
+    @Serializable @SerialName("nfc")                  data object Nfc                 : LocalToolOption()
+    @Serializable @SerialName("external_storage")     data object ExternalStorage     : LocalToolOption()
+    @Serializable @SerialName("archive")              data object Archive             : LocalToolOption()
 }
 
 private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
@@ -293,6 +301,10 @@ class LocalTools(
     // Post-action screenshot streamer for headless mode (Telegram bot / cron / sub-agent).
     // Injected rather than Koin-resolved inside each factory so JVM tests can pass a mock.
     private val interactiveToolStreamer: InteractiveToolStreamer,
+    // Phase 25 — NFC / SAF Activity-bridge buffers + the SAF tree-grant store.
+    private val nfcResultBuffer: me.rerere.rikkahub.data.ai.tools.local.NfcResultBuffer,
+    private val safPickerResultBuffer: me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer,
+    private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -839,6 +851,38 @@ class LocalTools(
                     )?.let { tools.add(it) }
                 }
             }
+        }
+        // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
+        if (options.contains(LocalToolOption.SmsSend)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.smsSendTool(context))
+        }
+        if (options.contains(LocalToolOption.Wallpaper)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.setWallpaperTool(context))
+        }
+        if (options.contains(LocalToolOption.Keystore)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreGenerateKeyTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreSignTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreVerifyTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreEncryptTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreDecryptTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreDeleteKeyTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreListKeysTool())
+        }
+        if (options.contains(LocalToolOption.Nfc)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.nfcReadTagTool(context, nfcResultBuffer, invocationContext))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.nfcWriteTagTool(context, nfcResultBuffer, invocationContext))
+        }
+        if (options.contains(LocalToolOption.ExternalStorage)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listStorageVolumesTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listGrantedDirectoriesTool(context, storageVolumeGrantStore))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.grantDirectoryAccessTool(
+                context, storageVolumeGrantStore, safPickerResultBuffer, invocationContext,
+            ))
+        }
+        if (options.contains(LocalToolOption.Archive)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.zipFilesTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.unzipFileTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listZipContentsTool(context))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

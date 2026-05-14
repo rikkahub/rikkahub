@@ -202,6 +202,22 @@ object ToolApprovalDefaults {
         // side carries the same trust footprint as plain browser_click, so it
         // inherits the same approval gate.
         "browser_click_and_read",
+
+        // Phase 25 — Phase 3 second cut. Every mutating tool is approval-gated; the
+        // read-only tools (keystore_verify, keystore_list_keys, list_storage_volumes,
+        // list_granted_directories, list_zip_contents) are deliberately NOT in this set.
+        "send_sms",                 // sends a real SMS — costs money / leaves the device
+        "set_wallpaper",            // changes a visible device setting
+        "keystore_generate_key",    // creates a hardware key (NO_ALWAYS_ALLOW below)
+        "keystore_sign",            // signs arbitrary data with the user's key
+        "keystore_encrypt",         // encrypts with the user's key
+        "keystore_decrypt",         // decrypts ciphertext (NO_ALWAYS_ALLOW below)
+        "keystore_delete_key",      // destroys a key
+        "nfc_read_tag",             // opens a foreground reader session
+        "nfc_write_tag",            // writes NDEF to a physical tag (NO_ALWAYS_ALLOW below)
+        "grant_directory_access",   // persistent read+write to a whole tree (NO_ALWAYS_ALLOW below)
+        "zip_files",                // writes an archive to disk / a granted tree
+        "unzip_file",               // writes extracted files to disk / a granted tree
     )
 
     /**
@@ -227,6 +243,16 @@ object ToolApprovalDefaults {
         // the residual surface is too broad to ever blanket-allow. Every invocation gets
         // an explicit per-call approval card, no exceptions.
         "browser_eval_js",
+        // Phase 25 — privilege-escalation surfaces that must confirm every single call:
+        //  - keystore_generate_key: mints a hardware key that later sign/encrypt calls trust
+        //  - keystore_decrypt: turns ciphertext back into plaintext the model then reads
+        //  - nfc_write_tag: permanently rewrites a physical tag's contents
+        //  - grant_directory_access: persistent read+write to an entire storage tree,
+        //    possibly cloud / Downloads / Pictures
+        "keystore_generate_key",
+        "keystore_decrypt",
+        "nfc_write_tag",
+        "grant_directory_access",
     )
 
     fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW

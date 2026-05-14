@@ -264,6 +264,7 @@ object PermissionInventory {
         Manifest.permission.READ_CONTACTS to "Contacts",
         Manifest.permission.READ_CALL_LOG to "Call log",
         Manifest.permission.READ_SMS to "SMS",
+        Manifest.permission.SEND_SMS to "Send SMS",
         Manifest.permission.POST_NOTIFICATIONS to "Post notifications",
         "com.termux.permission.RUN_COMMAND" to "Termux RUN_COMMAND",
     )
@@ -277,6 +278,7 @@ object PermissionInventory {
         Manifest.permission.READ_CONTACTS to "Used by search_contacts and list_contacts.",
         Manifest.permission.READ_CALL_LOG to "Used by list_call_log.",
         Manifest.permission.READ_SMS to "Used by list_sms_inbox and search_sms.",
+        Manifest.permission.SEND_SMS to "Used by send_sms to send text messages programmatically.",
         "com.termux.permission.RUN_COMMAND" to "Lets RikkaHub start commands inside Termux for the termux_run_command tool.",
     )
 
