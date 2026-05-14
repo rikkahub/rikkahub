@@ -187,8 +187,10 @@ public class StreamableHttpClientTransport(
             sseSession?.cancel()
             sseJob?.cancelAndJoin()
             scope.cancel()
-        } catch (_: Exception) {
-            // Ignore errors during cleanup
+        } catch (e: Exception) {
+            // Cleanup is best-effort: a failure here must not prevent the transport from
+            // being marked closed. Log so the failure isn't completely silent.
+            Log.w(TAG, "Error during transport cleanup", e)
         } finally {
             initialized.store(false)
             _onClose()

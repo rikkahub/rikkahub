@@ -104,14 +104,14 @@ class McpManager(
                         toAdd.forEach { cfg ->
                             appScope.launch {
                                 runCatching { addClient(cfg) }
-                                    .onFailure { it.printStackTrace() }
+                                    .onFailure { Log.w(TAG, "addClient failed for ${cfg.commonOptions.name}", it) }
                             }
                         }
                         toRemove.forEach { cfg ->
                             appScope.launch { removeClient(cfg) }
                         }
                     }.onFailure {
-                        it.printStackTrace()
+                        Log.w(TAG, "settings collector reconcile failed", it)
                     }
                 }
         }
@@ -246,7 +246,7 @@ class McpManager(
             reconnectAttempts[config.id] = 0 // 重置重连计数
             Log.i(TAG, "addClient: connected ${config.commonOptions.name}")
         }.onFailure {
-            it.printStackTrace()
+            Log.w(TAG, "addClient: connect failed for ${config.commonOptions.name}", it)
             setStatus(config = config, status = McpStatus.Error(it.message ?: it.javaClass.name))
         }
     }
@@ -321,7 +321,7 @@ class McpManager(
             runCatching {
                 sync(config)
             }.onFailure {
-                it.printStackTrace()
+                Log.w(TAG, "syncAll: sync failed for ${config.commonOptions.name}", it)
             }
         }
     }
@@ -354,7 +354,7 @@ class McpManager(
             runCatching {
                 entry.value.close()
             }.onFailure {
-                it.printStackTrace()
+                Log.w(TAG, "removeClient: close failed for ${entry.key.commonOptions.name}", it)
             }
             clients.remove(entry.key)
             syncingStatus.emit(syncingStatus.value.toMutableMap().apply { remove(entry.key.id) })
@@ -426,7 +426,8 @@ class McpManager(
         // 先关闭旧客户端
         val oldEntry = clients.entries.find { it.key.id == config.id }
         if (oldEntry != null) {
-            runCatching { oldEntry.value.close() }.onFailure { it.printStackTrace() }
+            runCatching { oldEntry.value.close() }
+                .onFailure { Log.w(TAG, "reconnectClient: old client close failed for ${config.commonOptions.name}", it) }
             clients.remove(oldEntry.key)
         }
 
