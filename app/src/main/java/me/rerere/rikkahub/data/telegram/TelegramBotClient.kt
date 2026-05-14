@@ -53,6 +53,12 @@ class TelegramBotClient(
     private val shortClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // End-to-end cap. readTimeout only catches gaps BETWEEN bytes; downloadFile streams
+        // Telegram-hosted files up to the 50 MB cap, so a path that trickles bytes just under
+        // the 30s readTimeout window could stay alive far longer than intended. 10 min is
+        // generous enough for a large file on slow mobile data yet bounds the worst case so a
+        // stuck call can never wedge the request forever.
+        .callTimeout(10, TimeUnit.MINUTES)
         .build()
         .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 

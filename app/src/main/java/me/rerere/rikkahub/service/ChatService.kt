@@ -388,7 +388,7 @@ class ChatService(
                 // Conservative: any match failure (tool throws, no result) falls back to the
                 // normal LLM path. Headless conversations and non-text messages are skipped.
                 val routedHandled = if (answer)
-                    tryFastPathRoute(conversationId, processedContent, withUser)
+                    tryFastPathRoute(conversationId, processedContent, withUser, assistant)
                 else false
 
                 // 开始补全 — only if router didn't handle the turn
@@ -414,12 +414,15 @@ class ChatService(
         conversationId: Uuid,
         userParts: List<UIMessagePart>,
         afterUserSave: me.rerere.rikkahub.data.model.Conversation,
+        assistant: Assistant,
     ): Boolean {
         // Headless paths (cron / sub-agent / external-automation / workflow) must always go
         // through the LLM — the fast-path is a per-user-turn optimisation, not a system-flow.
         if (me.rerere.rikkahub.data.ai.tools.HeadlessConversations.isHeadless(conversationId)) return false
 
-        val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
+        // assistant is resolved from the conversation's own assistantId by the caller — do NOT
+        // re-read the global getCurrentAssistant() here or a mid-turn assistant switch makes the
+        // router read fastPathRouterEnabled / localTools off the wrong assistant.
         if (!assistant.fastPathRouterEnabled) return false
 
         val userText = userParts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text }.trim()
