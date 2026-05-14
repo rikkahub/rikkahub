@@ -893,10 +893,13 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
             SpanStyle(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 0.95.em,
-                background = colorScheme.secondaryContainer.copy(alpha = 0.2f),
+                background = colorScheme.surfaceVariant,
+                color = colorScheme.primary,
             ).merge(cssStyle ?: SpanStyle())
         ) {
+            append(' ')
             append(element.text())
+            append(' ')
         }
 
         "a" -> {
