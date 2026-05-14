@@ -130,7 +130,7 @@ val dataSourceModule = module {
         MessageFtsManager(get())
     }
 
-    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get()) }
+    single { McpManager(context = get(), settingsStore = get(), appScope = get(), filesManager = get()) }
 
     single {
         GenerationHandler(
@@ -139,9 +139,12 @@ val dataSourceModule = module {
             json = get(),
             memoryRepo = get(),
             conversationRepo = get(),
-            aiLoggingManager = get()
+            aiLoggingManager = get(),
+            systemPromptBuilder = get(),
         )
     }
+
+    single { me.rerere.rikkahub.data.ai.SystemPromptBuilder() }
 
     single<OkHttpClient> {
         val acceptLang = AcceptLanguageBuilder.fromAndroid(get())
@@ -167,7 +170,11 @@ val dataSourceModule = module {
             .addNetworkInterceptor { chain ->
                 val request = chain.request()
                 val contentTypeHeader = request.header("Content-Type")
-                if (contentTypeHeader != null && contentTypeHeader.contains(";")) {
+                if (
+                    contentTypeHeader != null &&
+                    contentTypeHeader.contains(";") &&
+                    contentTypeHeader.substringBefore(";").trim().equals("application/json", ignoreCase = true)
+                ) {
                     chain.proceed(
                         request.newBuilder()
                             .header("Content-Type", contentTypeHeader.substringBefore(";").trim())

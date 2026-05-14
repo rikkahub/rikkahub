@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.telegram
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -46,17 +47,32 @@ class TelegramApiException(val errorCode: Int, val description: String) :
 class TelegramBotClient(
     private val tokenProvider: () -> String,
 ) {
+    private val tag = "TelegramBotClient"
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
     private val shortClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // End-to-end cap. readTimeout only catches gaps BETWEEN bytes; downloadFile streams
+        // Telegram-hosted files up to the 50 MB cap, so a path that trickles bytes just under
+        // the 30s readTimeout window could stay alive far longer than intended. 10 min is
+        // generous enough for a large file on slow mobile data yet bounds the worst case so a
+        // stuck call can never wedge the request forever.
+        .callTimeout(10, TimeUnit.MINUTES)
         .build()
         .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 
     private val pollClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)   // server-side max 50s + headroom
+        // End-to-end cap on the whole call. readTimeout only catches gaps BETWEEN bytes;
+        // a hostile/buggy network path can keep the connection alive with periodic single
+        // bytes below the readTimeout window and the long-poll never returns. callTimeout
+        // is enforced regardless of byte arrival pattern, so the poll-loop can never sit
+        // silently for more than ~2 minutes — the catch in pollLoop bumps the backoff and
+        // retries. Without this the bot looks dead from the user's POV until the OS
+        // eventually evicts the socket.
+        .callTimeout(120, TimeUnit.SECONDS)
         .build()
         .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 
@@ -71,14 +87,20 @@ class TelegramBotClient(
      */
     private fun redactToken(s: String?): String {
         if (s.isNullOrEmpty()) return s.orEmpty()
-        val token = try { tokenProvider() } catch (_: Throwable) { "" }
+        val token = try { tokenProvider() } catch (t: Throwable) {
+            Log.w(tag, "tokenProvider failed while redacting token", t)
+            ""
+        }
         return if (token.isNotBlank() && s.contains(token)) s.replace(token, "***REDACTED***") else s
     }
 
     /** Like [redactToken] but produces a fresh IOException so the (immutable) message is scrubbed. */
     private fun redactException(e: IOException): IOException {
         val msg = e.message
-        val token = try { tokenProvider() } catch (_: Throwable) { "" }
+        val token = try { tokenProvider() } catch (t: Throwable) {
+            Log.w(tag, "tokenProvider failed while redacting exception", t)
+            ""
+        }
         if (token.isBlank() || msg == null || !msg.contains(token)) return e
         return IOException(redactToken(msg), e.cause)
     }

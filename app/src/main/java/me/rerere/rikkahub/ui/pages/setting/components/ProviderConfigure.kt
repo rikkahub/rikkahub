@@ -50,6 +50,7 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.locallm.LocalRuntime
 import me.rerere.locallm.litert.LiteRtCatalog
@@ -466,6 +467,43 @@ private fun ColumnScope.ProviderConfigureClaude(
                 onEdit(provider.copy(promptCaching = it))
             }
         )
+    }
+
+    if (provider.promptCaching) {
+        Text(stringResource(id = R.string.setting_provider_page_claude_prompt_cache_ttl))
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            ClaudePromptCacheTtl.entries.forEachIndexed { index, ttl ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = ClaudePromptCacheTtl.entries.size
+                    ),
+                    label = {
+                        Text(
+                            when (ttl) {
+                                ClaudePromptCacheTtl.FIVE_MINUTES -> {
+                                    stringResource(
+                                        id = R.string.setting_provider_page_claude_prompt_cache_ttl_5m
+                                    )
+                                }
+
+                                ClaudePromptCacheTtl.ONE_HOUR -> {
+                                    stringResource(
+                                        id = R.string.setting_provider_page_claude_prompt_cache_ttl_1h
+                                    )
+                                }
+                            }
+                        )
+                    },
+                    selected = provider.promptCacheTtl == ttl,
+                    onClick = {
+                        onEdit(provider.copy(promptCacheTtl = ttl))
+                    }
+                )
+            }
+        }
     }
 }
 

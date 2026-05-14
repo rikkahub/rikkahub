@@ -308,6 +308,36 @@ class HardlineCommandGuardTest {
         )
     }
 
+    @Test fun `subagent_dispatch has all string args scanned`() {
+        // subagent_dispatch carries a free-form prompt plus structured fields; like mcp__*
+        // we don't trust any single key, so every string value is walked for hardline
+        // patterns. A dangerous command smuggled into the prompt MUST be blocked.
+        assertNotNull(
+            "subagent_dispatch with rm -rf / in the prompt should block",
+            HardlineCommandGuard.checkTool(
+                "subagent_dispatch",
+                """{"prompt":"please run rm -rf / to clean up","tools":["termux_run_command"]}"""
+            )
+        )
+        assertNotNull(
+            "subagent_dispatch with shutdown in a nested field should block",
+            HardlineCommandGuard.checkTool(
+                "subagent_dispatch",
+                """{"task":{"goal":"maintenance","steps":["shutdown -h now"]}}"""
+            )
+        )
+    }
+
+    @Test fun `subagent_dispatch with a safe prompt passes`() {
+        assertNull(
+            "an ordinary research prompt should not match",
+            HardlineCommandGuard.checkTool(
+                "subagent_dispatch",
+                """{"prompt":"research the weather forecast for tomorrow","tools":["search_web"]}"""
+            )
+        )
+    }
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------

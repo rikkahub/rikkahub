@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.mcp
 
+import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
 import io.ktor.client.HttpClient
@@ -36,7 +37,9 @@ import me.rerere.rikkahub.data.ai.mcp.transport.SseClientTransport
 import me.rerere.rikkahub.data.ai.mcp.transport.StreamableHttpClientTransport
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.checkDifferent
 import okhttp3.OkHttpClient
@@ -51,6 +54,7 @@ private const val BASE_RECONNECT_DELAY_MS = 1000L
 private const val MAX_RECONNECT_DELAY_MS = 30000L
 
 class McpManager(
+    private val context: Context,
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
     private val filesManager: FilesManager,
@@ -117,34 +121,32 @@ class McpManager(
         return clients.entries.find { it.key.id == config.id }?.value
     }
 
-    fun getAllAvailableTools(): List<McpTool> {
+    fun getAllAvailableTools(): List<Pair<Uuid, McpTool>> {
         val settings = settingsStore.settingsFlow.value
         val assistant = settings.getCurrentAssistant()
-        val mcpServers = settings.mcpServers
+        return settings.mcpServers
             .filter {
                 it.commonOptions.enable && it.id in assistant.mcpServers
             }
-            .flatMap {
-                it.commonOptions.tools.filter { tool -> tool.enable }
+            .flatMap { server ->
+                server.commonOptions.tools
+                    .filter { tool -> tool.enable }
+                    .map { tool -> server.id to tool }
             }
-        return mcpServers
     }
 
-    suspend fun callTool(toolName: String, args: JsonObject): List<UIMessagePart> {
-        val tools = getAllAvailableTools()
-        val tool = tools.find { it.name == toolName }
-            ?: return listOf(UIMessagePart.Text("Failed to execute tool, because no such tool"))
-        val client =
-            clients.entries.find { it.key.commonOptions.tools.any { it.name == toolName } }?.value
-        if (client == null) return listOf(UIMessagePart.Text("Failed to execute tool, because no such mcp client for the tool"))
-        val config = clients.entries.first { it.value == client }.key
-        Log.i(TAG, "callTool: $toolName / $args")
+    suspend fun callTool(serverId: Uuid, toolName: String, args: JsonObject): List<UIMessagePart> {
+        val entry = clients.entries.find { it.key.id == serverId }
+        val client = entry?.value
+            ?: return listOf(UIMessagePart.Text("Failed to execute tool, because no such mcp client for the tool"))
+        val config = entry.key
+        Log.i(TAG, "callTool: $toolName / $args (server: ${config.commonOptions.name})")
 
         if (client.transport == null) client.connect(getTransport(config))
         val result = client.callTool(
             request = CallToolRequest(
                 params = CallToolRequestParams(
-                    name = tool.name,
+                    name = toolName,
                     arguments = args,
                 ),
             ),
@@ -368,7 +370,7 @@ class McpManager(
         if (currentAttempt > MAX_RECONNECT_ATTEMPTS) {
             Log.w(TAG, "Max reconnect attempts reached for ${config.commonOptions.name}")
             appScope.launch {
-                setStatus(config, McpStatus.Error("连接断开，已达最大重连次数"))
+                setStatus(config, McpStatus.Error(context.getString(R.string.mcp_error_reconnect_exhausted)))
             }
             return
         }

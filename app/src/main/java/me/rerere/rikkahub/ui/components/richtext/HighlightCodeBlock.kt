@@ -63,11 +63,15 @@ import me.rerere.highlight.buildHighlightText
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.Code
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Eye
+import me.rerere.hugeicons.stroke.View
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.components.webview.WebView
+import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.Navigator
@@ -81,6 +85,7 @@ import me.rerere.rikkahub.utils.toDp
 import kotlin.time.Clock
 
 private const val COLLAPSE_LINES = 10
+private val PREVIEWABLE_LANGUAGES = setOf("html", "svg")
 
 @Composable
 fun HighlightCodeBlock(
@@ -101,6 +106,11 @@ fun HighlightCodeBlock(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val settings = LocalSettings.current
+    val normalizedLanguage = remember(language) { language.lowercase() }
+    val canInlinePreview = completeCodeBlock && normalizedLanguage in PREVIEWABLE_LANGUAGES
+    var previewMode by remember(canInlinePreview, code, normalizedLanguage) {
+        mutableStateOf(canInlinePreview)
+    }
 
     var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
         mutableStateOf(!settings.displaySetting.codeBlockAutoCollapse)
@@ -144,13 +154,27 @@ fun HighlightCodeBlock(
                 createDocumentLauncher = createDocumentLauncher,
                 navController = navController,
                 completeCodeBlock = completeCodeBlock,
+                previewMode = previewMode,
+                canInlinePreview = canInlinePreview,
+                onTogglePreviewMode = {
+                    previewMode = !previewMode
+                },
             )
         }
         Column(
             modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         ) {
             when {
-                completeCodeBlock && language == "mermaid" -> {
+                canInlinePreview && previewMode -> {
+                    CodeBlockPreview(
+                        code = code,
+                        language = normalizedLanguage,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                    )
+                }
+                completeCodeBlock && normalizedLanguage == "mermaid" -> {
                     Mermaid(
                         code = code,
                         modifier = Modifier.fillMaxWidth(),
@@ -337,6 +361,9 @@ private fun HighlightCodeActions(
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
     navController: Navigator,
     completeCodeBlock: Boolean = true,
+    previewMode: Boolean = false,
+    canInlinePreview: Boolean = false,
+    onTogglePreviewMode: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -408,7 +435,23 @@ private fun HighlightCodeActions(
                     .size(iconSize)
             )
 
-            if (completeCodeBlock && (language == "html" || language == "svg")) {
+            val normalizedLanguage = language.lowercase()
+            if (canInlinePreview) {
+                Icon(
+                    imageVector = if (previewMode) HugeIcons.Code else HugeIcons.View,
+                    contentDescription = if (previewMode) "Code" else stringResource(id = R.string.code_block_preview),
+                    tint = iconTint,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .onClick {
+                            onTogglePreviewMode()
+                        }
+                        .padding(4.dp)
+                        .size(iconSize)
+                )
+            }
+
+            if (completeCodeBlock && normalizedLanguage in PREVIEWABLE_LANGUAGES) {
                 Icon(
                     imageVector = HugeIcons.Eye,
                     contentDescription = stringResource(id = R.string.code_block_preview),
@@ -416,11 +459,7 @@ private fun HighlightCodeActions(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .onClick {
-                            val content = if (language == "svg") {
-                                """<!DOCTYPE html><html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;">$code</body></html>"""
-                            } else {
-                                code
-                            }
+                            val content = buildCodePreviewHtml(code = code, language = normalizedLanguage)
                             navController.navigate(Screen.WebView(content = content.base64Encode()))
                         }
                         .padding(4.dp)
@@ -428,6 +467,36 @@ private fun HighlightCodeActions(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CodeBlockPreview(
+    code: String,
+    language: String,
+    modifier: Modifier = Modifier,
+) {
+    val state = rememberWebViewState(
+        data = buildCodePreviewHtml(code = code, language = language),
+        baseUrl = "https://rikkahub.local",
+        mimeType = "text/html",
+        settings = {
+            builtInZoomControls = true
+            displayZoomControls = false
+        }
+    )
+
+    WebView(
+        state = state,
+        modifier = modifier.clip(RoundedCornerShape(4.dp)),
+    )
+}
+
+private fun buildCodePreviewHtml(code: String, language: String): String {
+    return if (language == "svg") {
+        """<!DOCTYPE html><html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;">$code</body></html>"""
+    } else {
+        code
     }
 }
 

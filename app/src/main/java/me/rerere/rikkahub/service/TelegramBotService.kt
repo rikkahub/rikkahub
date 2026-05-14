@@ -31,6 +31,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
@@ -550,13 +551,17 @@ class TelegramBotService : Service() {
             att.kind == AttachmentKind.AUDIO ||
             att.kind == AttachmentKind.VIDEO_NOTE
         }
+        val hasPhotoAttachment = m.photoFileIds.isNotEmpty()
         me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum.set(
             convId,
-            buildAgentContextPreamble(cfg, m.chatId, wasCreated, hasAudioAttachment),
+            buildAgentContextPreamble(cfg, m.chatId, wasCreated, hasAudioAttachment, hasPhotoAttachment),
         )
-        // Download any inbound photos to the app cache and attach as UIMessagePart.Image so
-        // the assistant's vision pipeline can see them (FileEncoder reads file:// only).
-        val imageParts = downloadInboundPhotos(m.photoFileIds)
+        // Download any inbound photos to the per-chat shared-storage inbox. They are attached as
+        // UIMessagePart.Image for the vision pipeline (FileEncoder reads file:// only) AND their
+        // saved paths are surfaced in the message text via buildPhotoNote, so a text-only model
+        // can still OCR / process them through file tools or Termux.
+        val (imageParts, photoPaths) = downloadInboundPhotos(m.chatId, m.photoFileIds)
+        val photoNote = buildPhotoNote(photoPaths)
 
         // Download non-photo attachments (documents, audio, video, voice, video_note) to
         // /sdcard/Download/telegram_inbox/<chatId>/ and build a structured note for the LLM.
@@ -565,13 +570,11 @@ class TelegramBotService : Service() {
 
         val parts = buildList<UIMessagePart> {
             addAll(imageParts)
-            // Build the user-visible text combining the typed message and the attachment note.
-            val combinedText = when {
-                m.text.isNotEmpty() && attachmentNote.isNotEmpty() -> "${m.text}\n\n$attachmentNote"
-                attachmentNote.isNotEmpty() -> attachmentNote
-                m.text.isNotEmpty() -> m.text
-                else -> ""
-            }
+            // Build the user-visible text by joining the typed message with the structured
+            // photo / attachment notes for whatever arrived alongside it.
+            val combinedText = listOf(m.text, photoNote, attachmentNote)
+                .filter { it.isNotEmpty() }
+                .joinToString("\n\n")
             // Only emit a Text part when there is actual content; an empty text triggers
             // the "no reply" UX downstream and confuses the LLM.
             if (combinedText.isNotEmpty()) add(UIMessagePart.Text(combinedText))
@@ -847,6 +850,7 @@ class TelegramBotService : Service() {
         chatId: Long,
         firstTurnOfChat: Boolean,
         hasAudioAttachment: Boolean = false,
+        hasPhotoAttachment: Boolean = false,
     ): String {
         val s = settingsStore.settingsFlow.value
         val assistant = s.getCurrentAssistant()
@@ -904,6 +908,21 @@ class TelegramBotService : Service() {
                 append("on the user's data plan. Wait for an explicit yes before running install commands. ")
                 append("If a tool errors, READ THE ENVELOPE — the recovery field tells you what to do; do not ")
                 append("retry the same tool with different args or pivot to manual termux commands.\n")
+            }
+            if (hasPhotoAttachment) {
+                val modelCanSeeImages = model?.inputModalities?.contains(Modality.IMAGE) == true
+                if (modelCanSeeImages) {
+                    append("IMAGE ATTACHMENT. This message includes one or more photos. You can ")
+                    append("view them directly. Their saved file path(s) are also listed in the ")
+                    append("message text if you need to process the file (e.g. OCR).\n")
+                } else {
+                    append("IMAGE ATTACHMENT — YOU CANNOT SEE IT. This message includes one or more ")
+                    append("photos, but the current model has no vision capability. Do NOT describe ")
+                    append("or guess what the image shows. Their saved file path(s) are listed in ")
+                    append("the message text — to read the contents, OCR the file (e.g. ")
+                    append("`tesseract <path> stdout` via termux_run_command) or process it with ")
+                    append("another file tool.\n")
+                }
             }
             append("]\n\n")
         }
@@ -1178,20 +1197,48 @@ class TelegramBotService : Service() {
     private fun assistantTextOf(m: UIMessage): String =
         m.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
 
-    /**
-     * Resolve each Telegram photo file_id to a downloaded file in the app cache, then return
-     * UIMessagePart.Image entries pointing at file:// URIs. Failures on individual photos are
-     * logged and skipped (so a transient network blip on one image does not drop the whole
-     * message).
-     */
-    private suspend fun downloadInboundPhotos(fileIds: List<String>): List<UIMessagePart.Image> {
-        if (fileIds.isEmpty()) return emptyList()
-        val dir = java.io.File(cacheDir, "telegram-incoming").apply { mkdirs() }
-        // Prune anything older than 24h to keep cache bounded.
-        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
-        dir.listFiles()?.forEach { f -> if (f.lastModified() < cutoff) f.delete() }
+    /** The per-chat inbound-attachment inbox on shared storage. Termux / file tools can reach it. */
+    private fun inboxDirFor(chatId: Long): java.io.File =
+        java.io.File("/sdcard/Download/telegram_inbox/$chatId").apply { mkdirs() }
 
-        val out = mutableListOf<UIMessagePart.Image>()
+    /**
+     * Prune a per-chat inbox: drop files older than 24h, then cap total size at
+     * [INBOUND_ATTACHMENT_INBOX_CAP_BYTES] (oldest first). Shared by the photo and
+     * non-photo download paths so both kinds get the same hygiene.
+     */
+    private fun pruneInbox(inboxDir: java.io.File) {
+        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+        inboxDir.listFiles()?.forEach { f -> if (f.isFile && f.lastModified() < cutoff) f.delete() }
+
+        val allFiles = inboxDir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() }
+        if (allFiles != null) {
+            var totalSize = allFiles.sumOf { it.length() }
+            for (f in allFiles) {
+                if (totalSize <= INBOUND_ATTACHMENT_INBOX_CAP_BYTES) break
+                totalSize -= f.length()
+                f.delete()
+            }
+        }
+    }
+
+    /**
+     * Resolve each Telegram photo file_id to a downloaded file in the per-chat shared-storage
+     * inbox (so Termux / file tools can also reach it, not just the in-process vision pipeline),
+     * then return both the UIMessagePart.Image entries (file:// URIs, for vision-capable models)
+     * AND the saved absolute paths (so [buildPhotoNote] can surface them in the message text for
+     * text-only models). Failures on individual photos are logged and skipped so a transient
+     * network blip on one image does not drop the whole message.
+     */
+    private suspend fun downloadInboundPhotos(
+        chatId: Long,
+        fileIds: List<String>,
+    ): Pair<List<UIMessagePart.Image>, List<String>> {
+        if (fileIds.isEmpty()) return emptyList<UIMessagePart.Image>() to emptyList()
+        val inboxDir = inboxDirFor(chatId)
+        pruneInbox(inboxDir)
+
+        val images = mutableListOf<UIMessagePart.Image>()
+        val paths = mutableListOf<String>()
         for (fileId in fileIds) {
             try {
                 val info = client.getFile(fileId)
@@ -1201,15 +1248,17 @@ class TelegramBotService : Service() {
                     continue
                 }
                 val ext = filePath.substringAfterLast('.', "jpg")
-                val dest = java.io.File(dir, "tg-${System.currentTimeMillis()}-${fileId.takeLast(8)}.$ext")
+                // fileId suffix keeps two photos in the same message unique even within one ms.
+                val dest = uniqueFile(inboxDir, "photo_${System.currentTimeMillis()}_${fileId.takeLast(6)}.$ext")
                 client.downloadFile(filePath, dest)
-                out.add(UIMessagePart.Image(url = "file://${dest.absolutePath}"))
+                images.add(UIMessagePart.Image(url = "file://${dest.absolutePath}"))
+                paths.add(dest.absolutePath)
                 android.util.Log.i(TAG, "downloadInboundPhotos: saved ${dest.name} (${dest.length()} bytes)")
             } catch (e: Throwable) {
                 android.util.Log.w(TAG, "downloadInboundPhotos: failed for $fileId", e)
             }
         }
-        return out
+        return images to paths
     }
 
     /**
@@ -1241,22 +1290,8 @@ class TelegramBotService : Service() {
     ): List<DownloadedAttachment> {
         if (attachments.isEmpty()) return emptyList()
 
-        val inboxDir = java.io.File("/sdcard/Download/telegram_inbox/$chatId").apply { mkdirs() }
-
-        // Prune files older than 24 h.
-        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
-        inboxDir.listFiles()?.forEach { f -> if (f.isFile && f.lastModified() < cutoff) f.delete() }
-
-        // Cap total inbox size at 500 MB — delete oldest first.
-        val allFiles = inboxDir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() }?.toMutableList()
-        if (allFiles != null) {
-            var totalSize = allFiles.sumOf { it.length() }
-            for (f in allFiles) {
-                if (totalSize <= INBOUND_ATTACHMENT_INBOX_CAP_BYTES) break
-                totalSize -= f.length()
-                f.delete()
-            }
-        }
+        val inboxDir = inboxDirFor(chatId)
+        pruneInbox(inboxDir)
 
         val out = mutableListOf<DownloadedAttachment>()
         for (att in attachments) {
@@ -1335,27 +1370,67 @@ class TelegramBotService : Service() {
     /** Telegram caps a single sendMessage at 4096 chars; split on newlines where possible. */
     private suspend fun sendChunked(chatId: Long, text: String, replyTo: Long?) {
         val chunks = chunk(text, MAX_CHARS)
+        // Track delivery so we can surface a single user-visible error if every fallback
+        // for some chunk fails. Silent drops were the root cause of the "model wrote a
+        // long reply but Telegram never received it" bug — diagnosing it required
+        // pulling logcat instead of seeing the failure in chat.
+        var anyChunkFailed = false
+        var lastFailure: Throwable? = null
         for ((idx, chunk) in chunks.withIndex()) {
             val html = TelegramHtmlRenderer.render(chunk)
-            val sent = try {
+            val htmlError: Throwable? = try {
                 client.sendMessage(
                     chatId = chatId,
                     text = html,
                     parseMode = PARSE_MODE_HTML,
                     replyToMessageId = if (idx == 0) replyTo else null,
                 )
-                true
-            } catch (_: Throwable) { false }
-            if (!sent) {
-                // HTML parse failed (truncation may have split a tag). Retry as plain text.
-                try {
-                    client.sendMessage(
-                        chatId = chatId,
-                        text = TelegramHtmlRenderer.stripHtml(html).ifBlank { chunk },
-                        parseMode = null,
-                        replyToMessageId = if (idx == 0) replyTo else null,
-                    )
-                } catch (_: Throwable) { /* best effort */ }
+                null
+            } catch (t: Throwable) { t }
+            if (htmlError == null) continue
+            // HTML parse failed (entity split, unclosed tag), or Telegram refused the
+            // chunk (length cap, rate limit, etc.). Log + retry as plain text. The
+            // pre-fix behaviour silently swallowed BOTH branches; we now record the
+            // exception so a future repeat leaves evidence in logcat.
+            android.util.Log.w(
+                TAG,
+                "sendChunked: HTML send failed for chunk ${idx + 1}/${chunks.size} (len=${html.length} src=${chunk.length}); retrying as plain text",
+                htmlError,
+            )
+            val plain = TelegramHtmlRenderer.stripHtml(html).ifBlank { chunk }
+            val plainError: Throwable? = try {
+                client.sendMessage(
+                    chatId = chatId,
+                    text = plain,
+                    parseMode = null,
+                    replyToMessageId = if (idx == 0) replyTo else null,
+                )
+                null
+            } catch (t: Throwable) { t }
+            if (plainError != null) {
+                android.util.Log.w(
+                    TAG,
+                    "sendChunked: plain-text fallback also failed for chunk ${idx + 1}/${chunks.size} (len=${plain.length})",
+                    plainError,
+                )
+                anyChunkFailed = true
+                lastFailure = plainError
+            }
+        }
+        // Surface ONE summary line to the chat so the user knows the reply was clipped.
+        // Without this the silent drop looks like a bot freeze and the user keeps
+        // re-prompting. Capped diagnostic — just the error class + first line of the
+        // message, so the bot token / chat content can't accidentally leak out.
+        if (anyChunkFailed) {
+            val cls = lastFailure?.javaClass?.simpleName.orEmpty()
+            val first = lastFailure?.message?.lineSequence()?.firstOrNull()?.take(120).orEmpty()
+            val notice = "⚠️ Reply too long for Telegram and the formatting was rejected by the API." +
+                (if (cls.isNotBlank()) " ($cls${if (first.isNotBlank()) ": $first" else ""})" else "") +
+                " Ask me to summarise, split the request, or save as a file."
+            runCatching {
+                client.sendMessage(chatId = chatId, text = notice, parseMode = null)
+            }.onFailure {
+                android.util.Log.w(TAG, "sendChunked: even the failure notice failed to deliver", it)
             }
         }
     }
@@ -1396,18 +1471,7 @@ class TelegramBotService : Service() {
         return "$sub\n…"
     }
 
-    private fun chunk(s: String, n: Int): List<String> {
-        if (s.length <= n) return listOf(s)
-        val out = mutableListOf<String>()
-        var rem = s
-        while (rem.length > n) {
-            val cut = rem.lastIndexOf('\n', n).let { if (it > n / 2) it else n }
-            out.add(rem.substring(0, cut))
-            rem = rem.substring(cut).trimStart('\n')
-        }
-        if (rem.isNotEmpty()) out.add(rem)
-        return out
-    }
+    private fun chunk(s: String, n: Int): List<String> = chunkForTelegram(s, n)
 
     /**
      * Send an inline-keyboard approval prompt for [tool]. The prompt is its OWN Telegram
@@ -2604,7 +2668,17 @@ class TelegramBotService : Service() {
         const val CHANNEL_ID = "rikkahub_telegram_bot"
         const val NOTIF_ID = 0xA1B2
 
-        const val MAX_CHARS = 4000   // Telegram limit is 4096; leave headroom
+        // Telegram's HARD per-message limit is 4096. We chunk at 3500 (was 4000) because
+        // chunks are markdown-rendered to HTML downstream and the rendered HTML can be
+        // LONGER than the source: `**foo**` (7) → `<b>foo</b>` (10), a single `[text](url)`
+        // can swell by 12+ chars per occurrence, and there's no upper bound on
+        // markdown→HTML expansion in pathological cases. A 4000-char chunk packed with
+        // bold + headers (e.g. a 25-paragraph story with `**Paragraph N:**` lines) easily
+        // pushed Telegram over the 4096 cap and got 400 MESSAGE_TOO_LONG, then the
+        // try-catches silently swallowed both the HTML and stripped-text retries leaving
+        // the user with no message at all. 3500 leaves ~600 bytes of headroom — enough
+        // for typical markdown-heavy text without making chunks needlessly small.
+        const val MAX_CHARS = 3500
 
         /** Long-poll request can take ~50s server-side + a few seconds for the client to
          *  handle inbound updates and dispatch them. 75s is comfortable headroom; the wake
@@ -2921,4 +2995,22 @@ internal fun uniqueFile(dir: java.io.File, preferredName: String): java.io.File 
     val ext = if (preferredName.contains('.')) ".${preferredName.substringAfterLast('.')}" else ""
     val base = if (ext.isNotEmpty()) preferredName.substringBeforeLast('.') else preferredName
     return java.io.File(dir, "$base-$ts$ext")
+}
+
+/**
+ * Build the structured note appended to the user message when inbound photos arrive, so the
+ * LLM learns the saved file path(s). Mirrors [TelegramBotService.buildAttachmentNote] — it
+ * lets the model OCR / process the image via file tools or Termux even when the configured
+ * model has no vision pipeline. Returns "" when no photo was saved.
+ */
+internal fun buildPhotoNote(paths: List<String>): String {
+    if (paths.isEmpty()) return ""
+    val noun = if (paths.size == 1) "photo" else "photos"
+    val sb = StringBuilder()
+    sb.append("[User attached ${paths.size} $noun with this message:\n")
+    for (p in paths) {
+        sb.append("- photo → saved to $p\n")
+    }
+    sb.append("View it directly if you have vision, or process the file at that path (e.g. OCR with `tesseract` via Termux).]")
+    return sb.toString()
 }

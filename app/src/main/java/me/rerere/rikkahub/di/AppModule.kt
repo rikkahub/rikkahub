@@ -2,7 +2,6 @@ package me.rerere.rikkahub.di
 
 import com.google.firebase.Firebase
 import com.google.firebase.analytics.analytics
-import com.google.firebase.crashlytics.crashlytics
 import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
@@ -11,7 +10,6 @@ import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
-import me.rerere.rikkahub.data.ai.tools.local.MediaPlayerHolder
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
@@ -25,6 +23,7 @@ import me.rerere.rikkahub.service.CronJobScheduler
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
@@ -39,10 +38,6 @@ val appModule = module {
 
     single {
         AppEventBus()
-    }
-
-    single {
-        MediaPlayerHolder()
     }
 
     single { CameraResultBuffer() }
@@ -155,7 +150,35 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        LocalTools(
+            context = get(),
+            eventBus = get(),
+            cameraResultBuffer = get(),
+            biometricResultBuffer = get(),
+            scheduledJobRepository = get(),
+            scheduledJobRunRepository = get(),
+            cronJobScheduler = get(),
+            settingsStore = get(),
+            sshHostRepository = get(),
+            telegramBotPreferences = get(),
+            telegramBotClient = get(),
+            notificationListenerPreferences = get(),
+            mcpManager = get(),
+            externalAutomationConfig = get(),
+            gitHubReleaseChecker = get(),
+            bugReportBuilder = get(),
+            subAgentEngine = get(),
+            subAgentRegistry = get(),
+            conversationRepo = get(),
+            workflowRepository = get(),
+            workflowEngine = get(),
+            skillUrlImporter = get(),
+            skillManager = get(),
+            jsSkillRunner = get(),
+            skillSecretsStore = get(),
+            browserPreferences = get(),
+            interactiveToolStreamer = get(),
+        )
     }
 
     single {
@@ -175,10 +198,6 @@ val appModule = module {
     }
 
     single {
-        Firebase.crashlytics
-    }
-
-    single {
         Firebase.remoteConfig
     }
 
@@ -187,7 +206,11 @@ val appModule = module {
     }
 
     single {
-        AILoggingManager()
+        SoundEffectPlayer(get())
+    }
+
+    single {
+        AILoggingManager(get(), get())
     }
 
     // Phase 22A: Local-LLM on-device providers

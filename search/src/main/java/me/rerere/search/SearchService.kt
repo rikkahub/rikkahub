@@ -60,6 +60,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.BochaOptions -> BochaSearchService
                 is SearchServiceOptions.RikkaHubOptions -> RikkaHubSearchService
                 is SearchServiceOptions.GrokOptions -> GrokSearchService
+                is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
             } as SearchService<T>
         }
 
@@ -148,6 +149,7 @@ sealed class SearchServiceOptions {
             JinaOptions::class to "Jina",
             BochaOptions::class to "博查",
             GrokOptions::class to "Grok",
+            TinyfishOptions::class to "Tinyfish",
         )
     }
 
@@ -268,6 +270,13 @@ sealed class SearchServiceOptions {
         val model: String = "grok-4-1-fast-non-reasoning",
         val customUrl: String = "https://api.x.ai/v1/responses",
         val systemPrompt: String = "You are a helpful search assistant. Search the web to find accurate and up-to-date information for the user's query. Provide a comprehensive answer with citations.",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("tinyfish")
+    data class TinyfishOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
     ) : SearchServiceOptions()
 }
 

@@ -36,13 +36,52 @@ class SkillManager(
     fun readSkillBody(skillName: String): String? {
         val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
         if (!skillFile.exists()) return null
-        return SkillFrontmatterParser.extractBody(skillFile.readText())
+        return SkillFrontmatterParser.extractBody(readCached(skillFile))
     }
 
     fun readSkillContent(skillName: String): String? {
         val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
         if (!skillFile.exists()) return null
-        return skillFile.readText()
+        return readCached(skillFile)
+    }
+
+    /**
+     * Read the body of an arbitrary file inside [skillName]'s directory (e.g. an
+     * `auto_load_path` such as `SOUL.md`). Returns null if the skill or relative path
+     * does not resolve, or the file does not exist. Backed by the same mtime-aware cache
+     * used by [readSkillBody] / [readSkillContent], so the per-turn auto-load reads in
+     * `SkillsTools.systemPrompt` are O(stat) on cache hit, not O(read).
+     */
+    fun readSkillFileCached(skillName: String, relativePath: String): String? {
+        val skillDir = resolveSkillDir(skillName) ?: return null
+        val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return null
+        if (!target.exists()) return null
+        return readCached(target)
+    }
+
+    // ---- mtime-aware in-memory cache for SKILL.md and auto-loaded sidecars ----
+
+    private data class CachedFile(val lastModifiedMs: Long, val length: Long, val text: String)
+
+    private val bodyCache = java.util.concurrent.ConcurrentHashMap<String, CachedFile>()
+
+    /**
+     * Return [file]'s text, serving from [bodyCache] when both `lastModified` and
+     * `length` match the cached values — invalidation falls out of the file system,
+     * no explicit write hook needed (write paths necessarily change the mtime). Falls
+     * back to a direct read on any cache miss / stat failure / anomalous length jump.
+     */
+    private fun readCached(file: File): String {
+        val key = file.absolutePath
+        val mtime = file.lastModified()
+        val len = file.length()
+        val hit = bodyCache[key]
+        if (hit != null && hit.lastModifiedMs == mtime && hit.length == len) {
+            return hit.text
+        }
+        val text = file.readText()
+        bodyCache[key] = CachedFile(mtime, len, text)
+        return text
     }
 
     fun saveSkill(name: String, content: String): SkillMetadata? {

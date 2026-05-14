@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.debug
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -33,6 +37,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,7 +76,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
             )
         }
     ) { contentPadding ->
-        val state = rememberPagerState { 2 }
+        val state = rememberPagerState { 3 }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -97,6 +104,17 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
                         }
                     },
                     text = {
+                        Text("Colors")
+                    }
+                )
+                Tab(
+                    selected = state.currentPage == 2,
+                    onClick = {
+                        scope.launch {
+                            state.animateScrollToPage(2)
+                        }
+                    },
+                    text = {
                         Text("Logging")
                     }
                 )
@@ -109,7 +127,8 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
             ) { page ->
                 when (page) {
                     0 -> MainPage(vm)
-                    1 -> Box {}
+                    1 -> ColorsPage()
+                    2 -> Box {}
                 }
             }
         }
@@ -268,4 +287,106 @@ private fun MainPage(vm: DebugVM) {
             modifier = Modifier.fillMaxWidth()
         )
     }
+}
+
+@Composable
+private fun ColorsPage() {
+    val colorScheme = MaterialTheme.colorScheme
+    val colorTokens = remember(colorScheme) {
+        listOf(
+            "primary" to colorScheme.primary,
+            "onPrimary" to colorScheme.onPrimary,
+            "primaryContainer" to colorScheme.primaryContainer,
+            "onPrimaryContainer" to colorScheme.onPrimaryContainer,
+            "inversePrimary" to colorScheme.inversePrimary,
+            "secondary" to colorScheme.secondary,
+            "onSecondary" to colorScheme.onSecondary,
+            "secondaryContainer" to colorScheme.secondaryContainer,
+            "onSecondaryContainer" to colorScheme.onSecondaryContainer,
+            "tertiary" to colorScheme.tertiary,
+            "onTertiary" to colorScheme.onTertiary,
+            "tertiaryContainer" to colorScheme.tertiaryContainer,
+            "onTertiaryContainer" to colorScheme.onTertiaryContainer,
+            "background" to colorScheme.background,
+            "onBackground" to colorScheme.onBackground,
+            "surface" to colorScheme.surface,
+            "onSurface" to colorScheme.onSurface,
+            "surfaceVariant" to colorScheme.surfaceVariant,
+            "onSurfaceVariant" to colorScheme.onSurfaceVariant,
+            "surfaceTint" to colorScheme.surfaceTint,
+            "inverseSurface" to colorScheme.inverseSurface,
+            "inverseOnSurface" to colorScheme.inverseOnSurface,
+            "surfaceBright" to colorScheme.surfaceBright,
+            "surfaceDim" to colorScheme.surfaceDim,
+            "surfaceContainer" to colorScheme.surfaceContainer,
+            "surfaceContainerHigh" to colorScheme.surfaceContainerHigh,
+            "surfaceContainerHighest" to colorScheme.surfaceContainerHighest,
+            "surfaceContainerLow" to colorScheme.surfaceContainerLow,
+            "surfaceContainerLowest" to colorScheme.surfaceContainerLowest,
+            "error" to colorScheme.error,
+            "onError" to colorScheme.onError,
+            "errorContainer" to colorScheme.errorContainer,
+            "onErrorContainer" to colorScheme.onErrorContainer,
+            "outline" to colorScheme.outline,
+            "outlineVariant" to colorScheme.outlineVariant,
+            "scrim" to colorScheme.scrim,
+            "primaryFixed" to colorScheme.primaryFixed,
+            "primaryFixedDim" to colorScheme.primaryFixedDim,
+            "onPrimaryFixed" to colorScheme.onPrimaryFixed,
+            "onPrimaryFixedVariant" to colorScheme.onPrimaryFixedVariant,
+            "secondaryFixed" to colorScheme.secondaryFixed,
+            "secondaryFixedDim" to colorScheme.secondaryFixedDim,
+            "onSecondaryFixed" to colorScheme.onSecondaryFixed,
+            "onSecondaryFixedVariant" to colorScheme.onSecondaryFixedVariant,
+            "tertiaryFixed" to colorScheme.tertiaryFixed,
+            "tertiaryFixedDim" to colorScheme.tertiaryFixedDim,
+            "onTertiaryFixed" to colorScheme.onTertiaryFixed,
+            "onTertiaryFixedVariant" to colorScheme.onTertiaryFixedVariant,
+        )
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items(colorTokens, key = { it.first }) { (name, color) ->
+            ColorTokenItem(name, color)
+        }
+    }
+}
+
+@Composable
+private fun ColorTokenItem(name: String, color: Color) {
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clip(shape)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .height(40.dp)
+                .weight(1f)
+                .clip(RoundedCornerShape(4.dp))
+                .background(color)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
+        )
+        Column(modifier = Modifier.weight(2f)) {
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                color.toHexString(),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = JetbrainsMono,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun Color.toHexString(): String {
+    val argb = toArgb()
+    return "#%08X".format(argb)
 }

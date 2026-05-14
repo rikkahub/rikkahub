@@ -117,6 +117,7 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(quickMessageIds = newIds))
                             },
+                            onManage = onNavigateToQuickMessages,
                         )
                     } else {
                         ExtensionEmptyState(
@@ -140,10 +141,13 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(modeInjectionIds = newIds))
                             },
+                            onManage = onNavigateToPrompts,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_mode_injections_empty)
+                            message = stringResource(R.string.extension_selector_mode_injections_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToPrompts,
                         )
                     }
                 }
@@ -161,10 +165,13 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(lorebookIds = newIds))
                             },
+                            onManage = onNavigateToPrompts,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_lorebooks_empty)
+                            message = stringResource(R.string.extension_selector_lorebooks_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToPrompts,
                         )
                     }
                 }
@@ -182,6 +189,7 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(enabledSkills = newSkills))
                             },
+                            onManage = onNavigateToSkills,
                         )
                     } else {
                         ExtensionEmptyState(

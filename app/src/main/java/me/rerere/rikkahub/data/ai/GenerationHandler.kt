@@ -209,6 +209,7 @@ class GenerationHandler(
     private val memoryRepo: MemoryRepository,
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
+    private val systemPromptBuilder: SystemPromptBuilder,
 ) {
     fun generateText(
         settings: Settings,
@@ -636,10 +637,55 @@ class GenerationHandler(
                             // docs) will pivot to a different approach.
                             return@forEach
                         }
+                        // Pre-parse args BEFORE the runCatching block so we can surface a
+                        // clean structured envelope when the LLM provider truncates the
+                        // streaming response mid-string (max_tokens hit, network drop, etc.).
+                        // Without this, kotlinx.serialization's raw exception message —
+                        // which includes the entire failed input — lands in the LLM-facing
+                        // `detail` field, can be thousands of tokens, and the model often
+                        // retries the same too-big call.
+                        val parsedArgs = runCatching {
+                            json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                        }
+                        if (parsedArgs.isFailure) {
+                            val cause = parsedArgs.exceptionOrNull()
+                            Log.w(TAG, "tool ${tool.toolName} args failed to parse (likely truncated stream)", cause)
+                            executedTools += tool.copy(
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(buildJsonObject {
+                                            put("error", JsonPrimitive("invalid_tool_args"))
+                                            put(
+                                                "detail",
+                                                JsonPrimitive(
+                                                    (cause?.message ?: cause?.javaClass?.simpleName ?: "json_parse_failed")
+                                                        .take(200)
+                                                ),
+                                            )
+                                            put(
+                                                "recovery",
+                                                JsonPrimitive(
+                                                    "Tool args JSON failed to parse — most often the provider's " +
+                                                        "stream was cut off mid-string by max_tokens or a network drop. " +
+                                                        "Retry with a shorter call. For long payloads (e.g. a 4000-char " +
+                                                        "message), split into multiple smaller tool calls or shrink the " +
+                                                        "content."
+                                                ),
+                                            )
+                                            put(
+                                                "exception",
+                                                JsonPrimitive(cause?.javaClass?.simpleName ?: "JsonParseException"),
+                                            )
+                                        })
+                                    )
+                                )
+                            )
+                            return@forEach
+                        }
                         runCatching {
                             val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                                 ?: error("Tool ${tool.toolName} not found")
-                            val args = json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                            val args = parsedArgs.getOrThrow()
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: ${redactSecrets(args)}")
                             // Mark the tool as "execution started" BEFORE actually running.
                             // ChatService persists this when it sees the chunk so a process
@@ -704,7 +750,11 @@ class GenerationHandler(
                                                 put("error", JsonPrimitive("tool_failed"))
                                                 put(
                                                     "detail",
-                                                    JsonPrimitive(it.message ?: it.javaClass.simpleName),
+                                                    // Cap at 500 chars so a tool that throws with
+                                                    // a giant message (e.g. an OkHttp body dump or
+                                                    // an echoed input arg) doesn't ship 8000+
+                                                    // tokens back to the LLM on every failure.
+                                                    JsonPrimitive((it.message ?: it.javaClass.simpleName).take(500)),
                                                 )
                                                 // Class name as a separate hint so the LLM can
                                                 // distinguish validation (IllegalStateException /
@@ -821,36 +871,20 @@ class GenerationHandler(
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     ) {
         val internalMessages = buildList {
-            val system = buildString {
-                // 如果助手有系统提示，则添加到消息中
-                if (assistant.systemPrompt.isNotBlank()) {
-                    append(assistant.systemPrompt)
-                }
-
-                // 记忆
-                if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories = memories))
-                }
-                if (assistant.enableRecentChatsReference) {
-                    appendLine()
-                    append(buildRecentChatsPrompt(assistant, conversationRepo))
-                }
-
-                // 工具prompt
-                tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(model, messages))
-                }
-
-                // Per-call surface-specific addendum (Telegram preamble, etc.). Lives in
-                // the system prompt so it's sent ONCE per generation instead of being
-                // baked into the user message body and replayed every turn.
-                if (!systemAddendum.isNullOrBlank()) {
-                    appendLine()
-                    append(systemAddendum)
-                }
-            }
+            val memoryPrompt = if (assistant.enableMemory) {
+                buildMemoryPrompt(memories = memories)
+            } else ""
+            val recentChatsPrompt = if (assistant.enableRecentChatsReference) {
+                buildRecentChatsPrompt(assistant, conversationRepo)
+            } else ""
+            val toolPrompts = tools.map { tool -> tool.systemPrompt(model, messages) }
+            val system = systemPromptBuilder.build(
+                assistantPrompt = assistant.systemPrompt,
+                memoryPrompt = memoryPrompt,
+                recentChatsPrompt = recentChatsPrompt,
+                toolPrompts = toolPrompts,
+                systemAddendum = systemAddendum,
+            )
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
             addAll(messages.limitContext(assistant.contextMessageSize).ageOldToolImages())
         }.transforms(

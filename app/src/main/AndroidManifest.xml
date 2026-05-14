@@ -223,7 +223,11 @@
     <service
       android:name=".service.MediaPlaybackService"
       android:exported="false"
-      android:foregroundServiceType="mediaPlayback" />
+      android:foregroundServiceType="mediaPlayback">
+      <intent-filter>
+        <action android:name="android.intent.action.MEDIA_BUTTON" />
+      </intent-filter>
+    </service>
 
     <!-- Handles hardware media-button broadcasts (headset, Bluetooth) and routes them
          to the active MediaSession via the AndroidX media-compat helper. -->

@@ -40,6 +40,7 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
@@ -75,9 +76,11 @@ import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -101,8 +104,13 @@ data class ChatError(
     val title: String? = null,
     val error: Throwable,
     val conversationId: Uuid? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val solution: ChatErrorSolution? = null,
 )
+
+enum class ChatErrorSolution {
+    CheckTitleModelSettings,
+}
 
 private val inputTransformers by lazy {
     listOf(
@@ -174,9 +182,14 @@ class ChatService(
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
 
-    fun addError(error: Throwable, conversationId: Uuid? = null, title: String? = null) {
+    fun addError(
+        error: Throwable,
+        conversationId: Uuid? = null,
+        title: String? = null,
+        solution: ChatErrorSolution? = null,
+    ) {
         if (error is CancellationException) return
-        _errors.update { it + ChatError(title = title, error = error, conversationId = conversationId) }
+        _errors.update { it + ChatError(title = title, error = error, conversationId = conversationId, solution = solution) }
     }
 
     fun dismissError(id: Uuid) {
@@ -348,11 +361,17 @@ class ChatService(
 
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
-        val processedContent = preprocessUserInputParts(content)
 
         val job = appScope.launch {
             try {
                 val currentConversation = session.state.value
+                // Resolve the assistant from the conversation's own assistantId, not the
+                // global current-assistant pointer — otherwise switching assistants mid-
+                // generation makes one conversation preprocess input with another's config.
+                val settings = settingsStore.settingsFlow.first()
+                val assistant = settings.getAssistantById(currentConversation.assistantId)
+                    ?: settings.getCurrentAssistant()
+                val processedContent = preprocessUserInputParts(content, assistant)
 
                 // 添加消息到列表
                 val withUser = currentConversation.copy(
@@ -369,7 +388,7 @@ class ChatService(
                 // Conservative: any match failure (tool throws, no result) falls back to the
                 // normal LLM path. Headless conversations and non-text messages are skipped.
                 val routedHandled = if (answer)
-                    tryFastPathRoute(conversationId, processedContent, withUser)
+                    tryFastPathRoute(conversationId, processedContent, withUser, assistant)
                 else false
 
                 // 开始补全 — only if router didn't handle the turn
@@ -395,12 +414,15 @@ class ChatService(
         conversationId: Uuid,
         userParts: List<UIMessagePart>,
         afterUserSave: me.rerere.rikkahub.data.model.Conversation,
+        assistant: Assistant,
     ): Boolean {
         // Headless paths (cron / sub-agent / external-automation / workflow) must always go
         // through the LLM — the fast-path is a per-user-turn optimisation, not a system-flow.
         if (me.rerere.rikkahub.data.ai.tools.HeadlessConversations.isHeadless(conversationId)) return false
 
-        val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
+        // assistant is resolved from the conversation's own assistantId by the caller — do NOT
+        // re-read the global getCurrentAssistant() here or a mid-turn assistant switch makes the
+        // router read fastPathRouterEnabled / localTools off the wrong assistant.
         if (!assistant.fastPathRouterEnabled) return false
 
         val userText = userParts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text }.trim()
@@ -483,8 +505,10 @@ class ChatService(
         return true
     }
 
-    private fun preprocessUserInputParts(parts: List<UIMessagePart>): List<UIMessagePart> {
-        val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
+    private fun preprocessUserInputParts(
+        parts: List<UIMessagePart>,
+        assistant: Assistant,
+    ): List<UIMessagePart> {
         return parts.map { part ->
             when (part) {
                 is UIMessagePart.Text -> {
@@ -686,7 +710,14 @@ class ChatService(
         messageRange: ClosedRange<Int>? = null
     ) {
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.getCurrentChatModel()
+        // Resolve the assistant from this conversation's own assistantId — the global
+        // current-assistant pointer can have moved if the user switched assistants while
+        // this generation was queued (multi-assistant crosstalk). Everything downstream
+        // (model, memories, tools, sender name) keys off this resolved assistant.
+        val initialConversation = getConversationFlow(conversationId).value
+        val assistant = settings.getAssistantById(initialConversation.assistantId)
+            ?: settings.getCurrentAssistant()
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
             ?: throw IllegalStateException(
                 "No chat model selected. Pick one in Settings → Default models, or send /model in Telegram."
             )
@@ -709,7 +740,6 @@ class ChatService(
             )
         }
 
-        val assistant = settings.getCurrentAssistant()
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
         } else {
@@ -717,8 +747,6 @@ class ChatService(
         }
 
         runCatching {
-            val initialConversation = getConversationFlow(conversationId).value
-
             // reset suggestions
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
@@ -778,11 +806,11 @@ class ChatService(
                         it
                     }
                 },
-                assistant = settings.getCurrentAssistant(),
-                memories = if (settings.getCurrentAssistant().useGlobalMemory) {
+                assistant = assistant,
+                memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
-                    memoryRepository.getMemoriesOfAssistant(settings.assistantId.toString())
+                    memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
                 },
                 inputTransformers = buildList {
                     addAll(inputTransformers)
@@ -799,13 +827,15 @@ class ChatService(
                     // HeadlessConversations — true iff this is a cron / sub-agent /
                     // workflow / external-automation flow.
                     val invocationCtx = me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
-                        callerAssistantId = settings.getCurrentAssistant().id.toString(),
+                        callerAssistantId = assistant.id.toString(),
                         callerConversationId = conversationId.toString(),
                         isHeadless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations
                             .isHeadless(conversationId),
+                        // show_image keys its result envelope off this — a text-only model
+                        // gets told it cannot see the image instead of confabulating one.
+                        modelCanSeeImages = Modality.IMAGE in model.inputModalities,
                     )
-                    addAll(localTools.getTools(settings.getCurrentAssistant().localTools, invocationCtx))
-                    val assistant = settings.getCurrentAssistant()
+                    addAll(localTools.getTools(assistant.localTools, invocationCtx))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
@@ -815,7 +845,7 @@ class ChatService(
                             )
                         )
                     }
-                    mcpManager.getAllAvailableTools().forEach { tool ->
+                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
                         val mcpToolName = "mcp__" + tool.name
                         add(
                             Tool(
@@ -834,7 +864,7 @@ class ChatService(
                                     .ToolApprovalDefaults.requiresApproval(mcpToolName) ||
                                     tool.needsApproval,
                                 execute = {
-                                    mcpManager.callTool(tool.name, it.jsonObject)
+                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
                                 },
                             )
                         )
@@ -1438,9 +1468,12 @@ class ChatService(
         parts: List<UIMessagePart>
     ) {
         if (parts.isEmptyInputMessage()) return
-        val processedParts = preprocessUserInputParts(parts)
 
         val currentConversation = getConversationFlow(conversationId).value
+        val settings = settingsStore.settingsFlow.first()
+        val assistant = settings.getAssistantById(currentConversation.assistantId)
+            ?: settings.getCurrentAssistant()
+        val processedParts = preprocessUserInputParts(parts, assistant)
         var edited = false
 
         val updatedNodes = currentConversation.messageNodes.map { node ->

@@ -37,8 +37,8 @@ fun writeTextFileTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = To
         outside system / other-app sandboxes (the path-safety guard refuses those with a
         structured envelope). Three behaviors via the append + overwrite flags: default
         refuses if the file exists; overwrite=true truncates; append=true appends to
-        existing content (creates the file if missing). Use create_directory first if
-        the parent directory doesn't exist.
+        existing content (creates the file if missing). Creates missing parent directories
+        automatically for app workspace paths and common shared-storage user folders.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -82,9 +82,9 @@ fun writeTextFileTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = To
         }
 
         val file = File(path)
-        // Auto-mkdir parent for tilde-rooted writes — the agent shouldn't have to call
-        // create_directory before writing to a fresh ~/learnings/ERRORS.md.
-        if (rawPath.startsWith("~/")) file.parentFile?.mkdirs()
+        // Auto-mkdir parent for app workspace writes and normal shared-storage user data
+        // folders. Keep unexpected absolute paths explicit so mistakes surface clearly.
+        if (shouldAutoCreateParent(rawPath, path)) file.parentFile?.mkdirs()
 
         if (file.exists() && !append && !overwrite) {
             return@Tool errEnvelope(
@@ -137,3 +137,12 @@ private fun errEnvelope(code: String, detail: String): List<UIMessagePart> =
         put("error", code)
         put("detail", detail)
     }.toString()))
+
+internal fun shouldAutoCreateParent(rawPath: String, expandedPath: String): Boolean =
+    rawPath.startsWith("~/") ||
+        expandedPath.startsWith("/sdcard/Documents/RikkaHub/") ||
+        expandedPath.startsWith("/sdcard/Download/RikkaHub/") ||
+        expandedPath.startsWith("/sdcard/Pictures/RikkaHub/") ||
+        expandedPath.startsWith("/storage/emulated/0/Documents/RikkaHub/") ||
+        expandedPath.startsWith("/storage/emulated/0/Download/RikkaHub/") ||
+        expandedPath.startsWith("/storage/emulated/0/Pictures/RikkaHub/")

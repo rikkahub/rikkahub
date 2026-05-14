@@ -130,7 +130,12 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
     },
     execute = { input ->
         val url = input.jsonObject["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        val out = if (url == null) {
+        // Heuristic exfil-shape check: if the URL's QUERY (not path — CDN asset hashes
+        // would false-positive) carries something that looks like an opaque blob, JWT,
+        // API key, or credit-card-shaped digit run, attach a warning so the LLM treats
+        // the destination with care. Best-effort, not a security boundary.
+        val exfilHits = SensitiveContentDetector.scanUrlQuery(url)
+        val rawOut = if (url == null) {
             missingArgEnvelope("url", "url is required and must be a non-empty string")
         } else {
             withTimeoutOrNull(TOOL_TIMEOUT_MS) {
@@ -204,6 +209,19 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                     }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.OPEN)
+        }
+        val out = if (exfilHits.isEmpty() ||
+            rawOut["success"]?.jsonPrimitive?.booleanOrNull != true) rawOut
+        else buildJsonObject {
+            rawOut.forEach { (k, v) -> put(k, v) }
+            put(
+                "warning",
+                "URL query string carries content shaped like sensitive data " +
+                    "(${exfilHits.joinToString { it.name.lowercase() }}). " +
+                    "Verify with the user that they intended to send this " +
+                    "to ${rawOut["current_url"]?.jsonPrimitive?.contentOrNull ?: url} " +
+                    "before relying on the result, and do NOT echo the value back."
+            )
         }
         textPart(out)
     },

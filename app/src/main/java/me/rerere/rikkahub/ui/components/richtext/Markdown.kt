@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -186,18 +187,18 @@ private fun MarkdownPreview() {
 private data class MarkdownParseResult(
     val preprocessed: String,
     val astTree: ASTNode,
-    val hasHtmlBlocks: Boolean,
+    val hasHtml: Boolean,
 )
 
-private fun ASTNode.containsHtmlBlocks(): Boolean {
-    if (type == MarkdownElementTypes.HTML_BLOCK) return true
-    return children.any { it.containsHtmlBlocks() }
+private fun ASTNode.containsHtml(): Boolean {
+    if (type == MarkdownElementTypes.HTML_BLOCK || type == MarkdownTokenTypes.HTML_TAG) return true
+    return children.any { it.containsHtml() }
 }
 
 private fun parseMarkdown(content: String): MarkdownParseResult {
     val preprocessed = preProcess(content)
     val astTree = parser.buildMarkdownTreeFromString(preprocessed)
-    return MarkdownParseResult(preprocessed, astTree, astTree.containsHtmlBlocks())
+    return MarkdownParseResult(preprocessed, astTree, astTree.containsHtml())
 }
 
 @Composable
@@ -221,7 +222,7 @@ fun MarkdownBlock(
             .collect { setData(it) }
     }
 
-    if (data.hasHtmlBlocks) {
+    if (data.hasHtml) {
         MarkdownNew(
             content = content,
             modifier = modifier,
@@ -231,7 +232,7 @@ fun MarkdownBlock(
     } else {
         ProvideTextStyle(style) {
             Column(
-                modifier = modifier.padding(start = 4.dp)
+                modifier = modifier.padding(horizontal = 4.dp)
             ) {
                 data.astTree.children.fastForEach { child ->
                     MarkdownNode(
@@ -989,10 +990,13 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                 SpanStyle(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 0.95.em,
-                    background = colorScheme.secondaryContainer.copy(alpha = 0.2f),
+                    background = colorScheme.surfaceVariant,
+                    color = colorScheme.primary,
                 )
             ) {
+                append(' ')
                 append(code)
+                append(' ')
             }
         }
 

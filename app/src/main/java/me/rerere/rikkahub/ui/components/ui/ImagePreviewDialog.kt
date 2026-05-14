@@ -25,6 +25,7 @@ import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Download01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.compose.koinInject
@@ -67,10 +68,13 @@ fun ImagePreviewDialog(
                     onClick = {
                         lifecycleOwner.lifecycleScope.launch {
                             runCatching {
-                                toaster.show("正在保存")
+                                toaster.show(context.getString(R.string.image_preview_saving))
                                 val imgUrl = images[state.currentPage]
                                 filesManager.saveMessageImage(context, imgUrl)
-                                toaster.show(message = "已保存图片", type = ToastType.Success)
+                                toaster.show(
+                                    message = context.getString(R.string.image_preview_saved),
+                                    type = ToastType.Success,
+                                )
                             }.onFailure {
                                 it.printStackTrace()
                                 toaster.show(

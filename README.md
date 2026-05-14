@@ -59,7 +59,7 @@ Each of those is a one-line setup. The phone runs them in the background while y
 
 ### Control your phone
 
-Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the torch on, change brightness or volume, post a notification, vibrate, share something, or read your battery, WiFi, signal, location, sensors, contacts, and SMS. Over 60 tools, all built into Android, no extra apps required. Each one stays off until you flip it on.
+Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the torch on, change brightness or volume, post a notification, vibrate, share something, or read your battery, WiFi, signal, location, sensors, contacts, and SMS. Over 70 tools, all built into Android, no extra apps required. Each one stays off until you flip it on.
 
 </td>
 <td width="50%" valign="top">
@@ -151,6 +151,22 @@ A built-in health checkup for the app. Tap Settings, then Doctor, and it runs a 
 </td>
 </tr>
 <tr>
+<td valign="top">
+
+### MCP servers
+
+Connect the assistant to [Model Context Protocol](https://modelcontextprotocol.io) servers and the AI gains whatever tools those servers expose. The AI can add, update, and manage MCP connections itself — every connection change is approval-gated, so a server can't be wired in behind your back.
+
+</td>
+<td valign="top">
+
+### Notifications + external triggers
+
+Pick which apps the AI is allowed to watch, and it can read, summarize, and forward incoming notifications — the whitelist starts empty, so nothing leaves your phone until you choose. Other apps (Tasker, automation tools, ADB) can also hand the agent a task through the External Automation Intent API, so RikkaHub Agent slots into automation flows you already run.
+
+</td>
+</tr>
+<tr>
 <td colspan="2" align="center" valign="top">
 
 ### Safety + privacy
@@ -173,7 +189,7 @@ Plus: passwords and API keys never make it into log files. The Telegram bot igno
 
 ## 🚀 Quick Start
 
-1. **Install**: download the latest `*-universal-debug.apk` from [Releases](https://github.com/ExTV/rikkahub-agent/releases/latest). Allow install from unknown sources. Open.
+1. **Install**: download the latest **`*-release.apk`** from [Releases](https://github.com/ExTV/rikkahub-agent/releases/latest). Allow install from unknown sources, then open. (One-time note: if you still have an old debug build of RikkaHub Agent installed, uninstall it first — the release build is signed differently and won't upgrade over it.)
 2. **Add an LLM provider**: Settings, then Providers, pick one, paste your API key. (Pixel 8/9/10 users can flip on the built-in **AICore** card for fully on-device Gemini Nano. No key, no network.)
 3. **Turn on what you want**: Settings, then Assistants, tap your assistant, then **Local Tools**, and flip the categories you want enabled.
 4. **(Optional) Telegram bot**: message [@BotFather](https://t.me/BotFather) with `/newbot` to get a bot token, then [@userinfobot](https://t.me/userinfobot) with `/start` to get your numeric Telegram user id. Then just say to the assistant in chat: *"Set up the Telegram bot. Token is `<your token>`. My user id is `<your id>`. Set me as the default chat. Enable it."* It'll handle the rest.
@@ -190,6 +206,12 @@ If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.
 | Android      | 8.0+ (API 26), targets API 37                                |
 | Storage      | ~80 MB app                                                   |
 | LLM provider | OpenAI, Google, Anthropic, Ollama, or any OpenAI-compatible endpoint. OR Gemini Nano via AICore on Pixel 8/9/10+ |
+
+---
+
+## 🌍 Languages
+
+The interface ships in **English, 简体中文, 繁體中文, 日本語, 한국어, Русский, and العربية**. The app follows your system language automatically and falls back to English for anything not yet translated.
 
 ---
 

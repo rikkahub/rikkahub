@@ -60,6 +60,13 @@ val PermissionCamera = PermissionInfo(
     required = true
 )
 
+val PermissionRecordAudio = PermissionInfo(
+    permission = Manifest.permission.RECORD_AUDIO,
+    displayName = { Text(stringResource(R.string.permission_microphone)) },
+    usage = { Text(stringResource(R.string.permission_microphone_desc)) },
+    required = true
+)
+
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 val PermissionNotification = PermissionInfo(
     permission = Manifest.permission.POST_NOTIFICATIONS,

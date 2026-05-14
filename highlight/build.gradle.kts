@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "me.rerere.highlight"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
