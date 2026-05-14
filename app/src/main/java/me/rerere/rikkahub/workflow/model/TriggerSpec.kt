@@ -91,12 +91,22 @@ sealed class TriggerSpec {
     @SerialName("app_closed")
     data class AppClosed(val packageName: String) : TriggerSpec()
 
+    /**
+     * `*_contains` fields match as case-insensitive plain substrings; `*_matches` fields
+     * hold a Java regex ([java.util.regex.Pattern]) tested with `find()` against the
+     * notification title/text. All non-null filters are AND-combined — if both
+     * `title_contains` and `title_matches` are set, the title must satisfy both. An
+     * uncompilable regex fails safe (treated as "no match", never crashes evaluation);
+     * workflow_create rejects bad patterns up front so the LLM can repair them.
+     */
     @Serializable
     @SerialName("notification_received")
     data class NotificationReceived(
         val packageName: String? = null,
         val titleContains: String? = null,
         val textContains: String? = null,
+        val titleMatches: String? = null,
+        val textMatches: String? = null,
     ) : TriggerSpec()
 
     @Serializable @SerialName("boot_completed") data object BootCompleted : TriggerSpec()

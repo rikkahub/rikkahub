@@ -84,9 +84,9 @@ class ConditionEvaluatorTest {
     }
 
     @Test fun `is_charging and is_not_charging`() {
-        assertTrue(ConditionEvaluator.evaluate(ConditionSpec.IsCharging, ctxAt(LocalTime.of(12, 0), charging = true), zone))
-        assertFalse(ConditionEvaluator.evaluate(ConditionSpec.IsCharging, ctxAt(LocalTime.of(12, 0), charging = false), zone))
-        assertTrue(ConditionEvaluator.evaluate(ConditionSpec.IsNotCharging, ctxAt(LocalTime.of(12, 0), charging = false), zone))
+        assertTrue(ConditionEvaluator.evaluate(ConditionSpec.IsCharging(), ctxAt(LocalTime.of(12, 0), charging = true), zone))
+        assertFalse(ConditionEvaluator.evaluate(ConditionSpec.IsCharging(), ctxAt(LocalTime.of(12, 0), charging = false), zone))
+        assertTrue(ConditionEvaluator.evaluate(ConditionSpec.IsNotCharging(), ctxAt(LocalTime.of(12, 0), charging = false), zone))
     }
 
     @Test fun `foreground_app_is matches package`() {
@@ -97,13 +97,13 @@ class ConditionEvaluatorTest {
     }
 
     @Test fun `screen_is_on and screen_is_off`() {
-        assertTrue(ConditionEvaluator.evaluate(ConditionSpec.ScreenIsOn, ctxAt(LocalTime.of(12, 0), screenOn = true), zone))
-        assertFalse(ConditionEvaluator.evaluate(ConditionSpec.ScreenIsOff, ctxAt(LocalTime.of(12, 0), screenOn = true), zone))
+        assertTrue(ConditionEvaluator.evaluate(ConditionSpec.ScreenIsOn(), ctxAt(LocalTime.of(12, 0), screenOn = true), zone))
+        assertFalse(ConditionEvaluator.evaluate(ConditionSpec.ScreenIsOff(), ctxAt(LocalTime.of(12, 0), screenOn = true), zone))
     }
 
     @Test fun `evaluateAll fails fast on first failed condition`() {
         val r = ConditionEvaluator.evaluateAll(
-            listOf(ConditionSpec.IsCharging, ConditionSpec.WifiSsidIs("Home")),
+            listOf(ConditionSpec.IsCharging(), ConditionSpec.WifiSsidIs("Home")),
             ctxAt(LocalTime.of(12, 0), charging = false, wifiSsid = "Home"),
             zone,
         )
@@ -113,11 +113,60 @@ class ConditionEvaluatorTest {
 
     @Test fun `evaluateAll passes when every condition holds`() {
         val r = ConditionEvaluator.evaluateAll(
-            listOf(ConditionSpec.IsCharging, ConditionSpec.BatteryAbove(20)),
+            listOf(ConditionSpec.IsCharging(), ConditionSpec.BatteryAbove(20)),
             ctxAt(LocalTime.of(12, 0), charging = true, battery = 80),
             zone,
         )
         assertTrue(r is ConditionEvaluator.Result.Pass)
+    }
+
+    // -- invert (item 10.2) ----------------------------------------------------------
+
+    @Test fun `invert negates a boolean condition`() {
+        // is_charging with invert: passes only when NOT charging.
+        val c = ConditionSpec.IsCharging(invert = true)
+        assertFalse(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(12, 0), charging = true), zone))
+        assertTrue(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(12, 0), charging = false), zone))
+    }
+
+    @Test fun `invert negates a value condition`() {
+        // "not on HomeWiFi"
+        val c = ConditionSpec.WifiSsidIs("HomeWiFi", invert = true)
+        assertFalse(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(12, 0), wifiSsid = "HomeWiFi"), zone))
+        assertTrue(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(12, 0), wifiSsid = "OtherWiFi"), zone))
+        // No WiFi: raw wifi_ssid_is is false, inverted = true.
+        assertTrue(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(12, 0), wifiSsid = null), zone))
+    }
+
+    @Test fun `invert negates a time window condition`() {
+        // "NOT between 09:00 and 17:00"
+        val c = ConditionSpec.TimeBetween("09:00", "17:00", invert = true)
+        assertFalse(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(12, 0)), zone))
+        assertTrue(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(20, 0)), zone))
+    }
+
+    @Test fun `invert defaults to false leaving behavior unchanged`() {
+        val c = ConditionSpec.BatteryAbove(50)
+        assertFalse(c.invert)
+        assertTrue(ConditionEvaluator.evaluate(c, ctxAt(LocalTime.of(12, 0), battery = 60), zone))
+    }
+
+    @Test fun `evaluateAll honors inverted condition`() {
+        // Pass only if NOT charging AND battery above 20.
+        val conditions = listOf(
+            ConditionSpec.IsCharging(invert = true),
+            ConditionSpec.BatteryAbove(20),
+        )
+        assertTrue(
+            ConditionEvaluator.evaluateAll(
+                conditions, ctxAt(LocalTime.of(12, 0), charging = false, battery = 80), zone,
+            ) is ConditionEvaluator.Result.Pass
+        )
+        assertTrue(
+            ConditionEvaluator.evaluateAll(
+                conditions, ctxAt(LocalTime.of(12, 0), charging = true, battery = 80), zone,
+            ) is ConditionEvaluator.Result.FailedAt
+        )
     }
 
     @Test fun `time_after_sunset fails open without location`() {
@@ -128,7 +177,7 @@ class ConditionEvaluatorTest {
     @Test fun `needsLocation true only for sun conditions`() {
         assertTrue(ConditionEvaluator.needsLocation(listOf(ConditionSpec.TimeAfterSunset())))
         assertTrue(ConditionEvaluator.needsLocation(listOf(ConditionSpec.TimeBeforeSunrise())))
-        assertFalse(ConditionEvaluator.needsLocation(listOf(ConditionSpec.IsCharging)))
+        assertFalse(ConditionEvaluator.needsLocation(listOf(ConditionSpec.IsCharging())))
         assertFalse(ConditionEvaluator.needsLocation(emptyList()))
     }
 }
