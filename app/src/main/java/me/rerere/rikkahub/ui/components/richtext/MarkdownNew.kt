@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.richtext
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -87,6 +88,8 @@ import org.jsoup.nodes.TextNode
 
 // ---- Preprocessing (mirrors Markdown.kt logic) ----
 
+private const val TAG = "MarkdownNew"
+
 private val INLINE_LATEX_REGEX = Regex("\\\\\\((.+?)\\\\\\)")
 private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
@@ -139,7 +142,7 @@ fun MarkdownNew(
         snapshotFlow { updatedContent }
             .distinctUntilChanged()
             .mapLatest { generateMarkdownHtml(it) }
-            .catch { it.printStackTrace() }
+            .catch { Log.e(TAG, "MarkdownNew: failed to generate markdown HTML", it) }
             .flowOn(Dispatchers.Default)
             .collect { html = it }
     }

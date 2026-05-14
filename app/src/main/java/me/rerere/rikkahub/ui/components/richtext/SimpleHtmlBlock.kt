@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.richtext
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -41,6 +42,8 @@ import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 
+private const val TAG = "SimpleHtmlBlock"
+
 @Composable
 fun SimpleHtmlBlock(
     html: String,
@@ -62,7 +65,7 @@ fun SimpleHtmlBlock(
                     try {
                         uriHandler.openUri(url)
                     } catch (e: Exception) {
-                        // Handle link click error silently
+                        Log.e(TAG, "SimpleHtmlBlock: failed to open link: $url", e)
                     }
                 }
             )
