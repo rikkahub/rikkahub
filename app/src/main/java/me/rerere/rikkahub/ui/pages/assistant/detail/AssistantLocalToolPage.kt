@@ -124,6 +124,12 @@ private fun AssistantLocalToolContent(
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val telegramBotPreferences = koinInject<TelegramBotPreferences>()
+    // Hardware-availability gate for the NFC toggle: a device with no NFC chip can never
+    // run the nfc tools, so the toggle is shown disabled with a "no NFC hardware" subtitle
+    // rather than letting the user enable a tool that would only ever error.
+    val hasNfc = remember {
+        ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_NFC)
+    }
 
     var showTermuxPostGrantDialog by remember { mutableStateOf(false) }
     var showTelegramNoTokenDialog by remember { mutableStateOf(false) }
@@ -1056,12 +1062,18 @@ private fun AssistantLocalToolContent(
                     Text(stringResource(R.string.assistant_page_local_tools_nfc_title))
                 },
                 supportingContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_nfc_desc))
+                    Text(
+                        if (hasNfc) stringResource(R.string.assistant_page_local_tools_nfc_desc)
+                        else stringResource(R.string.assistant_page_local_tools_nfc_unavailable)
+                    )
                 },
                 trailingContent = {
                     PermissionedSwitch(
-                        checked = assistant.localTools.contains(LocalToolOption.Nfc),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.Nfc, it) },
+                        checked = hasNfc && assistant.localTools.contains(LocalToolOption.Nfc),
+                        // Guard the callback too: even if the switch is somehow toggled,
+                        // a device with no NFC chip never gets the tool enabled.
+                        onCheckedChange = { if (hasNfc) toggleLocalTool(LocalToolOption.Nfc, it) },
+                        enabled = hasNfc,
                     )
                 }
             )
@@ -1271,6 +1283,7 @@ private fun PermissionedSwitch(
     requiresAccessibilityService: Boolean = false,
     requiresNotificationListener: Boolean = false,
     requiresAllFilesAccess: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val ctx = LocalContext.current
     val toaster = LocalToaster.current
@@ -1459,6 +1472,7 @@ private fun PermissionedSwitch(
     Column(horizontalAlignment = Alignment.End) {
         Switch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = { newChecked ->
                 if (!newChecked) {
                     onCheckedChange(false)
