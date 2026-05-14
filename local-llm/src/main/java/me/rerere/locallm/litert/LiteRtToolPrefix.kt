@@ -103,33 +103,94 @@ Only emit tool calls when actually needed. Otherwise reply with normal text.
         val droppedNote = if (droppedTotal > 0) {
             "(…and $droppedTotal more tool(s) hidden to keep prompt short — disable some, switch to a model with bigger context, or raise \"Max context\" to see all)\n"
         } else ""
+        // Note the explicit "include the closing </tool_call> tag": tiny models otherwise
+        // stop right after the JSON `}}`. extractToolCalls recovers an unclosed call
+        // anyway, but nudging the model to close the tag keeps the happy path clean.
         return """
-Tools you can call. Format: <tool_call>{"name":"<n>","arguments":{<json>}}</tool_call> on its own line, then stop. Only call when needed.
+Tools you can call. To call one, output exactly: <tool_call>{"name":"<n>","arguments":{<json>}}</tool_call> — and include the closing </tool_call> tag. Only call a tool when actually needed; otherwise reply normally.
 
 ${sb}${droppedNote}
 """.trimStart()
     }
 
     /**
-     * Scan [response] for <tool_call>...</tool_call> blocks and return the parsed calls.
-     * Returns an empty list when nothing matches or every match fails to parse.
+     * Scan [response] for tool calls and return the parsed calls. Returns an empty list
+     * when nothing matches or every match fails to parse.
+     *
+     * Two passes:
+     *  1. Well-formed `<tool_call>…</tool_call>` blocks (the happy path).
+     *  2. **Unclosed-tag recovery.** Tiny local models (Qwen2.5-1.5B, Gemma3-1B) very
+     *     frequently emit `<tool_call>{json}` and then stop WITHOUT the closing
+     *     `</tool_call>` tag — the compact prompt even tells them to "stop" right after
+     *     the JSON. Pass 1's regex requires the closing tag, so without this fallback the
+     *     whole tool call leaks to the user as raw text and never fires. When pass 1 finds
+     *     nothing but a `<tool_call>` opener exists, we parse the first balanced JSON
+     *     object after the LAST opener instead.
      */
     fun extractToolCalls(response: String): List<ParsedCall> {
-        return toolCallPattern.findAll(response).mapNotNull { match ->
-            val raw = match.groupValues[1]
-            runCatching {
-                val obj = lenient.parseToJsonElement(raw).jsonObject
-                val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
-                val args = (obj["arguments"] as? JsonObject) ?: JsonObject(emptyMap())
-                ParsedCall(name, args)
-            }.onFailure { t ->
-                // Log parse failures so model quality issues are diagnosable in logcat.
-                // Silent drops are fine UX (the model will just produce text output instead),
-                // but the log helps distinguish "model didn't call a tool" from
-                // "model called a tool but emitted malformed JSON".
-                Log.w(TAG, "Failed to parse tool_call block — raw=[$raw]: ${t.message}")
-            }.getOrNull()
-        }.toList()
+        // Pass 1 — well-formed blocks.
+        val closed = toolCallPattern.findAll(response)
+            .mapNotNull { parseToolCallJson(it.groupValues[1]) }
+            .toList()
+        if (closed.isNotEmpty()) return closed
+
+        // Pass 2 — unclosed-tag recovery.
+        val openerIdx = response.lastIndexOf("<tool_call>")
+        if (openerIdx >= 0) {
+            val afterOpener = response.substring(openerIdx + "<tool_call>".length)
+            val json = firstBalancedJsonObject(afterOpener)
+            if (json != null) {
+                parseToolCallJson(json)?.let { return listOf(it) }
+            }
+        }
+        return emptyList()
+    }
+
+    /** Parse one tool-call JSON payload into a [ParsedCall], or null if it is not a valid
+     *  call object. Lenient about trailing commas + whitespace. */
+    private fun parseToolCallJson(raw: String): ParsedCall? = runCatching {
+        val obj = lenient.parseToJsonElement(raw).jsonObject
+        val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
+        val args = (obj["arguments"] as? JsonObject) ?: JsonObject(emptyMap())
+        ParsedCall(name, args)
+    }.onFailure { t ->
+        // Log parse failures so model quality issues are diagnosable in logcat.
+        // Silent drops are fine UX (the model produces text output instead), but the log
+        // distinguishes "model didn't call a tool" from "model emitted malformed JSON".
+        Log.w(TAG, "Failed to parse tool_call block — raw=[$raw]: ${t.message}")
+    }.getOrNull()
+
+    /**
+     * Return the first brace-balanced `{…}` JSON object found in [text], or null if there
+     * is no `{` or the object is never closed (model truncated mid-JSON). String contents
+     * are skipped so a `}` inside a JSON string value does not close the object early.
+     */
+    private fun firstBalancedJsonObject(text: String): String? {
+        val start = text.indexOf('{')
+        if (start < 0) return null
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (i in start until text.length) {
+            val c = text[i]
+            if (inString) {
+                when {
+                    escaped -> escaped = false
+                    c == '\\' -> escaped = true
+                    c == '"' -> inString = false
+                }
+                continue
+            }
+            when (c) {
+                '"' -> inString = true
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return text.substring(start, i + 1)
+                }
+            }
+        }
+        return null
     }
 
     /**
