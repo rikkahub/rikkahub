@@ -1348,6 +1348,8 @@
   <string name="assistant_page_local_tools_section_browser">Browser</string>
   <string name="assistant_page_local_tools_browser_title">Browser</string>
   <string name="assistant_page_local_tools_browser_desc">AI-driven web browser. 17 individually-togglable tools — configure read/write access in Settings → Browser.</string>
+  <string name="assistant_page_local_tools_web_fetch_title">Web fetch</string>
+  <string name="assistant_page_local_tools_web_fetch_desc">Lightweight HTTP GET/POST tool. 30s timeout, response body capped at 8 KB. Requires approval on each call.</string>
 
   <!-- Phase 25 — Phase 3 second cut + ExternalStorage + Archive. -->
   <string name="assistant_page_local_tools_section_privileged">Privileged tools</string>

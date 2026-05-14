@@ -195,6 +195,7 @@ val appModule = module {
             nfcResultBuffer = get(),
             safPickerResultBuffer = get(),
             storageVolumeGrantStore = get(),
+            okHttpClient = get(),
         )
     }
 

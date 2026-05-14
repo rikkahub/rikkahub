@@ -104,7 +104,12 @@ import me.rerere.rikkahub.data.ai.tools.local.dismissNotificationTool
 import me.rerere.rikkahub.data.ai.tools.local.listActiveNotificationsTool
 import me.rerere.rikkahub.data.ai.tools.local.listRecentNotificationsTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationActionClickTool
+import me.rerere.rikkahub.data.ai.tools.local.notificationReplyTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationStatusTool
+import me.rerere.rikkahub.data.ai.tools.local.batchCopyTool
+import me.rerere.rikkahub.data.ai.tools.local.batchMoveTool
+import me.rerere.rikkahub.data.ai.tools.local.batchDeleteTool
+import me.rerere.rikkahub.data.ai.tools.local.webFetchTool
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
@@ -178,6 +183,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("js_skills")           data object JsSkills           : LocalToolOption()
     @Serializable @SerialName("system_intents")      data object SystemIntents      : LocalToolOption()
     @Serializable @SerialName("browser")             data object Browser            : LocalToolOption()
+    @Serializable @SerialName("web_fetch")           data object WebFetch           : LocalToolOption()
 
     // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
     @Serializable @SerialName("sms_send")             data object SmsSend             : LocalToolOption()
@@ -305,6 +311,8 @@ class LocalTools(
     private val nfcResultBuffer: me.rerere.rikkahub.data.ai.tools.local.NfcResultBuffer,
     private val safPickerResultBuffer: me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer,
     private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore,
+    // Shared OkHttp singleton (NetworkChangeMonitor-registered) — backs the web_fetch tool.
+    private val okHttpClient: okhttp3.OkHttpClient,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -748,6 +756,7 @@ class LocalTools(
             tools.add(listActiveNotificationsTool())
             tools.add(dismissNotificationTool())
             tools.add(notificationActionClickTool())
+            tools.add(notificationReplyTool())
             tools.add(notificationStatusTool(notificationListenerPreferences, telegramBotPreferences))
         }
         if (options.contains(LocalToolOption.Files)) {
@@ -762,6 +771,11 @@ class LocalTools(
             tools.add(findFilesTool())
             tools.add(showImageTool(context, invocationContext.modelCanSeeImages))  // inline image display; no separate auto-stream needed
             tools.add(openFileTool(context, invocationContext, interactiveToolStreamer))
+            // Batch ops (item 5.5) — list-or-glob copy / move / delete. Same toggle group
+            // as the single-path file tools; every path still goes through PathSafetyGuard.
+            tools.add(batchCopyTool())
+            tools.add(batchMoveTool())
+            tools.add(batchDeleteTool())
         }
         if (options.contains(LocalToolOption.McpControl)) {
             tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListTool(settingsStore, mcpManager))
@@ -851,6 +865,10 @@ class LocalTools(
                     )?.let { tools.add(it) }
                 }
             }
+        }
+        if (options.contains(LocalToolOption.WebFetch)) {
+            // Lightweight HTTP GET/POST (item 1.2) — backed by the shared OkHttp singleton.
+            tools.add(webFetchTool(okHttpClient))
         }
         // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
         if (options.contains(LocalToolOption.SmsSend)) {

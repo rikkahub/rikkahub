@@ -95,6 +95,7 @@ object ToolApprovalDefaults {
         // Notification listener side effects (read-only listing is free, mutating is not)
         "dismiss_notification",
         "notification_action_click",
+        "notification_reply",       // fires a notification's direct-reply RemoteInput action
 
         // File manager — all ops are side-effecting or read PII from arbitrary paths
         "list_files",
@@ -106,6 +107,12 @@ object ToolApprovalDefaults {
         "create_directory",
         "file_info",
         "find_files",
+        // Batch file ops (item 5.5) — list-or-glob copy / move / delete. Side-effecting
+        // over potentially many paths in one call, so each gets the same approval gate as
+        // the single-path file tools.
+        "batch_copy",
+        "batch_move",
+        "batch_delete",
 
         // Telegram outbound — the bot can DM other chats / change its own config
         "telegram_send_message",
@@ -202,6 +209,11 @@ object ToolApprovalDefaults {
         // side carries the same trust footprint as plain browser_click, so it
         // inherits the same approval gate.
         "browser_click_and_read",
+
+        // web_fetch (item 1.2) — network egress. A bare HTTP GET/POST can exfiltrate
+        // anything the LLM puts in the URL / body / headers, so it gets the same
+        // approval gate as every other outbound call.
+        "web_fetch",
 
         // Phase 25 — Phase 3 second cut. Every mutating tool is approval-gated; the
         // read-only tools (keystore_verify, keystore_list_keys, list_storage_volumes,
