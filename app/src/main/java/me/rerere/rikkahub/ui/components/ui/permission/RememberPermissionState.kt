@@ -52,7 +52,7 @@ fun rememberPermissionState(
 ): PermissionState {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
-        ?: throw IllegalStateException("rememberPermissionState 必须在 ComponentActivity 中使用")
+        ?: throw IllegalStateException("rememberPermissionState must be used within a ComponentActivity")
 
     // 创建权限状态对象
     val permissionState = remember(permissions) {

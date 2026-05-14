@@ -1517,4 +1517,25 @@
   <string name="setting_asr_configure_resource_id">Resource ID</string>
   <string name="setting_asr_configure_resource_id_desc">X-Api-Resource-Id for billing</string>
   <string name="setting_asr_configure_language_code_desc">Optional language code, e.g. zh-CN, en-US, ja-JP</string>
+  <!-- Phase 26.1 — extracted from hardcoded Chinese string literals in Kotlin (2026-05-14) -->
+  <string name="mcp_error_reconnect_exhausted">Connection lost — maximum reconnect attempts reached</string>
+  <string name="ocr_status_recognizing">Recognizing image…</string>
+  <string name="share_sheet_title">Share your LLM models</string>
+  <string name="setting_provider_page_discount_badge">10% off</string>
+  <string name="chat_select_model_first">Please select a model first</string>
+  <string name="image_preview_saving">Saving…</string>
+  <string name="image_preview_saved">Image saved</string>
+  <string name="chat_drawer_statistics">Statistics</string>
+  <string name="translator_error_generic">Error</string>
+  <string name="translator_paste_text">Paste text</string>
+  <string name="translator_copy_result">Copy translation</string>
+  <string name="provider_test_non_streaming">Non-streaming</string>
+  <string name="provider_test_streaming">Streaming</string>
+  <string name="provider_test_tool_call">Tool calling</string>
+  <string name="provider_test_tool_called">Called: %1$s  Input: %2$s</string>
+  <string name="provider_test_no_tool">No tool called, response: %1$s</string>
+  <string name="skill_detail_name_immutable">Changing the skill name is not allowed (the name field must be \"%1$s\")</string>
+  <string name="skill_detail_save_failed">Save failed</string>
+  <string name="update_download_description">Downloading update…</string>
+  <string name="chat_stop_generation_before_delete">Please stop generation before deleting messages</string>
 </resources>
