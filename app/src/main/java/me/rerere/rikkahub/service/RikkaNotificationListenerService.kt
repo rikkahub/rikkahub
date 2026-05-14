@@ -130,10 +130,14 @@ class RikkaNotificationListenerService : NotificationListenerService() {
     }
 
     private suspend fun tryForwardToTelegram(entry: NotificationEntry) {
-        val cfg = try { whitelistPrefs.current() } catch (_: Throwable) { return }
+        val cfg = try { whitelistPrefs.current() } catch (t: Throwable) {
+            Log.w(TAG, "whitelist prefs read failed; skipping forward", t); return
+        }
         if (entry.packageName !in cfg.whitelist) return
 
-        val tg = try { telegramPrefs.current() } catch (_: Throwable) { return }
+        val tg = try { telegramPrefs.current() } catch (t: Throwable) {
+            Log.w(TAG, "telegram prefs read failed; skipping forward", t); return
+        }
         val chatId = tg.defaultChatId ?: return
         if (!tg.enabled) return
 
@@ -329,7 +333,9 @@ private fun StatusBarNotification.toEntry(pm: PackageManager): NotificationEntry
     val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
     val label = try {
         pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
-    } catch (_: Throwable) {
+    } catch (t: Throwable) {
+        // Uninstalled / restricted package — fall back to the raw package name.
+        Log.d(TAG, "getApplicationLabel failed for $packageName", t)
         packageName
     }
     val actionTitles = n.actions?.mapNotNull { it.title?.toString() } ?: emptyList()
