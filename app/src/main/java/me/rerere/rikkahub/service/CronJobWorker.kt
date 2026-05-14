@@ -12,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
@@ -58,7 +57,6 @@ class CronJobWorker(
     private val settingsStore: SettingsStore by inject()
     private val localTools: LocalTools by inject()
     private val directRunner: DirectModeActionRunner by inject()
-    private val json: Json by inject()
     private val agentRunRepo: AgentRunRepository by inject()
 
     override suspend fun doWork(): Result {
@@ -281,7 +279,7 @@ class CronJobWorker(
         return Triple(seq.finalOutcome, seq.errorMessage, null)
     }
 
-    private fun recordRun(
+    private suspend fun recordRun(
         jobId: String,
         scheduledAtMs: Long,
         outcome: String,
@@ -289,23 +287,21 @@ class CronJobWorker(
         convId: Uuid?,
         errorMessage: String?,
     ) {
-        // Fire-and-forget — used for the concurrent_skip early return only.
+        // Used for the concurrent_skip early return only. doWork() is already a suspend
+        // function on the worker's dispatcher, so this insert runs inline. No runBlocking
+        // bridge needed (which would have blocked the worker thread).
         runCatching {
-            // Note: this lambda runs from the worker's dispatcher; suspend bridge is tight,
-            // so we keep this synchronous-via-runBlocking-equivalent path simple.
-            kotlinx.coroutines.runBlocking {
-                runRepo.insert(ScheduledJobRunEntity(
-                    id = Uuid.random().toString(),
-                    jobId = jobId,
-                    mode = mode,
-                    scheduledAtMs = scheduledAtMs,
-                    startedAtMs = scheduledAtMs,
-                    finishedAtMs = scheduledAtMs,
-                    outcome = outcome,
-                    conversationId = convId?.toString(),
-                    errorMessage = errorMessage?.take(500),
-                ))
-            }
+            runRepo.insert(ScheduledJobRunEntity(
+                id = Uuid.random().toString(),
+                jobId = jobId,
+                mode = mode,
+                scheduledAtMs = scheduledAtMs,
+                startedAtMs = scheduledAtMs,
+                finishedAtMs = scheduledAtMs,
+                outcome = outcome,
+                conversationId = convId?.toString(),
+                errorMessage = errorMessage?.take(500),
+            ))
         }.onFailure { Log.w(TAG, "recordRun failed", it) }
     }
 

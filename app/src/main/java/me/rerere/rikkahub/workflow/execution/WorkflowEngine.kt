@@ -13,10 +13,8 @@ import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.findAssistantById
 import me.rerere.rikkahub.workflow.condition.ConditionEvaluator
 import me.rerere.rikkahub.workflow.condition.ContextProvider
-import me.rerere.rikkahub.workflow.model.TriggerSpec
 import me.rerere.rikkahub.workflow.model.WorkflowAction
 import me.rerere.rikkahub.workflow.model.WorkflowDefinition
 import me.rerere.rikkahub.workflow.model.WorkflowRunStatus

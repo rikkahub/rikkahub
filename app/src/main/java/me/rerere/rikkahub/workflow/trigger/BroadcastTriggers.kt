@@ -127,7 +127,10 @@ internal class WifiTriggerFamily(context: Context, scope: CoroutineScope)
         wm?.connectionInfo?.ssid?.removeSurrounding("\"")?.takeIf {
             it.isNotBlank() && it != "<unknown ssid>"
         }
-    } catch (_: Throwable) { null }
+    } catch (e: Throwable) {
+        Log.w("WorkflowTrigger", "wifi: currentSsid lookup failed", e)
+        null
+    }
 }
 
 // -- Bluetooth connect / disconnect ----------------------------------------------------
