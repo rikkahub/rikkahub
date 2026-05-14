@@ -252,7 +252,11 @@ class TelegramBotService : Service() {
         try {
             val nm = getSystemService(NotificationManager::class.java) ?: return
             nm.notify(NOTIF_ID, buildForegroundNotification())
-        } catch (_: Throwable) { /* notifications can fail in restricted contexts; non-fatal */ }
+        } catch (e: Throwable) {
+            // Notifications can fail in restricted contexts (POST_NOTIFICATIONS revoked,
+            // channel blocked); non-fatal, but log so a vanished notification leaves a trace.
+            android.util.Log.w(TAG, "updateForegroundNotification failed", e)
+        }
     }
 
     /**
@@ -1276,13 +1280,6 @@ class TelegramBotService : Service() {
         return convId to true
     }
 
-    private suspend fun readLatestAssistantText(convId: kotlin.uuid.Uuid): String {
-        val conv = conversationRepo.getConversationById(convId) ?: return ""
-        val lastAssistant = conv.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
-            ?: return ""
-        return assistantTextOf(lastAssistant)
-    }
-
     private fun assistantTextOf(m: UIMessage): String =
         m.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
 
@@ -1842,7 +1839,9 @@ class TelegramBotService : Service() {
                     parseMode = PARSE_MODE_HTML,
                     replyMarkup = buildProviderKeyboard(enabledProviders, currentPair?.first?.id),
                 )
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+                android.util.Log.w(TAG, "handleProviderPickCallback: back-to-providers edit failed", e)
+            }
             return
         }
 
@@ -1890,7 +1889,9 @@ class TelegramBotService : Service() {
         )
         try {
             client.editMessageText(cq.chatId, cq.messageId, newText, parseMode = PARSE_MODE_HTML, replyMarkup = keyboard)
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            android.util.Log.w(TAG, "handleProviderPickCallback: model-list edit failed", e)
+        }
     }
 
     /**
@@ -1931,7 +1932,9 @@ class TelegramBotService : Service() {
                 append(")")
             }
             client.editMessageText(cq.chatId, cq.messageId, newText, parseMode = PARSE_MODE_HTML)
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            android.util.Log.w(TAG, "handleModelPickCallback: switched-confirmation edit failed", e)
+        }
     }
 
     /**
