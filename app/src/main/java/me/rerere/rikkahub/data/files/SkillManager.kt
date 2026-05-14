@@ -46,6 +46,43 @@ class SkillManager(
     }
 
     /**
+     * Phase 16 audit fix — read-only accessor backing the `skill_get_content` LLM tool.
+     *
+     * Returns the parsed frontmatter (name / description / format / source label) plus the
+     * markdown body and an optional args schema, or null when [skillName] does not resolve
+     * to a skill directory with a readable SKILL.md. Reads from the same on-disk location
+     * the install tools write to — no new persistence layer.
+     *
+     * `format` and `sourceLabel` are pulled from the optional `format:` / `source-url:`
+     * frontmatter keys the install path writes; both are absent on hand-authored skills.
+     * `argsSchema` is the optional `args_schema:` frontmatter key, parsed as a flat JSON
+     * object string (the frontmatter parser is line-oriented, so a skill author declares it
+     * on a single line); malformed or non-object values are dropped rather than surfaced.
+     */
+    fun getContent(skillName: String): SkillContent? {
+        val skillDir = resolveSkillDir(skillName) ?: return null
+        val skillFile = skillDir.resolve("SKILL.md")
+        if (!skillFile.exists()) return null
+        val raw = runCatching { readCached(skillFile) }.getOrNull() ?: return null
+        val frontmatter = SkillFrontmatterParser.parse(raw)
+        val name = frontmatter["name"]?.takeIf { it.isNotBlank() } ?: return null
+        val description = frontmatter["description"]?.takeIf { it.isNotBlank() } ?: return null
+        val argsSchema = frontmatter["args_schema"]?.takeIf { it.isNotBlank() }?.let { rawSchema ->
+            runCatching {
+                kotlinx.serialization.json.Json.parseToJsonElement(rawSchema)
+            }.getOrNull() as? kotlinx.serialization.json.JsonObject
+        }
+        return SkillContent(
+            name = name,
+            description = description,
+            format = frontmatter["format"]?.takeIf { it.isNotBlank() },
+            sourceLabel = frontmatter["source-url"]?.takeIf { it.isNotBlank() },
+            contentMd = SkillFrontmatterParser.extractBody(raw),
+            argsSchema = argsSchema,
+        )
+    }
+
+    /**
      * Read the body of an arbitrary file inside [skillName]'s directory (e.g. an
      * `auto_load_path` such as `SOUL.md`). Returns null if the skill or relative path
      * does not resolve, or the file does not exist. Backed by the same mtime-aware cache
@@ -373,6 +410,23 @@ data class SkillMetadata(
 ) {
     val skillFile: File get() = skillDir.resolve("SKILL.md")
 }
+
+/**
+ * Phase 16 audit fix — read-only view of a skill's SKILL.md, returned by
+ * [SkillManager.getContent] and surfaced to the LLM via the `skill_get_content` tool.
+ *
+ * @property contentMd the markdown body with the YAML frontmatter stripped.
+ * @property argsSchema optional structured arg description from the `args_schema:`
+ * frontmatter key; null when the skill doesn't declare one.
+ */
+data class SkillContent(
+    val name: String,
+    val description: String,
+    val format: String? = null,
+    val sourceLabel: String? = null,
+    val contentMd: String,
+    val argsSchema: kotlinx.serialization.json.JsonObject? = null,
+)
 
 object SkillFrontmatterParser {
     private val frontmatterEndRegex = Regex("""\r?\n---(?:\r?\n|$)""")

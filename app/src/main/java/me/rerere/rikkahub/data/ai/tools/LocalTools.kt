@@ -786,8 +786,8 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(settingsStore, conversationRepo))
         }
         if (options.contains(LocalToolOption.SkillImport)) {
-            tools.add(me.rerere.rikkahub.skills.skillInstallFromUrlTool(skillUrlImporter))
-            tools.add(me.rerere.rikkahub.skills.skillInstallFromTextTool(skillUrlImporter))
+            tools.add(me.rerere.rikkahub.skills.skillInstallFromUrlTool(skillUrlImporter, settingsStore, skillManager))
+            tools.add(me.rerere.rikkahub.skills.skillInstallFromTextTool(skillUrlImporter, settingsStore, skillManager))
         }
         if (options.contains(LocalToolOption.JsSkills)) {
             tools.add(me.rerere.rikkahub.skills.js.runJsTool(
