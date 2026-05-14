@@ -294,12 +294,16 @@ class TelegramBotService : Service() {
                 consecutiveErrors = 0
             }
             lastTokenSeen = cfg.token
-            // Held only for the duration of one long-poll cycle. Released in finally so a
-            // crash during getUpdates does not leak the wakelock.
-            val wakeLock = pm?.newWakeLock(
-                android.os.PowerManager.PARTIAL_WAKE_LOCK,
-                "rikkahub:telegram_long_poll",
-            )?.also { it.setReferenceCounted(false) }
+            // Held only for the duration of one long-poll cycle, and only when the screen
+            // is off - while the device is interactive the CPU stays awake on its own, so
+            // the lock is pure battery waste (see shouldHoldPollWakeLock). Released in
+            // finally so a crash during getUpdates does not leak the wakelock.
+            val wakeLock = if (shouldHoldPollWakeLock(pm?.isInteractive)) {
+                pm?.newWakeLock(
+                    android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                    "rikkahub:telegram_long_poll",
+                )?.also { it.setReferenceCounted(false) }
+            } else null
             try {
                 cycle++
                 wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
@@ -2777,6 +2781,21 @@ class TelegramBotService : Service() {
          *  lock is auto-released in finally before each next cycle so a longer hang cannot
          *  leak it. */
         const val WAKELOCK_TIMEOUT_MS: Long = 75_000L
+
+        /**
+         * Whether the long-poll cycle needs to hold a partial wake lock. The lock only
+         * matters when the CPU would otherwise suspend mid-poll, i.e. when the screen is
+         * off. While the device is interactive the CPU is already awake, so holding it
+         * then is pure waste - profiling showed the unconditional acquire kept the lock
+         * held ~100% of the time, which was the app's entire wake-lock budget. Gating on
+         * the non-interactive state preserves Doze survival (screen-off always gets the
+         * lock) while dropping the screen-on waste.
+         *
+         * @param isInteractive `PowerManager.isInteractive`, or `null` when no
+         *   PowerManager is available - in which case we default to holding the lock
+         *   (the safe choice: never weaker than the old unconditional behaviour).
+         */
+        fun shouldHoldPollWakeLock(isInteractive: Boolean?): Boolean = isInteractive != true
 
         /** Initial placeholder text the bot posts before streaming begins. */
         const val STREAM_PLACEHOLDER = "..."
