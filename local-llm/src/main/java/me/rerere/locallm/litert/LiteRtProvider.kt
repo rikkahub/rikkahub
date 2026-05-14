@@ -1,7 +1,6 @@
 package me.rerere.locallm.litert
 
 import android.util.Log
-import com.google.ai.edge.litertlm.Contents
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -174,8 +173,8 @@ class LiteRtProvider(
                 "Model \"${params.model.modelId}\" is multimodal (vision support) and " +
                     "requires the GPU backend, but \"Try GPU acceleration\" is currently " +
                     "off in Settings → Local · LiteRT. Either enable GPU and retry, or " +
-                    "switch to a text-only model (Gemma3-1B-IT, Qwen2.5-1.5B-Instruct, " +
-                    "DeepSeek-R1-Distill-Qwen-1.5B) which runs fine on CPU."
+                    "switch to a text-only model (Gemma3-1B-IT or Qwen2.5-1.5B-Instruct) " +
+                    "which runs fine on CPU."
             )
         }
         // User-set max-context override. Lets capable models (Gemma 4 E2B = 32k) use more
@@ -232,45 +231,33 @@ class LiteRtProvider(
             if (trimmedSystemTexts.isNotEmpty()) append(trimmedSystemTexts)
         }.trim()
 
-        val effectiveSystemInstruction: Contents? =
-            if (combinedSystem.isNotBlank()) Contents.of(combinedSystem) else null
-
-        // ---- User input: full multi-turn history rendered as one Content.Text ----
+        // ---- Conversation history → turn list + cold-path blob ----
         //
-        // Why we render the full history into a single user input despite the SDK's
-        // Conversation being stateful:
+        // We hand the runtime BOTH:
+        //   - `turns`: the full (trimmed) turn list, each carrying a content signature. The
+        //     runtime uses these to decide whether its warm Conversation's KV cache already
+        //     holds a prefix of this history — if so it sends ONLY the new turn and reuses
+        //     the cache (Gallery's behaviour), instead of re-prefilling the whole history.
+        //   - `coldBlob`: the full render used only when the cache can't be reused (first
+        //     turn, edited/regenerated history, tool round-trip, config change). Always
+        //     correct, just not warm.
         //
-        //   1. RikkaHub's Provider contract is STATELESS — every streamText() call gets
-        //      the full message list. The caller has no concept of "this is turn N of an
-        //      ongoing Conversation"; it just hands us everything-so-far.
-        //   2. LiteRtRuntime's Conversation may or may not still be loaded with a matching
-        //      EngineKey, and even when the Engine is reused across turns, ensureLoaded()
-        //      always recreates the Conversation (because per-call sampler / system /
-        //      tools knobs may differ). So the SDK's internal turn state isn't reliable
-        //      from our side anyway.
-        //   3. Sending one combined ChatML-shaped string still routes through the model's
-        //      chat template (Qwen/Gemma will wrap it in their role tokens), which is
-        //      strictly better than the old "User: ... Assistant: ..." plaintext that
-        //      bypassed the template entirely.
+        // TOOL-role messages are dropped here: their content is already represented inline
+        // in the immediately-preceding ASSISTANT message's Tool part output.
         //
-        // A future upgrade would maintain Conversation continuity across turns and send
-        // only the new user message — but that requires the runtime layer to track
-        // "which messages has this Conversation already seen" and is out of scope here.
-        val userInput = run {
-            // Drop oldest non-system turns one at a time until the rendered history fits
-            // under HISTORY_CHAR_BUDGET. Leaves the most-recent turns intact (the user's
-            // current message + any in-flight tool exchange right before it). On a cold
-            // chat with a single "hi" this is a no-op; on a long chat it gracefully
-            // degrades by forgetting the earliest exchanges instead of SDK-aborting.
-            val nonSystem = messages.filter { it.role != MessageRole.SYSTEM }
-            var trimmed = nonSystem
-            var rendered = renderHistoryAsChatML(trimmed)
-            while (rendered.length > HISTORY_CHAR_BUDGET && trimmed.size > 1) {
-                trimmed = trimmed.drop(1)
-                rendered = renderHistoryAsChatML(trimmed)
-            }
-            rendered
+        // Trimming: drop the oldest turns one at a time until the cold render fits under
+        // HISTORY_CHAR_BUDGET. A trimmed list is no longer a forward-only extension of what
+        // the Conversation already processed, so the runtime correctly falls back to a cold
+        // rebuild for that turn — exactly the behaviour we want when history is reshaped.
+        var trimmed = messages.filter {
+            it.role != MessageRole.SYSTEM && it.role != MessageRole.TOOL
         }
+        var coldBlob = renderColdBlob(trimmed)
+        while (coldBlob.length > HISTORY_CHAR_BUDGET && trimmed.size > 1) {
+            trimmed = trimmed.drop(1)
+            coldBlob = renderColdBlob(trimmed)
+        }
+        val turns = trimmed.map { it.toTurn() }
 
         // ---- Engine load with full per-model + per-call config ----
         try {
@@ -282,7 +269,7 @@ class LiteRtProvider(
                 supportImage = config.supportsImage,
                 supportAudio = config.supportsAudio,
                 speculativeDecoding = config.supportsSpeculativeDecoding,
-                systemInstruction = effectiveSystemInstruction,
+                systemInstructionText = combinedSystem.ifBlank { null },
                 tools = emptyList(), // Native tool registration deferred; we use prompt-engineered tools.
                 constrainedDecoding = false, // Future upgrade.
                 topK = config.topK,
@@ -311,7 +298,7 @@ class LiteRtProvider(
         val fullResponseBuilder = StringBuilder()
 
         try {
-            runtime.streamGenerate(userInput).collect { cumulative ->
+            runtime.streamTurns(history = turns, coldBlob = coldBlob).collect { cumulative ->
                 // Defensive: if the SDK ever emits a non-monotonic cumulative (e.g. after
                 // an internal retry or template re-tokenisation), treat the new payload as a
                 // fresh start — emit it whole as the delta rather than computing a negative-
@@ -422,20 +409,70 @@ class LiteRtProvider(
     }
 
     /**
-     * Render the full message history (everything except SYSTEM messages, which are passed
-     * separately as systemInstruction) into a single ChatML-like string suitable for the
-     * SDK's `Content.Text` user input. The runtime's chat template will wrap this as a
-     * single user turn from the model's perspective, which is acceptable because:
+     * Render ONE message's content WITHOUT a role marker — the raw turn text.
      *
-     *  - Qwen/Gemma chat templates apply role tokens around the OUTER content. The inner
-     *    "User:"/"Assistant:" markers we emit are recognisable to the model from its
-     *    instruction-tuning data even when not parsed natively by the template.
-     *  - Tool calls and tool outputs are kept in the same `<tool_call>...</tool_call>` /
-     *    `<tool_result>...</tool_result>` shape the prompt prefix teaches the model. This
-     *    preserves continuity for prompt-engineered tool calling across turns.
-     *  - TOOL role messages are intentionally skipped: their content is already represented
-     *    inline in the immediately-preceding ASSISTANT message's `Tool` part output.
+     * Used both for the warm path (the runtime sends this as-is and the SDK's chat template
+     * applies role wrapping, exactly like Gallery) and as the body of each line in
+     * [renderHistoryAsChatML]. Tool calls/outputs are kept in the
+     * `<tool_call>…</tool_call>` / `<tool_result>…</tool_result>` shape the prompt prefix
+     * teaches the model, preserving prompt-engineered tool-calling continuity across turns.
      */
+    private fun renderTurnRawText(msg: UIMessage): String = buildString {
+        when (msg.role) {
+            MessageRole.USER -> {
+                append(
+                    msg.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
+                )
+            }
+            MessageRole.ASSISTANT -> {
+                // Walk the parts in order so an assistant turn that interleaves text +
+                // tool calls is reconstructed faithfully.
+                for (part in msg.parts) {
+                    when (part) {
+                        is UIMessagePart.Text -> append(part.text)
+                        is UIMessagePart.Tool -> {
+                            val callJson = """{"name":"${part.toolName}","arguments":${part.input.ifBlank { "{}" }}}"""
+                            append("<tool_call>").append(callJson).append("</tool_call>")
+                            if (part.isExecuted) {
+                                val outText = part.output
+                                    .filterIsInstance<UIMessagePart.Text>()
+                                    .joinToString("") { it.text }
+                                if (outText.isNotEmpty()) {
+                                    append("\n<tool_result>").append(outText).append("</tool_result>")
+                                }
+                            }
+                        }
+                        else -> { /* image/audio/document parts not yet wired into LiteRT input */ }
+                    }
+                }
+            }
+            else -> { /* SYSTEM / TOOL are filtered out by the caller */ }
+        }
+    }
+
+    /** Convert a message into a [Turn] for the runtime's warm/cold KV-cache decision. */
+    private fun UIMessage.toTurn(): Turn {
+        val turnRole = when (this.role) {
+            MessageRole.USER -> ROLE_USER
+            MessageRole.ASSISTANT -> ROLE_ASSISTANT
+            else -> "other"
+        }
+        return Turn(turnRole, renderTurnRawText(this))
+    }
+
+    /**
+     * The cold-path render of the (already SYSTEM/TOOL-filtered) history — what the runtime
+     * sends when it cannot reuse a warm KV cache.
+     *
+     * A single message is sent raw, so the SDK chat template wraps it cleanly (identical to
+     * the warm path). Multiple messages are crammed into one marker-formatted ChatML blob:
+     * Qwen/Gemma recognise the inner "User:/Assistant:" markers from their instruction-tuning
+     * data even when the template only wraps the OUTER content.
+     */
+    private fun renderColdBlob(messages: List<UIMessage>): String =
+        if (messages.size == 1) renderTurnRawText(messages[0])
+        else renderHistoryAsChatML(messages)
+
     private fun renderHistoryAsChatML(messages: List<UIMessage>): String = buildString {
         var first = true
         for (msg in messages) {
@@ -443,34 +480,8 @@ class LiteRtProvider(
             if (!first) append("\n")
             first = false
             when (msg.role) {
-                MessageRole.USER -> {
-                    val text = msg.parts.filterIsInstance<UIMessagePart.Text>()
-                        .joinToString("") { it.text }
-                    append("User: ").append(text)
-                }
-                MessageRole.ASSISTANT -> {
-                    append("Assistant: ")
-                    // Walk the parts in order so an assistant turn that interleaves text +
-                    // tool calls is reconstructed faithfully.
-                    for (part in msg.parts) {
-                        when (part) {
-                            is UIMessagePart.Text -> append(part.text)
-                            is UIMessagePart.Tool -> {
-                                val callJson = """{"name":"${part.toolName}","arguments":${part.input.ifBlank { "{}" }}}"""
-                                append("<tool_call>").append(callJson).append("</tool_call>")
-                                if (part.isExecuted) {
-                                    val outText = part.output
-                                        .filterIsInstance<UIMessagePart.Text>()
-                                        .joinToString("") { it.text }
-                                    if (outText.isNotEmpty()) {
-                                        append("\n<tool_result>").append(outText).append("</tool_result>")
-                                    }
-                                }
-                            }
-                            else -> { /* image/audio/document parts not yet wired into LiteRT input */ }
-                        }
-                    }
-                }
+                MessageRole.USER -> append("User: ").append(renderTurnRawText(msg))
+                MessageRole.ASSISTANT -> append("Assistant: ").append(renderTurnRawText(msg))
                 else -> { /* unreachable — filtered above */ }
             }
         }
@@ -528,7 +539,7 @@ class LiteRtProvider(
                 "This model is multimodal (vision) and the GPU vision executor failed " +
                     "to initialise on this device. The most reliable workaround on devices " +
                     "without compatible GPU compute is to pick a text-only model: " +
-                    "Gemma3-1B-IT, Qwen2.5-1.5B-Instruct, or DeepSeek-R1-Distill-Qwen-1.5B " +
+                    "Gemma3-1B-IT or Qwen2.5-1.5B-Instruct " +
                     "from the catalog in Settings → Local · LiteRT.",
                 t,
             )
