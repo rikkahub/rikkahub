@@ -6,7 +6,7 @@
 
 **Your phone, automated.**
 
-A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native Android LLM chat client into a real on-device agent: 70+ device tools, AI-authored workflows, scheduled jobs, an in-app browser the AI drives, SSH, screen automation, file manager, music player, voice transcription, and a remote Telegram bot. All opt-in.
+A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native Android LLM chat client into a real on-device agent: 80+ device tools, AI-authored workflows, scheduled jobs, an in-app browser the AI drives, SSH, screen automation, file manager, music player, voice transcription, downloadable on-device LLMs, and a remote Telegram bot. All opt-in.
 
 <p>
   <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/v/release/ExTV/rikkahub-agent?include_prereleases&style=flat-square&label=release&color=blue" alt="Release" /></a>
@@ -190,7 +190,7 @@ Plus: passwords and API keys never make it into log files. The Telegram bot igno
 ## 🚀 Quick Start
 
 1. **Install**: download the latest **`*-release.apk`** from [Releases](https://github.com/ExTV/rikkahub-agent/releases/latest). Allow install from unknown sources, then open. (One-time note: if you still have an old debug build of RikkaHub Agent installed, uninstall it first — the release build is signed differently and won't upgrade over it.)
-2. **Add an LLM provider**: Settings, then Providers, pick one, paste your API key. (Pixel 8/9/10 users can flip on the built-in **AICore** card for fully on-device Gemini Nano. No key, no network.)
+2. **Add an LLM provider**: Settings, then Providers, pick one, paste your API key. For fully on-device inference with no key and no network, open the **Local · LiteRT** provider and download a local model (Gemma, Qwen) — it runs on any device and uses the GPU automatically where supported. Pixel 8/9/10 users can also flip on the built-in **AICore** card for Gemini Nano.
 3. **Turn on what you want**: Settings, then Assistants, tap your assistant, then **Local Tools**, and flip the categories you want enabled.
 4. **(Optional) Telegram bot**: message [@BotFather](https://t.me/BotFather) with `/newbot` to get a bot token, then [@userinfobot](https://t.me/userinfobot) with `/start` to get your numeric Telegram user id. Then just say to the assistant in chat: *"Set up the Telegram bot. Token is `<your token>`. My user id is `<your id>`. Set me as the default chat. Enable it."* It'll handle the rest.
 
