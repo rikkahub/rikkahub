@@ -59,7 +59,7 @@ Each of those is a one-line setup. The phone runs them in the background while y
 
 ### Control your phone
 
-Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the torch on, change brightness or volume, post a notification, vibrate, share something, or read your battery, WiFi, signal, location, sensors, contacts, and SMS. Over 70 tools, all built into Android, no extra apps required. Each one stays off until you flip it on.
+Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the torch on, change brightness or volume, post a notification, vibrate, share something, or read your battery, WiFi, signal, location, sensors, contacts, and SMS. It can also send an SMS, set the wallpaper, read and write NFC tags, sign and encrypt data with the Android Keystore, reach external storage and SD cards, and zip or unzip archives. Over 80 tools, all built into Android, no extra apps required. Each one stays off until you flip it on.
 
 </td>
 <td width="50%" valign="top">
@@ -211,7 +211,7 @@ If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.
 
 ## 🌍 Languages
 
-The interface ships in **English, 简体中文, 繁體中文, 日本語, 한국어, Русский, and العربية**. The app follows your system language automatically and falls back to English for anything not yet translated.
+The interface ships in **English, 简体中文, 繁體中文, 日本語, 한국어, Русский, and العربية**. The app follows your system language automatically and falls back to English for anything not yet translated. Right-to-left languages render correctly in chat and markdown — code blocks stay left-to-right — and Arabic, Persian, and Urdu are available as translator languages.
 
 ---
 
@@ -242,6 +242,7 @@ Stands on the shoulders of giants:
 | [whisper.cpp](https://github.com/ggerganov/whisper.cpp)              | On-device speech-to-text via Termux                 |
 | [Termux](https://github.com/termux/termux-app)                       | Shell + package manager the agent uses for shell-out |
 | [JSch (mwiede fork)](https://github.com/mwiede/jsch)                 | Native SSH client                                   |
+| [FlorisBoard](https://github.com/florisboard/florisboard)            | Base for the optional [agent-keyboard](https://github.com/ExTV/agent-keyboard) companion |
 
 This fork is unaffiliated with the upstream RikkaHub maintainers. All credit for the underlying chat client, provider abstraction, and UI design goes to the upstream team.
 
