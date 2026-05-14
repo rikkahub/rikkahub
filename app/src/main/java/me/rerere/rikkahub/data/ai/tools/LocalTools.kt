@@ -192,6 +192,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("nfc")                  data object Nfc                 : LocalToolOption()
     @Serializable @SerialName("external_storage")     data object ExternalStorage     : LocalToolOption()
     @Serializable @SerialName("archive")              data object Archive             : LocalToolOption()
+    @Serializable @SerialName("keyboard_control")     data object KeyboardControl     : LocalToolOption()
 }
 
 private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
@@ -313,6 +314,8 @@ class LocalTools(
     private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore,
     // Shared OkHttp singleton (NetworkChangeMonitor-registered) — backs the web_fetch tool.
     private val okHttpClient: okhttp3.OkHttpClient,
+    // agent-keyboard IPC client — backs the keyboard_* tools (drives the active text field).
+    private val keyboardApiClient: me.rerere.rikkahub.data.keyboard.KeyboardApiClient,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -901,6 +904,19 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.data.ai.tools.local.zipFilesTool(context))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.unzipFileTool(context))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listZipContentsTool(context))
+        }
+        if (options.contains(LocalToolOption.KeyboardControl)) {
+            // Drives the active text field through the co-signed agent-keyboard IME.
+            // Write tools are approval-gated via ToolApprovalDefaults; the two read tools
+            // (keyboard_read_field, keyboard_editor_info) are not.
+            tools.add(keyboardTypeTool(keyboardApiClient))
+            tools.add(keyboardReadFieldTool(keyboardApiClient))
+            tools.add(keyboardPressKeyTool(keyboardApiClient))
+            tools.add(keyboardDeleteTool(keyboardApiClient))
+            tools.add(keyboardClearTool(keyboardApiClient))
+            tools.add(keyboardEditorInfoTool(keyboardApiClient))
+            tools.add(keyboardSetCursorTool(keyboardApiClient))
+            tools.add(keyboardSelectRangeTool(keyboardApiClient))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

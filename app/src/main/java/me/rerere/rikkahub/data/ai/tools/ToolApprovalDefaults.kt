@@ -230,6 +230,18 @@ object ToolApprovalDefaults {
         "grant_directory_access",   // persistent read+write to a whole tree (NO_ALWAYS_ALLOW below)
         "zip_files",                // writes an archive to disk / a granted tree
         "unzip_file",               // writes extracted files to disk / a granted tree
+
+        // agent-keyboard control — every tool that mutates the focused text field or cursor
+        // is side-effecting and approval-gated. The two read tools (keyboard_read_field,
+        // keyboard_editor_info) are deliberately NOT in this set. No HARDLINE arm is needed:
+        // typing a string into a focused field is not shell execution, and agent-keyboard
+        // itself refuses password / sensitive fields at the IME boundary.
+        "keyboard_type",
+        "keyboard_press_key",
+        "keyboard_delete",
+        "keyboard_clear",
+        "keyboard_set_cursor",
+        "keyboard_select_range",
     )
 
     /**

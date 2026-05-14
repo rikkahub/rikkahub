@@ -104,6 +104,8 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // agent-keyboard IPC: IKeyboardApi.aidl + EditorInfoBundle.aidl in src/main/aidl.
+        aidl = true
     }
     sourceSets {
         getByName("androidTest").assets.srcDirs("$projectDir/schemas")

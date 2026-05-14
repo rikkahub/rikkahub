@@ -163,6 +163,8 @@ val appModule = module {
         )
     }
 
+    single { me.rerere.rikkahub.data.keyboard.KeyboardApiClient(get()) }
+
     single {
         LocalTools(
             context = get(),
@@ -196,6 +198,7 @@ val appModule = module {
             safPickerResultBuffer = get(),
             storageVolumeGrantStore = get(),
             okHttpClient = get(),
+            keyboardApiClient = get(),
         )
     }
 

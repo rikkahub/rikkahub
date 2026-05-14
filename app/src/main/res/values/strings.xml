@@ -1366,6 +1366,14 @@
   <string name="assistant_page_local_tools_archive_title">Archive (zip)</string>
   <string name="assistant_page_local_tools_archive_desc">Create and extract .zip archives directly. No password support in v1. Works on file:// and content:// URIs.</string>
 
+  <string name="assistant_page_local_tools_section_keyboard">Keyboard control</string>
+  <string name="assistant_page_local_tools_keyboard_title">Keyboard control</string>
+  <string name="assistant_page_local_tools_keyboard_desc">Drive the active text field through the co-signed agent-keyboard app: type, read, press keys, delete, move the cursor, and select text. 8 tools. Write tools require approval per call.</string>
+  <string name="assistant_page_local_tools_keyboard_setup_title">Set up agent-keyboard</string>
+  <string name="assistant_page_local_tools_keyboard_setup_message">Keyboard control needs the companion agent-keyboard app installed AND set as the active keyboard. Install it, then go to Settings &gt; System &gt; Languages &amp; input &gt; On-screen keyboard and switch to agent-keyboard. Without both, every keyboard tool will return an error.</string>
+  <string name="assistant_page_local_tools_keyboard_status_not_installed">agent-keyboard app not installed</string>
+  <string name="assistant_page_local_tools_keyboard_status_installed">agent-keyboard installed - set it as the active keyboard to use these tools</string>
+
   <string name="setting_browser_title">Browser</string>
   <string name="setting_browser_section_browser">Browser</string>
   <string name="setting_browser_open">Open browser</string>
