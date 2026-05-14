@@ -46,8 +46,23 @@ import java.lang.ref.WeakReference
 object BrowserController {
 
     private const val MAX_RECENT_ACTIONS = 20
-    /** Pass 2: 5-minute hard cap on a single AI-driven task to bound runaway loops. */
-    private const val SINGLE_TASK_WINDOW_MS = 5L * 60L * 1000L
+
+    /**
+     * Hard cap on a single AI-driven task to bound runaway loops. User-configurable via
+     * Settings → Browser (GitHub issue #4) — [BrowserPreferences] writes the persisted value
+     * here at app start and on every edit. Defaults to 5 min until the first read settles.
+     * Always holds a value clamped into [BrowserToolDefaults]'s supported range.
+     */
+    @Volatile
+    var singleTaskTimeoutMs: Long = BrowserToolDefaults.DEFAULT_SINGLE_TASK_TIMEOUT_MS
+
+    /**
+     * Per-tool timeout — the `withTimeoutOrNull` budget every browser tool wraps its dispatch
+     * in. User-configurable via Settings → Browser (GitHub issue #4); kept in sync by
+     * [BrowserPreferences]. Defaults to 30 s until the first read settles. Always clamped.
+     */
+    @Volatile
+    var perToolTimeoutMs: Long = BrowserToolDefaults.DEFAULT_PER_TOOL_TIMEOUT_MS
     /** Cache subdir for streamed (headless) screenshots — separate from the `browser-shots`
      *  subdir the explicit browser_screenshot tool writes into so the streamer pipe can be
      *  swept independently if it ever grows unbounded. */
@@ -259,9 +274,10 @@ object BrowserController {
     }
 
     /**
-     * Start (or refresh) the 5-min single-task window. browser_open calls this on every
-     * successful navigation; once a task starts, every browser_* call after the window
-     * expires gets [taskTimeoutEnvelope] until browser_done fires (which clears the timer).
+     * Start (or refresh) the single-task window. browser_open calls this on every successful
+     * navigation; once a task starts, every browser_* call after the window expires gets
+     * [taskTimeoutEnvelope] until browser_done fires (which clears the timer). The window
+     * length is [singleTaskTimeoutMs] — user-configurable in Settings → Browser.
      */
     fun startTaskWindow() {
         currentTaskStartedAt = System.currentTimeMillis()
@@ -274,12 +290,12 @@ object BrowserController {
 
     /**
      * Returns true if no task is in flight OR the in-flight task hasn't yet exhausted its
-     * 5-minute budget. Tools call this BEFORE doing any work so a runaway loop costs at
-     * most one envelope per call after the cap.
+     * configured single-task budget ([singleTaskTimeoutMs]). Tools call this BEFORE doing any
+     * work so a runaway loop costs at most one envelope per call after the cap.
      */
     fun isWithinTaskWindow(): Boolean {
         val started = currentTaskStartedAt ?: return true
-        return System.currentTimeMillis() - started < SINGLE_TASK_WINDOW_MS
+        return System.currentTimeMillis() - started < singleTaskTimeoutMs
     }
 
     /**

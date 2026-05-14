@@ -51,9 +51,16 @@ import kotlin.uuid.Uuid
  * user has explicitly disabled.
  */
 
-private const val TOOL_TIMEOUT_MS = 30_000L
 private const val MAX_SCREENSHOT_HEIGHT_PX = 8192
 private const val SCREENSHOT_CACHE_SUBDIR = "browser-shots"
+
+/**
+ * Per-tool timeout budget every browser tool wraps its dispatch in. User-configurable via
+ * Settings → Browser (GitHub issue #4) — resolved fresh on each tool call from
+ * [BrowserController.perToolTimeoutMs], which [me.rerere.rikkahub.browser.BrowserPreferences]
+ * keeps in sync with the persisted value.
+ */
+private val toolTimeoutMs: Long get() = BrowserController.perToolTimeoutMs
 
 /**
  * Pass 3: appended to every browser tool's description so the LLM knows that in headless
@@ -92,7 +99,7 @@ private fun isHeadlessInvocation(ctx: ToolInvocationContext?): Boolean {
 private fun timeoutEnvelope(toolName: String): JsonObject = buildJsonObject {
     put("error", "tool_timeout")
     put("tool", toolName)
-    put("recovery", "The browser tool exceeded its $TOOL_TIMEOUT_MS-ms budget. Retry, or simplify the selector.")
+    put("recovery", "The browser tool exceeded its $toolTimeoutMs-ms budget. Retry, or simplify the selector.")
 }
 
 private fun missingArgEnvelope(name: String, detail: String): JsonObject = buildJsonObject {
@@ -138,7 +145,7 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
         val rawOut = if (url == null) {
             missingArgEnvelope("url", "url is required and must be a non-empty string")
         } else {
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            withTimeoutOrNull(toolTimeoutMs) {
                 // Pass 3 mode picker. If the caller is a Telegram / cron / sub-agent
                 // conversation, run in headless mode — no on-screen Activity, screenshots
                 // streamed to the calling chat after every state-changing tool. Otherwise
@@ -232,7 +239,7 @@ fun browserCurrentUrlTool(): Tool = Tool(
     description = "Return the browser's current URL and page title. {url, title}. browser_not_open if the browser isn't open.$TELEGRAM_HEADLESS_CUE",
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
     execute = {
-        val out = withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+        val out = withTimeoutOrNull(toolTimeoutMs) {
             BrowserControllerHandle.withController {
                 buildJsonObject {
                     put("url", webView.url.orEmpty())
@@ -260,7 +267,7 @@ fun browserScreenshotTool(context: Context): Tool = Tool(
     execute = { input ->
         val fullPage = input.jsonObject["full_page"]?.jsonPrimitive?.booleanOrNull == true
         val parts = mutableListOf<UIMessagePart>()
-        val out = withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+        val out = withTimeoutOrNull(toolTimeoutMs) {
             BrowserControllerHandle.withController {
                 val (path, w, h) = withContext(Dispatchers.Main) {
                     val width = webView.width.coerceAtLeast(1)
@@ -342,7 +349,7 @@ fun browserGetLinksTool(): Tool = Tool(
     execute = { input ->
         val selector = (input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull
             ?.takeIf { it.isNotBlank() }) ?: "body"
-        val out = withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+        val out = withTimeoutOrNull(toolTimeoutMs) {
             BrowserControllerHandle.withController {
                 val js = """(function(){
                     try {
@@ -392,7 +399,7 @@ fun browserWaitForTool(): Tool = Tool(
             })
             put("timeout_ms", buildJsonObject {
                 put("type", "integer")
-                put("description", "Max wait in ms (default 10000, capped at 30000)")
+                put("description", "Max wait in ms (default 10000, capped at the configured per-tool timeout)")
             })
         }, required = listOf("selector"))
     },
@@ -401,12 +408,14 @@ fun browserWaitForTool(): Tool = Tool(
         val out = if (selector == null) {
             missingArgEnvelope("selector", "selector is required and must be a non-empty CSS selector")
         } else {
-            // Cap the user-supplied timeout at our 30 s tool budget so the LLM can't ask
-            // for a 5-minute wait and starve every other tool call. The withTimeoutOrNull
-            // below would catch this anyway, but capping here gives a clean envelope.
+            // Cap the user-supplied timeout at our per-tool budget so the LLM can't ask for a
+            // longer wait and starve every other tool call. The withTimeoutOrNull below would
+            // catch this anyway, but capping here gives a clean envelope. The cap tracks the
+            // user-configured per-tool timeout (Settings → Browser).
             val timeoutMs = (input.jsonObject["timeout_ms"]?.jsonPrimitive?.intOrNull ?: 10_000)
-                .coerceIn(200, 30_000)
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+                .toLong()
+                .coerceIn(200L, toolTimeoutMs)
+            withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     val started = System.currentTimeMillis()
                     val deadline = started + timeoutMs
@@ -440,7 +449,7 @@ fun browserClickTool(): Tool = Tool(
         val out = if (selector == null) {
             missingArgEnvelope("selector", "selector is required and must be a non-empty CSS selector")
         } else {
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     withDiff(full) {
                         val js = """(function(){
@@ -493,7 +502,7 @@ fun browserTypeTool(): Tool = Tool(
         val out = when {
             selector == null -> missingArgEnvelope("selector", "selector is required")
             text == null -> missingArgEnvelope("text", "text is required (use empty string to clear)")
-            else -> withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            else -> withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     withDiff(full) {
                         // Use both 'input' and 'change' events to satisfy frameworks that listen
@@ -548,7 +557,7 @@ fun browserScrollTool(): Tool = Tool(
         val out = if (direction == null || direction !in setOf("up", "down", "top", "bottom")) {
             missingArgEnvelope("direction", "direction must be one of [up, down, top, bottom]")
         } else {
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     val js = """(function(){
                         try {
@@ -595,7 +604,7 @@ fun browserSubmitTool(): Tool = Tool(
         val out = if (selector == null) {
             missingArgEnvelope("selector", "selector is required")
         } else {
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     withDiff(full) {
                         val js = """(function(){
@@ -649,7 +658,7 @@ fun browserSelectTool(): Tool = Tool(
         val out = when {
             selector == null -> missingArgEnvelope("selector", "selector is required")
             value == null -> missingArgEnvelope("value", "value is required")
-            else -> withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            else -> withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     withDiff(full) {
                         val js = """(function(){
@@ -697,7 +706,7 @@ fun browserPressKeyTool(): Tool = Tool(
         val out = if (key == null) {
             missingArgEnvelope("key", "key is required (e.g. 'Enter', 'Escape')")
         } else {
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     withDiff(full) {
                         val js = """(function(){
@@ -744,9 +753,9 @@ fun browserEvalJsTool(): Tool = Tool(
         val out = if (code == null) {
             missingArgEnvelope("code", "code is required")
         } else {
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
-                    val raw = webView.evaluateJavascriptAsync(code, TOOL_TIMEOUT_MS - 1_000L)
+                    val raw = webView.evaluateJavascriptAsync(code, toolTimeoutMs - 1_000L)
                     BrowserController.appendAction("Run JS")
                     buildJsonObject { put("result", raw ?: "null") }
                 }
@@ -807,7 +816,7 @@ fun browserClickAndReadTool(): Tool = Tool(
         val out = if (selector == null) {
             missingArgEnvelope("selector", "selector is required")
         } else {
-            withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+            withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
                     val before = if (mode == "diff") captureBodyText() else ""
                     val titleBefore = withContext(Dispatchers.Main) { webView.title.orEmpty() }
@@ -1088,7 +1097,7 @@ private suspend fun runReadHelper(
     // model can't tell us to grab a megabyte of HTML).
     val maxChars = (input.jsonObject["max_chars"]?.jsonPrimitive?.intOrNull ?: defaultMax)
         .coerceIn(100, 64 * 1024)
-    return withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+    return withTimeoutOrNull(toolTimeoutMs) {
         BrowserControllerHandle.withController {
             parseJsResult(webView.evaluateJavascriptAsync(jsBuilder(selector, maxChars)))
         }
@@ -1118,7 +1127,7 @@ private suspend fun runGetText(input: kotlinx.serialization.json.JsonElement): J
     val mode = input.jsonObject["extract_mode"]?.jsonPrimitive?.contentOrNull?.lowercase()
         ?.takeIf { it in setOf("auto", "readability", "raw") } ?: "auto"
 
-    return withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+    return withTimeoutOrNull(toolTimeoutMs) {
         BrowserControllerHandle.withController {
             // Selector arg trumps everything — the model is being explicit, honour it.
             if (explicitSelector != null) {
@@ -1188,7 +1197,7 @@ private fun clipText(text: String, maxChars: Int): Pair<String, Boolean> =
     else text.substring(0, maxChars) to true
 
 private suspend fun runHistoryNav(toolName: String, forward: Boolean): JsonObject {
-    val out = withTimeoutOrNull(TOOL_TIMEOUT_MS) {
+    val out = withTimeoutOrNull(toolTimeoutMs) {
         BrowserControllerHandle.withController {
             val ok = withContext(Dispatchers.Main) {
                 if (forward) {

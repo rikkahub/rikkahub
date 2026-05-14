@@ -1241,13 +1241,11 @@
   <string name="setting_browser_open">ブラウザを開く</string>
   <string name="setting_browser_open_desc">ブラウザを about:blank で起動 — AI に引き継がせる前に一度ログインするのに便利です。</string>
   <string name="setting_browser_per_tool_timeout">ツールごとのタイムアウト</string>
-  <string name="setting_browser_per_tool_timeout_value">30 秒</string>
   <string name="setting_browser_search_engine">検索エンジン</string>
   <string name="setting_browser_search_engine_desc">DuckDuckGo（デフォルト）— 切り替えは browser_search の提供開始後に有効になります。</string>
   <string name="setting_browser_section_browser">ブラウザ</string>
   <string name="setting_browser_section_defaults">デフォルトと制限</string>
   <string name="setting_browser_single_task_timeout">単一タスクのタイムアウト</string>
-  <string name="setting_browser_single_task_timeout_value">5 分</string>
   <string name="setting_browser_title">ブラウザ</string>
   <string name="setting_browser_tool_back_desc">ブラウザ履歴を戻ります。</string>
   <string name="setting_browser_tool_back_title">戻る</string>

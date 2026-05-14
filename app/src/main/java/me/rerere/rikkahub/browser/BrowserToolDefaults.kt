@@ -76,4 +76,30 @@ object BrowserToolDefaults {
         toolName in LOOP_CONTROL_TOOLS -> Category.LOOP_CONTROL
         else -> Category.READ
     }
+
+    // --- Timeout settings (GitHub issue #4: user-configurable) -------------------------------
+    //
+    // The issue asked for "unlimited", but a truly unbounded task can wedge the Telegram bot
+    // (it blocks on generation completing) and burn battery silently — see CLAUDE.md's "every
+    // tool MUST have a hard timeout" rule. So instead of unlimited we expose a generous
+    // configurable range with a hard ceiling. Input from the Settings UI is clamped to these
+    // bounds via [clampPerToolTimeoutMs] / [clampSingleTaskTimeoutMs].
+
+    /** Per-tool timeout (`withTimeoutOrNull` around each browser tool dispatch). */
+    const val DEFAULT_PER_TOOL_TIMEOUT_MS = 30_000L
+    const val MIN_PER_TOOL_TIMEOUT_MS = 10_000L          // 10 s
+    const val MAX_PER_TOOL_TIMEOUT_MS = 600_000L         // 10 min
+
+    /** Single-task window (hard cap on one AI-driven browser task to bound runaway loops). */
+    const val DEFAULT_SINGLE_TASK_TIMEOUT_MS = 300_000L  // 5 min
+    const val MIN_SINGLE_TASK_TIMEOUT_MS = 60_000L       // 1 min
+    const val MAX_SINGLE_TASK_TIMEOUT_MS = 3_600_000L    // 60 min
+
+    /** Clamp a per-tool timeout (ms) into the supported range. */
+    fun clampPerToolTimeoutMs(ms: Long): Long =
+        ms.coerceIn(MIN_PER_TOOL_TIMEOUT_MS, MAX_PER_TOOL_TIMEOUT_MS)
+
+    /** Clamp a single-task timeout (ms) into the supported range. */
+    fun clampSingleTaskTimeoutMs(ms: Long): Long =
+        ms.coerceIn(MIN_SINGLE_TASK_TIMEOUT_MS, MAX_SINGLE_TASK_TIMEOUT_MS)
 }

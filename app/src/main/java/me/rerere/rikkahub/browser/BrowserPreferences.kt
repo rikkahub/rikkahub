@@ -4,10 +4,17 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 private val Context.browserDataStore by preferencesDataStore(name = "browser_prefs")
 
@@ -29,6 +36,57 @@ class BrowserPreferences(private val context: Context) {
     private val store = context.browserDataStore
 
     private fun keyFor(toolName: String) = booleanPreferencesKey("tool_$toolName")
+
+    // --- Timeout settings (GitHub issue #4) --------------------------------------------------
+
+    private val perToolTimeoutKey = longPreferencesKey("per_tool_timeout_ms")
+    private val singleTaskTimeoutKey = longPreferencesKey("single_task_timeout_ms")
+
+    init {
+        // Push the persisted (or default) timeout values into [BrowserController] — the
+        // synchronous runtime source of truth read by every browser tool's withTimeoutOrNull
+        // and the task-window check. BrowserPreferences is a Koin singleton constructed at
+        // app start, so this collector arms the values before the first tool call and keeps
+        // them in sync when the user edits them in Settings → Browser.
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        scope.launch {
+            perToolTimeoutFlow()
+                .distinctUntilChanged()
+                .onEach { BrowserController.perToolTimeoutMs = it }
+                .collect {}
+        }
+        scope.launch {
+            singleTaskTimeoutFlow()
+                .distinctUntilChanged()
+                .onEach { BrowserController.singleTaskTimeoutMs = it }
+                .collect {}
+        }
+    }
+
+    /** Per-tool timeout (ms). Missing-key safe; always clamped into the supported range. */
+    fun perToolTimeoutFlow(): Flow<Long> = store.data.map { prefs ->
+        BrowserToolDefaults.clampPerToolTimeoutMs(
+            prefs[perToolTimeoutKey] ?: BrowserToolDefaults.DEFAULT_PER_TOOL_TIMEOUT_MS
+        )
+    }
+
+    /** Single-task timeout (ms). Missing-key safe; always clamped into the supported range. */
+    fun singleTaskTimeoutFlow(): Flow<Long> = store.data.map { prefs ->
+        BrowserToolDefaults.clampSingleTaskTimeoutMs(
+            prefs[singleTaskTimeoutKey] ?: BrowserToolDefaults.DEFAULT_SINGLE_TASK_TIMEOUT_MS
+        )
+    }
+
+    /** Persist the per-tool timeout. Input is clamped before write so the store never holds
+     *  an out-of-range value. */
+    suspend fun setPerToolTimeoutMs(ms: Long) {
+        store.edit { it[perToolTimeoutKey] = BrowserToolDefaults.clampPerToolTimeoutMs(ms) }
+    }
+
+    /** Persist the single-task timeout. Input is clamped before write. */
+    suspend fun setSingleTaskTimeoutMs(ms: Long) {
+        store.edit { it[singleTaskTimeoutKey] = BrowserToolDefaults.clampSingleTaskTimeoutMs(ms) }
+    }
 
     /**
      * Reads the current toggle state for [toolName], falling back to

@@ -1401,9 +1401,11 @@
   <string name="setting_browser_search_engine">Search engine</string>
   <string name="setting_browser_search_engine_desc">DuckDuckGo (default) — switching takes effect once browser_search ships.</string>
   <string name="setting_browser_per_tool_timeout">Per-tool timeout</string>
-  <string name="setting_browser_per_tool_timeout_value">30 s</string>
+  <string name="setting_browser_per_tool_timeout_desc">Hard time budget for each browser tool call. Range 10 s to 10 min.</string>
+  <string name="setting_browser_per_tool_timeout_unit">seconds</string>
   <string name="setting_browser_single_task_timeout">Single-task timeout</string>
-  <string name="setting_browser_single_task_timeout_value">5 min</string>
+  <string name="setting_browser_single_task_timeout_desc">Hard cap on one AI-driven browser task to bound runaway loops. Range 1 min to 60 min.</string>
+  <string name="setting_browser_single_task_timeout_unit">minutes</string>
 
   <string name="browser_address_bar_close">Close browser</string>
   <string name="browser_address_bar_back">Browser back</string>

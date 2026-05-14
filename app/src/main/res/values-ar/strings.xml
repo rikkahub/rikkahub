@@ -1358,9 +1358,7 @@
   <string name="setting_browser_search_engine">محرك البحث</string>
   <string name="setting_browser_search_engine_desc">DuckDuckGo (افتراضي) — يسري التبديل بمجرد إصدار browser_search.</string>
   <string name="setting_browser_per_tool_timeout">مهلة كل أداة</string>
-  <string name="setting_browser_per_tool_timeout_value">30 ث</string>
   <string name="setting_browser_single_task_timeout">مهلة المهمة الواحدة</string>
-  <string name="setting_browser_single_task_timeout_value">5 د</string>
   <string name="browser_address_bar_close">إغلاق المتصفح</string>
   <string name="browser_address_bar_back">رجوع المتصفح</string>
   <string name="browser_address_bar_forward">تقدّم المتصفح</string>
