@@ -32,8 +32,18 @@ import java.io.File
  * No approval required — same risk profile as `take_screenshot`, which is also
  * auto-approved (the LLM can already see arbitrary screen content; reading a file
  * the file tools can already read isn't a privilege escalation).
+ *
+ * [modelCanSeeImages] gates what the LLM is told in the result envelope. The
+ * `UIMessagePart.Image` is always returned (it's the *user's* display — the in-app bubble
+ * or the Telegram photo). But when the active model has no image input modality, the text
+ * envelope says so plainly: a text-only model handed `width`/`height`/`success:true` with
+ * no caveat treats it as "I looked at it" and confabulates a description. Telling it
+ * `visible_to_you: false` + an OCR pointer kills that at the source.
  */
-fun showImageTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = Tool(
+fun showImageTool(
+    @Suppress("UNUSED_PARAMETER") context: Context,
+    modelCanSeeImages: Boolean = true,
+): Tool = Tool(
     name = "show_image",
     description = "Display an image file inline in the chat (Telegram: sends as a real photo). Use when the user wants to see an image at a known path, or after take_photo/take_screenshot to surface the result. Path accepts ~ or absolute. Supported: PNG, JPEG, WebP, GIF, BMP.",
     parameters = {
@@ -72,17 +82,52 @@ fun showImageTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = Tool(
         }
         val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, opts)
-        val envelope = buildJsonObject {
-            put("success", true)
-            put("path", file.absolutePath)
-            put("mime", mime)
-            put("size_bytes", file.length())
-            put("width", opts.outWidth)
-            put("height", opts.outHeight)
-        }.toString()
+        val envelope = buildShowImageEnvelope(
+            path = file.absolutePath,
+            mime = mime,
+            sizeBytes = file.length(),
+            width = opts.outWidth,
+            height = opts.outHeight,
+            modelCanSeeImages = modelCanSeeImages,
+        )
         listOf(
             UIMessagePart.Image(url = "file://${file.absolutePath}"),
             UIMessagePart.Text(envelope),
         )
     },
 )
+
+/**
+ * Builds the `show_image` result envelope (the text part the LLM reads). Extracted as a
+ * pure function so it's unit-testable without Android's BitmapFactory.
+ *
+ * Vision models get the envelope unchanged — `success` + the file metadata — because they
+ * see the `UIMessagePart.Image` directly. Text-only models additionally get
+ * `visible_to_you: false` and a `note` pointing them at OCR, so they don't confabulate a
+ * description from `width`/`height` alone.
+ */
+internal fun buildShowImageEnvelope(
+    path: String,
+    mime: String,
+    sizeBytes: Long,
+    width: Int,
+    height: Int,
+    modelCanSeeImages: Boolean,
+): String = buildJsonObject {
+    put("success", true)
+    put("path", path)
+    put("mime", mime)
+    put("size_bytes", sizeBytes)
+    put("width", width)
+    put("height", height)
+    if (!modelCanSeeImages) {
+        put("visible_to_you", false)
+        put(
+            "note",
+            "The image is now displayed to the user, but the current model has no " +
+                "vision capability — you cannot see its contents. Do not describe or " +
+                "guess what the image shows. To read it, OCR or otherwise process the " +
+                "file at `path` (e.g. `tesseract <path> stdout` via termux_run_command).",
+        )
+    }
+}.toString()

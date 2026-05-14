@@ -21,11 +21,18 @@ package me.rerere.rikkahub.data.ai.tools
  *  - [isHeadless]: true when the dispatch is happening from a system flow rather than the
  *    user typing in a chat. Sub-agents, cron jobs, workflows, and external-automation
  *    runs all set this to true so the recursion guard fires.
+ *  - [modelCanSeeImages]: true iff the model handling this turn has image input in its
+ *    modalities. `show_image` reads this so a text-only model is told plainly it cannot
+ *    see the picture (and must OCR / file-process it) instead of being handed dimensions
+ *    that read like "I looked at it" — the root cause of confabulated image descriptions.
+ *    Defaults to `true`: the no-knowledge fallback preserves the pre-fix behaviour, and
+ *    ChatService (the only LLM-driven dispatch path) always sets it explicitly.
  */
 data class ToolInvocationContext(
     val callerAssistantId: String? = null,
     val callerConversationId: String? = null,
     val isHeadless: Boolean = false,
+    val modelCanSeeImages: Boolean = true,
 ) {
     companion object {
         /** No-knowledge fallback. Factories that depend on context MUST handle this. */

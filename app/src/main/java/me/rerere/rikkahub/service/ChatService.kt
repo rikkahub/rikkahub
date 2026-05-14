@@ -40,6 +40,7 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
@@ -827,6 +828,9 @@ class ChatService(
                         callerConversationId = conversationId.toString(),
                         isHeadless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations
                             .isHeadless(conversationId),
+                        // show_image keys its result envelope off this — a text-only model
+                        // gets told it cannot see the image instead of confabulating one.
+                        modelCanSeeImages = Modality.IMAGE in model.inputModalities,
                     )
                     addAll(localTools.getTools(assistant.localTools, invocationCtx))
                     if (assistant.enabledSkills.isNotEmpty()) {

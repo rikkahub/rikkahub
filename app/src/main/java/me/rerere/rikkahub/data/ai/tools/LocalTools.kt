@@ -748,7 +748,7 @@ class LocalTools(
             tools.add(createDirectoryTool())
             tools.add(fileInfoTool())
             tools.add(findFilesTool())
-            tools.add(showImageTool(context))  // inline image display; no separate auto-stream needed
+            tools.add(showImageTool(context, invocationContext.modelCanSeeImages))  // inline image display; no separate auto-stream needed
             tools.add(openFileTool(context, invocationContext, interactiveToolStreamer))
         }
         if (options.contains(LocalToolOption.McpControl)) {

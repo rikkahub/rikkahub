@@ -31,6 +31,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
@@ -909,10 +910,19 @@ class TelegramBotService : Service() {
                 append("retry the same tool with different args or pivot to manual termux commands.\n")
             }
             if (hasPhotoAttachment) {
-                append("IMAGE ATTACHMENT. This message includes one or more photos. Their saved ")
-                append("file path(s) are listed in the message text. If you have vision you can ")
-                append("view the image directly; otherwise process the file at that path ")
-                append("(e.g. OCR with `tesseract` via Termux).\n")
+                val modelCanSeeImages = model?.inputModalities?.contains(Modality.IMAGE) == true
+                if (modelCanSeeImages) {
+                    append("IMAGE ATTACHMENT. This message includes one or more photos. You can ")
+                    append("view them directly. Their saved file path(s) are also listed in the ")
+                    append("message text if you need to process the file (e.g. OCR).\n")
+                } else {
+                    append("IMAGE ATTACHMENT — YOU CANNOT SEE IT. This message includes one or more ")
+                    append("photos, but the current model has no vision capability. Do NOT describe ")
+                    append("or guess what the image shows. Their saved file path(s) are listed in ")
+                    append("the message text — to read the contents, OCR the file (e.g. ")
+                    append("`tesseract <path> stdout` via termux_run_command) or process it with ")
+                    append("another file tool.\n")
+                }
             }
             append("]\n\n")
         }
