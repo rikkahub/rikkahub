@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.ai.tools
 
 import android.view.KeyEvent
+import kotlinx.coroutines.delay
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -26,6 +28,11 @@ import me.rerere.rikkahub.data.keyboard.KeyboardApiClient
  * HARDLINE arm: typing a string into a focused field is not shell execution and the
  * keyboard itself refuses password / sensitive fields.
  */
+
+// Settle delay between committing typed text and firing Enter in keyboard_type(submit=true).
+// Gives the target app a beat to commit the text and re-focus before the key event, which
+// is what prevents the type/press_key race that garbles terminal input.
+private const val SUBMIT_SETTLE_DELAY_MS = 120L
 
 // keycode aliases the LLM is likely to use, mapped to android.view.KeyEvent constants.
 private val KEY_NAME_ALIASES: Map<String, Int> = mapOf(
@@ -102,14 +109,24 @@ private inline fun <T> handle(
 fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
     name = "keyboard_type",
     description = "Type text into the currently focused text field on the device via the " +
-        "agent-keyboard IME. Inserts at the cursor. Fails if no field is focused or the " +
-        "field is a password field. Example: keyboard_type(text=\"hello world\").",
+        "agent-keyboard IME. Inserts at the cursor. Set submit=true to press Enter right " +
+        "after typing, as one atomic action - prefer this over a separate keyboard_press_key " +
+        "call, which can race the app and garble input (especially in terminals). Fails if " +
+        "no field is focused or the field is a password field. In terminal-like apps " +
+        "keyboard_read_field returns empty, so take a screenshot first to confirm the prompt " +
+        "is ready before typing. Example: keyboard_type(text=\"whoami\", submit=true).",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("text", buildJsonObject {
                     put("type", "string")
                     put("description", "The text to insert at the cursor.")
+                })
+                put("submit", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "If true, press Enter after typing as one atomic " +
+                        "action (default false). Use for terminals, search boxes, and chat " +
+                        "inputs to avoid a type/press_key race.")
                 })
             },
             required = listOf("text"),
@@ -122,7 +139,23 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
                 "missing_text", "text is required",
                 "Provide the text to type.",
             )
-        handle(client.typeText(text)) { ok { put("typed", text.length) } }
+        val submit = args.jsonObject["submit"]?.jsonPrimitive?.booleanOrNull ?: false
+        when (val typed = client.typeText(text)) {
+            is KeyboardApiClient.Result.Err -> failureEnvelope(typed.failure)
+            is KeyboardApiClient.Result.Ok -> {
+                if (!submit) {
+                    ok { put("typed", text.length) }
+                } else {
+                    // Let the app commit the text and re-focus before Enter fires.
+                    delay(SUBMIT_SETTLE_DELAY_MS)
+                    when (val entered = client.pressKey(KeyEvent.KEYCODE_ENTER)) {
+                        is KeyboardApiClient.Result.Err -> failureEnvelope(entered.failure)
+                        is KeyboardApiClient.Result.Ok ->
+                            ok { put("typed", text.length); put("submitted", true) }
+                    }
+                }
+            }
+        }
     },
 )
 
@@ -130,7 +163,9 @@ fun keyboardReadFieldTool(client: KeyboardApiClient): Tool = Tool(
     name = "keyboard_read_field",
     description = "Read the full text content of the currently focused text field via the " +
         "agent-keyboard IME. Returns the field text and the selected substring (if any). " +
-        "Read-only. Example: keyboard_read_field().",
+        "Read-only. Note: terminal emulators (e.g. Termux) and some custom views do not " +
+        "expose their buffer to the IME, so this can return empty even when text is " +
+        "visible on screen - take a screenshot to read those. Example: keyboard_read_field().",
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
     execute = {
         when (val text = client.getCurrentText()) {
