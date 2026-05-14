@@ -126,6 +126,23 @@ private fun parseHeaders(raw: JsonElement?): List<Pair<String, String>> {
 
 private fun parseUuid(raw: String?): Uuid? = raw?.let { runCatching { Uuid.parse(it.trim()) }.getOrNull() }
 
+/**
+ * Render an [InputSchema] as a plain JSON-Schema-shaped object so the LLM can see each
+ * MCP tool's argument shape. Returns null when the server didn't supply a schema (older
+ * MCP servers, or tools/list responses without inputSchema) — callers omit the field
+ * gracefully in that case rather than emitting an empty object.
+ */
+internal fun inputSchemaJson(schema: InputSchema?): JsonObject? = when (schema) {
+    null -> null
+    is InputSchema.Obj -> buildJsonObject {
+        put("type", "object")
+        put("properties", schema.properties)
+        schema.required?.let { req ->
+            putJsonArray("required") { req.forEach { add(it) } }
+        }
+    }
+}
+
 private fun buildConfig(
     id: Uuid,
     transport: String,
@@ -639,7 +656,8 @@ fun mcpListToolsTool(settingsStore: SettingsStore, manager: McpManager): Tool = 
     description = """
         List the MCP tools exposed by one server (when id is provided), or aggregated across
         all enabled servers (when id is null/absent). Each entry includes server name + id,
-        tool name, description, and whether it requires approval.
+        tool name, description, whether it requires approval, and (when the server supplied
+        one) the tool's input_schema describing its argument shape.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -672,6 +690,10 @@ fun mcpListToolsTool(settingsStore: SettingsStore, manager: McpManager): Tool = 
                         put("description", tool.description ?: "")
                         put("enabled", tool.enable)
                         put("needs_approval", tool.needsApproval)
+                        // Pass the MCP server's per-tool inputSchema through so the LLM
+                        // can see each tool's argument shape. Omitted when the server
+                        // didn't supply one.
+                        inputSchemaJson(tool.inputSchema)?.let { put("input_schema", it) }
                     }
                 }
             }
