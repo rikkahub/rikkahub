@@ -28,6 +28,43 @@ import me.rerere.locallm.AcceleratorProbe
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
 
+/** Role labels used in [Turn] signatures. Kept as plain strings so [turnSignature] is a
+ *  pure function the provider and the runtime can both call without sharing an enum. */
+const val ROLE_USER = "user"
+const val ROLE_ASSISTANT = "assistant"
+
+/**
+ * Stable, content-derived signature for one conversation turn. Used to decide whether the
+ * warm [Conversation]'s KV cache can be reused (see [planTurns]). Length + hashCode keeps
+ * the collision rate negligible; a collision would only cause a (correct) cold reload, never
+ * wrong output.
+ */
+fun turnSignature(role: String, text: String): String = "$role|${text.length}|${text.hashCode()}"
+
+/**
+ * One rendered conversation turn handed from [LiteRtProvider] to [LiteRtRuntime].
+ *
+ * [rawText] is the turn's content WITHOUT any "User:/Assistant:" markers — when this turn is
+ * the single new turn appended to a warm Conversation, [rawText] is sent as-is and the SDK's
+ * chat template applies the role wrapping (the same path Gallery uses). The marker-prefixed
+ * cold blob is built separately by the provider for the rebuild-from-scratch path.
+ */
+data class Turn(val role: String, val rawText: String) {
+    val signature: String get() = turnSignature(role, rawText)
+}
+
+/**
+ * Outcome of [planTurns]: whether the live [Conversation]'s KV cache can be reused.
+ */
+sealed interface TurnPlan {
+    /** Reuse the warm Conversation; send only `history[sendFromIndex]` (guaranteed exactly
+     *  one new turn). The KV cache already holds every turn before [sendFromIndex]. */
+    data class Warm(val sendFromIndex: Int) : TurnPlan
+
+    /** Recreate the Conversation (clearing the KV cache) and send the full cold blob. */
+    data object Cold : TurnPlan
+}
+
 /**
  * Thrown when a `.litertlm` model file is structurally broken in a way that retrying
  * with a different accelerator won't fix (e.g. corrupt tokenizer data, invalid magic
@@ -53,32 +90,34 @@ class LiteRtModelCorruptException(
  *
  *   1. **Skipped `engine.initialize()`.** `Engine(config)` returns a partially-constructed
  *      handle; only `initialize()` actually loads tokenizer, KV cache, and weights into the
- *      backend. Without it, the first generation worked by luck (or didn't), and KV cache
- *      sizing was unset → output truncated at the runtime's hardcoded default.
+ *      backend.
  *   2. **Did not pass `EngineConfig.maxNumTokens`.** The SDK falls back to an internal default
- *      (~16) when `maxNumTokens` is null, so users saw "I" then nothing. Setting it to 4096
- *      (Gallery's `DEFAULT_MAX_TOKEN`) restores normal-length responses.
+ *      (~16) when `maxNumTokens` is null, so users saw "I" then nothing.
  *   3. **Inlined the system prompt as `User: …\nAssistant: …` plain text.** The LiteRT-LM
  *      runtime ships per-model chat templates; without `systemInstruction` going through the
- *      template engine, Qwen2.5 (and any chat-tuned model) emits gibberish — the template's
- *      role tokens are missing.
+ *      template engine, Qwen2.5 (and any chat-tuned model) emits gibberish.
  *
- * This rewrite mirrors `gallery/.../LlmChatModelHelper.kt` line-by-line for the SDK-call
- * sequence. Other behavior (corruption detection, in-session GPU→CPU fallback, accelerator
- * probe caching) is preserved from the v22A original so [LiteRtProvider] keeps compiling.
+ * # KV-cache reuse across turns (the perf rewrite)
  *
- * # Lifecycle
+ * The original recreated the [Conversation] on every [ensureLoaded] call, so every turn
+ * re-prefilled the ENTIRE conversation history from a cold KV cache — turn N paid for
+ * turns 1..N every time. Gallery instead keeps ONE Conversation alive and sends only the
+ * new user message each turn, so the KV cache stays warm and each turn prefills only its
+ * own new tokens.
  *
- * The Engine + Conversation pair are loaded once per
- * (modelPath, accelerator, maxNumTokens, supportImage, supportAudio, speculativeDecoding)
- * tuple and reused across multiple [streamGenerate] calls. Per-conversation knobs
- * (system instruction, tools, sampler params, constrained decoding) recreate the
- * Conversation but keep the Engine — the Engine cold-load is the expensive 10-60s step.
+ * This runtime now does the same. The Conversation is kept across turns when the
+ * (model, accelerator, sampler, system instruction) tuple is unchanged. [streamTurns]
+ * compares the caller's full turn list against [LoadedModel.processed] (the signatures the
+ * live Conversation has already consumed): a clean single-turn append reuses the warm KV
+ * cache; anything else (a new chat, an edited/regenerated turn, a tool round-trip, a config
+ * change) falls back to recreating the Conversation and re-sending the full history. The
+ * cold path is always correct — the warm path is purely an optimisation, and a signature
+ * mismatch can only cost a cold reload, never produce wrong output.
  *
  * # Concurrency
  *
- * A single [mutex] serialises all access. Two concurrent collectors of the same
- * runtime queue up; only one inference is in flight at a time.
+ * A single [mutex] serialises all access. The mutex is held for the full duration of each
+ * inference, so [LoadedModel.processed] is only ever touched by one coroutine at a time.
  */
 class LiteRtRuntime(private val context: Context) {
 
@@ -93,10 +132,8 @@ class LiteRtRuntime(private val context: Context) {
     @Volatile private var sessionFallbackAccelerator: String? = null
 
     /**
-     * Snapshot of every config bit that requires Engine teardown vs. only Conversation
-     * recreation. The Engine is the expensive resource (cold-load 10-60s); the Conversation
-     * is cheap to recreate. This split lets a caller change `systemInstruction` or `tools`
-     * mid-session without paying the Engine reload cost.
+     * Snapshot of every config bit that requires Engine teardown. The Engine is the
+     * expensive resource (cold-load 10-60s); changing any of these forces a full reload.
      */
     private data class EngineKey(
         val modelPath: String,
@@ -107,10 +144,40 @@ class LiteRtRuntime(private val context: Context) {
         val speculativeDecoding: Boolean,
     )
 
-    private data class LoadedModel(
-        val key: EngineKey,
+    /**
+     * Snapshot of every config bit that requires only Conversation recreation (cheap) — NOT
+     * an Engine reload. When this is unchanged the warm Conversation (and its KV cache) is
+     * kept across [ensureLoaded] calls.
+     */
+    private data class ConversationKey(
+        val systemInstructionText: String?,
+        val constrainedDecoding: Boolean,
+        val topK: Int,
+        val topP: Double,
+        val temperature: Double,
+    )
+
+    /** Everything needed to (re)build a [Conversation] for the cold path without re-deriving
+     *  it from scattered call parameters. */
+    private data class ConversationSpec(
+        val systemInstruction: Contents?,
+        val tools: List<ToolProvider>,
+        val constrainedDecoding: Boolean,
+        val topK: Int,
+        val topP: Double,
+        val temperature: Double,
+    )
+
+    private class LoadedModel(
+        val engineKey: EngineKey,
+        var conversationKey: ConversationKey,
+        var conversationSpec: ConversationSpec,
         val engine: Engine,
         var conversation: Conversation,
+        /** Signatures of the turns the live Conversation's KV cache currently holds, in
+         *  order — the caller-supplied history turns plus one synthetic assistant turn for
+         *  the response generated last. Cleared whenever the Conversation is recreated. */
+        val processed: MutableList<String> = mutableListOf(),
     )
 
     /**
@@ -118,14 +185,6 @@ class LiteRtRuntime(private val context: Context) {
      * error message indicates a structural file problem that won't be fixed by switching
      * accelerators or retrying. Returns the original throwable unchanged for transient /
      * hardware errors so the GPU→CPU fallback still works.
-     *
-     * Non-recoverable patterns (file is permanently broken):
-     *   - "Failed to decompress" / "Uncompressed size … exceeds" — corrupt tokenizer chunk
-     *   - "Invalid magic number" — not a valid .litertlm container
-     *   - "No KV cache inputs found" — model built for a different runtime version
-     *   - "FAILED_PRECONDITION" — schema mismatch (usually paired with KV cache message)
-     *   - "INVALID_ARGUMENT" with "tokenizer" / "Section not found" / "Uncompressed size"
-     *     — tokenizer or section header is structurally invalid
      */
     private fun classifyEngineError(modelPath: String, t: Throwable): Throwable {
         val msg = t.message.orEmpty()
@@ -145,9 +204,7 @@ class LiteRtRuntime(private val context: Context) {
      * Map our internal accelerator label → the SDK's [Backend] sealed-class instance.
      *
      * NPU/TPU both map to `Backend.NPU` with the app's native library dir, matching
-     * Gallery's `LlmChatModelHelper.kt` lines 91-94: both labels share the QNN delegate
-     * loader path; "TPU" is just a label the Gallery UI uses for Pixel Tensor and is
-     * still served by the NPU backend under the hood.
+     * Gallery's `LlmChatModelHelper.kt`: both labels share the QNN delegate loader path.
      */
     private fun acceleratorToBackend(accel: String): Backend = when (accel) {
         "QNN", "NPU", "TPU" -> Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
@@ -156,19 +213,16 @@ class LiteRtRuntime(private val context: Context) {
     }
 
     /**
-     * Configure the engine + conversation for the next [streamGenerate] call.
+     * Configure the engine + conversation for the next [streamTurns] call.
      *
-     * Reuses the existing Engine if every Engine-affecting parameter matches
-     * (modelPath, accelerator, maxNumTokens, supportImage, supportAudio, speculativeDecoding).
-     * If only per-conversation knobs change (systemInstruction, tools, sampler, constrained
-     * decoding), the Engine is kept and only the Conversation is recreated — saving the
-     * 10-60s Engine cold-load cost.
+     * Engine reuse: when every [EngineKey] field matches, the (expensive) Engine is kept.
+     * Conversation reuse: when the [ConversationKey] ALSO matches, the warm Conversation —
+     * and its KV cache — is kept untouched, so the next [streamTurns] can warm-continue.
+     * When only the ConversationKey changed (system instruction / sampler), the Engine is
+     * kept but the Conversation is recreated and [LoadedModel.processed] is cleared.
      *
      * When the preferred/probed accelerator fails (e.g. GPU OpenCL/OpenGL stack absent),
-     * automatically retries with CPU. The fallback is remembered in-session so subsequent
-     * loads skip the failed GPU attempt. The persistent accelerator preference in
-     * `LocalRuntimePreferences` is NOT modified — the user can trigger Re-detect to update
-     * it explicitly.
+     * automatically retries with CPU. The fallback is remembered in-session.
      *
      * Returns the resolved accelerator label that was actually used.
      */
@@ -181,7 +235,7 @@ class LiteRtRuntime(private val context: Context) {
         supportImage: Boolean = false,
         supportAudio: Boolean = false,
         speculativeDecoding: Boolean = false,
-        systemInstruction: Contents? = null,
+        systemInstructionText: String? = null,
         tools: List<ToolProvider> = emptyList(),
         constrainedDecoding: Boolean = false,
         topK: Int = 64,
@@ -189,17 +243,13 @@ class LiteRtRuntime(private val context: Context) {
         temperature: Double = 1.0,
     ): String = mutex.withLock {
         // Use in-session fallback if a prior GPU→CPU retry already succeeded this session.
-        // forceCpu wins over a non-null preferredAccel — when the user has the toggle off
-        // (or recovery flipped it), CPU is mandatory for this session.
+        // forceCpu wins over a non-null preferredAccel.
         val accel = if (forceCpu) "CPU"
         else sessionFallbackAccelerator
             ?: preferredAccel
             ?: AcceleratorProbe.probeLiteRt(context)
 
         // Probe the file for speculative-decoding support BEFORE building the engine.
-        // Gallery wraps this in try/catch (line 128-134) because Capabilities() can throw
-        // on malformed files — but we want to keep going either way (a corrupt file will
-        // fail again at engine.initialize() and get classified there).
         val supportsSpeculativeDecoding = try {
             Capabilities(modelPath).use { it.hasSpeculativeDecodingSupport() }
         } catch (_: Throwable) {
@@ -207,7 +257,7 @@ class LiteRtRuntime(private val context: Context) {
         }
         val effectiveSpeculativeDecoding = speculativeDecoding && supportsSpeculativeDecoding
 
-        val desiredKey = EngineKey(
+        val desiredEngineKey = EngineKey(
             modelPath = modelPath,
             accelerator = accel,
             maxNumTokens = maxNumTokens,
@@ -215,50 +265,56 @@ class LiteRtRuntime(private val context: Context) {
             supportAudio = supportAudio,
             speculativeDecoding = effectiveSpeculativeDecoding,
         )
+        val systemInstruction: Contents? =
+            if (!systemInstructionText.isNullOrBlank()) Contents.of(systemInstructionText) else null
+        val desiredConversationKey = ConversationKey(
+            systemInstructionText = systemInstructionText?.takeIf { it.isNotBlank() },
+            constrainedDecoding = constrainedDecoding,
+            topK = topK,
+            topP = topP,
+            temperature = temperature,
+        )
+        val desiredConversationSpec = ConversationSpec(
+            systemInstruction = systemInstruction,
+            tools = tools,
+            constrainedDecoding = constrainedDecoding,
+            topK = topK,
+            topP = topP,
+            temperature = temperature,
+        )
 
         val current = loaded
-        // Engine reuse path: only recreate the Conversation. Saves the 10-60s cold-load.
-        if (current != null && current.key == desiredKey) {
+        if (current != null && current.engineKey == desiredEngineKey) {
+            if (current.conversationKey == desiredConversationKey) {
+                // Full reuse — Engine AND Conversation kept. The KV cache (and therefore
+                // [processed]) is left intact so the next streamTurns can warm-continue.
+                return@withLock accel
+            }
+            // Engine kept, Conversation config changed — recreate just the Conversation.
+            // The KV cache is gone, so [processed] must be cleared.
             try { current.conversation.close() } catch (_: Throwable) {}
-            val newConv = createConversationWithFlags(
+            current.conversation = createConversationWithFlags(
                 engine = current.engine,
-                backend = acceleratorToBackend(accel),
-                systemInstruction = systemInstruction,
-                tools = tools,
-                constrainedDecoding = constrainedDecoding,
-                topK = topK,
-                topP = topP,
-                temperature = temperature,
+                backend = acceleratorToBackend(current.engineKey.accelerator),
+                spec = desiredConversationSpec,
             )
-            current.conversation = newConv
+            current.conversationKey = desiredConversationKey
+            current.conversationSpec = desiredConversationSpec
+            current.processed.clear()
             return@withLock accel
         }
 
         // Engine swap path: tear down any prior Engine + Conversation.
         try { current?.conversation?.close() } catch (_: Throwable) {}
         try { current?.engine?.close() } catch (_: Throwable) {}
+        loaded = null
 
         // Try the preferred accelerator first; fall back to CPU if it isn't already CPU.
         val firstAttempt = runCatching {
-            tryLoadWithBackend(
-                modelPath = modelPath,
-                accel = accel,
-                maxNumTokens = maxNumTokens,
-                supportImage = supportImage,
-                supportAudio = supportAudio,
-                speculativeDecoding = effectiveSpeculativeDecoding,
-                systemInstruction = systemInstruction,
-                tools = tools,
-                constrainedDecoding = constrainedDecoding,
-                topK = topK,
-                topP = topP,
-                temperature = temperature,
-            )
+            tryLoadWithBackend(desiredEngineKey, accel, desiredConversationSpec)
         }
-        val (engine, conv, finalAccel) = firstAttempt.getOrElse { firstError ->
+        val loadResult = firstAttempt.getOrElse { firstError ->
             if (accel == "CPU") {
-                // CPU was already tried. Don't retry; surface the error, classifying as
-                // corrupt if the message matches a non-recoverable structural pattern.
                 throw classifyEngineError(
                     modelPath,
                     RuntimeException(
@@ -271,9 +327,6 @@ class LiteRtRuntime(private val context: Context) {
                     )
                 )
             }
-            // Non-CPU failed. Classify before deciding whether to retry.
-            // If the first error is already a structural/corrupt problem, retrying on CPU
-            // won't help — surface the classified exception immediately.
             val classified = classifyEngineError(modelPath, firstError)
             if (classified is LiteRtModelCorruptException) throw classified
 
@@ -283,18 +336,9 @@ class LiteRtRuntime(private val context: Context) {
             )
             try {
                 tryLoadWithBackend(
-                    modelPath = modelPath,
-                    accel = "CPU",
-                    maxNumTokens = maxNumTokens,
-                    supportImage = supportImage,
-                    supportAudio = supportAudio,
-                    speculativeDecoding = effectiveSpeculativeDecoding,
-                    systemInstruction = systemInstruction,
-                    tools = tools,
-                    constrainedDecoding = constrainedDecoding,
-                    topK = topK,
-                    topP = topP,
-                    temperature = temperature,
+                    desiredEngineKey.copy(accelerator = "CPU"),
+                    "CPU",
+                    desiredConversationSpec,
                 )
             } catch (cpuError: Throwable) {
                 throw classifyEngineError(
@@ -312,103 +356,73 @@ class LiteRtRuntime(private val context: Context) {
         }
 
         // If we fell back to CPU from a non-CPU accelerator, cache that decision in-session.
-        if (finalAccel != accel) {
-            sessionFallbackAccelerator = finalAccel
+        if (loadResult.accelerator != accel) {
+            sessionFallbackAccelerator = loadResult.accelerator
         }
 
         loaded = LoadedModel(
-            key = desiredKey.copy(accelerator = finalAccel),
-            engine = engine,
-            conversation = conv,
+            engineKey = desiredEngineKey.copy(accelerator = loadResult.accelerator),
+            conversationKey = desiredConversationKey,
+            conversationSpec = desiredConversationSpec,
+            engine = loadResult.engine,
+            conversation = loadResult.conversation,
         )
-        finalAccel
+        loadResult.accelerator
     }
+
+    private class LoadResult(
+        val engine: Engine,
+        val conversation: Conversation,
+        val accelerator: String,
+    )
 
     /**
      * Build + initialize an Engine, then open a Conversation. Throws if either step fails.
      *
-     * Mirrors Gallery's `LlmChatModelHelper.initialize()` lines 110-176:
-     *   - EngineConfig with explicit `maxNumTokens` (THE fix for the I-then-nothing bug)
-     *   - `cacheDir` only when modelPath sits in `/data/local/tmp` (matches Gallery 119-122)
-     *     — for normal app-storage paths, the runtime picks its own cache location.
-     *   - The flag dance: set `enableSpeculativeDecoding` true → construct Engine →
-     *     `engine.initialize()` → reset flag false. The flag is read at construction +
-     *     init time; resetting after init prevents leaking the choice into the next Engine
-     *     created from another component (e.g. background workflow).
-     *   - `enableConversationConstrainedDecoding` flag is read at `createConversation`
-     *     time; same set/reset dance around it.
+     * Mirrors Gallery's `LlmChatModelHelper.initialize()`:
+     *   - EngineConfig with explicit `maxNumTokens`
+     *   - `cacheDir` only when modelPath sits in `/data/local/tmp`
+     *   - the `enableSpeculativeDecoding` flag dance around construct + initialize
      */
     @OptIn(ExperimentalApi::class)
     private suspend fun tryLoadWithBackend(
-        modelPath: String,
+        engineKey: EngineKey,
         accel: String,
-        maxNumTokens: Int,
-        supportImage: Boolean,
-        supportAudio: Boolean,
-        speculativeDecoding: Boolean,
-        systemInstruction: Contents?,
-        tools: List<ToolProvider>,
-        constrainedDecoding: Boolean,
-        topK: Int,
-        topP: Double,
-        temperature: Double,
-    ): Triple<Engine, Conversation, String> {
+        conversationSpec: ConversationSpec,
+    ): LoadResult {
         val backend = acceleratorToBackend(accel)
-        // Vision backend MUST be GPU for Gemma 3n (Gallery comment line 116). When the
-        // caller doesn't request image support, leave the backend null entirely so the
-        // engine doesn't allocate vision-encoder memory.
-        val visionBackend: Backend? = if (supportImage) Backend.GPU() else null
-        // Audio backend MUST be CPU for Gemma 3n (Gallery comment line 117).
-        val audioBackend: Backend? = if (supportAudio) Backend.CPU() else null
+        // Vision backend MUST be GPU for Gemma 3n; audio backend MUST be CPU (Gallery's
+        // mandate). Leave each null when the caller didn't request that modality so the
+        // engine doesn't allocate the corresponding executor memory.
+        val visionBackend: Backend? = if (engineKey.supportImage) Backend.GPU() else null
+        val audioBackend: Backend? = if (engineKey.supportAudio) Backend.CPU() else null
 
         val engineConfig = EngineConfig(
-            modelPath = modelPath,
+            modelPath = engineKey.modelPath,
             backend = backend,
             visionBackend = visionBackend,
             audioBackend = audioBackend,
-            // The fix for the "single character then nothing" bug: the SDK's null-default
-            // for maxNumTokens is ~16, which truncates the very first response. 4096
-            // matches Gallery's `DEFAULT_MAX_TOKEN`. Larger values (32k for Gemma 4 E2B/E4B)
-            // would need per-model overrides — out of scope for this rewrite.
-            maxNumTokens = maxNumTokens,
-            // Gallery only sets cacheDir when the model lives in /data/local/tmp (the dev
-            // push location). For models the user installed normally, the runtime picks
-            // its own cache location automatically. Mirroring this avoids surprising the
-            // SDK with a cacheDir for a path it didn't expect.
-            cacheDir = if (modelPath.startsWith("/data/local/tmp"))
+            maxNumTokens = engineKey.maxNumTokens,
+            cacheDir = if (engineKey.modelPath.startsWith("/data/local/tmp"))
                 context.getExternalFilesDir(null)?.absolutePath
             else null,
         )
 
         val engine = withContext(Dispatchers.IO) {
-            // The flag dance: set BEFORE constructing the Engine so the constructor sees
-            // it, and reset AFTER initialize() so a later Engine constructed elsewhere
-            // doesn't accidentally inherit speculative decoding. We set/reset around the
-            // *whole* construct+initialize sequence because the SDK reads the flag at
-            // multiple points across both calls.
-            ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
+            // The flag dance: set BEFORE constructing the Engine, reset AFTER initialize().
+            ExperimentalFlags.enableSpeculativeDecoding = engineKey.speculativeDecoding
             val e = try {
                 Engine(engineConfig).also { built ->
                     try {
-                        // Common failures:
-                        //   FAILED_PRECONDITION: No KV cache inputs found — model was built
-                        //     for a different LiteRT-LM version.
-                        //   INVALID_ARGUMENT: tokenizer … exceeds — model's vocab size is
-                        //     larger than the runtime's built-in limit.
-                        //   INTERNAL: GPU backend error — OpenCL/OpenGL stack not supported;
-                        //     caller retries with CPU automatically.
                         built.initialize()
                     } catch (t: Throwable) {
                         // Close the partially-constructed engine to release its native
-                        // handle before propagating. Otherwise the GPU engine leaks when
-                        // initialize() fails and we fall back to CPU.
+                        // handle before propagating.
                         try { built.close() } catch (_: Throwable) {}
                         throw t
                     }
                 }
             } finally {
-                // Reset even on failure so a later attempt with speculativeDecoding=false
-                // doesn't get an unwanted carry-over.
                 ExperimentalFlags.enableSpeculativeDecoding = false
             }
             e
@@ -417,41 +431,25 @@ class LiteRtRuntime(private val context: Context) {
         val conv = createConversationWithFlags(
             engine = engine,
             backend = backend,
-            systemInstruction = systemInstruction,
-            tools = tools,
-            constrainedDecoding = constrainedDecoding,
-            topK = topK,
-            topP = topP,
-            temperature = temperature,
+            spec = conversationSpec,
         )
-        return Triple(engine, conv, accel)
+        return LoadResult(engine, conv, accel)
     }
 
     /**
      * Build a Conversation with the constrained-decoding flag dance.
      *
-     * Sampler choice mirrors Gallery line 162-171:
-     *   - NPU backend → samplerConfig MUST be null. The QNN runtime ignores the field
-     *     and configuring it produces an error in some delegate versions.
-     *   - GPU/CPU backend → pass an explicit SamplerConfig with the caller's topK/topP/
-     *     temperature so the Conversation's sampling matches the user's settings.
-     *
-     * `enableConversationConstrainedDecoding` is read inside createConversation, so we
-     * set it true right before and reset to false right after, matching Gallery's
-     * line 157-176 dance.
+     * Sampler choice mirrors Gallery:
+     *   - NPU backend → samplerConfig MUST be null.
+     *   - GPU/CPU backend → explicit SamplerConfig with the caller's topK/topP/temperature.
      */
     @OptIn(ExperimentalApi::class)
     private fun createConversationWithFlags(
         engine: Engine,
         backend: Backend,
-        systemInstruction: Contents?,
-        tools: List<ToolProvider>,
-        constrainedDecoding: Boolean,
-        topK: Int,
-        topP: Double,
-        temperature: Double,
+        spec: ConversationSpec,
     ): Conversation {
-        ExperimentalFlags.enableConversationConstrainedDecoding = constrainedDecoding
+        ExperimentalFlags.enableConversationConstrainedDecoding = spec.constrainedDecoding
         return try {
             engine.createConversation(
                 ConversationConfig(
@@ -459,13 +457,13 @@ class LiteRtRuntime(private val context: Context) {
                         null
                     } else {
                         SamplerConfig(
-                            topK = topK,
-                            topP = topP,
-                            temperature = temperature,
+                            topK = spec.topK,
+                            topP = spec.topP,
+                            temperature = spec.temperature,
                         )
                     },
-                    systemInstruction = systemInstruction,
-                    tools = tools,
+                    systemInstruction = spec.systemInstruction,
+                    tools = spec.tools,
                 )
             )
         } finally {
@@ -473,91 +471,110 @@ class LiteRtRuntime(private val context: Context) {
         }
     }
 
+    /** Close + rebuild the live Conversation in place, clearing its KV cache. Caller must
+     *  hold [mutex] and must clear [LoadedModel.processed] itself. */
+    private fun recreateConversationLocked(instance: LoadedModel) {
+        try { instance.conversation.close() } catch (_: Throwable) {}
+        instance.conversation = createConversationWithFlags(
+            engine = instance.engine,
+            backend = acceleratorToBackend(instance.engineKey.accelerator),
+            spec = instance.conversationSpec,
+        )
+    }
+
     /**
-     * Stream a single user turn. Each emitted String is the **cumulative** response so far,
-     * NOT a delta — Gallery's `partialResult` is consumed via
-     * `updateLastTextMessageContentIncrementally(partialContent = partialResult)`, which
-     * REPLACES the content rather than appending. Downstream consumers in this fork should
-     * either treat each emission as the full latest text, or compute deltas themselves.
+     * Stream one assistant response.
      *
-     * Multi-modal inputs (images, audio) are passed in per-call and packaged into [Contents]
-     * the same way Gallery's `runInference` does — image/audio Contents are appended FIRST
-     * and the text Content last, so the runtime sees the text as the final token in the
-     * input sequence (Gallery comment line 308).
+     * [history] is the FULL turn list for the conversation (already trimmed to the model's
+     * context budget by the caller). The runtime decides — via [planTurns] — whether the
+     * live Conversation's KV cache already holds a prefix of [history]:
      *
-     * The optional [onThinking] callback receives the model's reasoning-channel content
-     * (Message.channels["thought"]) when the model emits one. Reasoning models like
-     * Qwen3-Thinking surface their chain-of-thought through this side channel rather than
-     * inlined in the response text.
+     *  - **Warm:** the cache holds everything except exactly one newly-appended turn → send
+     *    only that turn's [Turn.rawText]; the SDK's chat template applies role wrapping and
+     *    the prior turns are reused from the cache (Gallery's behaviour).
+     *  - **Cold:** anything else (first turn, config change, edited/regenerated history,
+     *    a tool round-trip, media inputs) → recreate the Conversation and send [coldBlob],
+     *    the caller's full marker-formatted render of the history.
      *
-     * Caller MUST have called [ensureLoaded] first.
+     * Each emitted String is the **cumulative** response so far, NOT a delta — same contract
+     * as Gallery's `partialResult`. Downstream consumers compute deltas themselves.
      *
-     * The [mutex] is held for the duration of each inference so two concurrent callers
-     * queue up rather than both calling [Conversation.sendMessageAsync] on the same
-     * (non-thread-safe) Conversation simultaneously.
+     * Caller MUST have called [ensureLoaded] first. The [mutex] is held for the whole
+     * inference so two concurrent callers queue up rather than racing the Conversation.
      */
-    fun streamGenerate(
-        userInput: String,
+    fun streamTurns(
+        history: List<Turn>,
+        coldBlob: String,
         images: List<Bitmap> = emptyList(),
         audioClips: List<ByteArray> = emptyList(),
         onThinking: ((String) -> Unit)? = null,
     ): Flow<String> = callbackFlow {
         mutex.withLock {
             val instance = loaded
-                ?: throw IllegalStateException(
-                    "Call ensureLoaded(modelPath) before streamGenerate()"
-                )
+                ?: throw IllegalStateException("Call ensureLoaded(...) before streamTurns()")
+
+            val hasMedia = images.isNotEmpty() || audioClips.isNotEmpty()
+            val historySignatures = history.map { it.signature }
+            val plan = planTurns(instance.processed, historySignatures, hasMedia)
+
+            val inputText: String = when (plan) {
+                is TurnPlan.Warm -> history[plan.sendFromIndex].rawText
+                TurnPlan.Cold -> {
+                    // ensureLoaded may have kept a warm Conversation that this turn cannot
+                    // reuse (a /new, an edit, a regeneration, a tool round-trip, or media).
+                    // Recreate it to clear the KV cache, then send the full history.
+                    recreateConversationLocked(instance)
+                    instance.processed.clear()
+                    coldBlob
+                }
+            }
+
             val conv = instance.conversation
-
-            // Build Contents in the same order Gallery does (line 300-310): images and
-            // audio first, then text last. The runtime treats the LAST Content as the
-            // most recent token block, which matters for chat templates that emit a
-            // role-end marker after the final user text.
+            // Build Contents in Gallery's order: images and audio first, text last.
             val contentList = mutableListOf<Content>()
-            for (image in images) {
-                contentList.add(Content.ImageBytes(image.toPngByteArray()))
-            }
-            for (clip in audioClips) {
-                contentList.add(Content.AudioBytes(clip))
-            }
-            if (userInput.trim().isNotEmpty()) {
-                contentList.add(Content.Text(userInput))
-            }
+            for (image in images) contentList.add(Content.ImageBytes(image.toPngByteArray()))
+            for (clip in audioClips) contentList.add(Content.AudioBytes(clip))
+            if (inputText.trim().isNotEmpty()) contentList.add(Content.Text(inputText))
 
+            var lastCumulative = ""
             conv.sendMessageAsync(
                 Contents.of(contentList),
                 object : MessageCallback {
                     override fun onMessage(message: Message) {
-                        // Surface reasoning channel separately if present. Gallery threads
-                        // this back through the resultListener's `partialThinkingResult`
-                        // parameter; we expose it as an optional callback so the fork's
-                        // existing emission shape (Flow<String>) stays simple.
                         message.channels["thought"]?.let { thinking ->
                             if (thinking.isNotEmpty()) onThinking?.invoke(thinking)
                         }
-                        // Message.toString() returns the cumulative-so-far response text.
                         val text = message.toString()
-                        if (text.isNotEmpty()) trySend(text)
+                        if (text.isNotEmpty()) {
+                            lastCumulative = text
+                            trySend(text)
+                        }
                     }
                     override fun onDone() {
+                        // The Conversation's KV cache now holds [history…] + the assistant
+                        // turn just generated. Record that so the NEXT call can warm-continue
+                        // if it is a clean single-turn append. Mutating [processed] here is
+                        // safe: the mutex is held for this whole streamTurns invocation.
+                        instance.processed.clear()
+                        instance.processed.addAll(historySignatures)
+                        instance.processed.add(turnSignature(ROLE_ASSISTANT, lastCumulative))
                         close()
                     }
                     override fun onError(throwable: Throwable) {
+                        // The KV-cache state is now unknown — force the next turn cold.
+                        instance.processed.clear()
                         if (throwable is CancellationException) close() else close(throwable)
                     }
                 },
                 emptyMap(),
             )
-            awaitClose { /* SDK callback already closed the channel above; nothing to cancel here. */ }
+            awaitClose { /* SDK callback already closed the channel above. */ }
         }
     }.flowOn(Dispatchers.IO)
 
     /**
      * Cancel the currently-running generation, if any. Safe to call when nothing is
-     * generating — `cancelProcess` is a no-op in that case. Does NOT tear down the
-     * Engine or Conversation; the runtime stays warm for the next [streamGenerate].
-     *
-     * Mirrors Gallery's `stopResponse` (line 271-274).
+     * generating. Does NOT tear down the Engine or Conversation; the runtime stays warm.
      */
     fun stop() {
         try { loaded?.conversation?.cancelProcess() } catch (_: Throwable) {}
@@ -565,9 +582,6 @@ class LiteRtRuntime(private val context: Context) {
 
     /**
      * Tear down the currently loaded engine + conversation, if any.
-     * Acquires [mutex] so it cannot race with a concurrent [ensureLoaded] or
-     * [streamGenerate] call — otherwise a concurrent caller could see [loaded]
-     * go null while the engine handle is mid-close.
      */
     suspend fun closeIfLoaded() {
         mutex.withLock {
@@ -581,5 +595,36 @@ class LiteRtRuntime(private val context: Context) {
         val stream = ByteArrayOutputStream()
         this.compress(Bitmap.CompressFormat.PNG, 100, stream)
         return stream.toByteArray()
+    }
+
+    companion object {
+        /**
+         * Pure decision function: given the signatures the live Conversation has already
+         * consumed ([processed]) and the caller's full [historySignatures], decide whether
+         * the warm KV cache can be reused. Extracted for unit testing.
+         *
+         * Warm reuse requires ALL of:
+         *  - no media inputs (the warm path sends one turn's text and has nowhere to attach
+         *    per-call images/audio onto a prior turn);
+         *  - the runtime has prior warm state ([processed] non-empty);
+         *  - [processed] is a strict prefix of [historySignatures];
+         *  - exactly one turn was appended (a clean continuation — more than one, or a
+         *    rewritten earlier turn, goes cold so the full history is re-sent correctly).
+         *
+         * Any "no" answer is [TurnPlan.Cold], which is always correct — the warm path is
+         * purely an optimisation.
+         */
+        internal fun planTurns(
+            processed: List<String>,
+            historySignatures: List<String>,
+            hasMedia: Boolean,
+        ): TurnPlan {
+            if (hasMedia) return TurnPlan.Cold
+            if (processed.isEmpty()) return TurnPlan.Cold
+            if (processed.size >= historySignatures.size) return TurnPlan.Cold
+            if (historySignatures.subList(0, processed.size) != processed) return TurnPlan.Cold
+            if (historySignatures.size - processed.size != 1) return TurnPlan.Cold
+            return TurnPlan.Warm(sendFromIndex = processed.size)
+        }
     }
 }
