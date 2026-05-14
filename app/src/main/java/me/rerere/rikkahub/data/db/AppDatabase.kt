@@ -6,6 +6,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import me.rerere.ai.core.TokenUsage
+import me.rerere.rikkahub.data.agentrun.AgentRun
+import me.rerere.rikkahub.data.agentrun.AgentRunDao
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.GenMediaDAO
@@ -51,8 +53,9 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         TelegramChatEntity::class,
         WorkflowEntity::class,
         WorkflowRunEntity::class,
+        AgentRun::class,
     ],
-    version = 23,
+    version = 24,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -98,6 +101,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workflowDao(): WorkflowDao
 
     abstract fun workflowRunDao(): WorkflowRunDao
+
+    abstract fun agentRunDao(): AgentRunDao
 }
 
 object TokenUsageConverter {

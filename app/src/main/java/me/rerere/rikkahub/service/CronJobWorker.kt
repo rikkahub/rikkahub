@@ -13,7 +13,12 @@ import kotlin.uuid.Uuid
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.agentrun.AgentRunKind
+import me.rerere.rikkahub.data.agentrun.AgentRunRepository
+import me.rerere.rikkahub.data.agentrun.AgentRunStatus
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -54,6 +59,7 @@ class CronJobWorker(
     private val localTools: LocalTools by inject()
     private val directRunner: DirectModeActionRunner by inject()
     private val json: Json by inject()
+    private val agentRunRepo: AgentRunRepository by inject()
 
     override suspend fun doWork(): Result {
         val jobId = inputData.getString(KEY_JOB_ID) ?: return Result.failure()
@@ -125,6 +131,21 @@ class CronJobWorker(
                 errorMessage = null,
             ))
 
+            // Phase 24 — open the cross-pillar ledger row alongside the domain detail row.
+            // domain_id is keyed per-fire (jobId:runAtMs) so a replay or a later fire of the
+            // same job is a distinct ledger row. Best-effort: ledger failures never break the
+            // cron run.
+            val ledgerRunAtMs = job.nextRunAtMs ?: nowMs
+            val ledgerId = agentRunRepo.open(
+                kind = AgentRunKind.Cron,
+                domainId = "$jobId:$ledgerRunAtMs",
+                metadata = buildJsonObject {
+                    put("job_name", job.name)
+                    put("mode", job.mode)
+                    put("manual", isManual)
+                },
+            )
+
             val (outcome, errorMessage, convIdMaybe) = when (job.mode) {
                 "llm"    -> runLlm(job)
                 "direct" -> runDirect(job)
@@ -142,6 +163,16 @@ class CronJobWorker(
                 conversationId = convIdMaybe?.toString(),
                 errorMessage = errorMessage?.take(500),
             ))
+
+            // Phase 24 — mirror the terminal outcome into the cross-pillar ledger. Cron
+            // outcomes map to: success → succeeded; timed_out / failed / unknown → failed.
+            // (concurrent_skip / skipped_catchup / process_killed_replay never reach here —
+            // they early-return before the ledger row is opened.)
+            agentRunRepo.markTerminal(
+                id = ledgerId,
+                status = if (outcome == "success") AgentRunStatus.succeeded else AgentRunStatus.failed,
+                lastError = if (outcome == "success") null else "$outcome: ${errorMessage.orEmpty()}",
+            )
 
             // Failure notification (post once per failure; the existing channel handles dedup)
             if (outcome != "success") {

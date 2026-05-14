@@ -8,8 +8,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.agentrun.AgentRunKind
+import me.rerere.rikkahub.data.agentrun.AgentRunRepository
+import me.rerere.rikkahub.data.agentrun.AgentRunStatus
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
@@ -45,6 +50,16 @@ class SubAgentEngine(
     private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
+    /**
+     * Phase 24 — unified AgentRun ledger writer. The [SubAgentRegistry] is in-memory only,
+     * so a backgrounded sub-agent does NOT survive process death — its registry entry is
+     * gone on restart. Writing each sub-agent run to the persistent ledger closes that gap:
+     * a run left `running` when the process dies is flipped to `process_lost` by
+     * [me.rerere.rikkahub.data.agentrun.AgentRunBootRecovery] on next start, so the user
+     * (and `subagent_get`, via the ledger) can see what actually happened. No DI-cycle
+     * risk: AgentRunRepository depends only on its DAO.
+     */
+    private val agentRunRepo: AgentRunRepository,
 ) {
 
     /**
@@ -59,6 +74,14 @@ class SubAgentEngine(
     private val chatService: ChatService by lazy {
         org.koin.java.KoinJavaComponent.getKoin().get<ChatService>()
     }
+
+    /**
+     * Phase 24 — maps a sub-agent run id to its `agent_runs` ledger row id. Populated when
+     * the run is dispatched, consulted by [executeRun] / [markTerminal] when transitioning
+     * the ledger row, removed when the run reaches a terminal status. A run with no entry
+     * here simply skips the ledger write (best-effort — the ledger never breaks a run).
+     */
+    private val ledgerIds = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     sealed class DispatchResult {
         data class Ok(val run: SubAgentRun) : DispatchResult()
@@ -125,6 +148,23 @@ class SubAgentEngine(
         )
         registry.addPending(initialRun)
 
+        // Phase 24 — open the cross-pillar ledger row. domain_id is the sub-agent run id.
+        // The row starts in `queued` (the execution coroutine hasn't been launched yet);
+        // executeRun() flips it to `running`. If the process dies before then, boot
+        // recovery flips the stranded `queued` row to `process_lost`.
+        val ledgerId = agentRunRepo.open(
+            kind = AgentRunKind.SubAgent,
+            domainId = runId,
+            parentRunId = parentChatId,
+            status = AgentRunStatus.queued,
+            metadata = buildJsonObject {
+                put("label", initialRun.label)
+                put("parent_assistant_id", parentAssistantId)
+                put("run_in_background", cleaned.runInBackground)
+            },
+        )
+        ledgerIds[runId] = ledgerId
+
         val executionJob = appScope.launch(Dispatchers.IO) {
             executeRun(runId, parentAssistantId, parentChatId, cleaned)
         }
@@ -162,6 +202,7 @@ class SubAgentEngine(
         request: SubAgentRequest,
     ) {
         registry.update(runId) { it.copy(status = SubAgentStatus.RUNNING) }
+        ledgerIds[runId]?.let { agentRunRepo.setStatus(it, AgentRunStatus.running) }
 
         val parentAsstUuid = runCatching { Uuid.parse(parentAssistantId) }.getOrNull()
             ?: run {
@@ -215,6 +256,9 @@ class SubAgentEngine(
                     finishedAtMs = System.currentTimeMillis(),
                 )
             }
+            ledgerIds.remove(runId)?.let {
+                agentRunRepo.markTerminal(it, AgentRunStatus.succeeded)
+            }
             notifyParentIfBackground(parentChatId, registry.get(runId))
         } catch (t: Throwable) {
             Log.w(TAG, "sub-agent run failed", t)
@@ -228,13 +272,24 @@ class SubAgentEngine(
         }
     }
 
-    private fun markTerminal(runId: String, status: SubAgentStatus, error: String?) {
+    private suspend fun markTerminal(runId: String, status: SubAgentStatus, error: String?) {
         registry.update(runId) {
             it.copy(
                 status = status,
                 error = error,
                 finishedAtMs = System.currentTimeMillis(),
             )
+        }
+        // Phase 24 — mirror the terminal status into the cross-pillar ledger. TIMED_OUT and
+        // FAILED both map to `failed`; CANCELLED maps to `cancelled`. (SUCCEEDED never
+        // routes through here — it transitions the ledger row inline in executeRun.)
+        ledgerIds.remove(runId)?.let { ledgerId ->
+            val ledgerStatus = when (status) {
+                SubAgentStatus.CANCELLED -> AgentRunStatus.cancelled
+                SubAgentStatus.SUCCEEDED -> AgentRunStatus.succeeded
+                else -> AgentRunStatus.failed
+            }
+            agentRunRepo.markTerminal(ledgerId, ledgerStatus, error)
         }
     }
 

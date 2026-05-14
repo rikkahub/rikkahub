@@ -7,6 +7,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -71,6 +73,17 @@ class WorkflowEngine(
         org.koin.java.KoinJavaComponent.getKoin().get<LocalTools>()
     }
 
+    /**
+     * Phase 24 — unified AgentRun ledger writer. Resolved lazily via Koin (same pattern as
+     * [localTools] above) to keep the engine's constructor DI surface minimal — the engine
+     * is shared across cron / sub-agent surfaces and a tiny lookup on the rare-fire path is
+     * cheaper than threading another constructor arg through the factory. No cycle risk:
+     * AgentRunRepository depends only on its DAO.
+     */
+    private val agentRunRepo: me.rerere.rikkahub.data.agentrun.AgentRunRepository by lazy {
+        org.koin.java.KoinJavaComponent.getKoin().get<me.rerere.rikkahub.data.agentrun.AgentRunRepository>()
+    }
+
     private val perWorkflowLocks = mutableMapOf<String, Mutex>()
     private val locksMutex = Mutex()
 
@@ -112,8 +125,21 @@ class WorkflowEngine(
         val def = loaded.definition
         val entity = loaded.entity
 
+        // Phase 24 — open the cross-pillar ledger row for this fire. Opened after the
+        // workflow loads so a `workflow_not_found` non-fire isn't recorded, but before the
+        // gate checks so a SKIPPED_* outcome is still visible in the ledger. domain_id is
+        // the workflow id; the ledger row is per-fire (a fresh row each time fire() runs).
+        val ledgerId = agentRunRepo.open(
+            kind = me.rerere.rikkahub.data.agentrun.AgentRunKind.Workflow,
+            domainId = workflowId,
+            metadata = buildJsonObject {
+                put("name", entity.name)
+                put("trigger", def.trigger::class.simpleName ?: "unknown")
+            },
+        )
+
         if (!entity.enabled) {
-            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_DISABLED, null, "")
+            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_DISABLED, null, "", ledgerId)
         }
 
         // Trigger runtime pre-flight — surface "this trigger needs setup" as an explicit
@@ -123,7 +149,7 @@ class WorkflowEngine(
         //  - notification_received without notification listener bound
         //  - app_launched / app_closed without accessibility service running
         triggerRuntimeCheck(def.trigger)?.let { reason ->
-            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.FAILED, reason, "")
+            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.FAILED, reason, "", ledgerId)
         }
 
         // Cooldown gate. NOTE: must use `lastActualFireAtMs` (most-recent SUCCESS/FAILED
@@ -133,7 +159,7 @@ class WorkflowEngine(
         // be satisfied by waiting.
         val lastActualFireMs = if (def.cooldownSeconds > 0) repository.lastActualFireAtMs(workflowId) else null
         if (CooldownGate.isWithinCooldown(def.cooldownSeconds, lastActualFireMs, firedAtMs)) {
-            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_COOLDOWN, null, "")
+            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_COOLDOWN, null, "", ledgerId)
         }
 
         // Daily-cap gate
@@ -141,7 +167,7 @@ class WorkflowEngine(
             val today = LocalDate.now(ZoneId.systemDefault()).toString()
             val countedToday = if (entity.runsTodayDate == today) entity.runsTodayCount else 0
             if (countedToday >= def.maxRunsPerDay) {
-                return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_DAILY_CAP, null, "")
+                return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_DAILY_CAP, null, "", ledgerId)
             }
         }
 
@@ -152,7 +178,7 @@ class WorkflowEngine(
             if (cr is ConditionEvaluator.Result.FailedAt) {
                 return persistAndReturn(
                     workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_CONDITIONS,
-                    "condition[${cr.index}] failed: ${cr.reason}", "",
+                    "condition[${cr.index}] failed: ${cr.reason}", "", ledgerId,
                 )
             }
         }
@@ -181,7 +207,7 @@ class WorkflowEngine(
         }
         if (authoringAssistant == null) {
             return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.FAILED,
-                "no_workflows_assistant", "")
+                "no_workflows_assistant", "", ledgerId)
         }
         // Headless context — sub-agent recursion guard fires from workflow-action
         // dispatch so a workflow's actions can't spawn a sub-agent that re-fires another
@@ -198,7 +224,7 @@ class WorkflowEngine(
         // Execute the action sequence. ActionRunner enforces per-action timeout + HARDLINE.
         val result = actionRunner.run(def.actions, tools)
         val status = if (result.success) WorkflowRunStatus.SUCCESS else WorkflowRunStatus.FAILED
-        return persistAndReturn(workflowId, firedAtMs, started, status, result.error, result.summary)
+        return persistAndReturn(workflowId, firedAtMs, started, status, result.error, result.summary, ledgerId)
     }
 
     /**
@@ -263,6 +289,7 @@ class WorkflowEngine(
         status: WorkflowRunStatus,
         error: String?,
         summary: String,
+        ledgerId: String,
     ): FireOutcome {
         val durationMs = (System.nanoTime() - startedNanos) / 1_000_000L
         runCatching {
@@ -274,6 +301,20 @@ class WorkflowEngine(
                 errorMessage = error,
             )
         }.onFailure { Log.w(TAG, "recordFire failed for $workflowId", it) }
+        // Phase 24 — mirror the terminal outcome into the cross-pillar ledger. Every
+        // WorkflowRunStatus is terminal from the ledger's point of view: SUCCESS →
+        // succeeded; FAILED → failed; every SKIPPED_* variant → cancelled (the fire was
+        // accepted but a gate stopped it — not a failure, not a success).
+        val ledgerStatus = when (status) {
+            WorkflowRunStatus.SUCCESS -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.succeeded
+            WorkflowRunStatus.FAILED -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.failed
+            else -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.cancelled
+        }
+        agentRunRepo.markTerminal(
+            id = ledgerId,
+            status = ledgerStatus,
+            lastError = error ?: if (ledgerStatus == me.rerere.rikkahub.data.agentrun.AgentRunStatus.cancelled) status.name else null,
+        )
         return FireOutcome(status, error, summary)
     }
 

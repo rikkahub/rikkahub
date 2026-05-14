@@ -127,6 +127,14 @@ class RikkaHubApp : Application() {
         // next onAvailable forces a fresh DNS lookup + new socket on the next request.
         startNetworkChangeMonitor()
 
+        // Phase 24 — unified AgentRun ledger boot recovery. Walk the ledger once per
+        // process start: any autonomous run (cron / workflow / sub-agent / Telegram /
+        // external automation) left in flight by a killed process is flipped to
+        // `process_lost` and a single aggregate notification is fired. This is the
+        // cross-pillar generalisation of the Phase 9.5 cron stranded-row sweep and is what
+        // makes background sub-agents survivable across process death.
+        runAgentRunBootRecovery()
+
         // Auto-recover from a prior native crash inside a local-runtime JNI lib
         // (LiteRT-LM 0.11.0 has known SIGSEGVs on the GPU/NNAPI backend during
         // inference on Pixel Tensor-G). If we detect one, force the runtime to
@@ -179,6 +187,21 @@ class RikkaHubApp : Application() {
                 )
             }.onFailure {
                 Log.w(TAG, "sweepLocalLlmNativeCrashes failed", it)
+            }
+        }
+    }
+
+    /**
+     * Phase 24 — run the unified AgentRun ledger boot-recovery sweep once per process
+     * start. Best-effort: a slow or failed sweep must never block app start, so it runs on
+     * the IO dispatcher off [AppScope] and swallows its own failures.
+     */
+    private fun runAgentRunBootRecovery() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<me.rerere.rikkahub.data.agentrun.AgentRunBootRecovery>().runRecovery()
+            }.onFailure {
+                Log.w(TAG, "runAgentRunBootRecovery failed", it)
             }
         }
     }
