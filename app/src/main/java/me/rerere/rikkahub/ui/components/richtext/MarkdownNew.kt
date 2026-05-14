@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -345,6 +346,11 @@ private fun HtmlParagraphContent(
     val hasInlineMath = element.select("span.math").any { it.attr("inline") == "true" }
     val colorScheme = MaterialTheme.colorScheme
     val textStyle = LocalTextStyle.current
+    // Per-paragraph direction from the first strong directional character so an
+    // Arabic paragraph renders RTL and an English one stays LTR in one message.
+    val textDirection = remember(element.outerHtml()) {
+        resolveTextDirection(element.text())
+    }
 
     val (annotatedString, inlineContents) = remember(
         element.outerHtml(),
@@ -382,6 +388,7 @@ private fun HtmlParagraphContent(
                 TextUnit.Unspecified
             else
                 textStyle.lineHeight,
+            textDirection = textDirection,
         ),
     )
 }
@@ -708,6 +715,12 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
     val density = LocalDensity.current
 
     val key = remember(nodes) { nodes.joinToString("") { if (it is Element) it.outerHtml() else it.toString() } }
+    // Per-block direction so RTL list items / table cells render right-aligned.
+    val textDirection = remember(key) {
+        resolveTextDirection(
+            nodes.joinToString("") { if (it is Element) it.text() else it.toString() }
+        )
+    }
     val (annotatedString, inlineContents) = remember(
         key,
         enableLatexRendering,
@@ -734,7 +747,11 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
     }
 
     if (annotatedString.isNotEmpty()) {
-        Text(text = annotatedString, inlineContent = inlineContents)
+        Text(
+            text = annotatedString,
+            inlineContent = inlineContents,
+            style = LocalTextStyle.current.copy(textDirection = textDirection),
+        )
     }
 }
 
