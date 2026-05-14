@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.tools.local
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.util.Log
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -12,6 +13,8 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import java.io.File
+
+private const val TAG = "SetWallpaperTool"
 
 private val WALLPAPER_TARGETS = setOf("home", "lock", "both")
 
@@ -65,13 +68,15 @@ fun setWallpaperTool(context: Context): Tool = Tool(
         }
         val bitmap = try {
             BitmapFactory.decodeFile(path)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            Log.w(TAG, "BitmapFactory.decodeFile failed for $path", e)
             null
         } ?: return@Tool wallpaperErr("file is not a readable image")
 
         val wm = try {
             WallpaperManager.getInstance(context)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            Log.w(TAG, "WallpaperManager.getInstance failed", e)
             null
         } ?: return@Tool wallpaperErr("feature unavailable")
 

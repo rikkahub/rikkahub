@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.tools.local
 import android.Manifest
 import android.content.Context
 import android.telephony.SmsManager
+import android.util.Log
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -11,6 +12,8 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+
+private const val TAG = "SmsSendTool"
 
 private val SMS_RECIPIENT_REGEX = Regex("^[+]?[0-9 \\-()]+$")
 private const val SMS_MAX_BODY = 4096
@@ -71,7 +74,8 @@ fun smsSendTool(context: Context): Tool = Tool(
                 @Suppress("DEPRECATION")
                 SmsManager.getDefault()
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            Log.w(TAG, "SmsManager acquisition failed", e)
             null
         } ?: return@Tool smsErr("feature unavailable")
 
