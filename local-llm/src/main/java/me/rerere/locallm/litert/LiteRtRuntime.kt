@@ -2,6 +2,9 @@ package me.rerere.locallm.litert
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
+import android.os.PerformanceHintManager
+import android.os.Process
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Capabilities
 import com.google.ai.edge.litertlm.Content
@@ -509,7 +512,33 @@ class LiteRtRuntime(private val context: Context) {
         audioClips: List<ByteArray> = emptyList(),
         onThinking: ((String) -> Unit)? = null,
     ): Flow<String> = callbackFlow {
-        mutex.withLock {
+        // GPU-boost the inference. Three levers, in order of effectiveness:
+        //   1. PerformanceHintManager (API 33+). Opens a hint session for this thread
+        //      with a 50ms target — the OS scheduler treats the process as doing
+        //      sustained compute and refuses to downclock GPU/CPU like it would for a
+        //      productivity app. This is exactly what Android game engines use.
+        //   2. THREAD_PRIORITY_URGENT_DISPLAY on the calling thread. LiteRT's native
+        //      worker threads inherit nice values from their creator; boosting our
+        //      thread propagates a higher scheduling priority into the compute work.
+        //   3. (Manifest) game_mode_config.xml declares we accept PERFORMANCE mode,
+        //      so OEM game-mode frameworks (Adreno GPP, Mali frame rate control,
+        //      Tensor Game Mode) also bump GPU clocks + relax DCVS throttling.
+        // All cleaned up in the finally so an idle app doesn't keep the boost.
+        val callerTid = Process.myTid()
+        val originalPriority = runCatching {
+            Process.getThreadPriority(callerTid)
+        }.getOrDefault(Process.THREAD_PRIORITY_DEFAULT)
+        val hintSession = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            runCatching {
+                val phm = context.getSystemService(PerformanceHintManager::class.java)
+                phm?.createHintSession(intArrayOf(callerTid), 50_000_000L)  // 50 ms target
+            }.getOrNull()
+        } else null
+        runCatching {
+            Process.setThreadPriority(callerTid, Process.THREAD_PRIORITY_URGENT_DISPLAY)
+        }
+
+        try { mutex.withLock {
             val instance = loaded
                 ?: throw IllegalStateException("Call ensureLoaded(...) before streamTurns()")
 
@@ -569,6 +598,9 @@ class LiteRtRuntime(private val context: Context) {
                 emptyMap(),
             )
             awaitClose { /* SDK callback already closed the channel above. */ }
+        } } finally {
+            runCatching { hintSession?.close() }
+            runCatching { Process.setThreadPriority(callerTid, originalPriority) }
         }
     }.flowOn(Dispatchers.IO)
 
