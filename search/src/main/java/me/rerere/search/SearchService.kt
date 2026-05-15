@@ -304,8 +304,8 @@ sealed class SearchServiceOptions {
 function scrape(urls) {
   return {
     urls: urls.map(function(url) {
-      var res = fetch(url);
-      var body = res.text();
+      const res = fetch(url);
+      const body = res.text();
       return { url: url, content: body };
     })
   };
@@ -317,9 +317,9 @@ function scrape(urls) {
 // Return { items: [{ title, url, text }], answer?: string }
 
 function search(query, resultSize) {
-  var encoded = encodeURIComponent(query);
-  var res = fetch("https://example.com/search?q=" + encoded + "&limit=" + resultSize);
-  var data = res.json();
+  const encoded = encodeURIComponent(query);
+  const res = fetch("https://example.com/search?q=" + encoded + "&limit=" + resultSize);
+  const data = res.json();
   return {
     items: data.results.map(function(r) {
       return { title: r.title, url: r.url, text: r.snippet };
