@@ -21,6 +21,12 @@ class TelegramBotPreferences(private val context: Context) {
     private val K_ASSISTANT_ID = stringPreferencesKey("assistant_id")
     private val K_CUSTOM_COMMANDS = stringPreferencesKey("custom_commands")
     private val K_STREAM_SCREENSHOTS = booleanPreferencesKey("stream_screenshots")
+    // Long-poll update_id offset survives process death. Without this, an OEM kill
+    // followed by a restart would re-process up to 24 h of cached updates (Telegram
+    // retains unconfirmed updates server-side) — the user would see the bot replying
+    // to messages from yesterday on every cold start. Kept out of TelegramBotConfig
+    // because it's runtime state, not user-facing configuration.
+    private val K_LAST_OFFSET = longPreferencesKey("last_offset")
 
     val flow = store.data.map { p -> readConfig(p) }
 
@@ -56,6 +62,16 @@ class TelegramBotPreferences(private val context: Context) {
             // matching the default in TelegramBotConfig.
             streamScreenshots = p[K_STREAM_SCREENSHOTS] != false,
         )
+
+    /** Last update_id confirmed to Telegram. The next getUpdates pass uses this + 1
+     *  so server-cached updates from before a process restart don't replay. */
+    suspend fun lastOffset(): Long = store.data.first()[K_LAST_OFFSET] ?: 0L
+
+    /** Persist after every successful getUpdates cycle. Reset to 0 on token change
+     *  (handled by the poll loop). */
+    suspend fun setLastOffset(offset: Long) {
+        store.edit { p -> p[K_LAST_OFFSET] = offset }
+    }
 
     private fun parseWhitelist(s: String): Set<Long> =
         s.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()

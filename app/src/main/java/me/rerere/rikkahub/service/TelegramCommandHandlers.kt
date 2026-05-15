@@ -629,10 +629,24 @@ internal suspend fun TelegramBotService.handleDoctorCommand(chatId: Long) {
     // remedy exists — they had to know to open Settings → Doctor to find the button.
     // The handler re-runs the checks at tap time, looks up by check.id, and executes
     // FixAction.AutoFix in-process.
-    val fixable = results.filter {
-        (it.severity == me.rerere.rikkahub.ui.pages.setting.doctor.Severity.FAIL ||
-         it.severity == me.rerere.rikkahub.ui.pages.setting.doctor.Severity.WARN) &&
-            it.fix is me.rerere.rikkahub.ui.pages.setting.doctor.FixAction.AutoFix
+    // Bot API caps callback_data at 64 BYTES. Drop any AutoFix whose `dfix:<id>` payload
+    // would overflow — better to surface no button than ship a keyboard Telegram silently
+    // rejects. Author-controlled (DoctorChecks ids) so this is future-proofing; today's
+    // ids leave ~33 bytes of headroom.
+    val fixable = results.filter { c ->
+        val matchesSeverity = c.severity == me.rerere.rikkahub.ui.pages.setting.doctor.Severity.FAIL ||
+            c.severity == me.rerere.rikkahub.ui.pages.setting.doctor.Severity.WARN
+        val hasAutoFix = c.fix is me.rerere.rikkahub.ui.pages.setting.doctor.FixAction.AutoFix
+        if (!matchesSeverity || !hasAutoFix) return@filter false
+        val payloadBytes = (DOCTOR_FIX_CB_PREFIX + c.id).toByteArray(Charsets.UTF_8).size
+        if (payloadBytes > 64) {
+            android.util.Log.w(
+                TAG,
+                "handleDoctorCommand: skipping AutoFix button for check.id=${c.id} " +
+                    "($payloadBytes bytes > 64 cap)",
+            )
+            false
+        } else true
     }
     if (fixable.isNotEmpty()) {
         val markup = buildJsonObject {

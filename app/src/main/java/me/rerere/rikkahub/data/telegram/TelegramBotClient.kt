@@ -25,7 +25,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
@@ -41,8 +40,16 @@ import kotlin.coroutines.resumeWithException
  * on Telegram-side errors. Long-poll-friendly: getUpdates uses a separate OkHttpClient with a
  * read-timeout long enough to honor the server-side timeout.
  */
-class TelegramApiException(val errorCode: Int, val description: String) :
-    RuntimeException("Telegram API $errorCode: $description")
+/**
+ * Telegram Bot API non-2xx envelope. `retryAfterSec` is set when the server returned
+ * `parameters: { retry_after }` on a 429 — callers can honor flood-wait timing precisely
+ * instead of guessing a backoff.
+ */
+class TelegramApiException(
+    val errorCode: Int,
+    val description: String,
+    val retryAfterSec: Int? = null,
+) : RuntimeException("Telegram API $errorCode: $description")
 
 class TelegramBotClient(
     private val tokenProvider: () -> String,
@@ -116,11 +123,15 @@ class TelegramBotClient(
         val body = buildJsonObject {
             put("offset", offset)
             put("timeout", timeoutSec)
-            // We now handle callback_query updates for tool-approval inline keyboards.
-            // The poll-loop's offset bump catches and skips any other update type.
+            // We handle: inbound messages, inline-keyboard taps, and bot-membership
+            // transitions (so we can detect when the user blocks the bot or removes
+            // it from a group — the only signal the Bot API gives us before subsequent
+            // sendMessage calls start failing). Everything else is dropped by the poll
+            // loop's offset bump.
             put("allowed_updates", buildJsonArray {
                 add("message")
                 add("callback_query")
+                add("my_chat_member")
             })
         }
         val res = call(pollClient, "getUpdates", body)
@@ -132,14 +143,20 @@ class TelegramBotClient(
         text: String,
         parseMode: String? = null,
         replyToMessageId: Long? = null,
-        disableWebPagePreview: Boolean = false,
         replyMarkup: JsonObject? = null,
     ): JsonObject = call(shortClient, "sendMessage", buildJsonObject {
         put("chat_id", chatId)
         put("text", text)
         if (parseMode != null) put("parse_mode", parseMode)
-        if (replyToMessageId != null) put("reply_to_message_id", replyToMessageId)
-        if (disableWebPagePreview) put("disable_web_page_preview", true)
+        // Bot API 7.0 replaced `reply_to_message_id` with the `reply_parameters` object,
+        // which carries the same `message_id` plus optional cross-chat / fallback fields.
+        // The legacy field is still accepted by the server, but the documented shape is
+        // `reply_parameters` and that is what we now send.
+        if (replyToMessageId != null) {
+            put("reply_parameters", buildJsonObject {
+                put("message_id", replyToMessageId)
+            })
+        }
         // reply_markup carries the inline keyboard JSON used for tool-approval prompts.
         // Format: {"inline_keyboard": [[{"text": "...", "callback_data": "..."}, ...]]}.
         // Telegram caps callback_data at 64 bytes per button.
@@ -223,9 +240,21 @@ class TelegramBotClient(
             if (replyMarkup != null) put("reply_markup", replyMarkup)
         }).jsonObject
     } catch (e: TelegramApiException) {
-        // 400 with "message is not modified" / "message_too_long" — surface as null so the
-        // streaming consumer can decide whether to ignore (no-op) or fall back (overflow).
-        null
+        // Soft failures the streaming consumer should treat as "skip this edit":
+        //   * "message is not modified" — the rendered text equals the previous chunk;
+        //     happens constantly during streaming and is the whole reason this method
+        //     returns null instead of throwing.
+        //   * "message_too_long" / "MESSAGE_TOO_LONG" — chunk overflow; caller falls
+        //     back to deleting + re-sending as multiple shorter messages.
+        // Anything else (403 bot was blocked / kicked, 401 token revoked, 5xx upstream)
+        // is genuinely fatal: re-throw so the streaming pipeline tears down cleanly
+        // instead of silently looping on every chunk.
+        val desc = e.description.lowercase()
+        val soft = e.errorCode == 400 && (
+            desc.contains("not modified") || desc.contains("message_too_long") ||
+                desc.contains("message is too long")
+        )
+        if (soft) null else throw e
     }
 
     suspend fun deleteMessage(chatId: Long, messageId: Long): Boolean = try {
@@ -250,7 +279,7 @@ class TelegramBotClient(
                 if (!resp.isSuccessful) {
                     throw IOException("downloadFile $filePath -> HTTP ${resp.code}")
                 }
-                val body = resp.body ?: throw IOException("downloadFile $filePath -> empty body")
+                val body = resp.body
                 body.byteStream().use { input ->
                     dest.outputStream().use { out -> input.copyTo(out) }
                 }
@@ -272,7 +301,9 @@ class TelegramBotClient(
         if (obj["ok"]?.jsonPrimitive?.boolean != true) {
             val code = obj["error_code"]?.jsonPrimitive?.intOrNull ?: -1
             val desc = obj["description"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-            throw TelegramApiException(code, desc)
+            val retryAfter = obj["parameters"]?.jsonObject?.get("retry_after")
+                ?.jsonPrimitive?.intOrNull
+            throw TelegramApiException(code, desc, retryAfter)
         }
         return obj["result"]!!
     }
@@ -301,7 +332,9 @@ class TelegramBotClient(
         if (obj["ok"]?.jsonPrimitive?.boolean != true) {
             val code = obj["error_code"]?.jsonPrimitive?.intOrNull ?: -1
             val desc = obj["description"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-            throw TelegramApiException(code, desc)
+            val retryAfter = obj["parameters"]?.jsonObject?.get("retry_after")
+                ?.jsonPrimitive?.intOrNull
+            throw TelegramApiException(code, desc, retryAfter)
         }
         return obj["result"]!!.jsonObject
     }
@@ -319,7 +352,7 @@ class TelegramBotClient(
                     response.use { r ->
                         if (cont.isActive) {
                             try {
-                                cont.resume(r.body?.string() ?: "")
+                                cont.resume(r.body.string())
                             } catch (e: IOException) {
                                 cont.resumeWithException(redactException(e))
                             }
@@ -358,6 +391,28 @@ data class TelegramAttachment(
     val sizeBytes: Long?,
     val durationSec: Int?,              // audio / video / voice / video_note only
 )
+
+/**
+ * Subset of `my_chat_member` we care about: the chat the transition happened in and
+ * the new status of the bot account. Everything else (the `from` actor, the old
+ * status, the dates) is dropped — the bot only needs to know whether it still has
+ * access to this chat.
+ */
+data class TelegramMyChatMember(
+    val updateId: Long,
+    val chatId: Long,
+    val newStatus: String,
+)
+
+/** Returns the parsed my_chat_member transition if [update] is one, else null. */
+fun parseMyChatMember(update: JsonObject): TelegramMyChatMember? {
+    val updateId = update["update_id"]?.jsonPrimitive?.longOrNull ?: return null
+    val mcm = update["my_chat_member"]?.jsonObject ?: return null
+    val chatId = mcm["chat"]?.jsonObject?.get("id")?.jsonPrimitive?.longOrNull ?: return null
+    val newStatus = mcm["new_chat_member"]?.jsonObject?.get("status")
+        ?.jsonPrimitive?.contentOrNull ?: return null
+    return TelegramMyChatMember(updateId, chatId, newStatus)
+}
 
 /** Inline-keyboard button tap. We use these for tool-approval prompts only. */
 data class TelegramCallbackQuery(

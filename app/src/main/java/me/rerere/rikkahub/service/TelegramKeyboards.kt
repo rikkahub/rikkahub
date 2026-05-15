@@ -55,6 +55,20 @@ const val PROVIDER_CB_BACK: String = "mdp:back"
 const val MODEL_PICKER_PAGE_SIZE: Int = 10
 
 /**
+ * Maximum characters of provider/model display text that we render inside one inline-
+ * keyboard button label. The Bot API doesn't publish a per-button text cap, but a very
+ * long user-set name causes Telegram to silently drop the WHOLE keyboard, leaving the
+ * user with a message and no buttons. 40 chars + checkmark/circle marker fits comfortably
+ * on a phone keyboard row. Strings longer than this are tail-elided with "…".
+ */
+private const val BUTTON_TEXT_MAX_CHARS = 40
+
+/** Truncate [s] to [BUTTON_TEXT_MAX_CHARS] with a trailing ellipsis when needed. */
+private fun clampForButton(s: String): String =
+    if (s.length <= BUTTON_TEXT_MAX_CHARS) s
+    else s.take(BUTTON_TEXT_MAX_CHARS - 1) + "…"
+
+/**
  * Process-scoped registry mapping short numeric tokens to full model IDs. The
  * /model picker registers each visible button's model id under a fresh token, and
  * the callback handler resolves the token back. We can't put the model_id straight
@@ -158,7 +172,7 @@ internal fun buildModelKeyboard(
     return buildJsonObject {
         put("inline_keyboard", buildJsonArray {
             pageSlice.forEach { (_, model) ->
-                val name = model.displayName.ifBlank { model.modelId }
+                val name = clampForButton(model.displayName.ifBlank { model.modelId })
                 val marker = if (model.id == currentModelId) "✅" else "◯"
                 val token = ModelPickRegistry.register(model.id.toString())
                 addJsonArray {
@@ -243,9 +257,14 @@ internal fun buildProviderKeyboard(
             providers.forEach { p ->
                 val marker = if (p.id == currentProviderId) "✅" else "◯"
                 val token = ProviderPickRegistry.register(p.id.toString())
+                val chatModelCount = p.models.count { it.type == ModelType.CHAT }
+                // Clamp the provider name only, not the count suffix — a clamped name
+                // followed by " (12)" stays under the per-button cap even if the user
+                // gave the provider an absurdly long name.
+                val clampedName = clampForButton(p.name)
                 addJsonArray {
                     addJsonObject {
-                        put("text", "$marker ${p.name} (${p.models.count { it.type == ModelType.CHAT }})")
+                        put("text", "$marker $clampedName ($chatModelCount)")
                         put("callback_data", "$PROVIDER_CB_PREFIX$token")
                     }
                 }

@@ -22,11 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toInstant
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -44,19 +40,16 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.TelegramChatRepository
 import me.rerere.rikkahub.data.telegram.AttachmentKind
 import me.rerere.rikkahub.data.telegram.TelegramApiException
-import me.rerere.rikkahub.data.telegram.TelegramAttachment
 import me.rerere.rikkahub.data.telegram.TelegramBotClient
 import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.data.telegram.TelegramCallbackQuery
 import me.rerere.rikkahub.data.telegram.TelegramHtmlRenderer
 import me.rerere.rikkahub.data.telegram.TelegramIncomingMessage
+import me.rerere.rikkahub.data.telegram.TelegramMyChatMember
 import me.rerere.rikkahub.data.telegram.parseCallbackQuery
 import me.rerere.rikkahub.data.telegram.parseIncoming
+import me.rerere.rikkahub.data.telegram.parseMyChatMember
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.addJsonArray
-import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.koin.android.ext.android.inject
@@ -273,7 +266,12 @@ class TelegramBotService : Service() {
     private suspend fun pollLoop() {
         android.util.Log.i(TAG, "pollLoop: starting")
         val pm = applicationContext.getSystemService(android.os.PowerManager::class.java)
-        var offset = 0L
+        // Persisted offset survives process death: a cold start replays no more than
+        // the updates that arrived in the gap. Without this, an OEM kill -> next boot
+        // re-processes up to 24 h of cached updates (Telegram retains unconfirmed
+        // server-side) and the bot replies to ancient messages.
+        var offset = runCatching { prefs.lastOffset() }.getOrDefault(0L)
+        android.util.Log.i(TAG, "pollLoop: starting at offset=$offset")
         var cycle = 0L
         // Exponential backoff state. Bumped on every transient error, reset on every
         // successful cycle. Without this, a brief network blip used to spin every 5s
@@ -295,6 +293,7 @@ class TelegramBotService : Service() {
             if (lastTokenSeen != null && lastTokenSeen != cfg.token) {
                 android.util.Log.i(TAG, "pollLoop: token changed; resetting offset")
                 offset = 0L
+                runCatching { prefs.setLastOffset(0L) }
                 consecutiveErrors = 0
             }
             lastTokenSeen = cfg.token
@@ -320,6 +319,7 @@ class TelegramBotService : Service() {
                 if (cycle <= 2 || updates.isNotEmpty()) {
                     android.util.Log.i(TAG, "pollLoop: cycle=$cycle offset=$offset updates=${updates.size}")
                 }
+                val offsetBefore = offset
                 for (u in updates.map { it as kotlinx.serialization.json.JsonObject }) {
                     // Bump the offset BEFORE deciding whether to dispatch this update.
                     // Without this, any update parseIncoming returns null for (callback_query,
@@ -347,7 +347,21 @@ class TelegramBotService : Service() {
                         }
                         continue
                     }
+                    val mcm = parseMyChatMember(u)
+                    if (mcm != null) {
+                        android.util.Log.i(TAG, "pollLoop: my_chat_member chat=${mcm.chatId} newStatus=${mcm.newStatus}")
+                        scope.launch {
+                            try { handleMyChatMember(mcm) }
+                            catch (e: Throwable) { android.util.Log.e(TAG, "handleMyChatMember threw for chat=${mcm.chatId}", e) }
+                        }
+                        continue
+                    }
                     // Unknown update type — offset already bumped, just drop it.
+                }
+                // Persist the high-water offset once per cycle (cheap async DataStore write).
+                // Only when it actually advanced — idle cycles don't need the disk hit.
+                if (offset != offsetBefore) {
+                    runCatching { prefs.setLastOffset(offset) }
                 }
                 // Successful cycle: reset the backoff counter so a transient blip doesn't
                 // permanently elevate the retry delay.
@@ -361,7 +375,7 @@ class TelegramBotService : Service() {
                     // stop the service cleanly.
                     android.util.Log.w(TAG, "pollLoop: bailing out; bot token rejected (${e.errorCode})")
                     runCatching { prefs.update { it.copy(enabled = false) } }
-                    postTokenInvalidNotification(e.errorCode, e.description ?: "Telegram rejected the token")
+                    postTokenInvalidNotification(e.errorCode, e.description)
                     stopSelf(); return
                 }
                 consecutiveErrors++
@@ -466,6 +480,28 @@ class TelegramBotService : Service() {
                 android.util.Log.w(TAG, "external-gen-pump: send failed for convId=$convId", it)
             }
         }
+    }
+
+    /**
+     * Handle a `my_chat_member` update: the bot's membership in [TelegramMyChatMember.chatId]
+     * just changed. We only care about the terminal states — `kicked` (user blocked the bot
+     * in a private chat) and `left` (bot was removed from a group). On either, drop the
+     * chat -> conversation mapping so subsequent outbound paths can't keep posting into a
+     * dead chat, then cancel any parked turn for the chat. We don't try to send a goodbye
+     * message — Telegram would 403 the send for `kicked` chats anyway.
+     */
+    private suspend fun handleMyChatMember(update: TelegramMyChatMember) {
+        val terminal = update.newStatus == "kicked" || update.newStatus == "left"
+        if (!terminal) return
+        // Cancel any parked turn for this chat so the per-chat mutex releases.
+        turnJobs.remove(update.chatId)?.let { runCatching { it.cancelAndJoin() } }
+        // Drop the chat -> conversation mapping. Conversation rows stay in the DB so the
+        // user can still browse history in-app; only the Telegram routing breaks.
+        runCatching { chatRepo.deleteByChatId(update.chatId) }
+        // Stale approval keyboards in this chat are now orphan; their messageIds belong to
+        // a chat we can no longer edit. Drop them from the registry so no future cancellation
+        // sweep tries (and fails) to edit them.
+        runCatching { ApprovalPromptRegistry.clearChat(update.chatId) }
     }
 
     /**
@@ -1269,8 +1305,10 @@ class TelegramBotService : Service() {
                 val mode = jobInput?.get("mode")?.jsonPrimitive?.contentOrNull
                 when (mode) {
                     "direct" -> {
+                        // Inside this branch jobInput is smart-cast to non-null
+                        // (mode being non-null implies the jobInput?.get(...) chain succeeded).
                         val actions = runCatching {
-                            (jobInput?.get("actions") as? kotlinx.serialization.json.JsonArray)
+                            (jobInput.get("actions") as? kotlinx.serialization.json.JsonArray)
                         }.getOrNull()
                         if (actions != null && actions.isNotEmpty()) {
                             append("\n\n<b>Actions:</b>")
@@ -1287,7 +1325,7 @@ class TelegramBotService : Service() {
                         }
                     }
                     "llm" -> {
-                        val prompt = jobInput?.get("prompt")?.jsonPrimitive?.contentOrNull ?: ""
+                        val prompt = jobInput.get("prompt")?.jsonPrimitive?.contentOrNull ?: ""
                         if (prompt.isNotEmpty()) {
                             val truncatedPrompt = if (prompt.length > 200) prompt.take(200) + "…" else prompt
                             append("\n\n<b>Prompt:</b> ")
@@ -1451,8 +1489,9 @@ class TelegramBotService : Service() {
 
     /**
      * Handle a callback_query (inline-keyboard button tap). Whitelisted users only —
-     * unauthorised taps drop silently without even acking the callback so attackers
-     * can't probe the bot's keyboard state. callback_data format: "apv:<scope>:<toolCallId>".
+     * unauthorised taps are still acked (so Telegram clears the button spinner and stops
+     * retrying the delivery) but no work is done. callback_data format:
+     * "apv:<scope>:<toolCallId>" / "mdl:<token>" / "mdp:<token>" / "dfix:<id>".
      */
     private suspend fun handleCallbackQuery(
         cfg: me.rerere.rikkahub.data.telegram.TelegramBotConfig,
@@ -1460,9 +1499,16 @@ class TelegramBotService : Service() {
     ) {
         val cbStartMs = System.currentTimeMillis()
         android.util.Log.i(TAG, "cb:${cq.callbackQueryId} START data=${cq.data} chat=${cq.chatId}")
-        val sender = cq.senderId ?: return
-        if (sender !in cfg.whitelist && cq.chatId !in cfg.whitelist) {
+        val sender = cq.senderId
+        if (sender == null || (sender !in cfg.whitelist && cq.chatId !in cfg.whitelist)) {
             android.util.Log.w(TAG, "handleCallbackQuery: dropping non-whitelisted sender=$sender chat=${cq.chatId}")
+            // ALWAYS ack, even when dropping. Spec requires answerCallbackQuery within
+            // ~15 s or Telegram resends the tap multiple times — without this ack the
+            // bot wastes a getUpdates round-trip on every retry. There is no probe-defence
+            // value in withholding the ack: Telegram only routes callback_query updates
+            // to the bot that produced the keyboard, so non-whitelisted taps cannot be
+            // adversarial scans from outside.
+            runCatching { client.answerCallbackQuery(cq.callbackQueryId) }
             return
         }
         // Dispatch by callback_data prefix. New keyboard surfaces (model picker, etc.)
