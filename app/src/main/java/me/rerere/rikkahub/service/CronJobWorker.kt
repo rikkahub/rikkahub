@@ -10,6 +10,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonObject
@@ -32,6 +34,28 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 private const val TAG = "CronJobWorker"
+
+/**
+ * Wait for the ChatService generation job on [flow] to terminate (transition to null)
+ * within a wall-clock [timeoutMs] cap. Returns `true` on natural completion, `false` if
+ * the cap fired first.
+ *
+ * The `Unit` sentinel is load-bearing: `.first { it == null }` returns the matched value
+ * (null), and `withTimeoutOrNull` also returns null on timeout. Without the sentinel the
+ * two outcomes are indistinguishable — every successful LLM-mode cron run was
+ * misclassified as `timed_out` until this fix. (SubAgentEngine carries the same fix
+ * inline; this helper exists so a JVM unit test can pin the contract.)
+ */
+internal suspend fun awaitGenerationTerminal(
+    flow: Flow<Job?>,
+    timeoutMs: Long,
+): Boolean {
+    val completed: Unit? = withTimeoutOrNull(timeoutMs) {
+        flow.first { it == null }
+        Unit
+    }
+    return completed != null
+}
 
 /**
  * Tracks which jobs currently have a worker actively running. Prevents two
@@ -239,10 +263,12 @@ class CronJobWorker(
         try {
             chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(prompt)))
             // Wait for the generation job to clear, with a 15-min wall-clock cap.
-            val finished = withTimeoutOrNull(15L * 60_000L) {
-                chatService.getGenerationJobStateFlow(conv.id).first { it == null }
-            }
-            return if (finished == null) Triple("timed_out", "llm turn exceeded 15min", conv.id)
+            // See awaitGenerationTerminal's KDoc for the Unit-sentinel rationale.
+            val completed = awaitGenerationTerminal(
+                flow = chatService.getGenerationJobStateFlow(conv.id),
+                timeoutMs = 15L * 60_000L,
+            )
+            return if (!completed) Triple("timed_out", "llm turn exceeded 15min", conv.id)
                    else Triple("success", null, conv.id)
         } catch (t: Throwable) {
             return Triple("failed", "${t::class.simpleName}: ${t.message.orEmpty()}", conv.id)
