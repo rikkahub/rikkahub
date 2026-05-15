@@ -135,6 +135,27 @@ class TelegramBotService : Service() {
     private val activeHandleIncomingConvs: java.util.concurrent.ConcurrentHashMap.KeySetView<Uuid, Boolean> =
         java.util.concurrent.ConcurrentHashMap.newKeySet<Uuid>()
 
+    /**
+     * Deferred-removal jobs for [activeHandleIncomingConvs]. When [handleIncoming] exits,
+     * the set entry stays for [ACTIVE_INCOMING_LINGER_MS] so the external generation-done
+     * pump still sees the conv as "Telegram-pumped right now" and skips it.
+     *
+     * Why the linger: [chatService.sendMessage]'s launch block emits to
+     * [chatService.generationDoneFlow] BEFORE the launch block exits, but the pump's
+     * `collect { }` lambda runs on a separate coroutine. There is a tiny window where
+     * [handleIncoming] can return + run its finally (remove from activeHandleIncomingConvs)
+     * BEFORE the pump's lambda processes the emit — typically observed on very fast
+     * generations (sub-second), where handleIncoming's final Telegram edit + cleanup
+     * race past the pump's scheduling latency. Without the linger the pump then sees
+     * the conv as not-actively-pumped and sends a duplicate copy of the assistant text
+     * to Telegram (visible to the user as the same reply landing twice in a row).
+     *
+     * A new handleIncoming for the same chat cancels any pending removal so the entry
+     * doesn't get dropped mid-turn.
+     */
+    private val pendingActiveIncomingRemovals: java.util.concurrent.ConcurrentHashMap<Uuid, Job> =
+        java.util.concurrent.ConcurrentHashMap<Uuid, Job>()
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -735,7 +756,9 @@ class TelegramBotService : Service() {
         chatService.addConversationReference(convId)
         // Mark this conv as "Telegram-pumped right now" so the external generation-done
         // listener doesn't ALSO push a copy of the assistant text — handleIncoming
-        // already streams + finalises it on its own.
+        // already streams + finalises it on its own. Cancel any pending deferred
+        // removal first so a fast back-to-back turn doesn't drop the marker mid-turn.
+        pendingActiveIncomingRemovals.remove(convId)?.cancel()
         activeHandleIncomingConvs.add(convId)
         // Tools we've already prompted for in this turn — tracked so a single tool call
         // doesn't get a second approval bubble if the loop re-enters before the user
@@ -887,7 +910,21 @@ class TelegramBotService : Service() {
             generationError = e
         } finally {
             chatService.removeConversationReference(convId)
-            activeHandleIncomingConvs.remove(convId)
+            // Defer the activeHandleIncomingConvs removal by ACTIVE_INCOMING_LINGER_MS so
+            // the external generation-done pump still sees the conv as Telegram-pumped
+            // for a short window after handleIncoming returns. Without this, the pump's
+            // collect lambda — which runs on a separate coroutine and can land after
+            // handleIncoming exits on fast generations — duplicates the assistant text
+            // into Telegram.
+            val removalJob = scope.launch {
+                delay(ACTIVE_INCOMING_LINGER_MS)
+                activeHandleIncomingConvs.remove(convId)
+                pendingActiveIncomingRemovals.remove(convId)
+            }
+            pendingActiveIncomingRemovals.compute(convId) { _, existing ->
+                existing?.cancel()
+                removalJob
+            }
             HeadlessConversations.unmark(convId)
             // Phase 24 — mark the ledger row terminal. cancelled (/stop or /new) →
             // cancelled; a generation error → failed; otherwise succeeded. Runs in the
@@ -1654,6 +1691,13 @@ class TelegramBotService : Service() {
         // the user with no message at all. 3500 leaves ~600 bytes of headroom — enough
         // for typical markdown-heavy text without making chunks needlessly small.
         const val MAX_CHARS = 3500
+
+        /** How long an activeHandleIncomingConvs entry lingers after handleIncoming exits.
+         *  The external generation-done pump can land its collect lambda AFTER the finally
+         *  has removed the marker, on fast (sub-second) generations. Keeping the marker
+         *  for an extra 5 seconds covers any realistic pump scheduling latency without
+         *  blocking legitimate sub-agent wake messages from going through after that. */
+        const val ACTIVE_INCOMING_LINGER_MS: Long = 5_000L
 
         /** Long-poll request can take ~50s server-side + a few seconds for the client to
          *  handle inbound updates and dispatch them. 75s is comfortable headroom; the wake
