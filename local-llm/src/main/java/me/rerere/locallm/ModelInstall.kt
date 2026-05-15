@@ -235,10 +235,7 @@ object ModelInstall {
                 runCatching { partial.delete() }
             }
 
-            val body = response.body ?: run {
-                emit(Progress.Failed(IllegalStateException("empty body")))
-                return@flow
-            }
+            val body = response.body
 
             // Skip the HTML magic-byte sniff when resuming — those bytes are already on
             // disk from the prior attempt, and the body now starts mid-file. A false

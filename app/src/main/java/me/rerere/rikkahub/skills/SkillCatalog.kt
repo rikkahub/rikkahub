@@ -57,13 +57,15 @@ fun loadCatalogFromAssets(context: Context): SkillCatalog {
     return parseSkillCatalogJson(raw)
 }
 
+private val skillCatalogJson = Json { ignoreUnknownKeys = true }
+
 /**
  * Pure-string parser. Public for JVM-test coverage that doesn't need an Android Context.
  * Returns an empty catalog on any malformed-JSON / unknown-shape input.
  */
 fun parseSkillCatalogJson(raw: String): SkillCatalog {
     return runCatching {
-        Json { ignoreUnknownKeys = true }.decodeFromString(SkillCatalog.serializer(), raw)
+        skillCatalogJson.decodeFromString(SkillCatalog.serializer(), raw)
     }.getOrElse { t ->
         runCatching { Log.w("SkillCatalog", "skill-catalog.json failed to parse", t) }
         SkillCatalog()

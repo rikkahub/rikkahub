@@ -611,11 +611,13 @@ class ChatService(
         if (approved && toolName != null && scope != ApprovalScope.Once) {
             appScope.launch(NonCancellable) {
                 runCatching {
+                    // Smart-cast on the surrounding `if` excluded Once already, so only
+                    // ChatScope and Always remain — the when is exhaustive without else.
                     when (scope) {
                         ApprovalScope.ChatScope -> me.rerere.rikkahub.data.ai.tools
                             .ToolApprovalAllowList.grantForChat(conversationId, toolName)
                         ApprovalScope.Always -> toolApprovalPreferences.grantAlways(toolName)
-                        else -> Unit
+                        ApprovalScope.Once -> Unit
                     }
                 }.onFailure { Log.w(TAG, "approval grant write failed", it) }
             }

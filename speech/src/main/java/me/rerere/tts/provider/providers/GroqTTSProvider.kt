@@ -48,7 +48,7 @@ class GroqTTSProvider : TTSProvider<TTSProviderSetting.Groq> {
 
         if (!response.isSuccessful) {
             Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
-            Log.e(TAG, "generateSpeech: ${response.body?.string()}")
+            Log.e(TAG, "generateSpeech: ${response.body.string()}")
             throw Exception("Groq TTS request failed: ${response.code} ${response.message}")
         }
 

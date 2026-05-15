@@ -160,7 +160,7 @@ class SkillUrlImporter(
             if (!resp.isSuccessful) {
                 throw RuntimeException("HTTP ${resp.code}")
             }
-            return resp.body?.string() ?: ""
+            return resp.body.string()
         }
     }
 

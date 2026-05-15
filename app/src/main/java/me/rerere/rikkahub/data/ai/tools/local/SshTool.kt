@@ -129,6 +129,9 @@ private fun enumerateCandidateNetworks(ctx: Context): List<Pair<String, Network?
     val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         ?: return listOf("default" to null)
     val out = mutableListOf<Pair<String, Network?>>()
+    // allNetworks deprecated at API 31; the recommended NetworkCallback path is async and
+    // doesn't fit our synchronous enumeration here. Behaviour-equivalent and still functional.
+    @Suppress("DEPRECATION")
     val all = try { cm.allNetworks.toList() } catch (_: Throwable) { emptyList() }
     fun caps(n: Network) = try { cm.getNetworkCapabilities(n) } catch (_: Throwable) { null }
 

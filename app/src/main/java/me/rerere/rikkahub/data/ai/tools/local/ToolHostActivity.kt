@@ -71,7 +71,12 @@ class ToolHostActivity : AppCompatActivity() {
     }
 
     private fun launchCamera() {
-        cameraOutputUri = intent.getParcelableExtra(EXTRA_OUTPUT_URI)
+        cameraOutputUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(EXTRA_OUTPUT_URI, android.net.Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(EXTRA_OUTPUT_URI)
+        }
         val uri = cameraOutputUri
         if (uri == null) {
             cameraBuffer.complete(requestId, null)

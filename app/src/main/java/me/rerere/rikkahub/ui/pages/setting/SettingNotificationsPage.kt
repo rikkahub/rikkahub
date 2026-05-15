@@ -416,7 +416,7 @@ private fun loadInstalledApps(ctx: Context): List<InstalledAppRow> {
     val all = try { pm.getInstalledPackages(0) } catch (_: Throwable) { emptyList() }
     val rows = mutableListOf<InstalledAppRow>()
     for (info in all) {
-        val pkg = info.packageName ?: continue
+        val pkg = info.packageName
         if (pkg == ctx.packageName) continue
         if (pkg == "com.android.systemui") continue
         val appInfo: ApplicationInfo = info.applicationInfo ?: continue

@@ -160,6 +160,7 @@ class RouteActivity : ComponentActivity() {
         }
         setContent {
             RikkahubTheme {
+                @OptIn(coil3.annotation.ExperimentalCoilApi::class)
                 setSingletonImageLoaderFactory { context ->
                     ImageLoader.Builder(context)
                         .crossfade(true)

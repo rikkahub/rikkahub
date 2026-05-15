@@ -187,7 +187,7 @@ private fun TextView.setComposeTextStyle(
                 // extra = desired_line_height - font_metrics_height
                 val fontMetrics = paint.fontMetricsInt
                 val extraSpacing = lineHeightPx - (fontMetrics.descent - fontMetrics.ascent)
-                setLineSpacing(extraSpacing.toFloat(), 1.0f)
+                setLineSpacing(extraSpacing, 1.0f)
             }
         }
 

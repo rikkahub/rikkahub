@@ -228,7 +228,7 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
                     continue
                 }
             }
-            val label = info.loadLabel(pm)?.toString().orEmpty()
+            val label = info.loadLabel(pm).toString()
             if (filter != null && !label.lowercase().contains(filter) && !pkg.lowercase().contains(filter)) {
                 continue
             }
@@ -243,7 +243,7 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
             @Suppress("DEPRECATION")
             val all = try { pm.getInstalledPackages(0) } catch (_: Throwable) { emptyList() }
             for (pkgInfo in all) {
-                val pkg = pkgInfo.packageName ?: continue
+                val pkg = pkgInfo.packageName
                 if (pkg in seen) continue
                 seen.add(pkg)
                 val appInfo = pkgInfo.applicationInfo ?: continue
@@ -252,7 +252,7 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
                     val isUpdated = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                     if (isSystem && !isUpdated) continue
                 }
-                val label = appInfo.loadLabel(pm)?.toString().orEmpty()
+                val label = appInfo.loadLabel(pm).toString()
                 if (filter != null && !label.lowercase().contains(filter) && !pkg.lowercase().contains(filter)) {
                     continue
                 }

@@ -148,7 +148,12 @@ internal class BluetoothTriggerFamily(context: Context, scope: CoroutineScope)
         spec is TriggerSpec.BluetoothDeviceConnected || spec is TriggerSpec.BluetoothDeviceDisconnected
 
     override fun matchEvent(intent: Intent, workflows: List<WorkflowDefinition>): List<Pair<String, TriggerSpec>> {
-        val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+        val device = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+        }
         val mac = try { device?.address } catch (_: SecurityException) { null }
         val isConnect = intent.action == BluetoothDevice.ACTION_ACL_CONNECTED
         val matches = mutableListOf<Pair<String, TriggerSpec>>()

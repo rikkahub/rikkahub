@@ -352,6 +352,9 @@ public class StreamableHttpClientTransport(
         }
 
         while (!channel.isClosedForRead) {
+            // readLineStrict is the modern replacement but requires a ktor bump;
+            // keep readUTF8Line until that migration is scheduled.
+            @Suppress("DEPRECATION")
             val line = channel.readUTF8Line() ?: break
             if (line.isEmpty()) {
                 dispatch(id = id, eventName = eventName, data = sb.toString())

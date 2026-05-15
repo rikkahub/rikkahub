@@ -30,7 +30,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -219,10 +218,10 @@ private val Locales by lazy {
         Locale.FRENCH,
         Locale.GERMAN,
         Locale.ITALIAN,
-        Locale("es", "ES"),
-        Locale("ar"),
-        Locale("fa"),
-        Locale("ur")
+        Locale.forLanguageTag("es-ES"),
+        Locale.forLanguageTag("ar"),
+        Locale.forLanguageTag("fa"),
+        Locale.forLanguageTag("ur")
     )
 }
 
@@ -244,10 +243,10 @@ private fun LanguageSelector(
             Locale.FRENCH -> stringResource(R.string.language_french)
             Locale.GERMAN -> stringResource(R.string.language_german)
             Locale.ITALIAN -> stringResource(R.string.language_italian)
-            Locale("es", "ES") -> stringResource(R.string.language_spanish)
-            Locale("ar") -> stringResource(R.string.language_arabic)
-            Locale("fa") -> stringResource(R.string.language_persian)
-            Locale("ur") -> stringResource(R.string.language_urdu)
+            Locale.forLanguageTag("es-ES") -> stringResource(R.string.language_spanish)
+            Locale.forLanguageTag("ar") -> stringResource(R.string.language_arabic)
+            Locale.forLanguageTag("fa") -> stringResource(R.string.language_persian)
+            Locale.forLanguageTag("ur") -> stringResource(R.string.language_urdu)
             else -> locale.getDisplayLanguage(Locale.getDefault())
         }
     }

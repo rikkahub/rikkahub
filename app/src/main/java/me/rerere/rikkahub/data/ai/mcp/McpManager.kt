@@ -260,7 +260,7 @@ class McpManager(
         if (client.transport == null) {
             client.connect(getTransport(config))
         }
-        val serverTools = client.listTools()?.tools ?: emptyList()
+        val serverTools = client.listTools().tools
         Log.i(TAG, "sync: tools: $serverTools")
         settingsStore.update { old ->
             old.copy(
@@ -506,6 +506,7 @@ private fun redactConfigForLog(config: McpServerConfig): String {
 }
 
 internal val McpJson: Json by lazy {
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     Json {
         ignoreUnknownKeys = true
         encodeDefaults = true

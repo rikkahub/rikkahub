@@ -534,6 +534,7 @@ private fun ColumnScope.ModelList(
     val providerBadgeListState = rememberLazyListState()
     LaunchedEffect(lazyListState) {
         // 当LazyColumn滚动时，LazyRow也跟随滚动
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .debounce(100) // 防抖处理

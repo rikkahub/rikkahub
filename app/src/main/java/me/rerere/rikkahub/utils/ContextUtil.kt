@@ -152,6 +152,7 @@ fun Context.exportImage(
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
 
             // 通知图库更新
+            @Suppress("DEPRECATION")  // MediaStore is the modern path; this still works for gallery refresh
             val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
             mediaScanIntent.data = Uri.fromFile(image)
             sendBroadcast(mediaScanIntent)
@@ -205,6 +206,7 @@ fun Context.exportImageFile(
             file.copyTo(image, overwrite = true)
 
             // 通知图库更新
+            @Suppress("DEPRECATION")  // MediaStore is the modern path; this still works for gallery refresh
             val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
             mediaScanIntent.data = Uri.fromFile(image)
             sendBroadcast(mediaScanIntent)
