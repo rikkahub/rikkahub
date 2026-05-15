@@ -26,6 +26,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -56,7 +57,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
@@ -64,6 +67,8 @@ import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.JetbrainsMono
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.plus
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchService
@@ -256,7 +261,7 @@ private fun SearchProviderCard(
                     },
                     leading = {
                         AutoAIIcon(
-                            name = SearchServiceOptions.TYPES[options::class] ?: "unknown",
+                            name = options.displayName,
                             modifier = Modifier.size(24.dp)
                         )
                     },
@@ -388,6 +393,13 @@ private fun SearchProviderCard(
                                 onUpdateService(options)
                             }
                         }
+
+                        is SearchServiceOptions.CustomJsOptions -> {
+                            CustomJsOptions(options as SearchServiceOptions.CustomJsOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
                     }
 
                     ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -439,7 +451,7 @@ fun SearchAbilityTagLine(
         ) {
             Text(stringResource(R.string.search_ability_search))
         }
-        if (SearchService.getService(options).scrapingParameters != null) {
+        if (SearchService.getService(options).scrapingParameters(options) != null) {
             Tag(
                 type = TagType.DEFAULT,
             ) {
@@ -1160,6 +1172,84 @@ private fun GrokOptions(
             },
             minLines = 3,
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun CustomJsOptions(
+    options: SearchServiceOptions.CustomJsOptions,
+    onUpdateOptions: (SearchServiceOptions.CustomJsOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("Name")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.name,
+            onValueChange = {
+                onUpdateOptions(options.copy(name = it))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("My Custom Search") }
+        )
+    }
+
+    val highlighter = LocalHighlighter.current
+    val darkMode = LocalDarkMode.current
+
+    FormItem(
+        label = {
+            Text("Search Script")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.searchScript,
+            onValueChange = {
+                onUpdateOptions(options.copy(searchScript = it))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 8,
+            maxLines = 20,
+            visualTransformation = HighlightCodeVisualTransformation(
+                language = "javascript",
+                highlighter = highlighter,
+                darkMode = darkMode
+            ),
+            textStyle = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("Scrape Script")
+        },
+        description = {
+            Text("Optional. Implement scrape(urls) returning { urls: [{ url, content, metadata? }] }")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.scrapeScript,
+            onValueChange = {
+                onUpdateOptions(options.copy(scrapeScript = it))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 4,
+            maxLines = 20,
+            placeholder = {
+                Text(
+                    text = SearchServiceOptions.CustomJsOptions.DEFAULT_SCRAPE_SCRIPT.trimIndent(),
+                    style = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                )
+            },
+            visualTransformation = HighlightCodeVisualTransformation(
+                language = "javascript",
+                highlighter = highlighter,
+                darkMode = darkMode
+            ),
+            textStyle = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
         )
     }
 }

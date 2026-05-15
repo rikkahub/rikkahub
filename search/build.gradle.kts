@@ -54,4 +54,5 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.material3)
     api(libs.jsoup)
+    implementation(libs.quickjs)
 }

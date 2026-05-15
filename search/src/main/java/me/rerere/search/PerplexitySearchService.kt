@@ -40,8 +40,8 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.PerplexityOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -51,7 +51,7 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.PerplexityOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,

@@ -92,7 +92,7 @@ fun SearchPickerButton(
                     )
                 } else if (enableSearch && currentService != null) {
                     AutoAIIcon(
-                        name = SearchServiceOptions.TYPES[currentService::class] ?: "Search",
+                        name = currentService.displayName,
                         color = Color.Transparent
                     )
                 } else {
@@ -267,14 +267,14 @@ private fun AppSearchSettings(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AutoAIIcon(
-                        name = SearchServiceOptions.TYPES[service::class] ?: "Search",
+                        name = service.displayName,
                         modifier = Modifier.size(24.dp)
                     )
                     Column(
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(
-                            text = SearchServiceOptions.TYPES[service::class] ?: "Unknown",
+                            text = service.displayName,
                             style = MaterialTheme.typography.titleMedium,
                         )
                         SearchAbilityTagLine(

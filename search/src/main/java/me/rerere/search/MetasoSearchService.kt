@@ -35,8 +35,8 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
         })
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.MetasoOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -46,7 +46,7 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.MetasoOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,
