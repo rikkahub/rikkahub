@@ -2005,6 +2005,9 @@ class TelegramBotService : Service() {
             cq.data.startsWith(PROVIDER_CB_PREFIX) -> {
                 handleProviderPickCallback(cq); return
             }
+            cq.data.startsWith(DOCTOR_FIX_CB_PREFIX) -> {
+                handleDoctorFixCallback(cq); return
+            }
             cq.data.startsWith(APPROVAL_CB_PREFIX) -> {
                 // Falls through to the approval-handling block below.
             }
@@ -2706,6 +2709,80 @@ class TelegramBotService : Service() {
                 runCatching { client.sendMessage(chatId, c) }
             }
         }
+        // Surface AutoFix actions as inline-keyboard buttons. Without this, the /doctor
+        // Telegram surface tells the user what's broken but not that an in-app one-tap
+        // remedy exists — they had to know to open Settings → Doctor to find the button.
+        // The handler re-runs the checks at tap time, looks up by check.id, and executes
+        // FixAction.AutoFix in-process.
+        val fixable = results.filter {
+            (it.severity == me.rerere.rikkahub.ui.pages.setting.doctor.Severity.FAIL ||
+             it.severity == me.rerere.rikkahub.ui.pages.setting.doctor.Severity.WARN) &&
+                it.fix is me.rerere.rikkahub.ui.pages.setting.doctor.FixAction.AutoFix
+        }
+        if (fixable.isNotEmpty()) {
+            val markup = buildJsonObject {
+                put("inline_keyboard", buildJsonArray {
+                    fixable.forEach { c ->
+                        val af = c.fix as me.rerere.rikkahub.ui.pages.setting.doctor.FixAction.AutoFix
+                        add(buildJsonArray {
+                            addJsonObject {
+                                put("text", "🔧 ${af.label}")
+                                put("callback_data", "$DOCTOR_FIX_CB_PREFIX${c.id}")
+                            }
+                        })
+                    }
+                })
+            }
+            val body = "🩺 ${fixable.size} issue${if (fixable.size == 1) "" else "s"} with an in-app fix — tap to run:"
+            runCatching {
+                client.sendMessage(chatId, body, replyMarkup = markup)
+            }
+        }
+    }
+
+    /**
+     * Handle a `dfix:<check_id>` callback. Re-runs the full DoctorChecks suite at tap-time
+     * (rather than caching the FixAction.run lambda from the /doctor invocation, which
+     * would leak across restarts and grow unbounded), locates the matching check by id,
+     * and executes its FixAction.AutoFix.
+     *
+     * The button message is edited in place: "Running…" → result. If the underlying check
+     * no longer surfaces an AutoFix (the corruption auto-cleared, the user already fixed
+     * it from the app, etc.), the message is replaced with a "no longer applicable" note.
+     */
+    private suspend fun handleDoctorFixCallback(cq: TelegramCallbackQuery) {
+        val checkId = cq.data.removePrefix(DOCTOR_FIX_CB_PREFIX).trim()
+        if (checkId.isEmpty()) {
+            client.answerCallbackQuery(cq.callbackQueryId, "malformed fix callback")
+            return
+        }
+        // Ack fast so Telegram's button spinner clears. The actual fix may take seconds.
+        client.answerCallbackQuery(cq.callbackQueryId, "Running…")
+        val msgId = cq.messageId
+        runCatching { client.editMessageText(cq.chatId, msgId, "🔧 Running fix for $checkId…") }
+        val results = runCatching { doctorChecks.runAll() }.getOrElse {
+            val msg = "🩺 Doctor re-run failed: ${it::class.simpleName}: ${it.message ?: "(no message)"}"
+            runCatching { client.editMessageText(cq.chatId, msgId, msg) }
+            return
+        }
+        val match = results.firstOrNull { it.id == checkId }
+        val af = match?.fix as? me.rerere.rikkahub.ui.pages.setting.doctor.FixAction.AutoFix
+        if (af == null) {
+            val msg = "✅ ${match?.label ?: checkId}: no longer needs a fix."
+            runCatching { client.editMessageText(cq.chatId, msgId, msg) }
+            return
+        }
+        val outcome = runCatching { af.run() }
+        val body = outcome.fold(
+            onSuccess = { r ->
+                val icon = if (r.ok) "✅" else "❌"
+                "$icon ${match.label}: ${r.message}"
+            },
+            onFailure = { t ->
+                "❌ ${match.label}: ${t::class.simpleName}: ${t.message ?: "(no message)"}"
+            },
+        )
+        runCatching { client.editMessageText(cq.chatId, msgId, body) }
     }
 
     /**
@@ -2842,6 +2919,11 @@ class TelegramBotService : Service() {
          *  inline-keyboard cap (#1) and got no response at all. */
         const val PROVIDER_CB_PREFIX: String = "mdp:"
         const val PROVIDER_CB_BACK: String = "mdp:back"
+
+        /** Inline-keyboard prefix for the /doctor "Run fix" buttons. callback_data is
+         *  "dfix:<check_id>" where check_id is the DoctorCheck.id (e.g. "db.integrity").
+         *  Check ids are short kebab/dot-cased identifiers, comfortably under the 64-byte cap. */
+        const val DOCTOR_FIX_CB_PREFIX: String = "dfix:"
 
         /** Maximum file size for auto-downloading inbound non-photo attachments.
          *  Telegram allows up to 2 GB; we cap at 50 MB to avoid surprise storage use. */
