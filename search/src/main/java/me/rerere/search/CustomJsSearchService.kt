@@ -2,6 +2,7 @@ package me.rerere.search
 
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import com.whl.quickjs.wrapper.JSCallFunction
 import com.whl.quickjs.wrapper.QuickJSContext
 import kotlinx.coroutines.Dispatchers
@@ -24,11 +25,7 @@ object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOption
 
     @Composable
     override fun Description() {
-        Text(
-            "Custom search provider powered by QuickJS. " +
-                "Implement search(query, resultSize) and optionally scrape(urls) functions. " +
-                "Use fetch(url, options?) for HTTP requests."
-        )
+        Text(stringResource(R.string.custom_js_desc))
     }
 
     override fun parameters(options: SearchServiceOptions.CustomJsOptions): InputSchema? =
