@@ -281,6 +281,9 @@ val appModule = module {
             browserPreferences = get(),
             // Phase 25: surface the SAF granted-directories live count.
             storageVolumeGrantStore = get(),
+            // LiteRT accelerator status row in the Doctor: shows the persisted backend
+            // decision so a silent GPU -> CPU fallback is visible.
+            localRuntimePreferences = get(),
         )
     }
 }

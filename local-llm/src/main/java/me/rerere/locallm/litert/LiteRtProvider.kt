@@ -260,7 +260,7 @@ class LiteRtProvider(
         val turns = trimmed.map { it.toTurn() }
 
         // ---- Engine load with full per-model + per-call config ----
-        try {
+        val resolvedAccel = try {
             runtime.ensureLoaded(
                 modelPath = modelPath,
                 preferredAccel = cachedAccel,
@@ -278,6 +278,15 @@ class LiteRtProvider(
             )
         } catch (corrupt: LiteRtModelCorruptException) {
             handleCorruptModel(corrupt)
+        }
+        // Persist whatever the runtime actually used. Without this, the in-runtime
+        // GPU -> CPU fallback only sticks for the current process: every cold start
+        // re-probes the (known-broken-on-this-device) GPU and wastes ~1 s before
+        // landing on CPU again. By persisting we also surface the truth to the
+        // Doctor and Settings UI ("running on CPU because GPU failed at init").
+        if (resolvedAccel != cachedAccel) {
+            runCatching { prefs.setAccelerator(LocalRuntime.LiteRT, resolvedAccel) }
+                .onFailure { Log.w(TAG, "setAccelerator($resolvedAccel) failed", it) }
         }
 
         // ---- Stream + cumulative→delta conversion ----
