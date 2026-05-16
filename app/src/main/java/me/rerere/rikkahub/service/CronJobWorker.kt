@@ -35,6 +35,9 @@ import org.koin.core.component.inject
 
 private const val TAG = "CronJobWorker"
 
+/** Outer bound on how long after [startedAtMs] a WorkManager replay can plausibly arrive. */
+internal const val REPLAY_WINDOW_MS = 10L * 60_000L
+
 /**
  * Wait for the ChatService generation job on [flow] to terminate (transition to null)
  * within a wall-clock [timeoutMs] cap. Returns `true` on natural completion, `false` if
@@ -55,6 +58,33 @@ internal suspend fun awaitGenerationTerminal(
         Unit
     }
     return completed != null
+}
+
+/**
+ * The slot to stamp into the run row. Manual fires (trigger_job_now) happen at nowMs and
+ * are NOT bound to any scheduled slot — stamping them with [jobNextRunAtMs] would poison
+ * the next regular fire's replay guard. Natural fires stamp the slot they were enqueued
+ * for so a true WorkManager replay still matches.
+ */
+internal fun computeRunSlot(isManual: Boolean, jobNextRunAtMs: Long?, nowMs: Long): Long =
+    if (isManual) nowMs else (jobNextRunAtMs ?: nowMs)
+
+/**
+ * A WorkManager replay re-fires the SAME enqueued work request, so a true replay's
+ * [slotMs] matches the prior row's exactly AND its [nowMs] is within minutes of the prior
+ * row's [ScheduledJobRunEntity.startedAtMs]. Both checks are required: matching slot alone
+ * lets stale rows (e.g. a manual fire from yesterday) suppress today's regular fire.
+ */
+internal fun shouldSuppressAsReplay(
+    priorRow: ScheduledJobRunEntity?,
+    slotMs: Long,
+    nowMs: Long,
+    windowMs: Long = REPLAY_WINDOW_MS,
+): Boolean {
+    if (priorRow == null) return false
+    if (priorRow.scheduledAtMs != slotMs) return false
+    if (priorRow.outcome == "concurrent_skip" || priorRow.outcome == "skipped_catchup") return false
+    return priorRow.startedAtMs >= nowMs - windowMs
 }
 
 /**
@@ -106,25 +136,17 @@ class CronJobWorker(
                 return Result.success()
             }
 
-            // WorkManager-replay idempotency guard — runs BEFORE the optimistic insert,
-            // because the insert itself creates a row that would self-match the heuristic.
-            // A WorkManager replay re-fires the SAME enqueued work request, which means
-            // job.nextRunAtMs hasn't advanced (the prior worker died before persisting
-            // lastRunAtMs + scheduling the next fire). So a true replay's scheduledAtMs
-            // matches the prior row's scheduledAtMs exactly. A genuine subsequent fire
-            // (e.g. tick #2 of a 2-min cron) gets a NEW nextRunAtMs first, so the equality
-            // check fails and we proceed normally. Manual fires (trigger_job_now) skip this
-            // guard entirely so the user can always force a fresh fire.
-            val scheduledAtMs = job.nextRunAtMs ?: nowMs
+            // Slot stamp: manual fires use nowMs (they aren't bound to a scheduled slot);
+            // natural fires use job.nextRunAtMs so a true WorkManager replay can be detected.
+            val scheduledAtMs = computeRunSlot(isManual, job.nextRunAtMs, nowMs)
+
+            // Replay guard runs BEFORE the optimistic insert, else the insert self-matches.
+            // Manual fires skip the guard so the user can always force a fresh fire.
             if (!isManual) {
                 val priorRow = runRepo.getMostRecent(jobId)
-                if (priorRow != null
-                    && priorRow.scheduledAtMs == scheduledAtMs
-                    && priorRow.outcome != "concurrent_skip"
-                    && priorRow.outcome != "skipped_catchup"
-                ) {
+                if (shouldSuppressAsReplay(priorRow, scheduledAtMs, nowMs)) {
                     Log.w(TAG, "doWork: suppressing likely WorkManager replay for $jobId " +
-                            "(prior row ${priorRow.id} same scheduledAtMs=$scheduledAtMs outcome=${priorRow.outcome})")
+                            "(prior row ${priorRow!!.id} same scheduledAtMs=$scheduledAtMs outcome=${priorRow.outcome})")
                     runRepo.insert(ScheduledJobRunEntity(
                         id = runRowId,
                         jobId = jobId,
@@ -145,7 +167,7 @@ class CronJobWorker(
                 id = runRowId,
                 jobId = jobId,
                 mode = job.mode,
-                scheduledAtMs = job.nextRunAtMs ?: nowMs,
+                scheduledAtMs = scheduledAtMs,
                 startedAtMs = nowMs,
                 finishedAtMs = null,
                 outcome = "success",                          // optimistic
@@ -154,13 +176,12 @@ class CronJobWorker(
             ))
 
             // Phase 24 — open the cross-pillar ledger row alongside the domain detail row.
-            // domain_id is keyed per-fire (jobId:runAtMs) so a replay or a later fire of the
+            // domain_id is keyed per-fire (jobId:slot) so a replay or a later fire of the
             // same job is a distinct ledger row. Best-effort: ledger failures never break the
             // cron run.
-            val ledgerRunAtMs = job.nextRunAtMs ?: nowMs
             val ledgerId = agentRunRepo.open(
                 kind = AgentRunKind.Cron,
-                domainId = "$jobId:$ledgerRunAtMs",
+                domainId = "$jobId:$scheduledAtMs",
                 metadata = buildJsonObject {
                     put("job_name", job.name)
                     put("mode", job.mode)
@@ -178,7 +199,7 @@ class CronJobWorker(
                 id = runRowId,
                 jobId = jobId,
                 mode = job.mode,
-                scheduledAtMs = job.nextRunAtMs ?: nowMs,
+                scheduledAtMs = scheduledAtMs,
                 startedAtMs = nowMs,
                 finishedAtMs = System.currentTimeMillis(),
                 outcome = outcome,
