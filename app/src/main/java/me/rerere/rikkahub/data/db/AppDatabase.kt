@@ -31,7 +31,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         ManagedFileEntity::class,
         FavoriteEntity::class
     ],
-    version = 19,
+    version = 20,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -46,6 +46,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 16, to = 17, spec = Migration_16_17::class),
         AutoMigration(from = 17, to = 18),
         AutoMigration(from = 18, to = 19),
+        AutoMigration(from = 19, to = 20),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)

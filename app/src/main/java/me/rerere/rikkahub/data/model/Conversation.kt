@@ -25,6 +25,8 @@ data class Conversation(
     @Serializable(with = InstantSerializer::class)
     val updateAt: Instant = Instant.now(),
     val customSystemPrompt: String? = null,
+    val modeInjectionIds: Set<Uuid> = emptySet(),
+    val lorebookIds: Set<Uuid> = emptySet(),
     @Transient
     val newConversation: Boolean = false
 ) {

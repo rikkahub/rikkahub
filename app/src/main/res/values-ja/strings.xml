@@ -44,6 +44,8 @@
   <string name="assistant_page_add_header">ヘッダーを追加</string>
   <string name="assistant_page_allow_conversation_system_prompt">会話別システムプロンプト</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">会話ごとにシステムプロンプトを個別に設定可能にする</string>
+  <string name="assistant_page_allow_conversation_prompt_injection">会話別プロンプトインジェクション</string>
+  <string name="assistant_page_allow_conversation_prompt_injection_desc">会話ごとにプロンプトインジェクションとロアブックを個別にバインド可能にする</string>
   <string name="assistant_page_available_variables">"利用可能な変数: "</string>
   <string name="assistant_page_background_opacity">背景の透明度</string>
   <string name="assistant_page_background_opacity_desc">チャット背景画像の表示透明度を調整します</string>
@@ -1058,3 +1060,4 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
 </resources>
+

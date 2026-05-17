@@ -44,6 +44,8 @@
   <string name="assistant_page_add_header">Добавить заголовок</string>
   <string name="assistant_page_allow_conversation_system_prompt">Системный промпт для каждой беседы</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">Разрешить каждому разговору переопределять системный запрос ассистента</string>
+  <string name="assistant_page_allow_conversation_prompt_injection">Промпт-инъекции для каждой беседы</string>
+  <string name="assistant_page_allow_conversation_prompt_injection_desc">Разрешить каждой беседе привязывать собственные промпт-инъекции и лорбуки</string>
   <string name="assistant_page_available_variables">Доступные переменные:</string>
   <string name="assistant_page_background_opacity">Прозрачность фона</string>
   <string name="assistant_page_background_opacity_desc">Настройте видимость фонового изображения чата</string>
@@ -1058,3 +1060,4 @@
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
 </resources>
+

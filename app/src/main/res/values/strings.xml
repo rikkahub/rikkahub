@@ -44,6 +44,8 @@
   <string name="assistant_page_add_header">Add Header</string>
   <string name="assistant_page_allow_conversation_system_prompt">Per-Conversation System Prompt</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">Allow each conversation to override the assistant\'s system prompt</string>
+  <string name="assistant_page_allow_conversation_prompt_injection">Per-Conversation Prompt Injections</string>
+  <string name="assistant_page_allow_conversation_prompt_injection_desc">Allow each conversation to bind its own prompt injections and lorebooks</string>
   <string name="assistant_page_available_variables">"Available variables: "</string>
   <string name="assistant_page_background_opacity">Background Opacity</string>
   <string name="assistant_page_background_opacity_desc">Adjust chat background image visibility</string>
@@ -1056,3 +1058,4 @@
   <string name="web_search_disabled">Web search disabled</string>
   <string name="web_search_enabled">Web search enabled</string>
 </resources>
+

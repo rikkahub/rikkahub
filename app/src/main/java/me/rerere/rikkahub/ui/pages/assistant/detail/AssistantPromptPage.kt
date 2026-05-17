@@ -231,6 +231,32 @@ private fun AssistantPromptContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_allow_conversation_prompt_injection))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_allow_conversation_prompt_injection_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.allowConversationPromptInjection,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    allowConversationPromptInjection = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+        }
+
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

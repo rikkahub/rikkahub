@@ -72,6 +72,7 @@ internal fun FilesPicker(
     mcpManager: McpManager,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
+    onUpdateConversation: (Conversation) -> Unit,
     showInjectionSheet: Boolean,
     onShowInjectionSheetChange: (Boolean) -> Unit,
     showCompressDialog: Boolean,
@@ -123,8 +124,16 @@ internal fun FilesPicker(
         }
 
         // Extensions (Quick Messages + Prompt Injections + Skills)
+        val modeAndLorebookCount =
+            if (assistant.allowConversationPromptInjection) {
+                conversation.modeInjectionIds.size + conversation.lorebookIds.size
+            } else {
+                assistant.modeInjectionIds.size + assistant.lorebookIds.size
+            }
         val activeCount =
-            assistant.quickMessageIds.size + assistant.modeInjectionIds.size + assistant.lorebookIds.size + assistant.enabledSkills.size
+            assistant.quickMessageIds.size +
+                modeAndLorebookCount +
+                assistant.enabledSkills.size
         ListItem(
             leadingContent = {
                 Icon(
@@ -182,9 +191,11 @@ internal fun FilesPicker(
     // Injection Bottom Sheet
     if (showInjectionSheet) {
         InjectionQuickConfigSheet(
+            conversation = conversation,
             assistant = assistant,
             settings = settings,
             onUpdateAssistant = onUpdateAssistant,
+            onUpdateConversation = onUpdateConversation,
             onDismiss = { onShowInjectionSheetChange(false) })
     }
 
@@ -201,7 +212,12 @@ internal fun FilesPicker(
 
 @Composable
 private fun InjectionQuickConfigSheet(
-    assistant: Assistant, settings: Settings, onUpdateAssistant: (Assistant) -> Unit, onDismiss: () -> Unit
+    conversation: Conversation,
+    assistant: Assistant,
+    settings: Settings,
+    onUpdateAssistant: (Assistant) -> Unit,
+    onUpdateConversation: (Conversation) -> Unit,
+    onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -221,6 +237,8 @@ private fun InjectionQuickConfigSheet(
                 assistant = assistant,
                 settings = settings,
                 onUpdate = onUpdateAssistant,
+                conversation = conversation,
+                onUpdateConversation = onUpdateConversation,
                 modifier = Modifier.weight(1f),
                 onNavigateToQuickMessages = {
                     scope.launch {

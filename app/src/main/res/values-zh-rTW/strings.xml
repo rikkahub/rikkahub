@@ -44,6 +44,8 @@
   <string name="assistant_page_add_header">添加 Header</string>
   <string name="assistant_page_allow_conversation_system_prompt">獨立對話系統提示</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">允許每個對話單獨設定系統提示詞</string>
+  <string name="assistant_page_allow_conversation_prompt_injection">獨立對話提示詞注入</string>
+  <string name="assistant_page_allow_conversation_prompt_injection_desc">允許每個對話單獨綁定提示詞注入和世界書</string>
   <string name="assistant_page_available_variables">"可用變數: "</string>
   <string name="assistant_page_background_opacity">背景透明度</string>
   <string name="assistant_page_background_opacity_desc">調整聊天背景圖片顯示透明度</string>
@@ -1056,3 +1058,4 @@
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="web_search_enabled">已啟用網頁搜尋</string>
 </resources>
+

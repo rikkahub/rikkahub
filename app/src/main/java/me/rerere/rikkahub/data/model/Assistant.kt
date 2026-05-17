@@ -43,6 +43,7 @@ data class Assistant(
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
+    val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
 )
 
 @Serializable
