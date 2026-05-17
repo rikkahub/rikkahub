@@ -819,7 +819,21 @@
   <string name="setting_page_sponsor_alert_desc">Вы запустили приложение более 100 раз! Если вам нравится им пользоваться, пожалуйста, поддержите разработчика.</string>
   <string name="setting_page_sponsor_alert_dismiss">Не сейчас</string>
   <string name="setting_page_sponsor_alert_title">Поддержать разработчика</string>
-  <string name="setting_page_theme_setting">Настройки темы</string>
+  <string name="setting_page_theme_setting">Тема</string>
+  <string name="setting_page_theme_setting_desc">Настроить цветовую схему приложения</string>
+  <string name="setting_theme_page_preset_themes">Предустановленные темы</string>
+  <string name="setting_theme_page_custom_themes">Пользовательские темы</string>
+  <string name="setting_theme_page_add_theme">Создать</string>
+  <string name="setting_theme_page_no_custom_themes">Пользовательских тем ещё нет</string>
+  <string name="setting_theme_page_create_theme">Создать тему</string>
+  <string name="setting_theme_page_edit_theme">Редактировать тему</string>
+  <string name="setting_theme_page_theme_name">Название темы</string>
+  <string name="setting_theme_page_primary_color">Основной цвет</string>
+  <string name="setting_theme_page_secondary_color">Вторичный цвет</string>
+  <string name="setting_theme_page_tertiary_color">Третичный цвет</string>
+  <string name="setting_theme_page_preview">Предпросмотр</string>
+  <string name="setting_theme_page_save">Сохранить</string>
+  <string name="setting_theme_page_dynamic_color_hint">Динамический цвет включён. Отключите его в настройках отображения для использования пользовательских тем.</string>
   <string name="setting_page_tts_service">Служба преобразования текста в речь</string>
   <string name="setting_page_tts_service_desc">Настроить поставщиков службы преобразования текста в речь</string>
   <string name="setting_page_tts_settings">Настройки TTS</string>
@@ -1060,4 +1074,3 @@
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
 </resources>
-

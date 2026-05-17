@@ -1,9 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import android.os.Build
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -37,6 +36,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.Icon
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import me.rerere.rikkahub.data.datastore.DisplaySetting
@@ -48,7 +50,8 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
-import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
+import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -126,20 +129,17 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         },
                         colors = CustomColors.listItemColors,
                     )
-                    if (!settings.dynamicColor) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.surfaceBright)
-                        ) {
-                            PresetThemeButtonGroup(
-                                themeId = settings.themeId,
-                                modifier = Modifier.fillMaxWidth(),
-                                onChangeTheme = { vm.updateSettings(settings.copy(themeId = it)) }
-                            )
-                        }
-                    }
+                    val navController = LocalNavController.current
+                    ListItem(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { navController.navigate(Screen.SettingTheme) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_theme_setting)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_theme_setting_desc)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                        colors = CustomColors.listItemColors,
+                    )
                     ListItem(
                         modifier = Modifier
                             .fillMaxWidth()
