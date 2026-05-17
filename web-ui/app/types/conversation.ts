@@ -22,6 +22,9 @@ export interface Conversation {
   truncateIndex: number;
   chatSuggestions: string[];
   isPinned: boolean;
+  customSystemPrompt?: string | null;
+  modeInjectionIds?: string[];
+  lorebookIds?: string[];
   createAt: number;
   updateAt: number;
 }

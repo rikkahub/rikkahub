@@ -66,6 +66,9 @@ export interface ConversationDto {
   truncateIndex: number;
   chatSuggestions: string[];
   isPinned: boolean;
+  customSystemPrompt?: string | null;
+  modeInjectionIds?: string[];
+  lorebookIds?: string[];
   createAt: number;
   updateAt: number;
   isGenerating: boolean;
