@@ -787,7 +787,7 @@
   <string name="setting_page_donate">寄付</string>
   <string name="setting_page_donate_desc">このアプリを気に入った場合は、作者の作品をスポンサーしてください</string>
   <string name="setting_page_dynamic_color">ダイナミックカラー</string>
-  <string name="setting_page_dynamic_color_desc">ダイナミックカラーを使用するかどうか</string>
+  <string name="setting_page_dynamic_color_desc">壁紙に基づいてアプリのテーマ配色を動的に生成するかどうか</string>
   <string name="setting_page_extensions">拡張機能</string>
   <string name="setting_page_extensions_desc">プロンプトインジェクション、スキルなどを管理</string>
   <string name="setting_page_general_settings">一般設定</string>

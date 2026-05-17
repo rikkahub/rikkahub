@@ -787,7 +787,7 @@
   <string name="setting_page_donate">赞助</string>
   <string name="setting_page_donate_desc">如果你喜欢这个应用，请赞助作者的工作</string>
   <string name="setting_page_dynamic_color">动态颜色</string>
-  <string name="setting_page_dynamic_color_desc">是否使用动态颜色</string>
+  <string name="setting_page_dynamic_color_desc">是否基于壁纸动态生成 app 主题配色</string>
   <string name="setting_page_extensions">扩展管理</string>
   <string name="setting_page_extensions_desc">管理提示词注入、技能等扩展</string>
   <string name="setting_page_general_settings">通用设置</string>

@@ -787,7 +787,7 @@
   <string name="setting_page_donate">후원</string>
   <string name="setting_page_donate_desc">앱이 마음에 드시면 제작자의 작업을 후원해 주세요</string>
   <string name="setting_page_dynamic_color">동적 색상</string>
-  <string name="setting_page_dynamic_color_desc">동적 색상 사용</string>
+  <string name="setting_page_dynamic_color_desc">배경화면을 기반으로 앱 테마 색상을 동적으로 생성할지 여부</string>
   <string name="setting_page_extensions">확장 기능</string>
   <string name="setting_page_extensions_desc">프롬프트 인젝션, 스킬 등을 관리합니다</string>
   <string name="setting_page_general_settings">일반 설정</string>

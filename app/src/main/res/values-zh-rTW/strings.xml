@@ -787,7 +787,7 @@
   <string name="setting_page_donate">贊助</string>
   <string name="setting_page_donate_desc">如果你喜歡這個應用，請贊助作者的工作</string>
   <string name="setting_page_dynamic_color">動態顏色</string>
-  <string name="setting_page_dynamic_color_desc">是否使用動態顏色</string>
+  <string name="setting_page_dynamic_color_desc">是否基於桌布動態生成 app 主題配色</string>
   <string name="setting_page_extensions">擴充功能</string>
   <string name="setting_page_extensions_desc">管理提示注入、技能等功能</string>
   <string name="setting_page_general_settings">通用設定</string>

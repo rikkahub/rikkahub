@@ -787,7 +787,7 @@
   <string name="setting_page_donate">Поддержать</string>
   <string name="setting_page_donate_desc">Если вам нравится, поддержите автора</string>
   <string name="setting_page_dynamic_color">Динамический цвет</string>
-  <string name="setting_page_dynamic_color_desc">Использовать динамический цвет</string>
+  <string name="setting_page_dynamic_color_desc">Динамически создавать цвета темы приложения на основе обоев</string>
   <string name="setting_page_extensions">Расширения</string>
   <string name="setting_page_extensions_desc">Управление внедрением подсказок, навыками и другими возможностями</string>
   <string name="setting_page_general_settings">Общие настройки</string>
