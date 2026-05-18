@@ -415,7 +415,7 @@ fun ChatInput(
     }
 
     Surface(
-        color = MaterialTheme.colorScheme.background,
+        color = if (assistant.background != null) Color.Transparent else MaterialTheme.colorScheme.background,
     ) {
         Column(
             modifier = modifier
