@@ -80,16 +80,19 @@ fun ReminderTab(vm: BackupVM) {
                     },
                 )
 
-                val lastBackupText = if (config.lastBackupTime == 0L) {
-                    stringResource(R.string.backup_page_reminder_no_record)
-                } else {
-                    stringResource(
-                        R.string.backup_page_reminder_last_time,
-                        Instant.ofEpochMilli(config.lastBackupTime).toLocalDateTime()
-                    )
-                }
                 item(
-                    headlineContent = { Text(lastBackupText) },
+                    headlineContent = {
+                        Text(
+                            if (config.lastBackupTime == 0L) {
+                                stringResource(R.string.backup_page_reminder_no_record)
+                            } else {
+                                stringResource(
+                                    R.string.backup_page_reminder_last_time,
+                                    Instant.ofEpochMilli(config.lastBackupTime).toLocalDateTime()
+                                )
+                            }
+                        )
+                    },
                 )
             }
         }
