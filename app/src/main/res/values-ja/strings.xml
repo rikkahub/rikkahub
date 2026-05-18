@@ -1073,5 +1073,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="video">動画</string>
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
+  <string name="setting_theme_page_import_theme">インポート</string>
+  <string name="setting_theme_page_export_success">テーマJSONがクリップボードにコピーされました</string>
+  <string name="setting_theme_page_import_success">テーマが正常にインポートされました</string>
+  <string name="setting_theme_page_delete_theme_title">テーマを削除</string>
+  <string name="setting_theme_page_delete_theme_message">このテーマを削除してもよろしいですか？</string>
 </resources>
 

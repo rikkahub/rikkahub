@@ -1073,4 +1073,10 @@
   <string name="video">Видео</string>
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
+  <string name="setting_theme_page_import_theme">Импорт</string>
+  <string name="setting_theme_page_export_success">JSON темы скопирован в буфер обмена</string>
+  <string name="setting_theme_page_import_success">Тема успешно импортирована</string>
+  <string name="setting_theme_page_delete_theme_title">Удалить тему</string>
+  <string name="setting_theme_page_delete_theme_message">Вы уверены, что хотите удалить эту тему?</string>
 </resources>
+

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.ClipData
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -42,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,32 +53,55 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dokar.sonner.ToastType
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.Edit02
+import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.PlusSign
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
+import kotlin.uuid.Uuid
+
+private val themeJson = Json {
+    ignoreUnknownKeys = true
+    prettyPrint = true
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingThemePage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val clipboardManager = LocalClipboard.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    val exportSuccessMsg = stringResource(R.string.setting_theme_page_export_success)
+    val importSuccessMsg = stringResource(R.string.setting_theme_page_import_success)
 
     var showEditSheet by remember { mutableStateOf(false) }
     var editingTheme by remember { mutableStateOf<CustomTheme?>(null) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var deletingTheme by remember { mutableStateOf<CustomTheme?>(null) }
 
     Scaffold(
         topBar = {
@@ -152,15 +178,24 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        FilledTonalButton(
-                            onClick = {
-                                editingTheme = null
-                                showEditSheet = true
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = { showImportDialog = true }
+                            ) {
+                                Icon(HugeIcons.FileImport, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.setting_theme_page_import_theme))
                             }
-                        ) {
-                            Icon(HugeIcons.PlusSign, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.setting_theme_page_add_theme))
+                            FilledTonalButton(
+                                onClick = {
+                                    editingTheme = null
+                                    showEditSheet = true
+                                }
+                            ) {
+                                Icon(HugeIcons.PlusSign, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.setting_theme_page_add_theme))
+                            }
                         }
                     }
                 }
@@ -189,23 +224,21 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
                         onSelect = {
                             vm.updateSettings(settings.copy(themeId = theme.id))
                         },
+                        onExport = {
+                            val json = themeJson.encodeToString(theme)
+                            scope.launch {
+                                clipboardManager.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText("theme", json))
+                                )
+                            }
+                            toaster.show(exportSuccessMsg, type = ToastType.Success)
+                        },
                         onEdit = {
                             editingTheme = theme
                             showEditSheet = true
                         },
                         onDelete = {
-                            val newThemes = settings.customThemes.filter { it.id != theme.id }
-                            val newThemeId = if (settings.themeId == theme.id) {
-                                "sakura"
-                            } else {
-                                settings.themeId
-                            }
-                            vm.updateSettings(
-                                settings.copy(
-                                    customThemes = newThemes,
-                                    themeId = newThemeId
-                                )
-                            )
+                            deletingTheme = theme
                         }
                     )
                 }
@@ -233,6 +266,42 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
             }
         )
     }
+
+    if (showImportDialog) {
+        ImportThemeDialog(
+            onDismiss = { showImportDialog = false },
+            onImport = { theme ->
+                val importedTheme = theme.copy(id = Uuid.random().toString())
+                vm.updateSettings(
+                    settings.copy(
+                        customThemes = settings.customThemes + importedTheme,
+                        themeId = importedTheme.id
+                    )
+                )
+                showImportDialog = false
+                toaster.show(importSuccessMsg, type = ToastType.Success)
+            }
+        )
+    }
+
+    RikkaConfirmDialog(
+        show = deletingTheme != null,
+        title = stringResource(R.string.setting_theme_page_delete_theme_title),
+        confirmText = stringResource(android.R.string.ok),
+        dismissText = stringResource(android.R.string.cancel),
+        onConfirm = {
+            deletingTheme?.let { theme ->
+                val newThemes = settings.customThemes.filter { it.id != theme.id }
+                val newThemeId = if (settings.themeId == theme.id) "sakura" else settings.themeId
+                vm.updateSettings(settings.copy(customThemes = newThemes, themeId = newThemeId))
+            }
+            deletingTheme = null
+        },
+        onDismiss = { deletingTheme = null },
+        text = {
+            Text(stringResource(R.string.setting_theme_page_delete_theme_message))
+        }
+    )
 }
 
 @Composable
@@ -240,6 +309,7 @@ private fun CustomThemeItem(
     theme: CustomTheme,
     isSelected: Boolean,
     onSelect: () -> Unit,
+    onExport: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -288,6 +358,9 @@ private fun CustomThemeItem(
         },
         trailingContent = {
             Row {
+                IconButton(onClick = onExport) {
+                    Icon(HugeIcons.Copy01, null)
+                }
                 IconButton(onClick = onEdit) {
                     Icon(HugeIcons.Edit02, null)
                 }
@@ -412,6 +485,57 @@ private fun CustomThemeEditSheet(
             }
         }
     }
+}
+
+@Composable
+private fun ImportThemeDialog(
+    onDismiss: () -> Unit,
+    onImport: (CustomTheme) -> Unit,
+) {
+    var jsonText by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.setting_theme_page_import_theme)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = jsonText,
+                    onValueChange = {
+                        jsonText = it
+                        errorMessage = null
+                    },
+                    label = { Text("JSON") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8,
+                    isError = errorMessage != null,
+                    supportingText = errorMessage?.let { msg -> { Text(msg) } },
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    try {
+                        val theme = themeJson.decodeFromString<CustomTheme>(jsonText)
+                        onImport(theme)
+                    } catch (e: Exception) {
+                        errorMessage = e.message
+                    }
+                },
+                enabled = jsonText.isNotBlank()
+            ) {
+                Text(stringResource(R.string.setting_theme_page_import_theme))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
