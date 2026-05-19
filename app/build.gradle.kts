@@ -190,7 +190,8 @@ dependencies {
 
     // Haze (background blur)
     implementation(libs.haze)
-    implementation(libs.haze.materials)
+    implementation(libs.haze.blur)
+    implementation(libs.haze.blur.materials)
 
     // koin
     implementation(platform(libs.koin.bom))

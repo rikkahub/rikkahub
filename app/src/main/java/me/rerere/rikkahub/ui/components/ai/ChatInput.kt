@@ -80,8 +80,9 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.HazeMaterials
+import dev.chrisbanes.haze.blur.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -147,6 +148,8 @@ fun ChatInput(
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
+    val inputHazeStyle = HazeMaterials.ultraThin(containerColor = hazeTintColor)
+    val filesHazeStyle = HazeMaterials.ultraThin()
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -361,9 +364,12 @@ fun ChatInput(
                     .clip(MaterialTheme.shapes.largeIncreased)
                     .then(
                         if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
-                        )
+                            state = hazeState
+                        ) {
+                            blurEffect {
+                                style = inputHazeStyle
+                            }
+                        }
                         else Modifier
                     ),
                 shape = MaterialTheme.shapes.largeIncreased,
@@ -558,9 +564,12 @@ fun ChatInput(
                             .clip(RoundedCornerShape(20.dp))
                             .then(
                                 if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
-                                    state = hazeState,
-                                    style = HazeMaterials.ultraThin()
-                                )
+                                    state = hazeState
+                                ) {
+                                    blurEffect {
+                                        style = filesHazeStyle
+                                    }
+                                }
                                 else Modifier
                             ),
                         shape = RoundedCornerShape(20.dp),

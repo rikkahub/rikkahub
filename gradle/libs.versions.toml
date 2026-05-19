@@ -53,7 +53,7 @@ browser = "1.10.0"
 appcompat = "1.7.1"
 material = "1.14.0"
 ucrop = "2.2.11-native"
-haze = "1.7.2"
+haze = "2.0.0-alpha02"
 uiautomator = "2.3.0"
 benchmarkMacroJunit4 = "1.4.1"
 baselineprofile = "1.4.1"
@@ -146,7 +146,8 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
-haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = "haze" }
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
+haze-blur-materials = { module = "dev.chrisbanes.haze:haze-blur-materials", version.ref = "haze" }
 androidx-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmarkMacroJunit4" }
 androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
