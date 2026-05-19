@@ -20,6 +20,8 @@ import me.rerere.ai.util.audioBytes
 import me.rerere.ai.util.toBitmap
 import me.rerere.locallm.LocalRuntime
 import me.rerere.locallm.LocalRuntimePreferences
+import com.google.ai.edge.litertlm.tool as litertTool
+import com.google.ai.edge.litertlm.ToolProvider
 
 private const val TAG = "LiteRtProvider"
 
@@ -44,6 +46,11 @@ class LiteRtProvider(
     private val prefs: LocalRuntimePreferences,
     private val settingsUpdater: suspend (transform: (List<ProviderSetting>) -> List<ProviderSetting>) -> Unit,
 ) : Provider<ProviderSetting.LiteRtLocal> {
+
+    /** Singleton bridge — one ToolSet for the lifetime of this provider. Its @Tool
+     *  method reads the per-request tool list from [LiteRtToolBridgeRegistry]. */
+    private val toolBridge = LiteRtToolBridge()
+    private val toolProvider: ToolProvider = litertTool(toolBridge)
 
     /**
      * Self-heal a permanently corrupt model: delete the file from disk, remove it from
@@ -220,21 +227,45 @@ class LiteRtProvider(
         // can afford. For models without a curated maxContextLength (URL-pasted entries),
         // fall back to maxTokens (output cap) as a conservative lower bound. See
         // [LiteRtToolPrefix.budgetForContext] for tier thresholds.
-        val contextLen = config.maxContextLength ?: effectiveMaxNumTokens
-        val toolBudget = LiteRtToolPrefix.budgetForContext(contextLen)
-        val toolPrefix = LiteRtToolPrefix.buildCompactPrefix(
-            params.tools,
-            maxTools = toolBudget.maxTools,
-            maxChars = toolBudget.maxChars,
-        )
-        val surfacedCount = params.tools.size.coerceAtMost(toolBudget.maxTools)
-        val droppedCount = (params.tools.size - surfacedCount).coerceAtLeast(0)
+        // Native tool calling via the LiteRT-LM SDK's ToolSet mechanism — mirrors Google
+        // AI Edge Gallery's approach exactly. The bridge's @Tool method is enumerated
+        // by the SDK at engine creation time; the model invokes it as a native function
+        // call (no <tool_call> prompt-engineering, no regex extraction). When the model
+        // calls runTool(name, argsJson) the bridge looks up the named tool from the
+        // per-request snapshot and dispatches it through the regular execute path.
+        //
+        // Populate the snapshot before handing the engine the call, clear it in the
+        // finally below so concurrent requests cannot see each other's tools.
+        LiteRtToolBridgeRegistry.setForRequest(params.tools)
+        val nativeTools = if (params.tools.isNotEmpty()) listOf(toolProvider) else emptyList()
         Log.i(
             TAG,
-            "tool prefix: ${params.tools.size} enabled, $surfacedCount surfaced, " +
-                "$droppedCount hidden (context=$contextLen tokens; " +
-                "budget=${toolBudget.maxTools} tools / ${toolBudget.maxChars} chars)",
+            "tool bridge: ${params.tools.size} tool(s) registered for this request " +
+                "(${params.tools.joinToString(",") { it.name }.take(200)}…)",
         )
+        // For models that still need a per-tool catalogue in the system prompt (small
+        // local models that benefit from explicit name + description listing alongside
+        // SDK tool registration), build a compact reference block. This is descriptive
+        // text only; the model invokes tools through the bridge, NOT by emitting
+        // <tool_call> blocks.
+        val toolReference = if (params.tools.isNotEmpty()) {
+            buildString {
+                append("You have ${params.tools.size} tools available. ")
+                append("Call runTool(name, argsJson) with one of these names to use them:\n")
+                params.tools.take(60).forEach { tool ->
+                    val firstLineDesc = tool.description.lineSequence().firstOrNull()
+                        ?.trim().orEmpty().take(80)
+                    append("- ${tool.name}: $firstLineDesc\n")
+                }
+                if (params.tools.size > 60) {
+                    append("(…and ${params.tools.size - 60} more tools available — ")
+                    append("call runTool with their names directly when needed.)\n")
+                }
+            }
+        } else {
+            ""
+        }
+        val toolPrefix = toolReference
 
         val combinedSystem = buildString {
             if (toolPrefix.isNotEmpty()) {
@@ -299,7 +330,7 @@ class LiteRtProvider(
                 speculativeDecoding = config.supportsSpeculativeDecoding,
                 visionAccelerator = config.visionAccelerator ?: "gpu",
                 systemInstructionText = combinedSystem.ifBlank { null },
-                tools = emptyList(), // Native tool registration deferred; we use prompt-engineered tools.
+                tools = nativeTools,
                 constrainedDecoding = false, // Future upgrade.
                 topK = config.topK,
                 topP = config.topP,
@@ -381,52 +412,56 @@ class LiteRtProvider(
         }
 
         try {
-            runtime.streamTurns(
-                history = turns,
-                coldBlob = coldBlob,
-                images = turnImages,
-                audioClips = turnAudio,
-            ).collect { cumulative ->
-                // Defensive: if the SDK ever emits a non-monotonic cumulative (e.g. after
-                // an internal retry or template re-tokenisation), treat the new payload as a
-                // fresh start — emit it whole as the delta rather than computing a negative-
-                // length suffix that would silently drop characters.
-                val delta = if (cumulative.startsWith(previousCumulative)) {
-                    cumulative.substring(previousCumulative.length)
-                } else {
-                    cumulative
-                }
-                previousCumulative = cumulative
-                fullResponseBuilder.setLength(0)
-                fullResponseBuilder.append(cumulative)
+            try {
+                runtime.streamTurns(
+                    history = turns,
+                    coldBlob = coldBlob,
+                    images = turnImages,
+                    audioClips = turnAudio,
+                ).collect { cumulative ->
+                    // Defensive: if the SDK ever emits a non-monotonic cumulative (e.g. after
+                    // an internal retry or template re-tokenisation), treat the new payload as a
+                    // fresh start — emit it whole as the delta rather than computing a negative-
+                    // length suffix that would silently drop characters.
+                    val delta = if (cumulative.startsWith(previousCumulative)) {
+                        cumulative.substring(previousCumulative.length)
+                    } else {
+                        cumulative
+                    }
+                    previousCumulative = cumulative
+                    fullResponseBuilder.setLength(0)
+                    fullResponseBuilder.append(cumulative)
 
-                if (delta.isNotEmpty()) {
-                    emit(
-                        MessageChunk(
-                            id = streamId,
-                            model = params.model.modelId,
-                            choices = listOf(
-                                UIMessageChoice(
-                                    index = 0,
-                                    delta = UIMessage(
-                                        role = MessageRole.ASSISTANT,
-                                        parts = listOf(UIMessagePart.Text(delta)),
-                                    ),
-                                    message = null,
-                                    finishReason = null,
-                                )
-                            ),
+                    if (delta.isNotEmpty()) {
+                        emit(
+                            MessageChunk(
+                                id = streamId,
+                                model = params.model.modelId,
+                                choices = listOf(
+                                    UIMessageChoice(
+                                        index = 0,
+                                        delta = UIMessage(
+                                            role = MessageRole.ASSISTANT,
+                                            parts = listOf(UIMessagePart.Text(delta)),
+                                        ),
+                                        message = null,
+                                        finishReason = null,
+                                    )
+                                ),
+                            )
                         )
-                    )
+                    }
                 }
+            } catch (t: Throwable) {
+                // Translate the LiteRT-LM SDK's raw native-error text into something the user
+                // and the chat error surface can act on. The most common one — "Input token
+                // ids are too long. Exceeding the maximum number of tokens allowed: N >= M"
+                // — looks scary but means "your conversation is bigger than this model can
+                // hold". Surface that with a recovery hint.
+                throw translateSdkError(t, effectiveMaxNumTokens)
             }
-        } catch (t: Throwable) {
-            // Translate the LiteRT-LM SDK's raw native-error text into something the user
-            // and the chat error surface can act on. The most common one — "Input token
-            // ids are too long. Exceeding the maximum number of tokens allowed: N >= M"
-            // — looks scary but means "your conversation is bigger than this model can
-            // hold". Surface that with a recovery hint.
-            throw translateSdkError(t, effectiveMaxNumTokens)
+        } finally {
+            LiteRtToolBridgeRegistry.clear()
         }
 
         // ---- Persist tok/s telemetry --------------------------------------------------
@@ -460,71 +495,32 @@ class LiteRtProvider(
             }
         }
 
-        // ---- Tool-call extraction at end-of-stream ----
+        // With native SDK tool calling the @Tool method body already executed the tool
+        // and returned its output as the function's return value — there are NO leftover
+        // <tool_call> blocks to extract from the streamed text. The SDK incorporated the
+        // tool's output back into the model's reasoning automatically. Always emit
+        // finishReason = "stop" at end of stream.
         //
-        // AICoreProvider does this incrementally with ToolTagParser.feed() so the visible
-        // text never momentarily contains the raw <tool_call> block. We do it once at end
-        // of stream because (a) LiteRT's onMessage gives cumulative text, not deltas, so a
-        // streaming parser would have to constantly diff and re-scan the same prefix, and
-        // (b) the visible-text leak window is small and the alternative is significantly
-        // more state to maintain. If a tool call is detected, we emit a corrective chunk
-        // that adds the Tool part AND signals finishReason="tool_calls" so the
-        // GenerationHandler dispatches the tool and resumes generation on the next turn.
-        //
-        // Note: the raw <tool_call>...</tool_call> text already streamed to the user.
-        // Stripping it from the visible text in retrospect is non-trivial without the
-        // chunk protocol supporting "remove last N characters", so we leave it visible —
-        // the appended Tool part below is what makes the behaviour CORRECT (the tool
-        // actually fires) even if the visible text is slightly noisy. A future upgrade
-        // would port AICoreProvider's incremental ToolTagParser.
-        val fullResponse = fullResponseBuilder.toString()
-        val parsedCalls = LiteRtToolPrefix.extractToolCalls(fullResponse)
-        if (parsedCalls.isNotEmpty()) {
-            val toolParts = parsedCalls.map { call ->
-                UIMessagePart.Tool(
-                    toolCallId = "litert-tool-${System.nanoTime()}",
-                    toolName = call.name,
-                    input = call.arguments.toString(),
-                    output = emptyList(),
-                )
-            }
-            emit(
-                MessageChunk(
-                    id = streamId,
-                    model = params.model.modelId,
-                    choices = listOf(
-                        UIMessageChoice(
-                            index = 0,
-                            delta = UIMessage(
-                                role = MessageRole.ASSISTANT,
-                                parts = toolParts,
-                            ),
-                            message = null,
-                            finishReason = "tool_calls",
-                        )
-                    ),
-                )
+        // (The legacy LiteRtToolPrefix.extractToolCalls + unclosed-tag recovery path
+        // is kept around for the in-app browser tool which still uses prompt-engineered
+        // tool calling, but it is not called from the LiteRT chat path anymore.)
+        emit(
+            MessageChunk(
+                id = streamId,
+                model = params.model.modelId,
+                choices = listOf(
+                    UIMessageChoice(
+                        index = 0,
+                        delta = UIMessage(
+                            role = MessageRole.ASSISTANT,
+                            parts = emptyList(),
+                        ),
+                        message = null,
+                        finishReason = "stop",
+                    )
+                ),
             )
-        } else {
-            // Normal completion — emit the terminal chunk with finishReason = "stop".
-            emit(
-                MessageChunk(
-                    id = streamId,
-                    model = params.model.modelId,
-                    choices = listOf(
-                        UIMessageChoice(
-                            index = 0,
-                            delta = UIMessage(
-                                role = MessageRole.ASSISTANT,
-                                parts = emptyList(),
-                            ),
-                            message = null,
-                            finishReason = "stop",
-                        )
-                    ),
-                )
-            )
-        }
+        )
     }
 
     /**
