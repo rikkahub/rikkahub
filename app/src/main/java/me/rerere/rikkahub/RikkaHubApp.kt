@@ -220,6 +220,22 @@ class RikkaHubApp : Application() {
                             "accelerator + vision-unavailable + crash-recovery for LiteRT (new=${prefs.currentSdkVersion})",
                     )
                 }
+                // Unconditionally wipe the visionUnavailable set on every app start. Stale
+                // flags can be left behind by transient failures the SDK has since
+                // recovered from (most notably the 0.12.0 -> 0.11.0 downgrade where the
+                // SDK-version key may already match because the device ran 0.11.0 first).
+                // If GPU vision really is broken on this device, [LiteRtRuntime.ensureLoaded]
+                // re-stamps the flag the moment it observes a fresh failure — so the wipe
+                // never strands the app in a crash loop, it just ensures we re-test on
+                // every launch.
+                val wipedVision = prefs.clearAllVisionUnavailable(me.rerere.locallm.LocalRuntime.LiteRT)
+                if (wipedVision > 0) {
+                    Log.i(
+                        TAG,
+                        "invalidateLocalLlmDecisionsOnSdkUpgrade: wiped $wipedVision stale " +
+                            "visionUnavailable entries (forcing fresh attempt next inference)",
+                    )
+                }
             }.onFailure {
                 Log.w(TAG, "invalidateLocalLlmDecisionsOnSdkUpgrade failed", it)
             }

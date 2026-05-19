@@ -319,6 +319,27 @@ class LocalRuntimePreferences(private val context: Context) {
         }
     }
 
+    /**
+     * Wipe the entire vision-unavailable set for [runtime] and return the number of
+     * entries removed. Called once per app start from [RikkaHubApp]'s SDK-aware sweep so
+     * the next inference can re-attempt GPU vision from scratch on every model the user
+     * has installed. If the GPU vision encoder really is still broken on this device, the
+     * runtime's text-only fallback in [LiteRtRuntime.ensureLoaded] re-stamps the relevant
+     * file the moment it observes a fresh failure — so this wipe never strands the app in
+     * a crash loop.
+     */
+    suspend fun clearAllVisionUnavailable(runtime: LocalRuntime): Int {
+        var removed = 0
+        context.localRuntimeDataStore.edit { prefs ->
+            val current = decodeStringSet(prefs[visionUnavailableKey(runtime)])
+            removed = current.size
+            if (current.isNotEmpty()) {
+                prefs.remove(visionUnavailableKey(runtime))
+            }
+        }
+        return removed
+    }
+
     suspend fun removeInstalledModel(runtime: LocalRuntime, fileName: String) {
         context.localRuntimeDataStore.edit { prefs ->
             val raw = prefs[installedModelsKey(runtime)]
