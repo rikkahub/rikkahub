@@ -753,6 +753,64 @@ class DoctorChecks(
                         ),
                     )
                 )
+                // Performance telemetry — surface the last-known prefill/decode tok/s for
+                // each model so the user (and the support team triaging a slow report)
+                // can see at a glance whether the runtime is hitting expected rates. We
+                // INFO when present; WARN never (the model could legitimately be slow on a
+                // weak device — the user knows their hardware better than we do).
+                val perfMap = prefs.perfTelemetryFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
+                if (perfMap.isNotEmpty()) {
+                    val rows = perfMap.values.sortedByDescending { it.sampledAtMs }
+                    val detail = rows.joinToString("\n") { s ->
+                        val spec = if (s.specDecodingEngaged) ", MTP on" else ""
+                        "${s.modelId}: prefill ${"%.1f".format(s.prefillTps)} tok/s, " +
+                            "decode ${"%.1f".format(s.decodeTps)} tok/s$spec"
+                    }
+                    add(
+                        DoctorCheck(
+                            id = "net.litert_perf",
+                            category = DoctorCategory.Network,
+                            label = "LiteRT performance",
+                            detail = "Last-known per-model rates (character-based estimate, " +
+                                "~10% accurate for English text):\n$detail",
+                            severity = Severity.INFO,
+                            fix = FixAction.OpenAppRoute(
+                                "Open Local LiteRT",
+                                AppRouteKey.SettingProvider,
+                            ),
+                        )
+                    )
+                }
+                // Vision-encoder availability — surface any models the runtime had to drop
+                // to text-only on this device's GPU. The provider's vision-CPU fallback
+                // means a multimodal model still works for chat, but the user has lost
+                // image input on this chip. Most common cause: Adreno 7xx + restrictive
+                // OEM linker namespace (One UI / OriginOS) hitting upstream LiteRT-LM
+                // issue #2292 (gpu_backend_opengl.cc:CreateSharedMemoryManager UNIMPLEMENTED).
+                val visionUnavailable = prefs
+                    .visionUnavailableFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
+                if (visionUnavailable.isNotEmpty()) {
+                    add(
+                        DoctorCheck(
+                            id = "net.litert_vision",
+                            category = DoctorCategory.Network,
+                            label = "LiteRT vision encoder",
+                            detail = "Vision encoder unavailable on this device for: " +
+                                visionUnavailable.joinToString(", ") +
+                                ". These multimodal models run in text-only mode — chat works, " +
+                                "image inputs don't. Often fixed by a future LiteRT-LM SDK update " +
+                                "(the OpenGL fallback path's CreateSharedMemoryManager is " +
+                                "currently UNIMPLEMENTED upstream). Tap 'Re-try vision' next to " +
+                                "the model in Settings -> Local LiteRT after a GPU driver update " +
+                                "to clear the flag.",
+                            severity = Severity.WARN,
+                            fix = FixAction.OpenAppRoute(
+                                "Open Local LiteRT",
+                                AppRouteKey.SettingProvider,
+                            ),
+                        )
+                    )
+                }
             }
         }
         // DNS sanity — confirms the OkHttp clients aren't stuck on a stale resolver.

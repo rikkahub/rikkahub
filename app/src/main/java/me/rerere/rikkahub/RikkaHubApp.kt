@@ -143,6 +143,16 @@ class RikkaHubApp : Application() {
         // a silent re-crash.
         sweepLocalLlmNativeCrashes()
 
+        // Clear stale per-device decisions (cached accelerator, vision-unavailable set,
+        // crash-recovery banner) when the bundled LiteRT-LM SDK has been bumped since
+        // the last app start. An older SDK's "GPU is broken on Adreno 7xx" / "vision
+        // encoder unavailable" decisions can mask a fix shipped in the new SDK; without
+        // this sweep, a 0.11→0.12 bump would silently stay on CPU even though 0.12 may
+        // have fixed the GPU path. Decisions are re-inferred from a fresh probe on the
+        // next inference / re-detect tap. User-set knobs (force-CPU toggle, max-context
+        // override) are NOT touched.
+        invalidateLocalLlmDecisionsOnSdkUpgrade()
+
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
 
@@ -187,6 +197,47 @@ class RikkaHubApp : Application() {
                 )
             }.onFailure {
                 Log.w(TAG, "sweepLocalLlmNativeCrashes failed", it)
+            }
+        }
+    }
+
+    /**
+     * Fire-and-forget: clear stale SDK-coupled decisions (accelerator, vision-unavailable
+     * set, crash-recovery banner) whenever the compiled-in LiteRT-LM version differs from
+     * the last-persisted one. Best-effort — failure is logged and ignored so a slow or
+     * broken DataStore read can never block app start. Idempotent across multiple calls
+     * within the same process (the version write makes the second call a no-op).
+     */
+    private fun invalidateLocalLlmDecisionsOnSdkUpgrade() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val prefs = get<me.rerere.locallm.LocalRuntimePreferences>()
+                val invalidated = prefs.maybeInvalidateOnSdkUpgrade(me.rerere.locallm.LocalRuntime.LiteRT)
+                if (invalidated) {
+                    Log.i(
+                        TAG,
+                        "invalidateLocalLlmDecisionsOnSdkUpgrade: SDK version changed — cleared " +
+                            "accelerator + vision-unavailable + crash-recovery for LiteRT (new=${prefs.currentSdkVersion})",
+                    )
+                }
+                // Unconditionally wipe the visionUnavailable set on every app start. Stale
+                // flags can be left behind by transient failures the SDK has since
+                // recovered from (most notably the 0.12.0 -> 0.11.0 downgrade where the
+                // SDK-version key may already match because the device ran 0.11.0 first).
+                // If GPU vision really is broken on this device, [LiteRtRuntime.ensureLoaded]
+                // re-stamps the flag the moment it observes a fresh failure — so the wipe
+                // never strands the app in a crash loop, it just ensures we re-test on
+                // every launch.
+                val wipedVision = prefs.clearAllVisionUnavailable(me.rerere.locallm.LocalRuntime.LiteRT)
+                if (wipedVision > 0) {
+                    Log.i(
+                        TAG,
+                        "invalidateLocalLlmDecisionsOnSdkUpgrade: wiped $wipedVision stale " +
+                            "visionUnavailable entries (forcing fresh attempt next inference)",
+                    )
+                }
+            }.onFailure {
+                Log.w(TAG, "invalidateLocalLlmDecisionsOnSdkUpgrade failed", it)
             }
         }
     }
