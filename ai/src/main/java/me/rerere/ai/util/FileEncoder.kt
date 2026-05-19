@@ -1,15 +1,18 @@
 package me.rerere.ai.util
 
+import android.content.Context
 import android.media.ExifInterface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.net.Uri
 import android.util.Base64
 import android.util.Base64OutputStream
 import androidx.core.net.toUri
 import me.rerere.ai.ui.UIMessagePart
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 
 private val supportedTypes = setOf(
     "image/jpeg",
@@ -78,6 +81,137 @@ fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<Encoded
         }
         else -> throw IllegalArgumentException("Unsupported URL format: $url")
     }
+}
+
+/**
+ * Decode this image part into a [Bitmap] suitable for handing to a local on-device runtime
+ * (e.g. LiteRT-LM's [com.google.ai.edge.litertlm.Content.ImageBytes]). Supports `file://`,
+ * `content://`, `data:`, and `http(s)://` (the http path reads via Android's content
+ * resolver-shaped fallback; pass an OkHttp client externally if you need a richer http
+ * fetcher). Returns null when the bitmap cannot be decoded — callers should treat that as
+ * "drop this image part" and surface a polite skip to the user.
+ *
+ * Auto-rotates per EXIF on `file://` paths and bounds the longest side to [maxDimension]
+ * so a 12-MP camera image doesn't allocate a 100-MB ARGB_8888 buffer in the multimodal
+ * vision encoder's input layer.
+ */
+fun UIMessagePart.Image.toBitmap(
+    context: Context,
+    maxDimension: Int = 1536,
+): Bitmap? {
+    val raw: Bitmap? = runCatching {
+        when {
+            url.startsWith("data:") -> {
+                // data:image/<mime>;base64,<payload>  — decode the base64 directly.
+                val payload = url.substringAfter(",", missingDelimiterValue = "")
+                if (payload.isEmpty()) return@runCatching null
+                val bytes = Base64.decode(payload, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, sampleOpts(bytes, maxDimension))
+            }
+            url.startsWith("file://") -> {
+                val path = url.toUri().path ?: return@runCatching null
+                BitmapFactory.decodeFile(path, sampleOptsFromFile(path, maxDimension))
+            }
+            url.startsWith("content://") -> {
+                val uri: Uri = url.toUri()
+                context.contentResolver.openInputStream(uri).use { stream ->
+                    decodeStreamWithSampling(stream, maxDimension, context, uri)
+                }
+            }
+            url.startsWith("http://") || url.startsWith("https://") -> {
+                // Bare HTTP fetch — pull as a single buffered read. This path is used by
+                // chat surfaces that pasted an https image URL directly; it does NOT honor
+                // the app's OkHttp interceptors (auth, network-change pool eviction, etc).
+                // Callers that need those should resolve the URL upstream and hand us a
+                // file:// or data: instead.
+                val conn = java.net.URL(url).openConnection().apply {
+                    connectTimeout = 8_000
+                    readTimeout = 15_000
+                }
+                conn.getInputStream().use { stream ->
+                    val bytes = stream.readBytes()
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, sampleOpts(bytes, maxDimension))
+                }
+            }
+            else -> null
+        }
+    }.getOrNull()
+    if (raw == null) return null
+    // Apply EXIF rotation only for file:// (we have a real path to read EXIF from).
+    val rotated = if (url.startsWith("file://")) {
+        val path = url.toUri().path
+        if (path != null) File(path).normalizeByExif(raw) else raw
+    } else raw
+    return rotated
+}
+
+/**
+ * Read this audio part's raw container bytes (mp3 / wav / flac / m4a) into a [ByteArray]
+ * the on-device runtime can hand off to its audio executor. We do NOT decode to PCM here
+ * — LiteRT-LM's [com.google.ai.edge.litertlm.Content.AudioBytes] accepts the encoded
+ * container; the runtime decodes internally. Returns null when the URL can't be opened.
+ */
+fun UIMessagePart.Audio.audioBytes(context: Context): ByteArray? {
+    return runCatching {
+        when {
+            url.startsWith("data:") -> {
+                val payload = url.substringAfter(",", missingDelimiterValue = "")
+                if (payload.isEmpty()) return@runCatching null
+                Base64.decode(payload, Base64.DEFAULT)
+            }
+            url.startsWith("file://") -> {
+                val path = url.toUri().path ?: return@runCatching null
+                File(path).takeIf { it.exists() }?.readBytes()
+            }
+            url.startsWith("content://") -> {
+                context.contentResolver.openInputStream(url.toUri())?.use { it.readBytes() }
+            }
+            url.startsWith("http://") || url.startsWith("https://") -> {
+                val conn = java.net.URL(url).openConnection().apply {
+                    connectTimeout = 8_000
+                    readTimeout = 15_000
+                }
+                conn.getInputStream().use { it.readBytes() }
+            }
+            else -> null
+        }
+    }.getOrNull()
+}
+
+private fun sampleOpts(bytes: ByteArray, maxDimension: Int): BitmapFactory.Options {
+    val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, probe)
+    return BitmapFactory.Options().apply {
+        inSampleSize = calculateInSampleSize(probe, maxDimension, maxDimension)
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+}
+
+private fun sampleOptsFromFile(path: String, maxDimension: Int): BitmapFactory.Options {
+    val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, probe)
+    return BitmapFactory.Options().apply {
+        inSampleSize = calculateInSampleSize(probe, maxDimension, maxDimension)
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+}
+
+private fun decodeStreamWithSampling(
+    stream: InputStream?,
+    maxDimension: Int,
+    context: Context,
+    uri: Uri,
+): Bitmap? {
+    // Probing inSampleSize on a non-seekable content:// stream means a second open.
+    val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)?.use {
+        BitmapFactory.decodeStream(it, null, probe)
+    }
+    val opts = BitmapFactory.Options().apply {
+        inSampleSize = calculateInSampleSize(probe, maxDimension, maxDimension)
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+    return BitmapFactory.decodeStream(stream, null, opts)
 }
 
 fun UIMessagePart.Video.encodeBase64(withPrefix: Boolean = true): Result<String> = runCatching {

@@ -212,6 +212,7 @@ val dataSourceModule = module {
             pm.registerProvider(
                 "local_litert",
                 me.rerere.locallm.litert.LiteRtProvider(
+                    context = get(),
                     runtime = get(),
                     prefs = get(),
                     settingsUpdater = { transform ->

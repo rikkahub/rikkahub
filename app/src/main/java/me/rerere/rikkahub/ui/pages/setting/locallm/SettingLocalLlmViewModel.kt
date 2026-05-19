@@ -18,6 +18,7 @@ import me.rerere.ai.provider.LITERT_PROVIDER_ID
 import me.rerere.locallm.AcceleratorProbe
 import me.rerere.locallm.LocalRuntime
 import me.rerere.locallm.LocalRuntimePreferences
+import me.rerere.locallm.litert.LiteRtModelMetadata
 import me.rerere.locallm.MemoryGuard
 import me.rerere.locallm.ModelInstall
 import me.rerere.rikkahub.R
@@ -72,6 +73,21 @@ class SettingLocalLlmViewModel(
     val crashRecoveryAccelerator: StateFlow<String?> = prefs.crashRecoveryFlow(runtime)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Set of installed model filenames whose GPU vision encoder failed on this device.
+     *  Surfaced in InstalledModelRow as a "Vision unavailable on this device — text-only"
+     *  caption + a "Re-try vision" button that clears the flag so the next load attempts
+     *  GPU vision again (useful after a GPU driver update). */
+    val visionUnavailableSet: StateFlow<Set<String>> = prefs.visionUnavailableFlow(runtime)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** Last-known tok/s telemetry sample per model. Provider stamps a new sample after each
+     *  successful stream. Settings renders "12.4 tok/s prefill · 2.7 tok/s decode" under the
+     *  installed-model row; Doctor uses this to WARN when sustained decode tps is below the
+     *  device's expected band. */
+    val perfTelemetry: StateFlow<Map<String, LocalRuntimePreferences.PerfSample>> =
+        prefs.perfTelemetryFlow(runtime)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     /** Whether the provider is currently enabled in persisted settings. */
     val providerEnabled: StateFlow<Boolean> = settingsStore.settingsFlow
         .map { settings ->
@@ -111,7 +127,59 @@ class SettingLocalLlmViewModel(
     init {
         viewModelScope.launch {
             refreshFromDisk()
+            migrateExistingModelMetadata()
         }
+    }
+
+    /**
+     * One-shot startup migration for users who installed LiteRT models BEFORE the
+     * ability auto-detect landed. Walks the persisted [ProviderSetting.LiteRtLocal]
+     * models list and adds (never removes) capabilities the catalog declares. Idempotent
+     * — re-running finds nothing to change and exits without a write. Migration runs
+     * each time Settings → LiteRT mounts; cheap (in-memory comparison + at most one
+     * DataStore write).
+     */
+    private suspend fun migrateExistingModelMetadata() {
+        val targetId = providerIdForRuntime()
+        val provider = settingsStore.settingsFlow.value.providers
+            .firstOrNull { it.id == targetId } ?: return
+        if (provider.models.isEmpty()) return
+        val originals = provider.models.toList()
+        var anyChange = false
+        val patched = originals.map { model ->
+            val current = LiteRtModelMetadata.Capabilities(
+                inputModalities = model.inputModalities,
+                abilities = model.abilities,
+            )
+            val target = LiteRtModelMetadata.deriveCapabilities(model.modelId)
+            val merged = LiteRtModelMetadata.mergeAdditive(current, target)
+            if (merged.inputModalities == model.inputModalities &&
+                merged.abilities == model.abilities
+            ) {
+                model
+            } else {
+                anyChange = true
+                model.copy(
+                    inputModalities = merged.inputModalities,
+                    abilities = merged.abilities,
+                )
+            }
+        }
+        if (!anyChange) return
+        val changedCount = patched.indices.count { patched[it] != originals[it] }
+        settingsStore.update { old ->
+            old.copy(providers = old.providers.map { p ->
+                if (p.id == targetId) {
+                    var next = p
+                    patched.forEach { newModel -> next = next.editModel(newModel) }
+                    next
+                } else p
+            })
+        }
+        android.util.Log.i(
+            "SettingLocalLlmVM",
+            "migrateExistingModelMetadata: patched $changedCount model(s) to add catalog-declared abilities/modalities",
+        )
     }
 
     private suspend fun refreshFromDisk() {
@@ -165,10 +233,12 @@ class SettingLocalLlmViewModel(
             val knownModelIds = currentProvider.models.map { it.modelId }.toSet()
             val missing = finalInstalled.keys.filter { it !in knownModelIds }
             for (fileName in missing) {
+                val caps = LiteRtModelMetadata.deriveCapabilities(fileName)
                 val model = Model(
                     modelId = fileName,
                     displayName = fileName,
-                    abilities = listOf(ModelAbility.TOOL),
+                    inputModalities = caps.inputModalities,
+                    abilities = caps.abilities,
                 )
                 updateMyProvider { provider -> provider.addModel(model) }
             }
@@ -209,6 +279,14 @@ class SettingLocalLlmViewModel(
     /** Set the max-context override. Pass null to clear and revert to the curated default. */
     fun setMaxNumTokensOverride(value: Int?) {
         viewModelScope.launch { prefs.setMaxNumTokensOverride(runtime, value) }
+    }
+
+    /** Clear the "vision unavailable" flag for [fileName] so the next inference attempts the
+     *  GPU vision encoder again. Used by the "Re-try vision" button — the user opts back in
+     *  after a GPU driver update or a ROM change. If the encoder fails again, the runtime
+     *  will re-stamp the flag automatically. */
+    fun retryVisionEncoder(fileName: String) {
+        viewModelScope.launch { prefs.clearVisionUnavailable(runtime, fileName) }
     }
 
     /**
@@ -305,10 +383,12 @@ class SettingLocalLlmViewModel(
                 is ModelInstall.Progress.Done -> {
                     _downloadProgress.value = null
                     prefs.addInstalledModel(runtime, fileName, p.file.absolutePath)
+                    val caps = LiteRtModelMetadata.deriveCapabilities(fileName)
                     val model = Model(
                         modelId = fileName,
                         displayName = fileName,
-                        abilities = listOf(ModelAbility.TOOL),
+                        inputModalities = caps.inputModalities,
+                        abilities = caps.abilities,
                     )
                     updateMyProvider { provider -> provider.addModel(model) }
                     // Enable the provider automatically after the first successful download.
