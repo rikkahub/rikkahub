@@ -27,6 +27,30 @@ object LiteRtToolPrefix {
         allowTrailingComma = true
     }
 
+    /**
+     * Adaptive tool-prefix budget. Scales with the model's `maxNumTokens` so large-context
+     * models (Gemma 4 = 32k) get every tool while small-context models (Qwen 1.5B = 4k)
+     * keep a tight cap. Three tiers:
+     *
+     *   - small (`maxNumTokens < 6144`): the original 25 tools / 2000 chars cap. Stays safe
+     *     on Qwen2.5-1.5B-Instruct (4k context) and Gemma3-1B-IT (1k effective).
+     *   - medium (`6144 <= maxNumTokens < 16384`): 60 tools / 4500 chars. A future
+     *     mid-sized local model would land here.
+     *   - large (`>= 16384`): unlimited tools, 12000 chars of total budget. Gemma 4 E2B
+     *     and E4B have 32k context and fit every enabled tool here with room to spare.
+     *
+     * The 12000-char ceiling is a defensive cap to keep the prompt under ~3000 tokens
+     * — even at 32k context a runaway 50-kB tool list would crowd out the user's
+     * conversation history.
+     */
+    data class Budget(val maxTools: Int, val maxChars: Int)
+
+    fun budgetForContext(maxNumTokens: Int): Budget = when {
+        maxNumTokens >= 16384 -> Budget(maxTools = Int.MAX_VALUE, maxChars = 12000)
+        maxNumTokens >= 6144 -> Budget(maxTools = 60, maxChars = 4500)
+        else -> Budget(maxTools = 25, maxChars = 2000)
+    }
+
     // Capture everything between <tool_call> and </tool_call> and hand the raw text to
     // the lenient JSON parser.  Using a greedy [\s\S]* here is intentional: the closing
     // tag "</tool_call>" is the real terminator, so there's no risk of run-on matching.
