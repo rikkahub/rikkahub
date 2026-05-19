@@ -327,11 +327,22 @@ class LiteRtProvider(
                 maxNumTokens = effectiveMaxNumTokens,
                 supportImage = effectiveSupportImage,
                 supportAudio = config.supportsAudio,
-                speculativeDecoding = config.supportsSpeculativeDecoding,
+                // Match Google AI Edge Gallery: speculative decoding is an explicit user
+                // opt-in (their `ConfigKeys.ENABLE_SPECULATIVE_DECODING` defaults to false).
+                // Forcing it on whenever the model file supports it has been a candidate
+                // contributor to GPU init regressions on Adreno-class devices; matching
+                // Gallery removes that variable. Re-enable if/when we expose a settings
+                // toggle and the user explicitly opts in.
+                speculativeDecoding = false,
                 visionAccelerator = config.visionAccelerator ?: "gpu",
                 systemInstructionText = combinedSystem.ifBlank { null },
                 tools = nativeTools,
-                constrainedDecoding = false, // Future upgrade.
+                // Constrained decoding ON when this turn carries tools — matches Gallery's
+                // tool-task behaviour. The SDK projects the model's output into the @Tool
+                // call grammar so Gemma actually invokes runTool(...) via the bridge
+                // instead of producing free-form "I can't do that" text. OFF for plain
+                // chat turns to avoid biasing normal language.
+                constrainedDecoding = params.tools.isNotEmpty(),
                 topK = config.topK,
                 topP = config.topP,
                 temperature = config.temperature,
