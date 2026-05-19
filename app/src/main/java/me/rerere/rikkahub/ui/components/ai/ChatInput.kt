@@ -148,8 +148,8 @@ fun ChatInput(
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
-    val inputHazeStyle = HazeMaterials.ultraThin(containerColor = hazeTintColor)
-    val filesHazeStyle = HazeMaterials.ultraThin()
+    val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
+    val filesHazeStyle = HazeMaterials.thin()
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
