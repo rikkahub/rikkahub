@@ -92,21 +92,28 @@ class BackupVM(
     }
 
     suspend fun restoreFromChatBox(file: File): ChatboxRestoreResult {
-        val payload = ChatboxImporter.import(
+        var importedConversations = 0
+        var skippedExistingConversations = 0
+        val result = ChatboxImporter.importStreaming(
             file = file,
             assistantId = settings.value.assistantId,
             providers = settings.value.providers,
+            onConversation = { conversation ->
+                if (conversationRepository.existsConversationById(conversation.id)) {
+                    skippedExistingConversations++
+                } else {
+                    conversationRepository.insertConversation(conversation)
+                    importedConversations++
+                }
+            }
         )
+
         val targetAssistantId = settings.value.assistantId
-        val mergedProviders = payload.providers + settings.value.providers
-        val shouldAllowConversationSystemPrompt = payload.conversations.conversations.any {
-            !it.customSystemPrompt.isNullOrBlank()
-        }
         settingsStore.update(
             settings.value.copy(
-                providers = mergedProviders,
+                providers = result.providers + settings.value.providers,
                 assistants = settings.value.assistants.map { assistant ->
-                    if (shouldAllowConversationSystemPrompt && assistant.id == targetAssistantId) {
+                    if (result.hasConversationSystemPrompt && assistant.id == targetAssistantId) {
                         assistant.copy(allowConversationSystemPrompt = true)
                     } else {
                         assistant
@@ -115,29 +122,18 @@ class BackupVM(
             )
         )
 
-        var importedConversations = 0
-        var skippedExistingConversations = 0
-        payload.conversations.conversations.forEach { conversation ->
-            if (conversationRepository.existsConversationById(conversation.id)) {
-                skippedExistingConversations++
-            } else {
-                conversationRepository.insertConversation(conversation)
-                importedConversations++
-            }
-        }
-
         Log.i(
             TAG,
-            "restoreFromChatBox: import ${payload.providers.size} providers, " +
+            "restoreFromChatBox: import ${result.providers.size} providers, " +
                 "$importedConversations conversations, skip $skippedExistingConversations existing, " +
-                "drop ${payload.conversations.skippedImageParts} images"
+                "drop ${result.skippedImageParts} images"
         )
         return ChatboxRestoreResult(
-            importedProviders = payload.providers.size,
+            importedProviders = result.providers.size,
             importedConversations = importedConversations,
             skippedExistingConversations = skippedExistingConversations,
-            skippedImageParts = payload.conversations.skippedImageParts,
-            skippedEmptyMessages = payload.conversations.skippedEmptyMessages,
+            skippedImageParts = result.skippedImageParts,
+            skippedEmptyMessages = result.skippedEmptyMessages,
         )
     }
 

@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.data.sync.importer
 
+import android.util.JsonReader
+import android.util.JsonToken
+import kotlinx.serialization.json.JsonNull
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonArray
@@ -23,6 +26,7 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import java.io.File
+import java.io.Reader
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.UUID
@@ -58,17 +62,74 @@ import kotlin.uuid.Uuid
  */
 object ChatboxImporter {
     fun import(file: File, assistantId: Uuid, providers: List<ProviderSetting>): ChatboxImportPayload {
-        val root = JsonInstant.parseToJsonElement(file.readText()).jsonObject
-        val importedProviders = importProviders(root)
+        val importedProviders = importProviders(file)
+        val allProviders = importedProviders + providers
+        var skippedImageParts = 0
+        var skippedEmptyMessages = 0
+        val conversations = arrayListOf<Conversation>()
+
+        file.bufferedReader(StandardCharsets.UTF_8).use { reader ->
+            forEachSessionSync(reader) { session ->
+                val result = parseSession(session, assistantId, allProviders)
+                skippedImageParts += result.skippedImageParts
+                skippedEmptyMessages += result.skippedEmptyMessages
+                result.conversation?.let(conversations::add)
+            }
+        }
+
         return ChatboxImportPayload(
             providers = importedProviders,
-            conversations = importConversations(root, assistantId, importedProviders + providers),
+            conversations = ChatboxConversationImport(
+                conversations = conversations,
+                skippedImageParts = skippedImageParts,
+                skippedEmptyMessages = skippedEmptyMessages,
+            ),
         )
     }
 
     fun importProviders(file: File): List<ProviderSetting> {
-        val root = JsonInstant.parseToJsonElement(file.readText()).jsonObject
-        return importProviders(root)
+        return file.bufferedReader(StandardCharsets.UTF_8).use { reader ->
+            readSettings(reader)
+                ?.let { settings -> importProviders(JsonObject(mapOf("settings" to settings))) }
+                ?: emptyList()
+        }
+    }
+
+    suspend fun importStreaming(
+        file: File,
+        assistantId: Uuid,
+        providers: List<ProviderSetting>,
+        onConversation: suspend (Conversation) -> Unit,
+    ): ChatboxStreamingImportResult {
+        val importedProviders = importProviders(file)
+        val allProviders = importedProviders + providers
+        var parsedConversations = 0
+        var skippedImageParts = 0
+        var skippedEmptyMessages = 0
+        var hasConversationSystemPrompt = false
+
+        file.bufferedReader(StandardCharsets.UTF_8).use { reader ->
+            forEachSession(reader) { session ->
+                val result = parseSession(session, assistantId, allProviders)
+                skippedImageParts += result.skippedImageParts
+                skippedEmptyMessages += result.skippedEmptyMessages
+                result.conversation?.let { conversation ->
+                    parsedConversations++
+                    if (!conversation.customSystemPrompt.isNullOrBlank()) {
+                        hasConversationSystemPrompt = true
+                    }
+                    onConversation(conversation)
+                }
+            }
+        }
+
+        return ChatboxStreamingImportResult(
+            providers = importedProviders,
+            parsedConversations = parsedConversations,
+            skippedImageParts = skippedImageParts,
+            skippedEmptyMessages = skippedEmptyMessages,
+            hasConversationSystemPrompt = hasConversationSystemPrompt,
+        )
     }
 
     private fun importProviders(root: JsonObject): List<ProviderSetting> {
@@ -152,73 +213,10 @@ object ChatboxImporter {
         var skippedImageParts = 0
         var skippedEmptyMessages = 0
         val conversations = sessionObjects(root).mapNotNull { session ->
-            val sessionId = session["id"]?.asString ?: return@mapNotNull null
-            val messages = session["messages"]?.jsonArrayOrNull ?: return@mapNotNull null
-            val sessionSettings = session["settings"]?.jsonObjectOrNull
-            val sessionModelId = sessionSettings?.get("modelId")?.asString
-            val sessionProvider = sessionSettings?.get("provider")?.asString
-            val title = session["threadName"]?.asString
-                ?.takeIf { it.isNotBlank() }
-                ?: session["name"]?.asString?.takeIf { it.isNotBlank() }
-                ?: sessionId
-
-            var customSystemPrompt: String? = null
-            var reachedConversationMessages = false
-            val nodes = messages.mapNotNull { element ->
-                val message = element.jsonObject
-                val role = message["role"]?.asString?.toMessageRole() ?: return@mapNotNull null
-                if (role == MessageRole.SYSTEM && !reachedConversationMessages) {
-                    val systemPrompt = extractText(message).trim()
-                    if (systemPrompt.isNotBlank()) {
-                        customSystemPrompt = listOfNotNull(customSystemPrompt, systemPrompt).joinToString("\n\n")
-                    }
-                    return@mapNotNull null
-                }
-                reachedConversationMessages = true
-
-                val parseResult = parseParts(message)
-                skippedImageParts += parseResult.skippedImageParts
-                if (parseResult.parts.isEmpty()) {
-                    skippedEmptyMessages++
-                    return@mapNotNull null
-                }
-
-                val messageId = message["id"]?.asString ?: "${sessionId}:${message.hashCode()}"
-                MessageNode(
-                    id = stableUuid("chatbox:node:$sessionId:$messageId"),
-                    messages = listOf(
-                        UIMessage(
-                            id = stableUuid("chatbox:message:$messageId"),
-                            role = role,
-                            parts = parseResult.parts,
-                            createdAt = millisToLocalDateTime(message["timestamp"]?.asLong),
-                            modelId = resolveModelId(
-                                providers = providers,
-                                providerName = message["aiProvider"]?.asString ?: sessionProvider,
-                                modelId = sessionModelId,
-                                modelName = message["model"]?.asString
-                            ),
-                            usage = parseUsage(message["usage"]?.jsonObjectOrNull),
-                        )
-                    ),
-                    selectIndex = 0
-                )
-            }
-
-            if (nodes.isEmpty()) {
-                return@mapNotNull null
-            }
-
-            val timestamps = messages.mapNotNull { it.jsonObject["timestamp"]?.asLong }
-            Conversation(
-                id = stableUuid("chatbox:session:$sessionId"),
-                assistantId = assistantId,
-                title = title,
-                messageNodes = nodes,
-                createAt = timestamps.minOrNull()?.let { Instant.ofEpochMilli(it) } ?: Instant.now(),
-                updateAt = timestamps.maxOrNull()?.let { Instant.ofEpochMilli(it) } ?: Instant.now(),
-                customSystemPrompt = customSystemPrompt,
-            )
+            val result = parseSession(session, assistantId, providers)
+            skippedImageParts += result.skippedImageParts
+            skippedEmptyMessages += result.skippedEmptyMessages
+            result.conversation
         }
 
         return ChatboxConversationImport(
@@ -241,6 +239,184 @@ object ChatboxImporter {
             .mapNotNull { it.value.jsonObjectOrNull }
             .toList()
         return listedSessions + extraSessions
+    }
+
+    private fun parseSession(
+        session: JsonObject,
+        assistantId: Uuid,
+        providers: List<ProviderSetting>,
+    ): ChatboxSessionParseResult {
+        var skippedImageParts = 0
+        var skippedEmptyMessages = 0
+        val sessionId = session["id"]?.asString ?: return ChatboxSessionParseResult(null, 0, 0)
+        val messages = session["messages"]?.jsonArrayOrNull ?: return ChatboxSessionParseResult(null, 0, 0)
+        val sessionSettings = session["settings"]?.jsonObjectOrNull
+        val sessionModelId = sessionSettings?.get("modelId")?.asString
+        val sessionProvider = sessionSettings?.get("provider")?.asString
+        val title = session["threadName"]?.asString
+            ?.takeIf { it.isNotBlank() }
+            ?: session["name"]?.asString?.takeIf { it.isNotBlank() }
+            ?: sessionId
+
+        var customSystemPrompt: String? = null
+        var reachedConversationMessages = false
+        var minTimestamp: Long? = null
+        var maxTimestamp: Long? = null
+        val nodes = messages.mapNotNull { element ->
+            val message = element.jsonObject
+            val timestamp = message["timestamp"]?.asLong
+            if (timestamp != null) {
+                minTimestamp = minOf(minTimestamp ?: timestamp, timestamp)
+                maxTimestamp = maxOf(maxTimestamp ?: timestamp, timestamp)
+            }
+            val role = message["role"]?.asString?.toMessageRole() ?: return@mapNotNull null
+            if (role == MessageRole.SYSTEM && !reachedConversationMessages) {
+                val systemPrompt = extractText(message).trim()
+                if (systemPrompt.isNotBlank()) {
+                    customSystemPrompt = listOfNotNull(customSystemPrompt, systemPrompt).joinToString("\n\n")
+                }
+                return@mapNotNull null
+            }
+            reachedConversationMessages = true
+
+            val parseResult = parseParts(message)
+            skippedImageParts += parseResult.skippedImageParts
+            if (parseResult.parts.isEmpty()) {
+                skippedEmptyMessages++
+                return@mapNotNull null
+            }
+
+            val messageId = message["id"]?.asString ?: "${sessionId}:${message.hashCode()}"
+            MessageNode(
+                id = stableUuid("chatbox:node:$sessionId:$messageId"),
+                messages = listOf(
+                    UIMessage(
+                        id = stableUuid("chatbox:message:$messageId"),
+                        role = role,
+                        parts = parseResult.parts,
+                        createdAt = millisToLocalDateTime(timestamp),
+                        modelId = resolveModelId(
+                            providers = providers,
+                            providerName = message["aiProvider"]?.asString ?: sessionProvider,
+                            modelId = sessionModelId,
+                            modelName = message["model"]?.asString
+                        ),
+                        usage = parseUsage(message["usage"]?.jsonObjectOrNull),
+                    )
+                ),
+                selectIndex = 0
+            )
+        }
+
+        if (nodes.isEmpty()) {
+            return ChatboxSessionParseResult(null, skippedImageParts, skippedEmptyMessages)
+        }
+
+        return ChatboxSessionParseResult(
+            conversation = Conversation(
+                id = stableUuid("chatbox:session:$sessionId"),
+                assistantId = assistantId,
+                title = title,
+                messageNodes = nodes,
+                createAt = minTimestamp?.let { Instant.ofEpochMilli(it) } ?: Instant.now(),
+                updateAt = maxTimestamp?.let { Instant.ofEpochMilli(it) } ?: Instant.now(),
+                customSystemPrompt = customSystemPrompt,
+            ),
+            skippedImageParts = skippedImageParts,
+            skippedEmptyMessages = skippedEmptyMessages,
+        )
+    }
+
+    private fun readSettings(reader: Reader): JsonObject? {
+        val jsonReader = JsonReader(reader).apply { isLenient = true }
+        jsonReader.beginObject()
+        while (jsonReader.hasNext()) {
+            when (jsonReader.nextName()) {
+                "settings" -> return jsonReader.nextJsonElement().jsonObjectOrNull
+                else -> jsonReader.skipValue()
+            }
+        }
+        jsonReader.endObject()
+        return null
+    }
+
+    private suspend fun forEachSession(
+        reader: Reader,
+        onSession: suspend (JsonObject) -> Unit,
+    ) {
+        val jsonReader = JsonReader(reader).apply { isLenient = true }
+        jsonReader.beginObject()
+        while (jsonReader.hasNext()) {
+            val name = jsonReader.nextName()
+            if (name.startsWith("session:")) {
+                jsonReader.nextJsonElement().jsonObjectOrNull?.let { session ->
+                    onSession(session)
+                }
+            } else {
+                jsonReader.skipValue()
+            }
+        }
+        jsonReader.endObject()
+    }
+
+    private fun forEachSessionSync(
+        reader: Reader,
+        onSession: (JsonObject) -> Unit,
+    ) {
+        val jsonReader = JsonReader(reader).apply { isLenient = true }
+        jsonReader.beginObject()
+        while (jsonReader.hasNext()) {
+            val name = jsonReader.nextName()
+            if (name.startsWith("session:")) {
+                jsonReader.nextJsonElement().jsonObjectOrNull?.let(onSession)
+            } else {
+                jsonReader.skipValue()
+            }
+        }
+        jsonReader.endObject()
+    }
+
+    private fun JsonReader.nextJsonElement(): JsonElement {
+        return when (peek()) {
+            JsonToken.BEGIN_OBJECT -> {
+                beginObject()
+                val map = linkedMapOf<String, JsonElement>()
+                while (hasNext()) {
+                    map[nextName()] = nextJsonElement()
+                }
+                endObject()
+                JsonObject(map)
+            }
+
+            JsonToken.BEGIN_ARRAY -> {
+                beginArray()
+                val list = arrayListOf<JsonElement>()
+                while (hasNext()) {
+                    list.add(nextJsonElement())
+                }
+                endArray()
+                JsonArray(list)
+            }
+
+            JsonToken.STRING -> JsonPrimitive(nextString())
+            JsonToken.NUMBER -> nextString().toJsonNumber()
+            JsonToken.BOOLEAN -> JsonPrimitive(nextBoolean())
+            JsonToken.NULL -> {
+                nextNull()
+                JsonNull
+            }
+
+            else -> {
+                skipValue()
+                JsonNull
+            }
+        }
+    }
+
+    private fun String.toJsonNumber(): JsonPrimitive {
+        return toLongOrNull()?.let { JsonPrimitive(it) }
+            ?: toDoubleOrNull()?.let { JsonPrimitive(it) }
+            ?: JsonPrimitive(this)
     }
 
     private fun parseParts(message: JsonObject): ChatboxPartParseResult {
@@ -426,6 +602,20 @@ data class ChatboxImportPayload(
 
 data class ChatboxConversationImport(
     val conversations: List<Conversation>,
+    val skippedImageParts: Int,
+    val skippedEmptyMessages: Int,
+)
+
+data class ChatboxStreamingImportResult(
+    val providers: List<ProviderSetting>,
+    val parsedConversations: Int,
+    val skippedImageParts: Int,
+    val skippedEmptyMessages: Int,
+    val hasConversationSystemPrompt: Boolean,
+)
+
+private data class ChatboxSessionParseResult(
+    val conversation: Conversation?,
     val skippedImageParts: Int,
     val skippedEmptyMessages: Int,
 )
