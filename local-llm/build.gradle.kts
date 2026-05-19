@@ -48,7 +48,14 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.okhttp)
     // LiteRT-LM runtime: loads .litertlm model files produced by the LiteRT-LM toolchain.
-    // Pinned to 0.11.0 to match the Gallery reference app's dependency; upgrade deliberately.
+    //
+    // Pinned to 0.11.0 to MATCH Google AI Edge Gallery's working configuration. Gallery
+    // ships 0.11.0 (gradle/libs.versions.toml in github.com/google-ai-edge/gallery) and
+    // successfully runs Gemma 4 multimodal on devices including Snapdragon 8 Gen 1
+    // (Nothing Phone 1 / Adreno 642L) where our prior 0.12.0 bump native-SIGSEGV'd inside
+    // liblitertlm_jni.so during vision-encoder init. Until we have an upstream signal
+    // that 0.12+ is safe on the device classes Gallery supports, we stay aligned with
+    // Gallery's reference build.
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
 
     testImplementation(libs.junit)
