@@ -284,6 +284,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val QWEN_3_7 = defineModel {
+        tokens("qwen", "3", "7")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val DOUBAO_1_6 = defineModel {
         tokens("doubao", "1", "6")
         visionInput()
@@ -440,6 +446,7 @@ object ModelRegistry {
         QWEN_3,
         QWEN_3_5,
         QWEN_3_6,
+        QWEN_3_7,
         DOUBAO_1_6,
         DOUBAO_1_8,
         GROK_4,
