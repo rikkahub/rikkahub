@@ -15,6 +15,9 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import android.content.Context
+import me.rerere.ai.util.audioBytes
+import me.rerere.ai.util.toBitmap
 import me.rerere.locallm.LocalRuntime
 import me.rerere.locallm.LocalRuntimePreferences
 
@@ -36,6 +39,7 @@ private const val TAG = "LiteRtProvider"
  *   from the DI layer.
  */
 class LiteRtProvider(
+    private val context: Context,
     private val runtime: LiteRtRuntime,
     private val prefs: LocalRuntimePreferences,
     private val settingsUpdater: suspend (transform: (List<ProviderSetting>) -> List<ProviderSetting>) -> Unit,
@@ -162,21 +166,15 @@ class LiteRtProvider(
         // (topK / topP / temperature / maxTokens / multimodal flags / speculative decoding).
         // For HF-pasted models that aren't in the table, this returns the FALLBACK config.
         val config = LiteRtModelDefaults.forModelFile(params.model.modelId)
-        // Pre-flight: multimodal models REQUIRE a GPU vision backend (Gallery's mandate
-        // — see LiteRtRuntime.tryLoadWithBackend's visionBackend logic). With Force CPU
-        // on, the runtime would still configure visionBackend=GPU.Backend, the SDK's
-        // vision executor would fail on init, the fallback to CPU would also fail (still
-        // GPU vision needed), and the user would see the generic "engine could not load"
-        // error. Refuse upfront with a clear, actionable message instead.
-        if (config.supportsImage && forceCpu) {
-            throw IllegalStateException(
-                "Model \"${params.model.modelId}\" is multimodal (vision support) and " +
-                    "requires the GPU backend, but \"Try GPU acceleration\" is currently " +
-                    "off in Settings → Local · LiteRT. Either enable GPU and retry, or " +
-                    "switch to a text-only model (Gemma3-1B-IT or Qwen2.5-1.5B-Instruct) " +
-                    "which runs fine on CPU."
-            )
-        }
+        // Note: the old pre-flight refusal here (multimodal + forceCpu = throw) has been
+        // removed. With the runtime's vision-encoder fallback path (see
+        // [LiteRtRuntime.LoadOutcome.visionFellBackToTextOnly]) and the per-model
+        // [LocalRuntimePreferences.isVisionUnavailable] flag, a multimodal model on a
+        // force-CPU device just loads text-only — the user can chat with it, they only
+        // lose the ability to pass images. Refusing was wrong: it punished users on
+        // GPU-broken devices (Adreno 7xx + restrictive OEM ROMs, Google Tensor) by
+        // making the bigger Gemma-4 models completely unreachable when a text-only
+        // load would have worked.
         // User-set max-context override. Lets capable models (Gemma 4 E2B = 32k) use more
         // than Gallery's curated default; the underlying KV cache size still caps it
         // (Qwen `ekv4096` cannot exceed 4096 regardless of this setting).
@@ -215,12 +213,27 @@ class LiteRtProvider(
 
         // Compact tool prefix only — full-schema dump would re-blow the context budget
         // (every tool's schema is ~200-500 chars, ×50 tools = ~15k chars on its own).
-        // Caps further: at most 25 tools, at most 2000 chars total. Prefill on CPU is
-        // ~1-3 tok/s; every tool we shave off knocks ~30s off "time to first token".
+        // Budget is adaptive: large-context models (Gemma 4 = 32k) see every enabled
+        // tool, small-context models (Qwen 1.5B = 4k) stay capped at 25 / 2000 chars.
+        // We pass the model's MAX CONTEXT LENGTH (not output cap): config.maxContextLength
+        // is the input + output budget, which is what determines how much tool prefix we
+        // can afford. For models without a curated maxContextLength (URL-pasted entries),
+        // fall back to maxTokens (output cap) as a conservative lower bound. See
+        // [LiteRtToolPrefix.budgetForContext] for tier thresholds.
+        val contextLen = config.maxContextLength ?: effectiveMaxNumTokens
+        val toolBudget = LiteRtToolPrefix.budgetForContext(contextLen)
         val toolPrefix = LiteRtToolPrefix.buildCompactPrefix(
             params.tools,
-            maxTools = MAX_TOOLS_IN_PREFIX,
-            maxChars = TOOL_PREFIX_CHAR_BUDGET,
+            maxTools = toolBudget.maxTools,
+            maxChars = toolBudget.maxChars,
+        )
+        val surfacedCount = params.tools.size.coerceAtMost(toolBudget.maxTools)
+        val droppedCount = (params.tools.size - surfacedCount).coerceAtLeast(0)
+        Log.i(
+            TAG,
+            "tool prefix: ${params.tools.size} enabled, $surfacedCount surfaced, " +
+                "$droppedCount hidden (context=$contextLen tokens; " +
+                "budget=${toolBudget.maxTools} tools / ${toolBudget.maxChars} chars)",
         )
 
         val combinedSystem = buildString {
@@ -259,16 +272,32 @@ class LiteRtProvider(
         }
         val turns = trimmed.map { it.toTurn() }
 
+        // Check the persisted vision-unavailable flag. If a prior load fell back to
+        // text-only on this device, skip the GPU vision attempt entirely — saves ~1 s of
+        // doomed engine init per cold load. The user can clear the flag via Settings →
+        // Local · LiteRT if they update GPU drivers or move to a capable device.
+        val visionPersistentlyUnavailable = runCatching {
+            prefs.isVisionUnavailable(LocalRuntime.LiteRT, params.model.modelId)
+        }.getOrDefault(false)
+        // Also honor the per-model config field [LiteRtModelConfig.visionAccelerator] —
+        // when null we never try the GPU vision backend even if the model file contains
+        // vision tensors. Today this is set to null for Gemma-3n entries and to "gpu"
+        // for Gemma-4 entries; treat null as "skip vision regardless".
+        val effectiveSupportImage = config.supportsImage &&
+            config.visionAccelerator != null &&
+            !visionPersistentlyUnavailable
+
         // ---- Engine load with full per-model + per-call config ----
-        val resolvedAccel = try {
+        val outcome = try {
             runtime.ensureLoaded(
                 modelPath = modelPath,
                 preferredAccel = cachedAccel,
                 forceCpu = forceCpu,
                 maxNumTokens = effectiveMaxNumTokens,
-                supportImage = config.supportsImage,
+                supportImage = effectiveSupportImage,
                 supportAudio = config.supportsAudio,
                 speculativeDecoding = config.supportsSpeculativeDecoding,
+                visionAccelerator = config.visionAccelerator ?: "gpu",
                 systemInstructionText = combinedSystem.ifBlank { null },
                 tools = emptyList(), // Native tool registration deferred; we use prompt-engineered tools.
                 constrainedDecoding = false, // Future upgrade.
@@ -278,7 +307,10 @@ class LiteRtProvider(
             )
         } catch (corrupt: LiteRtModelCorruptException) {
             handleCorruptModel(corrupt)
+        } catch (t: Throwable) {
+            throw translateSdkError(t, effectiveMaxNumTokens)
         }
+        val resolvedAccel = outcome.accelerator
         // Persist whatever the runtime actually used. Without this, the in-runtime
         // GPU -> CPU fallback only sticks for the current process: every cold start
         // re-probes the (known-broken-on-this-device) GPU and wastes ~1 s before
@@ -287,6 +319,16 @@ class LiteRtProvider(
         if (resolvedAccel != cachedAccel) {
             runCatching { prefs.setAccelerator(LocalRuntime.LiteRT, resolvedAccel) }
                 .onFailure { Log.w(TAG, "setAccelerator($resolvedAccel) failed", it) }
+        }
+        // If the runtime had to drop vision to text-only on this load, persist that so the
+        // next load skips the doomed GPU vision attempt up front. Only stamp on a true
+        // fallback — not when we already skipped vision because of the persisted flag.
+        if (outcome.visionFellBackToTextOnly && !visionPersistentlyUnavailable) {
+            Log.w(TAG, "Vision encoder unavailable on this device for ${params.model.modelId}; " +
+                "persisting decision so future loads skip the GPU vision attempt")
+            runCatching {
+                prefs.setVisionUnavailable(LocalRuntime.LiteRT, params.model.modelId)
+            }.onFailure { Log.w(TAG, "setVisionUnavailable failed", it) }
         }
 
         // ---- Stream + cumulative→delta conversion ----
@@ -306,8 +348,45 @@ class LiteRtProvider(
         var previousCumulative = ""
         val fullResponseBuilder = StringBuilder()
 
+        // Extract images + audio from the LAST USER message only (the new turn). Earlier
+        // turns' media is already represented in the conversation prefix via the cold-blob
+        // text render; the SDK's vision/audio executors only consume current-turn input.
+        // Decode here so the runtime gets ready-to-use Bitmaps / encoded audio bytes and
+        // doesn't have to know about content URIs.
+        val lastUser = messages.lastOrNull { it.role == MessageRole.USER }
+        val turnImages: List<android.graphics.Bitmap> = if (effectiveSupportImage) {
+            lastUser?.parts
+                ?.filterIsInstance<UIMessagePart.Image>()
+                ?.mapNotNull { it.toBitmap(context) }
+                .orEmpty()
+        } else {
+            // Vision unavailable / not supported by this model — drop image parts silently.
+            // The user already sees the "Vision unavailable" caption in Settings if persisted.
+            emptyList()
+        }
+        val turnAudio: List<ByteArray> = if (config.supportsAudio) {
+            lastUser?.parts
+                ?.filterIsInstance<UIMessagePart.Audio>()
+                ?.mapNotNull { it.audioBytes(context) }
+                .orEmpty()
+        } else {
+            emptyList()
+        }
+        if (turnImages.isNotEmpty() || turnAudio.isNotEmpty()) {
+            Log.i(
+                TAG,
+                "streamText: forwarding ${turnImages.size} image(s) + ${turnAudio.size} " +
+                    "audio clip(s) to runtime for modelId=${params.model.modelId}",
+            )
+        }
+
         try {
-            runtime.streamTurns(history = turns, coldBlob = coldBlob).collect { cumulative ->
+            runtime.streamTurns(
+                history = turns,
+                coldBlob = coldBlob,
+                images = turnImages,
+                audioClips = turnAudio,
+            ).collect { cumulative ->
                 // Defensive: if the SDK ever emits a non-monotonic cumulative (e.g. after
                 // an internal retry or template re-tokenisation), treat the new payload as a
                 // fresh start — emit it whole as the delta rather than computing a negative-
@@ -348,6 +427,37 @@ class LiteRtProvider(
             // — looks scary but means "your conversation is bigger than this model can
             // hold". Surface that with a recovery hint.
             throw translateSdkError(t, effectiveMaxNumTokens)
+        }
+
+        // ---- Persist tok/s telemetry --------------------------------------------------
+        // After a clean stream the runtime stamps lastTelemetry with prefill / decode
+        // timings and character counts. Persist it per-model so the Settings page can
+        // render "Last gen: 12.4 tok/s prefill, 2.7 tok/s decode" without re-running
+        // inference. Best-effort: a write failure must never break the user's reply.
+        runtime.lastTelemetry?.let { tele ->
+            // Only persist samples with non-trivial timings — a zero-decode case would
+            // be the SDK emitting no tokens, which is already a bug we want to see
+            // elsewhere; persisting tps=0 muddies the rolling average.
+            if (tele.decodeMs > 100 && tele.outputCharCount > 0) {
+                runCatching {
+                    prefs.setPerfTelemetry(
+                        LocalRuntime.LiteRT,
+                        LocalRuntimePreferences.PerfSample(
+                            modelId = params.model.modelId,
+                            prefillTps = tele.prefillTps,
+                            decodeTps = tele.decodeTps,
+                            specDecodingEngaged = tele.specDecodingEngaged,
+                            sampledAtMs = System.currentTimeMillis(),
+                        ),
+                    )
+                }.onFailure { Log.w(TAG, "setPerfTelemetry failed", it) }
+                Log.i(
+                    TAG,
+                    "telemetry: prefill=${"%.2f".format(tele.prefillTps)} tok/s decode=${"%.2f".format(tele.decodeTps)} tok/s " +
+                        "(prefillMs=${tele.prefillMs} decodeMs=${tele.decodeMs} inChars=${tele.inputCharCount} outChars=${tele.outputCharCount} " +
+                        "specDecoding=${tele.specDecodingEngaged})",
+                )
+            }
         }
 
         // ---- Tool-call extraction at end-of-stream ----
@@ -512,6 +622,23 @@ class LiteRtProvider(
      * users on a chat surface.
      */
     private fun translateSdkError(t: Throwable, effectiveMaxNumTokens: Int): Throwable {
+        // Typed exception from the runtime — the structural diagnosis already happened.
+        // Vision-unavailable here means BOTH "GPU vision tried and failed" AND "text-only
+        // retry also failed", i.e. the model truly cannot load on this device's chip class
+        // (typically Adreno 7xx + One UI / OriginOS + multimodal Gemma — upstream LiteRT-LM
+        // issue #2292, OpenGL fallback's CreateSharedMemoryManager is UNIMPLEMENTED).
+        if (t is LiteRtVisionUnavailableException) {
+            return RuntimeException(
+                "This multimodal model could not be loaded on your device. The GPU vision " +
+                    "encoder failed (a known upstream LiteRT-LM issue on Adreno 7xx GPUs + " +
+                    "OEM ROMs that restrict vendor library access), and the text-only " +
+                    "fallback ALSO failed. Pick a text-only model from Settings → Local · " +
+                    "LiteRT (Qwen2.5-1.5B-Instruct is the most reliable) or try a newer " +
+                    "device. If a future LiteRT-LM SDK adds an OpenGL fallback path, an " +
+                    "app update should pick it up automatically.",
+                t,
+            )
+        }
         // Walk the cause chain too — LiteRtRuntime wraps the SDK error inside a
         // RuntimeException of its own ("LiteRT engine could not load this model on
         // this device's GPU OR CPU. … Underlying: …"), so the SDK's own text only
@@ -569,14 +696,8 @@ class LiteRtProvider(
         /** Hard char-cap for the rendered ChatML history. ~3000 chars ≈ 750 tokens. */
         private const val HISTORY_CHAR_BUDGET = 3000
 
-        /** Max tools surfaced in the compact tool prefix. Beyond ~30 tools the
-         *  prefix alone consumes more context than a 4k model can spare for
-         *  system + history + output. The compact prefix is ordered by the caller;
-         *  later tools are dropped first (with a "and N more" note) so the user
-         *  can still call the most important ones. */
-        private const val MAX_TOOLS_IN_PREFIX = 25
-
-        /** Hard char-cap for the compact tool prefix. ~2000 chars ≈ 500 tokens. */
-        private const val TOOL_PREFIX_CHAR_BUDGET = 2000
+        // MAX_TOOLS_IN_PREFIX / TOOL_PREFIX_CHAR_BUDGET were static caps that starved
+        // large-context models (Gemma 4 = 32k) of 30+ enabled tools. Replaced by
+        // [LiteRtToolPrefix.budgetForContext], which scales with the model's context.
     }
 }

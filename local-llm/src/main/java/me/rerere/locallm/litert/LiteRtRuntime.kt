@@ -252,6 +252,10 @@ class LiteRtRuntime(private val context: Context) {
         val supportImage: Boolean,
         val supportAudio: Boolean,
         val speculativeDecoding: Boolean,
+        /** Per-model vision-backend choice. Mirrors Gallery's `ConfigKeys.VISION_ACCELERATOR`
+         *  field. "gpu" / "cpu" / "npu". Default "gpu" matches Gallery's default; null
+         *  is reserved for non-multimodal models where supportImage is also false. */
+        val visionAccelerator: String,
     )
 
     /**
@@ -361,6 +365,9 @@ class LiteRtRuntime(private val context: Context) {
         supportImage: Boolean = false,
         supportAudio: Boolean = false,
         speculativeDecoding: Boolean = false,
+        /** "gpu" | "cpu" | "npu". Defaults to "gpu" matching Gallery's
+         *  DEFAULT_VISION_ACCELERATOR. Ignored when supportImage = false. */
+        visionAccelerator: String = "gpu",
         systemInstructionText: String? = null,
         tools: List<ToolProvider> = emptyList(),
         constrainedDecoding: Boolean = false,
@@ -390,6 +397,7 @@ class LiteRtRuntime(private val context: Context) {
             supportImage = supportImage,
             supportAudio = supportAudio,
             speculativeDecoding = effectiveSpeculativeDecoding,
+            visionAccelerator = visionAccelerator,
         )
         val systemInstruction: Contents? =
             if (!systemInstructionText.isNullOrBlank()) Contents.of(systemInstructionText) else null
@@ -633,7 +641,16 @@ class LiteRtRuntime(private val context: Context) {
         // Vision backend MUST be GPU for Gemma 3n; audio backend MUST be CPU (Gallery's
         // mandate). Leave each null when the caller didn't request that modality so the
         // engine doesn't allocate the corresponding executor memory.
-        val visionBackend: Backend? = if (engineKey.supportImage) Backend.GPU() else null
+        // Vision backend mirrors Gallery's `LlmChatModelHelper`: configurable per model
+        // via the visionAccelerator label. GPU is default (Gemma 3n / 4 train with GPU
+        // vision); CPU and NPU are valid alternates the SDK accepts.
+        val visionBackend: Backend? = if (engineKey.supportImage) {
+            when (engineKey.visionAccelerator) {
+                "cpu" -> Backend.CPU()
+                "npu", "tpu" -> Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+                else -> Backend.GPU()
+            }
+        } else null
         val audioBackend: Backend? = if (engineKey.supportAudio) Backend.CPU() else null
 
         // cacheDir: matches Google AI Edge Gallery's LlmChatModelHelper exactly. Only set
