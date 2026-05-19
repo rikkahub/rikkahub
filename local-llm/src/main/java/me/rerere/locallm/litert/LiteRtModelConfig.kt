@@ -32,7 +32,9 @@ object LiteRtModelDefaults {
     )
 
     private val BUILT_IN: List<LiteRtModelConfig> = listOf(
-        // Gemma-4-E2B-it
+        // Gemma-4-E2B-it — matches Google AI Edge Gallery's allowlist for this model file.
+        // Vision works on Adreno 642L (Nothing Phone 1, Snapdragon 8 Gen 1) per the user's
+        // live Gallery test on 2026-05-19; both apps target litertlm 0.11.0.
         LiteRtModelConfig(
             modelFile = "gemma-4-E2B-it.litertlm",
             topK = 64,
@@ -49,7 +51,7 @@ object LiteRtModelDefaults {
             minDeviceMemoryGb = 8,
             sizeBytes = 2588147712L,
         ),
-        // Gemma-4-E4B-it
+        // Gemma-4-E4B-it — Gallery-parity multimodal config.
         LiteRtModelConfig(
             modelFile = "gemma-4-E4B-it.litertlm",
             topK = 64,
@@ -66,7 +68,7 @@ object LiteRtModelDefaults {
             minDeviceMemoryGb = 12,
             sizeBytes = 3659530240L,
         ),
-        // Gemma-3n-E2B-it
+        // Gemma-3n-E2B-it — Gallery-parity multimodal (no thinking).
         LiteRtModelConfig(
             modelFile = "gemma-3n-E2B-it-int4.litertlm",
             topK = 64,
@@ -75,7 +77,7 @@ object LiteRtModelDefaults {
             maxTokens = 4096,
             maxContextLength = null,
             preferredAccelerators = listOf("cpu", "gpu"),
-            visionAccelerator = null,
+            visionAccelerator = "gpu",
             supportsImage = true,
             supportsAudio = true,
             supportsThinking = false,
@@ -83,7 +85,7 @@ object LiteRtModelDefaults {
             minDeviceMemoryGb = 8,
             sizeBytes = 3655827456L,
         ),
-        // Gemma-3n-E4B-it
+        // Gemma-3n-E4B-it — Gallery-parity multimodal (no thinking).
         LiteRtModelConfig(
             modelFile = "gemma-3n-E4B-it-int4.litertlm",
             topK = 64,
@@ -92,7 +94,7 @@ object LiteRtModelDefaults {
             maxTokens = 4096,
             maxContextLength = null,
             preferredAccelerators = listOf("cpu", "gpu"),
-            visionAccelerator = null,
+            visionAccelerator = "gpu",
             supportsImage = true,
             supportsAudio = true,
             supportsThinking = false,
