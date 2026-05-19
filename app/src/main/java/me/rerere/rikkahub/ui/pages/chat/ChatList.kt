@@ -90,7 +90,6 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
@@ -260,6 +259,16 @@ private fun ChatListNormal(
         )
     }
 
+    val assistant = remember(settings.assistants, conversation.assistantId) {
+        settings.getAssistantById(conversation.assistantId)
+    }
+    val modelById = remember(settings.providers) {
+        settings.providers
+            .flatMap { it.models }
+            .associateBy { it.id }
+    }
+    val lastMessageIndex = conversation.messageNodes.lastIndex
+
     Box(
         modifier = Modifier
             .fillMaxSize(),
@@ -320,9 +329,9 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
-                            model = node.currentMessage.modelId?.let { settings.findModelById(it) },
-                            assistant = settings.getAssistantById(conversation.assistantId),
-                            loading = loading && index == conversation.messageNodes.lastIndex,
+                            model = node.currentMessage.modelId?.let(modelById::get),
+                            assistant = assistant,
+                            loading = loading && index == lastMessageIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
                             },
@@ -352,13 +361,12 @@ private fun ChatListNormal(
                             onClearTranslation = onClearTranslation,
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
-                            lastMessage = index == conversation.messageNodes.lastIndex,
+                            lastMessage = index == lastMessageIndex,
                         )
                     }
                 }
             }
 
-            val assistant = settings.getAssistantById(conversation.assistantId)
             if (!loading && assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
                 item(key = "ConversationSystemPrompt") {
                     ConversationSystemPromptButton(
