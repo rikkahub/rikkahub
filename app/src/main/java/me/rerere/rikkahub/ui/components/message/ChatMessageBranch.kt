@@ -35,6 +35,8 @@ fun ChatMessageBranchSelector(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (node.messages.size > 1) {
+            val actionColor = MaterialTheme.colorScheme.onSurfaceVariant
+
             Icon(
                 imageVector = HugeIcons.ArrowLeft01,
                 contentDescription = "Prev",
@@ -55,12 +57,14 @@ fun ChatMessageBranchSelector(
                         }
                     )
                     .padding(8.dp)
-                    .size(16.dp)
+                    .size(16.dp),
+                tint = actionColor
             )
 
             Text(
                 text = "${node.selectIndex + 1}/${node.messages.size}",
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = actionColor
             )
 
             Icon(
@@ -84,6 +88,7 @@ fun ChatMessageBranchSelector(
                     )
                     .padding(8.dp)
                     .size(16.dp),
+                tint = actionColor
             )
         }
     }
