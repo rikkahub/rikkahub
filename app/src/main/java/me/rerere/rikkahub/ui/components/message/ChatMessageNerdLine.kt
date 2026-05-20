@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -15,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.ui.UIMessage
@@ -24,7 +24,6 @@ import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Upload02
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.ui.context.LocalSettings
-import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.toFixed
 import java.time.Duration
 
@@ -41,78 +40,37 @@ fun ChatMessageNerdLine(
 
     ProvideTextStyle(MaterialTheme.typography.labelSmall.copy(color = color)) {
         CompositionLocalProvider(LocalContentColor provides color) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-                modifier = modifier.padding(horizontal = 4.dp),
-            ) {
-                val usage = message.usage
-                if (settings.showTokenUsage && usage != null) {
-                    // Input tokens
-                    StatsItem(
-                        icon = {
-                            Icon(
-                                imageVector = HugeIcons.Upload02,
-                                contentDescription = "Input",
-                                tint = color,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        },
-                        content = {
-                            Text(text = "${usage.promptTokens.formatNumber()} tokens")
-                            // Cached tokens
-                            if (usage.cachedTokens > 0) {
-                                Text(
-                                    text = "(${message.usage?.cachedTokens?.formatNumber() ?: "0"} cached)"
-                                )
-                            }
-                        }
+            val usage = message.usage
+            if (settings.showTokenUsage && usage != null) {
+                Row(
+                    modifier = modifier.padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatItem(
+                        icon = HugeIcons.Upload02,
+                        text = buildInputText(usage.promptTokens, usage.cachedTokens),
                     )
-                    // Output tokens
-                    StatsItem(
-                        icon = {
-                            Icon(
-                                imageVector = HugeIcons.Download04,
-                                contentDescription = "Output",
-                                modifier = Modifier.size(12.dp)
-                            )
-                        },
-                        content = {
-                            Text(text = "${usage.completionTokens.formatNumber()} tokens")
-                        }
+                    StatItem(
+                        icon = HugeIcons.Download04,
+                        text = compactTokenCount(usage.completionTokens),
                     )
-                    // TPS
-                    if (message.finishedAt != null) {
+
+                    val finishedAt = message.finishedAt
+                    if (finishedAt != null) {
                         val duration = Duration.between(
                             message.createdAt.toJavaLocalDateTime(),
-                            message.finishedAt!!.toJavaLocalDateTime()
+                            finishedAt.toJavaLocalDateTime()
                         )
                         val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
                         val seconds = (duration.toMillis() / 1000f).toFixed(1)
-                        StatsItem(
-                            icon = {
-                                Icon(
-                                    imageVector = HugeIcons.Zap,
-                                    contentDescription = "Speed",
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            },
-                            content = {
-                                Text(text = "${tps.toFixed(1)} tok/s")
-                            }
+                        StatItem(
+                            icon = HugeIcons.Zap,
+                            text = "${tps.toFixed(1)}/s",
                         )
-
-                        StatsItem(
-                            icon = {
-                                Icon(
-                                    imageVector = HugeIcons.Clock02,
-                                    contentDescription = "Duration",
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            },
-                            content = {
-                                Text(text = "${seconds}s")
-                            }
+                        StatItem(
+                            icon = HugeIcons.Clock02,
+                            text = "${seconds}s",
                         )
                     }
                 }
@@ -122,15 +80,58 @@ fun ChatMessageNerdLine(
 }
 
 @Composable
-fun StatsItem(
-    icon: @Composable () -> Unit,
-    content: @Composable () -> Unit
+private fun StatItem(
+    icon: ImageVector,
+    text: String,
 ) {
     Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        icon()
-        content()
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(12.dp),
+            tint = LocalContentColor.current,
+        )
+        Text(
+            text = text,
+            maxLines = 1,
+            color = LocalContentColor.current,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
+}
+
+private fun buildInputText(
+    promptTokens: Number,
+    cachedTokens: Number,
+): String = buildString {
+    append(compactTokenCount(promptTokens))
+    if (cachedTokens.toLong() > 0) {
+        append("(c")
+        append(compactTokenCount(cachedTokens))
+        append(")")
+    }
+}
+
+private fun compactTokenCount(value: Number): String {
+    val number = value.toLong()
+    val absolute = kotlin.math.abs(number.toDouble())
+    val suffix = when {
+        absolute >= 1_000_000_000 -> "b"
+        absolute >= 1_000_000 -> "m"
+        absolute >= 1_000 -> "k"
+        else -> return number.toString()
+    }
+    val divisor = when (suffix) {
+        "b" -> 1_000_000_000.0
+        "m" -> 1_000_000.0
+        else -> 1_000.0
+    }
+    val roundedTenths = kotlin.math.round(number / divisor * 10).toLong()
+    val whole = roundedTenths / 10
+    val decimal = kotlin.math.abs(roundedTenths % 10)
+    val formatted = if (decimal == 0L) whole.toString() else "$whole.$decimal"
+    return "$formatted$suffix"
 }
