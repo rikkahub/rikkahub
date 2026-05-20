@@ -544,6 +544,9 @@ enum class ChatFontFamily {
     SERIF,
     @SerialName("monospace")
     MONOSPACE,
+
+    @SerialName("custom")
+    CUSTOM,
 }
 
 @Serializable
@@ -579,6 +582,8 @@ data class DisplaySetting(
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
+    val chatCustomFontPath: String = "",
+    val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
 )

@@ -100,6 +100,7 @@ import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
+import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.utils.plus
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
@@ -300,16 +301,17 @@ private fun ChatListNormal(
             }
         }
 
-        LazyColumn(
-            state = state,
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(state = hazeState)
-                .padding(top = innerPadding.calculateTopPadding()),
-        ) {
+        ChatFontProvider(displaySetting = settings.displaySetting) {
+            LazyColumn(
+                state = state,
+                contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(state = hazeState)
+                    .padding(top = innerPadding.calculateTopPadding()),
+            ) {
             itemsIndexed(
                 items = conversation.messageNodes,
                 key = { index, item -> item.id },
@@ -406,6 +408,7 @@ private fun ChatListNormal(
                         .fillMaxWidth()
                         .height(5.dp)
                 )
+            }
             }
         }
 

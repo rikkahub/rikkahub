@@ -1078,5 +1078,12 @@
   <string name="setting_theme_page_import_success">Тема успешно импортирована</string>
   <string name="setting_theme_page_delete_theme_title">Удалить тему</string>
   <string name="setting_theme_page_delete_theme_message">Вы уверены, что хотите удалить эту тему?</string>
+  <string name="setting_display_page_chat_font_family_custom">Пользовательский</string>
+  <string name="setting_display_page_custom_font_import">Импортировать пользовательский шрифт</string>
+  <string name="setting_display_page_custom_font_import_failed">Не удалось импортировать шрифт: %1$s</string>
+  <string name="setting_display_page_custom_font_import_success">Пользовательский шрифт импортирован</string>
+  <string name="setting_display_page_custom_font_not_imported">Пользовательский шрифт не импортирован. Поддерживаются файлы .ttf, .otf и .ttc.</string>
+  <string name="setting_display_page_custom_font_remove">Удалить пользовательский шрифт</string>
+  <string name="setting_display_page_custom_font_title">Пользовательский шрифт</string>
 </resources>
 

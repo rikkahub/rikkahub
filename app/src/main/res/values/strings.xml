@@ -631,6 +631,7 @@
   <string name="setting_display_page_auto_play_tts_desc">Automatically play TTS after assistant message generation completes</string>
   <string name="setting_display_page_auto_play_tts_title">Auto-play TTS After Generation</string>
   <string name="setting_display_page_chat_font_family_default">Default</string>
+  <string name="setting_display_page_chat_font_family_custom">Custom</string>
   <string name="setting_display_page_chat_font_family_monospace">Monospace</string>
   <string name="setting_display_page_chat_font_family_serif">Serif</string>
   <string name="setting_display_page_chat_font_family_title">Chat Font</string>
@@ -642,6 +643,12 @@
   <string name="setting_display_page_code_block_auto_wrap_title">Code Block Auto Wrap</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Create a new conversation when the app starts</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">New chat on launch</string>
+  <string name="setting_display_page_custom_font_import">Import custom font</string>
+  <string name="setting_display_page_custom_font_import_failed">Failed to import font: %1$s</string>
+  <string name="setting_display_page_custom_font_import_success">Custom font imported</string>
+  <string name="setting_display_page_custom_font_not_imported">No custom font imported. Supports .ttf, .otf, and .ttc files.</string>
+  <string name="setting_display_page_custom_font_remove">Remove custom font</string>
+  <string name="setting_display_page_custom_font_title">Custom Font</string>
   <string name="setting_display_page_enable_auto_scroll_desc">Automatically scroll to the bottom when AI is generating content</string>
   <string name="setting_display_page_enable_auto_scroll_title">Auto Scroll</string>
   <string name="setting_display_page_enable_blur_effect_desc">Enable blur effect on chat input bar</string>

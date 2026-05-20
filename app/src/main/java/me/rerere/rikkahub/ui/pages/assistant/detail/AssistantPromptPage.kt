@@ -83,6 +83,7 @@ import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TextArea
+import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.UiState
@@ -374,17 +375,19 @@ private fun AssistantPromptContent(
                     )
                 }
                 preview.onSuccess {
-                    it.fastForEach { message ->
-                        ChatMessage(
-                            node = message.toMessageNode(),
-                            onFork = {},
-                            onRegenerate = {},
-                            onEdit = {},
-                            onShare = {},
-                            onDelete = {},
-                            onUpdate = {},
-                            lastMessage = false,
-                        )
+                    ChatFontProvider(displaySetting = settings.displaySetting) {
+                        it.fastForEach { message ->
+                            ChatMessage(
+                                node = message.toMessageNode(),
+                                onFork = {},
+                                onRegenerate = {},
+                                onEdit = {},
+                                onShare = {},
+                                onDelete = {},
+                                onUpdate = {},
+                                lastMessage = false,
+                            )
+                        }
                     }
                 }
             }

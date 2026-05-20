@@ -168,6 +168,18 @@ class S3Sync(
                 } else {
                     Log.w(TAG, "prepareBackupFile: Skills folder does not exist or is not a directory")
                 }
+
+                val fontsFolder = File(context.filesDir, FileFolders.FONTS)
+                if (fontsFolder.exists() && fontsFolder.isDirectory) {
+                    Log.i(TAG, "prepareBackupFile: Backing up fonts from ${fontsFolder.absolutePath}")
+                    fontsFolder.listFiles()?.forEach { file ->
+                        if (file.isFile) {
+                            addFileToZip(zipOut, file, "${FileFolders.FONTS}/${file.name}")
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "prepareBackupFile: Fonts folder does not exist or is not a directory")
+                }
             }
         }
 
@@ -271,6 +283,21 @@ class S3Sync(
                                 zipEntry.name.startsWith("${FileFolders.SKILLS}/")
                             ) {
                                 restoreSkillEntry(zipIn, zipEntry.name)
+                            } else if (config.items.contains(S3Config.BackupItem.FILES) &&
+                                zipEntry.name.startsWith("${FileFolders.FONTS}/")
+                            ) {
+                                val fileName = zipEntry.name.substringAfter("${FileFolders.FONTS}/")
+                                if (fileName.isNotEmpty() && !fileName.contains('/')) {
+                                    val fontsFolder = File(context.filesDir, FileFolders.FONTS).apply { mkdirs() }
+                                    val targetFile = File(fontsFolder, fileName)
+                                    FileOutputStream(targetFile).use { outputStream ->
+                                        zipIn.copyTo(outputStream)
+                                    }
+                                    Log.i(
+                                        TAG,
+                                        "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
+                                    )
+                                }
                             } else {
                                 Log.i(TAG, "restoreFromBackupFile: Skipping entry ${zipEntry.name}")
                             }

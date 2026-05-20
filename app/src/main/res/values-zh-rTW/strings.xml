@@ -1076,5 +1076,12 @@
   <string name="setting_theme_page_import_success">主題匯入成功</string>
   <string name="setting_theme_page_delete_theme_title">刪除主題</string>
   <string name="setting_theme_page_delete_theme_message">確定要刪除此主題嗎？</string>
+  <string name="setting_display_page_chat_font_family_custom">自訂</string>
+  <string name="setting_display_page_custom_font_import">匯入自訂字型</string>
+  <string name="setting_display_page_custom_font_import_failed">匯入字型失敗：%1$s</string>
+  <string name="setting_display_page_custom_font_import_success">自訂字型已匯入</string>
+  <string name="setting_display_page_custom_font_not_imported">尚未匯入自訂字型。支援 .ttf、.otf 與 .ttc 檔案。</string>
+  <string name="setting_display_page_custom_font_remove">移除自訂字型</string>
+  <string name="setting_display_page_custom_font_title">自訂字型</string>
 </resources>
 

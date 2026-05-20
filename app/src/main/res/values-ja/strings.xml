@@ -1078,5 +1078,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_theme_page_import_success">テーマが正常にインポートされました</string>
   <string name="setting_theme_page_delete_theme_title">テーマを削除</string>
   <string name="setting_theme_page_delete_theme_message">このテーマを削除してもよろしいですか？</string>
+  <string name="setting_display_page_chat_font_family_custom">カスタム</string>
+  <string name="setting_display_page_custom_font_import">カスタムフォントをインポート</string>
+  <string name="setting_display_page_custom_font_import_failed">フォントのインポートに失敗しました: %1$s</string>
+  <string name="setting_display_page_custom_font_import_success">カスタムフォントをインポートしました</string>
+  <string name="setting_display_page_custom_font_not_imported">カスタムフォントがインポートされていません。.ttf、.otf、.ttcファイルに対応しています。</string>
+  <string name="setting_display_page_custom_font_remove">カスタムフォントを削除</string>
+  <string name="setting_display_page_custom_font_title">カスタムフォント</string>
 </resources>
 

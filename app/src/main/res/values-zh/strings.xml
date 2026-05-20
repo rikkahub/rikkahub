@@ -631,6 +631,7 @@
   <string name="setting_display_page_auto_play_tts_desc">助手消息生成完成后自动播放TTS</string>
   <string name="setting_display_page_auto_play_tts_title">生成后自动播放TTS</string>
   <string name="setting_display_page_chat_font_family_default">默认</string>
+  <string name="setting_display_page_chat_font_family_custom">自定义</string>
   <string name="setting_display_page_chat_font_family_monospace">等宽字体</string>
   <string name="setting_display_page_chat_font_family_serif">衬线体</string>
   <string name="setting_display_page_chat_font_family_title">聊天字体</string>
@@ -642,6 +643,12 @@
   <string name="setting_display_page_code_block_auto_wrap_title">代码块自动换行</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">当应用启动时，自动创建一个新的对话</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">启动时新建对话</string>
+  <string name="setting_display_page_custom_font_import">导入自定义字体</string>
+  <string name="setting_display_page_custom_font_import_failed">导入字体失败：%1$s</string>
+  <string name="setting_display_page_custom_font_import_success">自定义字体已导入</string>
+  <string name="setting_display_page_custom_font_not_imported">未导入自定义字体。支持 .ttf、.otf 和 .ttc 文件。</string>
+  <string name="setting_display_page_custom_font_remove">移除自定义字体</string>
+  <string name="setting_display_page_custom_font_title">自定义字体</string>
   <string name="setting_display_page_enable_auto_scroll_desc">AI生成内容时自动滚动到底部</string>
   <string name="setting_display_page_enable_auto_scroll_title">自动滚动</string>
   <string name="setting_display_page_enable_blur_effect_desc">在聊天输入栏启用模糊效果</string>
