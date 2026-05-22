@@ -14,10 +14,11 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - **app**: Main application module with UI, ViewModels, and core logic
 - **ai**: AI SDK abstraction layer for different providers (OpenAI, Google, Anthropic)
 - **common**: Common utilities and extensions
-- **document**: Document parsing module for handling PDF, DOCX, and PPTX files
+- **document**: Document parsing module for handling PDF, DOCX, PPTX, and EPUB files
 - **highlight**: Code syntax highlighting implementation
-- **search**: Search functionality SDK (Exa, Tavily, Zhipu)
-- **tts**: Text-to-speech implementation for different providers
+- **material3**: Material color utility extensions used by the app UI
+- **search**: Search functionality SDK for multiple providers (Exa, Tavily, Zhipu, Bing, Brave, SearXNG, and others)
+- **speech**: Speech module for TTS and ASR implementations
 - **web**: Embedded web server module that provides Ktor server startup function and hosts static frontend build files (
   built from web-ui/ React project)
 
@@ -28,7 +29,7 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - **Room**: Database ORM
 - **DataStore**: Preferences storage
 - **OkHttp**: HTTP client with SSE support
-- **Navigation Compose**: App navigation
+- **Navigation 3**: App navigation
 - **Kotlinx Serialization**: JSON handling
 
 ### Core Packages (app module)
@@ -43,7 +44,10 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 
 - **Assistant**: An assistant configuration with system prompts, model parameters, and conversation isolation. Each assistant maintains its own settings including temperature, context size, custom headers, tools, memory options, regex transformations, and prompt injections (mode/lorebook). Assistants provide isolated chat environments with specific behaviors and capabilities. (app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt)
 
-- **Conversation**: A persistent conversation thread between the user and an assistant. Each conversation maintains a list of MessageNodes in a tree structure to support message branching, along with metadata like title, creation time, and pin status. Conversations can be truncated at a specific index and maintain chat suggestions. (app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt)
+- **Conversation**: A persistent conversation thread between the user and an assistant. Each conversation maintains a
+  list of MessageNodes in a tree structure to support message branching, along with metadata like title, creation time,
+  update time, pin status, chat suggestions, optional conversation-level system prompt, and prompt injection bindings. (
+  app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt)
 
 - **UIMessage**: A platform-agnostic message abstraction that encapsulates chat messages with different types of content parts (text, images, documents, reasoning, tool calls/results, etc.). Each message has a role (USER, ASSISTANT, SYSTEM, TOOL), creation timestamp, model ID, token usage information, and optional annotations. UIMessages support streaming updates through chunk merging. (ai/src/main/java/me/rerere/ai/ui/Message.kt)
 
@@ -74,25 +78,13 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 
 ### Internationalization
 
-- String resources located in `app/src/main/res/values-*/strings.xml`
+- String resources are usually located in `app/src/main/res/values*/strings.xml`; feature modules such as `search`
+  may also maintain their own `values*/strings.xml`
 - Use `stringResource(R.string.key_name)` in Compose
 - Page-specific strings should use page prefix (e.g., `setting_page_`)
 - If the user does not explicitly request localization, prioritize implementing functionality without considering
   localization. (e.g `Text("Hello world")`)
 - If the user explicitly requests localization, all languages should be supported.
-- English(en) is the default language. Chinese(zh), Japanese(ja), and Traditional Chinese(zh-rTW), Korean(ko-rKR) are supported.
+- English(en) is the default language. Chinese(zh), Japanese(ja), Traditional Chinese(zh-rTW), Korean(ko-rKR), and
+  Russian(ru) are supported.
 - When localization is needed, use the `locale-tui-localization` skill for managing string resources.
-
-### Database
-
-- Room database with migration support
-- Schema files in `app/schemas/`
-- Use KSP for Room annotation processing
-- Current database version tracked in `AppDatabase.kt`
-
-### AI Provider Integration
-
-- New providers go in `ai/src/main/java/me/rerere/ai/provider/providers/`
-- Extend base `Provider` class
-- Implement required API methods following existing patterns
-- Support for streaming responses via SSE
