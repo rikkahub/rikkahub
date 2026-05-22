@@ -533,7 +533,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         put("type", "tool_use")
         put("id", toolCallId)
         put("name", toolName)
-        put("input", json.parseToJsonElement(input.ifBlank { "{}" }))
+        put("input", inputAsJson())
     }
 
     private fun UIMessagePart.Tool.toToolResultBlock() = buildJsonObject {

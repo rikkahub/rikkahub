@@ -24,6 +24,42 @@ class FileEncoderExifTransformTest {
         assertEquals(ExifTransformType.NONE, mapExifOrientationToTransform(-1))
     }
 
+    @Test
+    fun `long screenshots should keep original resolution when under pixel budget`() {
+        val sampleSize = calculateImageInSampleSize(
+            width = 1272,
+            height = 2800,
+            maxDimension = 10_000,
+            maxPixels = 16_000_000L
+        )
+
+        assertEquals(1, sampleSize)
+    }
+
+    @Test
+    fun `very large images should still be downsampled by pixel budget`() {
+        val sampleSize = calculateImageInSampleSize(
+            width = 5000,
+            height = 5000,
+            maxDimension = 10_000,
+            maxPixels = 16_000_000L
+        )
+
+        assertEquals(2, sampleSize)
+    }
+
+    @Test
+    fun `extremely long images should still be downsampled by max dimension`() {
+        val sampleSize = calculateImageInSampleSize(
+            width = 1200,
+            height = 20_000,
+            maxDimension = 10_000,
+            maxPixels = 16_000_000L
+        )
+
+        assertEquals(2, sampleSize)
+    }
+
     companion object {
         private const val ORIENTATION_UNDEFINED = 0
         private const val ORIENTATION_NORMAL = 1

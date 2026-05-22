@@ -43,6 +43,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 // Same shape as ClaudeProvider.MINIMAX_FALLBACK_MODELS — see comment there for
 // why a fallback is needed (Minimax's /v1/models returns `{"object":"","data":null}`
@@ -278,16 +280,7 @@ class OpenAIProvider(
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
 
-        val items = data.map { imageJson ->
-            val imageObj = imageJson.jsonObject
-            val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
-                ?: error("No b64_json in response")
-
-            ImageGenerationItem(
-                data = b64Json,
-                mimeType = "image/png"
-            )
-        }
+        val items = parseImageGenerationItems(data)
 
         ImageGenerationResult(items = items)
     }
@@ -357,18 +350,49 @@ class OpenAIProvider(
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
 
-        val items = data.map { imageJson ->
-            val imageObj = imageJson.jsonObject
-            val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
-                ?: error("No b64_json in response")
-
-            ImageGenerationItem(
-                data = b64Json,
-                mimeType = "image/png"
-            )
-        }
+        val items = parseImageGenerationItems(data)
 
         ImageGenerationResult(items = items)
+    }
+
+    private suspend fun parseImageGenerationItems(data: JsonArray): List<ImageGenerationItem> {
+        return data.map { imageJson ->
+            val imageObj = imageJson.jsonObject
+            val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
+
+            if (b64Json != null) {
+                ImageGenerationItem(
+                    data = b64Json,
+                    mimeType = "image/png"
+                )
+            } else {
+                val url = imageObj["url"]?.jsonPrimitive?.contentOrNull
+                    ?: error("No b64_json or url in response")
+                downloadImageAsBase64(url)
+            }
+        }
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun downloadImageAsBase64(url: String): ImageGenerationItem {
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
+
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to download generated image: ${response.code} ${response.body.string()}")
+        }
+
+        val body = response.body
+        val mimeType = body.contentType()?.toString() ?: "image/png"
+        val base64 = Base64.encode(body.bytes())
+
+        return ImageGenerationItem(
+            data = base64,
+            mimeType = mimeType
+        )
     }
 
     private fun File.imageMediaType(): String = when (extension.lowercase()) {
