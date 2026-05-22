@@ -741,7 +741,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private fun UIMessagePart.Tool.toFunctionCallPart() = buildJsonObject {
         put("functionCall", buildJsonObject {
             put("name", toolName)
-            put("args", json.parseToJsonElement(input.ifBlank { "{}" }))
+            put("args", inputAsJson())
         })
         metadata?.get("thoughtSignature")?.let {
             put("thoughtSignature", it)
