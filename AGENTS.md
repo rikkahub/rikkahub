@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-本文档面向贡献者，概述本仓库的模块结构、开发流程与提交规范，便于快速上手并保持一致的协作质量。
+本文档面向贡献者，概述本仓库的模块结构、开发流程，便于快速上手并保持一致的协作质量。
 
 ## Build, Test, and Development Commands
 
@@ -14,6 +14,7 @@
 ```
 
 构建应用需要在 `app/` 下提供 `google-services.json`（用于 Firebase）。
+`web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，需要本地可用 `pnpm`。
 
 ## Coding Style & Naming Conventions
 
@@ -23,7 +24,7 @@
 - XML/JSON：2 空格缩进。
 - Markdown/YAML：2 空格缩进，允许尾随空格（用于对齐）。
 
-命名习惯：模块名为小写目录（如 `ai/`、`tts/`），Kotlin 类遵循 PascalCase，测试类以 `*Test` 结尾。
+命名习惯：模块名为小写目录（如 `ai/`、`speech/`），Kotlin 类遵循 PascalCase，测试类以 `*Test` 结尾。
 
 ## Testing Guidelines
 
@@ -37,10 +38,11 @@
 - **app**: Main application module with UI, ViewModels, and core logic
 - **ai**: AI SDK abstraction layer for different providers (OpenAI, Google, Anthropic)
 - **common**: Common utilities and extensions
-- **document**: Document parsing module for handling PDF, DOCX, and PPTX files
+- **document**: Document parsing module for handling PDF, DOCX, PPTX, and EPUB files
 - **highlight**: Code syntax highlighting implementation
-- **search**: Search functionality SDK (Exa, Tavily, Zhipu)
-- **tts**: Text-to-speech implementation for different providers
+- **material3**: Material color utility extensions used by the app UI
+- **search**: Search functionality SDK for multiple providers (Exa, Tavily, Zhipu, Bing, Brave, SearXNG, and others)
+- **speech**: Speech module for TTS and ASR implementations
 - **web**: Embedded web server module that provides Ktor server startup function and hosts static frontend build files (
   built from web-ui/ React project)
 
@@ -53,7 +55,7 @@
 
 - **Conversation**: A persistent conversation thread between the user and an assistant. Each conversation maintains a
   list of MessageNodes in a tree structure to support message branching, along with metadata like title, creation time,
-  and pin status. Conversations can be truncated at a specific index and maintain chat suggestions. (
+  update time, pin status, chat suggestions, optional conversation-level system prompt, and prompt injection bindings. (
   app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt)
 
 - **UIMessage**: A platform-agnostic message abstraction that encapsulates chat messages with different types of content
@@ -83,7 +85,8 @@
 
 ## Internationalization
 
-- String resources located in `app/src/main/res/values-*/strings.xml`
+- String resources are usually located in `app/src/main/res/values*/strings.xml`; feature modules such as `search`
+  may also maintain their own `values*/strings.xml`
 - Use `stringResource(R.string.key_name)` in Compose
 - Page-specific strings should use page prefix (e.g., `setting_page_`)
 - If the user does not explicitly request localization, prioritize implementing functionality without considering
