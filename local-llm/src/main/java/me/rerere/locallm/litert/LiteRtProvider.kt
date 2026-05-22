@@ -26,6 +26,39 @@ import com.google.ai.edge.litertlm.ToolProvider
 private const val TAG = "LiteRtProvider"
 
 /**
+ * Outcome of [decideImageForwarding]: whether to hand image bytes to the runtime this turn,
+ * and whether the user's attached images were dropped in a way that warrants a chat note.
+ */
+internal data class ImageForwardingDecision(
+    val forwardImages: Boolean,
+    val noteImagesDropped: Boolean,
+)
+
+/**
+ * Decide whether the current turn's images may be forwarded to [LiteRtRuntime.streamTurns].
+ *
+ * The forward gate keys off [visionEnabledPostLoad] — the ACTUAL vision state of the loaded
+ * engine ([LiteRtRuntime.LoadOutcome.visionEnabled]) — NOT the pre-load estimate. When the GPU
+ * vision executor fails to initialise (Adreno 7xx + OEM ROMs; upstream LiteRT-LM #2292), the
+ * runtime falls back to a text-only engine; forwarding image bytes to that engine null-derefs
+ * the native runtime (SIGSEGV in `liblitertlm_jni.so`). Reading the pre-load estimate here was
+ * the root cause of that crash.
+ *
+ * [ImageForwardingDecision.noteImagesDropped] is true only when the user actually attached
+ * images to an image-capable model whose vision is not live — i.e. a vision model that could
+ * not bring up its encoder on this device. A plain text-only model with a stray image
+ * attachment keeps the prior silent drop (the device's vision capability was never the issue).
+ */
+internal fun decideImageForwarding(
+    modelImageCapable: Boolean,
+    visionEnabledPostLoad: Boolean,
+    userSentImages: Boolean,
+): ImageForwardingDecision = ImageForwardingDecision(
+    forwardImages = visionEnabledPostLoad,
+    noteImagesDropped = userSentImages && modelImageCapable && !visionEnabledPostLoad,
+)
+
+/**
  * Implements the existing Provider interface so any assistant can pick a LiteRT
  * model the same way it picks an OpenAI / Claude model. Routes inference through
  * [LiteRtRuntime] and tool calls through [LiteRtToolPrefix].
@@ -396,14 +429,25 @@ class LiteRtProvider(
         // Decode here so the runtime gets ready-to-use Bitmaps / encoded audio bytes and
         // doesn't have to know about content URIs.
         val lastUser = messages.lastOrNull { it.role == MessageRole.USER }
-        val turnImages: List<android.graphics.Bitmap> = if (effectiveSupportImage) {
-            lastUser?.parts
-                ?.filterIsInstance<UIMessagePart.Image>()
-                ?.mapNotNull { it.toBitmap(context) }
-                .orEmpty()
+        val userImageParts = lastUser?.parts
+            ?.filterIsInstance<UIMessagePart.Image>()
+            .orEmpty()
+        // Gate image forwarding on the ACTUAL post-load vision state (outcome.visionEnabled),
+        // NOT the pre-load effectiveSupportImage. ensureLoaded may have fallen back to a
+        // text-only engine when the GPU vision executor failed to init; forwarding image bytes
+        // to an engine with no vision executor crashes the native runtime (SIGSEGV in
+        // liblitertlm_jni.so). See [decideImageForwarding].
+        val imageDecision = decideImageForwarding(
+            modelImageCapable = config.supportsImage && config.visionAccelerator != null,
+            visionEnabledPostLoad = outcome.visionEnabled,
+            userSentImages = userImageParts.isNotEmpty(),
+        )
+        val turnImages: List<android.graphics.Bitmap> = if (imageDecision.forwardImages) {
+            userImageParts.mapNotNull { it.toBitmap(context) }
         } else {
-            // Vision unavailable / not supported by this model — drop image parts silently.
-            // The user already sees the "Vision unavailable" caption in Settings if persisted.
+            // Vision unavailable / not supported by this model — drop image parts. When the
+            // user actually attached images to a vision-capable model, the note below tells
+            // them why; otherwise it's a silent no-op (text-only model, no attachment).
             emptyList()
         }
         val turnAudio: List<ByteArray> = if (config.supportsAudio) {
@@ -419,6 +463,34 @@ class LiteRtProvider(
                 TAG,
                 "streamText: forwarding ${turnImages.size} image(s) + ${turnAudio.size} " +
                     "audio clip(s) to runtime for modelId=${params.model.modelId}",
+            )
+        }
+
+        // The user attached image(s) to a vision-capable model whose encoder couldn't
+        // initialise on this device, so they were dropped above. Tell the user once, in-line,
+        // so a text-only reply to an image prompt isn't silently confusing.
+        if (imageDecision.noteImagesDropped) {
+            Log.w(
+                TAG,
+                "vision not live post-load for ${params.model.modelId}; dropped " +
+                    "${userImageParts.size} image(s), noting it to the user",
+            )
+            emit(
+                MessageChunk(
+                    id = streamId,
+                    model = params.model.modelId,
+                    choices = listOf(
+                        UIMessageChoice(
+                            index = 0,
+                            delta = UIMessage(
+                                role = MessageRole.ASSISTANT,
+                                parts = listOf(UIMessagePart.Text(VISION_DROPPED_NOTE)),
+                            ),
+                            message = null,
+                            finishReason = null,
+                        )
+                    ),
+                )
             )
         }
 
@@ -694,6 +766,12 @@ class LiteRtProvider(
     }
 
     companion object {
+        /** In-chat note shown once when the user attached image(s) to a vision-capable model
+         *  whose vision encoder could not initialise on this device (text-only fallback). */
+        private const val VISION_DROPPED_NOTE =
+            "[Note: this model's vision encoder is unavailable on this device, so attached " +
+                "images were not analysed. Replying from text only.]\n\n"
+
         /** Hard char-cap for the joined SYSTEM-message text. Tight on purpose: we
          *  want the user's actual system prompt ("You are X") to land, but NOT
          *  agent-core's auto-loaded skill body (~3-5k tokens of persona + tool
