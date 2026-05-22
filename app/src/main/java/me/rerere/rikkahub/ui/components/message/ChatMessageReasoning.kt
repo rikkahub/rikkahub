@@ -201,7 +201,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
         },
         label = {
             if (showThinkingTitle) {
-                ReasoningTitle(title = thinkingTitle!!)
+                ReasoningTitle(title = thinkingTitle)
             } else {
                 Text(
                     text = stringResource(

@@ -104,7 +104,7 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
                     )
                 )
             } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                error("response failed #${response.code}: ${response.body.string()}")
             }
         }
     }
@@ -148,7 +148,7 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
                     )
                 )
             } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                error("response failed #${response.code}: ${response.body.string()}")
             }
         }
     }

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Declares this app's Game Mode preferences to the OEM Game Mode framework
+    introduced in Android 12 (API 31). Allowed for non-game apps — see
+    https://developer.android.com/games/gamemode/gamemode-api.
+
+    What this gets us:
+      * On Pixel, Samsung, Asus, Nothing, Xiaomi etc., the OEM Game Mode
+        framework reads this manifest config to decide whether to honor
+        Performance / Battery hints for the app.
+      * supportsPerformanceGameMode="true" lets the OEM bump SoC clocks +
+        memory bandwidth + reduce DCVS throttling when the user (or app) is
+        in PERFORMANCE mode. Heavy compute workloads like local LLM inference
+        run at game-mode-tier sustained throughput instead of being held back
+        by the default productivity DCVS curve.
+      * supportsBatteryGameMode="true" gives the user the inverse option
+        from Quick Settings: cap clocks for max battery during long-running
+        local inference on a near-empty battery.
+
+    We intentionally do NOT enable allowGameAngleDriver / allowGameDownscaling /
+    allowGameFpsOverride — those are display-resolution / frame-pacing tweaks
+    aimed at games. LLM inference is compute, not graphics; those settings
+    would only hurt UI quality without changing inference speed.
+
+    appCategory remains "productivity" in the manifest. This file is the
+    documented way to opt into game-mode perf treatment without becoming a
+    game in Play Store, OEM game launchers, or backup-rule defaults.
+-->
+<game-mode-config xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsPerformanceGameMode="true"
+    android:supportsBatteryGameMode="true"
+    android:allowGameAngleDriver="false"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false" />

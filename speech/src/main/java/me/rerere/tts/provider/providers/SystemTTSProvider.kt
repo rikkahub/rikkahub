@@ -76,6 +76,7 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                         }
                     }
 
+                    @Deprecated("UtteranceProgressListener.onError(String) was deprecated in API 21 in favor of onError(String, Int); kept for back-compat")
                     override fun onError(utteranceId: String?) {
                         Log.e(TAG, "onError: TTS synthesis failed!")
                         audioFile.delete()
@@ -109,7 +110,7 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
         tts = TextToSpeech(context, listener)
 
         continuation.invokeOnCancellation {
-            tts?.shutdown()
+            tts.shutdown()
         }
     }
 

@@ -596,7 +596,6 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                                 updateDisplaySetting(displaySetting.copy(pasteLongTextThreshold = it.toInt()))
                                             },
                                             valueRange = 100f..10000f,
-                                            steps = 98,
                                             modifier = Modifier.weight(1f)
                                         )
                                         Text(text = "${displaySetting.pasteLongTextThreshold}")

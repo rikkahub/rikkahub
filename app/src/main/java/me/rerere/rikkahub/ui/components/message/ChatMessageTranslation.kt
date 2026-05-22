@@ -68,11 +68,11 @@ fun LanguageSelectionDialog(
             Locale.KOREAN,
             Locale.FRENCH,
             Locale.GERMAN,
-            Locale("es", "ES"),
+            Locale.forLanguageTag("es-ES"),
             Locale.ITALIAN,
-            Locale("ar"),
-            Locale("fa"),
-            Locale("ur"),
+            Locale.forLanguageTag("ar"),
+            Locale.forLanguageTag("fa"),
+            Locale.forLanguageTag("ur"),
         )
     }
 
@@ -88,10 +88,10 @@ fun LanguageSelectionDialog(
             Locale.FRENCH -> stringResource(R.string.language_french)
             Locale.GERMAN -> stringResource(R.string.language_german)
             Locale.ITALIAN -> stringResource(R.string.language_italian)
-            Locale("es", "ES") -> stringResource(R.string.language_spanish)
-            Locale("ar") -> stringResource(R.string.language_arabic)
-            Locale("fa") -> stringResource(R.string.language_persian)
-            Locale("ur") -> stringResource(R.string.language_urdu)
+            Locale.forLanguageTag("es-ES") -> stringResource(R.string.language_spanish)
+            Locale.forLanguageTag("ar") -> stringResource(R.string.language_arabic)
+            Locale.forLanguageTag("fa") -> stringResource(R.string.language_persian)
+            Locale.forLanguageTag("ur") -> stringResource(R.string.language_urdu)
             else -> locale.getDisplayLanguage(Locale.getDefault())
         }
     }

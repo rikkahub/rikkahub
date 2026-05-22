@@ -125,7 +125,7 @@ fun findNodeTool(
                 })
             }
         }
-        streamer.streamIfHeadless(invocationContext, "FindNode $by=\"${value?.take(30).orEmpty()}\"")
+        streamer.streamIfHeadless(invocationContext, "FindNode $by=\"${value.take(30)}\"")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
@@ -228,7 +228,7 @@ fun clickNodeTool(
                 })
             }
         }
-        streamer.streamIfHeadless(invocationContext, "ClickNode $by=\"${value?.take(30).orEmpty()}\"")
+        streamer.streamIfHeadless(invocationContext, "ClickNode $by=\"${value.take(30)}\"")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
@@ -355,7 +355,7 @@ fun setTextTool(
                 put("set_to", newText)
             }
         }
-        streamer.streamIfHeadless(invocationContext, "SetText $by=\"${value?.take(20).orEmpty()}\" -> \"${newText?.take(20).orEmpty()}\"")
+        streamer.streamIfHeadless(invocationContext, "SetText $by=\"${value.take(20)}\" -> \"${newText.take(20)}\"")
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )

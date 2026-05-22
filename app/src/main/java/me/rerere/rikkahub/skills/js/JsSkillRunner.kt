@@ -98,10 +98,13 @@ class JsSkillRunner(private val context: Context) {
             var webView: WebView? = null
             try {
                 val wv = WebView(context.applicationContext).apply {
-                    @Suppress("SetJavaScriptEnabled")
+                    @Suppress("SetJavaScriptEnabled", "DEPRECATION")
                     settings.javaScriptEnabled = true
+                    @Suppress("DEPRECATION")
                     settings.allowFileAccess = true                       // file:// load of skill dir
+                    @Suppress("DEPRECATION")
                     settings.allowFileAccessFromFileURLs = true           // file:// can fetch siblings
+                    @Suppress("DEPRECATION")
                     settings.allowUniversalAccessFromFileURLs = true      // so cross-origin XHR works for Wikipedia etc
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
                     settings.domStorageEnabled = true           // localStorage for skills that store state

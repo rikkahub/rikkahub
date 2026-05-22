@@ -82,7 +82,7 @@ object RikkaHubSearchService : SearchService<SearchServiceOptions.RikkaHubOption
                     )
                 )
             } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                error("response failed #${response.code}: ${response.body.string()}")
             }
         }
     }

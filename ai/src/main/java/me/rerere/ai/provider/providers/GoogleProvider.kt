@@ -125,7 +125,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             )
             val response = client.newCall(request).await()
             if (response.isSuccessful) {
-                val body = response.body?.string() ?: error("empty body")
+                val body = response.body.string()
                 Log.d(TAG, "listModels: $body")
                 val bodyObject = json.parseToJsonElement(body).jsonObject
                 val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
@@ -182,10 +182,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
+        val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         val candidates = bodyJson["candidates"]!!.jsonArray
@@ -651,7 +651,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                             && carriedSig != null
                         ) {
                             tool.copy(metadata = buildJsonObject {
-                                put("thoughtSignature", JsonPrimitive(carriedSig!!))
+                                put("thoughtSignature", JsonPrimitive(carriedSig))
                             })
                         } else tool
                         partsBuffer.add(effective.toFunctionCallPart())
@@ -741,7 +741,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private fun UIMessagePart.Tool.toFunctionCallPart() = buildJsonObject {
         put("functionCall", buildJsonObject {
             put("name", toolName)
-            put("args", json.parseToJsonElement(input.ifBlank { "{}" }))
+            put("args", inputAsJson())
         })
         metadata?.get("thoughtSignature")?.let {
             put("thoughtSignature", it)

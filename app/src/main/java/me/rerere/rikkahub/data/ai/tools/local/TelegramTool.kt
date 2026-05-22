@@ -51,7 +51,7 @@ internal fun classifyTokenVerifyError(t: Throwable): JsonObject {
     return if (isInvalidToken) {
         buildJsonObject {
             put("error", "token_invalid")
-            put("detail", "Telegram API rejected the token (HTTP 401: ${(t as TelegramApiException).description}).")
+            put("detail", "Telegram API rejected the token (HTTP 401: ${t.description}).")
             put(
                 "recovery",
                 "The token is permanently invalid — do NOT retry with the same value. " +

@@ -115,7 +115,12 @@ class NsdServiceRegistrar(
         return try {
             val wifiManager = context.applicationContext
                 .getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            // WifiInfo.connectionInfo / .ipAddress deprecated at API 31 (NetworkCallback is
+            // the modern path). NSD server needs the IP synchronously so the deprecated
+            // accessor is the simpler path for now.
+            @Suppress("DEPRECATION")
             val wifiInfo = wifiManager?.connectionInfo
+            @Suppress("DEPRECATION")
             val ipInt = wifiInfo?.ipAddress ?: return null
 
             if (ipInt == 0) return null

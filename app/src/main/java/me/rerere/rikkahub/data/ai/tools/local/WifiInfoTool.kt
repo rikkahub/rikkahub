@@ -86,7 +86,7 @@ private fun buildWifiInfoPayload(appContext: Context): kotlinx.serialization.jso
         }
         // IP from ConnectivityManager.LinkProperties is the reliable path on modern
         // Android — WifiManager.ipAddress returns 0 under redaction.
-        val link = activeNet?.let { cm.getLinkProperties(it) }
+        val link = activeNet.let { cm.getLinkProperties(it) }
         val ipv4 = link?.linkAddresses
             ?.firstOrNull { (it.address as? Inet4Address) != null && !it.address.isLoopbackAddress }
         if (ipv4 != null) {

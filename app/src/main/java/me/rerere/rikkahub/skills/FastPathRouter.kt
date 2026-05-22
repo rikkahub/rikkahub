@@ -68,8 +68,8 @@ object FastPathRouter {
         // -- Battery ----------------------------------------------------------------------
         object : Intent {
             private val pat = Regex("""^(what(?:'s|\s+is)?\s+(?:my\s+|the\s+)?battery(?:\s+(?:level|percent|status|life))?|battery\??)$""")
-            override fun tryMatch(n: String): Match? {
-                if (!pat.matches(n)) return null
+            override fun tryMatch(normalized: String): Match? {
+                if (!pat.matches(normalized)) return null
                 return Match(
                     intent = "battery",
                     toolName = "get_battery_status",
@@ -87,8 +87,8 @@ object FastPathRouter {
         // -- Time / date -----------------------------------------------------------------
         object : Intent {
             private val pat = Regex("""^(what(?:'s|\s+is)?\s+the\s+time|what\s+time\s+is\s+it|time\??)$""")
-            override fun tryMatch(n: String): Match? {
-                if (!pat.matches(n)) return null
+            override fun tryMatch(normalized: String): Match? {
+                if (!pat.matches(normalized)) return null
                 return Match(
                     intent = "time",
                     toolName = "get_time_info",
@@ -105,8 +105,8 @@ object FastPathRouter {
         },
         object : Intent {
             private val pat = Regex("""^(what(?:'s|\s+is)?\s+(?:the\s+|today's\s+)?date|what\s+day\s+(?:is\s+it|is\s+today)|today's\s+date|date\??)$""")
-            override fun tryMatch(n: String): Match? {
-                if (!pat.matches(n)) return null
+            override fun tryMatch(normalized: String): Match? {
+                if (!pat.matches(normalized)) return null
                 return Match(
                     intent = "date",
                     toolName = "get_time_info",
@@ -122,8 +122,8 @@ object FastPathRouter {
         // -- Storage ---------------------------------------------------------------------
         object : Intent {
             private val pat = Regex("""^(what(?:'s|\s+is)?\s+(?:my\s+|the\s+)?(?:free\s+)?storage(?:\s+(?:left|space))?|storage\s+left|how\s+much\s+(?:storage|space)\s+(?:do\s+i\s+have\s+)?(?:left|free)?|storage\??)$""")
-            override fun tryMatch(n: String): Match? {
-                if (!pat.matches(n)) return null
+            override fun tryMatch(normalized: String): Match? {
+                if (!pat.matches(normalized)) return null
                 return Match(
                     intent = "storage",
                     toolName = "get_storage_info",
@@ -148,8 +148,8 @@ object FastPathRouter {
         // -- Wifi info ------------------------------------------------------------------
         object : Intent {
             private val pat = Regex("""^(what(?:'s|\s+is)?\s+(?:my\s+)?wi-?fi(?:\s+(?:network|status))?|wifi(?:\s+status)?\??|am\s+i\s+(?:on|connected\s+to)\s+wi-?fi)$""")
-            override fun tryMatch(n: String): Match? {
-                if (!pat.matches(n)) return null
+            override fun tryMatch(normalized: String): Match? {
+                if (!pat.matches(normalized)) return null
                 return Match(
                     intent = "wifi",
                     toolName = "get_wifi_info",
@@ -173,8 +173,8 @@ object FastPathRouter {
         // -- List workflows -------------------------------------------------------------
         object : Intent {
             private val pat = Regex("""^(list\s+(?:my\s+)?workflows|what\s+workflows\s+(?:do\s+i\s+have|are\s+(?:running|enabled))|show\s+(?:me\s+)?(?:my\s+)?workflows)$""")
-            override fun tryMatch(n: String): Match? {
-                if (!pat.matches(n)) return null
+            override fun tryMatch(normalized: String): Match? {
+                if (!pat.matches(normalized)) return null
                 return Match(
                     intent = "list_workflows",
                     toolName = "workflow_list",
@@ -196,8 +196,8 @@ object FastPathRouter {
         // -- List scheduled jobs --------------------------------------------------------
         object : Intent {
             private val pat = Regex("""^(list\s+(?:my\s+)?(?:scheduled\s+)?jobs|what\s+jobs\s+(?:do\s+i\s+have|are\s+(?:running|scheduled))|show\s+(?:me\s+)?(?:my\s+)?(?:scheduled\s+)?jobs)$""")
-            override fun tryMatch(n: String): Match? {
-                if (!pat.matches(n)) return null
+            override fun tryMatch(normalized: String): Match? {
+                if (!pat.matches(normalized)) return null
                 return Match(
                     intent = "list_jobs",
                     toolName = "list_jobs",

@@ -76,6 +76,7 @@ fun SettingWebPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    @Suppress("DEPRECATION")  // LocalClipboard requires a suspend-friendly callsite refactor
     val clipboardManager = LocalClipboardManager.current
     val toaster = LocalToaster.current
     val copiedText = stringResource(R.string.copied)

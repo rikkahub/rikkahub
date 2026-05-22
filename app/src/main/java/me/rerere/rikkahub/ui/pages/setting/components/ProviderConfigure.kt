@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
@@ -747,6 +748,8 @@ private fun ColumnScope.ProviderConfigureLiteRT(
     val maxNumTokensOverride by vm.maxNumTokensOverride.collectAsStateWithLifecycle()
     val crashRecoveryAccel by vm.crashRecoveryAccelerator.collectAsStateWithLifecycle()
     val installedModelFiles by vm.installedModelFiles.collectAsStateWithLifecycle()
+    val visionUnavailableSet by vm.visionUnavailableSet.collectAsStateWithLifecycle()
+    val perfTelemetry by vm.perfTelemetry.collectAsStateWithLifecycle()
 
     provider.description()
 
@@ -831,8 +834,16 @@ private fun ColumnScope.ProviderConfigureLiteRT(
         provider.models.forEach { model ->
             InstalledModelRow(
                 model = model,
+                visionUnavailable = model.modelId in visionUnavailableSet,
+                // After a native crash inside liblitertlm we suppress the Re-try
+                // vision button: re-trying immediately is what just crashed the app.
+                // The user dismisses the crash banner (above) when they want to opt
+                // back in to taking that risk; the button reappears.
+                allowVisionRetry = crashRecoveryAccel == null,
+                perfSample = perfTelemetry[model.modelId],
                 onRename = { newName -> vm.renameModel(model.modelId, newName) },
                 onDelete = { vm.deleteModel(model.modelId) },
+                onRetryVision = { vm.retryVisionEncoder(model.modelId) },
             )
         }
     }
@@ -1105,8 +1116,12 @@ private fun LiteRtCatalogEntryCard(
 @Composable
 private fun InstalledModelRow(
     model: Model,
+    visionUnavailable: Boolean,
+    allowVisionRetry: Boolean,
+    perfSample: me.rerere.locallm.LocalRuntimePreferences.PerfSample?,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
+    onRetryVision: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf(false) }
     var renameText by remember(model.id) { mutableStateOf(model.displayName) }
@@ -1151,6 +1166,42 @@ private fun InstalledModelRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = LocalContentColor.current.copy(alpha = 0.6f),
                 )
+                if (visionUnavailable) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.local_llm_vision_unavailable_caption),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        if (allowVisionRetry) {
+                            TextButton(
+                                onClick = onRetryVision,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.local_llm_vision_retry),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+                }
+                perfSample?.let { sample ->
+                    Text(
+                        text = stringResource(
+                            R.string.local_llm_perf_telemetry_format,
+                            sample.prefillTps,
+                            sample.decodeTps,
+                        ) + if (sample.specDecodingEngaged) " · " +
+                            stringResource(R.string.local_llm_spec_decoding_engaged_short)
+                        else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalContentColor.current.copy(alpha = 0.7f),
+                    )
+                }
             }
             IconButton(onClick = { renaming = true }) {
                 Icon(HugeIcons.Edit01, stringResource(R.string.local_llm_rename))

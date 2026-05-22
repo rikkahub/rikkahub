@@ -111,7 +111,7 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
 
                 return@withContext Result.success(SearchResult(items = items))
             } else {
-                val errorBody = response.body?.string()
+                val errorBody = response.body.string()
                 println("SearXNG API error: ${response.code} - $errorBody")
                 error("SearXNG request failed with status ${response.code}")
             }

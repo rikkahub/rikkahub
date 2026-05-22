@@ -1492,6 +1492,10 @@
   <string name="local_llm_rename_label">Display name</string>
   <string name="local_llm_rename_save">Save</string>
   <string name="local_llm_delete">Delete</string>
+  <string name="local_llm_vision_unavailable_caption">Vision unavailable on this device — running text-only</string>
+  <string name="local_llm_vision_retry">Re-try vision</string>
+  <string name="local_llm_perf_telemetry_format">Prefill %1$.1f tok/s · Decode %2$.1f tok/s</string>
+  <string name="local_llm_spec_decoding_engaged_short">MTP on</string>
   <string name="local_llm_delete_confirm_title">Delete model?</string>
   <string name="local_llm_delete_confirm_message">Remove \"%1$s\" from your device? This deletes the file (you\'ll need to download it again to use it).</string>
   <string name="local_llm_invalid_url">Invalid URL: must be https and well-formed</string>

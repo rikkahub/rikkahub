@@ -186,7 +186,7 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                             me.rerere.rikkahub.browser.BrowserActivity.intent(
                                 context,
                                 url,
-                                conversationId = callerConvId?.toString(),
+                                conversationId = callerConvId,
                             )
                         )
                         if (!BrowserController.awaitBind(5_000L)) {

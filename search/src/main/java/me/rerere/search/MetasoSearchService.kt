@@ -73,7 +73,7 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
 
             val response = httpClient.newCall(request).await()
             if (response.isSuccessful) {
-                val bodyRaw = response.body?.string() ?: error("Failed to get response body")
+                val bodyRaw = response.body.string()
                 val searchResponse = runCatching {
                     json.decodeFromString<MetasoSearchResponse>(bodyRaw)
                 }.onFailure {
@@ -94,7 +94,7 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
                     )
                 )
             } else {
-                val errorBody = response.body?.string()
+                val errorBody = response.body.string()
                 println("Metaso search failed with code ${response.code}: $errorBody")
                 error("Search request failed with code ${response.code}: $errorBody")
             }

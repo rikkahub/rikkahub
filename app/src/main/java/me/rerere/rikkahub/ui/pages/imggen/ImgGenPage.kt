@@ -518,6 +518,7 @@ private fun ImageGalleryScreen(
     val generatedImages = vm.generatedImages.collectAsLazyPagingItems()
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
+    @Suppress("DEPRECATION")  // LocalClipboard requires a suspend-friendly callsite refactor
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current

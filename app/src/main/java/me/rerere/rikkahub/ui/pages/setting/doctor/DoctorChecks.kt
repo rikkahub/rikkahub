@@ -132,6 +132,10 @@ class DoctorChecks(
     // Phase 25 — SAF tree-grant store, backs the "granted directories" Doctor row.
     // Nullable + defaulted so legacy test paths that don't build the full DI graph compile.
     private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore? = null,
+    // Surface the persisted LiteRT accelerator decision so the user can see whether their
+    // local models actually engaged GPU/NPU or silently fell back to CPU.
+    // Nullable + defaulted same as the others above for legacy test path compatibility.
+    private val localRuntimePreferences: me.rerere.locallm.LocalRuntimePreferences? = null,
 ) {
     suspend fun runAll(): List<DoctorCheck> = withContext(Dispatchers.IO) {
         // Aggregate enabled tools across every assistant. A tool is "in use" if at least
@@ -705,6 +709,109 @@ class DoctorChecks(
                     fix = FixAction.OpenAppRoute("Open Providers", AppRouteKey.SettingProvider),
                 )
             )
+        }
+        // LiteRT accelerator status. The runtime's GPU -> CPU fallback is silent today:
+        // if the device's OpenCL/OpenGL delegate fails to init (e.g. MLDrift's
+        // "CreateSharedMemoryManager is not implemented" on some Adreno drivers), the
+        // model loads on CPU and the user has no UI indication. LiteRtProvider now
+        // persists the actually-chosen accelerator after every load; surface that here
+        // so the user can confirm GPU is engaged.
+        runCatching {
+            val prefs = localRuntimePreferences
+            if (prefs != null) {
+                val accel = prefs.acceleratorFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
+                val forceCpu = prefs.forceCpu(me.rerere.locallm.LocalRuntime.LiteRT)
+                val detail = when {
+                    accel == null -> "Not probed yet. The accelerator is decided on the first model load."
+                    forceCpu && accel == "CPU" ->
+                        "CPU (Try-GPU toggle off in Settings -> Local LiteRT). " +
+                            "Flip it on to retry the device's GPU on the next load."
+                    accel == "CPU" ->
+                        "CPU (fallback: the GPU delegate failed to initialise on this device, " +
+                            "likely an MLDrift issue. Tap 'Re-detect' in Settings -> Local LiteRT " +
+                            "to retry with a fresh probe.)"
+                    accel == "GPU" -> "GPU (OpenCL or OpenGL, picked by LiteRT's internal probe)."
+                    accel == "QNN" || accel == "NPU" -> "NPU (Qualcomm QNN delegate)."
+                    accel == "NNAPI" -> "NNAPI."
+                    else -> "Backend label: $accel"
+                }
+                val severity = when {
+                    accel == null -> Severity.INFO
+                    accel == "CPU" && !forceCpu -> Severity.WARN  // unexpected fallback
+                    else -> Severity.OK
+                }
+                add(
+                    DoctorCheck(
+                        id = "net.litert_accel",
+                        category = DoctorCategory.Network,
+                        label = "LiteRT accelerator",
+                        detail = detail,
+                        severity = severity,
+                        fix = FixAction.OpenAppRoute(
+                            "Open Local LiteRT",
+                            AppRouteKey.SettingProvider,
+                        ),
+                    )
+                )
+                // Performance telemetry — surface the last-known prefill/decode tok/s for
+                // each model so the user (and the support team triaging a slow report)
+                // can see at a glance whether the runtime is hitting expected rates. We
+                // INFO when present; WARN never (the model could legitimately be slow on a
+                // weak device — the user knows their hardware better than we do).
+                val perfMap = prefs.perfTelemetryFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
+                if (perfMap.isNotEmpty()) {
+                    val rows = perfMap.values.sortedByDescending { it.sampledAtMs }
+                    val detail = rows.joinToString("\n") { s ->
+                        val spec = if (s.specDecodingEngaged) ", MTP on" else ""
+                        "${s.modelId}: prefill ${"%.1f".format(s.prefillTps)} tok/s, " +
+                            "decode ${"%.1f".format(s.decodeTps)} tok/s$spec"
+                    }
+                    add(
+                        DoctorCheck(
+                            id = "net.litert_perf",
+                            category = DoctorCategory.Network,
+                            label = "LiteRT performance",
+                            detail = "Last-known per-model rates (character-based estimate, " +
+                                "~10% accurate for English text):\n$detail",
+                            severity = Severity.INFO,
+                            fix = FixAction.OpenAppRoute(
+                                "Open Local LiteRT",
+                                AppRouteKey.SettingProvider,
+                            ),
+                        )
+                    )
+                }
+                // Vision-encoder availability — surface any models the runtime had to drop
+                // to text-only on this device's GPU. The provider's vision-CPU fallback
+                // means a multimodal model still works for chat, but the user has lost
+                // image input on this chip. Most common cause: Adreno 7xx + restrictive
+                // OEM linker namespace (One UI / OriginOS) hitting upstream LiteRT-LM
+                // issue #2292 (gpu_backend_opengl.cc:CreateSharedMemoryManager UNIMPLEMENTED).
+                val visionUnavailable = prefs
+                    .visionUnavailableFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
+                if (visionUnavailable.isNotEmpty()) {
+                    add(
+                        DoctorCheck(
+                            id = "net.litert_vision",
+                            category = DoctorCategory.Network,
+                            label = "LiteRT vision encoder",
+                            detail = "Vision encoder unavailable on this device for: " +
+                                visionUnavailable.joinToString(", ") +
+                                ". These multimodal models run in text-only mode — chat works, " +
+                                "image inputs don't. Often fixed by a future LiteRT-LM SDK update " +
+                                "(the OpenGL fallback path's CreateSharedMemoryManager is " +
+                                "currently UNIMPLEMENTED upstream). Tap 'Re-try vision' next to " +
+                                "the model in Settings -> Local LiteRT after a GPU driver update " +
+                                "to clear the flag.",
+                            severity = Severity.WARN,
+                            fix = FixAction.OpenAppRoute(
+                                "Open Local LiteRT",
+                                AppRouteKey.SettingProvider,
+                            ),
+                        )
+                    )
+                }
+            }
         }
         // DNS sanity — confirms the OkHttp clients aren't stuck on a stale resolver.
         val dnsOk = withTimeoutOrNull(2_500L) {

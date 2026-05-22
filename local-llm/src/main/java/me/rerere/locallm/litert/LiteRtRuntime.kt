@@ -2,6 +2,9 @@ package me.rerere.locallm.litert
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
+import android.os.PerformanceHintManager
+import android.os.Process
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Capabilities
 import com.google.ai.edge.litertlm.Content
@@ -21,12 +24,14 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.locallm.AcceleratorProbe
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
+import java.util.concurrent.TimeUnit
 
 /** Role labels used in [Turn] signatures. Kept as plain strings so [turnSignature] is a
  *  pure function the provider and the runtime can both call without sharing an enum. */
@@ -76,6 +81,27 @@ class LiteRtModelCorruptException(
     cause: Throwable,
 ) : RuntimeException(
     "LiteRT model file appears corrupt or incompatible: ${cause.message}",
+    cause,
+)
+
+/**
+ * Thrown when engine init fails specifically inside the vision executor — the model file
+ * itself is fine, but this device's GPU vision pipeline cannot be initialised. The
+ * canonical signature is an error message containing `vision_litert_compiled_model_executor`
+ * (the SDK's per-modality executor that fails when `CreateSharedMemoryManager` is
+ * unimplemented in the OpenGL fallback path — upstream LiteRT-LM #2292, hitting Adreno
+ * 7xx + OEM ROMs that block `libvndksupport.so` discovery).
+ *
+ * The runtime self-recovers by retrying with `supportImage=false` (text-only) once. The
+ * provider catches this and persists the per-model decision so subsequent loads skip
+ * the doomed GPU vision attempt entirely. Multimodal models still load — they just
+ * cannot accept images on this device.
+ */
+class LiteRtVisionUnavailableException(
+    val modelPath: String,
+    cause: Throwable,
+) : RuntimeException(
+    "LiteRT vision encoder failed to initialise on this device's GPU: ${cause.message}",
     cause,
 )
 
@@ -131,6 +157,90 @@ class LiteRtRuntime(private val context: Context) {
      */
     @Volatile private var sessionFallbackAccelerator: String? = null
 
+    /** Last-known telemetry from [streamTurns]. Read by [LiteRtProvider] after each stream
+     *  completes so the rolling perf samples can be persisted. Cleared on engine teardown. */
+    @Volatile
+    var lastTelemetry: StreamTelemetry? = null
+        private set
+
+    /**
+     * Per-stream timing + token counts. `prefillTps` = input tokens / time from
+     * `sendMessageAsync` to first `onMessage`; `decodeTps` = output tokens / time from
+     * first onMessage to onDone. Token counts are character-based estimates (cumulative
+     * String.length divided by ~4 chars/token) because the SDK does not surface a per-call
+     * tokenizer counter — accurate within ~10% for English text, less for CJK.
+     */
+    data class StreamTelemetry(
+        val prefillMs: Long,
+        val decodeMs: Long,
+        val inputCharCount: Int,
+        val outputCharCount: Int,
+        val specDecodingEngaged: Boolean,
+    ) {
+        val prefillTps: Double = if (prefillMs > 0)
+            (inputCharCount.toDouble() / CHARS_PER_TOKEN) * 1000.0 / prefillMs else 0.0
+        val decodeTps: Double = if (decodeMs > 0)
+            (outputCharCount.toDouble() / CHARS_PER_TOKEN) * 1000.0 / decodeMs else 0.0
+
+        companion object {
+            /** Conservative estimate. Underestimates speed for English (true rate ~3.5
+             *  chars/token) and overestimates for CJK (~1.5 chars/token), but consistent
+             *  enough for relative speed comparisons across runs on the same model. */
+            const val CHARS_PER_TOKEN: Int = 4
+        }
+    }
+
+    // ---- Idle teardown ----
+    //
+    // The Engine + Conversation pin ~2-4 GB of native heap for the loaded model.
+    // Keeping them warm is great for response latency on consecutive turns but expensive
+    // for an app the user has wandered away from. After [idleTeardownDelayMs] of no
+    // [streamTurns] activity, close the engine. Next request re-loads cold (10-60 s on
+    // CPU). Configurable per-runtime via [setIdleTeardownDelayMs]; pass 0 to disable.
+
+    @Volatile
+    private var idleTeardownDelayMs: Long = TimeUnit.MINUTES.toMillis(15)
+
+    @Volatile
+    private var idleTeardownJob: kotlinx.coroutines.Job? = null
+
+    private val idleScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
+    )
+
+    /** Set the idle window. 0 disables the watchdog (engine stays warm until manually
+     *  closed). Negative values are clamped to 0. Honored on the next idle event. */
+    fun setIdleTeardownDelayMs(ms: Long) {
+        idleTeardownDelayMs = ms.coerceAtLeast(0L)
+        // If a teardown was scheduled with the old delay, re-arm with the new one.
+        armIdleTeardown()
+    }
+
+    /** Cancel any pending teardown and schedule a fresh one at the current delay. Called
+     *  from the streamTurns finally so a new turn always resets the clock. */
+    private fun armIdleTeardown() {
+        idleTeardownJob?.cancel()
+        val delay = idleTeardownDelayMs
+        if (delay <= 0L || loaded == null) return
+        idleTeardownJob = idleScope.launch {
+            kotlinx.coroutines.delay(delay)
+            mutex.withLock {
+                val current = loaded ?: return@withLock
+                val sinceLastUseMs = android.os.SystemClock.elapsedRealtime() - current.lastUseAtMs
+                if (sinceLastUseMs >= delay) {
+                    android.util.Log.i(
+                        "LiteRtRuntime",
+                        "armIdleTeardown: idle ${sinceLastUseMs}ms >= ${delay}ms; closing engine",
+                    )
+                    try { current.conversation.close() } catch (_: Throwable) {}
+                    try { current.engine.close() } catch (_: Throwable) {}
+                    loaded = null
+                    lastTelemetry = null
+                }
+            }
+        }
+    }
+
     /**
      * Snapshot of every config bit that requires Engine teardown. The Engine is the
      * expensive resource (cold-load 10-60s); changing any of these forces a full reload.
@@ -142,6 +252,10 @@ class LiteRtRuntime(private val context: Context) {
         val supportImage: Boolean,
         val supportAudio: Boolean,
         val speculativeDecoding: Boolean,
+        /** Per-model vision-backend choice. Mirrors Gallery's `ConfigKeys.VISION_ACCELERATOR`
+         *  field. "gpu" / "cpu" / "npu". Default "gpu" matches Gallery's default; null
+         *  is reserved for non-multimodal models where supportImage is also false. */
+        val visionAccelerator: String,
     )
 
     /**
@@ -174,10 +288,19 @@ class LiteRtRuntime(private val context: Context) {
         var conversationSpec: ConversationSpec,
         val engine: Engine,
         var conversation: Conversation,
+        /** Captured from `Capabilities.hasSpeculativeDecodingSupport()` at engine build
+         *  time. Persisted so we can surface it on warm-reuse paths too. */
+        val fileSupportsSpeculativeDecoding: Boolean,
+        /** True iff [engineKey.speculativeDecoding] was true at engine.initialize() time.
+         *  Surfaced by [LoadOutcome.speculativeDecodingEngaged]. */
+        val speculativeDecodingEngaged: Boolean,
         /** Signatures of the turns the live Conversation's KV cache currently holds, in
          *  order — the caller-supplied history turns plus one synthetic assistant turn for
          *  the response generated last. Cleared whenever the Conversation is recreated. */
         val processed: MutableList<String> = mutableListOf(),
+        /** Monotonic timestamp of the last [streamTurns] invocation. The idle-teardown
+         *  watchdog ([armIdleTeardown]) uses this to decide whether to close the engine. */
+        @Volatile var lastUseAtMs: Long = android.os.SystemClock.elapsedRealtime(),
     )
 
     /**
@@ -187,7 +310,14 @@ class LiteRtRuntime(private val context: Context) {
      * hardware errors so the GPU→CPU fallback still works.
      */
     private fun classifyEngineError(modelPath: String, t: Throwable): Throwable {
-        val msg = t.message.orEmpty()
+        // Walk the cause chain — the SDK's native exception is typically the innermost
+        // cause; surrounding wrappers add their own (less specific) messages.
+        val msg = generateSequence<Throwable>(t) { it.cause }
+            .map { it.message.orEmpty() }
+            .joinToString("\n")
+        if (isVisionExecutorError(msg)) {
+            return LiteRtVisionUnavailableException(modelPath, t)
+        }
         val isCorrupt =
             msg.contains("Invalid magic number", ignoreCase = true) ||
             msg.contains("Failed to decompress", ignoreCase = true) ||
@@ -235,13 +365,16 @@ class LiteRtRuntime(private val context: Context) {
         supportImage: Boolean = false,
         supportAudio: Boolean = false,
         speculativeDecoding: Boolean = false,
+        /** "gpu" | "cpu" | "npu". Defaults to "gpu" matching Gallery's
+         *  DEFAULT_VISION_ACCELERATOR. Ignored when supportImage = false. */
+        visionAccelerator: String = "gpu",
         systemInstructionText: String? = null,
         tools: List<ToolProvider> = emptyList(),
         constrainedDecoding: Boolean = false,
         topK: Int = 64,
         topP: Double = 0.95,
         temperature: Double = 1.0,
-    ): String = mutex.withLock {
+    ): LoadOutcome = mutex.withLock {
         // Use in-session fallback if a prior GPU→CPU retry already succeeded this session.
         // forceCpu wins over a non-null preferredAccel.
         val accel = if (forceCpu) "CPU"
@@ -264,6 +397,7 @@ class LiteRtRuntime(private val context: Context) {
             supportImage = supportImage,
             supportAudio = supportAudio,
             speculativeDecoding = effectiveSpeculativeDecoding,
+            visionAccelerator = visionAccelerator,
         )
         val systemInstruction: Contents? =
             if (!systemInstructionText.isNullOrBlank()) Contents.of(systemInstructionText) else null
@@ -288,7 +422,13 @@ class LiteRtRuntime(private val context: Context) {
             if (current.conversationKey == desiredConversationKey) {
                 // Full reuse — Engine AND Conversation kept. The KV cache (and therefore
                 // [processed]) is left intact so the next streamTurns can warm-continue.
-                return@withLock accel
+                return@withLock LoadOutcome(
+                    accelerator = accel,
+                    visionEnabled = current.engineKey.supportImage,
+                    visionFellBackToTextOnly = false,
+                    fileSupportsSpeculativeDecoding = current.fileSupportsSpeculativeDecoding,
+                    speculativeDecodingEngaged = current.speculativeDecodingEngaged,
+                )
             }
             // Engine kept, Conversation config changed — recreate just the Conversation.
             // The KV cache is gone, so [processed] must be cleared.
@@ -301,7 +441,13 @@ class LiteRtRuntime(private val context: Context) {
             current.conversationKey = desiredConversationKey
             current.conversationSpec = desiredConversationSpec
             current.processed.clear()
-            return@withLock accel
+            return@withLock LoadOutcome(
+                accelerator = accel,
+                visionEnabled = current.engineKey.supportImage,
+                visionFellBackToTextOnly = false,
+                fileSupportsSpeculativeDecoding = current.fileSupportsSpeculativeDecoding,
+                speculativeDecodingEngaged = current.speculativeDecodingEngaged,
+            )
         }
 
         // Engine swap path: tear down any prior Engine + Conversation.
@@ -314,7 +460,42 @@ class LiteRtRuntime(private val context: Context) {
             tryLoadWithBackend(desiredEngineKey, accel, desiredConversationSpec)
         }
         val loadResult = firstAttempt.getOrElse { firstError ->
-            if (accel == "CPU") {
+            val classified = classifyEngineError(modelPath, firstError)
+            // Vision executor failed (typically Adreno 7xx + OEM linker namespace blocking
+            // libvndksupport.so → OpenCL discovery fails → OpenGL fallback hits the 0.11
+            // `CreateSharedMemoryManager` UNIMPLEMENTED stub; upstream issue #2292). The
+            // text path is fine on this device, so retry once with the vision backend off.
+            // The provider catches the typed exception we surface after the retry and
+            // persists the "vision unavailable" flag so subsequent loads skip the doomed
+            // GPU vision attempt entirely.
+            if (classified is LiteRtVisionUnavailableException && desiredEngineKey.supportImage) {
+                android.util.Log.w(
+                    "LiteRtRuntime",
+                    "Vision executor failed on $accel (${firstError.message}); " +
+                        "retrying without vision backend (text-only)",
+                )
+                val textOnlyKey = desiredEngineKey.copy(supportImage = false)
+                try {
+                    tryLoadWithBackend(textOnlyKey, accel, desiredConversationSpec).also {
+                        // The retry succeeded text-only — record this on the LoadedModel
+                        // so the provider can see it via the resolved engine key and
+                        // persist the per-model decision. We still throw a typed signal
+                        // up after the LoadedModel is committed, see below.
+                    }
+                } catch (retryError: Throwable) {
+                    // Text-only retry ALSO failed → the model just won't load on this
+                    // device. Surface the original vision-unavailable error so the
+                    // user message names the right root cause.
+                    throw classifyEngineError(
+                        modelPath,
+                        RuntimeException(
+                            "LiteRT engine could not load this model even with vision " +
+                                "disabled. Underlying: ${retryError.message}",
+                            retryError,
+                        )
+                    )
+                }
+            } else if (accel == "CPU") {
                 throw classifyEngineError(
                     modelPath,
                     RuntimeException(
@@ -326,32 +507,57 @@ class LiteRtRuntime(private val context: Context) {
                         firstError,
                     )
                 )
-            }
-            val classified = classifyEngineError(modelPath, firstError)
-            if (classified is LiteRtModelCorruptException) throw classified
+            } else {
+                if (classified is LiteRtModelCorruptException) throw classified
 
-            android.util.Log.w(
-                "LiteRtRuntime",
-                "Engine init failed on $accel (${firstError.message}); retrying on CPU",
-            )
-            try {
-                tryLoadWithBackend(
-                    desiredEngineKey.copy(accelerator = "CPU"),
-                    "CPU",
-                    desiredConversationSpec,
+                android.util.Log.w(
+                    "LiteRtRuntime",
+                    "Engine init failed on $accel (${firstError.message}); retrying on CPU",
                 )
-            } catch (cpuError: Throwable) {
-                throw classifyEngineError(
-                    modelPath,
-                    RuntimeException(
-                        "LiteRT engine could not load this model on this device's GPU OR CPU. " +
-                        "This usually means the model file is packaged for a different runtime version. " +
-                        "Try a different model from the Gallery allowlist (tap Install default, or " +
-                        "paste a litert-community/ HuggingFace URL). " +
-                        "Underlying: ${cpuError.message}",
-                        cpuError,
+                try {
+                    tryLoadWithBackend(
+                        desiredEngineKey.copy(accelerator = "CPU"),
+                        "CPU",
+                        desiredConversationSpec,
                     )
-                )
+                } catch (cpuError: Throwable) {
+                    val cpuClassified = classifyEngineError(modelPath, cpuError)
+                    // Vision-side error even on CPU main backend → text-only retry too.
+                    if (cpuClassified is LiteRtVisionUnavailableException &&
+                        desiredEngineKey.supportImage
+                    ) {
+                        android.util.Log.w(
+                            "LiteRtRuntime",
+                            "Vision executor failed on CPU too; retrying without vision backend",
+                        )
+                        val textOnlyCpuKey = desiredEngineKey
+                            .copy(accelerator = "CPU", supportImage = false)
+                        try {
+                            tryLoadWithBackend(textOnlyCpuKey, "CPU", desiredConversationSpec)
+                        } catch (lastError: Throwable) {
+                            throw classifyEngineError(
+                                modelPath,
+                                RuntimeException(
+                                    "LiteRT engine could not load this model on this device " +
+                                        "even with vision disabled. Underlying: ${lastError.message}",
+                                    lastError,
+                                )
+                            )
+                        }
+                    } else {
+                        throw classifyEngineError(
+                            modelPath,
+                            RuntimeException(
+                                "LiteRT engine could not load this model on this device's GPU OR CPU. " +
+                                "This usually means the model file is packaged for a different runtime version. " +
+                                "Try a different model from the Gallery allowlist (tap Install default, or " +
+                                "paste a litert-community/ HuggingFace URL). " +
+                                "Underlying: ${cpuError.message}",
+                                cpuError,
+                            )
+                        )
+                    }
+                }
             }
         }
 
@@ -361,19 +567,60 @@ class LiteRtRuntime(private val context: Context) {
         }
 
         loaded = LoadedModel(
-            engineKey = desiredEngineKey.copy(accelerator = loadResult.accelerator),
+            engineKey = desiredEngineKey.copy(
+                accelerator = loadResult.accelerator,
+                supportImage = loadResult.supportImage,
+            ),
             conversationKey = desiredConversationKey,
             conversationSpec = desiredConversationSpec,
             engine = loadResult.engine,
             conversation = loadResult.conversation,
+            fileSupportsSpeculativeDecoding = supportsSpeculativeDecoding,
+            speculativeDecodingEngaged = effectiveSpeculativeDecoding,
         )
-        loadResult.accelerator
+        android.util.Log.i(
+            "LiteRtRuntime",
+            "ensureLoaded: accel=${loadResult.accelerator} visionEnabled=${loadResult.supportImage} " +
+                "fileSupportsSpecDecoding=$supportsSpeculativeDecoding " +
+                "specDecodingEngaged=$effectiveSpeculativeDecoding",
+        )
+        LoadOutcome(
+            accelerator = loadResult.accelerator,
+            visionEnabled = loadResult.supportImage,
+            visionFellBackToTextOnly = desiredEngineKey.supportImage && !loadResult.supportImage,
+            fileSupportsSpeculativeDecoding = supportsSpeculativeDecoding,
+            speculativeDecodingEngaged = effectiveSpeculativeDecoding,
+        )
     }
 
     private class LoadResult(
         val engine: Engine,
         val conversation: Conversation,
         val accelerator: String,
+        /** The resolved supportImage value (may differ from the requested value when the
+         *  runtime had to fall back to text-only after the vision executor failed). */
+        val supportImage: Boolean,
+    )
+
+    /**
+     * Result returned by [ensureLoaded]. Tells the caller (a) which accelerator the engine
+     * ended up on, (b) whether the vision encoder is live or had to be dropped to
+     * text-only mode to get the model loaded, and (c) whether speculative decoding was
+     * available on the file and engaged for this load. The provider persists
+     * [visionFellBackToTextOnly] so future loads skip the doomed GPU vision attempt; the
+     * Doctor uses the speculative-decoding fields to surface a regression (file capability
+     * vanishing after an SDK bump) visibly.
+     */
+    data class LoadOutcome(
+        val accelerator: String,
+        val visionEnabled: Boolean,
+        val visionFellBackToTextOnly: Boolean,
+        /** True iff `Capabilities.hasSpeculativeDecodingSupport()` returned true for the
+         *  model file. */
+        val fileSupportsSpeculativeDecoding: Boolean,
+        /** True iff the caller requested speculative decoding AND the file supports it
+         *  AND the SDK's experimental flag was set during engine init. */
+        val speculativeDecodingEngaged: Boolean,
     )
 
     /**
@@ -394,9 +641,23 @@ class LiteRtRuntime(private val context: Context) {
         // Vision backend MUST be GPU for Gemma 3n; audio backend MUST be CPU (Gallery's
         // mandate). Leave each null when the caller didn't request that modality so the
         // engine doesn't allocate the corresponding executor memory.
-        val visionBackend: Backend? = if (engineKey.supportImage) Backend.GPU() else null
+        // Vision backend mirrors Gallery's `LlmChatModelHelper`: configurable per model
+        // via the visionAccelerator label. GPU is default (Gemma 3n / 4 train with GPU
+        // vision); CPU and NPU are valid alternates the SDK accepts.
+        val visionBackend: Backend? = if (engineKey.supportImage) {
+            when (engineKey.visionAccelerator) {
+                "cpu" -> Backend.CPU()
+                "npu", "tpu" -> Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+                else -> Backend.GPU()
+            }
+        } else null
         val audioBackend: Backend? = if (engineKey.supportAudio) Backend.CPU() else null
 
+        // cacheDir: matches Google AI Edge Gallery's LlmChatModelHelper exactly. Only set
+        // when the model path is the ADB push debug location (/data/local/tmp). For
+        // installed models (filesDir/local-models/...) the SDK does its own cache
+        // management internally; passing a non-null cacheDir for those paths diverges
+        // from Gallery's reference build with unknown side effects on vision-backend init.
         val engineConfig = EngineConfig(
             modelPath = engineKey.modelPath,
             backend = backend,
@@ -433,7 +694,7 @@ class LiteRtRuntime(private val context: Context) {
             backend = backend,
             spec = conversationSpec,
         )
-        return LoadResult(engine, conv, accel)
+        return LoadResult(engine, conv, accel, engineKey.supportImage)
     }
 
     /**
@@ -509,7 +770,33 @@ class LiteRtRuntime(private val context: Context) {
         audioClips: List<ByteArray> = emptyList(),
         onThinking: ((String) -> Unit)? = null,
     ): Flow<String> = callbackFlow {
-        mutex.withLock {
+        // GPU-boost the inference. Three levers, in order of effectiveness:
+        //   1. PerformanceHintManager (API 33+). Opens a hint session for this thread
+        //      with a 50ms target — the OS scheduler treats the process as doing
+        //      sustained compute and refuses to downclock GPU/CPU like it would for a
+        //      productivity app. This is exactly what Android game engines use.
+        //   2. THREAD_PRIORITY_URGENT_DISPLAY on the calling thread. LiteRT's native
+        //      worker threads inherit nice values from their creator; boosting our
+        //      thread propagates a higher scheduling priority into the compute work.
+        //   3. (Manifest) game_mode_config.xml declares we accept PERFORMANCE mode,
+        //      so OEM game-mode frameworks (Adreno GPP, Mali frame rate control,
+        //      Tensor Game Mode) also bump GPU clocks + relax DCVS throttling.
+        // All cleaned up in the finally so an idle app doesn't keep the boost.
+        val callerTid = Process.myTid()
+        val originalPriority = runCatching {
+            Process.getThreadPriority(callerTid)
+        }.getOrDefault(Process.THREAD_PRIORITY_DEFAULT)
+        val hintSession = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            runCatching {
+                val phm = context.getSystemService(PerformanceHintManager::class.java)
+                phm?.createHintSession(intArrayOf(callerTid), 50_000_000L)  // 50 ms target
+            }.getOrNull()
+        } else null
+        runCatching {
+            Process.setThreadPriority(callerTid, Process.THREAD_PRIORITY_URGENT_DISPLAY)
+        }
+
+        try { mutex.withLock {
             val instance = loaded
                 ?: throw IllegalStateException("Call ensureLoaded(...) before streamTurns()")
 
@@ -536,11 +823,20 @@ class LiteRtRuntime(private val context: Context) {
             for (clip in audioClips) contentList.add(Content.AudioBytes(clip))
             if (inputText.trim().isNotEmpty()) contentList.add(Content.Text(inputText))
 
+            // Telemetry. We measure character counts as a proxy for token counts (the SDK
+            // does not surface a per-call tokenizer counter). The cold-path text input
+            // includes the full history + system prompt; the warm path is just the new
+            // turn's raw text. Either way `inputText.length` is the prefill character
+            // budget for this call.
+            val telemetryInputChars = inputText.length
+            val callStartedNs = System.nanoTime()
+            var firstMessageNs: Long = 0L
             var lastCumulative = ""
             conv.sendMessageAsync(
                 Contents.of(contentList),
                 object : MessageCallback {
                     override fun onMessage(message: Message) {
+                        if (firstMessageNs == 0L) firstMessageNs = System.nanoTime()
                         message.channels["thought"]?.let { thinking ->
                             if (thinking.isNotEmpty()) onThinking?.invoke(thinking)
                         }
@@ -558,17 +854,38 @@ class LiteRtRuntime(private val context: Context) {
                         instance.processed.clear()
                         instance.processed.addAll(historySignatures)
                         instance.processed.add(turnSignature(ROLE_ASSISTANT, lastCumulative))
+                        // Stamp telemetry for the provider to read + persist.
+                        val endNs = System.nanoTime()
+                        val prefillMs = if (firstMessageNs > 0L)
+                            (firstMessageNs - callStartedNs) / 1_000_000L else 0L
+                        val decodeMs = if (firstMessageNs > 0L)
+                            (endNs - firstMessageNs) / 1_000_000L else 0L
+                        lastTelemetry = StreamTelemetry(
+                            prefillMs = prefillMs,
+                            decodeMs = decodeMs,
+                            inputCharCount = telemetryInputChars,
+                            outputCharCount = lastCumulative.length,
+                            specDecodingEngaged = instance.speculativeDecodingEngaged,
+                        )
+                        instance.lastUseAtMs = android.os.SystemClock.elapsedRealtime()
                         close()
                     }
                     override fun onError(throwable: Throwable) {
                         // The KV-cache state is now unknown — force the next turn cold.
                         instance.processed.clear()
+                        instance.lastUseAtMs = android.os.SystemClock.elapsedRealtime()
                         if (throwable is CancellationException) close() else close(throwable)
                     }
                 },
                 emptyMap(),
             )
             awaitClose { /* SDK callback already closed the channel above. */ }
+        } } finally {
+            runCatching { hintSession?.close() }
+            runCatching { Process.setThreadPriority(callerTid, originalPriority) }
+            // Arm (or re-arm) the idle teardown. A new turn cancels the prior schedule and
+            // starts a fresh window from now; no turn keeps the existing one ticking.
+            armIdleTeardown()
         }
     }.flowOn(Dispatchers.IO)
 
@@ -584,10 +901,13 @@ class LiteRtRuntime(private val context: Context) {
      * Tear down the currently loaded engine + conversation, if any.
      */
     suspend fun closeIfLoaded() {
+        idleTeardownJob?.cancel()
+        idleTeardownJob = null
         mutex.withLock {
             try { loaded?.conversation?.close() } catch (_: Throwable) {}
             try { loaded?.engine?.close() } catch (_: Throwable) {}
             loaded = null
+            lastTelemetry = null
         }
     }
 
@@ -626,5 +946,19 @@ class LiteRtRuntime(private val context: Context) {
             if (historySignatures.size - processed.size != 1) return TurnPlan.Cold
             return TurnPlan.Warm(sendFromIndex = processed.size)
         }
+
+        /**
+         * True if the joined cause-chain message text indicates the SDK's vision-modality
+         * executor failed at compile / init time. Extracted as a pure function for unit
+         * testing. The canonical signature is `vision_litert_compiled_model_executor` (the
+         * source file path in the SDK's native stack), but in practice the error can also
+         * surface as `vision_litert` truncated, `CreateSharedMemoryManager is not
+         * implemented` (the upstream root cause on Adreno 7xx + One UI / OriginOS), or
+         * `gpu_backend_opengl.cc` (the file that hosts the stub). Match any of those.
+         */
+        internal fun isVisionExecutorError(joinedMessage: String): Boolean =
+            joinedMessage.contains("vision_litert", ignoreCase = true) ||
+                joinedMessage.contains("CreateSharedMemoryManager", ignoreCase = true) ||
+                joinedMessage.contains("gpu_backend_opengl", ignoreCase = true)
     }
 }

@@ -1,3 +1,5 @@
+@file:OptIn(dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi::class)
+
 package me.rerere.rikkahub.ui.components.ai
 
 import android.content.Intent

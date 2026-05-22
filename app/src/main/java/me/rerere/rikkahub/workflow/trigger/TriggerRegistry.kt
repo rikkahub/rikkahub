@@ -94,8 +94,8 @@ class TriggerRegistry(
     }
 
     /** Re-bucket workflows and ask each family to reconcile. */
-    suspend fun resync(enabled: List<WorkflowDefinition>) = syncMutex.withLock {
-        val fire = engineFire ?: return
+    suspend fun resync(enabled: List<WorkflowDefinition>): Unit = syncMutex.withLock {
+        val fire = engineFire ?: return@withLock
         for (family in families) {
             val matching = enabled.filter { family.handles(it.trigger) }
             runCatching { family.sync(matching, fire) }.onFailure {

@@ -20,8 +20,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 162
-        versionName = "2.1.19"
+        versionCode = 163
+        versionName = "2.1.20"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -108,7 +108,7 @@ android {
         aidl = true
     }
     sourceSets {
-        getByName("androidTest").assets.srcDirs("$projectDir/schemas")
+        getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
     androidResources {
         generateLocaleConfig = true
@@ -141,7 +141,8 @@ android {
         compilerOptions.optIn.add("kotlin.uuid.ExperimentalUuidApi")
         compilerOptions.optIn.add("kotlin.time.ExperimentalTime")
         compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
-        compilerOptions.optIn.add("androidx.navigation3.runtime.ExperimentalNavigation3Api")
+        // ExperimentalNavigation3Api was renamed/removed in newer navigation3 — opt-in is
+        // no longer required and the marker class no longer exists in the runtime artifact.
     }
 }
 

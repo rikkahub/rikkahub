@@ -129,6 +129,17 @@
     android:theme="@style/Theme.Rikkahub"
     android:usesCleartextTraffic="true"
     tools:targetApi="33">
+    <!--
+      Game Mode preferences. Declares to the OEM Game Mode framework (Pixel, Samsung,
+      Asus, Nothing, Xiaomi, etc.) that this app accepts PERFORMANCE and BATTERY mode
+      treatment. Local LLM inference is a heavy compute workload that benefits from
+      sustained higher GPU clocks + relaxed DCVS throttling, exactly what game-mode
+      perf delivers. Non-game opt-in — appCategory stays "productivity".
+      See res/xml/game_mode_config.xml for the rationale per attribute.
+    -->
+    <meta-data
+      android:name="android.game_mode_config"
+      android:resource="@xml/game_mode_config" />
     <activity
       android:name=".ui.activity.SafeModeActivity"
       android:exported="false"

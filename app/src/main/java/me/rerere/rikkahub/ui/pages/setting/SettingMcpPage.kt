@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")  // FlowRowOverflow deprecated; no replacement in current Compose
+
 package me.rerere.rikkahub.ui.pages.setting
 
 import me.rerere.hugeicons.HugeIcons
