@@ -357,7 +357,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
-                    addAssistantMessage(message)
+                    addAssistantMessage(message, promptCaching, promptCacheTtl)
                 } else {
                     addUserMessage(message)
                 }
@@ -408,7 +408,11 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         })
     }
 
-    private fun JsonArrayBuilder.addAssistantMessage(message: UIMessage) {
+    private fun JsonArrayBuilder.addAssistantMessage(
+        message: UIMessage,
+        promptCaching: Boolean,
+        promptCacheTtl: ClaudePromptCacheTtl
+    ) {
         val groups = groupPartsByToolBoundary(message.parts)
         val contentBuffer = mutableListOf<JsonObject>()
 
@@ -433,7 +437,9 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("content") {
-                            group.tools.forEach { add(it.toToolResultBlock()) }
+                            group.tools.forEach {
+                                add(it.toToolResultBlock(promptCaching, promptCacheTtl))
+                            }
                         }
                     })
                 }
@@ -495,11 +501,17 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         put("input", inputAsJson())
     }
 
-    private fun UIMessagePart.Tool.toToolResultBlock() = buildJsonObject {
+    private fun UIMessagePart.Tool.toToolResultBlock(
+        promptCaching: Boolean,
+        promptCacheTtl: ClaudePromptCacheTtl
+    ) = buildJsonObject {
         put("type", "tool_result")
         put("tool_use_id", toolCallId)
         putJsonArray("content") {
             output.mapNotNull { it.toContentBlock() }.forEach { add(it) }
+        }
+        if (promptCaching) {
+            put("cache_control", cacheControlEphemeral(promptCacheTtl))
         }
     }
 
