@@ -833,7 +833,7 @@
   <string name="setting_theme_page_tertiary_color">ターシャリカラー</string>
   <string name="setting_theme_page_preview">プレビュー</string>
   <string name="setting_theme_page_save">保存</string>
-  <string name="setting_theme_page_dynamic_color_hint">ダイナミックカラーが有効です。カスタムテーマを使用するには、表示設定で無効にしてください。</string>
+  <string name="setting_theme_page_dynamic_color_hint">ダイナミックカラーが有効です。カスタムテーマを使用するには、設定 &gt; テーマで無効にしてください。</string>
   <string name="setting_page_tts_service">音声サービス</string>
   <string name="setting_page_tts_service_desc">音声合成と音声認識のプロバイダーを設定</string>
   <string name="setting_page_tts_settings">TTS設定</string>
@@ -1085,5 +1085,15 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_custom_font_not_imported">カスタムフォントがインポートされていません。.ttf、.otf、.ttcファイルに対応しています。</string>
   <string name="setting_display_page_custom_font_remove">カスタムフォントを削除</string>
   <string name="setting_display_page_custom_font_title">カスタムフォント</string>
+  <string name="setting_page_preferences">設定</string>
+  <string name="setting_page_preferences_desc">テーマ、通知、UI、全般設定</string>
+  <string name="setting_page_preferences_theme">テーマ</string>
+  <string name="setting_page_preferences_theme_desc">ダイナミックカラー、テーマ、AMOLEDダークモード</string>
+  <string name="setting_page_preferences_notification">通知</string>
+  <string name="setting_page_preferences_notification_desc">アップデート通知、メッセージ生成通知</string>
+  <string name="setting_page_preferences_general">一般</string>
+  <string name="setting_page_preferences_general_desc">操作動作、スクロール、入力設定</string>
+  <string name="setting_page_preferences_ui">UI設定</string>
+  <string name="setting_page_preferences_ui_desc">メッセージ表示、フォント、コードブロック</string>
 </resources>
 

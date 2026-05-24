@@ -833,7 +833,7 @@
   <string name="setting_theme_page_tertiary_color">第三色</string>
   <string name="setting_theme_page_preview">預覽</string>
   <string name="setting_theme_page_save">儲存</string>
-  <string name="setting_theme_page_dynamic_color_hint">動態顏色已開啟，請在顯示設定中關閉以使用自訂主題。</string>
+  <string name="setting_theme_page_dynamic_color_hint">動態顏色已開啟，請在偏好設定 &gt; 主題中關閉以使用自訂主題。</string>
   <string name="setting_page_tts_service">語音服務</string>
   <string name="setting_page_tts_service_desc">配置語音合成與語音識別服務提供商</string>
   <string name="setting_page_tts_settings">TTS設定</string>
@@ -1083,5 +1083,15 @@
   <string name="setting_display_page_custom_font_not_imported">尚未匯入自訂字型。支援 .ttf、.otf 與 .ttc 檔案。</string>
   <string name="setting_display_page_custom_font_remove">移除自訂字型</string>
   <string name="setting_display_page_custom_font_title">自訂字型</string>
+  <string name="setting_page_preferences">偏好設定</string>
+  <string name="setting_page_preferences_desc">主題、通知、介面與一般設定</string>
+  <string name="setting_page_preferences_theme">主題</string>
+  <string name="setting_page_preferences_theme_desc">動態色彩、主題、AMOLED 深色模式</string>
+  <string name="setting_page_preferences_notification">通知</string>
+  <string name="setting_page_preferences_notification_desc">更新提醒、訊息產生通知</string>
+  <string name="setting_page_preferences_general">一般</string>
+  <string name="setting_page_preferences_general_desc">互動行為、捲動、輸入設定</string>
+  <string name="setting_page_preferences_ui">UI 偏好設定</string>
+  <string name="setting_page_preferences_ui_desc">訊息顯示、字型、程式碼區塊</string>
 </resources>
 

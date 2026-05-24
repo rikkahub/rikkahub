@@ -833,7 +833,7 @@
   <string name="setting_theme_page_tertiary_color">Третичный цвет</string>
   <string name="setting_theme_page_preview">Предпросмотр</string>
   <string name="setting_theme_page_save">Сохранить</string>
-  <string name="setting_theme_page_dynamic_color_hint">Динамический цвет включён. Отключите его в настройках отображения для использования пользовательских тем.</string>
+  <string name="setting_theme_page_dynamic_color_hint">Динамические цвета включены. Отключите их в разделе Настройки &gt; Тема, чтобы использовать пользовательские темы.</string>
   <string name="setting_page_tts_service">Служба преобразования текста в речь</string>
   <string name="setting_page_tts_service_desc">Настроить поставщиков службы преобразования текста в речь</string>
   <string name="setting_page_tts_settings">Настройки TTS</string>
@@ -1085,5 +1085,15 @@
   <string name="setting_display_page_custom_font_not_imported">Пользовательский шрифт не импортирован. Поддерживаются файлы .ttf, .otf и .ttc.</string>
   <string name="setting_display_page_custom_font_remove">Удалить пользовательский шрифт</string>
   <string name="setting_display_page_custom_font_title">Пользовательский шрифт</string>
+  <string name="setting_page_preferences">Настройки</string>
+  <string name="setting_page_preferences_desc">Тема, уведомления, интерфейс и общие настройки</string>
+  <string name="setting_page_preferences_theme">Тема</string>
+  <string name="setting_page_preferences_theme_desc">Динамические цвета, тема, тёмный режим AMOLED</string>
+  <string name="setting_page_preferences_notification">Уведомления</string>
+  <string name="setting_page_preferences_notification_desc">Уведомления об обновлениях и генерации сообщений</string>
+  <string name="setting_page_preferences_general">Общие</string>
+  <string name="setting_page_preferences_general_desc">Поведение взаимодействия, прокрутка, настройки ввода</string>
+  <string name="setting_page_preferences_ui">Настройки интерфейса</string>
+  <string name="setting_page_preferences_ui_desc">Отображение сообщений, шрифты, блоки кода</string>
 </resources>
 

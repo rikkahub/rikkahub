@@ -190,10 +190,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(selectedColorModeText) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.SettingDisplay) },
+                        onClick = { navController.navigate(Screen.SettingPreferences) },
                         leadingContent = { Icon(HugeIcons.Settings03, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_display_setting_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_display_setting)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_preferences_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_preferences)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Assistant) },

@@ -789,6 +789,16 @@
   <string name="setting_page_default_model_desc">Set default models for each feature</string>
   <string name="setting_page_display_setting">Display Settings</string>
   <string name="setting_page_display_setting_desc">Manage display settings</string>
+  <string name="setting_page_preferences">Preferences</string>
+  <string name="setting_page_preferences_desc">Theme, notifications, UI and general settings</string>
+  <string name="setting_page_preferences_theme">Theme</string>
+  <string name="setting_page_preferences_theme_desc">Dynamic color, theme, AMOLED dark mode</string>
+  <string name="setting_page_preferences_notification">Notifications</string>
+  <string name="setting_page_preferences_notification_desc">Update alerts, message generation notifications</string>
+  <string name="setting_page_preferences_general">General</string>
+  <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
+  <string name="setting_page_preferences_ui">UI Preferences</string>
+  <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
   <string name="setting_page_donate">Donate</string>
@@ -843,7 +853,7 @@
   <string name="setting_theme_page_import_theme">Import</string>
   <string name="setting_theme_page_export_success">Theme JSON copied to clipboard</string>
   <string name="setting_theme_page_import_success">Theme imported successfully</string>
-  <string name="setting_theme_page_dynamic_color_hint">Dynamic color is enabled. Disable it in Display Settings to use custom themes.</string>
+  <string name="setting_theme_page_dynamic_color_hint">Dynamic color is enabled. Disable it in Preferences &gt; Theme to use custom themes.</string>
   <string name="setting_page_tts_service">Speech Services</string>
   <string name="setting_page_tts_service_desc">Configure text-to-speech and speech recognition providers</string>
   <string name="setting_page_tts_settings">TTS Settings</string>
