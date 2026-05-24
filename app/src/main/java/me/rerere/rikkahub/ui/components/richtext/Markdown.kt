@@ -253,28 +253,57 @@ private fun dumpAst(node: ASTNode, text: String, indent: String = "") {
 }
 
 object HeaderStyle {
-    val H1 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 24.sp
+    private const val LINE_HEIGHT_RATIO = 1.25f
+
+    fun fromLevel(level: Int, fontSizeRatio: Float): TextStyle {
+        val fontSize = when (level) {
+            1 -> 24.sp
+            2 -> 22.sp
+            3 -> 20.sp
+            4 -> 18.sp
+            5 -> 16.sp
+            else -> 14.sp
+        } * fontSizeRatio
+
+        return TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = fontSize,
+            lineHeight = fontSize * LINE_HEIGHT_RATIO,
+        )
+    }
+
+    fun verticalPadding(level: Int) = when (level) {
+        1 -> 16.dp
+        2 -> 14.dp
+        3 -> 12.dp
+        4 -> 10.dp
+        5 -> 8.dp
+        else -> 6.dp
+    }
+
+    fun fromMarkdownType(type: IElementType, fontSizeRatio: Float): TextStyle = fromLevel(
+        level = when (type) {
+            MarkdownElementTypes.ATX_1 -> 1
+            MarkdownElementTypes.ATX_2 -> 2
+            MarkdownElementTypes.ATX_3 -> 3
+            MarkdownElementTypes.ATX_4 -> 4
+            MarkdownElementTypes.ATX_5 -> 5
+            MarkdownElementTypes.ATX_6 -> 6
+            else -> 6
+        },
+        fontSizeRatio = fontSizeRatio,
     )
 
-    val H2 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 22.sp
-    )
-
-    val H3 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 20.sp
-    )
-
-    val H4 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 18.sp
-    )
-
-    val H5 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 16.sp
-    )
-
-    val H6 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 14.sp
+    fun verticalPadding(type: IElementType) = verticalPadding(
+        level = when (type) {
+            MarkdownElementTypes.ATX_1 -> 1
+            MarkdownElementTypes.ATX_2 -> 2
+            MarkdownElementTypes.ATX_3 -> 3
+            MarkdownElementTypes.ATX_4 -> 4
+            MarkdownElementTypes.ATX_5 -> 5
+            else -> 6
+        }
     )
 }
 
@@ -305,25 +334,12 @@ private fun MarkdownNode(
 
         // 标题
         MarkdownElementTypes.ATX_1, MarkdownElementTypes.ATX_2, MarkdownElementTypes.ATX_3, MarkdownElementTypes.ATX_4, MarkdownElementTypes.ATX_5, MarkdownElementTypes.ATX_6 -> {
-            val style = when (node.type) {
-                MarkdownElementTypes.ATX_1 -> HeaderStyle.H1
-                MarkdownElementTypes.ATX_2 -> HeaderStyle.H2
-                MarkdownElementTypes.ATX_3 -> HeaderStyle.H3
-                MarkdownElementTypes.ATX_4 -> HeaderStyle.H4
-                MarkdownElementTypes.ATX_5 -> HeaderStyle.H5
-                MarkdownElementTypes.ATX_6 -> HeaderStyle.H6
-                else -> throw IllegalArgumentException("Unknown header type")
-            }
-            val headingPadding = when (node.type) {
-                MarkdownElementTypes.ATX_1 -> 16.dp
-                MarkdownElementTypes.ATX_2 -> 14.dp
-                MarkdownElementTypes.ATX_3 -> 12.dp
-                MarkdownElementTypes.ATX_4 -> 10.dp
-                MarkdownElementTypes.ATX_5 -> 8.dp
-                MarkdownElementTypes.ATX_6 -> 6.dp
-                else -> 8.dp
-            }
-            ProvideTextStyle(value = style) {
+            val style = HeaderStyle.fromMarkdownType(
+                type = node.type,
+                fontSizeRatio = LocalSettings.current.displaySetting.fontSizeRatio,
+            )
+            val headingPadding = HeaderStyle.verticalPadding(node.type)
+            ProvideTextStyle(value = LocalTextStyle.current.merge(style)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.children.fastForEach { node ->
                         if (node.type == MarkdownTokenTypes.ATX_CONTENT) {
