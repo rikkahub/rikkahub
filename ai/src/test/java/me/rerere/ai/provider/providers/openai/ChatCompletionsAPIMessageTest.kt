@@ -10,8 +10,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.MessageChunk
@@ -59,9 +61,20 @@ class ChatCompletionsAPIMessageTest {
         return method.invoke(api, message) as UIMessage
     }
 
+    private fun invokeParseMessage(message: JsonObject, wrapImagesAsDataUri: Boolean): UIMessage {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "parseMessage",
+            JsonObject::class.java,
+            Boolean::class.javaPrimitiveType
+        )
+        method.isAccessible = true
+        return method.invoke(api, message, wrapImagesAsDataUri) as UIMessage
+    }
+
     private fun invokeBuildChatCompletionRequest(
         providerSetting: ProviderSetting.OpenAI,
         model: Model,
+        reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     ): JsonObject {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildChatCompletionRequest",
@@ -74,7 +87,7 @@ class ChatCompletionsAPIMessageTest {
         return method.invoke(
             api,
             listOf(UIMessage.user("Generate an image")),
-            TextGenerationParams(model = model),
+            TextGenerationParams(model = model, reasoningLevel = reasoningLevel),
             providerSetting,
             false
         ) as JsonObject
@@ -414,6 +427,49 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
+    fun `parseMessage default should keep raw image chunks for streaming`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {
+                        put("data", "STREAM_BASE64")
+                        put("mimeType", "png")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        val image = result.parts.single() as UIMessagePart.Image
+        assertEquals("STREAM_BASE64", image.url)
+    }
+
+    @Test
+    fun `parseMessage should wrap final aihubmix image as data uri`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {
+                        put("data", "CAMEL_BASE64")
+                        put("mimeType", "png")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message, wrapImagesAsDataUri = true)
+
+        val image = result.parts.single() as UIMessagePart.Image
+        assertEquals("data:image/png;base64,CAMEL_BASE64", image.url)
+        assertEquals("image/png", image.metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `parseMessage should parse aihubmix snake_case multi modal image and normalize jpeg mime`() {
         val message = buildJsonObject {
             put("role", "assistant")
@@ -466,6 +522,37 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("image/png", images[0].metadata?.get("mimeType")?.jsonPrimitive?.content)
         assertEquals("JPG_BASE64", images[1].url)
         assertEquals("image/jpeg", images[1].metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseMessage should preserve full image mime values`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {
+                        put("data", "SVG_BASE64")
+                        put("mimeType", "image/svg+xml")
+                    })
+                })
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {
+                        put("data", "OCTET_BASE64")
+                        put("mimeType", "application/octet-stream")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message, wrapImagesAsDataUri = true)
+        val images = result.parts.filterIsInstance<UIMessagePart.Image>()
+
+        assertEquals(2, images.size)
+        assertEquals("data:image/svg+xml;base64,SVG_BASE64", images[0].url)
+        assertEquals("image/svg+xml", images[0].metadata?.get("mimeType")?.jsonPrimitive?.content)
+        assertEquals("data:image/png;base64,OCTET_BASE64", images[1].url)
+        assertEquals("image/png", images[1].metadata?.get("mimeType")?.jsonPrimitive?.content)
     }
 
     @Test
@@ -549,6 +636,28 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
+    fun `parseMessage should wrap final openrouter jpeg image as data uri`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("images", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "image_url")
+                    put("image_url", buildJsonObject {
+                        put("url", "data:image/jpeg;base64,JPEG_BASE64")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message, wrapImagesAsDataUri = true)
+
+        val image = result.parts.single() as UIMessagePart.Image
+        assertEquals("data:image/jpeg;base64,JPEG_BASE64", image.url)
+        assertEquals("image/jpeg", image.metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `handleMessageChunk should prefix image with mime metadata exactly once`() {
         val messages = listOf(UIMessage.user("Generate an image"))
         val chunk = MessageChunk(
@@ -563,6 +672,36 @@ class ChatCompletionsAPIMessageTest {
                         parts = listOf(
                             UIMessagePart.Image(
                                 url = "JPEG_BASE64",
+                                metadata = buildJsonObject { put("mimeType", "image/jpeg") }
+                            )
+                        )
+                    ),
+                    finishReason = "stop"
+                )
+            )
+        )
+
+        val result = messages.handleMessageChunk(chunk)
+        val image = result.last().parts.single() as UIMessagePart.Image
+
+        assertEquals("data:image/jpeg;base64,JPEG_BASE64", image.url)
+    }
+
+    @Test
+    fun `handleMessageChunk should not double prefix image data uri`() {
+        val messages = listOf(UIMessage.user("Generate an image"))
+        val chunk = MessageChunk(
+            id = "chunk-id",
+            model = "model-id",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = null,
+                    message = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Image(
+                                url = "data:image/jpeg;base64,JPEG_BASE64",
                                 metadata = buildJsonObject { put("mimeType", "image/jpeg") }
                             )
                         )
@@ -617,6 +756,26 @@ class ChatCompletionsAPIMessageTest {
         assertEquals(2, modalities.size)
         assertEquals("text", modalities[0].jsonPrimitive.content)
         assertEquals("image", modalities[1].jsonPrimitive.content)
+    }
+
+    @Test
+    fun `buildChatCompletionRequest should route dashscope intl reasoning params`() {
+        val reasoningModel = Model(
+            modelId = "qwen3-max",
+            abilities = listOf(ModelAbility.REASONING)
+        )
+
+        val request = invokeBuildChatCompletionRequest(
+            providerSetting = ProviderSetting.OpenAI(
+                baseUrl = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+            ),
+            model = reasoningModel,
+            reasoningLevel = ReasoningLevel.HIGH
+        )
+
+        assertEquals("true", request["enable_thinking"]?.jsonPrimitive?.content)
+        assertEquals("8000", request["thinking_budget"]?.jsonPrimitive?.content)
+        assertTrue(!request.containsKey("reasoning_effort"))
     }
 
     @Test

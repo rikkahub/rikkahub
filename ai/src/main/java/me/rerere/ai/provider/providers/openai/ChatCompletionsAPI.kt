@@ -117,7 +117,7 @@ class ChatCompletionsAPI(
                 UIMessageChoice(
                     index = 0,
                     delta = null,
-                    message = parseMessage(message),
+                    message = parseMessage(message, wrapImagesAsDataUri = true),
                     finishReason = finishReason
                 )
             ),
@@ -300,7 +300,7 @@ class ChatCompletionsAPI(
                         })
                     }
 
-                    host.matchesHostOrSubdomain("dashscope.aliyuncs.com") -> {
+                    host.matchesDashScopeHost() -> {
                         // 阿里云百炼
                         // https://bailian.console.aliyun.com/console?tab=doc#/doc/?type=model&url=https%3A%2F%2Fhelp.aliyun.com%2Fdocument_detail%2F2870973.html&renderType=iframe
                         put("enable_thinking", level.isEnabled)
@@ -623,7 +623,12 @@ class ChatCompletionsAPI(
         })
     }
 
-    private fun parseMessage(jsonObject: JsonObject): UIMessage {
+    private fun parseMessage(jsonObject: JsonObject): UIMessage = parseMessage(
+        jsonObject = jsonObject,
+        wrapImagesAsDataUri = false
+    )
+
+    private fun parseMessage(jsonObject: JsonObject, wrapImagesAsDataUri: Boolean): UIMessage {
         val role = MessageRole.valueOf(
             jsonObject["role"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "ASSISTANT"
         )
@@ -681,7 +686,7 @@ class ChatCompletionsAPI(
                     val parsedImage = parseImageContent(url, allowRawBase64 = false)
                     add(
                         UIMessagePart.Image(
-                            url = parsedImage.base64,
+                            url = parsedImage.toImageUrl(wrapImagesAsDataUri),
                             metadata = buildJsonObject {
                                 put("mimeType", parsedImage.mimeType)
                             }
@@ -704,7 +709,7 @@ class ChatCompletionsAPI(
                         val parsedImage = parseImageContent(data, rawMime)
                         add(
                             UIMessagePart.Image(
-                                url = parsedImage.base64,
+                                url = parsedImage.toImageUrl(wrapImagesAsDataUri),
                                 metadata = buildJsonObject {
                                     put("mimeType", parsedImage.mimeType)
                                 }
@@ -724,7 +729,11 @@ class ChatCompletionsAPI(
     private data class ParsedImageContent(
         val base64: String,
         val mimeType: String,
-    )
+    ) {
+        fun toImageUrl(wrapAsDataUri: Boolean): String {
+            return if (wrapAsDataUri) "data:$mimeType;base64,$base64" else base64
+        }
+    }
 
     private fun parseImageContent(
         data: String,
@@ -763,8 +772,16 @@ class ChatCompletionsAPI(
             "png", "image/png" -> "image/png"
             "webp", "image/webp" -> "image/webp"
             "gif", "image/gif" -> "image/gif"
-            else -> "image/png"
+            "avif", "image/avif" -> "image/avif"
+            "heic", "image/heic" -> "image/heic"
+            "svg", "svg+xml", "image/svg", "image/svg+xml" -> "image/svg+xml"
+            else -> if (cleaned.startsWith("image/")) cleaned else "image/png"
         }
+    }
+
+    private fun String.matchesDashScopeHost(): Boolean {
+        return matchesHostOrSubdomain("dashscope.aliyuncs.com") ||
+            matchesHostOrSubdomain("dashscope-intl.aliyuncs.com")
     }
 
     private fun parseAnnotations(jsonArray: JsonArray): List<UIMessageAnnotation> {

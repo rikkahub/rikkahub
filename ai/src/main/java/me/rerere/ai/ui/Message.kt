@@ -69,8 +69,13 @@ data class UIMessage(
                                 ?.jsonPrimitive
                                 ?.contentOrNull
                                 ?: "image/png"
+                            val url = if (deltaPart.url.startsWith("data:", ignoreCase = true)) {
+                                deltaPart.url
+                            } else {
+                                "data:$mime;base64,${deltaPart.url}"
+                            }
                             acc + UIMessagePart.Image(
-                                url = "data:$mime;base64,${deltaPart.url}",
+                                url = url,
                                 metadata = deltaPart.metadata,
                             )
                         }
