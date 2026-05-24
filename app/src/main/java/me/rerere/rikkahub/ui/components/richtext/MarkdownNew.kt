@@ -891,7 +891,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
 
         "code" -> withStyle(
             SpanStyle(
-                fontFamily = FontFamily.Monospace,
+                fontFamily = JetbrainsMono,
                 fontSize = 0.95.em,
                 background = colorScheme.surfaceVariant,
                 color = colorScheme.primary,
