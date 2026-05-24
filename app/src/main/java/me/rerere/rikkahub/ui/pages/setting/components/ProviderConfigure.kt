@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -16,16 +18,25 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -274,6 +285,7 @@ private fun ColumnScope.ProviderConfigureOpenAI(
         modifier = Modifier.fillMaxWidth(),
     )
 
+    var openAiKeyVisible by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = provider.apiKey,
         onValueChange = {
@@ -284,6 +296,12 @@ private fun ColumnScope.ProviderConfigureOpenAI(
         },
         modifier = Modifier.fillMaxWidth(),
         maxLines = 3,
+        visualTransformation = if (openAiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { openAiKeyVisible = !openAiKeyVisible }) {
+                Icon(if (openAiKeyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+            }
+        },
     )
 
     OutlinedTextField(
@@ -364,6 +382,7 @@ private fun ColumnScope.ProviderConfigureClaude(
         maxLines = 3,
     )
 
+    var claudeKeyVisible by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = provider.apiKey,
         onValueChange = {
@@ -374,6 +393,12 @@ private fun ColumnScope.ProviderConfigureClaude(
         },
         modifier = Modifier.fillMaxWidth(),
         maxLines = 3,
+        visualTransformation = if (claudeKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { claudeKeyVisible = !claudeKeyVisible }) {
+                Icon(if (claudeKeyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+            }
+        },
     )
 
     OutlinedTextField(
@@ -512,6 +537,7 @@ private fun ColumnScope.ProviderConfigureGoogle(
     }
 
     if (!(provider.vertexAI && provider.useServiceAccount)) {
+        var googleKeyVisible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = provider.apiKey,
             onValueChange = {
@@ -522,6 +548,12 @@ private fun ColumnScope.ProviderConfigureGoogle(
             },
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3,
+            visualTransformation = if (googleKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { googleKeyVisible = !googleKeyVisible }) {
+                    Icon(if (googleKeyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
     }
 
@@ -577,6 +609,7 @@ private fun ColumnScope.ProviderConfigureGoogle(
                 },
                 modifier = Modifier.fillMaxWidth()
             )
+            var privateKeyVisible by remember { mutableStateOf(false) }
             OutlinedTextField(
                 value = provider.privateKey,
                 onValueChange = {
@@ -589,6 +622,12 @@ private fun ColumnScope.ProviderConfigureGoogle(
                 maxLines = 6,
                 minLines = 3,
                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono),
+                visualTransformation = if (privateKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { privateKeyVisible = !privateKeyVisible }) {
+                        Icon(if (privateKeyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                    }
+                },
             )
             OutlinedTextField(
                 value = provider.location,
