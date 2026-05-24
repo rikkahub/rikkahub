@@ -398,6 +398,26 @@ private fun ColumnScope.ProviderConfigureOpenAI(
             }
         )
     }
+
+    // OpenRouter is the only OpenAI-compatible host where this does anything: it gates
+    // the cache_control breakpoints required by Anthropic/Gemini/Qwen models routed
+    // through it. Other models on OpenRouter cache automatically regardless.
+    if (provider.baseUrl.toHttpUrlOrNull()?.host == "openrouter.ai") {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(id = R.string.setting_provider_page_claude_prompt_caching),
+                modifier = Modifier.weight(1f)
+            )
+            Checkbox(
+                checked = provider.promptCaching,
+                onCheckedChange = {
+                    onEdit(provider.copy(promptCaching = it))
+                }
+            )
+        }
+    }
 }
 
 @Composable

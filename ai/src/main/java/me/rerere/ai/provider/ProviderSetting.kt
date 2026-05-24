@@ -64,6 +64,10 @@ sealed class ProviderSetting {
         var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
+        // OpenRouter only: emit per-block cache_control breakpoints. Anthropic/Gemini/Qwen
+        // need them explicitly; auto-caching providers have the field stripped upstream, so
+        // it is applied to every model on the OpenRouter host. See ChatCompletionsAPI.
+        var promptCaching: Boolean = true,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

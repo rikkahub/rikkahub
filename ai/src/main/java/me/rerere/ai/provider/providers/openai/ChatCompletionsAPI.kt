@@ -250,9 +250,17 @@ class ChatCompletionsAPI(
         stream: Boolean = false,
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
+        // OpenRouter prompt caching: add per-block cache_control breakpoints for every model.
+        // Anthropic/Gemini/Qwen need them explicitly; providers that cache automatically
+        // (OpenAI/DeepSeek/Grok/MiniMax) have the field stripped by OpenRouter. So this is safe
+        // for any model and, unlike top-level cache_control, never pins routing to one upstream.
+        val openRouterCache = host == "openrouter.ai" && providerSetting.promptCaching
+        val messagesArray = buildMessages(messages).let {
+            if (openRouterCache) insertOpenRouterCacheControl(it) else it
+        }
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", buildMessages(messages))
+            put("messages", messagesArray)
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
@@ -403,6 +411,53 @@ class ChatCompletionsAPI(
                 }
             }
         }.mergeCustomBody(params.customBody)
+    }
+
+    // Mirrors the native ClaudeProvider's breakpoint placement, but in OpenAI message
+    // shape: mark the static system prefix and the cacheable conversation prefix (the
+    // second-to-last user turn). Two of OpenRouter's four allowed breakpoints.
+    private fun insertOpenRouterCacheControl(messages: JsonArray): JsonArray {
+        val systemIndex = messages.indexOfLast {
+            it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "system"
+        }
+        val userIndices = messages.mapIndexedNotNull { index, msg ->
+            if (msg.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "user") index else null
+        }
+        val userTarget = if (userIndices.size >= 2) userIndices[userIndices.size - 2] else -1
+
+        val targets = setOf(systemIndex, userTarget).filter { it >= 0 }
+        if (targets.isEmpty()) return messages
+
+        return JsonArray(messages.mapIndexed { index, msg ->
+            if (index in targets) msg.jsonObject.withCacheControlOnLastBlock() else msg
+        })
+    }
+
+    // Attach cache_control to the last content block, promoting a plain-string content
+    // to the array form that can carry the field.
+    private fun JsonObject.withCacheControlOnLastBlock(): JsonObject {
+        val ephemeral = buildJsonObject { put("type", "ephemeral") }
+        val newContent: JsonArray = when (val content = this["content"]) {
+            is JsonPrimitive -> buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "text")
+                    put("text", content.contentOrNull ?: "")
+                    put("cache_control", ephemeral)
+                })
+            }
+
+            is JsonArray -> {
+                if (content.isEmpty()) return this
+                JsonArray(content.mapIndexed { idx, block ->
+                    if (idx == content.lastIndex && block is JsonObject) {
+                        JsonObject(block + ("cache_control" to ephemeral))
+                    } else block
+                })
+            }
+
+            else -> return this
+        }
+        return JsonObject(this + ("content" to newContent))
     }
 
     private fun isModelAllowTemperature(model: Model): Boolean {
