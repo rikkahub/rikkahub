@@ -38,6 +38,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
+import me.rerere.ai.util.matchesHostOrSubdomain
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
@@ -767,8 +768,8 @@ internal data class ResponseProviderCapabilities(
 )
 
 internal fun resolveResponseProviderCapabilities(host: String): ResponseProviderCapabilities {
-    return when (host) {
-        "ark.cn-beijing.volces.com" -> ResponseProviderCapabilities(
+    return when {
+        host.matchesHostOrSubdomain("ark.cn-beijing.volces.com") -> ResponseProviderCapabilities(
             supportsReasoningSummary = false,
             supportEncryptedContent = false
         )

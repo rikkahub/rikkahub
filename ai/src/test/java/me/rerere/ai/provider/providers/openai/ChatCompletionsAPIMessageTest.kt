@@ -602,6 +602,92 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("text", openrouterModalities[1].jsonPrimitive.content)
     }
 
+    @Test
+    fun `buildChatCompletionRequest should match aihubmix subdomain hosts`() {
+        val imageModel = Model(
+            modelId = "gemini-2.5-flash-image-preview",
+            outputModalities = listOf(Modality.TEXT, Modality.IMAGE)
+        )
+        val request = invokeBuildChatCompletionRequest(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.aihubmix.com/v1"),
+            model = imageModel
+        )
+
+        val modalities = request["modalities"]!!.jsonArray
+        assertEquals(2, modalities.size)
+        assertEquals("text", modalities[0].jsonPrimitive.content)
+        assertEquals("image", modalities[1].jsonPrimitive.content)
+    }
+
+    @Test
+    fun `parseMessage should normalize aihubmix raw base64 with jpeg shorthand mime`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {
+                        put("data", "JPEG_SHORTHAND_BASE64")
+                        put("mimeType", "jpeg")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertEquals(1, result.parts.size)
+        val image = result.parts.single() as UIMessagePart.Image
+        assertEquals("JPEG_SHORTHAND_BASE64", image.url)
+        assertEquals("image/jpeg", image.metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseMessage should order multi modal text before image within same item`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("text", "hello")
+                    put("inlineData", buildJsonObject {
+                        put("data", "BASE64")
+                        put("mimeType", "png")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertEquals(2, result.parts.size)
+        assertEquals("hello", (result.parts[0] as UIMessagePart.Text).text)
+        val image = result.parts[1] as UIMessagePart.Image
+        assertEquals("BASE64", image.url)
+    }
+
+    @Test
+    fun `parseMessage should tolerate non-primitive multi modal fields`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("text", buildJsonObject { put("nested", "object") })
+                    put("inlineData", buildJsonObject {
+                        put("data", buildJsonArray { add(JsonPrimitive("not-a-string")) })
+                        put("mimeType", buildJsonObject { put("garbage", true) })
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertTrue(result.parts.none { it is UIMessagePart.Image })
+        assertTrue(result.parts.none { it is UIMessagePart.Text })
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(

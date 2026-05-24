@@ -21,19 +21,19 @@ fun List<CustomHeader>.toHeaders(): Headers {
     }.build()
 }
 
+fun String.matchesHostOrSubdomain(base: String): Boolean {
+    val lowered = lowercase()
+    val baseLowered = base.lowercase()
+    return lowered == baseLowered || lowered.endsWith(".$baseLowered")
+}
+
 fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
-    val httpUrl = url.toHttpUrl()
-    return when (httpUrl.host) {
-        "aihubmix.com" -> {
-            addHeader("APP-Code", "DKHA9468")
-        }
-
-        "openrouter.ai" -> {
-            this
-                .addHeader("X-Title", "RikkaHub")
-                .addHeader("HTTP-Referer", "https://rikka-ai.com")
-        }
-
+    val host = url.toHttpUrl().host
+    return when {
+        host.matchesHostOrSubdomain("aihubmix.com") -> addHeader("APP-Code", "DKHA9468")
+        host.matchesHostOrSubdomain("openrouter.ai") -> this
+            .addHeader("X-Title", "RikkaHub")
+            .addHeader("HTTP-Referer", "https://rikka-ai.com")
         else -> this
     }
 }

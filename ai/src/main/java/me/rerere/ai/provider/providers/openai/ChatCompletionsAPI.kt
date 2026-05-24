@@ -42,6 +42,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
+import me.rerere.ai.util.matchesHostOrSubdomain
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
@@ -264,7 +265,7 @@ class ChatCompletionsAPI(
 
             put("stream", stream)
             if (stream) {
-                if (host != "api.mistral.ai") { // mistral 不支持 stream_options
+                if (!host.matchesHostOrSubdomain("api.mistral.ai")) { // mistral 不支持 stream_options
                     put("stream_options", buildJsonObject {
                         put("include_usage", true)
                     })
@@ -272,12 +273,12 @@ class ChatCompletionsAPI(
             }
 
             if (params.model.outputModalities.contains(Modality.IMAGE)) {
-                if (host == "openrouter.ai") {
+                if (host.matchesHostOrSubdomain("openrouter.ai")) {
                     put("modalities", buildJsonArray {
                         add("image")
                         add("text")
                     })
-                } else if (host == "aihubmix.com") {
+                } else if (host.matchesHostOrSubdomain("aihubmix.com")) {
                     put("modalities", buildJsonArray {
                         add("text")
                         add("image")
@@ -287,8 +288,8 @@ class ChatCompletionsAPI(
 
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = params.reasoningLevel
-                when (host) {
-                    "openrouter.ai" -> {
+                when {
+                    host.matchesHostOrSubdomain("openrouter.ai") -> {
                         // https://openrouter.ai/docs/use-cases/reasoning-tokens
                         put("reasoning", buildJsonObject {
                             when (level) {
@@ -299,31 +300,31 @@ class ChatCompletionsAPI(
                         })
                     }
 
-                    "dashscope.aliyuncs.com" -> {
+                    host.matchesHostOrSubdomain("dashscope.aliyuncs.com") -> {
                         // 阿里云百炼
                         // https://bailian.console.aliyun.com/console?tab=doc#/doc/?type=model&url=https%3A%2F%2Fhelp.aliyun.com%2Fdocument_detail%2F2870973.html&renderType=iframe
                         put("enable_thinking", level.isEnabled)
                         if (level != ReasoningLevel.AUTO) put("thinking_budget", level.budgetTokens)
                     }
 
-                    "ark.cn-beijing.volces.com" -> {
+                    host.matchesHostOrSubdomain("ark.cn-beijing.volces.com") -> {
                         // 豆包 (火山)
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
                     }
 
-                    "api.mistral.ai" -> {
+                    host.matchesHostOrSubdomain("api.mistral.ai") -> {
                         // Mistral 不支持
                     }
 
-                    "chat.intern-ai.org.cn" -> {
+                    host.matchesHostOrSubdomain("chat.intern-ai.org.cn") -> {
                         // 书生
                         // https://internlm.intern-ai.org.cn/api/document?lang=zh
                         put("thinking_mode", level.isEnabled)
                     }
 
-                    "api.siliconflow.cn" -> {
+                    host.matchesHostOrSubdomain("api.siliconflow.cn") -> {
                         // https://docs.siliconflow.cn/cn/userguide/capabilities/reasoning#3-1-api-%E5%8F%82%E6%95%B0
                         val modelId = params.model.modelId
                         val siliconflowThinkingModels = setOf(
@@ -358,19 +359,19 @@ class ChatCompletionsAPI(
                         }
                     }
 
-                    "open.bigmodel.cn" -> {
+                    host.matchesHostOrSubdomain("open.bigmodel.cn") -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
                     }
 
-                    "api.moonshot.cn" -> {
+                    host.matchesHostOrSubdomain("api.moonshot.cn") -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
                     }
 
-                    "api.deepseek.com" -> {
+                    host.matchesHostOrSubdomain("api.deepseek.com") -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
@@ -379,7 +380,7 @@ class ChatCompletionsAPI(
                         }
                     }
 
-                    "integrate.api.nvidia.com" -> {
+                    host.matchesHostOrSubdomain("integrate.api.nvidia.com") -> {
                         if ("deepseek-v4" in params.model.modelId.lowercase()) {
                             if (level != ReasoningLevel.AUTO) {
                                 val effort = when (level) {
@@ -690,9 +691,15 @@ class ChatCompletionsAPI(
                 multiModContent.forEach { item ->
                     val obj = item.jsonObjectOrNull ?: return@forEach
                     val inlineData = (obj["inlineData"] ?: obj["inline_data"])?.jsonObjectOrNull
-                    val data = inlineData?.get("data")?.jsonPrimitive?.contentOrNull
+                    val data = inlineData?.get("data")?.jsonPrimitiveOrNull?.contentOrNull
                     val rawMime = (inlineData?.get("mimeType") ?: inlineData?.get("mime_type"))
-                        ?.jsonPrimitive?.contentOrNull
+                        ?.jsonPrimitiveOrNull?.contentOrNull
+                    if (content.isEmpty()) {
+                        val text = obj["text"]?.jsonPrimitiveOrNull?.contentOrNull
+                        if (!text.isNullOrEmpty()) {
+                            add(UIMessagePart.Text(text))
+                        }
+                    }
                     if (!data.isNullOrEmpty()) {
                         val parsedImage = parseImageContent(data, rawMime)
                         add(
@@ -703,12 +710,6 @@ class ChatCompletionsAPI(
                                 }
                             )
                         )
-                    }
-                    if (content.isEmpty()) {
-                        val text = obj["text"]?.jsonPrimitive?.contentOrNull
-                        if (!text.isNullOrEmpty()) {
-                            add(UIMessagePart.Text(text))
-                        }
                     }
                 }
             },
@@ -756,11 +757,13 @@ class ChatCompletionsAPI(
 
     private fun normalizeImageMime(mime: String?): String {
         val cleaned = mime?.trim()?.lowercase()
-        return when {
-            cleaned.isNullOrBlank() -> "image/png"
-            cleaned == "jpg" || cleaned == "image/jpg" -> "image/jpeg"
-            cleaned.startsWith("image/") -> cleaned
-            else -> "image/$cleaned"
+        return when (cleaned) {
+            null, "" -> "image/png"
+            "jpg", "jpeg", "image/jpg", "image/jpeg" -> "image/jpeg"
+            "png", "image/png" -> "image/png"
+            "webp", "image/webp" -> "image/webp"
+            "gif", "image/gif" -> "image/gif"
+            else -> "image/png"
         }
     }
 
