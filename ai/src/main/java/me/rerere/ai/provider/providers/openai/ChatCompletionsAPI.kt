@@ -271,12 +271,16 @@ class ChatCompletionsAPI(
                 }
             }
 
-            // open router适配
-            if(host == "openrouter.ai") {
-                if(params.model.outputModalities.contains(Modality.IMAGE)) {
+            if (params.model.outputModalities.contains(Modality.IMAGE)) {
+                if (host == "openrouter.ai") {
                     put("modalities", buildJsonArray {
                         add("image")
                         add("text")
+                    })
+                } else if (host == "aihubmix.com") {
+                    put("modalities", buildJsonArray {
+                        add("text")
+                        add("image")
                     })
                 }
             }
@@ -633,9 +637,10 @@ class ChatCompletionsAPI(
                 arr.jsonArrayOrNull?.getOrNull(0)?.jsonObject?.get("thinking")?.jsonArrayOrNull?.getOrNull(0)?.jsonObjectOrNull?.get(
                     "text"
                 )?.jsonPrimitiveOrNull?.contentOrNull
-            }
+        }
         val toolCalls = jsonObject["tool_calls"] as? JsonArray ?: JsonArray(emptyList())
         val images = jsonObject["images"] as? JsonArray ?: JsonArray(emptyList())
+        val multiModContent = jsonObject["multi_mod_content"] as? JsonArray ?: JsonArray(emptyList())
 
         return UIMessage(
             role = role,
@@ -672,8 +677,39 @@ class ChatCompletionsAPI(
                     val type = imageObject["type"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                     if (type != "image_url") return@forEach
                     val url = imageObject["image_url"]?.jsonObjectOrNull?.get("url")?.jsonPrimitive?.contentOrNull ?: return@forEach
-                    require(url.startsWith("data:image")) { "Only data uri is supported" }
-                    add(UIMessagePart.Image(url.substringAfter("data:image/png;base64,")))
+                    val parsedImage = parseImageContent(url, allowRawBase64 = false)
+                    add(
+                        UIMessagePart.Image(
+                            url = parsedImage.base64,
+                            metadata = buildJsonObject {
+                                put("mimeType", parsedImage.mimeType)
+                            }
+                        )
+                    )
+                }
+                multiModContent.forEach { item ->
+                    val obj = item.jsonObjectOrNull ?: return@forEach
+                    val inlineData = (obj["inlineData"] ?: obj["inline_data"])?.jsonObjectOrNull
+                    val data = inlineData?.get("data")?.jsonPrimitive?.contentOrNull
+                    val rawMime = (inlineData?.get("mimeType") ?: inlineData?.get("mime_type"))
+                        ?.jsonPrimitive?.contentOrNull
+                    if (!data.isNullOrEmpty()) {
+                        val parsedImage = parseImageContent(data, rawMime)
+                        add(
+                            UIMessagePart.Image(
+                                url = parsedImage.base64,
+                                metadata = buildJsonObject {
+                                    put("mimeType", parsedImage.mimeType)
+                                }
+                            )
+                        )
+                    }
+                    if (content.isEmpty()) {
+                        val text = obj["text"]?.jsonPrimitive?.contentOrNull
+                        if (!text.isNullOrEmpty()) {
+                            add(UIMessagePart.Text(text))
+                        }
+                    }
                 }
             },
             annotations = parseAnnotations(
@@ -682,6 +718,50 @@ class ChatCompletionsAPI(
                 )
             ),
         )
+    }
+
+    private data class ParsedImageContent(
+        val base64: String,
+        val mimeType: String,
+    )
+
+    private fun parseImageContent(
+        data: String,
+        mime: String? = null,
+        allowRawBase64: Boolean = true
+    ): ParsedImageContent {
+        if (data.startsWith("data:", ignoreCase = true)) {
+            require(data.startsWith("data:image", ignoreCase = true)) {
+                "Only data uri is supported"
+            }
+            val base64Marker = "base64,"
+            val base64Index = data.indexOf(base64Marker, ignoreCase = true)
+            require(base64Index >= 0) {
+                "Only base64 data uri is supported"
+            }
+            val mimeType = data.substring("data:".length, base64Index).substringBefore(";")
+            return ParsedImageContent(
+                base64 = data.substring(base64Index + base64Marker.length),
+                mimeType = normalizeImageMime(mimeType)
+            )
+        }
+        require(allowRawBase64) {
+            "Only data uri is supported"
+        }
+        return ParsedImageContent(
+            base64 = data,
+            mimeType = normalizeImageMime(mime)
+        )
+    }
+
+    private fun normalizeImageMime(mime: String?): String {
+        val cleaned = mime?.trim()?.lowercase()
+        return when {
+            cleaned.isNullOrBlank() -> "image/png"
+            cleaned == "jpg" || cleaned == "image/jpg" -> "image/jpeg"
+            cleaned.startsWith("image/") -> cleaned
+            else -> "image/$cleaned"
+        }
     }
 
     private fun parseAnnotations(jsonArray: JsonArray): List<UIMessageAnnotation> {

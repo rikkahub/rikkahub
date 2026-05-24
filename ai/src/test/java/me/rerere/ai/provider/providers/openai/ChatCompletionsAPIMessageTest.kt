@@ -1,13 +1,24 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Modality
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
@@ -37,6 +48,36 @@ class ChatCompletionsAPIMessageTest {
         )
         method.isAccessible = true
         return method.invoke(api, messages) as JsonArray
+    }
+
+    private fun invokeParseMessage(message: JsonObject): UIMessage {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "parseMessage",
+            JsonObject::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(api, message) as UIMessage
+    }
+
+    private fun invokeBuildChatCompletionRequest(
+        providerSetting: ProviderSetting.OpenAI,
+        model: Model,
+    ): JsonObject {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildChatCompletionRequest",
+            List::class.java,
+            TextGenerationParams::class.java,
+            ProviderSetting.OpenAI::class.java,
+            Boolean::class.javaPrimitiveType
+        )
+        method.isAccessible = true
+        return method.invoke(
+            api,
+            listOf(UIMessage.user("Generate an image")),
+            TextGenerationParams(model = model),
+            providerSetting,
+            false
+        ) as JsonObject
     }
 
     @Test
@@ -344,6 +385,221 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseMessage should parse aihubmix camelCase multi modal image as raw base64 with normalized mime`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "Generated image")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("text", "")
+                    put("inlineData", buildJsonObject {
+                        put("data", "CAMEL_BASE64")
+                        put("mimeType", "png")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertEquals(MessageRole.ASSISTANT, result.role)
+        assertEquals(2, result.parts.size)
+        assertEquals("Generated image", (result.parts[0] as UIMessagePart.Text).text)
+        val image = result.parts[1] as UIMessagePart.Image
+        assertEquals("CAMEL_BASE64", image.url)
+        assertEquals("image/png", image.metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseMessage should parse aihubmix snake_case multi modal image and normalize jpeg mime`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("text", "")
+                    put("inline_data", buildJsonObject {
+                        put("data", "SNAKE_BASE64")
+                        put("mime_type", " image/JPG ")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertEquals(1, result.parts.size)
+        val image = result.parts.single() as UIMessagePart.Image
+        assertEquals("SNAKE_BASE64", image.url)
+        assertEquals("image/jpeg", image.metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseMessage should keep image png mime and normalize jpg shorthand`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {
+                        put("data", "PNG_BASE64")
+                        put("mimeType", "image/png")
+                    })
+                })
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {
+                        put("data", "JPG_BASE64")
+                        put("mimeType", "jpg")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+        val images = result.parts.filterIsInstance<UIMessagePart.Image>()
+
+        assertEquals(2, images.size)
+        assertEquals("PNG_BASE64", images[0].url)
+        assertEquals("image/png", images[0].metadata?.get("mimeType")?.jsonPrimitive?.content)
+        assertEquals("JPG_BASE64", images[1].url)
+        assertEquals("image/jpeg", images[1].metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseMessage should skip empty multi modal inline data`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("inlineData", buildJsonObject {})
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertTrue(result.parts.none { it is UIMessagePart.Image })
+    }
+
+    @Test
+    fun `parseMessage should avoid duplicated multi modal text when top-level content exists`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "Top level text")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("text", "Top level text")
+                    put("inlineData", buildJsonObject {})
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        val texts = result.parts.filterIsInstance<UIMessagePart.Text>()
+        assertEquals(1, texts.size)
+        assertEquals("Top level text", texts.single().text)
+        assertTrue(result.parts.none { it is UIMessagePart.Image })
+    }
+
+    @Test
+    fun `parseMessage should add multi modal text when top-level content is empty`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("multi_mod_content", buildJsonArray {
+                add(buildJsonObject {
+                    put("text", "Text from multi modal content")
+                    put("inlineData", buildJsonObject {})
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertEquals(1, result.parts.size)
+        assertEquals("Text from multi modal content", (result.parts.single() as UIMessagePart.Text).text)
+    }
+
+    @Test
+    fun `parseMessage should parse openrouter jpeg data uri as raw base64 with mime metadata`() {
+        val message = buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("images", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "image_url")
+                    put("image_url", buildJsonObject {
+                        put("url", "data:image/jpeg;base64,JPEG_BASE64")
+                    })
+                })
+            })
+        }
+
+        val result = invokeParseMessage(message)
+
+        assertEquals(1, result.parts.size)
+        val image = result.parts.single() as UIMessagePart.Image
+        assertEquals("JPEG_BASE64", image.url)
+        assertEquals("image/jpeg", image.metadata?.get("mimeType")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `handleMessageChunk should prefix image with mime metadata exactly once`() {
+        val messages = listOf(UIMessage.user("Generate an image"))
+        val chunk = MessageChunk(
+            id = "chunk-id",
+            model = "model-id",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = null,
+                    message = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Image(
+                                url = "JPEG_BASE64",
+                                metadata = buildJsonObject { put("mimeType", "image/jpeg") }
+                            )
+                        )
+                    ),
+                    finishReason = "stop"
+                )
+            )
+        )
+
+        val result = messages.handleMessageChunk(chunk)
+        val image = result.last().parts.single() as UIMessagePart.Image
+
+        assertEquals("data:image/jpeg;base64,JPEG_BASE64", image.url)
+    }
+
+    @Test
+    fun `buildChatCompletionRequest should send provider-specific image modalities`() {
+        val imageModel = Model(
+            modelId = "gemini-2.5-flash-image-preview",
+            outputModalities = listOf(Modality.TEXT, Modality.IMAGE)
+        )
+        val aihubmixRequest = invokeBuildChatCompletionRequest(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://aihubmix.com/v1"),
+            model = imageModel
+        )
+        val openrouterRequest = invokeBuildChatCompletionRequest(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://openrouter.ai/api/v1"),
+            model = imageModel
+        )
+
+        val aihubmixModalities = aihubmixRequest["modalities"]!!.jsonArray
+        assertEquals("text", aihubmixModalities[0].jsonPrimitive.content)
+        assertEquals("image", aihubmixModalities[1].jsonPrimitive.content)
+
+        val openrouterModalities = openrouterRequest["modalities"]!!.jsonArray
+        assertEquals("image", openrouterModalities[0].jsonPrimitive.content)
+        assertEquals("text", openrouterModalities[1].jsonPrimitive.content)
     }
 
     // ==================== Helper Functions ====================

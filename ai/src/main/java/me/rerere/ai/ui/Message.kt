@@ -7,6 +7,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
@@ -62,8 +64,13 @@ data class UIMessage(
                             )
                         } else {
                             // Create new Image part
+                            val mime = deltaPart.metadata
+                                ?.get("mimeType")
+                                ?.jsonPrimitive
+                                ?.contentOrNull
+                                ?: "image/png"
                             acc + UIMessagePart.Image(
-                                url = "data:image/png;base64,${deltaPart.url}",
+                                url = "data:$mime;base64,${deltaPart.url}",
                                 metadata = deltaPart.metadata,
                             )
                         }
