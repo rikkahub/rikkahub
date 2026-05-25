@@ -78,6 +78,25 @@ private object Capability {
     val Nfc: Set<LocalToolOption> = setOf(
         LocalToolOption.Nfc,
     )
+    // Permissions that previously had no Doctor check at all. Each is gated on the tool that
+    // actually needs it, so a denied perm only WARNs when its feature is enabled (opt-in) and
+    // stays INFO otherwise. Closes the "Doctor reported all-clear while overlay etc. were denied"
+    // gap.
+    val Overlay: Set<LocalToolOption> = setOf(
+        LocalToolOption.ScreenAutomation,    // "agent is working" overlay during automation
+    )
+    val WriteSettings: Set<LocalToolOption> = setOf(
+        LocalToolOption.Brightness,          // set_brightness writes Settings.System
+    )
+    val BluetoothConnect: Set<LocalToolOption> = setOf(
+        LocalToolOption.Workflows,           // workflow Bluetooth triggers read paired-device state
+    )
+    val NearbyWifi: Set<LocalToolOption> = setOf(
+        LocalToolOption.WifiInfo,            // WiFi scan/info on Android 13+
+    )
+    val BackgroundLocation: Set<LocalToolOption> = setOf(
+        LocalToolOption.Workflows,           // geofence triggers fire while the app is closed
+    )
 }
 
 /** Friendly name for the row's "needed by:" subtitle. */
@@ -277,6 +296,81 @@ class DoctorChecks(
                 fix = FixAction.OpenAppRoute("Open app permissions", AppRouteKey.SettingPermissions),
             )
         )
+        // Previously-unchecked permissions, now covered. Each is tool-aware: it only WARNs when
+        // the feature that needs it is enabled, so the opt-in philosophy holds (a denied perm for
+        // a disabled tool stays INFO). This is what fixes the "Doctor said all-clear while
+        // Display-over-other-apps etc. were ungranted" report.
+        add(
+            capabilityRow(
+                id = "perm.overlay",
+                category = DoctorCategory.Permissions,
+                label = "Display over other apps",
+                cap = Capability.Overlay,
+                enabled = enabled,
+                granted = android.provider.Settings.canDrawOverlays(context),
+                grantedDetail = "Granted.",
+                missingDetail = "The \"agent is working\" overlay can't be shown during screen automation.",
+                fix = FixAction.OpenAppRoute("Open app permissions", AppRouteKey.SettingPermissions),
+            )
+        )
+        add(
+            capabilityRow(
+                id = "perm.write_settings",
+                category = DoctorCategory.Permissions,
+                label = "Modify system settings",
+                cap = Capability.WriteSettings,
+                enabled = enabled,
+                granted = PermissionHelper.hasWriteSettings(context),
+                grantedDetail = "Granted.",
+                missingDetail = "set_brightness can't change screen brightness without it.",
+                fix = FixAction.OpenAppRoute("Open app permissions", AppRouteKey.SettingPermissions),
+            )
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            add(
+                capabilityRow(
+                    id = "perm.bluetooth_connect",
+                    category = DoctorCategory.Permissions,
+                    label = "Bluetooth Connect",
+                    cap = Capability.BluetoothConnect,
+                    enabled = enabled,
+                    granted = PermissionHelper.hasRuntime(context, listOf(Manifest.permission.BLUETOOTH_CONNECT)),
+                    grantedDetail = "Granted.",
+                    missingDetail = "Workflow Bluetooth triggers can't read paired-device state.",
+                    fix = FixAction.OpenAppRoute("Open app permissions", AppRouteKey.SettingPermissions),
+                )
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(
+                capabilityRow(
+                    id = "perm.nearby_wifi",
+                    category = DoctorCategory.Permissions,
+                    label = "Nearby WiFi devices",
+                    cap = Capability.NearbyWifi,
+                    enabled = enabled,
+                    granted = PermissionHelper.hasRuntime(context, listOf(Manifest.permission.NEARBY_WIFI_DEVICES)),
+                    grantedDetail = "Granted.",
+                    missingDetail = "WiFi scan/info may be limited on Android 13+ without it.",
+                    fix = FixAction.OpenAppRoute("Open app permissions", AppRouteKey.SettingPermissions),
+                )
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            add(
+                capabilityRow(
+                    id = "perm.background_location",
+                    category = DoctorCategory.Permissions,
+                    label = "Background location",
+                    cap = Capability.BackgroundLocation,
+                    enabled = enabled,
+                    granted = PermissionHelper.hasRuntime(context, listOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION)),
+                    grantedDetail = "Granted.",
+                    missingDetail = "Geofence workflow triggers won't fire when the app is closed.",
+                    fix = FixAction.OpenAppRoute("Open app permissions", AppRouteKey.SettingPermissions),
+                )
+            )
+        }
         // Phase 25 — NFC combined hardware + system-toggle row. Tri-state: no hardware
         // (INFO, no fix), hardware present but disabled (WARN, open NFC settings), on (OK).
         run {
