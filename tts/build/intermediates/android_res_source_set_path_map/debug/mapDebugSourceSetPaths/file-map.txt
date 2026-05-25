@@ -1,9 +1,0 @@
-me.rerere.tts-pngs-0 /Users/reovo/StudioProjects/rikkahub/tts/build/generated/res/pngs/debug
-me.rerere.tts-updated_navigation_xml-1 /Users/reovo/StudioProjects/rikkahub/tts/build/generated/updated_navigation_xml/debug
-me.rerere.tts-mergeDebugResources-2 /Users/reovo/StudioProjects/rikkahub/tts/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-me.rerere.tts-mergeDebugResources-3 /Users/reovo/StudioProjects/rikkahub/tts/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-me.rerere.tts-debug-4 /Users/reovo/StudioProjects/rikkahub/tts/build/intermediates/merged_res/debug/mergeDebugResources
-me.rerere.tts-debug-5 /Users/reovo/StudioProjects/rikkahub/tts/build/intermediates/packaged_res/debug/packageDebugResources
-me.rerere.tts-debug-6 /Users/reovo/StudioProjects/rikkahub/tts/src/debug/res
-me.rerere.tts-main-7 /Users/reovo/StudioProjects/rikkahub/tts/src/main/res
-gradleHome-0 /Users/reovo/.gradle
