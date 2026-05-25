@@ -66,7 +66,7 @@ Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the to
 
 ### Telegram bot
 
-Talk to your assistant from anywhere. Set up a private Telegram bot in a minute, then chat with it like a contact. Send a question, a photo, a PDF, or a voice note. It can run on your behalf while you're at work, while you sleep, or while you're driving. Approval prompts use simple Yes/No buttons in the chat. A reply too long for one message arrives as a downloadable file instead of getting truncated, and message bursts are paced so Telegram never rate-limits the answer out from under you.
+Talk to your assistant from anywhere. Set up a private Telegram bot in a minute, then chat with it like a contact. Send a question, a photo, a PDF, or a voice note. It can run on your behalf while you're at work, while you sleep, or while you're driving. Approval prompts use simple Yes/No buttons in the chat. When the AI needs to ask you something, it pops a tappable multiple-choice question (or takes a free-text reply) right in the chat. A reply too long for one message arrives as a downloadable file instead of getting truncated, and message bursts are paced so Telegram never rate-limits the answer out from under you.
 
 </td>
 </tr>
@@ -114,7 +114,7 @@ Save your servers once and the AI can SSH into any of them on demand. Run a comm
 
 ### Termux + voice transcription
 
-If you have Termux installed, the AI can run real Linux commands on your phone: installing packages, building software, running scripts, or starting a background service that keeps running after the command returns. On top of that, voice notes you send in Telegram get transcribed automatically. Everything runs on your phone, no cloud transcription, no API key, no internet needed.
+If you have Termux installed, the AI can run real Linux commands on your phone: installing packages, building software, running scripts, or starting a background service that keeps running after the command returns. A dedicated Settings → Termux page lets you tune the command timeout, the per-turn time budget, and other Termux limits when a long install or build needs more room. On top of that, voice notes you send in Telegram get transcribed automatically. Everything runs on your phone, no cloud transcription, no API key, no internet needed.
 
 </td>
 </tr>
