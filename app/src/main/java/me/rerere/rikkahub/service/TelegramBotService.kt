@@ -1174,6 +1174,12 @@ class TelegramBotService : Service() {
     /** Telegram caps a single sendMessage at 4096 chars; split on newlines where possible. */
     internal suspend fun sendChunked(chatId: Long, text: String, replyTo: Long?) {
         val chunks = chunk(text, MAX_CHARS)
+        // A very long reply (e.g. a full audit report) becomes dozens of back-to-back
+        // messages, which trips Telegram's per-chat flood limit (429: retry after N) and
+        // buries the content. Above MAX_INLINE_CHUNKS, upload the whole thing as a .md
+        // document with a short inline preview instead. Falls through to chunked send only
+        // if the document upload itself fails.
+        if (chunks.size > MAX_INLINE_CHUNKS && trySendReplyAsDocument(chatId, text, replyTo)) return
         // Track delivery so we can surface a single user-visible error if every fallback
         // for some chunk fails. Silent drops were the root cause of the "model wrote a
         // long reply but Telegram never received it" bug — diagnosing it required
@@ -1182,44 +1188,32 @@ class TelegramBotService : Service() {
         var lastFailure: Throwable? = null
         for ((idx, chunk) in chunks.withIndex()) {
             val html = TelegramHtmlRenderer.render(chunk)
-            val htmlError: Throwable? = try {
-                client.sendMessage(
-                    chatId = chatId,
-                    text = html,
-                    parseMode = PARSE_MODE_HTML,
-                    replyToMessageId = if (idx == 0) replyTo else null,
-                )
-                null
-            } catch (t: Throwable) { t }
-            if (htmlError == null) continue
-            // HTML parse failed (entity split, unclosed tag), or Telegram refused the
-            // chunk (length cap, rate limit, etc.). Log + retry as plain text. The
-            // pre-fix behaviour silently swallowed BOTH branches; we now record the
-            // exception so a future repeat leaves evidence in logcat.
-            android.util.Log.w(
-                TAG,
-                "sendChunked: HTML send failed for chunk ${idx + 1}/${chunks.size} (len=${html.length} src=${chunk.length}); retrying as plain text",
-                htmlError,
-            )
-            val plain = TelegramHtmlRenderer.stripHtml(html).ifBlank { chunk }
-            val plainError: Throwable? = try {
-                client.sendMessage(
-                    chatId = chatId,
-                    text = plain,
-                    parseMode = null,
-                    replyToMessageId = if (idx == 0) replyTo else null,
-                )
-                null
-            } catch (t: Throwable) { t }
-            if (plainError != null) {
+            var err = sendWithFloodRetry(chatId, html, PARSE_MODE_HTML, if (idx == 0) replyTo else null)
+            if (err != null) {
+                // HTML parse failed (entity split, unclosed tag), or Telegram refused the
+                // chunk. Log + retry as plain text. sendWithFloodRetry already honored any
+                // 429 retry_after on the HTML attempt. The pre-fix behaviour silently
+                // swallowed both branches; we record the exception so a repeat leaves a trail.
                 android.util.Log.w(
                     TAG,
-                    "sendChunked: plain-text fallback also failed for chunk ${idx + 1}/${chunks.size} (len=${plain.length})",
-                    plainError,
+                    "sendChunked: HTML send failed for chunk ${idx + 1}/${chunks.size} (len=${html.length} src=${chunk.length}); retrying as plain text",
+                    err,
                 )
-                anyChunkFailed = true
-                lastFailure = plainError
+                val plain = TelegramHtmlRenderer.stripHtml(html).ifBlank { chunk }
+                err = sendWithFloodRetry(chatId, plain, null, if (idx == 0) replyTo else null)
+                if (err != null) {
+                    android.util.Log.w(
+                        TAG,
+                        "sendChunked: plain-text fallback also failed for chunk ${idx + 1}/${chunks.size} (len=${plain.length})",
+                        err,
+                    )
+                    anyChunkFailed = true
+                    lastFailure = err
+                }
             }
+            // Pace subsequent chunks so a multi-message reply stays under Telegram's per-chat
+            // send rate instead of bursting into a 429.
+            if (idx < chunks.lastIndex) delay(INTER_CHUNK_DELAY_MS)
         }
         // Surface ONE summary line to the chat so the user knows the reply was clipped.
         // Without this the silent drop looks like a bot freeze and the user keeps
@@ -1236,6 +1230,60 @@ class TelegramBotService : Service() {
             }.onFailure {
                 android.util.Log.w(TAG, "sendChunked: even the failure notice failed to deliver", it)
             }
+        }
+    }
+
+    /**
+     * Send one Telegram message, honoring a single 429 flood-wait. Returns null on success or
+     * the last error. On a 429 with retry_after, waits that long (plus a small buffer) and
+     * retries once; any other error is returned immediately for the caller's fallback path.
+     */
+    private suspend fun sendWithFloodRetry(
+        chatId: Long,
+        text: String,
+        parseMode: String?,
+        replyToMessageId: Long?,
+    ): Throwable? {
+        try {
+            client.sendMessage(chatId = chatId, text = text, parseMode = parseMode, replyToMessageId = replyToMessageId)
+            return null
+        } catch (e: TelegramApiException) {
+            if (e.errorCode != 429 || e.retryAfterSec == null) return e
+            android.util.Log.w(TAG, "sendWithFloodRetry: 429 flood-wait ${e.retryAfterSec}s; backing off then retrying once")
+            delay(e.retryAfterSec * 1000L + 250L)
+        } catch (t: Throwable) {
+            return t
+        }
+        return try {
+            client.sendMessage(chatId = chatId, text = text, parseMode = parseMode, replyToMessageId = replyToMessageId)
+            null
+        } catch (t: Throwable) { t }
+    }
+
+    /**
+     * Save [text] to a temp .md file and upload it as a Telegram document with a short inline
+     * preview, instead of fragmenting a huge reply into dozens of flood-prone messages. Returns
+     * true if the document was delivered; false (temp file cleaned up) so the caller can fall
+     * back to chunked send.
+     */
+    private suspend fun trySendReplyAsDocument(chatId: Long, text: String, replyTo: Long?): Boolean {
+        var file: java.io.File? = null
+        return try {
+            file = java.io.File.createTempFile("rikkahub_reply_", ".md", cacheDir).apply { writeText(text) }
+            val preview = text.take(500).let { if (text.length > 500) "$it…" else it }
+            sendWithFloodRetry(
+                chatId,
+                "📄 Reply is long (${text.length} chars); the full text is attached as a file below.\n\n$preview",
+                null,
+                replyTo,
+            )
+            client.sendDocument(chatId, file, caption = "Full reply (${text.length} chars)")
+            true
+        } catch (t: Throwable) {
+            android.util.Log.w(TAG, "trySendReplyAsDocument: failed, falling back to chunked send", t)
+            false
+        } finally {
+            try { file?.delete() } catch (_: Throwable) {}
         }
     }
 
@@ -1691,6 +1739,14 @@ class TelegramBotService : Service() {
         // the user with no message at all. 3500 leaves ~600 bytes of headroom — enough
         // for typical markdown-heavy text without making chunks needlessly small.
         const val MAX_CHARS = 3500
+
+        /** Above this many chunks a reply is uploaded as a .md document instead of dozens of
+         *  back-to-back messages (which trip Telegram's per-chat flood limit, 429 retry_after). */
+        const val MAX_INLINE_CHUNKS = 6
+
+        /** Pause between chunked messages so a multi-part reply stays under Telegram's per-chat
+         *  send rate and doesn't flood into a 429. */
+        const val INTER_CHUNK_DELAY_MS: Long = 400L
 
         /** How long an activeHandleIncomingConvs entry lingers after handleIncoming exits.
          *  The external generation-done pump can land its collect lambda AFTER the finally
