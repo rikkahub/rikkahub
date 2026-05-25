@@ -305,6 +305,12 @@ class LocalTools(
     // toggle ([LocalToolOption.Browser]) acts as the group on/off; per-tool toggles act as
     // a sub-allow-list. Both must be true for a tool to register.
     private val browserPreferences: me.rerere.rikkahub.browser.BrowserPreferences,
+    // TermuxPreferences is injected here solely to force Koin to construct it at first tool
+    // use (same trick as browserPreferences above). Koin singles are lazy; without this
+    // constructor reference the singleton — and its init{} sync seed + async collectors —
+    // would never build in headless sessions that skip Settings -> Termux.
+    @Suppress("UNUSED_PARAMETER")
+    termuxPreferences: me.rerere.rikkahub.data.preferences.TermuxPreferences,
     // Post-action screenshot streamer for headless mode (Telegram bot / cron / sub-agent).
     // Injected rather than Koin-resolved inside each factory so JVM tests can pass a mock.
     private val interactiveToolStreamer: InteractiveToolStreamer,

@@ -51,6 +51,7 @@ import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
+import me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -146,14 +147,9 @@ private const val TAG_GH_LOOP = "GenHandlerLoop"
  */
 private const val LOOP_GUARD_REPEAT_THRESHOLD = 3
 
-/**
- * Wall-clock budget for a single user turn. The maxSteps cap is per-step, but a stuck
- * agent loop with diverse-args tool calls can still chew through hours and 100k+ tokens.
- * 10 minutes fits a legitimately large turn (a full multi-tool audit: dozens of parallel
- * device/SSH/UI calls plus screenshots and a written report) while [MAX_LOOP_GUARD_TRIPS_PER_TURN]
- * and the per-step cap remain the primary backstops against a genuine runaway loop.
- */
-private const val TURN_WALL_CLOCK_BUDGET_MS = 10L * 60L * 1000L
+// The per-turn wall-clock budget was hardcoded here (most recently 10 min). It now lives in
+// ToolRuntimeLimits.turnBudgetMs (default 10 min), user-configurable via Settings -> Termux;
+// every read site below uses that holder directly.
 
 /**
  * Max number of times the loop guard can trip in a single turn before we force-end the
@@ -269,8 +265,8 @@ class GenerationHandler(
             // discovers many distinct tool calls (each within the loop guard) can still
             // run for hours.
             val elapsedMs = android.os.SystemClock.elapsedRealtime() - turnStartMs
-            if (elapsedMs > TURN_WALL_CLOCK_BUDGET_MS) {
-                Log.w(TAG, "generateText: wall-clock cap (${TURN_WALL_CLOCK_BUDGET_MS}ms) hit at step #$stepIndex; force-ending turn")
+            if (elapsedMs > ToolRuntimeLimits.turnBudgetMs) {
+                Log.w(TAG, "generateText: wall-clock cap (${ToolRuntimeLimits.turnBudgetMs}ms) hit at step #$stepIndex; force-ending turn")
                 break
             }
             // Repeated loop-guard trips mean the model is flailing: it bumps into the
@@ -709,10 +705,10 @@ class GenerationHandler(
                             // Hard-cap individual tool execution at the remaining wall-clock
                             // budget so a single tool with its OWN long timeout (camera 5min,
                             // ssh_exec timeout_seconds=300) can't carry the turn past the
-                            // global ${TURN_WALL_CLOCK_BUDGET_MS}ms cap. If the budget is
+                            // global ${ToolRuntimeLimits.turnBudgetMs}ms cap. If the budget is
                             // already blown when we start the tool, return a structured
                             // wall-clock envelope instead of even attempting.
-                            val remainingMs = TURN_WALL_CLOCK_BUDGET_MS -
+                            val remainingMs = ToolRuntimeLimits.turnBudgetMs -
                                 (android.os.SystemClock.elapsedRealtime() - turnStartMs)
                             val result = if (remainingMs <= 0L) {
                                 Log.w(TAG, "generateText: ${toolDef.name} skipped — wall-clock budget already exceeded")
@@ -728,7 +724,7 @@ class GenerationHandler(
                                             put("error", JsonPrimitive("tool_cancelled_wall_clock"))
                                             put(
                                                 "detail",
-                                                JsonPrimitive("tool execution exceeded the ${TURN_WALL_CLOCK_BUDGET_MS / 1000}s turn budget")
+                                                JsonPrimitive("tool execution exceeded the ${ToolRuntimeLimits.turnBudgetMs / 1000}s turn budget")
                                             )
                                         })))
                                     }

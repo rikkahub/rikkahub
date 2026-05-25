@@ -22,6 +22,8 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.data.preferences.TermuxDefaults
+import me.rerere.rikkahub.data.preferences.TermuxRuntime
 import java.util.UUID
 
 private const val TERMUX_PACKAGE = "com.termux"
@@ -41,9 +43,8 @@ private const val RESULT_KEY_EXIT_CODE = "exitCode"
 private const val RESULT_KEY_ERR = "err"
 private const val RESULT_KEY_ERRMSG = "errmsg"
 
-private const val DEFAULT_CAPTURE_TIMEOUT_MS = 60_000L
-private const val MAX_RETURNED_STDOUT = 8_000
-private const val MAX_RETURNED_STDERR = 2_000
+// DEFAULT_CAPTURE_TIMEOUT_MS, MAX_RETURNED_STDOUT, MAX_RETURNED_STDERR removed — read from
+// TermuxRuntime at call time so they reflect any user edits from Settings → Termux.
 
 /**
  * Termux installation + integration probe used by both the LLM tool and the toggle row in
@@ -90,7 +91,7 @@ internal object TermuxIntegration {
      * proves the entire chain works (manifest perm + runtime perm + allow-external-apps in
      * termux.properties + Termux is allowed to start a background session).
      */
-    suspend fun verify(ctx: Context, timeoutMs: Long = 8_000L): VerifyResult {
+    suspend fun verify(ctx: Context, timeoutMs: Long = TermuxRuntime.verifyTimeoutMs): VerifyResult {
         val s = state(ctx)
         if (s == State.NOT_INSTALLED) return VerifyResult.NotInstalled
         if (s == State.NO_PERMISSION) return VerifyResult.NoPermission
@@ -143,7 +144,9 @@ internal suspend fun runCommandCapture(
     executable: String,
     arguments: Array<String>,
     workingDir: String,
-    timeoutMs: Long = DEFAULT_CAPTURE_TIMEOUT_MS,
+    // Default reads from the runtime holder so callers that don't pass a timeout get the
+    // user-configured value, not a stale compile-time constant.
+    timeoutMs: Long = TermuxRuntime.commandTimeoutMs,
 ): CaptureResult {
     // Mark Termux as freshly touched BEFORE we issue the broadcast. The notification
     // listener uses this signal to suppress Termux's foreground-service notification
@@ -307,7 +310,7 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                 })
                 put("timeout_seconds", buildJsonObject {
                     put("type", "integer")
-                    put("description", "Capture-mode timeout. Default 60. Use 0 to wait up to 5 minutes for long commands.")
+                    put("description", "Capture-mode timeout in seconds. Omit or pass 0 to use the user-configured default (Settings -> Termux). Max ${TermuxDefaults.MAX_COMMAND_TIMEOUT_SECONDS} s.")
                 })
             }
         )
@@ -317,15 +320,19 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
         val executable = input.jsonObject["executable"]?.jsonPrimitive?.contentOrNull
         val argumentsArr = input.jsonObject["arguments"]?.jsonArray
         val workingDir = input.jsonObject["working_dir"]?.jsonPrimitive?.contentOrNull
-            ?: TERMUX_HOME_DIR
+            ?: TermuxRuntime.defaultWorkingDir
         val interactive = input.jsonObject["interactive"]?.jsonPrimitive?.contentOrNull
             ?.toBooleanStrictOrNull() ?: false
         val background = input.jsonObject["background"]?.jsonPrimitive?.contentOrNull
             ?.toBooleanStrictOrNull() ?: false
-        val rawTimeout = input.jsonObject["timeout_seconds"]?.jsonPrimitive?.intOrNull ?: 60
+        // Read the user-configured default command timeout at call time. The LLM can override
+        // per-call with timeout_seconds (0 = use runtime default, otherwise capped at
+        // MAX_COMMAND_TIMEOUT_SECONDS = 600 s, raised from the old 300 s ceiling).
+        val configuredTimeoutMs = TermuxRuntime.commandTimeoutMs
+        val rawTimeout = input.jsonObject["timeout_seconds"]?.jsonPrimitive?.intOrNull
         val timeoutMs = when {
-            rawTimeout == 0 -> 5L * 60 * 1000  // explicit "long" override
-            else -> rawTimeout.coerceIn(1, 300).toLong() * 1000
+            rawTimeout == null || rawTimeout == 0 -> configuredTimeoutMs
+            else -> rawTimeout.coerceIn(1, TermuxDefaults.MAX_COMMAND_TIMEOUT_SECONDS).toLong() * 1000
         }
 
         if (rawCommand.isNullOrBlank() && executable.isNullOrBlank()) {
@@ -378,11 +385,16 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
         // Prepend a noninteractive preamble for `command` mode so apt/pkg upgrades don't
         // hang waiting for "keep your existing config?" debconf prompts. Only applies to
         // the bash -c path; raw executable+arguments callers get no wrapping.
+        // Gated on TermuxRuntime.aptWrapEnabled — user can disable from Settings → Termux.
         val (resolvedExe, resolvedArgs) = if (rawCommand != null) {
-            val preamble = "export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a; " +
-                "apt(){ command apt -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
-                "apt-get(){ command apt-get -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
-                "export -f apt apt-get; "
+            // apt/dpkg noninteractive wrapping, gated on TermuxRuntime.aptWrapEnabled (user can
+            // disable from Settings -> Termux).
+            val preamble = if (TermuxRuntime.aptWrapEnabled) {
+                "export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a; " +
+                    "apt(){ command apt -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
+                    "apt-get(){ command apt-get -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
+                    "export -f apt apt-get; "
+            } else ""
             // background: detach so a long-running child doesn't keep the capture pipe open and
             // stall the result bundle until timeout. Same inherited-fd hazard as the SSH exec
             // channel; wrapDetachedCommand applies the identical nohup + redirect + echo-pid fix.
@@ -450,14 +462,16 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                 put("success", true)
                 put("mode", "capture")
                 put("exit_code", res.exitCode)
+                val maxOut = TermuxRuntime.maxStdoutBytes
+                val maxErr = TermuxRuntime.maxStderrBytes
                 put(
                     "stdout",
-                    res.stdout.let { if (it.length > MAX_RETURNED_STDOUT) it.take(MAX_RETURNED_STDOUT) + "\n…[truncated; ${it.length - MAX_RETURNED_STDOUT} bytes more]" else it }
+                    res.stdout.let { if (it.length > maxOut) it.take(maxOut) + "\n…[truncated; ${it.length - maxOut} bytes more]" else it }
                 )
                 if (res.stderr.isNotBlank()) {
                     put(
                         "stderr",
-                        res.stderr.let { if (it.length > MAX_RETURNED_STDERR) it.take(MAX_RETURNED_STDERR) + "\n…[truncated]" else it }
+                        res.stderr.let { if (it.length > maxErr) it.take(maxErr) + "\n…[truncated]" else it }
                     )
                 }
                 if (res.exitCode != 0) {

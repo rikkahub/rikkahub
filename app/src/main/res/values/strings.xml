@@ -1436,6 +1436,56 @@
   <string name="setting_browser_single_task_timeout_desc">Hard cap on one AI-driven browser task to bound runaway loops. Range 1 min to 60 min.</string>
   <string name="setting_browser_single_task_timeout_unit">minutes</string>
 
+  <!-- Settings → Termux -->
+  <string name="setting_page_termux">Termux</string>
+  <string name="setting_page_termux_desc">Shell commands, timeouts, and Termux integration.</string>
+
+  <string name="setting_termux_title">Termux</string>
+
+  <string name="setting_termux_section_status">Status</string>
+  <string name="setting_termux_status_app">Termux app</string>
+  <string name="setting_termux_status_app_installed">Installed — tap to open</string>
+  <string name="setting_termux_status_app_missing">Not installed — tap to download</string>
+  <string name="setting_termux_status_open">Open Termux</string>
+  <string name="setting_termux_status_open_desc">Launch the Termux app</string>
+  <string name="setting_termux_status_permission">RUN_COMMAND permission</string>
+  <string name="setting_termux_status_permission_granted">Granted — tap to re-request</string>
+  <string name="setting_termux_toast_permission_granted">Permission granted</string>
+  <string name="setting_termux_status_permission_missing">Not granted — tap to request</string>
+  <string name="setting_termux_status_verify">allow-external-apps</string>
+  <string name="setting_termux_status_verify_ok">Verified OK in this session</string>
+  <string name="setting_termux_status_verify_unknown">Not yet verified — tap to run smoke test</string>
+  <string name="setting_termux_verify_ok">Termux verified OK.</string>
+  <string name="setting_termux_verify_not_installed">Termux is not installed.</string>
+  <string name="setting_termux_verify_no_permission">RUN_COMMAND permission not granted.</string>
+  <string name="setting_termux_verify_allow_external_apps">Timed out — allow-external-apps=true may not be set in ~/.termux/termux.properties.</string>
+  <string name="setting_termux_verify_unexpected_output">Unexpected output from smoke test.</string>
+  <string name="setting_termux_verify_other_error">Verify failed: %s</string>
+
+  <string name="setting_termux_section_timeouts">Timeouts</string>
+  <string name="setting_termux_command_timeout">Default command timeout</string>
+  <string name="setting_termux_command_timeout_desc">How long to wait for a background shell command to return output. Range 5 s to 600 s.</string>
+  <string name="setting_termux_turn_budget">Per-turn wall-clock budget (all tools)</string>
+  <string name="setting_termux_turn_budget_desc">Hard cap on the total time any single user turn can spend executing tools. Range 1 min to 60 min.</string>
+  <string name="setting_termux_verify_timeout">Verify smoke-test timeout</string>
+  <string name="setting_termux_verify_timeout_desc">Timeout for the allow-external-apps echo smoke test. Range 3 s to 30 s.</string>
+  <string name="setting_termux_unit_seconds">seconds</string>
+  <string name="setting_termux_unit_minutes">minutes</string>
+  <string name="setting_termux_unit_bytes">bytes</string>
+
+  <string name="setting_termux_section_defaults">Defaults &amp; limits</string>
+  <string name="setting_termux_working_dir">Default working directory</string>
+  <string name="setting_termux_max_stdout">Stdout capture cap</string>
+  <string name="setting_termux_max_stdout_desc">Max bytes of stdout returned to the AI per command. Range 1 000 to 64 000.</string>
+  <string name="setting_termux_max_stderr">Stderr capture cap</string>
+  <string name="setting_termux_max_stderr_desc">Max bytes of stderr returned to the AI per command. Range 500 to 16 000.</string>
+  <string name="setting_termux_apt_wrap">Auto-wrap apt/dpkg as noninteractive</string>
+  <string name="setting_termux_apt_wrap_desc">Prepend DEBIAN_FRONTEND=noninteractive so apt upgrades do not hang waiting for interactive prompts.</string>
+
+  <string name="setting_termux_section_help">Setup help</string>
+  <string name="setting_termux_help_allow_external_apps_title">How to enable allow-external-apps</string>
+  <string name="setting_termux_help_allow_external_apps_body">In Termux, run:\n\n  mkdir -p ~/.termux\n  echo \'allow-external-apps=true\' >> ~/.termux/termux.properties\n\nThen force-stop Termux from Android App Info and reopen it. After that, tap the verify row above to confirm the link is working.</string>
+
   <string name="browser_address_bar_close">Close browser</string>
   <string name="browser_address_bar_back">Browser back</string>
   <string name="browser_address_bar_forward">Browser forward</string>
