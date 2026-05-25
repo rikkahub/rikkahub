@@ -63,7 +63,7 @@ class AITranslator:
             response = await self.client.chat.completions.create(
                 model=self.config.translation_model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
+                temperature=1.0,
             )
 
             content = response.choices[0].message.content

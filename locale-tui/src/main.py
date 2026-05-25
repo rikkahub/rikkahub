@@ -162,9 +162,8 @@ def add(key: str, value: str, module: str, skip_translate: bool):
         async def translate_async():
             translator = AITranslator(config)
 
-            for lang_code in target_languages:
+            async def translate_one(lang_code: str):
                 lang_name = config.get_language_name(lang_code)
-                click.echo(f"翻译到 {lang_name}...", nl=False)
 
                 try:
                     translations = await translator.translate_batch(
@@ -172,19 +171,28 @@ def add(key: str, value: str, module: str, skip_translate: bool):
                     )
 
                     if key in translations:
-                        translated_value = translations[key]
-                        entry.set_translation(lang_code, translated_value)
-
-                        # Save to file
-                        target_file = res_dir / lang_code / "strings.xml"
-                        StringsXmlParser.update_entry(target_file, key, translated_value)
-
-                        click.echo(f" ✓ {translated_value}")
-                    else:
-                        click.echo(" ✗ 翻译失败（未返回结果）", err=True)
-
+                        return lang_code, lang_name, translations[key], None
+                    return lang_code, lang_name, None, "翻译失败（未返回结果）"
                 except Exception as e:
-                    click.echo(f" ✗ 错误: {e}", err=True)
+                    return lang_code, lang_name, None, str(e)
+
+            tasks = [translate_one(lang_code) for lang_code in target_languages]
+            results = await asyncio.gather(*tasks)
+
+            for lang_code, lang_name, translated_value, error in results:
+                click.echo(f"翻译到 {lang_name}...", nl=False)
+
+                if error:
+                    click.echo(f" ✗ 错误: {error}", err=True)
+                    continue
+
+                entry.set_translation(lang_code, translated_value)
+
+                # Save to file
+                target_file = res_dir / lang_code / "strings.xml"
+                StringsXmlParser.update_entry(target_file, key, translated_value)
+
+                click.echo(f" ✓ {translated_value}")
 
         asyncio.run(translate_async())
         click.echo("完成！")
