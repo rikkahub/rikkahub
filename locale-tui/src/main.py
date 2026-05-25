@@ -52,6 +52,41 @@ def cli(ctx):
         app.run()
 
 
+@cli.command("test-connection")
+def test_connection():
+    """测试 AI 服务连接
+
+    \b
+    示例：
+        locale-tui test-connection
+    """
+    config = load_config()
+
+    if not config.openai_api_key:
+        click.echo("错误：未设置 OPENAI_API_KEY，无法测试连接。", err=True)
+        sys.exit(1)
+
+    click.echo("AI 服务配置：")
+    click.echo(f"  Base URL: {config.openai_base_url}")
+    click.echo(f"  Model: {config.translation_model}")
+    click.echo("正在测试连接...")
+
+    async def test_async():
+        translator = AITranslator(config)
+        return await translator.test_connection()
+
+    try:
+        content = asyncio.run(test_async())
+        click.echo("✓ 连接成功")
+        if content:
+            click.echo(f"响应: {content}")
+        else:
+            click.echo("响应为空，但 API 已返回有效结果。")
+    except Exception as e:
+        click.echo(f"✗ 连接失败: {e}", err=True)
+        sys.exit(1)
+
+
 @cli.command()
 @click.argument("key")
 @click.argument("value")

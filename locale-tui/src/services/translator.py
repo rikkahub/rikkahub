@@ -25,6 +25,29 @@ class AITranslator:
             api_key=config.openai_api_key, base_url=config.openai_base_url
         )
 
+    async def test_connection(self) -> str | None:
+        """Test whether the configured AI service is reachable."""
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.config.translation_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Reply exactly with OK to confirm the connection.",
+                    }
+                ],
+                temperature=0,
+                max_tokens=16,
+            )
+
+            if not response.choices:
+                raise TranslationError("No choices in API response")
+
+            content = response.choices[0].message.content
+            return content.strip() if content else None
+        except Exception as e:
+            raise TranslationError(f"Connection test failed: {e}")
+
     async def translate_batch(
         self,
         entries: dict[str, str],  # {key: source_text}

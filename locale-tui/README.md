@@ -33,6 +33,13 @@ cd locale-tui
 uv run python src/main.py
 ```
 
+## 测试 AI 连接
+
+```bash
+cd locale-tui
+uv run python src/main.py test-connection
+```
+
 ## 配置
 
 编辑 `config.yml` 配置模块列表、语言列表和翻译设置。
