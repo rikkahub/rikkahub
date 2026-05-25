@@ -546,10 +546,20 @@ class ChatService(
             try {
                 val conversation = session.state.value
 
+                // Locate the message's node up front. indexOf returns -1 when the node is no
+                // longer in the conversation (e.g. it was edited or removed between the tap and
+                // here). Both branches index off this: the USER branch would subList(0, 0) and
+                // silently wipe the conversation, and the regenerate branch builds `0..<-1`,
+                // whose endInclusive is -2, which handleMessageComplete turns into
+                // subList(0, -1) and crashes ("fromIndex(0) > toIndex(-1)"). Bail on not-found.
+                val node = conversation.getMessageNodeByMessage(message)
+                val indexAt = conversation.messageNodes.indexOf(node)
+                if (indexAt < 0) {
+                    Log.w(TAG, "regenerateAtMessage: node for message ${message.id} not in conversation; skipping")
+                    return@launch
+                }
                 if (message.role == MessageRole.USER) {
                     // 如果是用户消息，则截止到当前消息
-                    val node = conversation.getMessageNodeByMessage(message)
-                    val indexAt = conversation.messageNodes.indexOf(node)
                     val newConversation = conversation.copy(
                         messageNodes = conversation.messageNodes.subList(0, indexAt + 1)
                     )
@@ -557,9 +567,7 @@ class ChatService(
                     handleMessageComplete(conversationId)
                 } else {
                     if (regenerateAssistantMsg) {
-                        val node = conversation.getMessageNodeByMessage(message)
-                        val nodeIndex = conversation.messageNodes.indexOf(node)
-                        handleMessageComplete(conversationId, messageRange = 0..<nodeIndex)
+                        handleMessageComplete(conversationId, messageRange = 0..<indexAt)
                     } else {
                         saveConversation(conversationId, conversation)
                     }
