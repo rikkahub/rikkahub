@@ -66,7 +66,7 @@ Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the to
 
 ### Telegram bot
 
-Talk to your assistant from anywhere. Set up a private Telegram bot in a minute, then chat with it like a contact. Send a question, a photo, a PDF, or a voice note. It can run on your behalf while you're at work, while you sleep, or while you're driving. Approval prompts use simple Yes/No buttons in the chat.
+Talk to your assistant from anywhere. Set up a private Telegram bot in a minute, then chat with it like a contact. Send a question, a photo, a PDF, or a voice note. It can run on your behalf while you're at work, while you sleep, or while you're driving. Approval prompts use simple Yes/No buttons in the chat. A reply too long for one message arrives as a downloadable file instead of getting truncated, and message bursts are paced so Telegram never rate-limits the answer out from under you.
 
 </td>
 </tr>
@@ -107,14 +107,14 @@ The AI has its own file manager. Find files, read them, save new ones, copy, mov
 
 ### SSH from your pocket
 
-Save your servers once and the AI can SSH into any of them on demand. Run a command, upload a file, pull down a backup, check disk space, tail a log. Works whether you're on WiFi or cell. Watch your home server from a coffee shop without opening a terminal.
+Save your servers once and the AI can SSH into any of them on demand. Run a command, upload a file, pull down a backup, check disk space, tail a log. Pipe input straight into a command or write a remote file in one shot, and launch a long-running server in the background so the call returns its process ID instead of hanging on the connection. Works whether you're on WiFi or cell. Watch your home server from a coffee shop without opening a terminal.
 
 </td>
 <td valign="top">
 
 ### Termux + voice transcription
 
-If you have Termux installed, the AI can run real Linux commands on your phone: installing packages, building software, running scripts. On top of that, voice notes you send in Telegram get transcribed automatically. Everything runs on your phone, no cloud transcription, no API key, no internet needed.
+If you have Termux installed, the AI can run real Linux commands on your phone: installing packages, building software, running scripts, or starting a background service that keeps running after the command returns. On top of that, voice notes you send in Telegram get transcribed automatically. Everything runs on your phone, no cloud transcription, no API key, no internet needed.
 
 </td>
 </tr>
@@ -130,7 +130,7 @@ Ask for music and the AI plays it through Android's normal media controls: lock-
 
 ### Skills
 
-Drop a Markdown skill file into the app and the AI gains a new playbook it'll follow step-by-step: auto-reply to a contact, summarise a notification stack, or run a JavaScript mini-app whose result opens right in the in-app browser. A bundled featured catalog ships with a QR generator, a Wikipedia query box, a piano you can play, an interactive map, and more. Add new skills from a URL, a markdown file you share into the app, or pick from the bundled catalog.
+Drop a Markdown skill file into the app and the AI gains a new playbook it'll follow step-by-step: auto-reply to a contact, summarise a notification stack, or run a JavaScript mini-app whose result opens right in the in-app browser. A bundled featured catalog ships with a QR generator, a Wikipedia query box, a piano you can play, an interactive map, and more. Two skills are enabled out of the box: an always-on agent playbook that keeps the assistant proactive and self-improving across sessions, and a converter that adapts OpenClaw skills to run here. Add new skills from a URL, a markdown file you share into the app, or pick from the bundled catalog.
 
 </td>
 </tr>
@@ -146,7 +146,7 @@ For long tasks the main assistant can dispatch a focused **sub-agent** into a cl
 
 ### Doctor
 
-A built-in health checkup for the app. Tap Settings, then Doctor, and it runs a top-to-bottom audit of permissions, background services, database integrity, network, Termux, and diagnostics. Missing something? Tap the auto-fix button next to the row to grant the permission, restart the service, or rebuild the chat search index. The same report runs from Telegram via `/doctor` for remote troubleshooting. Smart enough to skip permissions you haven't enabled any tools for.
+A built-in health checkup for the app. Tap Settings, then Doctor, and it runs a top-to-bottom audit of permissions, background services, database integrity, network, Termux, and diagnostics. Missing something? Tap the auto-fix button next to the row to grant the permission, restart the service, or rebuild the chat search index. The same report runs from Telegram via `/doctor` for remote troubleshooting. It checks every permission your enabled tools actually rely on, including overlay, system-settings, Bluetooth, nearby-WiFi, and background-location, and stays quiet about the ones for tools you haven't turned on.
 
 </td>
 </tr>
