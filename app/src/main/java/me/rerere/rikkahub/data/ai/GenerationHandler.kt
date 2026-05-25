@@ -149,10 +149,11 @@ private const val LOOP_GUARD_REPEAT_THRESHOLD = 3
 /**
  * Wall-clock budget for a single user turn. The maxSteps cap is per-step, but a stuck
  * agent loop with diverse-args tool calls can still chew through hours and 100k+ tokens.
- * 5 minutes is generous for legitimate multi-tool turns (download + install + screenshot
- * + verify) and brutal for runaway loops.
+ * 10 minutes fits a legitimately large turn (a full multi-tool audit: dozens of parallel
+ * device/SSH/UI calls plus screenshots and a written report) while [MAX_LOOP_GUARD_TRIPS_PER_TURN]
+ * and the per-step cap remain the primary backstops against a genuine runaway loop.
  */
-private const val TURN_WALL_CLOCK_BUDGET_MS = 5L * 60L * 1000L
+private const val TURN_WALL_CLOCK_BUDGET_MS = 10L * 60L * 1000L
 
 /**
  * Max number of times the loop guard can trip in a single turn before we force-end the
