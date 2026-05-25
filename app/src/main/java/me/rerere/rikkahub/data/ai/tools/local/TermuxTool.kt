@@ -301,6 +301,10 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                     put("type", "boolean")
                     put("description", "If true, opens a visible Termux session and does NOT capture output. Default false (background + capture).")
                 })
+                put("background", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Command mode only. If true, launch the command fully detached (nohup, streams redirected) and return immediately with its PID. Use for servers / long-running processes that would otherwise keep the capture pipe open and block until timeout. Default false.")
+                })
                 put("timeout_seconds", buildJsonObject {
                     put("type", "integer")
                     put("description", "Capture-mode timeout. Default 60. Use 0 to wait up to 5 minutes for long commands.")
@@ -315,6 +319,8 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
         val workingDir = input.jsonObject["working_dir"]?.jsonPrimitive?.contentOrNull
             ?: TERMUX_HOME_DIR
         val interactive = input.jsonObject["interactive"]?.jsonPrimitive?.contentOrNull
+            ?.toBooleanStrictOrNull() ?: false
+        val background = input.jsonObject["background"]?.jsonPrimitive?.contentOrNull
             ?.toBooleanStrictOrNull() ?: false
         val rawTimeout = input.jsonObject["timeout_seconds"]?.jsonPrimitive?.intOrNull ?: 60
         val timeoutMs = when {
@@ -377,7 +383,11 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                 "apt(){ command apt -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
                 "apt-get(){ command apt-get -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
                 "export -f apt apt-get; "
-            "$TERMUX_BIN_DIR/bash" to arrayOf("-c", preamble + rawCommand)
+            // background: detach so a long-running child doesn't keep the capture pipe open and
+            // stall the result bundle until timeout. Same inherited-fd hazard as the SSH exec
+            // channel; wrapDetachedCommand applies the identical nohup + redirect + echo-pid fix.
+            val body = if (background) wrapDetachedCommand(rawCommand) else rawCommand
+            "$TERMUX_BIN_DIR/bash" to arrayOf("-c", preamble + body)
         } else {
             val args = argumentsArr?.mapNotNull { it.jsonPrimitive.contentOrNull }
                 ?.toTypedArray()

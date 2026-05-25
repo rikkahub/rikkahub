@@ -163,6 +163,8 @@ fun sshExecSavedTool(context: Context, repo: SshHostRepository): Tool = Tool(
             properties = buildJsonObject {
                 put("name", buildJsonObject { put("type", "string"); put("description", "Saved host name") })
                 put("command", buildJsonObject { put("type", "string"); put("description", "Shell command to run") })
+                put("stdin", buildJsonObject { put("type", "string"); put("description", "Optional data piped to the command's stdin (then EOF). Quote-free way to write a file (command=\"cat > /path\") or feed input; omit to send an immediate EOF.") })
+                put("background", buildJsonObject { put("type", "boolean"); put("description", "If true, launch the command fully detached (nohup, streams redirected) and return immediately with its PID instead of waiting. Default false.") })
                 put("timeout_seconds", buildJsonObject { put("type", "integer"); put("description", "Total timeout, default 30, max 300") })
             },
             required = listOf("name", "command")
@@ -172,6 +174,8 @@ fun sshExecSavedTool(context: Context, repo: SshHostRepository): Tool = Tool(
         val p = input.jsonObject
         val name = p["name"]?.jsonPrimitive?.contentOrNull ?: error("name is required")
         val command = p["command"]?.jsonPrimitive?.contentOrNull ?: error("command is required")
+        val stdin = p["stdin"]?.jsonPrimitive?.contentOrNull
+        val background = p["background"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
         val timeoutSec = (p["timeout_seconds"]?.jsonPrimitive?.intOrNull ?: 30).coerceIn(1, 300)
         val h = repo.getByName(name)
             ?: return@Tool listOf(UIMessagePart.Text(
@@ -183,8 +187,14 @@ fun sshExecSavedTool(context: Context, repo: SshHostRepository): Tool = Tool(
                 buildJsonObject { put("error", "saved host has no usable credentials") }.toString()
             ))
         }
+        if (background && stdin != null) {
+            return@Tool listOf(UIMessagePart.Text(
+                buildJsonObject { put("error", "stdin and background are mutually exclusive (a detached command reads from /dev/null)") }.toString()
+            ))
+        }
+        val effectiveCommand = if (background) wrapDetachedCommand(command) else command
         val payload = runCancellableSshOp(timeoutSec * 1000L) { sessionRef ->
-            execOneShot(context, h.host, h.port, h.user, auth, command, timeoutSec * 1000, sessionRef)
+            execOneShot(context, h.host, h.port, h.user, auth, effectiveCommand, timeoutSec * 1000, sessionRef, stdin)
         }
         listOf(UIMessagePart.Text(payload.toString()))
     }

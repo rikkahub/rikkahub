@@ -25,6 +25,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.Inet4Address
@@ -77,6 +78,28 @@ private const val MAX_RETURNED_STDERR = 2_000
 /** Truncate [s] to [max] chars and append a "[truncated; N bytes more]" suffix. */
 private fun cap(s: String, max: Int): String =
     if (s.length > max) s.take(max) + "\n…[truncated; ${s.length - max} bytes more]" else s
+
+/**
+ * Single-quote [s] for safe embedding in a POSIX shell command. Wraps the whole string in
+ * single quotes and rewrites each embedded single quote as the standard `'\''` sequence
+ * (close-quote, escaped literal quote, reopen-quote). Lets us splice an arbitrary user command
+ * into a wrapper without a quoting injection.
+ */
+internal fun shellSingleQuote(s: String): String =
+    "'" + s.replace("'", "'\\''") + "'"
+
+/**
+ * Wrap [command] so it runs fully detached from the SSH exec channel and returns immediately.
+ *
+ * A bare `cmd &` does NOT free the exec channel: the backgrounded child inherits the channel's
+ * stdout/stderr pipes, so JSch never sees channel EOF and ssh_exec blocks until its timeout even
+ * though the foreground shell already exited. We instead launch under `nohup` (immune to the
+ * SIGHUP fired when the session closes), redirect all three std streams away from the channel
+ * pipes, background it, and echo the launched PID. The channel then reaches EOF at once and the
+ * call returns the PID instead of hanging.
+ */
+internal fun wrapDetachedCommand(command: String): String =
+    "nohup sh -c ${shellSingleQuote(command)} >/dev/null 2>&1 </dev/null & echo \"rikkahub_bg_pid=\$!\""
 
 /**
  * Resolves [host] to an IPv4 address string. JSch's `Socket(addr, port)` does NOT implement
@@ -340,7 +363,7 @@ internal fun unreachableEnvelope(host: String, port: Int, outcome: ProbeOutcome)
     }
 
 /** Run a single command on an open session. Returns a JSON object with exit_code/stdout/stderr. */
-internal fun runOnSession(session: Session, command: String, timeoutMs: Int): JsonObject {
+internal fun runOnSession(session: Session, command: String, timeoutMs: Int, stdin: String? = null): JsonObject {
     val stdout = ByteArrayOutputStream()
     val stderr = ByteArrayOutputStream()
     val channel = session.openChannel("exec") as ChannelExec
@@ -349,6 +372,13 @@ internal fun runOnSession(session: Session, command: String, timeoutMs: Int): Js
         channel.setCommand(command)
         channel.outputStream = stdout
         channel.setErrStream(stderr)
+        // Feed stdin then EOF. Real `ssh host 'cmd'` closes stdin when there's no piped input,
+        // but JSch leaves the channel's stdin open with neither data nor EOF unless we set an
+        // input stream — so a command that reads stdin (`cat > file`, `read`, `base64 -d`)
+        // blocks until the deadline. An empty stream yields an immediate EOF; a non-null [stdin]
+        // is delivered first and then EOF, which is the quote-free way to pipe data or write a
+        // file without a heredoc.
+        channel.setInputStream(ByteArrayInputStream((stdin ?: "").toByteArray(Charsets.UTF_8)))
         channel.connect(timeoutMs)
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!channel.isClosed) {
@@ -367,9 +397,9 @@ internal fun runOnSession(session: Session, command: String, timeoutMs: Int): Js
             return buildJsonObject {
                 put("error", "command_timeout")
                 put("recovery", "Command did not complete within ${timeoutMs / 1000}s. Bump " +
-                    "timeout_seconds, or detach the command (e.g. nohup ... & disown) so it " +
-                    "runs in the background after your ssh exec returns. Partial stdout/stderr " +
-                    "captured before the timeout is included.")
+                    "timeout_seconds, or pass background=true to launch it detached so the call " +
+                    "returns immediately with the launched PID. Partial stdout/stderr captured " +
+                    "before the timeout is included.")
                 put("partial_stdout", cap(stdout.toString(Charsets.UTF_8), MAX_RETURNED_STDOUT))
                 put("partial_stderr", cap(stderr.toString(Charsets.UTF_8), MAX_RETURNED_STDERR))
             }
@@ -410,6 +440,8 @@ fun sshExecTool(context: Context): Tool = Tool(
                 put("private_key", buildJsonObject { put("type", "string"); put("description", "Full PEM/OpenSSH private key contents") })
                 put("passphrase", buildJsonObject { put("type", "string"); put("description", "Optional passphrase for the private key") })
                 put("command", buildJsonObject { put("type", "string"); put("description", "Shell command to run on the remote host") })
+                put("stdin", buildJsonObject { put("type", "string"); put("description", "Optional data piped to the command's stdin (then EOF). Quote-free way to write a file (command=\"cat > /path\") or feed input; omit to send an immediate EOF.") })
+                put("background", buildJsonObject { put("type", "boolean"); put("description", "If true, launch the command fully detached (nohup, streams redirected) and return immediately with its PID instead of waiting. Use for servers/long jobs that would otherwise block until timeout. Default false.") })
                 put("timeout_seconds", buildJsonObject { put("type", "integer"); put("description", "Total timeout including connect+exec, default 30, max 300") })
             },
             required = listOf("host", "user", "command")
@@ -421,6 +453,8 @@ fun sshExecTool(context: Context): Tool = Tool(
         val user = p["user"]?.jsonPrimitive?.contentOrNull ?: error("user is required")
         val command = p["command"]?.jsonPrimitive?.contentOrNull ?: error("command is required")
         val port = p["port"]?.jsonPrimitive?.intOrNull ?: 22
+        val stdin = p["stdin"]?.jsonPrimitive?.contentOrNull
+        val background = p["background"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
         val auth = SshAuth(
             password = p["password"]?.jsonPrimitive?.contentOrNull,
             privateKey = p["private_key"]?.jsonPrimitive?.contentOrNull,
@@ -432,8 +466,14 @@ fun sshExecTool(context: Context): Tool = Tool(
                 buildJsonObject { put("error", "must provide password or private_key") }.toString()
             ))
         }
+        if (background && stdin != null) {
+            return@Tool listOf(UIMessagePart.Text(
+                buildJsonObject { put("error", "stdin and background are mutually exclusive (a detached command reads from /dev/null)") }.toString()
+            ))
+        }
+        val effectiveCommand = if (background) wrapDetachedCommand(command) else command
         val payload = runCancellableSshOp(timeoutSec * 1000L) { sessionRef ->
-            execOneShot(context, host, port, user, auth, command, timeoutSec * 1000, sessionRef)
+            execOneShot(context, host, port, user, auth, effectiveCommand, timeoutSec * 1000, sessionRef, stdin)
         }
         listOf(UIMessagePart.Text(payload.toString()))
     }
@@ -483,6 +523,7 @@ internal suspend fun execOneShot(
     command: String,
     timeoutMs: Int,
     sessionRef: AtomicReference<Session?>,
+    stdin: String? = null,
 ): JsonObject {
     // Stage 1 (suspend): low-level reachability probe in parallel across every transport.
     // JSch's connect timeout fires at the END of the SSH handshake, so when the network is
@@ -507,7 +548,7 @@ internal suspend fun execOneShot(
         sessionRef.set(session)
         Log.i(TAG_SSH, "ssh session up via ${outcome.winningLabel ?: "default"} in ${System.currentTimeMillis() - handshakeStart}ms")
         try {
-            runOnSession(session, command, timeoutMs)
+            runOnSession(session, command, timeoutMs, stdin)
         } catch (e: Throwable) {
             buildJsonObject { put("error", "exec failed: ${e.message ?: "unknown"}") }
         } finally {
