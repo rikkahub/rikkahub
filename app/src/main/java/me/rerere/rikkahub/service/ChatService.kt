@@ -808,12 +808,25 @@ class ChatService(
                     // Once-grant lives in the message itself as
                     // ToolApprovalState.Approved, so it's already handled by the regular
                     // Pending → Approved transition.
-                    toolApprovalPreferences.currentYolo() ||
+                    //
+                    // ask_user is a human-input request, NOT a permission gate. It must pause
+                    // for the user whenever there's a surface to ask on (the in-app question card
+                    // or the Telegram clarify flow), so it ignores YOLO and the allow-lists —
+                    // otherwise it auto-executes its placeholder body and returns
+                    // ask_user_unavailable. In a headless run (cron / sub-agent) there's nobody to
+                    // answer, so it still auto-approves there and falls through to that graceful
+                    // envelope instead of hanging the turn.
+                    if (toolName == "ask_user") {
                         me.rerere.rikkahub.data.ai.tools.HeadlessConversations
-                            .shouldAutoApprove(conversationId) ||
-                        me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
-                            .isAllowedForChat(conversationId, toolName) ||
-                        toolApprovalPreferences.current().contains(toolName)
+                            .shouldAutoApprove(conversationId)
+                    } else {
+                        toolApprovalPreferences.currentYolo() ||
+                            me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                                .shouldAutoApprove(conversationId) ||
+                            me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
+                                .isAllowedForChat(conversationId, toolName) ||
+                            toolApprovalPreferences.current().contains(toolName)
+                    }
                 },
                 messages = conversation.currentMessages.let {
                     if (messageRange != null) {

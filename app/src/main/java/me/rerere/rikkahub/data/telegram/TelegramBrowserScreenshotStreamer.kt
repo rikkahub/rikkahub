@@ -57,6 +57,7 @@ class TelegramBrowserScreenshotStreamer(
         val caption = buildCaption(actionLabel, currentUrl)
         runCatching {
             client.sendPhoto(mapping.chatId, file, caption)
+            TelegramStreamSignal.noteScreenshot(callerConvId)
             Log.i(TAG, "send: posted browser screenshot ($actionLabel) to chat=${mapping.chatId} url=$currentUrl")
         }.onFailure { Log.w(TAG, "send: sendPhoto failed", it) }
     }

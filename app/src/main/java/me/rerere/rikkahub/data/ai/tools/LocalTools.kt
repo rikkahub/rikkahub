@@ -582,7 +582,22 @@ class LocalTools(
             },
             needsApproval = true,
             execute = {
-                error("ask_user tool should be handled by HITL flow")
+                // Reached only when no human-in-the-loop surface intercepted this call. The
+                // in-app question card and the Telegram clarify flow both handle ask_user before
+                // execute() runs; any other context (cron jobs, sub-agents) has nobody to answer,
+                // so return a graceful envelope telling the model to ask in plain text rather than
+                // throwing an opaque tool_failed.
+                listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("error", "ask_user_unavailable")
+                            put(
+                                "detail",
+                                "Interactive questions aren't available in this context. Ask your question in your normal reply text instead; the user will read it and answer."
+                            )
+                        }.toString()
+                    )
+                )
             }
         )
     }

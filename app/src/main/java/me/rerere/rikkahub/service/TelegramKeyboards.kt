@@ -34,6 +34,11 @@ const val APPROVAL_CB_CHAT: String = "2"
 const val APPROVAL_CB_ALWAYS: String = "3"
 const val APPROVAL_CB_DENY: String = "4"
 
+/** Inline-keyboard prefix for an interactive ask_user (clarify) question. callback_data is
+ *  "clr:<qIdx>:<sel>:<toolCallId>" where sel is an option index or "o" (type your own answer).
+ *  toolCallId carries no colons (toolu_… form), so a limit-3 split after the prefix is safe. */
+const val CLARIFY_CB_PREFIX: String = "clr:"
+
 /** Inline-keyboard prefix for /model interactive picker. callback_data is
  *  "mdl:<short-token>" where the token is a numeric handle into ModelPickRegistry —
  *  some provider model_ids are too long to fit Telegram's 64-byte cap directly. */
@@ -142,6 +147,32 @@ internal fun buildApprovalKeyboard(toolCallId: String, toolName: String? = null)
         }
     })
 }
+
+/**
+ * Build the inline keyboard for one interactive ask_user (clarify) question: one button per
+ * predefined option (callback "clr:<qIdx>:<optIdx>:<toolCallId>") plus a final
+ * "type your own answer" button (sel = "o") that flips the entry into text-capture mode. Open-
+ * ended questions (no options) skip this keyboard entirely and just await the next message.
+ */
+internal fun buildClarifyKeyboard(toolCallId: String, qIdx: Int, options: List<String>): JsonObject =
+    buildJsonObject {
+        put("inline_keyboard", buildJsonArray {
+            options.forEachIndexed { i, opt ->
+                addJsonArray {
+                    addJsonObject {
+                        put("text", clampForButton(opt))
+                        put("callback_data", "$CLARIFY_CB_PREFIX$qIdx:$i:$toolCallId")
+                    }
+                }
+            }
+            addJsonArray {
+                addJsonObject {
+                    put("text", "✍️ Other (type a reply)")
+                    put("callback_data", "$CLARIFY_CB_PREFIX$qIdx:o:$toolCallId")
+                }
+            }
+        })
+    }
 
 /**
  * Build the inline keyboard for the /model interactive picker — step 2 of the

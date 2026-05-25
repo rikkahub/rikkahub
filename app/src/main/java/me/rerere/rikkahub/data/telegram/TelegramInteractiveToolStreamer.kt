@@ -16,6 +16,36 @@ private const val MAX_CACHED_FILES = 20
 private const val MAX_CAPTION_CHARS = 1024
 
 /**
+ * Settle delay before capturing the device screen. Interactive tools (launch_app, a tap that
+ * opens an app, global-action back) kick off a launch/transition animation; capturing
+ * immediately grabs a half-painted frame — the app switcher, a white screen, or the previous
+ * app. Waiting lets the UI settle, mirroring the browser streamer's PAINT_SETTLE_MS (600ms)
+ * but a touch longer since cross-app launches animate slower than a WebView repaint.
+ */
+private const val SCREEN_SETTLE_MS = 900L
+
+/**
+ * Per-conversation count of screenshots auto-streamed during the current turn. The Telegram
+ * turn reads this at finalization: when it's >0, the final answer is posted as a fresh message
+ * at the BOTTOM (below the streamed photos) instead of edited back into the top placeholder, so
+ * the user doesn't have to scroll up past the photos to read it. Reset at the start of a turn.
+ * Keyed by conversation-id string to avoid coupling to a specific UUID type across modules.
+ */
+object TelegramStreamSignal {
+    private val counts = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
+
+    fun noteScreenshot(conversationId: String) {
+        counts.getOrPut(conversationId) { java.util.concurrent.atomic.AtomicInteger(0) }.incrementAndGet()
+    }
+
+    fun count(conversationId: String): Int = counts[conversationId]?.get() ?: 0
+
+    fun reset(conversationId: String) {
+        counts.remove(conversationId)
+    }
+}
+
+/**
  * [InteractiveToolStreamer] implementation that captures the real device screen via
  * [RikkaAccessibilityService] and sends the PNG to the originating Telegram chat.
  *
@@ -58,6 +88,10 @@ class TelegramInteractiveToolStreamer(
             .onFailure { Log.w(TAG, "streamIfHeadless: chatRepo lookup failed for $convId", it) }
             .getOrNull() ?: return
 
+        // Settle: let the launch/transition animation finish before grabbing the screen, so we
+        // don't stream a half-painted frame (app switcher / white / previous app).
+        kotlinx.coroutines.delay(SCREEN_SETTLE_MS)
+
         // Step 3: capture the screen.
         val bitmap = captureScreenOrNull() ?: run {
             Log.d(TAG, "streamIfHeadless: no screenshot available (accessibility service not bound or API < 28)")
@@ -76,6 +110,7 @@ class TelegramInteractiveToolStreamer(
         val caption = buildCaption(actionLabel)
         runCatching {
             client.sendPhoto(mapping.chatId, file, caption)
+            TelegramStreamSignal.noteScreenshot(convId.toString())
             Log.i(TAG, "streamIfHeadless: posted screenshot ($actionLabel) to chat=${mapping.chatId}")
         }.onFailure { Log.w(TAG, "streamIfHeadless: sendPhoto failed", it) }
     }

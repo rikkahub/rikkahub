@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -591,6 +592,14 @@ class TelegramBotService : Service() {
             if (handleBuiltInCommand(cfg, m)) return
         }
 
+        // A pending interactive ask_user question awaiting a free-form reply consumes this
+        // message as its answer (feeding it back to the parked generation) instead of starting
+        // a new turn.
+        if (tryResolveClarifyText(m.chatId, m.text)) return
+        // Otherwise the message starts something new, so any earlier unanswered clarify for this
+        // chat is abandoned — drop it so a stale entry doesn't linger.
+        clearClarifyForChat(m.chatId)
+
         // Non-built-in messages run the LLM and must be serialized per-chat so two model
         // turns from the same chat don't interleave. Built-ins above ran without this lock
         // by design — that's the whole point of the fix.
@@ -732,6 +741,10 @@ class TelegramBotService : Service() {
             },
         )
 
+        // Fresh per-turn screenshot signal so the finalizer's "post the answer at the bottom"
+        // decision reflects only THIS turn's auto-streamed photos.
+        me.rerere.rikkahub.data.telegram.TelegramStreamSignal.reset(convId.toString())
+
         // Send the streaming placeholder once. The per-iteration editJob below edits it
         // in place during active generation, then stops while we wait on the user (so we
         // don't burn battery firing edits every 600ms for hours if the user is away).
@@ -864,6 +877,13 @@ class TelegramBotService : Service() {
                 for (tool in pendingTools) {
                     if (tool.toolCallId in promptedToolCallIds) continue
                     promptedToolCallIds += tool.toolCallId
+                    // ask_user is interactive, not a permission gate: render its questions as a
+                    // clarify keyboard instead of an approve/deny card, and skip the failure
+                    // circuit breaker (it collects an answer, it doesn't "fail").
+                    if (tool.toolName == "ask_user") {
+                        scope.launch { startClarify(m.chatId, convId, tool) }
+                        continue
+                    }
                     // Retry circuit breaker: if the same tool has already returned an
                     // error envelope >=3 times in this turn, auto-deny the next call
                     // instead of asking the user to approve another doomed retry. The
@@ -983,11 +1003,19 @@ class TelegramBotService : Service() {
                     try { client.deleteMessage(m.chatId, placeholderId) } catch (_: Throwable) {}
                 }
             }
-            placeholderId != null && finalReply.length <= MAX_CHARS -> {
-                // Final fits in one message; just edit the placeholder one last time.
+            placeholderId != null && finalReply.length <= MAX_CHARS &&
+                me.rerere.rikkahub.data.telegram.TelegramStreamSignal.count(convId.toString()) == 0 -> {
+                // Final fits in one message AND no screenshots streamed this turn; just edit
+                // the placeholder one last time (it's still the newest message).
                 editPlaceholderHtmlWithFallback(m.chatId, placeholderId, finalReply)
             }
             else -> {
+                // Either the reply overflowed one message, OR screenshots were auto-streamed
+                // during the turn. In the screenshot case the placeholder is now buried ABOVE
+                // the photos, so editing it would leave the answer where the user has to scroll
+                // up past every screenshot to read it. Drop the placeholder and post the final
+                // answer as a fresh message at the BOTTOM, below the photos (the Hermes
+                // "deliver the final response as a new message" behaviour).
                 // Final reply overflowed Telegram's per-message limit. Drop the placeholder
                 // (delete or fold it into the first chunk) and send chunked.
                 if (placeholderId != null) {
@@ -1334,6 +1362,173 @@ class TelegramBotService : Service() {
      * (they might be away from the phone for hours). The prompt stays valid until they
      * tap, /stop is sent, the conversation is reset, or the app process restarts.
      */
+    // ---- Interactive ask_user (clarify) over Telegram --------------------------------
+    //
+    // ask_user has no executable body — in-app it's answered via a tappable question card.
+    // Over Telegram we mirror the approval flow: render each question's options as an inline
+    // keyboard (plus a "type your own answer" button), capture taps via the clr: callback and
+    // free-form replies via the message intercept in handleIncoming, then feed the collected
+    // answers back through handleToolApproval(answer=…) — the same hook the in-app card uses.
+    // Modelled on the Hermes clarify_gateway pattern; questions are asked one at a time.
+
+    private data class ClarifyQuestion(val id: String, val text: String, val options: List<String>)
+
+    private class ClarifyPending(
+        val chatId: Long,
+        val convId: Uuid,
+        val toolCallId: String,
+        val questions: List<ClarifyQuestion>,
+    ) {
+        val answers = LinkedHashMap<String, String>()
+        var currentIdx = 0
+        var awaitingText = false
+        /** message_id of the question currently on screen, so we can clear its keyboard once answered. */
+        var questionMessageId: Long? = null
+    }
+
+    /** Pending clarify prompts keyed by toolCallId; resolved by a button tap or a text reply. */
+    private val clarifyPending = java.util.concurrent.ConcurrentHashMap<String, ClarifyPending>()
+
+    private fun parseClarifyQuestions(input: String): List<ClarifyQuestion> {
+        val obj = runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(input.ifBlank { "{}" }).jsonObject
+        }.getOrNull() ?: return emptyList()
+        val arr = obj["questions"]?.jsonArray ?: return emptyList()
+        return arr.mapIndexedNotNull { i, el ->
+            val q = (el as? kotlinx.serialization.json.JsonObject) ?: return@mapIndexedNotNull null
+            val text = q["question"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: return@mapIndexedNotNull null
+            val id = q["id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: "q$i"
+            val options = q["options"]?.jsonArray
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull?.takeIf { o -> o.isNotBlank() } }
+                ?: emptyList()
+            ClarifyQuestion(id, text, options)
+        }
+    }
+
+    /** Begin an interactive ask_user prompt over Telegram. If the questions can't be parsed,
+     *  deny the call with an "ask in plain text" reason so the turn never hangs. */
+    private suspend fun startClarify(chatId: Long, convId: Uuid, tool: UIMessagePart.Tool) {
+        val questions = parseClarifyQuestions(tool.input)
+        if (questions.isEmpty()) {
+            chatService.handleToolApproval(
+                conversationId = convId,
+                toolCallId = tool.toolCallId,
+                approved = false,
+                reason = "ask_user could not be rendered over Telegram. Ask your question in plain reply text instead.",
+                toolName = "ask_user",
+            )
+            return
+        }
+        val entry = ClarifyPending(chatId, convId, tool.toolCallId, questions)
+        clarifyPending[tool.toolCallId] = entry
+        sendClarifyQuestion(entry)
+    }
+
+    private suspend fun sendClarifyQuestion(entry: ClarifyPending) {
+        val q = entry.questions.getOrNull(entry.currentIdx) ?: run { finalizeClarify(entry); return }
+        val header = if (entry.questions.size > 1)
+            "❓ <b>Question ${entry.currentIdx + 1}/${entry.questions.size}</b>\n\n" else "❓ "
+        val body = header + TelegramHtmlRenderer.escape(q.text)
+        val res = if (q.options.isEmpty()) {
+            entry.awaitingText = true
+            runCatching {
+                client.sendMessage(entry.chatId, "$body\n\n<i>Reply with your answer.</i>", parseMode = PARSE_MODE_HTML)
+            }.getOrNull()
+        } else {
+            entry.awaitingText = false
+            runCatching {
+                client.sendMessage(
+                    entry.chatId, body, parseMode = PARSE_MODE_HTML,
+                    replyMarkup = buildClarifyKeyboard(entry.toolCallId, entry.currentIdx, q.options),
+                )
+            }.getOrNull()
+        }
+        entry.questionMessageId = res?.get("message_id")?.jsonPrimitive?.longOrNull
+    }
+
+    private suspend fun handleClarifyCallback(cq: TelegramCallbackQuery) {
+        val parts = cq.data.removePrefix(CLARIFY_CB_PREFIX).split(":", limit = 3)
+        if (parts.size != 3) { client.answerCallbackQuery(cq.callbackQueryId, "malformed"); return }
+        val qIdx = parts[0].toIntOrNull()
+        val sel = parts[1]
+        val toolCallId = parts[2]
+        val entry = clarifyPending[toolCallId]
+        if (entry == null) { client.answerCallbackQuery(cq.callbackQueryId, "question expired"); return }
+        if (qIdx != entry.currentIdx) { client.answerCallbackQuery(cq.callbackQueryId, "already answered"); return }
+        val q = entry.questions.getOrNull(entry.currentIdx)
+            ?: run { client.answerCallbackQuery(cq.callbackQueryId, "done"); return }
+        if (sel == "o") {
+            entry.awaitingText = true
+            client.answerCallbackQuery(cq.callbackQueryId, "Type your answer")
+            runCatching {
+                client.sendMessage(
+                    entry.chatId,
+                    "✍️ Type your answer for: <i>${TelegramHtmlRenderer.escape(q.text)}</i>",
+                    parseMode = PARSE_MODE_HTML,
+                )
+            }
+            return
+        }
+        val chosen = sel.toIntOrNull()?.let { q.options.getOrNull(it) }
+        if (chosen == null) { client.answerCallbackQuery(cq.callbackQueryId, "unknown option"); return }
+        client.answerCallbackQuery(cq.callbackQueryId, "✓ ${chosen.take(28)}")
+        recordAndAdvance(entry, q, chosen)
+    }
+
+    /** Consume a free-form message as the answer to a clarify question awaiting text. Returns
+     *  true when consumed — the caller must NOT then treat the message as a new prompt. */
+    private suspend fun tryResolveClarifyText(chatId: Long, text: String): Boolean {
+        if (text.isBlank()) return false
+        val entry = clarifyPending.values.firstOrNull { it.chatId == chatId && it.awaitingText } ?: return false
+        val q = entry.questions.getOrNull(entry.currentIdx) ?: return false
+        entry.awaitingText = false
+        recordAndAdvance(entry, q, text.trim())
+        return true
+    }
+
+    private suspend fun recordAndAdvance(entry: ClarifyPending, q: ClarifyQuestion, answer: String) {
+        entry.answers[q.id] = answer
+        // Clear the just-answered question's inline keyboard and show what was picked, so the
+        // buttons don't linger looking still-tappable. Editing the text without a replyMarkup
+        // removes the keyboard.
+        entry.questionMessageId?.let { msgId ->
+            runCatching {
+                client.editMessageText(
+                    entry.chatId,
+                    msgId,
+                    "❓ ${TelegramHtmlRenderer.escape(q.text)}\n→ <b>${TelegramHtmlRenderer.escape(answer)}</b>",
+                    parseMode = PARSE_MODE_HTML,
+                )
+            }
+        }
+        entry.currentIdx++
+        if (entry.currentIdx < entry.questions.size) sendClarifyQuestion(entry) else finalizeClarify(entry)
+    }
+
+    private fun finalizeClarify(entry: ClarifyPending) {
+        clarifyPending.remove(entry.toolCallId)
+        val answerJson = buildJsonObject {
+            put("answers", buildJsonObject {
+                entry.questions.forEach { q ->
+                    put(q.id, kotlinx.serialization.json.JsonPrimitive(entry.answers[q.id] ?: ""))
+                }
+            })
+        }.toString()
+        chatService.handleToolApproval(
+            conversationId = entry.convId,
+            toolCallId = entry.toolCallId,
+            approved = true,
+            answer = answerJson,
+            toolName = "ask_user",
+        )
+    }
+
+    /** Drop any pending clarify prompts for a chat — the user moved on or cancelled the turn. */
+    private fun clearClarifyForChat(chatId: Long) {
+        clarifyPending.values.removeAll { it.chatId == chatId }
+    }
+
     private suspend fun sendApprovalPrompt(
         chatId: Long,
         tool: UIMessagePart.Tool,
@@ -1607,6 +1802,9 @@ class TelegramBotService : Service() {
             }
             cq.data.startsWith(DOCTOR_FIX_CB_PREFIX) -> {
                 handleDoctorFixCallback(cq); return
+            }
+            cq.data.startsWith(CLARIFY_CB_PREFIX) -> {
+                handleClarifyCallback(cq); return
             }
             cq.data.startsWith(APPROVAL_CB_PREFIX) -> {
                 // Falls through to the approval-handling block below.
