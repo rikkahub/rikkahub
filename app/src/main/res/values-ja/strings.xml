@@ -665,8 +665,8 @@
   <string name="setting_display_page_send_on_enter_title">Enterキーで送信</string>
   <string name="setting_display_page_show_assistant_bubble_desc">アシスタントメッセージのバブル背景を表示するかどうか</string>
   <string name="setting_display_page_show_assistant_bubble_title">アシスタントメッセージバブルを表示</string>
-  <string name="setting_display_page_show_date_below_name_desc">ニックネームまたはモデル名の下にメッセージの日付を表示するかどうか</string>
-  <string name="setting_display_page_show_date_below_name_title">名前の下に日付を表示</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">各メッセージの下に日時を表示します</string>
+  <string name="setting_display_page_show_datetime_in_message_title">メッセージに日付と時刻を表示</string>
   <string name="setting_display_page_show_line_numbers_desc">コードブロックに行番号を表示</string>
   <string name="setting_display_page_show_line_numbers_title">行番号を表示</string>
   <string name="setting_display_page_show_message_jumper_desc">チャットリストをスクロールすると、右側にクイックジャンプボタンが表示されます。</string>

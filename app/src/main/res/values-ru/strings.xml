@@ -665,8 +665,8 @@
   <string name="setting_display_page_send_on_enter_title">Отправлять по Enter</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Показывать фоновый пузырь для сообщений ассистента</string>
   <string name="setting_display_page_show_assistant_bubble_title">Показывать всплывающее сообщение ассистента</string>
-  <string name="setting_display_page_show_date_below_name_desc">Показывать дату сообщения под ником или названием модели</string>
-  <string name="setting_display_page_show_date_below_name_title">Показывать дату под именем</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">Показывать дату и время под каждым сообщением</string>
+  <string name="setting_display_page_show_datetime_in_message_title">Показывать дату и время в сообщении</string>
   <string name="setting_display_page_show_line_numbers_desc">Отображать номера строк в блоках кода</string>
   <string name="setting_display_page_show_line_numbers_title">Показывать номера строк</string>
   <string name="setting_display_page_show_message_jumper_desc">Отображать кнопки быстрого перехода справа при прокрутке списка чатов</string>

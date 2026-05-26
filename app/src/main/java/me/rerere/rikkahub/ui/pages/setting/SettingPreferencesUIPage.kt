@@ -176,13 +176,13 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_show_date_below_name_title)) },
-                        supportingContent = { Text(stringResource(R.string.setting_display_page_show_date_below_name_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_show_datetime_in_message_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_show_datetime_in_message_desc)) },
                         trailingContent = {
                             Switch(
-                                checked = displaySetting.showDateBelowName,
+                                checked = displaySetting.showDateTimeInMessage,
                                 onCheckedChange = {
-                                    updateDisplaySetting(displaySetting.copy(showDateBelowName = it))
+                                    updateDisplaySetting(displaySetting.copy(showDateTimeInMessage = it))
                                 }
                             )
                         },

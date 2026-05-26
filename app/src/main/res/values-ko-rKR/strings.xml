@@ -665,8 +665,8 @@
   <string name="setting_display_page_send_on_enter_title">Enter 키로 전송</string>
   <string name="setting_display_page_show_assistant_bubble_desc">어시스턴트 메시지에 말풍선 배경 표시 여부</string>
   <string name="setting_display_page_show_assistant_bubble_title">어시스턴트 메시지 버블 표시</string>
-  <string name="setting_display_page_show_date_below_name_desc">닉네임 또는 모델 이름 아래에 메시지 날짜를 표시할지 여부</string>
-  <string name="setting_display_page_show_date_below_name_title">이름 아래 날짜 표시</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">각 메시지 아래에 날짜와 시간을 표시합니다</string>
+  <string name="setting_display_page_show_datetime_in_message_title">메시지에 날짜와 시간 표시</string>
   <string name="setting_display_page_show_line_numbers_desc">코드 블록에 줄 번호 표시</string>
   <string name="setting_display_page_show_line_numbers_title">줄 번호 표시</string>
   <string name="setting_display_page_show_message_jumper_desc">채팅 목록을 스크롤할 때 오른쪽에 빠른 점프 버튼 표시</string>

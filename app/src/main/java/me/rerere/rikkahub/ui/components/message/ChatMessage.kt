@@ -92,7 +92,9 @@ import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.openUrl
+import me.rerere.rikkahub.utils.toMessageTimeString
 import me.rerere.rikkahub.utils.urlDecode
+import kotlinx.datetime.toJavaLocalDateTime
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -208,6 +210,16 @@ fun ChatMessage(
 
         ProvideTextStyle(textStyle) {
             ChatMessageNerdLine(message = message)
+        }
+
+        if (settings.showDateTimeInMessage && !message.parts.isEmptyUIMessage()) {
+            Text(
+                text = message.createdAt.toJavaLocalDateTime().toMessageTimeString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
         }
     }
     if (showActionsSheet) {

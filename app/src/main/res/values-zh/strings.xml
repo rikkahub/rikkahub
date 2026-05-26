@@ -672,8 +672,8 @@
   <string name="setting_display_page_send_on_enter_title">按Enter发送</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否为助手消息显示气泡背景</string>
   <string name="setting_display_page_show_assistant_bubble_title">显示助手消息气泡</string>
-  <string name="setting_display_page_show_date_below_name_desc">是否在昵称或模型名称下方显示消息日期</string>
-  <string name="setting_display_page_show_date_below_name_title">显示昵称下方日期</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">在每条消息下方显示日期和时间</string>
+  <string name="setting_display_page_show_datetime_in_message_title">在消息中显示日期和时间</string>
   <string name="setting_display_page_show_line_numbers_desc">在代码块中显示行号</string>
   <string name="setting_display_page_show_line_numbers_title">显示行号</string>
   <string name="setting_display_page_show_message_jumper_desc">在滚动聊天列表时，在右侧显示快速跳转按钮</string>
