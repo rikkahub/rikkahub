@@ -59,9 +59,9 @@ fun TextAvatar(
 ) {
     Box(
         modifier = modifier
+            .then(Modifier.size(32.dp))
             .clip(shape = rememberAvatarShape(loading))
-            .background(color)
-            .size(32.dp),
+            .background(color),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -105,7 +105,7 @@ fun UIAvatar(
         }
     }
 
-    Box(modifier = modifier.size(32.dp)) {
+    Box(modifier = modifier.then(Modifier.size(32.dp))) {
         Surface(
             shape = rememberAvatarShape(loading),
             modifier = Modifier.fillMaxSize(),
@@ -149,8 +149,14 @@ fun UIAvatar(
                                 .ifBlank { stringResource(R.string.user_default_name) }
                                 .takeIf { it.isNotEmpty() }
                                 ?.firstOrNull()?.toString()?.uppercase() ?: "A",
-                            fontSize = 20.sp,
-                            lineHeight = 1.em
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip,
+                            autoSize = TextAutoSize.StepBased(
+                                minFontSize = 8.sp,
+                                maxFontSize = 20.sp,
+                                stepSize = 1.sp
+                            ),
+                            lineHeight = 0.8.em
                         )
                     }
                 }

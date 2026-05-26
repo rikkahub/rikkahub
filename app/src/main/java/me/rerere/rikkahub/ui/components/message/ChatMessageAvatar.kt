@@ -45,14 +45,14 @@ fun ChatMessageUserAvatar(
             ) {
                 Text(
                     text = nickname.ifEmpty { stringResource(R.string.user_default_name) },
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     maxLines = 1,
                     color = LocalContentColor.current.copy(alpha = 0.85f),
                 )
             }
             UIAvatar(
                 name = nickname,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(24.dp),
                 value = avatar,
                 loading = false,
             )
@@ -73,7 +73,7 @@ fun ChatMessageAssistantAvatar(
     val useAssistantAvatar = assistant?.useAssistantAvatar == true
     if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar)) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = modifier
         ) {
@@ -81,7 +81,7 @@ fun ChatMessageAssistantAvatar(
                 if (showIcon) {
                     UIAvatar(
                         name = assistant.name,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(24.dp),
                         value = assistant.avatar,
                         loading = loading,
                     )
@@ -101,7 +101,7 @@ fun ChatMessageAssistantAvatar(
                 if (showIcon) {
                     AutoAIIcon(
                         name = model.modelId,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(24.dp),
                         loading = loading
                     )
                 }
@@ -112,6 +112,7 @@ fun ChatMessageAssistantAvatar(
                         Text(
                             text = model.displayName,
                             style = MaterialTheme.typography.titleSmallEmphasized,
+                            maxLines = 1,
                         )
                     }
                 }
