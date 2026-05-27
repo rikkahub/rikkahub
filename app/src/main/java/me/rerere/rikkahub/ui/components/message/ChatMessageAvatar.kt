@@ -35,7 +35,7 @@ fun ChatMessageUserAvatar(
     val settings = LocalSettings.current
     if (message.role == MessageRole.USER && !message.parts.isEmptyUIMessage() && settings.displaySetting.showUserAvatar) {
         Row(
-            modifier = modifier.padding(vertical = 8.dp),
+            modifier = modifier,
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -45,7 +45,7 @@ fun ChatMessageUserAvatar(
             ) {
                 Text(
                     text = nickname.ifEmpty { stringResource(R.string.user_default_name) },
-                    style = MaterialTheme.typography.labelSmallEmphasized,
+                    style = MaterialTheme.typography.labelMediumEmphasized,
                     maxLines = 1,
                 )
             }
@@ -91,7 +91,7 @@ fun ChatMessageAssistantAvatar(
                     if(settings.displaySetting.showModelName) {
                         Text(
                             text = assistant.name.ifEmpty { stringResource(R.string.assistant_page_default_assistant) },
-                            style = MaterialTheme.typography.labelSmallEmphasized,
+                            style = MaterialTheme.typography.labelMediumEmphasized,
                             maxLines = 1,
                         )
                     }
@@ -110,7 +110,7 @@ fun ChatMessageAssistantAvatar(
                     if(settings.displaySetting.showModelName) {
                         Text(
                             text = model.displayName,
-                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            style = MaterialTheme.typography.labelMediumEmphasized,
                             maxLines = 1,
                         )
                     }
