@@ -45,9 +45,8 @@ fun ChatMessageUserAvatar(
             ) {
                 Text(
                     text = nickname.ifEmpty { stringResource(R.string.user_default_name) },
-                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    style = MaterialTheme.typography.labelSmallEmphasized,
                     maxLines = 1,
-                    color = LocalContentColor.current.copy(alpha = 0.85f),
                 )
             }
             UIAvatar(
@@ -92,7 +91,7 @@ fun ChatMessageAssistantAvatar(
                     if(settings.displaySetting.showModelName) {
                         Text(
                             text = assistant.name.ifEmpty { stringResource(R.string.assistant_page_default_assistant) },
-                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            style = MaterialTheme.typography.labelSmallEmphasized,
                             maxLines = 1,
                         )
                     }
