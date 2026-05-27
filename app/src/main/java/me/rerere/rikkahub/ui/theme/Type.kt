@@ -11,25 +11,71 @@ import androidx.compose.ui.unit.sp
 import me.rerere.rikkahub.R
 
 val base = Typography()
+val Typography = Typography()
 
 // Set of Material typography styles to start with
-val Typography = Typography(
-    displayLargeEmphasized = base.displayLargeEmphasized.copy(fontFamily = GoogleSansFlex.Display.Emphasized.Large),
-    displayMediumEmphasized = base.displayMediumEmphasized.copy(fontFamily = GoogleSansFlex.Display.Emphasized.Medium),
-    displaySmallEmphasized = base.displaySmallEmphasized.copy(fontFamily = GoogleSansFlex.Display.Emphasized.Large),
-    headlineLargeEmphasized = base.headlineLargeEmphasized.copy(fontFamily = GoogleSansFlex.Headline.Emphasized.Large),
-    headlineMediumEmphasized = base.headlineMediumEmphasized.copy(fontFamily = GoogleSansFlex.Headline.Emphasized.Medium),
-    headlineSmallEmphasized = base.headlineSmallEmphasized.copy(fontFamily = GoogleSansFlex.Headline.Emphasized.Large),
-    titleLargeEmphasized = base.titleLargeEmphasized.copy(fontFamily = GoogleSansFlex.Title.Emphasized.Large),
-    titleMediumEmphasized = base.titleMediumEmphasized.copy(fontFamily = GoogleSansFlex.Title.Emphasized.Medium),
-    titleSmallEmphasized = base.titleSmallEmphasized.copy(fontFamily = GoogleSansFlex.Title.Emphasized.Small),
-    bodyLargeEmphasized = base.bodyLargeEmphasized.copy(fontFamily = GoogleSansFlex.Body.Emphasized.Large),
-    bodyMediumEmphasized = base.bodyMediumEmphasized.copy(fontFamily = GoogleSansFlex.Body.Emphasized.Medium),
-    bodySmallEmphasized = base.bodySmallEmphasized.copy(fontFamily = GoogleSansFlex.Body.Emphasized.Small),
-    labelLargeEmphasized = base.labelLargeEmphasized.copy(fontFamily = GoogleSansFlex.Label.Emphasized.Large),
-    labelMediumEmphasized = base.labelMediumEmphasized.copy(fontFamily = GoogleSansFlex.Label.Emphasized.Medium),
-    labelSmallEmphasized = base.labelSmallEmphasized.copy(fontFamily = GoogleSansFlex.Label.Emphasized.Small),
-)
+//val Typography = Typography(
+//    displayLargeEmphasized = base.displayLargeEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Display.Emphasized.Large,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    displayMediumEmphasized = base.displayMediumEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Display.Emphasized.Medium,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    displaySmallEmphasized = base.displaySmallEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Display.Emphasized.Large,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    headlineLargeEmphasized = base.headlineLargeEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Headline.Emphasized.Large,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    headlineMediumEmphasized = base.headlineMediumEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Headline.Emphasized.Medium,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    headlineSmallEmphasized = base.headlineSmallEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Headline.Emphasized.Large,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    titleLargeEmphasized = base.titleLargeEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Title.Emphasized.Large,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    titleMediumEmphasized = base.titleMediumEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Title.Emphasized.Medium,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    titleSmallEmphasized = base.titleSmallEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Title.Emphasized.Small,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    bodyLargeEmphasized = base.bodyLargeEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Body.Emphasized.Large,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    bodyMediumEmphasized = base.bodyMediumEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Body.Emphasized.Medium,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    bodySmallEmphasized = base.bodySmallEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Body.Emphasized.Small,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    labelLargeEmphasized = base.labelLargeEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Label.Emphasized.Large,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    labelMediumEmphasized = base.labelMediumEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Label.Emphasized.Medium,
+//        fontWeight = FontWeight.Bold
+//    ),
+//    labelSmallEmphasized = base.labelSmallEmphasized.copy(
+//        fontFamily = GoogleSansFlex.Label.Emphasized.Small,
+//        fontWeight = FontWeight.Bold
+//    ),
+//)
 
 @OptIn(ExperimentalTextApi::class)
 val JetbrainsMono = FontFamily(
