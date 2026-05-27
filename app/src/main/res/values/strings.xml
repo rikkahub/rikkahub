@@ -1093,5 +1093,7 @@
   <string name="web_search_enabled">Web search enabled</string>
   <string name="setting_theme_page_delete_theme_title">Delete Theme</string>
   <string name="setting_theme_page_delete_theme_message">Are you sure you want to delete this theme?</string>
+  <string name="skills_page_import_from_file">Import from File</string>
+  <string name="skills_page_add_manually">Add manually</string>
 </resources>
 

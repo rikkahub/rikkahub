@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,13 +24,15 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -48,6 +54,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Download01
+import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
@@ -69,9 +76,22 @@ fun SkillsPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val toaster = LocalToaster.current
     val context = LocalContext.current
+    var showImportSheet by rememberSaveable { mutableStateOf(false) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+    val fileImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        vm.importSkillFromFile(context, uri) { success, message ->
+            if (success) {
+                toaster.show(context.getString(R.string.skills_page_import_success, message))
+            } else {
+                toaster.show(context.getString(R.string.skills_page_import_failed, message))
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -83,19 +103,8 @@ fun SkillsPage() {
             )
         },
         floatingActionButton = {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                SmallFloatingActionButton(onClick = { showImportDialog = true }) {
-                    Icon(
-                        HugeIcons.Download01,
-                        contentDescription = stringResource(R.string.skills_page_import_from_github)
-                    )
-                }
-                FloatingActionButton(onClick = { showAddDialog = true }) {
-                    Icon(HugeIcons.Add01, contentDescription = null)
-                }
+            FloatingActionButton(onClick = { showImportSheet = true }) {
+                Icon(HugeIcons.Add01, contentDescription = null)
             }
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -143,6 +152,31 @@ fun SkillsPage() {
                 )
             }
         }
+    }
+
+    if (showImportSheet) {
+        SkillImportSheet(
+            onDismiss = { showImportSheet = false },
+            onAddManually = {
+                showImportSheet = false
+                showAddDialog = true
+            },
+            onImportFromFile = {
+                showImportSheet = false
+                fileImportLauncher.launch(
+                    arrayOf(
+                        "text/*",
+                        "application/zip",
+                        "application/x-zip-compressed",
+                        "application/octet-stream",
+                    )
+                )
+            },
+            onImportFromGitHub = {
+                showImportSheet = false
+                showImportDialog = true
+            },
+        )
     }
 
     if (showAddDialog) {
@@ -268,6 +302,62 @@ private fun SkillCard(
             }
         }
     }
+}
+
+@Composable
+private fun SkillImportSheet(
+    onDismiss: () -> Unit,
+    onAddManually: () -> Unit,
+    onImportFromFile: () -> Unit,
+    onImportFromGitHub: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.skills_page_add_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            SkillImportSheetItem(
+                icon = { Icon(HugeIcons.Add01, contentDescription = null) },
+                text = stringResource(R.string.skills_page_add_manually),
+                onClick = onAddManually,
+            )
+            SkillImportSheetItem(
+                icon = { Icon(HugeIcons.FileImport, contentDescription = null) },
+                text = stringResource(R.string.skills_page_import_from_file),
+                onClick = onImportFromFile,
+            )
+            SkillImportSheetItem(
+                icon = { Icon(HugeIcons.Download01, contentDescription = null) },
+                text = stringResource(R.string.skills_page_import_from_github),
+                onClick = onImportFromGitHub,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SkillImportSheetItem(
+    icon: @Composable () -> Unit,
+    text: String,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        leadingContent = icon,
+        headlineContent = { Text(text) },
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.large)
+            .clickable(onClick = onClick),
+    )
 }
 
 @Composable

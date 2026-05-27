@@ -1095,5 +1095,7 @@
   <string name="setting_page_preferences_general_desc">Поведение взаимодействия, прокрутка, настройки ввода</string>
   <string name="setting_page_preferences_ui">Настройки интерфейса</string>
   <string name="setting_page_preferences_ui_desc">Отображение сообщений, шрифты, блоки кода</string>
+  <string name="skills_page_import_from_file">Импортировать из файла</string>
+  <string name="skills_page_add_manually">Добавить вручную</string>
 </resources>
 

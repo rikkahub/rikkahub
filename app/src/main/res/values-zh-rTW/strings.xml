@@ -1093,5 +1093,7 @@
   <string name="setting_page_preferences_general_desc">互動行為、捲動、輸入設定</string>
   <string name="setting_page_preferences_ui">UI 偏好設定</string>
   <string name="setting_page_preferences_ui_desc">訊息顯示、字型、程式碼區塊</string>
+  <string name="skills_page_import_from_file">從檔案匯入</string>
+  <string name="skills_page_add_manually">手動新增</string>
 </resources>
 
