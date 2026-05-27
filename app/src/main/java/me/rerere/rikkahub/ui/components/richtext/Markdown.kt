@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,6 +30,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -73,6 +76,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -102,6 +106,7 @@ private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MAT
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
+private val LATEX_BLOCK_LINE_BREAK_REGEX = Regex("""[ \t]*\r?\n[ \t]*""")
 
 // 预处理markdown内容
 private fun preProcess(content: String): String {
@@ -130,7 +135,10 @@ private fun preProcess(content: String): String {
         if (isInCodeBlock(matchResult.range.first)) {
             matchResult.value // 保持原样
         } else {
-            "$$" + matchResult.groupValues[1] + "$$"
+            val formula = matchResult.groupValues[1]
+                .trim()
+                .replace(LATEX_BLOCK_LINE_BREAK_REGEX, " ")
+            "$$" + formula + "$$"
         }
     }
 
@@ -141,16 +149,18 @@ private fun preProcess(content: String): String {
 @Composable
 private fun MarkdownPreview() {
     MaterialTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            MarkdownBlock(
-                content = "Hi there!", modifier = Modifier.background(Color.Red)
-            )
-            MarkdownBlock(
-                content = """
+        CompositionLocalProvider(LocalSettings provides Settings()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                MarkdownBlock(
+                    content = "Hi there!", modifier = Modifier.background(Color.Red)
+                )
+                MarkdownBlock(
+                    content = """
                     ### 🌍 This is Markdown Test This Markdown Test
                     1. How many roads must a man walk down
                         * the slings and arrows of outrageous fortune, Or to take arms against a sea of troubles,
@@ -177,9 +187,9 @@ private fun MarkdownPreview() {
 
                     ## HTML Escaping
                     This is a &gt;  test
-
                 """.trimIndent()
-            )
+                )
+            }
         }
     }
 }
