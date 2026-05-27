@@ -1,15 +1,5 @@
 package me.rerere.rikkahub.ui.pages.setting
 
-import me.rerere.ai.core.ReasoningLevel
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Earth
-import me.rerere.hugeicons.stroke.View
-import me.rerere.hugeicons.stroke.FileZip
-import me.rerere.hugeicons.stroke.Mortarboard01
-import me.rerere.hugeicons.stroke.Message01
-import me.rerere.hugeicons.stroke.MessageMultiple01
-import me.rerere.hugeicons.stroke.Notebook01
-import me.rerere.hugeicons.stroke.Tools
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,47 +12,45 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ModelType
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.AiBrain01
+import me.rerere.hugeicons.stroke.AiEditing
+import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.FileZip
+import me.rerere.hugeicons.stroke.Message01
+import me.rerere.hugeicons.stroke.MessageMultiple01
+import me.rerere.hugeicons.stroke.Notebook01
+import me.rerere.hugeicons.stroke.View
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
-import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -71,584 +59,159 @@ import org.koin.androidx.compose.koinViewModel
 fun SettingModelPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val pagerState = rememberPagerState { 2 }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = {
-                    Text(stringResource(R.string.setting_model_page_title))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
+                title = { Text(stringResource(R.string.setting_model_page_title)) },
+                navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
         },
+        bottomBar = {
+            BottomAppBar {
+                NavigationBarItem(
+                    selected = pagerState.currentPage == 0,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    icon = { Icon(HugeIcons.AiBrain01, null) },
+                    label = { Text(stringResource(R.string.setting_model_page_tab_model)) }
+                )
+                NavigationBarItem(
+                    selected = pagerState.currentPage == 1,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                    icon = { Icon(HugeIcons.AiEditing, null) },
+                    label = { Text(stringResource(R.string.setting_model_page_tab_prompt)) }
+                )
+            }
+        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { contentPadding ->
-        LazyColumn(
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = contentPadding + PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                DefaultChatModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultTitleModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultSuggestionModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultTranslationModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultOcrModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultCompressModelSetting(settings = settings, vm = vm)
+        ) { page ->
+            when (page) {
+                0 -> ModelSettingsPage(settings = settings, vm = vm, contentPadding = contentPadding)
+                1 -> PromptSettingsPage(settings = settings, vm = vm, contentPadding = contentPadding)
             }
         }
     }
 }
 
 @Composable
-private fun DefaultTranslationModelSetting(
-    settings: Settings,
-    vm: SettingVM
-) {
-    var showModal by remember { mutableStateOf(false) }
-    ModelFeatureCard(
-        title = {
-            Text(
-                stringResource(R.string.setting_model_page_translate_model),
-                maxLines = 1
+private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding: PaddingValues) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding + PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            ModelFeatureCard(
+                icon = { Icon(HugeIcons.Message01, null) },
+                title = { Text(stringResource(R.string.setting_model_page_chat_model), maxLines = 1) },
+                description = { Text(stringResource(R.string.setting_model_page_chat_model_desc)) },
+                actions = {
+                    ModelSelector(
+                        modelId = settings.chatModelId,
+                        type = ModelType.CHAT,
+                        onSelect = { vm.updateSettings(settings.copy(chatModelId = it.id)) },
+                        providers = settings.providers,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             )
-        },
-        description = {
-            Text(stringResource(R.string.setting_model_page_translate_model_desc))
-        },
-        icon = {
-            Icon(HugeIcons.Earth, null)
-        },
-        actions = {
-            Box(modifier = Modifier.weight(1f)) {
-                ModelSelector(
-                    modelId = settings.translateModeId,
-                    type = ModelType.CHAT,
-                    onSelect = {
-                        vm.updateSettings(
-                            settings.copy(
-                                translateModeId = it.id
-                            )
-                        )
-                    },
-                    providers = settings.providers,
-                    modifier = Modifier.wrapContentWidth()
-                )
-            }
-            IconButton(
-                onClick = {
-                    showModal = true
-                },
-                colors = IconButtonDefaults.filledTonalIconButtonColors()
-            ) {
-                Icon(HugeIcons.Tools, null)
-            }
         }
-    )
-
-    if (showModal) {
-        ModalBottomSheet(
-            onDismissRequest = {
-                showModal = false
-            },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.assistant_page_thinking_budget))
-                    },
-                ) {
-                    ReasoningButton(
-                        reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
-                        onUpdateReasoningLevel = {
-                            vm.updateSettings(settings.copy(translateThinkingBudget = it.budgetTokens))
-                        }
+        item {
+            ModelFeatureCard(
+                icon = { Icon(HugeIcons.Notebook01, null) },
+                title = { Text(stringResource(R.string.setting_model_page_title_model), maxLines = 1) },
+                description = { Text(stringResource(R.string.setting_model_page_title_model_desc)) },
+                actions = {
+                    ModelSelector(
+                        modelId = settings.titleModelId,
+                        type = ModelType.CHAT,
+                        onSelect = { vm.updateSettings(settings.copy(titleModelId = it.id)) },
+                        providers = settings.providers,
+                        allowClear = true,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_prompt))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_translate_prompt_vars))
-                    }
-                ) {
-                    OutlinedTextField(
-                        value = settings.translatePrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    translatePrompt = it
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 10,
-                    )
-                    TextButton(
-                        onClick = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    translatePrompt = DEFAULT_TRANSLATION_PROMPT
-                                )
-                            )
-                        }
-                    ) {
-                        Text(stringResource(R.string.setting_model_page_reset_to_default))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DefaultSuggestionModelSetting(
-    settings: Settings,
-    vm: SettingVM
-) {
-    var showModal by remember { mutableStateOf(false) }
-    ModelFeatureCard(
-        title = {
-            Text(
-                text = stringResource(R.string.setting_model_page_suggestion_model),
-                maxLines = 1
             )
-        },
-        description = {
-            Text(stringResource(R.string.setting_model_page_suggestion_model_desc))
-        },
-        icon = {
-            Icon(HugeIcons.MessageMultiple01, null)
-        },
-        actions = {
-            Box(modifier = Modifier.weight(1f)) {
-                ModelSelector(
-                    modelId = settings.suggestionModelId,
-                    type = ModelType.CHAT,
-                    onSelect = {
-                        vm.updateSettings(
-                            settings.copy(
-                                suggestionModelId = it.id
-                            )
-                        )
-                    },
-                    providers = settings.providers,
-                    allowClear = true,
-                    modifier = Modifier.wrapContentWidth()
-                )
-            }
-            IconButton(
-                onClick = {
-                    showModal = true
-                },
-                colors = IconButtonDefaults.filledTonalIconButtonColors()
-            ) {
-                Icon(HugeIcons.Tools, null)
-            }
         }
-    )
-
-    if (showModal) {
-        ModalBottomSheet(
-            onDismissRequest = {
-                showModal = false
-            },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_prompt))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_suggestion_prompt_vars))
-                    }
-                ) {
-                    OutlinedTextField(
-                        value = settings.suggestionPrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    suggestionPrompt = it
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 8
+        item {
+            ModelFeatureCard(
+                icon = { Icon(HugeIcons.MessageMultiple01, null) },
+                title = { Text(stringResource(R.string.setting_model_page_suggestion_model), maxLines = 1) },
+                description = { Text(stringResource(R.string.setting_model_page_suggestion_model_desc)) },
+                actions = {
+                    ModelSelector(
+                        modelId = settings.suggestionModelId,
+                        type = ModelType.CHAT,
+                        onSelect = { vm.updateSettings(settings.copy(suggestionModelId = it.id)) },
+                        providers = settings.providers,
+                        allowClear = true,
+                        modifier = Modifier.weight(1f)
                     )
-                    TextButton(
-                        onClick = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    suggestionPrompt = DEFAULT_SUGGESTION_PROMPT
-                                )
-                            )
-                        }
-                    ) {
-                        Text(stringResource(R.string.setting_model_page_reset_to_default))
-                    }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DefaultTitleModelSetting(
-    settings: Settings,
-    vm: SettingVM
-) {
-    var showModal by remember { mutableStateOf(false) }
-    ModelFeatureCard(
-        title = {
-            Text(stringResource(R.string.setting_model_page_title_model), maxLines = 1)
-        },
-        description = {
-            Text(stringResource(R.string.setting_model_page_title_model_desc))
-        },
-        icon = {
-            Icon(HugeIcons.Notebook01, null)
-        },
-        actions = {
-            Box(modifier = Modifier.weight(1f)) {
-                ModelSelector(
-                    modelId = settings.titleModelId,
-                    type = ModelType.CHAT,
-                    onSelect = {
-                        vm.updateSettings(
-                            settings.copy(
-                                titleModelId = it.id
-                            )
-                        )
-                    },
-                    providers = settings.providers,
-                    allowClear = true,
-                    modifier = Modifier.wrapContentWidth()
-                )
-            }
-            IconButton(
-                onClick = {
-                    showModal = true
-                },
-                colors = IconButtonDefaults.filledTonalIconButtonColors()
-            ) {
-                Icon(HugeIcons.Tools, null)
-            }
-        }
-    )
-
-    if (showModal) {
-        ModalBottomSheet(
-            onDismissRequest = {
-                showModal = false
-            },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_prompt))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_suggestion_prompt_vars))
-                    }
-                ) {
-                    OutlinedTextField(
-                        value = settings.titlePrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    titlePrompt = it
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 8
-                    )
-                    TextButton(
-                        onClick = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    titlePrompt = DEFAULT_TITLE_PROMPT
-                                )
-                            )
-                        }
-                    ) {
-                        Text(stringResource(R.string.setting_model_page_reset_to_default))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DefaultChatModelSetting(
-    settings: Settings,
-    vm: SettingVM
-) {
-    ModelFeatureCard(
-        icon = {
-            Icon(HugeIcons.Message01, null)
-        },
-        title = {
-            Text(stringResource(R.string.setting_model_page_chat_model), maxLines = 1)
-        },
-        description = {
-            Text(stringResource(R.string.setting_model_page_chat_model_desc))
-        },
-        actions = {
-            Box(modifier = Modifier.weight(1f)) {
-                ModelSelector(
-                    modelId = settings.chatModelId,
-                    type = ModelType.CHAT,
-                    onSelect = {
-                        vm.updateSettings(
-                            settings.copy(
-                                chatModelId = it.id
-                            )
-                        )
-                    },
-                    providers = settings.providers,
-                    modifier = Modifier.wrapContentWidth()
-                )
-            }
-        }
-    )
-}
-
-@Composable
-private fun DefaultOcrModelSetting(
-    settings: Settings,
-    vm: SettingVM
-) {
-    var showModal by remember { mutableStateOf(false) }
-    ModelFeatureCard(
-        title = {
-            Text(
-                stringResource(R.string.setting_model_page_ocr_model),
-                maxLines = 1
             )
-        },
-        description = {
-            Text(stringResource(R.string.setting_model_page_ocr_model_desc))
-        },
-        icon = {
-            Icon(HugeIcons.View, null)
-        },
-        actions = {
-            Box(modifier = Modifier.weight(1f)) {
-                ModelSelector(
-                    modelId = settings.ocrModelId,
-                    type = ModelType.CHAT,
-                    onSelect = {
-                        vm.updateSettings(
-                            settings.copy(
-                                ocrModelId = it.id
-                            )
-                        )
-                    },
-                    providers = settings.providers,
-                    modifier = Modifier.wrapContentWidth()
-                )
-            }
-            IconButton(
-                onClick = {
-                    showModal = true
-                },
-                colors = IconButtonDefaults.filledTonalIconButtonColors()
-            ) {
-                Icon(HugeIcons.Tools, null)
-            }
         }
-    )
-
-    if (showModal) {
-        ModalBottomSheet(
-            onDismissRequest = {
-                showModal = false
-            },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_prompt))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_ocr_prompt_vars))
-                    }
-                ) {
-                    OutlinedTextField(
-                        value = settings.ocrPrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    ocrPrompt = it
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 10,
+        item {
+            ModelFeatureCard(
+                icon = { Icon(HugeIcons.Earth, null) },
+                title = { Text(stringResource(R.string.setting_model_page_translate_model), maxLines = 1) },
+                description = { Text(stringResource(R.string.setting_model_page_translate_model_desc)) },
+                actions = {
+                    ModelSelector(
+                        modelId = settings.translateModeId,
+                        type = ModelType.CHAT,
+                        onSelect = { vm.updateSettings(settings.copy(translateModeId = it.id)) },
+                        providers = settings.providers,
+                        modifier = Modifier.weight(1f)
                     )
-                    TextButton(
-                        onClick = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    ocrPrompt = DEFAULT_OCR_PROMPT
-                                )
-                            )
-                        }
-                    ) {
-                        Text(stringResource(R.string.setting_model_page_reset_to_default))
-                    }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DefaultCompressModelSetting(
-    settings: Settings,
-    vm: SettingVM
-) {
-    var showModal by remember { mutableStateOf(false) }
-    ModelFeatureCard(
-        title = {
-            Text(
-                stringResource(R.string.setting_model_page_compress_model),
-                maxLines = 1
             )
-        },
-        description = {
-            Text(stringResource(R.string.setting_model_page_compress_model_desc))
-        },
-        icon = {
-            Icon(HugeIcons.FileZip, null)
-        },
-        actions = {
-            Box(modifier = Modifier.weight(1f)) {
-                ModelSelector(
-                    modelId = settings.compressModelId,
-                    type = ModelType.CHAT,
-                    onSelect = {
-                        vm.updateSettings(
-                            settings.copy(
-                                compressModelId = it.id
-                            )
-                        )
-                    },
-                    providers = settings.providers,
-                    modifier = Modifier.wrapContentWidth()
-                )
-            }
-            IconButton(
-                onClick = {
-                    showModal = true
-                },
-                colors = IconButtonDefaults.filledTonalIconButtonColors()
-            ) {
-                Icon(HugeIcons.Tools, null)
-            }
         }
-    )
-
-    if (showModal) {
-        ModalBottomSheet(
-            onDismissRequest = {
-                showModal = false
-            },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_prompt))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_compress_prompt_vars))
-                    }
-                ) {
-                    OutlinedTextField(
-                        value = settings.compressPrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    compressPrompt = it
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 10,
+        item {
+            ModelFeatureCard(
+                icon = { Icon(HugeIcons.View, null) },
+                title = { Text(stringResource(R.string.setting_model_page_ocr_model), maxLines = 1) },
+                description = { Text(stringResource(R.string.setting_model_page_ocr_model_desc)) },
+                actions = {
+                    ModelSelector(
+                        modelId = settings.ocrModelId,
+                        type = ModelType.CHAT,
+                        onSelect = { vm.updateSettings(settings.copy(ocrModelId = it.id)) },
+                        providers = settings.providers,
+                        modifier = Modifier.weight(1f)
                     )
-                    TextButton(
-                        onClick = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    compressPrompt = DEFAULT_COMPRESS_PROMPT
-                                )
-                            )
-                        }
-                    ) {
-                        Text(stringResource(R.string.setting_model_page_reset_to_default))
-                    }
                 }
-            }
+            )
+        }
+        item {
+            ModelFeatureCard(
+                icon = { Icon(HugeIcons.FileZip, null) },
+                title = { Text(stringResource(R.string.setting_model_page_compress_model), maxLines = 1) },
+                description = { Text(stringResource(R.string.setting_model_page_compress_model_desc)) },
+                actions = {
+                    ModelSelector(
+                        modelId = settings.compressModelId,
+                        type = ModelType.CHAT,
+                        onSelect = { vm.updateSettings(settings.copy(compressModelId = it.id)) },
+                        providers = settings.providers,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun ModelFeatureCard(
+internal fun ModelFeatureCard(
     modifier: Modifier = Modifier,
     description: @Composable () -> Unit = {},
     icon: @Composable () -> Unit,
@@ -684,8 +247,7 @@ private fun ModelFeatureCard(
                     }
                 }
                 Box(
-                    modifier = Modifier
-                        .size(40.dp),
+                    modifier = Modifier.size(40.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     icon()

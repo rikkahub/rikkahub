@@ -1095,5 +1095,12 @@
   <string name="setting_theme_page_delete_theme_message">Are you sure you want to delete this theme?</string>
   <string name="skills_page_import_from_file">Import from File</string>
   <string name="skills_page_add_manually">Add manually</string>
+  <string name="setting_model_page_tab_model">Model</string>
+  <string name="setting_model_page_tab_prompt">Prompts</string>
+  <string name="setting_model_page_prompt_translation">Translation</string>
+  <string name="setting_model_page_prompt_title">Title Generation</string>
+  <string name="setting_model_page_prompt_suggestion">Chat Reply Suggestions</string>
+  <string name="setting_model_page_prompt_ocr">OCR Recognition</string>
+  <string name="setting_model_page_prompt_compress">Context Compression</string>
 </resources>
 

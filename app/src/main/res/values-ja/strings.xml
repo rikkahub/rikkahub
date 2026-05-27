@@ -1097,5 +1097,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_preferences_ui_desc">メッセージ表示、フォント、コードブロック</string>
   <string name="skills_page_import_from_file">ファイルからインポート</string>
   <string name="skills_page_add_manually">手動追加</string>
+  <string name="setting_model_page_tab_model">モデル</string>
+  <string name="setting_model_page_tab_prompt">プロンプト</string>
+  <string name="setting_model_page_prompt_translation">翻訳</string>
+  <string name="setting_model_page_prompt_title">タイトル生成</string>
+  <string name="setting_model_page_prompt_suggestion">チャット返信の提案</string>
+  <string name="setting_model_page_prompt_ocr">OCR認識</string>
+  <string name="setting_model_page_prompt_compress">コンテキスト圧縮</string>
 </resources>
 

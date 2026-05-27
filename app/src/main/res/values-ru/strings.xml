@@ -1097,5 +1097,12 @@
   <string name="setting_page_preferences_ui_desc">Отображение сообщений, шрифты, блоки кода</string>
   <string name="skills_page_import_from_file">Импортировать из файла</string>
   <string name="skills_page_add_manually">Добавить вручную</string>
+  <string name="setting_model_page_tab_model">Модель</string>
+  <string name="setting_model_page_tab_prompt">Промпты</string>
+  <string name="setting_model_page_prompt_translation">Перевод</string>
+  <string name="setting_model_page_prompt_title">Генерация заголовка</string>
+  <string name="setting_model_page_prompt_suggestion">Подсказки ответов в чате</string>
+  <string name="setting_model_page_prompt_ocr">OCR распознавание</string>
+  <string name="setting_model_page_prompt_compress">Сжатие контекста</string>
 </resources>
 
