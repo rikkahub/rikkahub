@@ -1104,5 +1104,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_prompt_suggestion">チャット返信の提案</string>
   <string name="setting_model_page_prompt_ocr">OCR認識</string>
   <string name="setting_model_page_prompt_compress">コンテキスト圧縮</string>
+  <string name="setting_display_page_bubble_opacity_title">吹き出しの不透明度</string>
 </resources>
 

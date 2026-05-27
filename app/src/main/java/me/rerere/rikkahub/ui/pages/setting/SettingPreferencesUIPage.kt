@@ -152,6 +152,27 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_bubble_opacity_title)) },
+                        supportingContent = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Slider(
+                                    value = displaySetting.bubbleOpacity,
+                                    onValueChange = {
+                                        updateDisplaySetting(displaySetting.copy(bubbleOpacity = it))
+                                    },
+                                    valueRange = 0.1f..1.0f,
+                                    steps = 8,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(text = "${(displaySetting.bubbleOpacity * 100).toInt()}%")
+                            }
+                        }
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_chat_list_model_icon_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_chat_list_model_icon_desc)) },
                         trailingContent = {
