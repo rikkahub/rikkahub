@@ -361,7 +361,7 @@ private fun MarkdownNode(
             UnorderedListNode(
                 node = node,
                 content = content,
-                modifier = modifier.padding(vertical = 4.dp),
+                modifier = modifier,
                 onClickCitation = onClickCitation,
                 level = listLevel
             )
@@ -371,7 +371,7 @@ private fun MarkdownNode(
             OrderedListNode(
                 node = node,
                 content = content,
-                modifier = modifier.padding(vertical = 4.dp),
+                modifier = modifier,
                 onClickCitation = onClickCitation,
                 level = listLevel
             )
