@@ -51,8 +51,8 @@ dependencies {
 
     // floating
     // https://github.com/Petterpx/FloatingX
-    api("io.github.petterpx:floatingx:2.3.7")
-    api("io.github.petterpx:floatingx-compose:2.3.7")
+    api(libs.floatingx)
+    api(libs.floatingx.compose)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

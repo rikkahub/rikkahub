@@ -12,13 +12,13 @@ espressoCore = "3.7.0"
 commons-text = "1.15.0"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.13.0"
-composeBom = "2026.05.00"
-material3 = "1.5.0-alpha19"
-media3 = "1.10.0"
+composeBom = "2026.05.01"
+material3 = "1.5.0-alpha20"
+media3 = "1.10.1"
 metadataExtractor = "2.20.0"
 nav2 = "2.9.8"
-nav3Core = "1.1.1"
-material3AdaptiveNav3 = "1.3.0-beta01"
+nav3Core = "1.1.2"
+material3AdaptiveNav3 = "1.3.0-beta02"
 lifecycleViewmodelNav3 = "2.10.0"
 nav3Material = "1.0.0-SNAPSHOT"
 markdown = "66a56dffca"
@@ -53,6 +53,7 @@ browser = "1.10.0"
 appcompat = "1.7.1"
 material = "1.14.0"
 ucrop = "2.2.11-native"
+floatingx = "2.3.7"
 haze = "2.0.0-alpha02"
 uiautomator = "2.3.0"
 benchmarkMacroJunit4 = "1.4.1"
@@ -145,6 +146,8 @@ androidx-browser = { group = "androidx.browser", name = "browser", version.ref =
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
+floatingx = { group = "io.github.petterpx", name = "floatingx", version.ref = "floatingx" }
+floatingx-compose = { group = "io.github.petterpx", name = "floatingx-compose", version.ref = "floatingx" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 haze-blur-materials = { module = "dev.chrisbanes.haze:haze-blur-materials", version.ref = "haze" }
