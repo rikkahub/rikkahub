@@ -332,6 +332,15 @@ private fun McpServerItem(
                             }
                         }
                     }
+                    if (status is McpStatus.Error) {
+                        Text(
+                            text = (status as McpStatus.Error).message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
                 IconButton(
