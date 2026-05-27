@@ -120,7 +120,7 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
 
             val response = httpClient.newCall(request).await()
             if (!response.isSuccessful) {
-                error("response failed #${'$'}{response.code}")
+                error("response failed #${response.code}")
             }
 
             val bodyString = response.body.string()
