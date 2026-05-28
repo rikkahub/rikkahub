@@ -3,22 +3,17 @@ package me.rerere.search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
-import com.whl.quickjs.wrapper.JSCallFunction
 import com.whl.quickjs.wrapper.QuickJSContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
+import me.rerere.common.js.injectFetch
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 
 object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOptions> {
     override val name: String = "Custom JS"
@@ -91,7 +86,7 @@ object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOption
     private fun executeScript(userScript: String, invocation: String): String {
         val context = QuickJSContext.create()
         try {
-            injectApis(context)
+            context.injectFetch(httpClient)
             context.evaluate(userScript)
 
             val result = context.evaluate("JSON.stringify($invocation)")
@@ -99,64 +94,6 @@ object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOption
         } finally {
             context.destroy()
         }
-    }
-
-    private fun injectApis(context: QuickJSContext) {
-        context.globalObject.setProperty("__httpRequest", JSCallFunction { args ->
-            val url = args[0] as? String ?: error("url is required")
-            val method = (args[1] as? String ?: "GET").uppercase()
-            val headersJson = args[2] as? String
-            val body = args[3] as? String
-
-            val requestBuilder = Request.Builder().url(url)
-
-            val parsedHeaders = if (!headersJson.isNullOrBlank() && headersJson != "null") {
-                json.parseToJsonElement(headersJson).jsonObject
-            } else null
-
-            parsedHeaders?.entries?.forEach { (key, value) ->
-                requestBuilder.addHeader(key, value.jsonPrimitive.content)
-            }
-
-            val contentType = try {
-                parsedHeaders?.get("Content-Type")?.jsonPrimitive?.content
-            } catch (_: Exception) {
-                null
-            }
-
-            val mediaType = (contentType ?: "application/json").toMediaType()
-            when (method) {
-                "GET" -> requestBuilder.get()
-                "HEAD" -> requestBuilder.head()
-                else -> {
-                    val reqBody = body?.toRequestBody(mediaType)
-                        ?: if (method in setOf("POST", "PUT", "PATCH")) {
-                            "".toRequestBody(mediaType)
-                        } else {
-                            null
-                        }
-                    requestBuilder.method(method, reqBody)
-                }
-            }
-
-            val response = httpClient.newCall(requestBuilder.build()).execute()
-            val responseBody = response.body.string()
-            val code = response.code
-            val message = response.message
-            response.close()
-
-            json.encodeToString(
-                HttpResponseDto.serializer(),
-                HttpResponseDto(
-                    status = code,
-                    ok = code in 200..299,
-                    statusText = message,
-                    body = responseBody,
-                )
-            )
-        })
-
-        context.evaluate(FETCH_POLYFILL)
     }
 
     private fun quoteJsString(s: String): String {
@@ -175,39 +112,4 @@ object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOption
         return sb.toString()
     }
 
-    @Serializable
-    private data class HttpResponseDto(
-        val status: Int,
-        val ok: Boolean,
-        val statusText: String,
-        val body: String,
-    )
-
-    // fetch() returns a Response object synchronously (not a Promise)
-    // because this QuickJS wrapper doesn't support microtask scheduling.
-    private const val FETCH_POLYFILL = """
-globalThis.fetch = function(url, options) {
-    options = options || {};
-    var method = (options.method || 'GET').toUpperCase();
-    var headers = options.headers ? JSON.stringify(options.headers) : null;
-    var body = options.body;
-    if (typeof body === 'object' && body !== null) {
-        body = JSON.stringify(body);
-    } else if (typeof body !== 'string') {
-        body = null;
-    }
-
-    var raw = __httpRequest(url, method, headers, body);
-    var data = JSON.parse(raw);
-    return {
-        status: data.status,
-        ok: data.ok,
-        statusText: data.statusText,
-        url: url,
-        _body: data.body,
-        text: function() { return this._body; },
-        json: function() { return JSON.parse(this._body); }
-    };
-};
-"""
 }
