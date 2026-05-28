@@ -293,7 +293,9 @@ private fun MiMoTTSConfiguration(
                 onValueChange(setting.copy(baseUrl = newBaseUrl))
             },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text://.xiaomim.com")           }
+            placeholder = { Text("https://api.xiaomimimo.com/v1") }
+        )
+    }
 
     // Model
     FormItem(
@@ -449,7 +451,7 @@ private fun MiniMaxTTSConfiguration(
                     .fillMaxWidth()
                     .menuAnchor(MenuAnchorType.PrimaryEditable),
                 trailingIcon = {
-                    ExposedDropdownMenurailingIcon(expanded = emotionExpanded)
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = emotionExpanded)
                 },
                 placeholder = { Text("Auto") }
             )
