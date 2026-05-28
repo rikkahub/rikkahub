@@ -1,7 +1,7 @@
 ---
 name: Bug Report
 about: 报告APP Bug或者崩溃
-title: ''
+title: 'bug: 输入标题'
 labels: ''
 assignees: ''
 

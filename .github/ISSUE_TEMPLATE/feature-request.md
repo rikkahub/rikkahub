@@ -1,8 +1,8 @@
 ---
 name: Feature Request
 about: 请求一个新功能
-title: ''
-labels: ''
+title: 'feat: 输入标题'
+labels: enhancement
 assignees: ''
 
 ---
