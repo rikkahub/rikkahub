@@ -1105,5 +1105,6 @@
   <string name="setting_model_page_prompt_ocr">OCR распознавание</string>
   <string name="setting_model_page_prompt_compress">Сжатие контекста</string>
   <string name="setting_display_page_bubble_opacity_title">Прозрачность пузырьков</string>
+  <string name="setting_provider_page_include_history_reasoning">Отправлять историю рассуждений</string>
 </resources>
 

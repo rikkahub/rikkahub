@@ -1103,5 +1103,6 @@
   <string name="setting_model_page_prompt_ocr">OCR 辨識</string>
   <string name="setting_model_page_prompt_compress">上下文壓縮</string>
   <string name="setting_display_page_bubble_opacity_title">氣泡透明度</string>
+  <string name="setting_provider_page_include_history_reasoning">回傳歷史思考過程</string>
 </resources>
 
