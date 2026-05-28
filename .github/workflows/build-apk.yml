@@ -25,7 +25,7 @@ jobs:
       - name: Install SDK platform & build-tools
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platforms;android-37" "build-tools;37.0.0" "ndk;27.0.12077973"
+          sdkmanager --channel=3 "platforms;android-37" "build-tools;37.0.0" "ndk;27.0.12077973"
 
       - name: Create dummy google-services.json
         run: |
