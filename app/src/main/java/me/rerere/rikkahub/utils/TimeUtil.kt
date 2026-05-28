@@ -49,11 +49,10 @@ fun LocalDateTime.toLocalString(): String {
  */
 fun LocalDateTime.toMessageTimeString(): String {
     val locale = Locale.getDefault()
-    val time = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(this)
     return if (this.toLocalDate() == LocalDate.now()) {
-        time
+        DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(this)
     } else {
-        "${this.toLocalDate().toLocalString(includeYear = false)} $time"
+        this.toLocalString()
     }
 }
 
