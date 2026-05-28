@@ -293,9 +293,7 @@ private fun MiMoTTSConfiguration(
                 onValueChange(setting.copy(baseUrl = newBaseUrl))
             },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.xiaomimimo.com/v1") }
-        )
-    }
+            placeholder = { Text://.xiaomim.com")           }
 
     // Model
     FormItem(
@@ -432,7 +430,7 @@ private fun MiniMaxTTSConfiguration(
 
     // Emotion
     var emotionExpanded by remember { mutableStateOf(false) }
-    val emotions = listOf("calm", "happy", "sad", "angry", "fearful", "disgusted", "surprised")
+    val emotions = listOf("", "calm", "happy", "sad", "angry", "fearful", "disgusted", "surprised")
 
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_emotion)) },
@@ -443,7 +441,7 @@ private fun MiniMaxTTSConfiguration(
             onExpandedChange = { emotionExpanded = !emotionExpanded }
         ) {
             OutlinedTextField(
-                value = setting.emotion,
+                value = setting.emotion.ifEmpty { "Auto" },
                 onValueChange = { newEmotion ->
                     onValueChange(setting.copy(emotion = newEmotion))
                 },
@@ -451,8 +449,9 @@ private fun MiniMaxTTSConfiguration(
                     .fillMaxWidth()
                     .menuAnchor(MenuAnchorType.PrimaryEditable),
                 trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = emotionExpanded)
-                }
+                    ExposedDropdownMenurailingIcon(expanded = emotionExpanded)
+                },
+                placeholder = { Text("Auto") }
             )
             ExposedDropdownMenu(
                 expanded = emotionExpanded,
@@ -460,7 +459,7 @@ private fun MiniMaxTTSConfiguration(
             ) {
                 emotions.forEach { emotion ->
                     DropdownMenuItem(
-                        text = { Text(emotion) },
+                        text = { Text(emotion.ifEmpty { "Auto" }) },
                         onClick = {
                             emotionExpanded = false
                             onValueChange(setting.copy(emotion = emotion))
