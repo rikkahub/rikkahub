@@ -5,9 +5,12 @@ plugins {
 val webUiDir = rootProject.layout.projectDirectory.dir("web-ui")
 val webStaticResourcesDir = layout.projectDirectory.dir("src/main/resources/static")
 
+val isCI = System.getenv("CI") == "true"
+
 val buildWebUi = tasks.register<Exec>("buildWebUi") {
     group = "build"
     description = "Build web-ui and copy its static output into the web module resources."
+    enabled = !isCI
 
     workingDir = webUiDir.asFile
     val hasZsh = runCatching {
