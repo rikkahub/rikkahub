@@ -25,8 +25,8 @@ sealed class TTSProviderSetting {
         val voice: String = "alloy"
     ) : TTSProviderSetting() {
         override fun copyProvider(
-            id: U,
- name: String,
+            id: Uuid,
+            name: String,
         ): TTSProviderSetting {
             return this.copy(
                 id = id,
@@ -42,7 +42,9 @@ sealed class TTSProviderSetting {
         override var name: String = "Gemini TTS",
         val apiKey: String = "",
         val baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
-        val model: String = "gemini-2.5-flash-preview-s        voice: String "ore    :TS() {
+        val model: String = "gemini-2.5-flash-preview-tts",
+        val voiceName: String = "Kore"
+    ) : TTSProviderSetting() {
         override fun copyProvider(
             id: Uuid,
             name: String,
