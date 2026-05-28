@@ -44,12 +44,21 @@ jobs:
                   resolutionStrategy {
                       eachDependency {
                           when {
-                              // adaptive-navigation3:1.0.0-SNAPSHOT → 1.0.0 (google() has no snapshots)
+                              // adaptive-navigation3:1.0.0-SNAPSHOT → 1.0.0-alpha03
+                              // google() does not serve SNAPSHOTs, and 1.0.0 stable was never released
                               requested.group == "androidx.compose.material3.adaptive"
                                   && requested.name == "adaptive-navigation3"
                                   && requested.version?.endsWith("-SNAPSHOT") == true -> {
-                                  useVersion("1.0.0")
-                                  logger.lifecycle("CI: substituted ${requested.displayName} → 1.0.0")
+                                  useVersion("1.0.0-alpha03")
+                                  logger.lifecycle("CI: substituted ${requested.displayName} → 1.0.0-alpha03")
+                              }
+                              // sqlite-android:-SNAPSHOT → pinned JitPack commit 80cedc8
+                              // JitPack cannot guarantee SNAPSHOT build availability or speed on CI
+                              requested.group == "com.github.rikkahub"
+                                  && requested.name == "sqlite-android"
+                                  && requested.version?.endsWith("-SNAPSHOT") == true -> {
+                                  useVersion("80cedc8")
+                                  logger.lifecycle("CI: substituted ${requested.displayName} → 80cedc8")
                               }
                           }
                       }
