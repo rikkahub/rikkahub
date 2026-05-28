@@ -17,15 +17,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: 'latest'
-
-      - name: Install SDK platform & build-tools
+      - name: Fix SDK platform path (android-37.0 → android-37)
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --channel=3 "platforms;android-37" "build-tools;37.0.0" "ndk;27.0.12077973"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
       - name: Create dummy google-services.json
         run: |
