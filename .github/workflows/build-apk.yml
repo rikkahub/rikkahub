@@ -92,7 +92,10 @@ jobs:
             gradle-${{ runner.os }}-
 
       - name: Build baseline APK
-        run: ./gradlew assembleBaseline --no-daemon --stacktrace
+        run: |
+          # Increase Gradle HTTP timeouts to handle slow JitPack responses
+          export GRADLE_OPTS="-Dorg.gradle.internal.http.socketTimeout=120000 -Dorg.gradle.internal.http.connectionTimeout=120000"
+          ./gradlew assembleBaseline --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
