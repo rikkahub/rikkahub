@@ -1,0 +1,35 @@
+name: Feature Request
+description: 请求一个新功能
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **注意 | Note**
+        > 如果您想请求新功能，请先在聊天群与我讨论，否则您的功能请求可能会被直接关闭。
+        > If you want to request a new feature, please discuss it with me in the chat group first, otherwise your feature request may be closed directly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 功能描述 | Feature Description
+      description: 请详细描述你希望添加的新功能。 / Describe the new feature you are requesting.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景 | Usage Scenario
+      description: 描述该功能在什么场景下使用，对你有什么帮助。 / Describe the scenario in which this feature would be used and how it would help you.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 可替代方案 | Alternatives Considered
+      description: 是否有其他方案可以替代这个需求？如果有，请说明。 / Are there any alternative solutions or workarounds you've considered?
+    validations:
+      required: false
