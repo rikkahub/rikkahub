@@ -48,6 +48,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -108,6 +109,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalASRState
@@ -120,10 +122,6 @@ import org.koin.compose.koinInject
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
-
-enum class ExpandState {
-    Collapsed, Files,
-}
 
 @Composable
 fun ChatInput(
@@ -149,7 +147,6 @@ fun ChatInput(
     val assistant = settings.getCurrentAssistant()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
-    val filesHazeStyle = HazeMaterials.thin()
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -166,21 +163,13 @@ fun ChatInput(
         if (loading) onCancelClick() else onLongSendClick()
     }
 
-    var expand by remember { mutableStateOf(ExpandState.Collapsed) }
+    var showFilesSheet by remember { mutableStateOf(false) }
     var showInjectionSheet by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
     fun dismissExpand() {
-        expand = ExpandState.Collapsed
+        showFilesSheet = false
         showInjectionSheet = false
         showCompressDialog = false
-    }
-
-    fun expandToggle(type: ExpandState) {
-        if (expand == type) {
-            dismissExpand()
-        } else {
-            expand = type
-        }
     }
 
     val context = LocalContext.current
@@ -194,6 +183,8 @@ fun ChatInput(
     }
     val asrPermission = rememberPermissionState(PermissionRecordAudio)
     PermissionManager(permissionState = asrPermission)
+    val cameraPermission = rememberPermissionState(PermissionCamera)
+    PermissionManager(permissionState = cameraPermission)
     var asrBaseText by remember { mutableStateOf("") }
     LaunchedEffect(asrState.status) {
         when (asrState.status) {
@@ -248,11 +239,15 @@ fun ChatInput(
         }
     }
     val onLaunchCamera: () -> Unit = {
-        cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
-        cameraOutputUri = FileProvider.getUriForFile(
-            context, "${context.packageName}.fileprovider", cameraOutputFile!!
-        )
-        cameraLauncher.launch(cameraOutputUri!!)
+        if (cameraPermission.allRequiredPermissionsGranted) {
+            cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
+            cameraOutputUri = FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", cameraOutputFile!!
+            )
+            cameraLauncher.launch(cameraOutputUri!!)
+        } else {
+            cameraPermission.requestPermissions()
+        }
     }
 
     // Image picker launcher
@@ -339,14 +334,6 @@ fun ChatInput(
                 }
             }
         }
-
-    // Collapse when ime is visible
-    val imeVisile = WindowInsets.isImeVisible
-    LaunchedEffect(imeVisile, showInjectionSheet, showCompressDialog) {
-        if (imeVisile && !showInjectionSheet && !showCompressDialog) {
-            dismissExpand()
-        }
-    }
 
     Surface(
         color = if (assistant.background != null) Color.Transparent else MaterialTheme.colorScheme.background,
@@ -455,10 +442,10 @@ fun ChatInput(
 
                         ActionIconButton(
                             onClick = {
-                                expandToggle(ExpandState.Files)
+                                showFilesSheet = true
                             }) {
                             Icon(
-                                imageVector = if (expand == ExpandState.Files) HugeIcons.Cancel01 else HugeIcons.Add01,
+                                imageVector = HugeIcons.Add01,
                                 contentDescription = stringResource(R.string.more_options)
                             )
                         }
@@ -546,58 +533,32 @@ fun ChatInput(
                 }
             }
 
-            // Expanded content
-            Box(
-                modifier = Modifier
-                    .animateContentSize()
-                    .fillMaxWidth()
-            ) {
-                BackHandler(
-                    enabled = expand != ExpandState.Collapsed,
-                ) {
-                    dismissExpand()
-                }
-                if (expand == ExpandState.Files) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
-                            .then(
-                                if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
-                                    state = hazeState
-                                ) {
-                                    blurEffect {
-                                        style = filesHazeStyle
-                                    }
-                                }
-                                else Modifier
-                            ),
-                        shape = RoundedCornerShape(20.dp),
-                        tonalElevation = 0.dp,
-                        color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
-                    ) {
-                        FilesPicker(
-                            conversation = conversation,
-                            state = state,
-                            assistant = assistant,
-                            mcpManager = mcpManager,
-                            onCompressContext = onCompressContext,
-                            onUpdateAssistant = onUpdateAssistant,
-                            onUpdateConversation = onUpdateConversation,
-                            showInjectionSheet = showInjectionSheet,
-                            onShowInjectionSheetChange = { showInjectionSheet = it },
-                            showCompressDialog = showCompressDialog,
-                            onShowCompressDialogChange = { showCompressDialog = it },
-                            onDismiss = { dismissExpand() },
-                            onTakePic = onLaunchCamera,
-                            onPickImage = { imagePickerLauncher.launch("image/*") },
-                            onPickVideo = { videoPickerLauncher.launch("video/*") },
-                            onPickAudio = { audioPickerLauncher.launch("audio/*") },
-                            onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
-                        )
-                    }
-                }
-            }
+        }
+    }
+
+    if (showFilesSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { dismissExpand() },
+        ) {
+            FilesPicker(
+                conversation = conversation,
+                state = state,
+                assistant = assistant,
+                mcpManager = mcpManager,
+                onCompressContext = onCompressContext,
+                onUpdateAssistant = onUpdateAssistant,
+                onUpdateConversation = onUpdateConversation,
+                showInjectionSheet = showInjectionSheet,
+                onShowInjectionSheetChange = { showInjectionSheet = it },
+                showCompressDialog = showCompressDialog,
+                onShowCompressDialogChange = { showCompressDialog = it },
+                onDismiss = { dismissExpand() },
+                onTakePic = onLaunchCamera,
+                onPickImage = { imagePickerLauncher.launch("image/*") },
+                onPickVideo = { videoPickerLauncher.launch("video/*") },
+                onPickAudio = { audioPickerLauncher.launch("audio/*") },
+                onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+            )
         }
     }
 }

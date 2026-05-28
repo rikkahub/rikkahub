@@ -281,22 +281,12 @@ private fun ImagePickButton(onClick: () -> Unit = {}) {
 
 @Composable
 fun TakePicButton(onLaunchCamera: () -> Unit = {}) {
-    val cameraPermission = rememberPermissionState(PermissionCamera)
-
-    PermissionManager(
-        permissionState = cameraPermission
-    ) {
-        BigIconTextButton(icon = {
-            Icon(HugeIcons.Camera01, null)
-        }, text = {
-            Text(stringResource(R.string.take_picture))
-        }) {
-            if (cameraPermission.allRequiredPermissionsGranted) {
-                onLaunchCamera()
-            } else {
-                cameraPermission.requestPermissions()
-            }
-        }
+    BigIconTextButton(icon = {
+        Icon(HugeIcons.Camera01, null)
+    }, text = {
+        Text(stringResource(R.string.take_picture))
+    }) {
+        onLaunchCamera()
     }
 }
 
