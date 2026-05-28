@@ -38,6 +38,37 @@ body:
       required: false
 
   - type: input
+    id: provider
+    attributes:
+      label: 使用的提供商 | Provider
+      description: 例如 OpenAI、Anthropic、Google、本地部署等 / e.g. OpenAI, Anthropic, Google, local deployment
+      placeholder: OpenAI
+    validations:
+      required: false
+
+  - type: input
+    id: model
+    attributes:
+      label: 使用的模型 | Model
+      description: 例如 gpt-4o、claude-3-5-sonnet 等 / e.g. gpt-4o, claude-3-5-sonnet
+      placeholder: gpt-4o
+    validations:
+      required: false
+
+  - type: dropdown
+    id: api-type
+    attributes:
+      label: 接口类型 | API Type
+      description: 使用的接口协议类型 / The API protocol type being used
+      options:
+        - OpenAI ChatCompletion
+        - Response API
+        - Google Gemini
+        - Anthropic
+    validations:
+      required: false
+
+  - type: input
     id: app-version
     attributes:
       label: APP 版本 | App Version
