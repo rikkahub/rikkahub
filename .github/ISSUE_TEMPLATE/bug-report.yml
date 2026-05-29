@@ -9,6 +9,10 @@ body:
         感谢你花时间提交 Bug 报告！请尽量填写完整信息以便我们复现和修复问题。
         Thanks for taking the time to report a bug! Please fill in as much detail as possible.
 
+        > **注意 | Note**
+        > 请勿提交由 AI 生成的 Issue，此类 Issue 将被直接关闭。
+        > Do not submit AI-generated issues — they will be closed without review.
+
   - type: textarea
     id: description
     attributes:

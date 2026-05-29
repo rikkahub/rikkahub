@@ -9,6 +9,9 @@ body:
         > **注意 | Note**
         > 如果您想请求新功能，请先在聊天群与我讨论，否则您的功能请求可能会被直接关闭。
         > If you want to request a new feature, please discuss it with me in the chat group first, otherwise your feature request may be closed directly.
+        >
+        > 功能请求是否被接受取决于其必要性以及对代码库的影响，并非所有请求都会被接受。
+        > Whether a feature request is accepted depends on its necessity and impact on the codebase — not all requests will be accepted.
 
   - type: textarea
     id: description
