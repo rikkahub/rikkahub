@@ -62,12 +62,15 @@ private const val TAG = "ChatCompletionsAPI"
 
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette
 ) : OpenAIImpl {
+    /** 记录当前使用的 Key ID，用于后续状态更新 */
+    private var currentKeyId: String? = null
+
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
+        keyRoulette: KeyRoulette,
     ): MessageChunk = withContext(Dispatchers.IO) {
         val requestBody =
             buildChatCompletionRequest(
@@ -76,13 +79,18 @@ class ChatCompletionsAPI(
                 providerSetting = providerSetting
             )
 
+        // 使用多 Key 选择
+        val keyResult = keyRoulette.selectForProvider(providerSetting)
+        val apiKey = keyResult.key?.key ?: providerSetting.apiKey
+        currentKeyId = keyResult.key?.id
+
         val proxyClient = client.configureClientWithProxy(providerSetting.proxy)
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey)}")
+            .addHeader("Authorization", "Bearer $apiKey")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -127,6 +135,7 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
+        keyRoulette: KeyRoulette,
     ): Flow<MessageChunk> = callbackFlow {
         val requestBody = buildChatCompletionRequest(
             messages = messages,
@@ -135,13 +144,18 @@ class ChatCompletionsAPI(
             stream = true,
         )
 
+        // 使用多 Key 选择
+        val keyResult = keyRoulette.selectForProvider(providerSetting)
+        val apiKey = keyResult.key?.key ?: providerSetting.apiKey
+        val usedKeyId = keyResult.key?.id
+
         val proxyClient = client.configureClientWithProxy(providerSetting.proxy)
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey)}")
+            .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()

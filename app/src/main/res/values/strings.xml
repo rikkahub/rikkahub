@@ -655,4 +655,36 @@
   <string name="video">Video</string>
   <string name="web_search_disabled">Web search disabled</string>
   <string name="web_search_enabled">Web search enabled</string>
+
+  <!-- Multi Key Management -->
+  <string name="multi_key_page_title">Multi Key Management</string>
+  <string name="multi_key_page_overview">Key Overview</string>
+  <string name="multi_key_page_total">Total</string>
+  <string name="multi_key_page_active">Active</string>
+  <string name="multi_key_page_error">Error</string>
+  <string name="multi_key_page_strategy">Strategy</string>
+  <string name="multi_key_page_add">Add Key</string>
+  <string name="multi_key_page_add_key">Add API Key</string>
+  <string name="multi_key_page_import_keys">Import Keys</string>
+  <string name="multi_key_page_single_add">Single</string>
+  <string name="multi_key_page_batch_import">Batch</string>
+  <string name="multi_key_page_import_hint">Enter multiple API keys, one per line or separated by commas</string>
+  <string name="multi_key_page_api_keys">API Keys</string>
+  <string name="multi_key_page_api_key">API Key</string>
+  <string name="multi_key_page_key_name">Key Name (Optional)</string>
+  <string name="multi_key_page_key_name_hint">e.g. Primary Key</string>
+  <string name="multi_key_page_key_name_placeholder">Key %d</string>
+  <string name="multi_key_page_key_placeholder">sk-...</string>
+  <string name="multi_key_page_import_placeholder">sk-xxx1\nsk-xxx2\nsk-xxx3</string>
+  <string name="multi_key_page_priority">Priority (1-10)</string>
+  <string name="multi_key_page_priority_hint">Smaller number = higher priority (default: 5)</string>
+  <string name="multi_key_page_delete_confirm">Are you sure you want to delete this API key?</string>
+  <string name="multi_key_page_strategy_settings">Load Balance Settings</string>
+  <string name="multi_key_page_load_balance">Load Balance Strategy</string>
+  <string name="multi_key_page_failure_config">Failure Recovery</string>
+  <string name="multi_key_page_max_failures">Max Failures Before Disable</string>
+  <string name="multi_key_page_max_failures_hint">Consecutive failures before marking key as error (default: 3)</string>
+  <string name="multi_key_page_recovery_time">Recovery Time (Minutes)</string>
+  <string name="multi_key_page_recovery_time_hint">Time before an error key is retried (default: 5 min)</string>
+  <string name="multi_key_page_delete_errors">Delete Error Keys</string>
 </resources>

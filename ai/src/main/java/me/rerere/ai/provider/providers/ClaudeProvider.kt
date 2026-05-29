@@ -34,6 +34,7 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -58,11 +59,17 @@ private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
 class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSetting.Claude> {
+    private val keyRoulette = KeyRoulette.default()
+
+    private fun resolveApiKey(providerSetting: ProviderSetting.Claude): String {
+        val result = keyRoulette.selectForProvider(providerSetting)
+        return result.key?.key ?: providerSetting.apiKey
+    }
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("x-api-key", providerSetting.apiKey)
+                .addHeader("x-api-key", resolveApiKey(providerSetting))
                 .addHeader("anthropic-version", ANTHROPIC_VERSION)
                 .get()
                 .build()
@@ -106,7 +113,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", providerSetting.apiKey)
+            .addHeader("x-api-key", resolveApiKey(providerSetting))
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -153,7 +160,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", providerSetting.apiKey)
+            .addHeader("x-api-key", resolveApiKey(providerSetting))
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
