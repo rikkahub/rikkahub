@@ -42,6 +42,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -77,9 +78,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFilter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Cable
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.KeyRound
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Network
 import com.composables.icons.lucide.Plus
@@ -102,6 +105,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.ai.ModelAbilityTag
 import me.rerere.rikkahub.ui.components.ai.ModelModalityTag
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -129,6 +133,8 @@ import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
+
+private const val TAG = "SettingProviderDetailPage"
 
 @Composable
 fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
@@ -159,6 +165,10 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
         vm.updateSettings(newSettings)
         navController.popBackStack()
     }
+
+    // 检查是否有多个 Key（通过 apiKeys 字段或旧的分隔符方式）
+    val multiKeyEnabled = provider.apiKeys.isNotEmpty() ||
+        provider.getSingleApiKey().split(Regex("[\\s,]+")).count { it.isNotBlank() } > 1
 
     Scaffold(
         topBar = {
@@ -242,7 +252,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         },
                         onDelete = {
                             onDelete()
-                        }
+                        },
+                        navController = navController,
                     )
                 }
 
@@ -268,7 +279,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
 private fun SettingProviderConfigPage(
     provider: ProviderSetting,
     onEdit: (ProviderSetting) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    navController: androidx.navigation.NavController
 ) {
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     val scope = rememberCoroutineScope()
@@ -288,6 +300,30 @@ private fun SettingProviderConfigPage(
                 internalProvider = it
             }
         )
+
+        // 多 Key 管理入口
+        if (internalProvider is ProviderSetting.OpenAI ||
+            internalProvider is ProviderSetting.Claude
+        ) {
+            val keyCount = internalProvider.apiKeys.size +
+                if (internalProvider.getSingleApiKey().isNotBlank()) 1 else 0
+            OutlinedButton(
+                onClick = {
+                    navController.navigate(Screen.MultiKeyManager(providerId = internalProvider.id.toString()))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Lucide.KeyRound, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (keyCount > 0) {
+                        "多 Key 管理 ($keyCount)"
+                    } else {
+                        "多 Key 管理"
+                    }
+                )
+            }
+        }
 
         if (internalProvider is ProviderSetting.OpenAI) {
             SettingProviderBalanceOption(

@@ -42,6 +42,12 @@ sealed class ProviderSetting {
     abstract val description: @Composable() () -> Unit
     abstract val shortDescription: @Composable() () -> Unit
 
+    /** 多 Key 配置列表 */
+    abstract val apiKeys: List<ApiKeyConfig>
+
+    /** Key 管理配置（负载均衡策略等） */
+    abstract val keyManagement: KeyManagementConfig
+
     abstract fun addModel(model: Model): ProviderSetting
     abstract fun editModel(model: Model): ProviderSetting
     abstract fun delModel(model: Model): ProviderSetting
@@ -56,7 +62,37 @@ sealed class ProviderSetting {
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
         shortDescription: @Composable (() -> Unit) = this.shortDescription,
+        apiKeys: List<ApiKeyConfig> = this.apiKeys,
+        keyManagement: KeyManagementConfig = this.keyManagement,
     ): ProviderSetting
+
+    /**
+     * 获取有效的 Key 列表（启用的 Key）
+     */
+    fun getEffectiveApiKeys(): List<ApiKeyConfig> {
+        return apiKeys.filter { it.isEnabled && it.status != ApiKeyStatus.DISABLED }
+            .ifEmpty {
+                // 向下兼容：如果 apiKeys 为空但 apiKey 非空，创建一个
+                val singleKey = getSingleApiKey()
+                if (singleKey.isNotBlank()) {
+                    listOf(
+                        ApiKeyConfig.create(singleKey, name = "Default")
+                    )
+                } else {
+                    emptyList()
+                }
+            }
+    }
+
+    /**
+     * 获取单个 API Key（兼容旧字段）
+     */
+    abstract fun getSingleApiKey(): String
+
+    /**
+     * 设置单个 API Key（兼容旧字段）
+     */
+    abstract fun setSingleApiKey(key: String): ProviderSetting
 
     @Serializable
     @SerialName("openai")
@@ -74,7 +110,13 @@ sealed class ProviderSetting {
         var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
+        override val apiKeys: List<ApiKeyConfig> = emptyList(),
+        override val keyManagement: KeyManagementConfig = KeyManagementConfig(),
     ) : ProviderSetting() {
+        override fun getSingleApiKey(): String = apiKey
+
+        override fun setSingleApiKey(key: String): ProviderSetting = copy(apiKey = key)
+
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)
         }
@@ -107,6 +149,8 @@ sealed class ProviderSetting {
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
+            apiKeys: List<ApiKeyConfig>,
+            keyManagement: KeyManagementConfig,
         ): ProviderSetting {
             return this.copy(
                 id = id,
@@ -117,7 +161,9 @@ sealed class ProviderSetting {
                 description = description,
                 proxy = proxy,
                 balanceOption = balanceOption,
-                shortDescription = shortDescription
+                shortDescription = shortDescription,
+                apiKeys = apiKeys,
+                keyManagement = keyManagement,
             )
         }
     }
@@ -141,7 +187,13 @@ sealed class ProviderSetting {
         var serviceAccountEmail: String = "", // only for vertex AI
         var location: String = "us-central1", // only for vertex AI
         var projectId: String = "", // only for vertex AI
+        override val apiKeys: List<ApiKeyConfig> = emptyList(),
+        override val keyManagement: KeyManagementConfig = KeyManagementConfig(),
     ) : ProviderSetting() {
+        override fun getSingleApiKey(): String = apiKey
+
+        override fun setSingleApiKey(key: String): ProviderSetting = copy(apiKey = key)
+
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)
         }
@@ -174,6 +226,8 @@ sealed class ProviderSetting {
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
+            apiKeys: List<ApiKeyConfig>,
+            keyManagement: KeyManagementConfig,
         ): ProviderSetting {
             return this.copy(
                 id = id,
@@ -184,7 +238,9 @@ sealed class ProviderSetting {
                 description = description,
                 shortDescription = shortDescription,
                 proxy = proxy,
-                balanceOption = balanceOption
+                balanceOption = balanceOption,
+                apiKeys = apiKeys,
+                keyManagement = keyManagement,
             )
         }
     }
@@ -203,7 +259,13 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.anthropic.com/v1",
+        override val apiKeys: List<ApiKeyConfig> = emptyList(),
+        override val keyManagement: KeyManagementConfig = KeyManagementConfig(),
     ) : ProviderSetting() {
+        override fun getSingleApiKey(): String = apiKey
+
+        override fun setSingleApiKey(key: String): ProviderSetting = copy(apiKey = key)
+
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)
         }
@@ -236,6 +298,8 @@ sealed class ProviderSetting {
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
+            apiKeys: List<ApiKeyConfig>,
+            keyManagement: KeyManagementConfig,
         ): ProviderSetting {
             return this.copy(
                 id = id,
@@ -247,6 +311,8 @@ sealed class ProviderSetting {
                 builtIn = builtIn,
                 description = description,
                 shortDescription = shortDescription,
+                apiKeys = apiKeys,
+                keyManagement = keyManagement,
             )
         }
     }

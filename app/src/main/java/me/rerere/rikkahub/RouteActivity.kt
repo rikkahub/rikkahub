@@ -324,6 +324,12 @@ class RouteActivity : ComponentActivity() {
                         SettingProviderDetailPage(id = id)
                     }
 
+                    composable<Screen.MultiKeyManager> {
+                        val route = it.toRoute<Screen.MultiKeyManager>()
+                        val id = Uuid.parse(route.providerId)
+                        MultiKeyManagerPage(id = id)
+                    }
+
                     composable<Screen.SettingModels> {
                         SettingModelPage()
                     }
@@ -470,6 +476,9 @@ sealed interface Screen {
 
     @Serializable
     data class SettingProviderDetail(val providerId: String) : Screen
+
+    @Serializable
+    data class MultiKeyManager(val providerId: String) : Screen
 
     @Serializable
     data object SettingModels : Screen

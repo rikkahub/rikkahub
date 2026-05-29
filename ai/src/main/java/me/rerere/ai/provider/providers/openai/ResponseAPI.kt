@@ -29,6 +29,7 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -55,8 +56,12 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
-        params: TextGenerationParams
+        params: TextGenerationParams,
+        keyRoulette: KeyRoulette,
     ): MessageChunk {
+        val keyResult = keyRoulette.selectForProvider(providerSetting)
+        val apiKey = keyResult.key?.key ?: providerSetting.apiKey
+
         val requestBody = buildRequestBody(
             messages = messages,
             params = params,
@@ -66,7 +71,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -89,8 +94,12 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
     override suspend fun streamText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
-        params: TextGenerationParams
+        params: TextGenerationParams,
+        keyRoulette: KeyRoulette,
     ): Flow<MessageChunk> = callbackFlow {
+        val keyResult = keyRoulette.selectForProvider(providerSetting)
+        val apiKey = keyResult.key?.key ?: providerSetting.apiKey
+
         val requestBody = buildRequestBody(
             messages = messages,
             params = params,
@@ -100,7 +109,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()

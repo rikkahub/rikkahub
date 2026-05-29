@@ -40,13 +40,15 @@ class OpenAIProvider(
 ) : Provider<ProviderSetting.OpenAI> {
     private val keyRoulette = KeyRoulette.default()
 
-    private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
+    private val chatCompletionsAPI = ChatCompletionsAPI(client = client)
     private val responseAPI = ResponseAPI(client = client)
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
-            val key = keyRoulette.next(providerSetting.apiKey)
+            val keyResult = keyRoulette.selectForProvider(providerSetting)
+            val key = keyResult.key?.key ?: providerSetting.apiKey
+
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
                 .addHeader("Authorization", "Bearer $key")
@@ -75,7 +77,9 @@ class OpenAIProvider(
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
-        val key = keyRoulette.next(providerSetting.apiKey)
+        val keyResult = keyRoulette.selectForProvider(providerSetting)
+        val key = keyResult.key?.key ?: providerSetting.apiKey
+
         val url = if (providerSetting.balanceOption.apiPath.startsWith("http")) {
             providerSetting.balanceOption.apiPath
         } else {
@@ -110,13 +114,15 @@ class OpenAIProvider(
         responseAPI.streamText(
             providerSetting = providerSetting,
             messages = messages,
-            params = params
+            params = params,
+            keyRoulette = keyRoulette,
         )
     } else {
         chatCompletionsAPI.streamText(
             providerSetting = providerSetting,
             messages = messages,
-            params = params
+            params = params,
+            keyRoulette = keyRoulette,
         )
     }
 
@@ -128,13 +134,15 @@ class OpenAIProvider(
         responseAPI.generateText(
             providerSetting = providerSetting,
             messages = messages,
-            params = params
+            params = params,
+            keyRoulette = keyRoulette,
         )
     } else {
         chatCompletionsAPI.generateText(
             providerSetting = providerSetting,
             messages = messages,
-            params = params
+            params = params,
+            keyRoulette = keyRoulette,
         )
     }
 
@@ -146,7 +154,8 @@ class OpenAIProvider(
             "Expected OpenAI provider setting"
         }
 
-        val key = keyRoulette.next(providerSetting.apiKey)
+        val keyResult = keyRoulette.selectForProvider(providerSetting)
+        val key = keyResult.key?.key ?: providerSetting.apiKey
 
         val requestBody = json.encodeToString(
             buildJsonObject {
