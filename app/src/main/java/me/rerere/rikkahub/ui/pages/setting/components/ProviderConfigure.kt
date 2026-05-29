@@ -202,8 +202,8 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
 private val cardGroupTextFieldColors
     @Composable get() = OutlinedTextFieldDefaults.colors(
         unfocusedBorderColor = Color.Transparent,
-        unfocusedContainerColor = Color.Transparent,
-        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
         disabledBorderColor = Color.Transparent,
         disabledContainerColor = Color.Transparent,
     )

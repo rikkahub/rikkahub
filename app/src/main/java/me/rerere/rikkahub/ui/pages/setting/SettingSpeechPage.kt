@@ -121,7 +121,9 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor
+            ) {
                 NavigationBarItem(
                     selected = selectedPage == 0,
                     onClick = { selectedPage = 0 },
