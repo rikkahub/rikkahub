@@ -1,0 +1,126 @@
+name: Build APK
+
+on:
+  push:
+    branches: [feat/minimax-auto-emotion]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Fix Android SDK platform path (android-37.0 → android-37)
+        run: |
+          ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          if [ -d "$ANDROID_SDK_ROOT/platforms/android-37.0" ]; then
+            if [ ! -e "$ANDROID_SDK_ROOT/platforms/android-37" ]; then
+              sudo ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+              echo "SYMLINK: android-37 -> android-37.0"
+            else
+              echo "SKIP: android-37 already exists"
+            fi
+          else
+            echo "ERROR: android-37.0 not found"
+            ls "$ANDROID_SDK_ROOT/platforms/" 2>/dev/null || true
+            exit 1
+          fi
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - name: Patch SNAPSHOT versions for CI
+        run: |
+          # adaptive-navigation3:1.0.0-SNAPSHOT → 1.0.0-alpha03 (latest published on Google Maven)
+          sed -i 's/nav3Material = "1.0.0-SNAPSHOT"/nav3Material = "1.0.0-alpha03"/' gradle/libs.versions.toml
+          # sqlite-android:-SNAPSHOT → pinned JitPack commit 80cedc8
+          sed -i 's/sqlite-android = "-SNAPSHOT"/sqlite-android = "80cedc8"/' gradle/libs.versions.toml
+          echo "=== Patched versions ==="
+          grep -E 'nav3Material|sqlite-android =' gradle/libs.versions.toml
+
+      - name: Create dummy google-services.json
+        run: |
+          cat > app/google-services.json << 'JSON'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "ci-build",
+              "storage_bucket": "ci-build.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDummyKeyForCIBuild00000000000"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub.debug"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDummyKeyForCIBuild00000000000"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          JSON
+
+      - name: Grant gradlew execute permission
+        run: chmod +x gradlew
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build baseline APK
+        run: |
+          # Increase Gradle HTTP timeouts to handle slow JitPack responses
+          export GRADLE_OPTS="-Dorg.gradle.internal.http.socketTimeout=120000 -Dorg.gradle.internal.http.connectionTimeout=120000"
+          ./gradlew assembleBaseline --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RikkaHub-APK
+          path: app/build/outputs/apk/baseline/*.apk
+          retention-days: 30

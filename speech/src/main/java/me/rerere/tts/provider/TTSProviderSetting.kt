@@ -84,7 +84,7 @@ sealed class TTSProviderSetting {
         val baseUrl: String = "https://api.minimaxi.com/v1",
         val model: String = "speech-2.6-turbo",
         val voiceId: String = "female-shaonv",
-        val emotion: String = "calm",
+        val emotion: String = "",
         val speed: Float = 1.0f
     ) : TTSProviderSetting() {
         override fun copyProvider(
