@@ -61,7 +61,7 @@ class WebServerService : Service() {
             }
 
             null -> {
-                // START_STICKY 重启时 intent 为 null
+                // 兜底：intent 为 null 时根据设置决定是否启动
                 startForegroundCompat()
                 serviceScope.launch {
                     val settings = settingsStore.settingsFlowRaw.first()
@@ -77,7 +77,7 @@ class WebServerService : Service() {
                 }
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
