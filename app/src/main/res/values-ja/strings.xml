@@ -232,6 +232,7 @@
   <string name="chain_of_thought_show_more_steps">あと %d ステップを表示</string>
   <string name="chat_input_placeholder">AIとチャットするメッセージを入力</string>
   <string name="chat_input_unsupported_file_type">サポートされていないファイルタイプ: %s</string>
+  <string name="chat_input_file_read_failed">ファイルの読み取りに失敗しました: %s</string>
   <string name="chat_message_add_favorite">お気に入りに追加</string>
   <string name="chat_message_remove_favorite">お気に入りから削除</string>
   <string name="chat_message_tool_approve">承認</string>

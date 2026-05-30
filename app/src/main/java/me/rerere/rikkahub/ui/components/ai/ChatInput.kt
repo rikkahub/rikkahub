@@ -318,7 +318,14 @@ fun ChatInput(
                     val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
                     val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
                     if (isAllowedFileType(fileName, mime)) {
-                        val localUri = filesManager.createChatFilesByContents(listOf(uri))[0]
+                        val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
+                            ?: run {
+                                toaster.show(
+                                    context.getString(R.string.chat_input_file_read_failed, fileName),
+                                    type = ToastType.Error
+                                )
+                                return@mapNotNull null
+                            }
                         UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime)
                     } else {
                         toaster.show(
