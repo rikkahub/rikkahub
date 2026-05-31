@@ -415,6 +415,48 @@ class GoogleProviderMessageTest {
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
     }
 
+    @Test
+    fun `memory tool response should include functionResponse name`() {
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                createExecutedTool("call_1", "memory_tool", """{"action":"create"}""", "created")
+            )
+        )
+
+        val result = invokeBuildContents(listOf(UIMessage.user("Remember this"), assistantMessage))
+        val functionResponse = result
+            .flatMap { it.jsonObject["parts"]?.jsonArray ?: emptyList() }
+            .first { it.jsonObject.containsKey("functionResponse") }
+            .jsonObject["functionResponse"]!!
+            .jsonObject
+
+        assertEquals("memory_tool", functionResponse["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `blank tool name should not produce invalid function call or response`() {
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Text("Calling a tool"),
+                createExecutedTool("call_1", "", """{"action":"create"}""", "created"),
+                UIMessagePart.Text("Done")
+            )
+        )
+
+        val result = invokeBuildContents(listOf(UIMessage.user("Remember this"), assistantMessage))
+        val toolNames = result.flatMap { message ->
+            (message.jsonObject["parts"]?.jsonArray ?: emptyList()).mapNotNull { part ->
+                val obj = part.jsonObject
+                obj["functionCall"]?.jsonObject?.get("name")?.jsonPrimitive?.content
+                    ?: obj["functionResponse"]?.jsonObject?.get("name")?.jsonPrimitive?.content
+            }
+        }
+
+        assertTrue(toolNames.none { it.isBlank() })
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(

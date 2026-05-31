@@ -29,6 +29,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.providers.shouldIncludeProviderReasoning
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -210,7 +211,7 @@ class ResponseAPI(
             }
 
             // messages
-            put("input", buildMessages(messages))
+            put("input", buildMessages(messages, params.model, providerSetting))
 
             // reasoning
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
@@ -274,19 +275,32 @@ class ResponseAPI(
         }.mergeCustomBody(params.customBody)
     }
 
-    internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    internal fun buildMessages(messages: List<UIMessage>) = buildMessages(messages) { true }
+
+    internal fun buildMessages(
+        messages: List<UIMessage>,
+        currentModel: Model,
+        providerSetting: ProviderSetting.OpenAI
+    ) = buildMessages(messages) {
+        providerSetting.includeHistoryReasoning && it.shouldIncludeProviderReasoning(currentModel, providerSetting)
+    }
+
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        shouldIncludeReasoning: (UIMessage) -> Boolean
+    ) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
-                    addAssistantItems(message)
+                    addAssistantItems(message, includeReasoning = shouldIncludeReasoning(message))
                 } else {
                     addUserItems(message)
                 }
             }
     }
 
-    private fun JsonArrayBuilder.addAssistantItems(message: UIMessage) {
+    private fun JsonArrayBuilder.addAssistantItems(message: UIMessage, includeReasoning: Boolean) {
         val groups = groupPartsByToolBoundary(message.parts)
         val contentBuffer = mutableListOf<UIMessagePart>()
 
@@ -296,6 +310,9 @@ class ResponseAPI(
                     group.parts.forEach { part ->
                         when (part) {
                             is UIMessagePart.Reasoning -> {
+                                if (!includeReasoning) {
+                                    return@forEach
+                                }
                                 // 先输出累积的文本/图片内容
                                 if (contentBuffer.isNotEmpty()) {
                                     addContentItem(MessageRole.ASSISTANT, contentBuffer)
@@ -543,7 +560,30 @@ class ResponseAPI(
                 val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
-                if (type == "reasoning") {
+                if (type == "function_call") {
+                    return MessageChunk(
+                        id = id,
+                        model = "",
+                        choices = listOf(
+                            UIMessageChoice(
+                                index = 0,
+                                message = null,
+                                delta = UIMessage(
+                                    role = MessageRole.ASSISTANT,
+                                    parts = listOf(
+                                        UIMessagePart.Tool(
+                                            toolCallId = id,
+                                            toolName = item["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                                            input = item["arguments"]?.jsonPrimitive?.contentOrNull ?: "",
+                                            output = emptyList()
+                                        )
+                                    )
+                                ),
+                                finishReason = null
+                            )
+                        )
+                    )
+                } else if (type == "reasoning") {
                     val encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content
                     return MessageChunk(
                         id = id,
@@ -595,6 +635,7 @@ class ResponseAPI(
             "response.function_call_arguments.done" -> {
                 val toolCallId =
                     jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
+                val name = jsonObject["name"]?.jsonPrimitive?.contentOrNull ?: ""
                 val arguments =
                     jsonObject["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
                 return MessageChunk(
@@ -608,7 +649,7 @@ class ResponseAPI(
                                 parts = listOf(
                                     UIMessagePart.Tool(
                                         toolCallId = toolCallId,
-                                        toolName = "",
+                                        toolName = name,
                                         input = arguments,
                                         output = emptyList()
                                     )
@@ -753,4 +794,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
-

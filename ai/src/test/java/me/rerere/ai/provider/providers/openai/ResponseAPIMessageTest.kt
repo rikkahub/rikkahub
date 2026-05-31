@@ -1,5 +1,6 @@
 package me.rerere.ai.provider.providers.openai
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -13,6 +14,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.handleMessageChunk
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,12 +45,29 @@ class ResponseAPIMessageTest {
         return api.buildMessages(messages)
     }
 
+    private fun invokeBuildMessages(
+        messages: List<UIMessage>,
+        currentModel: Model,
+        providerSetting: ProviderSetting.OpenAI
+    ): JsonArray {
+        return api.buildMessages(messages, currentModel, providerSetting)
+    }
+
     private fun invokeBuildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
         params: TextGenerationParams,
         stream: Boolean = false
     ): JsonObject {
         return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
+    }
+
+    private fun parseDelta(raw: String): me.rerere.ai.ui.MessageChunk? {
+        val method = ResponseAPI::class.java.getDeclaredMethod(
+            "parseResponseDelta",
+            JsonObject::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(api, Json.parseToJsonElement(raw).jsonObject) as me.rerere.ai.ui.MessageChunk?
     }
 
     private fun createReasoningParams(reasoningLevel: ReasoningLevel = ReasoningLevel.OFF): TextGenerationParams {
@@ -352,6 +371,106 @@ class ResponseAPIMessageTest {
         val reasoning = requestBody["reasoning"]?.jsonObject
         assertTrue("reasoning should exist", reasoning != null)
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `function call done should fill tool name without duplicating arguments`() {
+        val chunks = listOf(
+            parseDelta(
+                """
+                {
+                  "type": "response.output_item.added",
+                  "item": {
+                    "id": "fc_1",
+                    "type": "function_call",
+                    "name": "",
+                    "arguments": ""
+                  }
+                }
+                """.trimIndent()
+            )!!,
+            parseDelta(
+                """
+                {
+                  "type": "response.function_call_arguments.done",
+                  "item_id": "fc_1",
+                  "name": "memory_tool",
+                  "arguments": "{\"action\":\"create\"}"
+                }
+                """.trimIndent()
+            )!!,
+            parseDelta(
+                """
+                {
+                  "type": "response.output_item.done",
+                  "item": {
+                    "id": "fc_1",
+                    "call_id": "call_1",
+                    "type": "function_call",
+                    "name": "memory_tool",
+                    "arguments": "{\"action\":\"create\"}"
+                  }
+                }
+                """.trimIndent()
+            )!!
+        )
+
+        val messages = chunks.fold(listOf(UIMessage.user("remember this"))) { acc, chunk ->
+            acc.handleMessageChunk(chunk)
+        }
+        val tool = messages.last().parts.filterIsInstance<UIMessagePart.Tool>().single()
+
+        assertEquals("memory_tool", tool.toolName)
+        assertEquals("""{"action":"create"}""", tool.input)
+    }
+
+    @Test
+    fun `foreign provider reasoning should be omitted from responses history`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val googleModel = Model(modelId = "gemini-3-pro")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel))
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                modelId = googleModel.id,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "Gemini thought"),
+                    UIMessagePart.Text("Visible answer")
+                )
+            )
+        )
+
+        val result = invokeBuildMessages(messages, currentModel, providerSetting)
+
+        assertFalse(result.any { it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning" })
+        assertTrue(result.any { it.jsonObject["content"]?.jsonPrimitive?.content == "Visible answer" })
+    }
+
+    @Test
+    fun `same provider reasoning should be included in responses history`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val previousModel = Model(modelId = "gpt-4.1")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel, previousModel))
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                modelId = previousModel.id,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "OpenAI thought"),
+                    UIMessagePart.Text("Visible answer")
+                )
+            )
+        )
+
+        val result = invokeBuildMessages(messages, currentModel, providerSetting)
+        val reasoning = result.single { it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning" }.jsonObject
+        val summary = reasoning["summary"]!!.jsonArray
+
+        assertTrue(summary.any {
+            it.jsonObject["text"]?.jsonPrimitive?.content == "OpenAI thought"
+        })
     }
 
     // ==================== Helper Functions ====================

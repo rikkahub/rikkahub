@@ -32,6 +32,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.providers.shouldIncludeProviderReasoning
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -254,7 +255,10 @@ class ChatCompletionsAPI(
         val host = providerSetting.baseUrl.toHttpUrl().host
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", buildMessages(messages, providerSetting.includeHistoryReasoning))
+            put(
+                "messages",
+                buildMessages(messages, params.model, providerSetting, providerSetting.includeHistoryReasoning)
+            )
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
@@ -428,12 +432,33 @@ class ChatCompletionsAPI(
         return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
     }
 
-    private fun buildMessages(messages: List<UIMessage>, includeHistoryReasoning: Boolean = true) = buildJsonArray {
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean = true
+    ) = buildMessages(messages, includeHistoryReasoning) { true }
+
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        currentModel: Model,
+        providerSetting: ProviderSetting.OpenAI,
+        includeHistoryReasoning: Boolean = true
+    ) = buildMessages(messages, includeHistoryReasoning) {
+        it.shouldIncludeProviderReasoning(currentModel, providerSetting)
+    }
+
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean,
+        shouldIncludeReasoning: (UIMessage) -> Boolean
+    ) = buildJsonArray {
         val filteredMessages = messages.filter { it.isValidToUpload() }
 
         filteredMessages.forEach { message ->
             if (message.role == MessageRole.ASSISTANT) {
-                addAssistantMessages(message, includeReasoning = includeHistoryReasoning)
+                addAssistantMessages(
+                    message,
+                    includeReasoning = includeHistoryReasoning && shouldIncludeReasoning(message)
+                )
             } else {
                 addNonAssistantMessage(message)
             }

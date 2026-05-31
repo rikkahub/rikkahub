@@ -295,6 +295,70 @@ class MessageTest {
         assertEquals(messages, result)
     }
 
+    @Test
+    fun `Tool merge should not duplicate completed streaming fields`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "call1",
+            toolName = "memory_tool",
+            input = """{"action":"create"}"""
+        ).merge(
+            UIMessagePart.Tool(
+                toolCallId = "call1",
+                toolName = "memory_tool",
+                input = """{"action":"create"}"""
+            )
+        )
+
+        assertEquals("memory_tool", tool.toolName)
+        assertEquals("""{"action":"create"}""", tool.input)
+    }
+
+    @Test
+    fun `Tool merge should fill blank tool name from later delta`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "call1",
+            toolName = "",
+            input = """{"action":"create"}"""
+        ).merge(
+            UIMessagePart.Tool(
+                toolCallId = "call1",
+                toolName = "memory_tool",
+                input = ""
+            )
+        )
+
+        assertEquals("memory_tool", tool.toolName)
+        assertEquals("""{"action":"create"}""", tool.input)
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `migrateToolMessages should fill blank ToolCall name from ToolResult`() {
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.ToolCall("call1", "", """{"action":"create"}"""))
+            ),
+            UIMessage(
+                role = MessageRole.TOOL,
+                parts = listOf(
+                    UIMessagePart.ToolResult(
+                        toolCallId = "call1",
+                        toolName = "memory_tool",
+                        content = JsonPrimitive("created"),
+                        arguments = JsonPrimitive("""{"action":"create"}""")
+                    )
+                )
+            )
+        )
+
+        val result = messages.migrateToolMessages()
+        val tool = result[1].parts.filterIsInstance<UIMessagePart.Tool>().single()
+
+        assertEquals("memory_tool", tool.toolName)
+    }
+
     // ==================== migrateToolNodes Tests ====================
 
     /**

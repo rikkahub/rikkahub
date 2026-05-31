@@ -5,10 +5,14 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.ClaudePromptCacheTtl
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -37,10 +41,35 @@ class ClaudeProviderMessageTest {
         val method = ClaudeProvider::class.java.getDeclaredMethod(
             "buildMessages",
             List::class.java,
-            Boolean::class.javaPrimitiveType
+            Boolean::class.javaPrimitiveType,
+            ClaudePromptCacheTtl::class.java
         )
         method.isAccessible = true
-        return method.invoke(provider, messages, false) as JsonArray
+        return method.invoke(provider, messages, false, ClaudePromptCacheTtl.FIVE_MINUTES) as JsonArray
+    }
+
+    private fun invokeBuildMessages(
+        messages: List<UIMessage>,
+        currentModel: Model,
+        providerSetting: ProviderSetting.Claude
+    ): JsonArray {
+        val method = ClaudeProvider::class.java.getDeclaredMethod(
+            "buildMessages",
+            List::class.java,
+            Model::class.java,
+            ProviderSetting.Claude::class.java,
+            Boolean::class.javaPrimitiveType,
+            ClaudePromptCacheTtl::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(
+            provider,
+            messages,
+            currentModel,
+            providerSetting,
+            false,
+            ClaudePromptCacheTtl.FIVE_MINUTES
+        ) as JsonArray
     }
 
     @Test
@@ -346,6 +375,55 @@ class ClaudeProviderMessageTest {
             it.jsonObject["type"]?.jsonPrimitive?.content == "text"
         }?.jsonObject
         assertEquals("Hello, how are you?", textBlock?.get("text")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `foreign provider reasoning should be omitted from claude history`() {
+        val currentModel = Model(modelId = "claude-sonnet-4.6")
+        val googleModel = Model(modelId = "gemini-3-pro")
+        val providerSetting = ProviderSetting.Claude(models = listOf(currentModel))
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                modelId = googleModel.id,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "Gemini thought"),
+                    UIMessagePart.Text("Visible answer")
+                )
+            )
+        )
+
+        val result = invokeBuildMessages(messages, currentModel, providerSetting)
+        val content = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "assistant" }
+            .jsonObject["content"]!!.jsonArray
+
+        assertFalse(content.any { it.jsonObject["type"]?.jsonPrimitive?.content == "thinking" })
+        assertTrue(content.any { it.jsonObject["text"]?.jsonPrimitive?.content == "Visible answer" })
+    }
+
+    @Test
+    fun `same provider reasoning should be included in claude history`() {
+        val currentModel = Model(modelId = "claude-sonnet-4.6")
+        val previousModel = Model(modelId = "claude-haiku")
+        val providerSetting = ProviderSetting.Claude(models = listOf(currentModel, previousModel))
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                modelId = previousModel.id,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "Claude thought"),
+                    UIMessagePart.Text("Visible answer")
+                )
+            )
+        )
+
+        val result = invokeBuildMessages(messages, currentModel, providerSetting)
+        val content = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "assistant" }
+            .jsonObject["content"]!!.jsonArray
+
+        assertTrue(content.any { it.jsonObject["thinking"]?.jsonPrimitive?.content == "Claude thought" })
     }
 
     // ==================== Helper Functions ====================

@@ -1,5 +1,8 @@
 package me.rerere.ai.provider.providers
 
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 
 /**
@@ -43,7 +46,7 @@ internal fun groupPartsByToolBoundary(parts: List<UIMessagePart>): List<PartGrou
     }
 
     for (part in parts) {
-        if (part is UIMessagePart.Tool && part.isExecuted) {
+        if (part is UIMessagePart.Tool && part.isExecuted && part.toolName.isNotBlank()) {
             flushContent()
             currentTools.add(part)
         } else {
@@ -55,4 +58,12 @@ internal fun groupPartsByToolBoundary(parts: List<UIMessagePart>): List<PartGrou
     flushContent()
     flushTools()
     return groups
+}
+
+internal fun UIMessage.shouldIncludeProviderReasoning(
+    currentModel: Model,
+    providerSetting: ProviderSetting
+): Boolean {
+    val sourceModelId = modelId ?: return true
+    return sourceModelId == currentModel.id || providerSetting.models.any { it.id == sourceModelId }
 }

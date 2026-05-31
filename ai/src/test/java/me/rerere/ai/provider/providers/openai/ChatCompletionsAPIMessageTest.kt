@@ -6,11 +6,14 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -33,10 +36,28 @@ class ChatCompletionsAPIMessageTest {
     private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
-            List::class.java
+            List::class.java,
+            Boolean::class.javaPrimitiveType
         )
         method.isAccessible = true
-        return method.invoke(api, messages) as JsonArray
+        return method.invoke(api, messages, true) as JsonArray
+    }
+
+    private fun invokeBuildMessages(
+        messages: List<UIMessage>,
+        currentModel: Model,
+        providerSetting: ProviderSetting.OpenAI,
+        includeHistoryReasoning: Boolean = true
+    ): JsonArray {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildMessages",
+            List::class.java,
+            Model::class.java,
+            ProviderSetting.OpenAI::class.java,
+            Boolean::class.javaPrimitiveType
+        )
+        method.isAccessible = true
+        return method.invoke(api, messages, currentModel, providerSetting, includeHistoryReasoning) as JsonArray
     }
 
     @Test
@@ -163,8 +184,7 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `reasoning should only be included for messages after last user message`() {
-        // First assistant message (before user's last message) - reasoning should NOT be included
+    fun `reasoning should be included for all assistant messages when enabled`() {
         val assistant1 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -173,7 +193,6 @@ class ChatCompletionsAPIMessageTest {
             )
         )
 
-        // Second assistant message (after user's last message) - reasoning SHOULD be included
         val assistant2 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -198,19 +217,11 @@ class ChatCompletionsAPIMessageTest {
 
         assertEquals(2, assistantMessages.size)
 
-        // First assistant should NOT have reasoning_content
         val first = assistantMessages[0].jsonObject
-        assertTrue("First assistant should not have reasoning_content",
-            !first.containsKey("reasoning_content") ||
-            first["reasoning_content"]?.jsonPrimitive?.content.isNullOrEmpty()
-        )
+        assertEquals("Initial thinking", first["reasoning_content"]?.jsonPrimitive?.content)
 
-        // Second assistant SHOULD have reasoning_content
         val second = assistantMessages[1].jsonObject
-        assertTrue("Second assistant should have reasoning_content",
-            second.containsKey("reasoning_content") &&
-            second["reasoning_content"]?.jsonPrimitive?.content?.isNotEmpty() == true
-        )
+        assertEquals("Final thinking", second["reasoning_content"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -302,7 +313,7 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `assistant with only reasoning and empty text should be filtered out`() {
+    fun `assistant with only reasoning and empty text should keep reasoning content`() {
         val messages = listOf(
             UIMessage.user("Question 1"),
             UIMessage(
@@ -317,11 +328,14 @@ class ChatCompletionsAPIMessageTest {
 
         val result = invokeBuildMessages(messages)
 
-        assertEquals(2, result.size)
+        assertEquals(3, result.size)
         assertEquals("user", result[0].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("Question 1", result[0].jsonObject["content"]?.jsonPrimitive?.content)
-        assertEquals("user", result[1].jsonObject["role"]?.jsonPrimitive?.content)
-        assertEquals("Question 2", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+        assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
+        assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+        assertEquals("user", result[2].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("Question 2", result[2].jsonObject["content"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -344,6 +358,53 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `foreign provider reasoning should be omitted from chat completions history`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val googleModel = Model(modelId = "gemini-3-pro")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel))
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                modelId = googleModel.id,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "Gemini thought"),
+                    UIMessagePart.Text("Visible answer")
+                )
+            )
+        )
+
+        val result = invokeBuildMessages(messages, currentModel, providerSetting)
+        val assistant = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "assistant" }.jsonObject
+
+        assertFalse(assistant.containsKey("reasoning_content"))
+        assertEquals("Visible answer", assistant["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `same provider reasoning should be included in chat completions history`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val previousModel = Model(modelId = "gpt-4.1")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel, previousModel))
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                modelId = previousModel.id,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "OpenAI thought"),
+                    UIMessagePart.Text("Visible answer")
+                )
+            )
+        )
+
+        val result = invokeBuildMessages(messages, currentModel, providerSetting)
+        val assistant = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "assistant" }.jsonObject
+
+        assertEquals("OpenAI thought", assistant["reasoning_content"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

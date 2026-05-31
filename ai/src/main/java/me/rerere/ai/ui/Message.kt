@@ -463,14 +463,27 @@ sealed class UIMessagePart {
         fun merge(other: Tool): Tool {
             return Tool(
                 toolCallId = toolCallId,
-                toolName = toolName + other.toolName,
-                input = input + other.input,
+                toolName = mergeStreamingText(toolName, other.toolName),
+                input = mergeStreamingText(input, other.input),
                 output = output + other.output,
                 approvalState = approvalState,
                 metadata = if (other.metadata != null) other.metadata else metadata,
             )
         }
     }
+}
+
+private fun mergeStreamingText(current: String, delta: String): String {
+    if (delta.isEmpty()) return current
+    if (current.isEmpty()) return delta
+    if (current == delta) return current
+    if (delta.startsWith(current)) return delta
+    if (current.startsWith(delta)) return current
+
+    val overlap = (minOf(current.length, delta.length) downTo 1).firstOrNull { length ->
+        current.endsWith(delta.take(length))
+    } ?: 0
+    return current + delta.drop(overlap)
 }
 
 /**
@@ -605,6 +618,7 @@ fun List<UIMessage>.migrateToolMessages(): List<UIMessage> {
                         val matchingResult = toolResults.find { result -> result.toolCallId == part.toolCallId }
                         if (matchingResult != null) {
                             part.copy(
+                                toolName = part.toolName.ifBlank { matchingResult.toolName },
                                 output = listOf(
                                     UIMessagePart.Text(
                                         json.encodeToString(matchingResult.content)
@@ -620,7 +634,7 @@ fun List<UIMessage>.migrateToolMessages(): List<UIMessage> {
                         if (matchingResult != null) {
                             UIMessagePart.Tool(
                                 toolCallId = part.toolCallId,
-                                toolName = part.toolName,
+                                toolName = part.toolName.ifBlank { matchingResult.toolName },
                                 input = part.arguments,
                                 output = listOf(
                                     UIMessagePart.Text(
@@ -706,6 +720,7 @@ fun <T> List<T>.migrateToolNodes(
                                     val matchingResult = toolResults.find { it.toolCallId == part.toolCallId }
                                     if (matchingResult != null) {
                                         part.copy(
+                                            toolName = part.toolName.ifBlank { matchingResult.toolName },
                                             output = listOf(
                                                 UIMessagePart.Text(
                                                     json.encodeToString(matchingResult.content)
@@ -721,7 +736,7 @@ fun <T> List<T>.migrateToolNodes(
                                 if (matchingResult != null) {
                                     UIMessagePart.Tool(
                                         toolCallId = part.toolCallId,
-                                        toolName = part.toolName,
+                                        toolName = part.toolName.ifBlank { matchingResult.toolName },
                                         input = part.arguments,
                                         output = listOf(
                                             UIMessagePart.Text(

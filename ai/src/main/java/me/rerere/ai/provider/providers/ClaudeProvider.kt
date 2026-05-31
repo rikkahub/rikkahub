@@ -268,7 +268,13 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             put("model", params.model.modelId)
             put(
                 "messages",
-                buildMessages(messages, providerSetting.promptCaching, providerSetting.promptCacheTtl)
+                buildMessages(
+                    messages,
+                    params.model,
+                    providerSetting,
+                    providerSetting.promptCaching,
+                    providerSetting.promptCacheTtl
+                )
             )
             put("max_tokens", params.maxTokens ?: 64_000)
 
@@ -357,12 +363,29 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         promptCaching: Boolean,
         promptCacheTtl: ClaudePromptCacheTtl
+    ) = buildMessages(messages, promptCaching, promptCacheTtl) { true }
+
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        currentModel: Model,
+        providerSetting: ProviderSetting.Claude,
+        promptCaching: Boolean,
+        promptCacheTtl: ClaudePromptCacheTtl
+    ) = buildMessages(messages, promptCaching, promptCacheTtl) {
+        it.shouldIncludeProviderReasoning(currentModel, providerSetting)
+    }
+
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        promptCaching: Boolean,
+        promptCacheTtl: ClaudePromptCacheTtl,
+        shouldIncludeReasoning: (UIMessage) -> Boolean
     ) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
-                    addAssistantMessage(message)
+                    addAssistantMessage(message, includeReasoning = shouldIncludeReasoning(message))
                 } else {
                     addUserMessage(message)
                 }
@@ -413,14 +436,16 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         })
     }
 
-    private fun JsonArrayBuilder.addAssistantMessage(message: UIMessage) {
+    private fun JsonArrayBuilder.addAssistantMessage(message: UIMessage, includeReasoning: Boolean) {
         val groups = groupPartsByToolBoundary(message.parts)
         val contentBuffer = mutableListOf<JsonObject>()
 
         for (group in groups) {
             when (group) {
                 is PartGroup.Content -> {
-                    group.parts.mapNotNull { it.toContentBlock() }.forEach { contentBuffer.add(it) }
+                    group.parts
+                        .mapNotNull { it.toContentBlock(includeReasoning) }
+                        .forEach { contentBuffer.add(it) }
                 }
 
                 is PartGroup.Tools -> {
@@ -463,7 +488,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         })
     }
 
-    private fun UIMessagePart.toContentBlock(): JsonObject? = when (this) {
+    private fun UIMessagePart.toContentBlock(includeReasoning: Boolean = true): JsonObject? = when (this) {
         is UIMessagePart.Text -> buildJsonObject {
             put("type", "text")
             put("text", text)
@@ -484,11 +509,13 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }
 
-        is UIMessagePart.Reasoning -> buildJsonObject {
-            put("type", "thinking")
-            put("thinking", reasoning)
-            metadata?.forEach { (key, value) -> put(key, value) }
-        }
+        is UIMessagePart.Reasoning -> if (includeReasoning) {
+            buildJsonObject {
+                put("type", "thinking")
+                put("thinking", reasoning)
+                metadata?.forEach { (key, value) -> put(key, value) }
+            }
+        } else null
 
         else -> null
     }
