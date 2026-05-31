@@ -12,10 +12,12 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -36,6 +38,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiBrain01
 import me.rerere.hugeicons.stroke.AiEditing
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ModelListSheet
@@ -114,20 +117,27 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
         }
         item {
             ModelSettingItem(
+                title = stringResource(R.string.setting_model_page_fast_model),
+                description = stringResource(R.string.setting_model_page_fast_model_desc),
+                modelId = settings.fastModelId,
+                providers = settings.providers,
+                onSelect = { vm.updateSettings(settings.copy(fastModelId = it.id)) },
+            )
+        }
+        item {
+            ModelSettingItem(
                 title = stringResource(R.string.setting_model_page_title_model),
                 description = stringResource(R.string.setting_model_page_title_model_desc),
                 modelId = settings.titleModelId,
                 providers = settings.providers,
                 onSelect = { vm.updateSettings(settings.copy(titleModelId = it.id)) },
+                onClear = { vm.updateSettings(settings.copy(titleModelId = null)) },
             )
         }
         item {
-            ModelSettingItem(
-                title = stringResource(R.string.setting_model_page_suggestion_model),
-                description = stringResource(R.string.setting_model_page_suggestion_model_desc),
-                modelId = settings.suggestionModelId,
-                providers = settings.providers,
-                onSelect = { vm.updateSettings(settings.copy(suggestionModelId = it.id)) },
+            SuggestionModelSettingItem(
+                settings = settings,
+                vm = vm,
             )
         }
         item {
@@ -161,12 +171,85 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
 }
 
 @Composable
+private fun SuggestionModelSettingItem(
+    settings: Settings,
+    vm: SettingVM,
+) {
+    val title = stringResource(R.string.setting_model_page_suggestion_model)
+    val state = rememberModelListState(
+        modelId = settings.suggestionModelId,
+        providers = settings.providers,
+        type = ModelType.CHAT,
+    )
+
+    Column {
+        CardGroup(title = { Text(title) }) {
+            item(
+                headlineContent = { Text(stringResource(R.string.setting_model_page_enable_suggestion)) },
+                trailingContent = {
+                    Switch(
+                        checked = settings.enableSuggestion,
+                        onCheckedChange = {
+                            vm.updateSettings(settings.copy(enableSuggestion = it))
+                        }
+                    )
+                },
+            )
+            if (settings.enableSuggestion) {
+                item(
+                    onClick = { state.open() },
+                    headlineContent = { Text(title) },
+                    trailingContent = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = state.currentModel?.displayName
+                                    ?: stringResource(R.string.model_list_select_model),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (state.currentModel != null) {
+                                IconButton(
+                                    onClick = { vm.updateSettings(settings.copy(suggestionModelId = null)) },
+                                    modifier = Modifier.size(20.dp),
+                                ) {
+                                    Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(14.dp))
+                                }
+                            } else {
+                                Icon(
+                                    HugeIcons.ArrowRight01,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.setting_model_page_suggestion_model_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+        )
+    }
+
+    ModelListSheet(state = state, onSelect = { vm.updateSettings(settings.copy(suggestionModelId = it.id)) })
+}
+
+@Composable
 private fun ModelSettingItem(
     title: String,
     description: String,
     modelId: Uuid?,
     providers: List<ProviderSetting>,
     onSelect: (Model) -> Unit,
+    onClear: (() -> Unit)? = null,
 ) {
     val state = rememberModelListState(
         modelId = modelId,
@@ -192,11 +275,17 @@ private fun ModelSettingItem(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Icon(
-                            HugeIcons.ArrowRight01,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
+                        if (onClear != null && state.currentModel != null) {
+                            IconButton(onClick = onClear, modifier = Modifier.size(20.dp)) {
+                                Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(14.dp))
+                            }
+                        } else {
+                            Icon(
+                                HugeIcons.ArrowRight01,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     }
                 },
             )

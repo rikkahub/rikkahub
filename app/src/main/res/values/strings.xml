@@ -745,6 +745,8 @@
   <string name="setting_model_page_chat_model">Chat Model</string>
   <string name="setting_model_page_chat_model_desc">Global default chat model</string>
   <string name="setting_model_page_compress_model">Compress Model</string>
+  <string name="setting_model_page_fast_model">Fast Model</string>
+  <string name="setting_model_page_fast_model_desc">Model for fast or background tasks, also used as fallback for title and suggestion models when not set</string>
   <string name="setting_model_page_compress_model_desc">Model for compressing conversation history</string>
   <string name="setting_model_page_compress_prompt_vars">Variables: {content}, {target_tokens}, {additional_context}</string>
   <string name="setting_model_page_ocr_model">OCR Model</string>
@@ -752,12 +754,13 @@
   <string name="setting_model_page_ocr_prompt_vars">Variables: Image data: {images}</string>
   <string name="setting_model_page_prompt">Prompt</string>
   <string name="setting_model_page_reset_to_default">Reset to default</string>
+  <string name="setting_model_page_enable_suggestion">Enable Chat Suggestions</string>
   <string name="setting_model_page_suggestion_model">Chat Suggestion Model</string>
-  <string name="setting_model_page_suggestion_model_desc">Model used to generate conversation suggestions, recommend using fast and inexpensive models</string>
+  <string name="setting_model_page_suggestion_model_desc">Model used to generate conversation suggestions. If not set, uses the fast model</string>
   <string name="setting_model_page_suggestion_prompt_vars">Variables: Conversation content: {content}, Language: {locale}</string>
   <string name="setting_model_page_title">Model Settings</string>
   <string name="setting_model_page_title_model">Title Summary Model</string>
-  <string name="setting_model_page_title_model_desc">Model used to summarize conversation titles, recommend using fast and inexpensive models</string>
+  <string name="setting_model_page_title_model_desc">Model used to summarize conversation titles. If not set, uses the fast model</string>
   <string name="setting_model_page_translate_model">Translation Model</string>
   <string name="setting_model_page_translate_model_desc">The model used for translation features</string>
   <string name="setting_model_page_translate_prompt_vars">Variables: Source text: {source_text}, Target language: {target_lang}</string>

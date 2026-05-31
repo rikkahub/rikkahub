@@ -746,11 +746,11 @@
   <string name="setting_model_page_prompt">Промпт</string>
   <string name="setting_model_page_reset_to_default">Сбросить до значения по умолчанию</string>
   <string name="setting_model_page_suggestion_model">Модель предложений чата</string>
-  <string name="setting_model_page_suggestion_model_desc">Модель, используемая для генерации предложений в диалоге, рекомендуется использовать быстрые и недорогие модели</string>
+  <string name="setting_model_page_suggestion_model_desc">Модель для генерации предложений в чате. Если не задана, используется быстрая модель</string>
   <string name="setting_model_page_suggestion_prompt_vars">Переменные: Содержание разговора: {content}, Язык: {locale}</string>
   <string name="setting_model_page_title">Настройки модели</string>
   <string name="setting_model_page_title_model">Модель сводки заголовков</string>
-  <string name="setting_model_page_title_model_desc">Модель, используемая для суммаризации названий бесед, рекомендуется использовать быстрые и недорогие модели</string>
+  <string name="setting_model_page_title_model_desc">Модель для генерации заголовков бесед. Если не задана, используется быстрая модель</string>
   <string name="setting_model_page_translate_model">Модель перевода</string>
   <string name="setting_model_page_translate_model_desc">Модель, используемая для функций перевода</string>
   <string name="setting_model_page_translate_prompt_vars">Переменные: Исходный текст: {source_text}, Целевой язык: {target_lang}</string>
@@ -1107,5 +1107,8 @@
   <string name="setting_model_page_prompt_compress">Сжатие контекста</string>
   <string name="setting_display_page_bubble_opacity_title">Прозрачность пузырьков</string>
   <string name="setting_provider_page_include_history_reasoning">Отправлять историю рассуждений</string>
+  <string name="setting_model_page_fast_model">Быстрая модель</string>
+  <string name="setting_model_page_fast_model_desc">Модель для быстрых или фоновых задач, также используется как резервная для моделей заголовков и предложений, если не задана</string>
+  <string name="setting_model_page_enable_suggestion">Включить подсказки чата</string>
 </resources>
 

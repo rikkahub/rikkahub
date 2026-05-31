@@ -746,11 +746,11 @@
   <string name="setting_model_page_prompt">提示詞</string>
   <string name="setting_model_page_reset_to_default">重置為預設值</string>
   <string name="setting_model_page_suggestion_model">聊天建議模型</string>
-  <string name="setting_model_page_suggestion_model_desc">用於生成對話建議的模型, 推薦使用快速且便宜的模型</string>
+  <string name="setting_model_page_suggestion_model_desc">用於生成聊天建議的模型。未設置時使用快速模型</string>
   <string name="setting_model_page_suggestion_prompt_vars">變數: 對話內容: {content}, 語言: {locale}</string>
   <string name="setting_model_page_title">模型設定</string>
   <string name="setting_model_page_title_model">標題摘要模型</string>
-  <string name="setting_model_page_title_model_desc">用於摘要對話標題的模型, 推薦使用快速且便宜的模型</string>
+  <string name="setting_model_page_title_model_desc">用於總結對話標題的模型。未設置時使用快速模型</string>
   <string name="setting_model_page_translate_model">翻譯模型</string>
   <string name="setting_model_page_translate_model_desc">用於翻譯功能的模型</string>
   <string name="setting_model_page_translate_prompt_vars">變數: 原始文字: {source_text}, 目標語言: {target_lang}</string>
@@ -1105,5 +1105,8 @@
   <string name="setting_model_page_prompt_compress">上下文壓縮</string>
   <string name="setting_display_page_bubble_opacity_title">氣泡透明度</string>
   <string name="setting_provider_page_include_history_reasoning">回傳歷史思考過程</string>
+  <string name="setting_model_page_fast_model">快速模型</string>
+  <string name="setting_model_page_fast_model_desc">用於快速或背景任務的模型，未設置時也作為標題和建議模型的後備。</string>
+  <string name="setting_model_page_enable_suggestion">啟用聊天建議</string>
 </resources>
 

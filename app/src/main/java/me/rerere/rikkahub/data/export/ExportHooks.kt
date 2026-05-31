@@ -109,12 +109,16 @@ class ImporterState<T>(
     private val onResult: (Result<T>) -> Unit,
 ) {
     fun importFromFile() {
-        openDocumentLauncher.launch(arrayOf("application/json"))
+        openDocumentLauncher.launch(arrayOf("*/*"))
     }
 
     internal fun handleUri(uri: Uri) {
         scope.launch {
             val result = withContext(Dispatchers.IO) {
+                val fileName = serializer.getUriFileName(context, uri)
+                if (fileName != null && !fileName.endsWith(".json", ignoreCase = true)) {
+                    return@withContext Result.failure<T>(IllegalArgumentException("Not a JSON file"))
+                }
                 serializer.import(context, uri)
             }
             onResult(result)
