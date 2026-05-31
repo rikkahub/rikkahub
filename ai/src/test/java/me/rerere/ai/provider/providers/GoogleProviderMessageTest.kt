@@ -1,12 +1,14 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.migrateToolMessages
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -435,6 +437,44 @@ class GoogleProviderMessageTest {
     }
 
     @Test
+    @Suppress("DEPRECATION")
+    fun `migrated legacy memory tool should include functionResponse name`() {
+        val messages = listOf(
+            UIMessage.user("Remember this"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.ToolCall(
+                        toolCallId = "call_1",
+                        toolName = "",
+                        arguments = """{"action":"create"}"""
+                    )
+                )
+            ),
+            UIMessage(
+                role = MessageRole.TOOL,
+                parts = listOf(
+                    UIMessagePart.ToolResult(
+                        toolCallId = "call_1",
+                        toolName = "memory_tool",
+                        content = JsonPrimitive("created"),
+                        arguments = JsonPrimitive("""{"action":"create"}""")
+                    )
+                )
+            )
+        )
+
+        val result = invokeBuildContents(messages.migrateToolMessages())
+        val functionResponse = result
+            .flatMap { it.jsonObject["parts"]?.jsonArray ?: emptyList() }
+            .first { it.jsonObject.containsKey("functionResponse") }
+            .jsonObject["functionResponse"]!!
+            .jsonObject
+
+        assertEquals("memory_tool", functionResponse["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `blank tool name should not produce invalid function call or response`() {
         val assistantMessage = UIMessage(
             role = MessageRole.ASSISTANT,
@@ -446,15 +486,13 @@ class GoogleProviderMessageTest {
         )
 
         val result = invokeBuildContents(listOf(UIMessage.user("Remember this"), assistantMessage))
-        val toolNames = result.flatMap { message ->
-            (message.jsonObject["parts"]?.jsonArray ?: emptyList()).mapNotNull { part ->
-                val obj = part.jsonObject
-                obj["functionCall"]?.jsonObject?.get("name")?.jsonPrimitive?.content
-                    ?: obj["functionResponse"]?.jsonObject?.get("name")?.jsonPrimitive?.content
-            }
-        }
+        val parts = result.flatMap { it.jsonObject["parts"]?.jsonArray ?: emptyList() }
+        val texts = parts.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.content }
 
-        assertTrue(toolNames.none { it.isBlank() })
+        assertTrue(parts.none { it.jsonObject.containsKey("functionCall") })
+        assertTrue(parts.none { it.jsonObject.containsKey("functionResponse") })
+        assertTrue(texts.contains("Calling a tool"))
+        assertTrue(texts.contains("Done"))
     }
 
     // ==================== Helper Functions ====================

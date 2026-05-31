@@ -1,12 +1,15 @@
 package me.rerere.ai.provider.providers
 
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.time.Clock
+import kotlin.uuid.Uuid
 
 class ProviderMessageUtilsTest {
 
@@ -338,6 +341,46 @@ class ProviderMessageUtilsTest {
         assertEquals("Final answer", (content[1] as UIMessagePart.Text).text)
     }
 
+    // ==================== Reasoning Provider Compatibility Tests ====================
+
+    @Test
+    fun `message without model id should include provider reasoning`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel))
+        val message = createReasoningMessage(modelId = null)
+
+        assertTrue(message.shouldIncludeProviderReasoning(currentModel, providerSetting))
+    }
+
+    @Test
+    fun `current model reasoning should be included`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel))
+        val message = createReasoningMessage(modelId = currentModel.id)
+
+        assertTrue(message.shouldIncludeProviderReasoning(currentModel, providerSetting))
+    }
+
+    @Test
+    fun `same provider model reasoning should be included`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val previousModel = Model(modelId = "gpt-4.1")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel, previousModel))
+        val message = createReasoningMessage(modelId = previousModel.id)
+
+        assertTrue(message.shouldIncludeProviderReasoning(currentModel, providerSetting))
+    }
+
+    @Test
+    fun `foreign provider model reasoning should be omitted`() {
+        val currentModel = Model(modelId = "gpt-5")
+        val googleModel = Model(modelId = "gemini-3-pro")
+        val providerSetting = ProviderSetting.OpenAI(models = listOf(currentModel))
+        val message = createReasoningMessage(modelId = googleModel.id)
+
+        assertFalse(message.shouldIncludeProviderReasoning(currentModel, providerSetting))
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(callId: String, name: String): UIMessagePart.Tool {
@@ -355,6 +398,17 @@ class ProviderMessageUtilsTest {
             toolName = name,
             input = "{}",
             output = emptyList()
+        )
+    }
+
+    private fun createReasoningMessage(modelId: Uuid?): UIMessage {
+        return UIMessage(
+            role = MessageRole.ASSISTANT,
+            modelId = modelId,
+            parts = listOf(
+                UIMessagePart.Reasoning(reasoning = "thinking"),
+                UIMessagePart.Text("answer")
+            )
         )
     }
 }

@@ -58,6 +58,7 @@ import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
+private const val RESPONSE_CALL_ID_METADATA_KEY = "response_call_id"
 
 class ResponseAPI(
     private val client: OkHttpClient,
@@ -365,15 +366,16 @@ class ResponseAPI(
 
                     // 输出 function_call + function_call_output
                     group.tools.forEach { tool ->
+                        val callId = tool.responseCallId()
                         add(buildJsonObject {
                             put("type", "function_call")
-                            put("call_id", tool.toolCallId)
+                            put("call_id", callId)
                             put("name", tool.toolName)
                             put("arguments", tool.input)
                         })
                         add(buildJsonObject {
                             put("type", "function_call_output")
-                            put("call_id", tool.toolCallId)
+                            put("call_id", callId)
                             put(
                                 "output",
                                 tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
@@ -393,6 +395,22 @@ class ResponseAPI(
         val contentParts = message.parts.filter { it is UIMessagePart.Text || it is UIMessagePart.Image }
         if (contentParts.isNotEmpty()) {
             addContentItem(message.role, contentParts)
+        }
+    }
+
+    private fun UIMessagePart.Tool.responseCallId(): String {
+        return metadata?.get(RESPONSE_CALL_ID_METADATA_KEY)
+            ?.jsonPrimitiveOrNull
+            ?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+            ?: toolCallId
+    }
+
+    private fun responseCallIdMetadata(callId: String?): JsonObject? {
+        return callId?.takeIf { it.isNotBlank() }?.let {
+            buildJsonObject {
+                put(RESPONSE_CALL_ID_METADATA_KEY, it)
+            }
         }
     }
 
@@ -487,6 +505,7 @@ class ResponseAPI(
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "function_call") {
+                    val responseCallId = item["call_id"]?.jsonPrimitive?.contentOrNull
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -502,7 +521,8 @@ class ResponseAPI(
                                             toolName = item["name"]?.jsonPrimitive?.content ?: "",
                                             input = item["arguments"]?.jsonPrimitive?.content
                                                 ?: "",
-                                            output = emptyList()
+                                            output = emptyList(),
+                                            metadata = responseCallIdMetadata(responseCallId)
                                         )
                                     )
                                 ),
@@ -561,6 +581,7 @@ class ResponseAPI(
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "function_call") {
+                    val responseCallId = item["call_id"]?.jsonPrimitive?.contentOrNull
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -575,7 +596,8 @@ class ResponseAPI(
                                             toolCallId = id,
                                             toolName = item["name"]?.jsonPrimitive?.contentOrNull ?: "",
                                             input = item["arguments"]?.jsonPrimitive?.contentOrNull ?: "",
-                                            output = emptyList()
+                                            output = emptyList(),
+                                            metadata = responseCallIdMetadata(responseCallId)
                                         )
                                     )
                                 ),

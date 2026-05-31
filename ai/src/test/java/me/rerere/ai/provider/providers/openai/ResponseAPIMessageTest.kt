@@ -422,6 +422,19 @@ class ResponseAPIMessageTest {
 
         assertEquals("memory_tool", tool.toolName)
         assertEquals("""{"action":"create"}""", tool.input)
+
+        val executedTool = tool.copy(output = listOf(UIMessagePart.Text("created")))
+        val historyMessages = messages.dropLast(1) + messages.last().copy(parts = listOf(executedTool))
+        val history = invokeBuildMessages(historyMessages)
+        val functionCall = history.single {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "function_call"
+        }.jsonObject
+        val functionOutput = history.single {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "function_call_output"
+        }.jsonObject
+
+        assertEquals("call_1", functionCall["call_id"]?.jsonPrimitive?.content)
+        assertEquals("call_1", functionOutput["call_id"]?.jsonPrimitive?.content)
     }
 
     @Test
