@@ -1,8 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -23,31 +23,35 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.termux.view.TerminalView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
-import me.rerere.hugeicons.stroke.Clean
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File02
@@ -67,7 +71,6 @@ import org.koin.core.parameter.parametersOf
 fun WorkspaceDetailPage(id: String) {
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
-    val terminalState by vm.terminalState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
@@ -88,10 +91,6 @@ fun WorkspaceDetailPage(id: String) {
                     if (pagerState.currentPage == 0) {
                         IconButton(onClick = { vm.refresh() }) {
                             Icon(HugeIcons.Refresh01, contentDescription = null)
-                        }
-                    } else {
-                        IconButton(onClick = { vm.clearTerminal() }) {
-                            Icon(HugeIcons.Clean, contentDescription = null)
                         }
                     }
                 },
@@ -135,10 +134,8 @@ fun WorkspaceDetailPage(id: String) {
                 )
 
                 1 -> WorkspaceTerminalPage(
-                    state = terminalState,
+                    root = state.workspace?.root,
                     contentPadding = innerPadding,
-                    onInputChange = vm::updateTerminalInput,
-                    onExecute = vm::executeTerminalCommand,
                 )
             }
         }
@@ -214,111 +211,122 @@ private fun WorkspaceFilesPage(
 
 @Composable
 private fun WorkspaceTerminalPage(
-    state: WorkspaceTerminalState,
+    root: String?,
     contentPadding: PaddingValues,
-    onInputChange: (String) -> Unit,
-    onExecute: (String) -> Unit,
 ) {
-    Column(
+    val context = LocalContext.current
+    val terminalTextSizePx = with(LocalDensity.current) { 15.sp.roundToPx() }
+    var finished by remember(root) { mutableStateOf(false) }
+    val sessionClient = remember(root) {
+        WorkspaceTerminalSessionClient(context.applicationContext) {
+            finished = true
+        }
+    }
+    val viewClient = remember(root) {
+        WorkspaceTerminalViewClient(context)
+    }
+
+    if (root == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("工作区加载中...")
+        }
+        return
+    }
+
+    if (!workspaceRootfsReady(context, root)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "请先安装 Rootfs",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    val session = remember(root) {
+        createWorkspaceTerminalSession(context, root, sessionClient)
+    }
+
+    DisposableEffect(session) {
+        onDispose {
+            sessionClient.terminalView = null
+            viewClient.terminalView = null
+            session.finishIfRunning()
+        }
+    }
+
+    Surface(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(contentPadding),
+        color = Color.Black,
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (state.history.isEmpty()) {
-                item {
-                    Text(
-                        text = "命令会在工作区 files 目录下执行。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            items(state.history.size) { index ->
-                TerminalEntry(state.history[index])
-            }
-            if (state.running) {
-                item {
-                    Text(
-                        text = "执行中...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = state.input,
-                onValueChange = onInputChange,
-                modifier = Modifier.weight(1f),
-                label = { Text("命令") },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                enabled = !state.running,
+        Box(modifier = Modifier.fillMaxSize()) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                factory = { viewContext ->
+                    TerminalView(viewContext, null).apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        setTextSize(terminalTextSizePx)
+                        setTerminalViewClient(viewClient)
+                        attachSession(session)
+                        sessionClient.terminalView = this
+                        viewClient.terminalView = this
+                        setOnTouchListener { _, event ->
+                            if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                viewClient.focusAndShowKeyboard()
+                            }
+                            false
+                        }
+                        post {
+                            viewClient.focusAndShowKeyboard()
+                        }
+                    }
+                },
+                update = { terminalView ->
+                    terminalView.isFocusable = true
+                    terminalView.isFocusableInTouchMode = true
+                    terminalView.setTextSize(terminalTextSizePx)
+                    terminalView.setTerminalViewClient(viewClient)
+                    sessionClient.terminalView = terminalView
+                    viewClient.terminalView = terminalView
+                    terminalView.setOnTouchListener { _, event ->
+                        if (event.action == android.view.MotionEvent.ACTION_UP) {
+                            viewClient.focusAndShowKeyboard()
+                        }
+                        false
+                    }
+                    terminalView.attachSession(session)
+                    terminalView.onScreenUpdated()
+                },
             )
-            IconButton(
-                enabled = !state.running && state.input.isNotBlank(),
-                onClick = { onExecute(state.input) },
-            ) {
-                Icon(HugeIcons.ArrowRight01, contentDescription = null)
+            if (finished) {
+                Text(
+                    text = "终端已退出",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f),
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun TerminalEntry(entry: WorkspaceTerminalEntry) {
-    val text = when (entry) {
-        is WorkspaceTerminalEntry.Command -> "$ ${entry.command}"
-        is WorkspaceTerminalEntry.Error -> entry.message
-        is WorkspaceTerminalEntry.Result -> buildString {
-            if (entry.result.stdout.isNotBlank()) append(entry.result.stdout.trimEnd())
-            if (entry.result.stderr.isNotBlank()) {
-                if (isNotEmpty()) append('\n')
-                append(entry.result.stderr.trimEnd())
-            }
-            if (entry.result.timedOut) {
-                if (isNotEmpty()) append('\n')
-                append("命令超时")
-            }
-            if (isEmpty()) append("exit ${entry.result.exitCode}")
-        }
-    }
-    val color = when (entry) {
-        is WorkspaceTerminalEntry.Command -> MaterialTheme.colorScheme.primary
-        is WorkspaceTerminalEntry.Error -> MaterialTheme.colorScheme.error
-        is WorkspaceTerminalEntry.Result -> {
-            if (entry.result.exitCode == 0 && !entry.result.timedOut) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.error
-            }
-        }
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CustomColors.cardColorsOnSurfaceContainer,
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(12.dp),
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            color = color,
-        )
     }
 }
 

@@ -3,11 +3,11 @@ package me.rerere.workspace
 import java.io.File
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
 
 class WorkspaceManager(
     private val baseDir: File,
     private val config: WorkspaceConfig = WorkspaceConfig(),
+    private val shellRunner: WorkspaceShellRunner = HostShellRunner(),
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
 
@@ -102,25 +102,17 @@ class WorkspaceManager(
         require(workingDir.exists()) { "Working directory does not exist: $cwd" }
         require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
 
-        val process = ProcessBuilder(defaultShell(), "-c", command)
-            .directory(workingDir)
-            .redirectErrorStream(false)
-            .start()
-        val stdout = StringBuilder()
-        val stderr = StringBuilder()
-        val stdoutThread = process.inputStream.readTextAsync(stdout)
-        val stderrThread = process.errorStream.readTextAsync(stderr)
-        val finished = process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
-        if (!finished) {
-            process.destroyForcibly()
-        }
-        stdoutThread.join(1_000)
-        stderrThread.join(1_000)
-        return WorkspaceCommandResult(
-            exitCode = if (finished) process.exitValue() else -1,
-            stdout = stdout.toString(),
-            stderr = stderr.toString(),
-            timedOut = !finished,
+        return shellRunner.execute(
+            WorkspaceShellContext(
+                root = root,
+                command = command,
+                cwd = cwd,
+                filesDir = filesDir(root),
+                linuxDir = linuxDir(root),
+                tempDir = tempDir(root),
+                workingDir = workingDir,
+                timeoutMillis = timeoutMillis,
+            )
         )
     }
 
@@ -141,19 +133,5 @@ class WorkspaceManager(
         private const val TEMP_DIR = "tmp"
         private const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
         private val ROOT_NAME_REGEX = Regex("[A-Za-z0-9._-]+")
-
-        private fun defaultShell(): String =
-            if (File("/system/bin/sh").exists()) "/system/bin/sh" else "/bin/sh"
     }
 }
-
-private fun java.io.InputStream.readTextAsync(target: StringBuilder): Thread = Thread {
-    bufferedReader().use { reader ->
-        val buffer = CharArray(4096)
-        while (true) {
-            val read = reader.read(buffer)
-            if (read < 0) break
-            target.append(buffer, 0, read)
-        }
-    }
-}.apply { start() }

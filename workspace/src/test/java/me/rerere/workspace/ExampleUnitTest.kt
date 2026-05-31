@@ -83,6 +83,22 @@ class ExampleUnitTest {
         assertEquals("hello", File(manager.filesDir(root), "command.txt").readText())
     }
 
+    @Test
+    fun prootRunnerRequiresRootfs() {
+        val baseDir = Files.createTempDirectory("workspace-proot-test").toFile()
+        val manager = WorkspaceManager(
+            baseDir = baseDir,
+            shellRunner = ProotShellRunner(File(baseDir, "native"))
+        )
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        val result = manager.executeCommand(root, "cat /etc/os-release")
+
+        assertEquals(127, result.exitCode)
+        assertEquals("请先安装 Rootfs", result.stderr)
+    }
+
     private fun tarGz(vararg entries: TarTestEntry): ByteArray {
         val output = ByteArrayOutputStream()
         GZIPOutputStream(output).use { gzip ->
