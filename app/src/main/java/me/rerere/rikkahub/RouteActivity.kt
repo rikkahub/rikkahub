@@ -93,6 +93,8 @@ import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
 import me.rerere.rikkahub.ui.pages.extensions.SkillDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.SkillsPage
+import me.rerere.rikkahub.ui.pages.extensions.WorkspacePage
+import me.rerere.rikkahub.ui.pages.extensions.WorkspaceDetailPage
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
@@ -485,6 +487,14 @@ class RouteActivity : ComponentActivity() {
                                 SkillsPage()
                             }
 
+                            entry<Screen.Workspaces> {
+                                WorkspacePage()
+                            }
+
+                            entry<Screen.WorkspaceDetail> { key ->
+                                WorkspaceDetailPage(key.id)
+                            }
+
                             entry<Screen.SkillDetail> { key ->
                                 SkillDetailPage(skillName = key.skillName)
                             }
@@ -677,6 +687,12 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Skills : Screen
+
+    @Serializable
+    data object Workspaces : Screen
+
+    @Serializable
+    data class WorkspaceDetail(val id: String) : Screen
 
     @Serializable
     data class SkillDetail(val skillName: String) : Screen
