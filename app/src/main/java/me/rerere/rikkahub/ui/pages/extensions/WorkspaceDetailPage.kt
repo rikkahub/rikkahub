@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +30,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -78,7 +80,7 @@ fun WorkspaceDetailPage(id: String) {
 
     Scaffold(
         topBar = {
-            LargeFlexibleTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = state.workspace?.name ?: "工作区详情",
@@ -215,7 +217,7 @@ private fun WorkspaceTerminalPage(
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
-    val terminalTextSizePx = with(LocalDensity.current) { 15.sp.roundToPx() }
+    val terminalTextSizePx = with(LocalDensity.current) { 13.sp.roundToPx() }
     var finished by remember(root) { mutableStateOf(false) }
     val sessionClient = remember(root) {
         WorkspaceTerminalSessionClient(context.applicationContext) {
@@ -271,14 +273,14 @@ private fun WorkspaceTerminalPage(
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .padding(contentPadding),
+            .padding(contentPadding)
+            .imePadding(),
         color = Color.Black,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AndroidView(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
+                    .fillMaxSize(),
                 factory = { viewContext ->
                     TerminalView(viewContext, null).apply {
                         isFocusable = true
