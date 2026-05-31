@@ -4,6 +4,7 @@ import java.io.File
 
 class ProotShellRunner(
     private val nativeLibraryDir: File,
+    private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
         if (!context.linuxDir.hasUsableRootfs()) {
@@ -32,7 +33,7 @@ class ProotShellRunner(
         }
 
         context.tempDir.mkdirs()
-        ensureRootfsDns(context.linuxDir)
+        patcher.patch(context.linuxDir)
         val process = ProcessBuilder(buildCommand(context, proot))
             .directory(context.filesDir)
             .redirectErrorStream(false)
@@ -50,6 +51,7 @@ class ProotShellRunner(
         val command = mutableListOf(
             proot.absolutePath,
             "--root-id",
+            "--link2symlink",
             "--kill-on-exit",
             "-r",
             context.linuxDir.absolutePath,
@@ -72,7 +74,9 @@ class ProotShellRunner(
             "HOME=/root",
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "TERM=xterm-256color",
-            "/bin/sh",
+            "LANG=C.UTF-8",
+            "LC_ALL=C.UTF-8",
+            "/bin/bash",
             "-lc",
             context.command,
         )

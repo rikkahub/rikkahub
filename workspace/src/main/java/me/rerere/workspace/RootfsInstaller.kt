@@ -13,6 +13,7 @@ import java.util.zip.GZIPInputStream
 
 class RootfsInstaller(
     private val manager: WorkspaceManager,
+    private val patcher: RootfsPatcher = RootfsPatcher(),
 ) {
     fun install(
         root: String,
@@ -35,6 +36,7 @@ class RootfsInstaller(
             require(stagingDir.renameTo(linuxDir)) {
                 "Failed to move rootfs into workspace"
             }
+            patcher.patch(linuxDir)
             onProgress(RootfsInstallProgress(stage = RootfsInstallStage.INSTALLED))
         } finally {
             archive.delete()
