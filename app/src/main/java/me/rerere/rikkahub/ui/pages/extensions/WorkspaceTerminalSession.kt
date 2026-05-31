@@ -13,7 +13,8 @@ import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
-import me.rerere.workspace.ensureRootfsDns
+import me.rerere.workspace.RootfsPatchOptions
+import me.rerere.workspace.RootfsPatcher
 import java.io.File
 
 internal fun createWorkspaceTerminalSession(
@@ -29,10 +30,14 @@ internal fun createWorkspaceTerminalSession(
     val nativeLibraryDir = File(appContext.applicationInfo.nativeLibraryDir)
     val proot = File(nativeLibraryDir, "libproot_exec.so")
     val loader = File(nativeLibraryDir, "libproot_loader.so")
-    ensureRootfsDns(linuxDir, appContext.activeDnsServers())
+    RootfsPatcher().patch(
+        linuxDir,
+        RootfsPatchOptions(nameservers = appContext.activeDnsServers())
+    )
 
     val args = mutableListOf(
         "--root-id",
+        "--link2symlink",
         "--kill-on-exit",
         "-r",
         linuxDir.absolutePath,
@@ -53,9 +58,11 @@ internal fun createWorkspaceTerminalSession(
         "HOME=/root",
         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "TERM=xterm-256color",
+        "LANG=C.UTF-8",
+        "LC_ALL=C.UTF-8",
         "USER=root",
-        "SHELL=/bin/sh",
-        "/bin/sh",
+        "SHELL=/bin/bash",
+        "/bin/bash",
     )
 
     val env = arrayOf(
