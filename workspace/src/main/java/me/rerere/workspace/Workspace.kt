@@ -9,7 +9,6 @@ data class Workspace(
     val createdAt: Long,
     val updatedAt: Long,
     val lastAccessAt: Long? = null,
-    val sizeBytes: Long? = null,
 )
 
 enum class WorkspaceShellStatus {
