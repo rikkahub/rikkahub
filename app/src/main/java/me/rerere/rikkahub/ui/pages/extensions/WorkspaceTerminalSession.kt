@@ -168,6 +168,8 @@ internal class WorkspaceTerminalViewClient(
     private val context: Context,
 ) : TerminalViewClient {
     var terminalView: TerminalView? = null
+    var controlDown: Boolean = false
+    var altDown: Boolean = false
 
     override fun onScale(scale: Float): Float = scale.coerceIn(0.8f, 1.25f)
 
@@ -200,9 +202,9 @@ internal class WorkspaceTerminalViewClient(
 
     override fun onLongPress(event: MotionEvent): Boolean = false
 
-    override fun readControlKey(): Boolean = false
+    override fun readControlKey(): Boolean = controlDown
 
-    override fun readAltKey(): Boolean = false
+    override fun readAltKey(): Boolean = altDown
 
     override fun readShiftKey(): Boolean = false
 

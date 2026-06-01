@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import android.graphics.Typeface
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,17 +16,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.BottomAppBar
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -37,21 +37,21 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.termux.view.TerminalView
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
+import androidx.core.content.res.ResourcesCompat
+import com.termux.terminal.TerminalSession
+import com.termux.view.TerminalView
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.ComputerTerminal01
@@ -60,8 +60,11 @@ import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import me.rerere.workspace.WorkspaceFileEntry
@@ -71,11 +74,10 @@ import org.koin.core.parameter.parametersOf
 
 @Composable
 fun WorkspaceDetailPage(id: String) {
+    val navController = LocalNavController.current
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val pagerState = rememberPagerState { 2 }
-    val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
 
     Scaffold(
@@ -90,57 +92,28 @@ fun WorkspaceDetailPage(id: String) {
                 },
                 navigationIcon = { BackButton() },
                 actions = {
-                    if (pagerState.currentPage == 0) {
-                        IconButton(onClick = { vm.refresh() }) {
-                            Icon(HugeIcons.Refresh01, contentDescription = null)
-                        }
+                    IconButton(onClick = { vm.refresh() }) {
+                        Icon(HugeIcons.Refresh01, contentDescription = null)
+                    }
+                    IconButton(onClick = { navController.navigate(Screen.WorkspaceTerminal(id)) }) {
+                        Icon(HugeIcons.ComputerTerminal01, contentDescription = null)
                     }
                 },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
         },
-        bottomBar = {
-            BottomAppBar(
-                containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor,
-            ) {
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 0,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    icon = { Icon(HugeIcons.File02, contentDescription = null) },
-                    label = { Text("文件") },
-                )
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 1,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    icon = { Icon(HugeIcons.ComputerTerminal01, contentDescription = null) },
-                    label = { Text("终端") },
-                )
-            }
-        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-        ) { page ->
-            when (page) {
-                0 -> WorkspaceFilesPage(
-                    state = state,
-                    contentPadding = innerPadding,
-                    onSelectArea = vm::selectArea,
-                    onGoUp = vm::goUp,
-                    onOpen = vm::open,
-                    onDelete = { deleteTarget = it },
-                )
-
-                1 -> WorkspaceTerminalPage(
-                    root = state.workspace?.root,
-                    contentPadding = innerPadding,
-                )
-            }
-        }
+        WorkspaceFilesPage(
+            state = state,
+            contentPadding = innerPadding,
+            onSelectArea = vm::selectArea,
+            onGoUp = vm::goUp,
+            onOpen = vm::open,
+            onDelete = { deleteTarget = it },
+        )
     }
 
     deleteTarget?.let { entry ->
@@ -157,6 +130,40 @@ fun WorkspaceDetailPage(id: String) {
         ) {
             Text("将删除 ${entry.path}。")
         }
+    }
+}
+
+@Composable
+fun WorkspaceTerminalPage(id: String) {
+    val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
+    val state by vm.state.collectAsStateWithLifecycle()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = state.workspace?.name?.let { "$it · 终端" } ?: "终端",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                navigationIcon = { BackButton() },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Black,
+                    scrolledContainerColor = Color.Black,
+                    navigationIconContentColor = Color.White,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                ),
+            )
+        },
+        containerColor = Color.Black,
+    ) { innerPadding ->
+        WorkspaceTerminalContent(
+            root = state.workspace?.root,
+            contentPadding = innerPadding,
+        )
     }
 }
 
@@ -212,13 +219,18 @@ private fun WorkspaceFilesPage(
 }
 
 @Composable
-private fun WorkspaceTerminalPage(
+private fun WorkspaceTerminalContent(
     root: String?,
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
     val terminalTextSizePx = with(LocalDensity.current) { 13.sp.roundToPx() }
+    val terminalTypeface = remember(context) {
+        ResourcesCompat.getFont(context, R.font.jetbrains_mono) ?: Typeface.MONOSPACE
+    }
     var finished by remember(root) { mutableStateOf(false) }
+    var controlDown by remember(root) { mutableStateOf(false) }
+    var altDown by remember(root) { mutableStateOf(false) }
     val sessionClient = remember(root) {
         WorkspaceTerminalSessionClient(context.applicationContext) {
             finished = true
@@ -227,6 +239,8 @@ private fun WorkspaceTerminalPage(
     val viewClient = remember(root) {
         WorkspaceTerminalViewClient(context)
     }
+    viewClient.controlDown = controlDown
+    viewClient.altDown = altDown
 
     if (root == null) {
         Box(
@@ -236,7 +250,10 @@ private fun WorkspaceTerminalPage(
                 .padding(16.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text("工作区加载中...")
+            Text(
+                text = "工作区加载中...",
+                color = Color.White.copy(alpha = 0.7f),
+            )
         }
         return
     }
@@ -252,7 +269,7 @@ private fun WorkspaceTerminalPage(
             Text(
                 text = "请先安装 Rootfs",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.7f),
             )
         }
         return
@@ -277,59 +294,135 @@ private fun WorkspaceTerminalPage(
             .imePadding(),
         color = Color.Black,
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AndroidView(
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
                 modifier = Modifier
-                    .fillMaxSize(),
-                factory = { viewContext ->
-                    TerminalView(viewContext, null).apply {
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        setTextSize(terminalTextSizePx)
-                        setTerminalViewClient(viewClient)
-                        attachSession(session)
-                        sessionClient.terminalView = this
-                        viewClient.terminalView = this
-                        setOnTouchListener { _, event ->
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    factory = { viewContext ->
+                        TerminalView(viewContext, null).apply {
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                            setTextSize(terminalTextSizePx)
+                            setTypeface(terminalTypeface)
+                            setTerminalViewClient(viewClient)
+                            attachSession(session)
+                            sessionClient.terminalView = this
+                            viewClient.terminalView = this
+                            setOnTouchListener { _, event ->
+                                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                    viewClient.focusAndShowKeyboard()
+                                }
+                                false
+                            }
+                            post {
+                                viewClient.focusAndShowKeyboard()
+                            }
+                        }
+                    },
+                    update = { terminalView ->
+                        terminalView.isFocusable = true
+                        terminalView.isFocusableInTouchMode = true
+                        terminalView.setTextSize(terminalTextSizePx)
+                        terminalView.setTypeface(terminalTypeface)
+                        terminalView.setTerminalViewClient(viewClient)
+                        sessionClient.terminalView = terminalView
+                        viewClient.terminalView = terminalView
+                        terminalView.setOnTouchListener { _, event ->
                             if (event.action == android.view.MotionEvent.ACTION_UP) {
                                 viewClient.focusAndShowKeyboard()
                             }
                             false
                         }
-                        post {
-                            viewClient.focusAndShowKeyboard()
-                        }
-                    }
-                },
-                update = { terminalView ->
-                    terminalView.isFocusable = true
-                    terminalView.isFocusableInTouchMode = true
-                    terminalView.setTextSize(terminalTextSizePx)
-                    terminalView.setTerminalViewClient(viewClient)
-                    sessionClient.terminalView = terminalView
-                    viewClient.terminalView = terminalView
-                    terminalView.setOnTouchListener { _, event ->
-                        if (event.action == android.view.MotionEvent.ACTION_UP) {
-                            viewClient.focusAndShowKeyboard()
-                        }
-                        false
-                    }
-                    terminalView.attachSession(session)
-                    terminalView.onScreenUpdated()
-                },
-            )
-            if (finished) {
-                Text(
-                    text = "终端已退出",
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(12.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f),
+                        terminalView.attachSession(session)
+                        terminalView.onScreenUpdated()
+                    },
                 )
+                if (finished) {
+                    Text(
+                        text = "终端已退出",
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                    )
+                }
             }
+            TerminalExtraKeysBar(
+                controlDown = controlDown,
+                altDown = altDown,
+                onControlToggle = { controlDown = !controlDown },
+                onAltToggle = { altDown = !altDown },
+                onSendText = { session.writeText(it) },
+            )
         }
     }
+}
+
+@Composable
+private fun TerminalExtraKeysBar(
+    controlDown: Boolean,
+    altDown: Boolean,
+    onControlToggle: () -> Unit,
+    onAltToggle: () -> Unit,
+    onSendText: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Black)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TerminalExtraKey("ESC") { onSendText("\u001B") }
+        TerminalExtraKey("TAB") { onSendText("\t") }
+        TerminalExtraKey("CTRL", selected = controlDown, onClick = onControlToggle)
+        TerminalExtraKey("ALT", selected = altDown, onClick = onAltToggle)
+        TerminalExtraKey("-") { onSendText("-") }
+        TerminalExtraKey("/") { onSendText("/") }
+        TerminalExtraKey("|") { onSendText("|") }
+        TerminalExtraKey("←") { onSendText("\u001B[D") }
+        TerminalExtraKey("↓") { onSendText("\u001B[B") }
+        TerminalExtraKey("↑") { onSendText("\u001B[A") }
+        TerminalExtraKey("→") { onSendText("\u001B[C") }
+        TerminalExtraKey("HOME") { onSendText("\u001B[H") }
+        TerminalExtraKey("END") { onSendText("\u001B[F") }
+    }
+}
+
+@Composable
+private fun TerminalExtraKey(
+    label: String,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        modifier = Modifier
+            .background(
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.White.copy(alpha = 0.12f)
+                },
+                shape = RoundedCornerShape(6.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.labelMedium,
+        color = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            Color.White.copy(alpha = 0.9f)
+        },
+    )
 }
 
 @Composable
@@ -508,4 +601,9 @@ private fun formatBytes(bytes: Long): String {
         unitIndex++
     }
     return "%.1f %s".format(value, units[unitIndex])
+}
+
+private fun TerminalSession.writeText(text: String) {
+    val bytes = text.toByteArray()
+    write(bytes, 0, bytes.size)
 }
