@@ -20,11 +20,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -46,7 +44,6 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MoreVertical
-import me.rerere.hugeicons.stroke.PackageAdd
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -54,21 +51,16 @@ import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
-import me.rerere.workspace.RootfsInstallProgress
-import me.rerere.workspace.RootfsInstallStage
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
     val navController = LocalNavController.current
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
-    val installProgress by vm.installProgress.collectAsStateWithLifecycle()
-    val installErrors by vm.installErrors.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
-    var installTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
 
     Scaffold(
         topBar = {
@@ -101,11 +93,8 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
             items(workspaces, key = { it.id }) { workspace ->
                 WorkspaceCard(
                     workspace = workspace,
-                    installProgress = installProgress[workspace.id],
                     onRename = { editTarget = workspace },
                     onDelete = { deleteTarget = workspace },
-                    onShellEnabledChange = { vm.setShellEnabled(workspace, it) },
-                    onInstallRootfs = { installTarget = workspace },
                     onOpen = { navController.navigate(Screen.WorkspaceDetail(workspace.id)) },
                 )
             }
@@ -132,30 +121,6 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
             onConfirm = { name ->
                 vm.rename(workspace, name)
                 editTarget = null
-            },
-        )
-    }
-
-    installTarget?.let { workspace ->
-        InstallRootfsDialog(
-            workspace = workspace,
-            onDismiss = { installTarget = null },
-            onConfirm = { url ->
-                vm.installRootfs(workspace, url)
-                installTarget = null
-            },
-        )
-    }
-
-    installErrors.entries.firstOrNull()?.let { (workspaceId, message) ->
-        AlertDialog(
-            onDismissRequest = { vm.dismissInstallError(workspaceId) },
-            title = { Text("Rootfs 安装失败") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { vm.dismissInstallError(workspaceId) }) {
-                    Text("确定")
-                }
             },
         )
     }
@@ -206,11 +171,8 @@ private fun EmptyWorkspaceState() {
 @Composable
 private fun WorkspaceCard(
     workspace: WorkspaceEntity,
-    installProgress: RootfsInstallProgress?,
     onRename: () -> Unit,
     onDelete: () -> Unit,
-    onShellEnabledChange: (Boolean) -> Unit,
-    onInstallRootfs: () -> Unit,
     onOpen: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -256,11 +218,6 @@ private fun WorkspaceCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Switch(
-                    checked = workspace.shellEnabled,
-                    onCheckedChange = onShellEnabledChange,
-                    enabled = installProgress == null,
-                )
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(HugeIcons.MoreVertical, contentDescription = null)
@@ -269,15 +226,6 @@ private fun WorkspaceCard(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("安装 Rootfs") },
-                            leadingIcon = { Icon(HugeIcons.PackageAdd, contentDescription = null) },
-                            enabled = installProgress == null,
-                            onClick = {
-                                menuExpanded = false
-                                onInstallRootfs()
-                            },
-                        )
                         DropdownMenuItem(
                             text = { Text("重命名") },
                             leadingIcon = { Icon(HugeIcons.Edit01, contentDescription = null) },
@@ -303,51 +251,7 @@ private fun WorkspaceCard(
                     }
                 }
             }
-            installProgress?.let { progress ->
-                RootfsProgress(progress)
-            }
         }
-    }
-}
-
-@Composable
-private fun RootfsProgress(progress: RootfsInstallProgress) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        val fraction = progress.totalBytes?.takeIf { it > 0 }?.let {
-            (progress.bytesRead.toFloat() / it).coerceIn(0f, 1f)
-        }
-        if (fraction != null && progress.stage == RootfsInstallStage.DOWNLOADING) {
-            LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-        Text(
-            text = when (progress.stage) {
-                RootfsInstallStage.DOWNLOADING -> {
-                    val total = progress.totalBytes?.let { " / ${formatBytes(it)}" }.orEmpty()
-                    "下载中 ${formatBytes(progress.bytesRead)}$total"
-                }
-
-                RootfsInstallStage.EXTRACTING -> {
-                    val entry = progress.currentEntry?.let { " · $it" }.orEmpty()
-                    "解包中 ${progress.entriesExtracted} 项$entry"
-                }
-
-                RootfsInstallStage.INSTALLED -> "安装完成"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
@@ -387,61 +291,3 @@ private fun EditWorkspaceDialog(
         },
     )
 }
-
-@Composable
-private fun InstallRootfsDialog(
-    workspace: WorkspaceEntity,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var url by rememberSaveable(workspace.id) { mutableStateOf(DEFAULT_ROOTFS_URL) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("安装 Rootfs") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "会下载 tar.gz 并解包到 ${workspace.name} 的 linux 目录。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("tar.gz 下载链接") },
-                    singleLine = true,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(url.trim()) },
-                enabled = url.isNotBlank(),
-            ) {
-                Text("安装")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        },
-    )
-}
-
-private fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val units = listOf("KB", "MB", "GB", "TB")
-    var value = bytes / 1024.0
-    var unitIndex = 0
-    while (value >= 1024 && unitIndex < units.lastIndex) {
-        value /= 1024
-        unitIndex++
-    }
-    return "%.1f %s".format(value, units[unitIndex])
-}
-
-private const val DEFAULT_ROOTFS_URL =
-    "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz"
