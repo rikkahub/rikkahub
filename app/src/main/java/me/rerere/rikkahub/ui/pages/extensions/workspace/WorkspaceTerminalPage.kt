@@ -21,7 +21,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +42,8 @@ import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.theme.ColorMode
+import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -51,32 +52,26 @@ fun WorkspaceTerminalPage(id: String) {
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = state.workspace?.name?.let { "$it · 终端" } ?: "终端",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = { BackButton() },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black,
-                    scrolledContainerColor = Color.Black,
-                    navigationIconContentColor = Color.White,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                ),
+    RikkahubTheme(colorMode = ColorMode.DARK) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = state.workspace?.name?.let { "$it · 终端" } ?: "终端",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    navigationIcon = { BackButton() },
+                )
+            },
+        ) { innerPadding ->
+            WorkspaceTerminalContent(
+                root = state.workspace?.root,
+                contentPadding = innerPadding,
             )
-        },
-        containerColor = Color.Black,
-    ) { innerPadding ->
-        WorkspaceTerminalContent(
-            root = state.workspace?.root,
-            contentPadding = innerPadding,
-        )
+        }
     }
 }
 
@@ -114,7 +109,7 @@ private fun WorkspaceTerminalContent(
         ) {
             Text(
                 text = "工作区加载中...",
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             )
         }
         return
@@ -131,7 +126,7 @@ private fun WorkspaceTerminalContent(
             Text(
                 text = "请先安装 Rootfs",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             )
         }
         return
@@ -208,9 +203,9 @@ private fun WorkspaceTerminalContent(
                         text = "终端已退出",
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(12.dp),
+                        .padding(12.dp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                     )
                 }
             }
@@ -236,7 +231,7 @@ private fun TerminalExtraKeysBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.surface)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -271,7 +266,7 @@ private fun TerminalExtraKey(
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    Color.White.copy(alpha = 0.12f)
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                 },
                 shape = RoundedCornerShape(6.dp),
             )
@@ -281,7 +276,7 @@ private fun TerminalExtraKey(
         color = if (selected) {
             MaterialTheme.colorScheme.onPrimary
         } else {
-            Color.White.copy(alpha = 0.9f)
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
         },
     )
 }
