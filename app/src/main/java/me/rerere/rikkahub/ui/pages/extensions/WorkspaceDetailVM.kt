@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceStorageArea
@@ -21,6 +22,12 @@ class WorkspaceDetailVM(
 
     private val _terminalState = MutableStateFlow(WorkspaceTerminalState())
     val terminalState = _terminalState.asStateFlow()
+
+    private val _installProgress = MutableStateFlow<RootfsInstallProgress?>(null)
+    val installProgress = _installProgress.asStateFlow()
+
+    private val _installError = MutableStateFlow<String?>(null)
+    val installError = _installError.asStateFlow()
 
     init {
         loadWorkspace()
@@ -96,6 +103,35 @@ class WorkspaceDetailVM(
                 _state.update { it.copy(error = error.message ?: "删除失败") }
             }
         }
+    }
+
+    fun setShellEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val workspace = state.value.workspace ?: return@launch
+            repository.setShellEnabled(workspace.id, enabled)
+            loadWorkspace()
+        }
+    }
+
+    fun installRootfs(url: String) {
+        viewModelScope.launch {
+            _installError.value = null
+            val workspace = state.value.workspace ?: return@launch
+            runCatching {
+                repository.installRootfs(workspace.id, url) { progress ->
+                    _installProgress.value = progress
+                }
+            }.onFailure { error ->
+                _installError.value = error.message ?: "Rootfs 安装失败"
+            }
+            _installProgress.value = null
+            loadWorkspace()
+            refresh()
+        }
+    }
+
+    fun dismissInstallError() {
+        _installError.value = null
     }
 
     fun executeTerminalCommand(command: String) {

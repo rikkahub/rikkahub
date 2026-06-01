@@ -19,6 +19,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.Screen
@@ -75,7 +76,7 @@ fun ExtensionsPage() {
                     )
                     item(
                         onClick = { navController.navigate(Screen.Workspaces) },
-                        leadingContent = { Icon(HugeIcons.File02, null) },
+                        leadingContent = { Icon(HugeIcons.Folder01, null) },
                         headlineContent = { Text("工作区") },
                         supportingContent = { Text("管理 Agent 可访问的本地工作目录") },
                     )

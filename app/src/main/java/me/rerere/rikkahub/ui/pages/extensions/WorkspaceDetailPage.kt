@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
 import android.graphics.Typeface
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,20 +17,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -37,6 +48,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,22 +65,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.res.ResourcesCompat
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
+import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
+import me.rerere.hugeicons.stroke.Bash
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.PackageAdd
 import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
+import me.rerere.workspace.RootfsInstallProgress
+import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
+import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -77,8 +98,17 @@ fun WorkspaceDetailPage(id: String) {
     val navController = LocalNavController.current
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
+    val installProgress by vm.installProgress.collectAsStateWithLifecycle()
+    val installError by vm.installError.collectAsStateWithLifecycle()
+    val pagerState = rememberPagerState { 2 }
+    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
+    var showInstallDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = pagerState.currentPage == 1 && state.path.isNotBlank()) {
+        vm.goUp()
+    }
 
     Scaffold(
         topBar = {
@@ -103,16 +133,74 @@ fun WorkspaceDetailPage(id: String) {
                 colors = CustomColors.topBarColors,
             )
         },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = pagerState.currentPage == 0,
+                    label = { Text("基础") },
+                    icon = { Icon(HugeIcons.Settings03, contentDescription = null) },
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                )
+                NavigationBarItem(
+                    selected = pagerState.currentPage == 1,
+                    label = { Text("文件") },
+                    icon = { Icon(HugeIcons.File02, contentDescription = null) },
+                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                )
+            }
+        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        WorkspaceFilesPage(
-            state = state,
-            contentPadding = innerPadding,
-            onSelectArea = vm::selectArea,
-            onGoUp = vm::goUp,
-            onOpen = vm::open,
-            onDelete = { deleteTarget = it },
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize(),
+        ) { page ->
+            when (page) {
+                0 -> WorkspaceBasicPage(
+                    workspace = state.workspace,
+                    installProgress = installProgress,
+                    onShellEnabledChange = vm::setShellEnabled,
+                    onInstallRootfs = { showInstallDialog = true },
+                )
+
+                1 -> WorkspaceFilesPage(
+                    state = state,
+                    contentPadding = PaddingValues(),
+                    onSelectArea = vm::selectArea,
+                    onGoUp = vm::goUp,
+                    onOpen = vm::open,
+                    onDelete = { deleteTarget = it },
+                )
+            }
+        }
+    }
+
+    state.workspace?.let { workspace ->
+        if (showInstallDialog) {
+            InstallRootfsDialog(
+                workspace = workspace,
+                onDismiss = { showInstallDialog = false },
+                onConfirm = { url ->
+                    vm.installRootfs(url)
+                    showInstallDialog = false
+                },
+            )
+        }
+    }
+
+    installError?.let { message ->
+        AlertDialog(
+            onDismissRequest = vm::dismissInstallError,
+            title = { Text("Rootfs 安装失败") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = vm::dismissInstallError) {
+                    Text("确定")
+                }
+            },
         )
     }
 
@@ -165,6 +253,218 @@ fun WorkspaceTerminalPage(id: String) {
             contentPadding = innerPadding,
         )
     }
+}
+
+@Composable
+private fun WorkspaceBasicPage(
+    workspace: WorkspaceEntity?,
+    installProgress: RootfsInstallProgress?,
+    onShellEnabledChange: (Boolean) -> Unit,
+    onInstallRootfs: () -> Unit,
+) {
+    val shellStatus = workspace?.shellStatus
+    val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
+    val rootfsReady = shellStatus == WorkspaceShellStatus.READY.name
+    val installButtonText = when {
+        installing -> "安装中"
+        rootfsReady -> "重新安装 Rootfs"
+        else -> "安装 Rootfs"
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CustomColors.cardColorsOnSurfaceContainer,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        text = "工作区",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    WorkspaceInfoRow("名称", workspace?.name ?: "加载中")
+                    WorkspaceInfoRow("ID", workspace?.id ?: "-")
+                    WorkspaceInfoRow("Root", workspace?.root ?: "-")
+                    WorkspaceInfoRow("Shell 状态", workspace?.shellStatus?.lowercase() ?: "-")
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CustomColors.cardColorsOnSurfaceContainer,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = "启用 Shell",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = "允许该工作区使用本地 Rootfs 运行终端环境",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = workspace?.shellEnabled == true,
+                            onCheckedChange = onShellEnabledChange,
+                            enabled = workspace != null && installProgress == null,
+                        )
+                    }
+
+                    Button(
+                        onClick = onInstallRootfs,
+                        enabled = workspace != null && !installing,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(HugeIcons.Bash, contentDescription = null)
+                        Text(
+                            text = installButtonText,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+
+                    installProgress?.let { progress ->
+                        RootfsProgress(progress)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceInfoRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(0.35f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = value,
+            modifier = Modifier.weight(0.65f),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun RootfsProgress(progress: RootfsInstallProgress) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val fraction = progress.totalBytes?.takeIf { it > 0 }?.let {
+            (progress.bytesRead.toFloat() / it).coerceIn(0f, 1f)
+        }
+        if (fraction != null && progress.stage == RootfsInstallStage.DOWNLOADING) {
+            LinearProgressIndicator(
+                progress = { fraction },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        Text(
+            text = when (progress.stage) {
+                RootfsInstallStage.DOWNLOADING -> {
+                    val total = progress.totalBytes?.let { " / ${formatBytes(it)}" }.orEmpty()
+                    "下载中 ${formatBytes(progress.bytesRead)}$total"
+                }
+
+                RootfsInstallStage.EXTRACTING -> {
+                    val entry = progress.currentEntry?.let { " · $it" }.orEmpty()
+                    "解包中 ${progress.entriesExtracted} 项$entry"
+                }
+
+                RootfsInstallStage.INSTALLED -> "安装完成"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun InstallRootfsDialog(
+    workspace: WorkspaceEntity,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var url by rememberSaveable(workspace.id) { mutableStateOf(DEFAULT_ROOTFS_URL) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("安装 Rootfs") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "会下载 tar.gz 并解包到 ${workspace.name} 的 linux 目录。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("tar.gz 下载链接") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(url.trim()) },
+                enabled = url.isNotBlank(),
+            ) {
+                Text("安装")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
 }
 
 @Composable
@@ -607,3 +907,6 @@ private fun TerminalSession.writeText(text: String) {
     val bytes = text.toByteArray()
     write(bytes, 0, bytes.size)
 }
+
+private const val DEFAULT_ROOTFS_URL =
+    "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz"
