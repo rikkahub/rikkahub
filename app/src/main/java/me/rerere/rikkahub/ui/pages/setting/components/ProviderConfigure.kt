@@ -4,14 +4,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -22,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -36,7 +36,6 @@ import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
-import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -199,15 +198,6 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
     CLAUDE_OFFICIAL_HOST
 )
 
-private val cardGroupTextFieldColors
-    @Composable get() = OutlinedTextFieldDefaults.colors(
-        unfocusedBorderColor = Color.Transparent,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-        disabledBorderColor = Color.Transparent,
-        disabledContainerColor = Color.Transparent,
-    )
-
 @Composable
 private fun ProviderConfigureOpenAI(
     provider: ProviderSetting.OpenAI,
@@ -217,98 +207,85 @@ private fun ProviderConfigureOpenAI(
 
     provider.description()
 
-    CardGroup(modifier = Modifier.fillMaxWidth()) {
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_name)) },
-            supportingContent = {
-                OutlinedTextField(
-                    value = provider.name,
-                    onValueChange = { onEdit(provider.copy(name = it.trim())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = cardGroupTextFieldColors,
-                )
+    OutlinedTextField(
+        value = provider.name,
+        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_name)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    var keyVisible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = provider.apiKey,
+        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { keyVisible = !keyVisible }) {
+                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
             }
+        },
+    )
+
+    OutlinedTextField(
+        value = provider.baseUrl,
+        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+        modifier = Modifier.fillMaxWidth(),
+        isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+    )
+
+    if (!provider.useResponseApi) {
+        OutlinedTextField(
+            value = provider.chatCompletionsPath,
+            onValueChange = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_api_path)) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !provider.builtIn,
         )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-            supportingContent = {
-                var keyVisible by remember { mutableStateOf(false) }
-                OutlinedTextField(
-                    value = provider.apiKey,
-                    onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
-                    visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { keyVisible = !keyVisible }) {
-                            Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-                        }
-                    },
-                    colors = cardGroupTextFieldColors,
-                )
-            }
-        )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
-            supportingContent = {
-                OutlinedTextField(
-                    value = provider.baseUrl,
-                    onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
-                    colors = cardGroupTextFieldColors,
-                )
-            }
-        )
-        if (!provider.useResponseApi) {
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_api_path)) },
-                supportingContent = {
-                    OutlinedTextField(
-                        value = provider.chatCompletionsPath,
-                        onValueChange = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !provider.builtIn,
-                        colors = cardGroupTextFieldColors,
-                    )
-                }
-            )
-        }
     }
 
-    CardGroup(modifier = Modifier.fillMaxWidth()) {
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_enable)) },
-            trailingContent = {
-                Switch(
-                    checked = provider.enabled,
-                    onCheckedChange = { onEdit(provider.copy(enabled = it)) }
-                )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_enable))
+        Switch(
+            checked = provider.enabled,
+            onCheckedChange = { onEdit(provider.copy(enabled = it)) }
+        )
+    }
+
+    val responseAPIWarning = stringResource(R.string.setting_provider_page_response_api_warning)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_response_api))
+        Switch(
+            checked = provider.useResponseApi,
+            onCheckedChange = {
+                onEdit(provider.copy(useResponseApi = it))
+                if (it && provider.baseUrl.toHttpUrlOrNull()?.host != "api.openai.com") {
+                    toaster.show(message = responseAPIWarning, type = ToastType.Warning)
+                }
             }
         )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_response_api)) },
-            trailingContent = {
-                val responseAPIWarning = stringResource(R.string.setting_provider_page_response_api_warning)
-                Switch(
-                    checked = provider.useResponseApi,
-                    onCheckedChange = {
-                        onEdit(provider.copy(useResponseApi = it))
-                        if (it && provider.baseUrl.toHttpUrlOrNull()?.host != "api.openai.com") {
-                            toaster.show(message = responseAPIWarning, type = ToastType.Warning)
-                        }
-                    }
-                )
-            }
-        )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_include_history_reasoning)) },
-            trailingContent = {
-                Switch(
-                    checked = provider.includeHistoryReasoning,
-                    onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }
-                )
-            }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_include_history_reasoning))
+        Switch(
+            checked = provider.includeHistoryReasoning,
+            onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }
         )
     }
 }
@@ -320,70 +297,58 @@ private fun ProviderConfigureClaude(
 ) {
     provider.description()
 
-    CardGroup(modifier = Modifier.fillMaxWidth()) {
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_name)) },
-            supportingContent = {
-                OutlinedTextField(
-                    value = provider.name,
-                    onValueChange = { onEdit(provider.copy(name = it.trim())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
-                    colors = cardGroupTextFieldColors,
-                )
+    OutlinedTextField(
+        value = provider.name,
+        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_name)) },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+    )
+
+    var keyVisible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = provider.apiKey,
+        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { keyVisible = !keyVisible }) {
+                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
             }
-        )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-            supportingContent = {
-                var keyVisible by remember { mutableStateOf(false) }
-                OutlinedTextField(
-                    value = provider.apiKey,
-                    onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
-                    visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { keyVisible = !keyVisible }) {
-                            Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-                        }
-                    },
-                    colors = cardGroupTextFieldColors,
-                )
-            }
-        )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
-            supportingContent = {
-                OutlinedTextField(
-                    value = provider.baseUrl,
-                    onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
-                    colors = cardGroupTextFieldColors,
-                )
-            }
+        },
+    )
+
+    OutlinedTextField(
+        value = provider.baseUrl,
+        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+        modifier = Modifier.fillMaxWidth(),
+        isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_enable))
+        Switch(
+            checked = provider.enabled,
+            onCheckedChange = { onEdit(provider.copy(enabled = it)) }
         )
     }
 
-    CardGroup(modifier = Modifier.fillMaxWidth()) {
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_enable)) },
-            trailingContent = {
-                Switch(
-                    checked = provider.enabled,
-                    onCheckedChange = { onEdit(provider.copy(enabled = it)) }
-                )
-            }
-        )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_claude_prompt_caching)) },
-            trailingContent = {
-                Switch(
-                    checked = provider.promptCaching,
-                    onCheckedChange = { onEdit(provider.copy(promptCaching = it)) }
-                )
-            }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_claude_prompt_caching))
+        Switch(
+            checked = provider.promptCaching,
+            onCheckedChange = { onEdit(provider.copy(promptCaching = it)) }
         )
     }
 
@@ -444,88 +409,79 @@ private fun ProviderConfigureGoogle(
 
     provider.description()
 
-    CardGroup(modifier = Modifier.fillMaxWidth()) {
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_name)) },
-            supportingContent = {
-                OutlinedTextField(
-                    value = provider.name,
-                    onValueChange = { onEdit(provider.copy(name = it.trim())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = cardGroupTextFieldColors,
-                )
-            }
+    OutlinedTextField(
+        value = provider.name,
+        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_name)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    if (!(provider.vertexAI && provider.useServiceAccount)) {
+        var keyVisible by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            value = provider.apiKey,
+            onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3,
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
-        if (!(provider.vertexAI && provider.useServiceAccount)) {
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-                supportingContent = {
-                    var keyVisible by remember { mutableStateOf(false) }
-                    OutlinedTextField(
-                        value = provider.apiKey,
-                        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 3,
-                        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { keyVisible = !keyVisible }) {
-                                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-                            }
-                        },
-                        colors = cardGroupTextFieldColors,
-                    )
-                }
-            )
-        }
-        if (!provider.vertexAI) {
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
-                supportingContent = {
-                    OutlinedTextField(
-                        value = provider.baseUrl,
-                        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
-                        modifier = Modifier.fillMaxWidth(),
-                        isError = provider.baseUrl.isNotBlank() && (
-                            !provider.baseUrl.isValidBaseUrl() || !provider.baseUrl.endsWith("/v1beta")
-                        ),
-                        supportingText = if (!provider.baseUrl.endsWith("/v1beta")) {
-                            { Text("The base URL usually ends with `/v1beta`") }
-                        } else null,
-                        colors = cardGroupTextFieldColors,
-                    )
-                }
-            )
-        }
     }
 
-    CardGroup(modifier = Modifier.fillMaxWidth()) {
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_enable)) },
-            trailingContent = {
-                Switch(
-                    checked = provider.enabled,
-                    onCheckedChange = { onEdit(provider.copy(enabled = it)) }
-                )
-            }
+    if (!provider.vertexAI) {
+        OutlinedTextField(
+            value = provider.baseUrl,
+            onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+            modifier = Modifier.fillMaxWidth(),
+            isError = provider.baseUrl.isNotBlank() && (
+                !provider.baseUrl.isValidBaseUrl() || !provider.baseUrl.endsWith("/v1beta")
+                ),
+            supportingText = if (!provider.baseUrl.endsWith("/v1beta")) {
+                { Text("The base URL usually ends with `/v1beta`") }
+            } else null,
         )
-        item(
-            headlineContent = { Text(stringResource(R.string.setting_provider_page_vertex_ai)) },
-            trailingContent = {
-                Switch(
-                    checked = provider.vertexAI,
-                    onCheckedChange = { onEdit(provider.copy(vertexAI = it)) }
-                )
-            }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_enable))
+        Switch(
+            checked = provider.enabled,
+            onCheckedChange = { onEdit(provider.copy(enabled = it)) }
         )
-        if (provider.vertexAI) {
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_use_service_account)) },
-                trailingContent = {
-                    Switch(
-                        checked = provider.useServiceAccount,
-                        onCheckedChange = { onEdit(provider.copy(useServiceAccount = it)) }
-                    )
-                }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_vertex_ai))
+        Switch(
+            checked = provider.vertexAI,
+            onCheckedChange = { onEdit(provider.copy(vertexAI = it)) }
+        )
+    }
+
+    if (provider.vertexAI) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(R.string.setting_provider_page_use_service_account))
+            Switch(
+                checked = provider.useServiceAccount,
+                onCheckedChange = { onEdit(provider.copy(useServiceAccount = it)) }
             )
         }
     }
@@ -537,61 +493,43 @@ private fun ProviderConfigureGoogle(
         ) {
             Text(stringResource(R.string.setting_provider_page_import_service_account_json))
         }
-        CardGroup(modifier = Modifier.fillMaxWidth()) {
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_service_account_email)) },
-                supportingContent = {
-                    OutlinedTextField(
-                        value = provider.serviceAccountEmail,
-                        onValueChange = { onEdit(provider.copy(serviceAccountEmail = it.trim())) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = cardGroupTextFieldColors,
-                    )
+
+        OutlinedTextField(
+            value = provider.serviceAccountEmail,
+            onValueChange = { onEdit(provider.copy(serviceAccountEmail = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_service_account_email)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        var privateKeyVisible by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            value = provider.privateKey,
+            onValueChange = { onEdit(provider.copy(privateKey = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_private_key)) },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 6,
+            minLines = 3,
+            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono),
+            visualTransformation = if (privateKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { privateKeyVisible = !privateKeyVisible }) {
+                    Icon(if (privateKeyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
                 }
-            )
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_private_key)) },
-                supportingContent = {
-                    var keyVisible by remember { mutableStateOf(false) }
-                    OutlinedTextField(
-                        value = provider.privateKey,
-                        onValueChange = { onEdit(provider.copy(privateKey = it.trim())) },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 6,
-                        minLines = 3,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono),
-                        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { keyVisible = !keyVisible }) {
-                                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-                            }
-                        },
-                        colors = cardGroupTextFieldColors,
-                    )
-                }
-            )
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_location)) },
-                supportingContent = {
-                    OutlinedTextField(
-                        value = provider.location,
-                        onValueChange = { onEdit(provider.copy(location = it.trim())) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = cardGroupTextFieldColors,
-                    )
-                }
-            )
-            item(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_project_id)) },
-                supportingContent = {
-                    OutlinedTextField(
-                        value = provider.projectId,
-                        onValueChange = { onEdit(provider.copy(projectId = it.trim())) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = cardGroupTextFieldColors,
-                    )
-                }
-            )
-        }
+            },
+        )
+
+        OutlinedTextField(
+            value = provider.location,
+            onValueChange = { onEdit(provider.copy(location = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_location)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        OutlinedTextField(
+            value = provider.projectId,
+            onValueChange = { onEdit(provider.copy(projectId = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_project_id)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
