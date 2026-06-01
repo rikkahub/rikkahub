@@ -484,6 +484,7 @@ private fun CodeBlockPreview(
         settings = {
             builtInZoomControls = true
             displayZoomControls = false
+            useWideViewPort = true
         }
     )
 
