@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.extensions
+package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable

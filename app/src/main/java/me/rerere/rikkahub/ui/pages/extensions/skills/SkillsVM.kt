@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.extensions
+package me.rerere.rikkahub.ui.pages.extensions.skills
 
 import android.content.Context
 import android.net.Uri
@@ -19,6 +19,7 @@ import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import org.json.JSONArray
+import kotlin.collections.iterator
 
 class SkillsVM(
     private val skillManager: SkillManager,

@@ -1,6 +1,7 @@
-package me.rerere.rikkahub.ui.pages.extensions
+package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import android.graphics.Typeface
+import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -174,7 +175,7 @@ private fun WorkspaceTerminalContent(
                             sessionClient.terminalView = this
                             viewClient.terminalView = this
                             setOnTouchListener { _, event ->
-                                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                if (event.action == MotionEvent.ACTION_UP) {
                                     viewClient.focusAndShowKeyboard()
                                 }
                                 false
@@ -193,7 +194,7 @@ private fun WorkspaceTerminalContent(
                         sessionClient.terminalView = terminalView
                         viewClient.terminalView = terminalView
                         terminalView.setOnTouchListener { _, event ->
-                            if (event.action == android.view.MotionEvent.ACTION_UP) {
+                            if (event.action == MotionEvent.ACTION_UP) {
                                 viewClient.focusAndShowKeyboard()
                             }
                             false

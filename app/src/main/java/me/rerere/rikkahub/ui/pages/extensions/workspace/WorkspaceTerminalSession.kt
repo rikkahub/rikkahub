@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.extensions
+package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import android.content.ClipData
 import android.content.ClipboardManager
