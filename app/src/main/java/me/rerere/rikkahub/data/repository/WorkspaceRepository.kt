@@ -38,7 +38,6 @@ class WorkspaceRepository(
             createdAt = now,
             updatedAt = now,
             lastAccessAt = null,
-            sizeBytes = 0,
         )
         manager.ensureWorkspace(workspace.root)
         dao.upsert(workspace)
@@ -96,12 +95,10 @@ class WorkspaceRepository(
             }
         }.fold(
             onSuccess = {
-                val size = manager.calculateSize(workspace.root)
                 dao.upsert(
                     workspace.copy(
                         shellEnabled = true,
                         shellStatus = WorkspaceShellStatus.READY.name,
-                        sizeBytes = size,
                         updatedAt = System.currentTimeMillis(),
                     )
                 )
@@ -119,17 +116,6 @@ class WorkspaceRepository(
                 throw it
             },
         )
-    }
-
-    suspend fun refreshSize(id: String): Boolean {
-        val workspace = dao.getById(id) ?: return false
-        dao.upsert(
-            workspace.copy(
-                sizeBytes = manager.calculateSize(workspace.root),
-                updatedAt = System.currentTimeMillis(),
-            )
-        )
-        return true
     }
 
     suspend fun listFiles(
@@ -152,7 +138,6 @@ class WorkspaceRepository(
             val workspace = dao.getById(id) ?: return@withContext false
             manager.deleteFile(workspace.root, path, recursive, area)
         }
-        if (deleted) refreshSize(id)
         return deleted
     }
 

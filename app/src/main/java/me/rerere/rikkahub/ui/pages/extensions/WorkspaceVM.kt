@@ -48,12 +48,6 @@ class WorkspaceVM(
         }
     }
 
-    fun refreshSize(workspace: WorkspaceEntity) {
-        viewModelScope.launch {
-            repository.refreshSize(workspace.id)
-        }
-    }
-
     fun installRootfs(workspace: WorkspaceEntity, url: String) {
         viewModelScope.launch {
             _installErrors.update { it - workspace.id }

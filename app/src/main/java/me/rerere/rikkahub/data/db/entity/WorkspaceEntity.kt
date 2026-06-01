@@ -31,8 +31,6 @@ data class WorkspaceEntity(
     val updatedAt: Long,
     @ColumnInfo("last_access_at")
     val lastAccessAt: Long? = null,
-    @ColumnInfo("size_bytes")
-    val sizeBytes: Long? = null,
 ) {
     fun toWorkspace(): Workspace = Workspace(
         id = id,
@@ -44,6 +42,5 @@ data class WorkspaceEntity(
         createdAt = createdAt,
         updatedAt = updatedAt,
         lastAccessAt = lastAccessAt,
-        sizeBytes = sizeBytes,
     )
 }

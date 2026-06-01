@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 21,
-    "identityHash": "3a085d67e74cbd7bc850b79fc7df001b",
+    "identityHash": "ca80bfdfb1693cac87cee982e4f78852",
     "entities": [
       {
         "tableName": "ConversationEntity",
@@ -408,7 +408,7 @@
       },
       {
         "tableName": "workspaces",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `root` TEXT NOT NULL, `shell_enabled` INTEGER NOT NULL, `shell_status` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `last_access_at` INTEGER, `size_bytes` INTEGER, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `root` TEXT NOT NULL, `shell_enabled` INTEGER NOT NULL, `shell_status` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `last_access_at` INTEGER, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -456,11 +456,6 @@
             "fieldPath": "lastAccessAt",
             "columnName": "last_access_at",
             "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "sizeBytes",
-            "columnName": "size_bytes",
-            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -493,7 +488,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3a085d67e74cbd7bc850b79fc7df001b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ca80bfdfb1693cac87cee982e4f78852')"
     ]
   }
 }

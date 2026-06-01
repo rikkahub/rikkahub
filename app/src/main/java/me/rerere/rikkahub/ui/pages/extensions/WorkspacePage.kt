@@ -47,7 +47,6 @@ import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.PackageAdd
-import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -105,7 +104,6 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
                     installProgress = installProgress[workspace.id],
                     onRename = { editTarget = workspace },
                     onDelete = { deleteTarget = workspace },
-                    onRefreshSize = { vm.refreshSize(workspace) },
                     onShellEnabledChange = { vm.setShellEnabled(workspace, it) },
                     onInstallRootfs = { installTarget = workspace },
                     onOpen = { navController.navigate(Screen.WorkspaceDetail(workspace.id)) },
@@ -211,7 +209,6 @@ private fun WorkspaceCard(
     installProgress: RootfsInstallProgress?,
     onRename: () -> Unit,
     onDelete: () -> Unit,
-    onRefreshSize: () -> Unit,
     onShellEnabledChange: (Boolean) -> Unit,
     onInstallRootfs: () -> Unit,
     onOpen: () -> Unit,
@@ -252,7 +249,7 @@ private fun WorkspaceCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "${workspace.id.take(8)} · ${formatBytes(workspace.sizeBytes ?: 0)} · ${workspace.shellStatus.lowercase()}",
+                        text = "${workspace.id.take(8)} · ${workspace.shellStatus.lowercase()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -279,14 +276,6 @@ private fun WorkspaceCard(
                             onClick = {
                                 menuExpanded = false
                                 onInstallRootfs()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("刷新大小") },
-                            leadingIcon = { Icon(HugeIcons.Refresh01, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onRefreshSize()
                             },
                         )
                         DropdownMenuItem(
