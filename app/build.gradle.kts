@@ -17,6 +17,12 @@ android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 37
 
+    // Records the codebase's pre-existing lint findings so CI gates only NEW lint
+    // errors. Regenerate after intentionally clearing items: ./gradlew :app:updateLintBaseline
+    lint {
+        baseline = file("lint-baseline.xml")
+    }
+
     defaultConfig {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26

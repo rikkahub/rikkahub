@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile · Test · Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # material3 vendors material-color-utilities (provides the dynamiccolor package) as a submodule.
+          submodules: recursive
+
+      # Daemon JVM criteria pins JetBrains Runtime 21 (gradle/gradle-daemon-jvm.properties).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: jetbrains
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # google-services.json is gitignored and required by the firebase/gms plugin.
+      # CI uses a mock with the release + .debug applicationIds; values are non-functional.
+      - name: Generate mock google-services.json
+        run: |
+          cat > app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "rikkahub-mock",
+              "storage_bucket": "rikkahub-mock.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": { "package_name": "me.rerere.rikkahub" }
+                },
+                "oauth_client": [],
+                "api_key": [ { "current_key": "AIzaSyMock0000000000000000000000000000000" } ],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000001",
+                  "android_client_info": { "package_name": "me.rerere.rikkahub.debug" }
+                },
+                "oauth_client": [],
+                "api_key": [ { "current_key": "AIzaSyMock0000000000000000000000000000000" } ],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+
+      # :web:buildWebUi shells out to pnpm to build the React frontend — orthogonal
+      # to the Kotlin/Android gate and absent on the runner, so it is excluded.
+      - name: Compile (all modules, debug)
+        run: ./gradlew compileDebugKotlin -x :web:buildWebUi --stacktrace
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest -x :web:buildWebUi --stacktrace
+
+      - name: Android Lint
+        run: ./gradlew lintDebug -x :web:buildWebUi --stacktrace
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            **/build/reports/
+            **/build/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

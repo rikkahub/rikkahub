@@ -1,0 +1,2808 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.2.1" type="baseline" client="gradle" dependencies="false" name="AGP (9.2.1)" variant="all" version="9.2.1">
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead"
+        errorLine1="    if (kb &lt; 1024) return String.format(&quot;%.1fKB&quot;, kb)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingFilesPage.kt"
+            line="268"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead"
+        errorLine1="    if (mb &lt; 1024) return String.format(&quot;%.1fMB&quot;, mb)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingFilesPage.kt"
+            line="270"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead"
+        errorLine1="    return String.format(&quot;%.1fGB&quot;, gb)"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingFilesPage.kt"
+            line="272"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="DiscouragedPrivateApi"
+        message="Reflective access to sCursorWindowSize, which is not part of the public SDK and therefore likely to change in future Android releases"
+        errorLine1="            val field = CursorWindow::class.java.getDeclaredField(&quot;sCursorWindowSize&quot;)"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/utils/DatabaseUtil.kt"
+            line="11"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 33 (current min is 26): `android.Manifest.permission#POST_NOTIFICATIONS`"
+        errorLine1="            Manifest.permission.POST_NOTIFICATIONS"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/utils/NotificationUtil.kt"
+            line="47"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="            else -> locale.getDisplayLanguage(Locale.getDefault())"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageTranslation.kt"
+            line="90"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="                    if(Locale.getDefault().language == &quot;zh&quot;) {"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderPage.kt"
+            line="124"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="                                    labelDate.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())"
+        errorLine2="                                                                                    ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/stats/StatsPage.kt"
+            line="222"
+            column="85"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="            else -> locale.getDisplayLanguage(Locale.getDefault())"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/translator/TranslatorPage.kt"
+            line="240"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of Gradle than 9.4.1 is available: 9.5.1"
+        errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.4.1-bin.zip"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/wrapper/gradle-wrapper.properties"
+            line="4"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of com.google.firebase:firebase-bom than 34.13.0 is available: 34.14.0"
+        errorLine1="firebase-bom = &quot;34.13.0&quot;"
+        errorLine2="               ~~~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="41"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.github.g00fy2.quickie:quickie-bundled than 1.11.0 is available: 1.12.0"
+        errorLine1="quickie-bundled = &quot;1.11.0&quot;"
+        errorLine2="                  ~~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="45"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.modelcontextprotocol:kotlin-sdk than 0.12.0 is available: 0.13.0"
+        errorLine1="mcp = &quot;0.12.0&quot;"
+        errorLine2="      ~~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="50"
+            column="7"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.pebbletemplates:pebble than 4.1.1 is available: 4.1.2"
+        errorLine1="pebble = &quot;4.1.1&quot;"
+        errorLine2="         ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="51"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-content-negotiation than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-core than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-okhttp than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-serialization-kotlinx-json than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-auth than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-auth-jwt than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-caching-headers than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-cio than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-compression than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-conditional-headers than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-content-negotiation than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-core than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-cors than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-default-headers than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-host-common than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-sse than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-server-status-pages than 3.4.3 is available: 3.5.0"
+        errorLine1="ktor = &quot;3.4.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="62"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of ai.sqlite:vector than 0.9.92 is available: 1.0.0"
+        errorLine1="sqlite-vector = &quot;0.9.92&quot;"
+        errorLine2="                ~~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="63"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.slf4j:slf4j-api than 2.0.17 is available: 2.0.18"
+        errorLine1="slf4j = &quot;2.0.17&quot;"
+        errorLine2="        ~~~~~~~~">
+        <location
+            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
+            line="65"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="ContextCastToActivity"
+        message="LocalContext should not be cast to Activity, use LocalActivity instead"
+        errorLine1="    val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt"
+            line="216"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantImporter.kt"
+            line="89"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantImporter.kt"
+            line="115"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    context.getString(R.string.chat_input_file_read_failed, fileName),"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt"
+            line="324"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                            context.getString(R.string.chat_input_unsupported_file_type, fileName),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt"
+            line="332"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                            message = context.getString(R.string.imggen_page_image_saved_success),"
+        errorLine2="                                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImgGenPage.kt"
+            line="630"
+            column="71"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                            message = context.getString("
+        errorLine2="                                                                      ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImgGenPage.kt"
+            line="635"
+            column="71"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.backup_page_backup_success),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
+            line="75"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.backup_page_restore_failed, e.message ?: &quot;&quot;),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
+            line="81"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.backup_page_restore_success),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
+            line="155"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.backup_page_restore_failed, e.message ?: &quot;&quot;),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
+            line="162"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.mermaid_export_success),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/richtext/Mermaid.kt"
+            line="72"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.mermaid_export_failed),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/richtext/Mermaid.kt"
+            line="78"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                            context.getString("
+        errorLine2="                                            ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/PropertyEditor.kt"
+            line="171"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                context.getString(R.string.backup_page_connection_success),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="246"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                context.getString("
+        errorLine2="                                ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="252"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                context.getString(R.string.backup_page_backup_success),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="281"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                it.message ?: context.getString(R.string.backup_page_unknown_error),"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="287"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString(R.string.backup_page_delete_success),"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="349"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString("
+        errorLine2="                                                ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="356"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString(R.string.backup_page_restore_success),"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="371"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString("
+        errorLine2="                                                ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="379"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                context.getString(R.string.setting_provider_page_save_success),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderDetailPage.kt"
+            line="237"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                toaster.show(context.getString(R.string.skills_page_import_success, message))"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
+            line="90"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                toaster.show(context.getString(R.string.skills_page_import_failed, message))"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
+            line="92"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        toaster.show(context.getString(R.string.skills_page_save_failed))"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
+            line="190"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        toaster.show(context.getString(R.string.skills_page_import_success, message))"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
+            line="204"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        toaster.show(context.getString(R.string.skills_page_import_failed, message))"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
+            line="206"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    toaster.show(context.getString(R.string.text_area_import_success), type = ToastType.Success)"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/TextArea.kt"
+            line="99"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    val errorMessage = e.message ?: context.getString(R.string.text_area_import_failed)"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/TextArea.kt"
+            line="102"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                toaster.show(context.getString(R.string.update_card_downloading), type = ToastType.Info)"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/UpdateCard.kt"
+            line="128"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                context.getString(R.string.backup_page_connection_success),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="239"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                context.getString("
+        errorLine2="                                ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="245"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                context.getString(R.string.backup_page_backup_success),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="273"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                it.message ?: context.getString(R.string.backup_page_unknown_error),"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="279"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString(R.string.backup_page_delete_success),"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="341"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString("
+        errorLine2="                                                ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="348"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString(R.string.backup_page_restore_success),"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="363"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                                context.getString("
+        errorLine2="                                                ^">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="371"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="Typos"
+        message="&quot;Avaliable&quot; is a common misspelling; did you mean &quot;Available&quot;?"
+        errorLine1="  &lt;string name=&quot;setting_provider_page_avaliable_models&quot;>Avaliable Models&lt;/string>"
+        errorLine2="                                                        ~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="893"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="Typos"
+        message="Did you mean &quot;central!&quot; instead of &quot;central1&quot;?"
+        errorLine1="  &lt;string name=&quot;setting_provider_page_location&quot;>Location (e.g. us-central1)&lt;/string>"
+        errorLine2="                                                                  ~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="922"
+            column="67"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;tokens&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;assistant_page_max_tokens_limit&quot;>Limit: %d tokens&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="99"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;days&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;backup_page_reminder_interval_days&quot;>%1$d days&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="199"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;days&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;backup_page_reminder_last_days&quot;>Last backup %1$d days ago&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="200"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;more&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;chain_of_thought_show_more_steps&quot;>Show %d more steps&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="232"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;questions&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;chat_message_tool_ask_questions&quot;>Ask %d questions&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="239"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;results&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;chat_message_tool_search_results_count&quot;>%1$d results&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="257"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;messages&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;chat_page_message_count&quot;>%d messages&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="293"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;Citations&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;citations_count&quot;>%1$d Citations&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="307"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;entries&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;prompt_page_entries_count_format&quot;>%d entries&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="497"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;files&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;setting_page_chat_storage_desc&quot;>%1$d files, %2$.2f MB&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="780"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;models&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;setting_provider_page_model_count&quot;>%d models&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="923"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 26. Merge all the resources in this folder into `mipmap-anydpi`.">
+        <location
+            file="src/main/res/mipmap-anydpi-v26"/>
+    </issue>
+
+    <issue
+        id="UnnecessaryArrayInit"
+        message="This initialization lambda (`{ 0 }`) is unnecessary and is less efficient"
+        errorLine1="            val colWidths = IntArray(columnCount) { 0 }"
+        errorLine2="                                                  ~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/table/DataTable.kt"
+            line="68"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableLongStateOf` instead of `mutableStateOf`"
+        errorLine1="    var nextId by remember { mutableStateOf(0L) }"
+        errorLine2="                             ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/easteregg/EmojiBurst.kt"
+            line="37"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.purple_200` appears to be unused"
+        errorLine1="  &lt;color name=&quot;purple_200&quot;>#FFBB86FC&lt;/color>"
+        errorLine2="         ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="3"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.purple_500` appears to be unused"
+        errorLine1="  &lt;color name=&quot;purple_500&quot;>#FF6200EE&lt;/color>"
+        errorLine2="         ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="4"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.purple_700` appears to be unused"
+        errorLine1="  &lt;color name=&quot;purple_700&quot;>#FF3700B3&lt;/color>"
+        errorLine2="         ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="5"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.teal_200` appears to be unused"
+        errorLine1="  &lt;color name=&quot;teal_200&quot;>#FF03DAC5&lt;/color>"
+        errorLine2="         ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="6"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.teal_700` appears to be unused"
+        errorLine1="  &lt;color name=&quot;teal_700&quot;>#FF018786&lt;/color>"
+        errorLine2="         ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="7"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.white` appears to be unused"
+        errorLine1="  &lt;color name=&quot;white&quot;>#FFFFFFFF&lt;/color>"
+        errorLine2="         ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="9"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.patreon` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/patreon.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.assistant_page_balanced` appears to be unused"
+        errorLine1="  &lt;string name=&quot;assistant_page_balanced&quot;>Balanced&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="54"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.assistant_page_chaotic` appears to be unused"
+        errorLine1="  &lt;string name=&quot;assistant_page_chaotic&quot;>Chaotic (Dangerous)&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="59"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.assistant_page_creative` appears to be unused"
+        errorLine1="  &lt;string name=&quot;assistant_page_creative&quot;>Creative&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="70"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.assistant_page_strict` appears to be unused"
+        errorLine1="  &lt;string name=&quot;assistant_page_strict&quot;>Strict&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="131"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.assistant_page_top_p_value` appears to be unused"
+        errorLine1="  &lt;string name=&quot;assistant_page_top_p_value&quot;>Top P: %s&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="154"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.reasoning_auto_desc` appears to be unused"
+        errorLine1="  &lt;string name=&quot;reasoning_auto_desc&quot;>Let the model automatically determine reasoning level.&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="535"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.reasoning_custom` appears to be unused"
+        errorLine1="  &lt;string name=&quot;reasoning_custom&quot;>Custom reasoning budget&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="536"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.reasoning_heavy_desc` appears to be unused"
+        errorLine1="  &lt;string name=&quot;reasoning_heavy_desc&quot;>The model will use a large amount of reasoning to answer questions.&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="538"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.reasoning_light_desc` appears to be unused"
+        errorLine1="  &lt;string name=&quot;reasoning_light_desc&quot;>The model will use a small amount of reasoning to answer questions.&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="540"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.reasoning_medium_desc` appears to be unused"
+        errorLine1="  &lt;string name=&quot;reasoning_medium_desc&quot;>The model will use more reasoning to answer questions.&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="542"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.reasoning_off_desc` appears to be unused"
+        errorLine1="  &lt;string name=&quot;reasoning_off_desc&quot;>Turn off reasoning functionality, the model will directly answer questions.&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="544"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.setting_display_page_title` appears to be unused"
+        errorLine1="  &lt;string name=&quot;setting_display_page_title&quot;>Display Settings&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="694"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.setting_page_display_setting` appears to be unused"
+        errorLine1="  &lt;string name=&quot;setting_page_display_setting&quot;>Display Settings&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="794"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.setting_page_display_setting_desc` appears to be unused"
+        errorLine1="  &lt;string name=&quot;setting_page_display_setting_desc&quot;>Manage display settings&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="795"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.setting_page_interaction_notification_settings` appears to be unused"
+        errorLine1="  &lt;string name=&quot;setting_page_interaction_notification_settings&quot;>Interaction &amp;amp;amp; Notifications&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="815"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.setting_page_search_delete_provider` appears to be unused"
+        errorLine1="  &lt;string name=&quot;setting_page_search_delete_provider&quot;>Delete Provider&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="828"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.setting_tts_page_title` appears to be unused"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_title&quot;>Text-to-Speech&lt;/string>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="994"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UseOfNonLambdaOffsetOverload"
+        message="State backed values should use the lambda overload of Modifier.offset"
+        errorLine1="                .offset(x = thumbOffset)"
+        errorLine2="                 ~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/Switch.kt"
+            line="112"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="NotShrinkingResources"
+        message="Avoid setting isShrinkResources = false"
+        errorLine1="            isShrinkResources = false"
+        errorLine2="                                ~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="101"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_asr_configure_vad_desc&quot;>서버 VAD 민감도, 보통 0.3 - 0.8&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="620"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_asr_configure_vad_desc&quot;>伺服器 VAD 靈敏度，通常為 0.3 - 0.8&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="620"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_asr_configure_vad_desc&quot;>服务器 VAD 灵敏度，通常为 0.3 - 0.8&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="620"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_asr_configure_vad_desc&quot;>Server VAD sensitivity, usually 0.3 - 0.8&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="620"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_page_web_server_port_desc&quot;>網頁伺服器監聽連接埠（1024-65535）&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="856"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_page_web_server_port_desc&quot;>Webサーバーリスンポート（1024-65535）&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="858"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_page_web_server_port_desc&quot;>웹 서버 수신 포트(1024-65535)&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="858"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_page_web_server_port_desc&quot;>Порт веб-сервера (1024-65535)&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="858"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_page_web_server_port_desc&quot;>Web服务器监听端口（1024-65535）&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="865"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_page_web_server_port_desc&quot;>Web server listen port (1024-65535)&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="879"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_pitch_description&quot;>控制語音音調高低 (0.1 - 2.0，1.0為正常音調)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="959"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_pitch_description&quot;>音声のピッチを制御 (0.1 - 2.0、1.0が標準)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="961"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_pitch_description&quot;>말하기 피치 제어 (0.1 - 2.0, 1.0은 일반)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="961"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speech_rate_description&quot;>控制語音播放速度 (0.1 - 3.0，1.0為正常速度)&lt;/string>"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="967"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_pitch_description&quot;>控制语音音调高低 (0.1 - 2.0，1.0为正常音调)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="968"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speech_rate_description&quot;>音声の再生速度を制御 (0.1 - 3.0、1.0が標準)&lt;/string>"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="969"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speech_rate_description&quot;>말하기 속도 제어 (0.1 - 3.0, 1.0은 일반)&lt;/string>"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="969"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speed_description&quot;>語音合成速度 (0.25 - 4.0)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="969"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speed_description&quot;>音声合成の速度 (0.25 - 4.0)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="971"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speed_description&quot;>말하기 속도 (0.25 - 4.0)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="971"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speech_rate_description&quot;>控制语音播放速度 (0.1 - 3.0，1.0为正常速度)&lt;/string>"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="976"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speed_description&quot;>语音合成速度 (0.25 - 4.0)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="978"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_pitch_description&quot;>Control the pitch of speech (0.1 - 2.0, 1.0 is normal)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="982"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speech_rate_description&quot;>Control the speed of speech (0.1 - 3.0, 1.0 is normal)&lt;/string>"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="990"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_speed_description&quot;>Speech speed (0.25 - 4.0)&lt;/string>"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="992"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;assistant_importer_importing&quot;>インポート中...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="34"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;assistant_importer_importing&quot;>가져오는 중...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="34"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;assistant_importer_importing&quot;>匯入中...&lt;/string>"
+        errorLine2="                                              ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="34"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;assistant_importer_importing&quot;>导入中...&lt;/string>"
+        errorLine2="                                              ~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="34"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;assistant_importer_importing&quot;>Importing...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="34"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_backing_up&quot;>バックアップ中...&lt;/string>"
+        errorLine2="                                        ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="169"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_backing_up&quot;>백업 중...&lt;/string>"
+        errorLine2="                                        ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="169"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_backing_up&quot;>備份中...&lt;/string>"
+        errorLine2="                                        ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="169"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_backing_up&quot;>备份中...&lt;/string>"
+        errorLine2="                                        ~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="169"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_backing_up&quot;>Backing up...&lt;/string>"
+        errorLine2="                                        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="169"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_exporting&quot;>エクスポート中...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="180"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_exporting&quot;>내보내는 중...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="180"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_exporting&quot;>正在導出...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="180"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_exporting&quot;>正在导出...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="180"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_exporting&quot;>Exporting...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="180"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_importing&quot;>インポート中...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="189"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_importing&quot;>가져오는 중...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="189"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_importing&quot;>正在恢復...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="189"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_importing&quot;>正在恢复...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="189"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_importing&quot;>Importing...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="189"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_restoring&quot;>復元中...&lt;/string>"
+        errorLine2="                                       ~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="211"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_restoring&quot;>복원 중...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="211"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_restoring&quot;>Восстановление...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="211"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_restoring&quot;>恢復中...&lt;/string>"
+        errorLine2="                                       ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="211"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_restoring&quot;>恢复中...&lt;/string>"
+        errorLine2="                                       ~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="211"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;backup_page_restoring&quot;>Restoring...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="211"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;calculating&quot;>計算中...&lt;/string>"
+        errorLine2="                             ~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="228"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;calculating&quot;>계산 중...&lt;/string>"
+        errorLine2="                             ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="228"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;calculating&quot;>Вычисление...&lt;/string>"
+        errorLine2="                             ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="228"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;calculating&quot;>計算中...&lt;/string>"
+        errorLine2="                             ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="228"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;calculating&quot;>计算中...&lt;/string>"
+        errorLine2="                             ~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="228"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;calculating&quot;>Calculating...&lt;/string>"
+        errorLine2="                             ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="228"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;chat_page_compressing&quot;>압축 중...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="272"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;chat_page_compressing&quot;>Сжатие...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="272"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;chat_page_compressing&quot;>正在壓縮...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="272"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;chat_page_compressing&quot;>正在压缩...&lt;/string>"
+        errorLine2="                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="272"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;chat_page_compressing&quot;>Compressing...&lt;/string>"
+        errorLine2="                                       ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="272"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;db_migrating&quot;>데이터베이스 마이그레이션 중...&lt;/string>"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="319"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;db_migrating&quot;>正在移轉資料庫...&lt;/string>"
+        errorLine2="                              ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="319"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;db_migrating&quot;>Migrating database...&lt;/string>"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="319"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;emoji_picker_search_placeholder&quot;>絵文字を検索...&lt;/string>"
+        errorLine2="                                                 ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="330"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;emoji_picker_search_placeholder&quot;>이모지 검색...&lt;/string>"
+        errorLine2="                                                 ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="330"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;emoji_picker_search_placeholder&quot;>Поиск эмодзи...&lt;/string>"
+        errorLine2="                                                 ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="330"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;emoji_picker_search_placeholder&quot;>搜尋表情符號...&lt;/string>"
+        errorLine2="                                                 ~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="330"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;emoji_picker_search_placeholder&quot;>搜索表情符号...&lt;/string>"
+        errorLine2="                                                 ~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="330"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;emoji_picker_search_placeholder&quot;>Search emojis...&lt;/string>"
+        errorLine2="                                                 ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="330"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;imggen_page_prompt_placeholder&quot;>生成したい画像を説明してください...&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="406"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;imggen_page_prompt_placeholder&quot;>생성하고 싶은 이미지를 설명하세요...&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="406"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;imggen_page_prompt_placeholder&quot;>描述您想要生成的圖片...&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="406"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;imggen_page_prompt_placeholder&quot;>描述您想要生成的图片...&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="406"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;imggen_page_prompt_placeholder&quot;>Describe the image you want to generate...&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="406"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;mcp_picker_syncing&quot;>MCPサーバーを同期中...&lt;/string>"
+        errorLine2="                                    ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="420"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;mcp_picker_syncing&quot;>MCP 서버 동기화 중...&lt;/string>"
+        errorLine2="                                    ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="420"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;mcp_picker_syncing&quot;>正在同步MCP伺服器...&lt;/string>"
+        errorLine2="                                    ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="420"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;mcp_picker_syncing&quot;>正在同步MCP服务器...&lt;/string>"
+        errorLine2="                                    ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="420"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;mcp_picker_syncing&quot;>Syncing MCP servers...&lt;/string>"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="420"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_thinking&quot;>생각 중...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="442"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_thinking&quot;>思考中...&lt;/string>"
+        errorLine2="                                                   ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="442"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_thinking&quot;>Thinking...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="442"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_title&quot;>Generating response...&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="443"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_writing&quot;>응답 작성 중...&lt;/string>"
+        errorLine2="                                                  ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="445"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_writing&quot;>Writing response...&lt;/string>"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="445"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_web_server_starting&quot;>시작 중...&lt;/string>"
+        errorLine2="                                                  ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="447"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_web_server_starting&quot;>正在启动...&lt;/string>"
+        errorLine2="                                                  ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="447"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_web_server_starting&quot;>Starting...&lt;/string>"
+        errorLine2="                                                  ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="447"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_placeholder&quot;>메시지 내용 검색...&lt;/string>"
+        errorLine2="                                         ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="586"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_placeholder&quot;>Search message content...&lt;/string>"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="586"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_rebuilding&quot;>색인 재구성 중 (%1$d / %2$d)...&lt;/string>"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="590"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_rebuilding&quot;>Rebuilding index (%1$d / %2$d)...&lt;/string>"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="590"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_rebuilding_simple&quot;>색인 재구성 중...&lt;/string>"
+        errorLine2="                                               ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="591"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_rebuilding_simple&quot;>Rebuilding index...&lt;/string>"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="591"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_gemini&quot;>AIza...&lt;/string>"
+        errorLine2="                                                             ~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="941"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_openai&quot;>sk-...&lt;/string>"
+        errorLine2="                                                             ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="942"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_gemini&quot;>AIza...&lt;/string>"
+        errorLine2="                                                             ~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="943"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_gemini&quot;>AIza...&lt;/string>"
+        errorLine2="                                                             ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="943"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_gemini&quot;>AIza...&lt;/string>"
+        errorLine2="                                                             ~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="943"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_openai&quot;>sk-...&lt;/string>"
+        errorLine2="                                                             ~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="944"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_openai&quot;>sk-...&lt;/string>"
+        errorLine2="                                                             ~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="944"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_openai&quot;>sk-...&lt;/string>"
+        errorLine2="                                                             ~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="944"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_gemini&quot;>AIza...&lt;/string>"
+        errorLine2="                                                             ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="950"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_openai&quot;>sk-...&lt;/string>"
+        errorLine2="                                                             ~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="951"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_gemini&quot;>AIza...&lt;/string>"
+        errorLine2="                                                             ~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="964"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;setting_tts_page_api_key_placeholder_openai&quot;>sk-...&lt;/string>"
+        errorLine2="                                                             ~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="965"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_downloading&quot;>다운로드 중...&lt;/string>"
+        errorLine2="                                         ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="999"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_downloading&quot;>Загрузка...&lt;/string>"
+        errorLine2="                                         ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="999"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_downloading&quot;>正在下载...&lt;/string>"
+        errorLine2="                                         ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="1006"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_downloading&quot;>Downloading...&lt;/string>"
+        errorLine2="                                         ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1020"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>請輸入標籤名稱...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="1035"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>タグ名を入力...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="1037"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>태그 이름 입력...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="1037"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>Введите имя тега...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1037"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>请输入标签名称...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="1044"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translating&quot;>翻譯中...&lt;/string>"
+        errorLine2="                             ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="1053"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translating&quot;>翻訳中...&lt;/string>"
+        errorLine2="                             ~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="1055"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translating&quot;>번역 중...&lt;/string>"
+        errorLine2="                             ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="1055"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translating&quot;>Перевод...&lt;/string>"
+        errorLine2="                             ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1055"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>請輸入要翻譯的文字...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="1058"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>Enter tag name...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1058"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>翻訳するテキストを入力してください...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="1060"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>번역할 텍스트를 입력하세요...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="1060"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>Введите текст для перевода...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1060"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translating&quot;>翻译中...&lt;/string>"
+        errorLine2="                             ~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="1062"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>请输入要翻译的文本...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="1067"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translating&quot;>Translating...&lt;/string>"
+        errorLine2="                             ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1076"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>Enter text to translate...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1081"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/kofi.webp` in densityless folder">
+        <location
+            file="src/main/res/drawable/kofi.webp"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/placeholder.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/placeholder.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/placeholder_dark.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/placeholder_dark.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/siliconflow_dark.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/siliconflow_dark.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/siliconflow_light.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/siliconflow_light.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_foreground.png, ic_launcher_monochrome.png">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_monochrome.png"/>
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_foreground.png, ic_launcher_monochrome.png">
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_monochrome.png"/>
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_foreground.png, ic_launcher_monochrome.png">
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_monochrome.png"/>
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_foreground.png, ic_launcher_monochrome.png">
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_monochrome.png"/>
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_foreground.png, ic_launcher_monochrome.png">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_monochrome.png"/>
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="RtlHardcoded"
+        message="Use &quot;`Gravity.START`&quot; instead of &quot;`Gravity.LEFT`&quot; to ensure correct behavior in right-to-left locales"
+        errorLine1="                TextAlign.Left -> Gravity.LEFT"
+        errorLine2="                                          ~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/ViewText.kt"
+            line="157"
+            column="43"/>
+    </issue>
+
+    <issue
+        id="RtlHardcoded"
+        message="Use &quot;`Gravity.START`&quot; instead of &quot;`Gravity.LEFT`&quot; to ensure correct behavior in right-to-left locales"
+        errorLine1="                TextAlign.Left -> Gravity.LEFT"
+        errorLine2="                                          ~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/ViewText.kt"
+            line="157"
+            column="43"/>
+    </issue>
+
+    <issue
+        id="RtlHardcoded"
+        message="Use &quot;`Gravity.END`&quot; instead of &quot;`Gravity.RIGHT`&quot; to ensure correct behavior in right-to-left locales"
+        errorLine1="                TextAlign.Right -> Gravity.RIGHT"
+        errorLine2="                                           ~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/ViewText.kt"
+            line="158"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="RtlHardcoded"
+        message="Use &quot;`Gravity.END`&quot; instead of &quot;`Gravity.RIGHT`&quot; to ensure correct behavior in right-to-left locales"
+        errorLine1="                TextAlign.Right -> Gravity.RIGHT"
+        errorLine2="                                           ~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/components/ui/ViewText.kt"
+            line="158"
+            column="44"/>
+    </issue>
+
+</issues>
