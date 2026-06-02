@@ -7,6 +7,8 @@ import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.canResumeToolExecution
+import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.util.InstantSerializer
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
 import java.time.Instant
@@ -130,6 +132,126 @@ fun UIMessage.toMessageNode(): MessageNode {
         messages = listOf(this),
         selectIndex = 0
     )
+}
+
+/**
+ * Sanitize a message-node sequence into a state that is valid to hand to a
+ * provider request builder.
+ *
+ * Invariant enforced (must hold for every sequence sent to a provider):
+ * no empty/non-uploadable message, no two consecutive same-role messages,
+ * every assistant tool_use balanced by a tool_result, and no
+ * unterminated/unsigned thinking block.
+ *
+ * The invariant is first violated when an interrupted assistant turn is
+ * finalized (a stream cancelled before its first delta leaves an empty
+ * assistant node, an orphaned unexecuted tool, or an unsigned reasoning part).
+ * This function repairs the persisted/forwarded structure (messageNodes), it
+ * never fabricates content, and it is idempotent (a stable fixed point so the
+ * interruption finalizer and the next-send check always agree).
+ */
+fun List<MessageNode>.sanitizeForUpload(): List<MessageNode> {
+    val repaired = this.mapNotNull { node -> node.sanitizeNode() }
+    return repaired.collapseConsecutiveSameRole()
+}
+
+/**
+ * Repair a single node's selected message, or drop the node entirely if its
+ * selected message cannot be uploaded:
+ * - finish any unterminated reasoning, and drop a reasoning part that was left
+ *   unterminated by an interrupted stream AND carries no signature (it would be
+ *   uploaded as an unsigned thinking block, which Anthropic rejects);
+ * - if the selected message still has an unexecuted, non-resumable tool
+ *   (orphaned tool_use), drop that branch (preferring an earlier valid
+ *   sibling branch) rather than upload an unbalanced tool_use;
+ * - drop the whole node if no uploadable branch remains.
+ */
+private fun MessageNode.sanitizeNode(): MessageNode? {
+    if (messages.isEmpty()) return null
+    // Repair a corrupt selectIndex rather than dropping the node.
+    val node = if (selectIndex in messages.indices) this else copy(selectIndex = 0)
+
+    val original = node.messages[node.selectIndex]
+    val selected = original.finishReasoning().dropUnterminatedUnsignedReasoning(original)
+
+    // A resumable (approved/denied/answered) but not-yet-executed tool is
+    // intentionally pending and must be kept for the resume path.
+    val hasResumableTool = selected.getTools()
+        .any { !it.isExecuted && it.approvalState.canResumeToolExecution() }
+    val hasOrphanTool = selected.getTools()
+        .any { !it.isExecuted && !it.approvalState.canResumeToolExecution() }
+
+    if (hasOrphanTool && !hasResumableTool) {
+        // Drop the offending branch; fall back to a sibling if one exists.
+        val remaining = node.messages.filter { it.id != original.id }
+        if (remaining.isEmpty()) return null
+        return node.copy(messages = remaining, selectIndex = (node.selectIndex - 1).coerceAtLeast(0))
+    }
+
+    if (!selected.isValidToUpload() && !hasResumableTool) return null
+
+    if (selected == original && node === this) return this
+    val newMessages = node.messages.toMutableList().also { it[node.selectIndex] = selected }
+    return node.copy(messages = newMessages)
+}
+
+/**
+ * Drop a Reasoning part only when an interrupted stream left it unterminated
+ * (finishedAt == null in [original]) AND it carries no signature. Such a part is
+ * a half-streamed Anthropic thinking block that would be forwarded without its
+ * signature, which Anthropic rejects.
+ *
+ * A reasoning part that finished normally (finishedAt != null) is kept even
+ * without a signature: OpenAI ChatCompletions and Google text-thoughts build
+ * valid, signature-less Reasoning, and stripping those would be a data-loss
+ * regression. [original] is the pre-finishReasoning() message so its finishedAt
+ * still reflects the interruption.
+ */
+private fun UIMessage.dropUnterminatedUnsignedReasoning(original: UIMessage): UIMessage {
+    val newParts = parts.filterIndexed { index, part ->
+        if (part !is UIMessagePart.Reasoning) return@filterIndexed true
+        val wasUnterminated =
+            (original.parts.getOrNull(index) as? UIMessagePart.Reasoning)?.finishedAt == null
+        val unsigned = part.metadata?.get("signature") == null
+        !(wasUnterminated && unsigned)
+    }
+    return if (newParts == parts) this else copy(parts = newParts)
+}
+
+/**
+ * Collapse two consecutive same-role nodes so the forwarded sequence alternates.
+ *
+ * When both messages carry content, their parts are MERGED into a single node
+ * (a provider role turn accepts multiple content blocks) so no real user/assistant
+ * turn is lost — e.g. user "hi", generation interrupted, user "again" must upload
+ * BOTH, not just "again". An empty/non-uploadable message is dropped in favour of
+ * the content-bearing one. Content is never fabricated.
+ */
+private fun List<MessageNode>.collapseConsecutiveSameRole(): List<MessageNode> {
+    val result = mutableListOf<MessageNode>()
+    for (node in this) {
+        val previous = result.lastOrNull()
+        if (previous != null && previous.currentMessage.role == node.currentMessage.role) {
+            val prevMsg = previous.currentMessage
+            val nodeMsg = node.currentMessage
+            val merged = when {
+                !prevMsg.isValidToUpload() -> nodeMsg
+                !nodeMsg.isValidToUpload() -> prevMsg
+                else -> prevMsg.copy(parts = prevMsg.parts + nodeMsg.parts)
+            }
+            result[result.lastIndex] = previous.replaceCurrentMessage(merged)
+            continue
+        }
+        result.add(node)
+    }
+    return result
+}
+
+/** Replace this node's selected message in place, preserving branch siblings. */
+private fun MessageNode.replaceCurrentMessage(message: UIMessage): MessageNode {
+    if (message === currentMessage) return this
+    val newMessages = messages.toMutableList().also { it[selectIndex] = message }
+    return copy(messages = newMessages)
 }
 
 /**
