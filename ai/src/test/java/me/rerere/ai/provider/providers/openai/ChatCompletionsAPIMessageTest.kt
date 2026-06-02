@@ -30,13 +30,17 @@ class ChatCompletionsAPIMessageTest {
     }
 
     // Helper to invoke private buildMessages method via reflection
-    private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
+    private fun invokeBuildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean = true
+    ): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
-            List::class.java
+            List::class.java,
+            Boolean::class.javaPrimitiveType
         )
         method.isAccessible = true
-        return method.invoke(api, messages) as JsonArray
+        return method.invoke(api, messages, includeHistoryReasoning) as JsonArray
     }
 
     @Test
@@ -163,8 +167,7 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `reasoning should only be included for messages after last user message`() {
-        // First assistant message (before user's last message) - reasoning should NOT be included
+    fun `includeHistoryReasoning toggles reasoning_content on all assistant messages`() {
         val assistant1 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -172,8 +175,6 @@ class ChatCompletionsAPIMessageTest {
                 UIMessagePart.Text("Initial response")
             )
         )
-
-        // Second assistant message (after user's last message) - reasoning SHOULD be included
         val assistant2 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -181,7 +182,6 @@ class ChatCompletionsAPIMessageTest {
                 UIMessagePart.Text("Final response")
             )
         )
-
         val messages = listOf(
             UIMessage.user("First question"),
             assistant1,
@@ -189,28 +189,27 @@ class ChatCompletionsAPIMessageTest {
             assistant2
         )
 
-        val result = invokeBuildMessages(messages)
-
-        // Find assistant messages
-        val assistantMessages = result.filter {
+        fun assistants(arr: JsonArray) = arr.filter {
             it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
         }
+        fun hasReasoning(msg: kotlinx.serialization.json.JsonElement) =
+            msg.jsonObject.containsKey("reasoning_content") &&
+                msg.jsonObject["reasoning_content"]?.jsonPrimitive?.content?.isNotEmpty() == true
 
-        assertEquals(2, assistantMessages.size)
+        // includeHistoryReasoning is a uniform flag: true keeps reasoning_content on every
+        // assistant message (there is no per-position filtering in buildMessages).
+        val withReasoning = assistants(invokeBuildMessages(messages, includeHistoryReasoning = true))
+        assertEquals(2, withReasoning.size)
+        withReasoning.forEach {
+            assertTrue("includeHistoryReasoning=true should keep reasoning_content", hasReasoning(it))
+        }
 
-        // First assistant should NOT have reasoning_content
-        val first = assistantMessages[0].jsonObject
-        assertTrue("First assistant should not have reasoning_content",
-            !first.containsKey("reasoning_content") ||
-            first["reasoning_content"]?.jsonPrimitive?.content.isNullOrEmpty()
-        )
-
-        // Second assistant SHOULD have reasoning_content
-        val second = assistantMessages[1].jsonObject
-        assertTrue("Second assistant should have reasoning_content",
-            second.containsKey("reasoning_content") &&
-            second["reasoning_content"]?.jsonPrimitive?.content?.isNotEmpty() == true
-        )
+        // false strips reasoning_content from every assistant message.
+        val withoutReasoning = assistants(invokeBuildMessages(messages, includeHistoryReasoning = false))
+        assertEquals(2, withoutReasoning.size)
+        withoutReasoning.forEach {
+            assertTrue("includeHistoryReasoning=false should drop reasoning_content", !hasReasoning(it))
+        }
     }
 
     @Test
@@ -315,7 +314,9 @@ class ChatCompletionsAPIMessageTest {
             UIMessage.user("Question 2")
         )
 
-        val result = invokeBuildMessages(messages)
+        // With history reasoning excluded, the lone reasoning is stripped and the empty-text
+        // assistant has no content left, so it is dropped entirely.
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = false)
 
         assertEquals(2, result.size)
         assertEquals("user", result[0].jsonObject["role"]?.jsonPrimitive?.content)
