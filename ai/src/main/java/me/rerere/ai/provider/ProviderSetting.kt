@@ -23,6 +23,15 @@ enum class ClaudePromptCacheTtl(val apiValue: String?) {
 }
 
 @Serializable
+enum class ClaudeAuthType {
+    @SerialName("api_key")
+    ApiKey,
+
+    @SerialName("oauth")
+    OAuth
+}
+
+@Serializable
 sealed class ProviderSetting {
     abstract val id: Uuid
     abstract val enabled: Boolean
@@ -191,6 +200,9 @@ sealed class ProviderSetting {
         var baseUrl: String = "https://api.anthropic.com/v1",
         var promptCaching: Boolean = false,
         var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
+        var authType: ClaudeAuthType = ClaudeAuthType.ApiKey,
+        var oauthToken: String = "",
+        var oauthContext1M: Boolean = false,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

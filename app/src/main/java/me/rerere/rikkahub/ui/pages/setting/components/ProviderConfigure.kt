@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
+import me.rerere.ai.provider.ClaudeAuthType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
@@ -305,20 +306,68 @@ private fun ProviderConfigureClaude(
         maxLines = 3,
     )
 
-    var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { keyVisible = !keyVisible }) {
-                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-            }
-        },
-    )
+    val authTypes = listOf(ClaudeAuthType.ApiKey, ClaudeAuthType.OAuth)
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        authTypes.forEachIndexed { index, authType ->
+            SegmentedButton(
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = authTypes.size),
+                label = {
+                    Text(
+                        when (authType) {
+                            ClaudeAuthType.ApiKey -> "API Key"
+                            ClaudeAuthType.OAuth -> "OAuth Token"
+                        }
+                    )
+                },
+                selected = provider.authType == authType,
+                onClick = { onEdit(provider.copy(authType = authType)) }
+            )
+        }
+    }
+
+    if (provider.authType == ClaudeAuthType.ApiKey) {
+        var keyVisible by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            value = provider.apiKey,
+            onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3,
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
+        )
+    } else {
+        var tokenVisible by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            value = provider.oauthToken,
+            onValueChange = { onEdit(provider.copy(oauthToken = it.trim())) },
+            label = { Text("OAuth Access Token") },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3,
+            visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                    Icon(if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("1M context (Claude Max)")
+            Switch(
+                checked = provider.oauthContext1M,
+                onCheckedChange = { onEdit(provider.copy(oauthContext1M = it)) }
+            )
+        }
+    }
 
     OutlinedTextField(
         value = provider.baseUrl,

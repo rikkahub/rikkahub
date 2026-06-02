@@ -25,6 +25,7 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.provider.ClaudeAuthType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
@@ -60,15 +61,39 @@ import kotlin.time.Clock
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
+// OAuth (Claude Code) constants — pinned to Claude Code 2.1.x; Anthropic rotates these.
+private const val CLAUDE_OAUTH_BETAS =
+    "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,structured-outputs-2025-12-15,fast-mode-2026-02-01,redact-thinking-2026-02-12,token-efficient-tools-2026-03-28"
+private const val CLAUDE_OAUTH_CONTEXT_1M_BETA = "context-1m-2025-08-07"
+private const val CLAUDE_CODE_USER_AGENT = "ClaudeCode/2.1.128"
+private const val CLAUDE_FP_BILLING =
+    "x-anthropic-billing-header: cc_version=2.1.126.88c; cc_entrypoint=cli; cch=00000;"
+private const val CLAUDE_FP_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
+
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+
+    // OAuth token is used verbatim (not via KeyRoulette, which splits on whitespace/commas).
+    private fun Request.Builder.applyClaudeAuth(p: ProviderSetting.Claude): Request.Builder = when (p.authType) {
+        ClaudeAuthType.ApiKey -> this
+            .addHeader("x-api-key", keyRoulette.next(p.apiKey, p.id.toString()))
+            .addHeader("anthropic-version", ANTHROPIC_VERSION)
+
+        ClaudeAuthType.OAuth -> this
+            .addHeader("Authorization", "Bearer ${p.oauthToken}")
+            .addHeader("anthropic-version", ANTHROPIC_VERSION)
+            .addHeader(
+                "anthropic-beta",
+                if (p.oauthContext1M) "$CLAUDE_OAUTH_BETAS,$CLAUDE_OAUTH_CONTEXT_1M_BETA" else CLAUDE_OAUTH_BETAS
+            )
+            .header("User-Agent", CLAUDE_CODE_USER_AGENT)
+    }
 
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("x-api-key", keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString()))
-                .addHeader("anthropic-version", ANTHROPIC_VERSION)
+                .applyClaudeAuth(providerSetting)
                 .get()
                 .build()
 
@@ -110,8 +135,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString()))
-            .addHeader("anthropic-version", ANTHROPIC_VERSION)
+            .applyClaudeAuth(providerSetting)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -157,8 +181,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString()))
-            .addHeader("anthropic-version", ANTHROPIC_VERSION)
+            .applyClaudeAuth(providerSetting)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -287,14 +310,25 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
             // system prompt
             val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
-            val systemTextParts = systemMessage?.parts?.filterIsInstance<UIMessagePart.Text>().orEmpty()
-            if (systemTextParts.isNotEmpty()) {
+            val callerSystemTexts = systemMessage?.parts
+                ?.filterIsInstance<UIMessagePart.Text>()
+                ?.map { it.text }
+                .orEmpty()
+            // OAuth gate: the two fingerprint blocks must be the first two system blocks.
+            // Strip any pre-existing copies first so repeated builds don't stack them.
+            val systemTexts = if (providerSetting.authType == ClaudeAuthType.OAuth) {
+                listOf(CLAUDE_FP_BILLING, CLAUDE_FP_IDENTITY) +
+                    callerSystemTexts.filter { it != CLAUDE_FP_BILLING && it != CLAUDE_FP_IDENTITY }
+            } else {
+                callerSystemTexts
+            }
+            if (systemTexts.isNotEmpty()) {
                 put("system", buildJsonArray {
-                    systemTextParts.forEachIndexed { index, part ->
+                    systemTexts.forEachIndexed { index, text ->
                         add(buildJsonObject {
                             put("type", "text")
-                            put("text", part.text)
-                            if (providerSetting.promptCaching && index == systemTextParts.lastIndex) {
+                            put("text", text)
+                            if (providerSetting.promptCaching && index == systemTexts.lastIndex) {
                                 put("cache_control", cacheControlEphemeral(providerSetting.promptCacheTtl))
                             }
                         })
