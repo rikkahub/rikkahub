@@ -88,6 +88,31 @@ class RoomVectorStore(
         }
     }
 
+    /**
+     * Manifest-scoped retrieval. Identical to [search] but additionally drops any stored chunk whose
+     * [Chunk.docId] is absent from [allowedDocIds].
+     *
+     * Why this exists: chunk rows (Room) and the document manifest ([KnowledgeBase.documents] in the
+     * Settings DataStore) are written across two stores that cannot share a transaction, so a process
+     * death in the gap between "chunks committed" and "manifest entry committed" leaves orphan rows
+     * whose document the user can no longer see or delete. [search] ranks purely by namespace and
+     * would keep serving those orphans forever. The manifest is the source of truth for which
+     * documents exist, so retrieval reconciles against it: [allowedDocIds] is required (not nullable)
+     * precisely so the real retrieval path cannot forget the invariant.
+     */
+    suspend fun searchInDocuments(
+        request: SimilaritySearchRequest,
+        namespace: String?,
+        allowedDocIds: Set<String>,
+    ): List<SearchResult<Chunk>> {
+        val kbId = namespace ?: defaultNamespace
+        return withContext(Dispatchers.IO) {
+            val query = embedder.embed(request.queryText)
+            val rows = dao.getByKb(kbId).map { it.toChunk() to decodeVector(it.embedding) }
+            rankBySimilarity(query, rows, request, kbId, allowedDocIds)
+        }
+    }
+
     companion object {
         /**
          * Pure ranking core (no IO) — extracted for headless unit testing. Computes cosine
@@ -99,8 +124,12 @@ class RoomVectorStore(
             rows: List<Pair<Chunk, Vector>>,
             request: SimilaritySearchRequest,
             namespace: String? = null,
+            allowedDocIds: Set<String>? = null,
         ): List<SearchResult<Chunk>> {
             return rows.asSequence()
+                // null = allow all (used by non-manifest callers/tests); a set enforces the manifest
+                // invariant by hiding orphan chunks whose document no longer exists.
+                .filter { (chunk, _) -> allowedDocIds?.contains(chunk.docId) ?: true }
                 .map { (chunk, vector) -> chunk to query.cosineSimilarity(vector) }
                 .filter { (_, score) -> request.minScore?.let { score >= it } ?: true }
                 .sortedByDescending { (_, score) -> score }

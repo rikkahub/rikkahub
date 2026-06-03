@@ -50,8 +50,8 @@ class RoomVectorStoreSearchTest {
         }
     }
 
-    private fun chunk(id: String, content: String) =
-        Chunk(chunkId = id, docId = "doc", sourceRef = "src", chunkIndex = 0, content = content)
+    private fun chunk(id: String, content: String, docId: String = "doc") =
+        Chunk(chunkId = id, docId = docId, sourceRef = "src", chunkIndex = 0, content = content)
 
     @Test
     fun `add then search returns the most similar chunk first`() = runBlocking {
@@ -129,6 +129,46 @@ class RoomVectorStoreSearchTest {
         )
         assertEquals(1, results.size)
         assertEquals("c3", results[0].document.chunkId)
+    }
+
+    @Test
+    fun `searchInDocuments hides chunks whose doc is absent from the manifest`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", "fake-embed")
+
+        // An orphan chunk: its docId is NOT in the KB manifest (e.g. left behind by a partial
+        // ingest where the chunk row committed but the Settings manifest entry never did). It is a
+        // perfect cosine match for the query, so without manifest enforcement it ranks first.
+        store.add(listOf(chunk("orphan", "a cat sat", docId = "orphan-doc")))
+        // A valid chunk whose docId IS in the manifest, also a perfect match.
+        store.add(listOf(chunk("valid", "a cat sat", docId = "valid-doc")))
+
+        val results = store.searchInDocuments(
+            request = SimilaritySearchRequest(queryText = "the cat", limit = 10),
+            namespace = "kb1",
+            allowedDocIds = setOf("valid-doc"),
+        )
+
+        val ids = results.map { it.document.chunkId }
+        assertTrue("orphan chunk must be hidden from retrieval, got $ids", "orphan" !in ids)
+        assertTrue("valid in-manifest chunk must be retrievable, got $ids", "valid" in ids)
+    }
+
+    @Test
+    fun `rankBySimilarity drops rows whose docId is outside the allowed manifest set`() {
+        val query = Vector(listOf(1.0, 0.0))
+        val rows = listOf(
+            chunk("orphan", "x", docId = "orphan-doc") to Vector(listOf(1.0, 0.0)),
+            chunk("valid", "y", docId = "valid-doc") to Vector(listOf(1.0, 0.0)),
+        )
+        val results = RoomVectorStore.rankBySimilarity(
+            query = query,
+            rows = rows,
+            request = SimilaritySearchRequest(queryText = "", limit = 10),
+            allowedDocIds = setOf("valid-doc"),
+        )
+        val ids = results.map { it.document.chunkId }
+        assertEquals(listOf("valid"), ids)
     }
 
     @Test

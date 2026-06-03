@@ -49,9 +49,10 @@ object KnowledgeRetrievalTransformer : InputMessageTransformer, KoinComponent {
         return withContext(Dispatchers.IO) {
             try {
                 ctx.processingStatus.value = "正在检索知识库..."
-                val results = store.search(
+                val results = store.searchInDocuments(
                     request = buildRetrievalRequest(queryText, kb),
                     namespace = kb.id.toString(),
+                    allowedDocIds = kb.documents.mapTo(mutableSetOf()) { it.id.toString() },
                 )
                 if (results.isEmpty()) return@withContext messages
 
