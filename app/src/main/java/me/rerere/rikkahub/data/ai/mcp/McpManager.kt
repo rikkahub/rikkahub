@@ -183,35 +183,48 @@ class McpManager(
         return UIMessagePart.Image(url = uri.toString())
     }
 
-    private fun getTransport(config: McpServerConfig): AbstractTransport = when (config) {
-        is McpServerConfig.SseTransportServer -> {
-            SseClientTransport(
-                urlString = config.url,
-                client = client,
-                requestBuilder = {
-                    headers.appendAll(StringValues.build {
-                        config.commonOptions.headers.forEach {
-                            append(it.first, it.second)
-                        }
-                    })
-                },
-            )
-        }
+    private fun getTransport(config: McpServerConfig): AbstractTransport {
+        val transport = when (config) {
+            is McpServerConfig.SseTransportServer -> {
+                SseClientTransport(
+                    urlString = config.url,
+                    client = client,
+                    requestBuilder = {
+                        headers.appendAll(StringValues.build {
+                            config.commonOptions.headers.forEach {
+                                append(it.first, it.second)
+                            }
+                        })
+                    },
+                )
+            }
 
-        is McpServerConfig.StreamableHTTPServer -> {
-            StreamableHttpClientTransport(
-                url = config.url,
-                client = client,
-                requestBuilder = {
-                    headers.appendAll(StringValues.build {
-                        config.commonOptions.headers.forEach {
-                            append(it.first, it.second)
-                        }
-                    })
-                }
-            )
+            is McpServerConfig.StreamableHTTPServer -> {
+                StreamableHttpClientTransport(
+                    url = config.url,
+                    client = client,
+                    requestBuilder = {
+                        headers.appendAll(StringValues.build {
+                            config.commonOptions.headers.forEach {
+                                append(it.first, it.second)
+                            }
+                        })
+                    }
+                )
+            }
         }
+        return attachReconnectCallbacks(transport, config)
     }
+
+    private fun <T : AbstractTransport> attachReconnectCallbacks(
+        transport: T,
+        config: McpServerConfig,
+    ): T = attachReconnectCallbacks(
+        transport = transport,
+        config = config,
+        currentStatus = { syncingStatus.value[config.id] },
+        scheduleReconnect = { scheduleReconnect(config) },
+    )
 
     suspend fun addClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
         removeClient(config) // Remove first
@@ -225,25 +238,6 @@ class McpManager(
                 version = "1.0",
             )
         )
-
-        // 注册 transport 回调以支持自动重连
-        transport.onClose {
-            Log.i(TAG, "Transport closed for ${config.commonOptions.name}")
-            val currentStatus = syncingStatus.value[config.id]
-            // 只有在已连接状态下才触发重连，避免正常关闭时重连
-            if (currentStatus == McpStatus.Connected) {
-                scheduleReconnect(config)
-            }
-        }
-
-        transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
-            val currentStatus = syncingStatus.value[config.id]
-            // 只有在已连接状态下才触发重连
-            if (currentStatus == McpStatus.Connected) {
-                scheduleReconnect(config)
-            }
-        }
 
         clients[config] = client
         runCatching {
@@ -426,23 +420,6 @@ class McpManager(
             )
         )
 
-        // 注册回调
-        transport.onClose {
-            Log.i(TAG, "Transport closed for ${config.commonOptions.name}")
-            val currentStatus = syncingStatus.value[config.id]
-            if (currentStatus == McpStatus.Connected) {
-                scheduleReconnect(config)
-            }
-        }
-
-        transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
-            val currentStatus = syncingStatus.value[config.id]
-            if (currentStatus == McpStatus.Connected) {
-                scheduleReconnect(config)
-            }
-        }
-
         clients[config] = client
         setStatus(config, McpStatus.Connecting)
         client.connect(transport)
@@ -461,6 +438,37 @@ class McpManager(
     fun getStatus(config: McpServerConfig): Flow<McpStatus> {
         return syncingStatus.map { it[config.id] ?: McpStatus.Idle }
     }
+}
+
+// The reconnect/close invariant — every transport McpManager connects must carry
+// onClose/onError handlers that drive scheduleReconnect — has to hold at ALL connect
+// sites (addClient, reconnectClient, and the lazy connects in callTool/sync). Issue
+// #28: it was registered only at addClient/reconnectClient, so a transport opened on
+// the lazy callTool/sync path had no onClose handler — a dropped stream was never
+// rescheduled and the orphaned connection leaked. Attaching the callbacks here, called
+// from the single getTransport factory all four sites share, makes the invariant hold
+// by construction. It only reconnects while status is Connected so a deliberate
+// shutdown does not trigger a reconnect. Kept as a pure function (status + reconnect
+// injected) so the attachment behavior is JVM-unit-testable without the Android deps.
+internal fun <T : AbstractTransport> attachReconnectCallbacks(
+    transport: T,
+    config: McpServerConfig,
+    currentStatus: () -> McpStatus?,
+    scheduleReconnect: () -> Unit,
+): T {
+    transport.onClose {
+        Log.i(TAG, "Transport closed for ${config.commonOptions.name}")
+        if (currentStatus() == McpStatus.Connected) {
+            scheduleReconnect()
+        }
+    }
+    transport.onError { error ->
+        Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+        if (currentStatus() == McpStatus.Connected) {
+            scheduleReconnect()
+        }
+    }
+    return transport
 }
 
 internal val McpJson: Json by lazy {
