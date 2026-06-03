@@ -45,11 +45,13 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.removeElements
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
@@ -188,12 +190,31 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         val bodyStr = response.body?.string() ?: ""
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
-        val candidates = bodyJson["candidates"]!!.jsonArray
-        val usage = bodyJson["usageMetadata"]!!.jsonObject
+        parseGenerateContentResponse(bodyJson, params.model.modelId)
+    }
 
-        val messageChunk = MessageChunk(
+    // Parses a non-streaming generateContent 200 response. Gemini can return HTTP 200
+    // with no `candidates` (e.g. a safety-blocked prompt yielding only promptFeedback)
+    // and/or no `usageMetadata`. Mirror the streaming path: surface the block reason /
+    // server detail as an HttpException instead of a raw NPE.
+    private fun parseGenerateContentResponse(
+        bodyJson: JsonObject,
+        modelId: String,
+    ): MessageChunk {
+        val blockReason = bodyJson["promptFeedback"]?.jsonObject
+            ?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
+        if (blockReason != null) {
+            throw HttpException("Prompt feedback: $blockReason")
+        }
+
+        val candidates = bodyJson["candidates"]?.jsonArray
+        if (candidates.isNullOrEmpty()) {
+            throw bodyJson.parseErrorDetail()
+        }
+
+        return MessageChunk(
             id = Uuid.random().toString(),
-            model = params.model.modelId,
+            model = modelId,
             choices = candidates.map { candidate ->
                 UIMessageChoice(
                     message = parseMessage(candidate.jsonObject),
@@ -202,10 +223,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     delta = null
                 )
             },
-            usage = parseUsageMeta(usage)
+            usage = parseUsageMeta(bodyJson["usageMetadata"] as? JsonObject)
         )
-
-        messageChunk
     }
 
     override suspend fun streamText(
