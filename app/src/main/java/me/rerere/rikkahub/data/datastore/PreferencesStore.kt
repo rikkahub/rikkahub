@@ -391,7 +391,8 @@ class SettingsStore(
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-            preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+            preferences[SEARCH_SELECTED] =
+                coerceSearchServiceSelected(settings.searchServiceSelected, settings.searchServices.size)
 
             preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
@@ -639,6 +640,9 @@ fun Settings.findModelById(uuid: Uuid?, fallback: Uuid? = null): Model? {
     return uuid?.let { this.providers.findModelById(it) }
         ?: fallback?.let { this.providers.findModelById(it) }
 }
+
+internal fun coerceSearchServiceSelected(selected: Int, size: Int): Int =
+    selected.coerceIn(0, maxOf(0, size - 1))
 
 fun List<ProviderSetting>.findModelById(uuid: Uuid): Model? {
     this.forEach { setting ->
