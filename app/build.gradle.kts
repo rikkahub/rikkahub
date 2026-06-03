@@ -132,7 +132,6 @@ android {
         compilerOptions.optIn.add("kotlin.uuid.ExperimentalUuidApi")
         compilerOptions.optIn.add("kotlin.time.ExperimentalTime")
         compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
-        compilerOptions.optIn.add("androidx.navigation3.runtime.ExperimentalNavigation3Api")
     }
 }
 
