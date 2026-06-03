@@ -71,7 +71,13 @@ private const val CLAUDE_FP_BILLING =
     "x-anthropic-billing-header: cc_version=2.1.126.88c; cc_entrypoint=cli; cch=00000;"
 private const val CLAUDE_FP_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
 
-class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
+class ClaudeProvider(
+    private val client: OkHttpClient,
+    context: Context? = null,
+    // SSE 使用带有短 readTimeout 的专用客户端，使冻结的后台 socket 在 ~120s（而非共享客户端的 10 分钟）
+    // 内触发 SocketTimeoutException -> onFailure -> close(exception) -> flow 错误 -> 上层 sanitize/finalize。
+    private val streamClient: OkHttpClient = client,
+) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
     // OAuth token is used verbatim (not via KeyRoulette, which splits on whitespace/commas).
@@ -286,7 +292,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource = EventSources.createFactory(streamClient)
             .newEventSource(request, listener)
 
         awaitClose {

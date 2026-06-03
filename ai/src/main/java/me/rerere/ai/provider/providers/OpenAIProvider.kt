@@ -47,12 +47,14 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 class OpenAIProvider(
     private val client: OkHttpClient,
-    context: Context? = null
+    context: Context? = null,
+    // 见 ClaudeProvider：SSE 使用短 readTimeout 的专用客户端，快速失败而非挂起 10 分钟。
+    private val streamClient: OkHttpClient = client,
 ) : Provider<ProviderSetting.OpenAI> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
-    private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
-    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
+    private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette, streamClient = streamClient)
+    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette, streamClient = streamClient)
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =

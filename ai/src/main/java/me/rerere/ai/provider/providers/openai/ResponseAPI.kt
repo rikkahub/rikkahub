@@ -60,7 +60,9 @@ private const val TAG = "ResponseAPI"
 
 class ResponseAPI(
     private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+    private val keyRoulette: KeyRoulette = KeyRoulette.default(),
+    // SSE 专用短 readTimeout 客户端；默认回退到共享 client 保持向后兼容。
+    private val streamClient: OkHttpClient = client,
 ) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
@@ -173,7 +175,7 @@ class ResponseAPI(
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource = EventSources.createFactory(streamClient)
             .newEventSource(request, listener)
 
         awaitClose {

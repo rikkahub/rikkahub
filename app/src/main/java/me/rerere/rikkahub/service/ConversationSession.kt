@@ -20,6 +20,11 @@ class ConversationSession(
     initial: Conversation,
     private val scope: CoroutineScope,
     private val onIdle: (Uuid) -> Unit,
+    // Generation-job lifecycle hooks. This session is the single owner of the generation job, so it
+    // is the correct place to signal start/stop. Plain callbacks keep the session pure/JVM-constructible;
+    // ChatService supplies implementations that drive GenerationActivityTracker + the foreground service.
+    private val onGenerationStart: () -> Unit = {},
+    private val onGenerationStop: () -> Unit = {},
 ) {
     // 会话状态
     val state = MutableStateFlow(initial)
@@ -70,12 +75,18 @@ class ConversationSession(
     }
 
     fun setJob(job: Job?) {
+        // Cancelling the previous job fires its invokeOnCompletion -> onGenerationStop, so the
+        // start/stop signals stay balanced even when a new generation replaces an in-flight one.
         _generationJob.value?.cancel()
         _generationJob.value = job
-        job?.invokeOnCompletion {
-            _generationJob.value = null
-            if (refCount.get() <= 0) {
-                scheduleIdleCheck()
+        if (job != null) {
+            onGenerationStart()
+            job.invokeOnCompletion {
+                _generationJob.value = null
+                onGenerationStop()
+                if (refCount.get() <= 0) {
+                    scheduleIdleCheck()
+                }
             }
         }
     }

@@ -18,6 +18,8 @@
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
   <uses-feature
@@ -109,6 +111,21 @@
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="local web server for LLM chat UI" />
     </service>
+
+    <!--
+      dataSync (not specialUse): an LLM SSE stream is semantically a network data-sync task, which
+      is exactly what dataSync documents. It needs no PROPERTY_SPECIAL_USE_FGS_SUBTYPE justification
+      and keeps generation decoupled from the web-server's special-use entry. Android 14+ imposes a
+      ~6h/day cumulative dataSync budget. A single SSE read is bounded to ~120s (Part-B streaming
+      read timeout), but an agentic tool/MCP/search loop can chain many such reads and run far longer;
+      the service lives for the whole loop and stops on the 1->0 generation edge, well within the
+      daily budget for normal use. The WakeLock is renewed on streaming progress so a long live loop
+      keeps the CPU awake (see GenerationForegroundService.WAKE_LOCK_TIMEOUT_MS).
+    -->
+    <service
+      android:name=".service.GenerationForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
 
     <provider
       android:name="androidx.core.content.FileProvider"

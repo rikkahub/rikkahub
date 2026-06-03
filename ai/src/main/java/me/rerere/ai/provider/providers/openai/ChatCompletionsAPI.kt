@@ -65,7 +65,9 @@ private const val TAG = "ChatCompletionsAPI"
 
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette
+    private val keyRoulette: KeyRoulette,
+    // SSE 专用短 readTimeout 客户端；默认回退到共享 client 保持向后兼容。
+    private val streamClient: OkHttpClient = client,
 ) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
@@ -236,7 +238,7 @@ class ChatCompletionsAPI(
             }
         }
 
-        val eventSource = EventSources.createFactory(client).newEventSource(request, listener)
+        val eventSource = EventSources.createFactory(streamClient).newEventSource(request, listener)
 
         awaitClose {
             println("[awaitClose] 关闭eventSource ")

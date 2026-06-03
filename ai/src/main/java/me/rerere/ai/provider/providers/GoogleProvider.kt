@@ -73,7 +73,12 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
 
-class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
+class GoogleProvider(
+    private val client: OkHttpClient,
+    context: Context? = null,
+    // 见 ClaudeProvider：SSE 使用短 readTimeout 的专用客户端，快速失败而非挂起 10 分钟。
+    private val streamClient: OkHttpClient = client,
+) : Provider<ProviderSetting.Google> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
@@ -353,7 +358,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource = EventSources.createFactory(streamClient)
                 .newEventSource(request, listener)
 
         awaitClose {

@@ -40,6 +40,7 @@ import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -233,8 +234,25 @@ val dataSourceModule = module {
         SponsorAPI.create(get())
     }
 
+    // 专用流式客户端：从共享 client 克隆，仅把 readTimeout 收紧到 120s 用于 SSE。
+    // 阈值理由：推理模型在两个*可见 token* 之间可合法暂停 >60s，但 SSE 传输层在此期间仍持续
+    // 投递帧/心跳/空白，因此 120s 这一阈值键于*传输存活*（任意字节，而非任意 token），
+    // 既能放行合法的推理暂停，又能在约 120s（而非共享客户端的 10 分钟）内捕获真正死掉的后台 socket。
+    // callTimeout 显式设为 0（不限），让一次完整生成不被整体时长上限误杀——只约束单次 socket 读。
+    // 不降低共享 client 的 10 分钟 readTimeout：非流式 generateText/listModels 仍依赖它。
+    single<OkHttpClient>(named("stream")) {
+        get<OkHttpClient>().newBuilder()
+            .readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .build()
+    }
+
     single {
-        ProviderManager(client = get(), context = get())
+        ProviderManager(
+            client = get(),
+            context = get(),
+            streamClient = get(named("stream")),
+        )
     }
 
     single {

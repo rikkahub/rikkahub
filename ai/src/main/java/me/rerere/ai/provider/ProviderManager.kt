@@ -8,16 +8,24 @@ import okhttp3.OkHttpClient
 
 /**
  * Provider管理器，负责注册和获取Provider实例
+ *
+ * @param client 共享 OkHttpClient，用于非流式调用（generateText/listModels），保留较长的 readTimeout
+ * @param streamClient 专用流式 OkHttpClient，用于 SSE EventSource，带有更短的 readTimeout 以便快速失败。
+ *   默认回退到 client 以保持向后兼容（现有调用方/测试无需改动即可编译）。
  */
-class ProviderManager(client: OkHttpClient, context: Context) {
+class ProviderManager(
+    client: OkHttpClient,
+    context: Context,
+    streamClient: OkHttpClient = client,
+) {
     // 存储已注册的Provider实例
     private val providers = mutableMapOf<String, Provider<*>>()
 
     init {
         // 注册默认Provider
-        registerProvider("openai", OpenAIProvider(client, context))
-        registerProvider("google", GoogleProvider(client, context))
-        registerProvider("claude", ClaudeProvider(client, context))
+        registerProvider("openai", OpenAIProvider(client, context, streamClient))
+        registerProvider("google", GoogleProvider(client, context, streamClient))
+        registerProvider("claude", ClaudeProvider(client, context, streamClient))
     }
 
     /**
