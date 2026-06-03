@@ -199,7 +199,7 @@ fun Route.settingsRoutes(
             }
             settingsStore.settingsFlow
                 .collect { settings ->
-                    val json = JsonInstant.encodeToString(settings)
+                    val json = JsonInstant.encodeToString(settings.sanitizeForWeb())
                     send(data = json, event = "update")
                 }
         }
