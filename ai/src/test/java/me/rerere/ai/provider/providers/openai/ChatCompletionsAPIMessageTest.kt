@@ -1,10 +1,15 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -345,6 +350,48 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    // Helper to invoke private parseMessage method via reflection
+    private fun invokeParseMessage(jsonObject: JsonObject): UIMessage {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "parseMessage",
+            JsonObject::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(api, jsonObject) as UIMessage
+    }
+
+    private fun imageMessage(dataUri: String): JsonObject = buildJsonObject {
+        put("role", "assistant")
+        put("content", "")
+        putJsonArray("images") {
+            add(buildJsonObject {
+                put("type", "image_url")
+                putJsonObject("image_url") {
+                    put("url", dataUri)
+                }
+            })
+        }
+    }
+
+    @Test
+    fun `non-png image data uri is stripped to raw base64`() {
+        // Regression for issue #27: a jpeg/webp/gif data URI was matched by the
+        // require(startsWith("data:image")) guard but extracted with a hardcoded
+        // "data:image/png;base64," delimiter. substringAfter returns the WHOLE
+        // string when the delimiter is absent, so the full data URI leaked into
+        // Image.url and got double-prefixed downstream, corrupting the image.
+        val message = invokeParseMessage(imageMessage("data:image/jpeg;base64,QUJD"))
+        val image = message.parts.filterIsInstance<UIMessagePart.Image>().single()
+        assertEquals("QUJD", image.url)
+    }
+
+    @Test
+    fun `png image data uri is stripped to raw base64 (parity)`() {
+        val message = invokeParseMessage(imageMessage("data:image/png;base64,QUJD"))
+        val image = message.parts.filterIsInstance<UIMessagePart.Image>().single()
+        assertEquals("QUJD", image.url)
     }
 
     // ==================== Helper Functions ====================
