@@ -9,6 +9,7 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.security.KeyFactory
+import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
@@ -35,10 +36,23 @@ class ServiceAccountTokenProvider(
     )
 
     /**
-     * Generate cache key based on service account email and scopes
+     * Generate cache key based on service account email, scopes and private key.
+     * The private key is included as a SHA-256 hash so that a key rotation (same
+     * email/scopes, new key) does not reuse a token signed by the old/revoked key,
+     * while never retaining the raw secret as a map key.
      */
-    private fun generateCacheKey(serviceAccountEmail: String, scopes: List<String>): String {
-        return "$serviceAccountEmail:${scopes.sorted().joinToString(",")}"
+    private fun generateCacheKey(
+        serviceAccountEmail: String,
+        scopes: List<String>,
+        privateKeyPem: String
+    ): String {
+        val keyHash = sha256Hex(privateKeyPem.toByteArray(Charsets.UTF_8))
+        return "$serviceAccountEmail:${scopes.sorted().joinToString(",")}:$keyHash"
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     /**
@@ -61,7 +75,7 @@ class ServiceAccountTokenProvider(
         privateKeyPem: String,
         scopes: List<String> = listOf("https://www.googleapis.com/auth/cloud-platform")
     ): String = withContext(Dispatchers.IO) {
-        val cacheKey = generateCacheKey(serviceAccountEmail, scopes)
+        val cacheKey = generateCacheKey(serviceAccountEmail, scopes, privateKeyPem)
 
         // Check cache first
         tokenCache[cacheKey]?.let { cachedToken ->
