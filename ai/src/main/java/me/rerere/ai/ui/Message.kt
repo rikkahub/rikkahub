@@ -5,6 +5,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.MessageRole
@@ -92,8 +93,26 @@ data class UIMessage(
                     }
 
                     is UIMessagePart.Tool -> {
-                        if (deltaPart.toolCallId.isBlank()) {
-                            // No ID yet - append to the last Tool if it also has no ID
+                        val streamIndex = deltaPart.streamIndex
+                        if (streamIndex != null) {
+                            // Protocol index present (OpenAI tool_calls[].index /
+                            // Anthropic content-block index): a fragment belongs to
+                            // the OPEN tool at its index, NOT to whichever Tool is
+                            // currently last. This keeps parallel/interleaved calls
+                            // separate regardless of fragment ordering.
+                            val target = acc.lastOrNull {
+                                it is UIMessagePart.Tool && !it.isExecuted && it.streamIndex == streamIndex
+                            } as? UIMessagePart.Tool
+                            if (target != null) {
+                                acc.map { part ->
+                                    if (part === target) part.merge(deltaPart) else part
+                                }
+                            } else {
+                                acc + deltaPart.copy().also { it.streamIndex = streamIndex }
+                            }
+                        } else if (deltaPart.toolCallId.isBlank()) {
+                            // No index and no ID - append to the last Tool
+                            // (atomic providers: Google / ResponseAPI).
                             val lastTool = acc.lastOrNull { it is UIMessagePart.Tool } as? UIMessagePart.Tool
                             if (lastTool != null) {
                                 acc.map { part ->
@@ -446,6 +465,18 @@ sealed class UIMessagePart {
         val approvalState: ToolApprovalState = ToolApprovalState.Auto,
         override var metadata: JsonObject? = null
     ) : UIMessagePart() {
+        /**
+         * Transient streaming carrier for the protocol stream index
+         * (OpenAI tool_calls[].index / Anthropic content-block index).
+         * Declared as a non-constructor body var so it is excluded from
+         * serialization, equals, hashCode, copy and toString — the
+         * persisted Tool schema is unchanged and finalized Tools compare
+         * equal regardless of any leftover index. Set at the parse sites,
+         * read by the streaming merge, ignored once finalized.
+         */
+        @Transient
+        var streamIndex: Int? = null
+
         /** Whether the tool has been executed (has output) */
         val isExecuted: Boolean get() = output.isNotEmpty()
 
@@ -468,7 +499,12 @@ sealed class UIMessagePart {
                 output = output + other.output,
                 approvalState = approvalState,
                 metadata = if (other.metadata != null) other.metadata else metadata,
-            )
+            ).also {
+                // copy()/constructor cannot carry the body var, so propagate
+                // the open tool's index (receiver wins) to keep it stable
+                // across N fragments.
+                it.streamIndex = this.streamIndex ?: other.streamIndex
+            }
         }
     }
 }

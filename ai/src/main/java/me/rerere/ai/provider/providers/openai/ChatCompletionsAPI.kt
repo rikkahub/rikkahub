@@ -657,13 +657,14 @@ class ChatCompletionsAPI(
                         toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
                     val arguments =
                         toolCalls.jsonObject["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.contentOrNull
+                    val index = toolCalls.jsonObject["index"]?.jsonPrimitive?.intOrNull
                     add(
                         UIMessagePart.Tool(
                             toolCallId = toolCallId ?: "",
                             toolName = toolName ?: "",
                             input = arguments ?: "",
                             output = emptyList()
-                        )
+                        ).also { it.streamIndex = index }
                     )
                 }
                 if (content.isNotEmpty()) add(UIMessagePart.Text(content))

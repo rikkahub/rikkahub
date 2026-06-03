@@ -205,6 +205,11 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 }
 
                 val dataJson = json.parseToJsonElement(data).jsonObject
+                // Anthropic content-block index lives at the top level of the
+                // SSE frame (content_block_start / content_block_delta). It is
+                // the protocol key that disambiguates parallel tool calls, so
+                // attach it to any Tool delta parts for the streaming merge.
+                val blockIndex = dataJson["index"]?.jsonPrimitive?.intOrNull
                 val deltaMessage = parseMessage(buildJsonArray {
                     val contentBlockObj = dataJson["content_block"]?.jsonObject
                     val deltaObj = dataJson["delta"]?.jsonObject
@@ -214,7 +219,15 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     if (deltaObj != null) {
                         add(deltaObj)
                     }
-                })
+                }).let { msg ->
+                    if (blockIndex == null) msg
+                    else msg.copy(
+                        parts = msg.parts.map { part ->
+                            if (part is UIMessagePart.Tool) part.also { it.streamIndex = blockIndex }
+                            else part
+                        }
+                    )
+                }
                 val tokenUsage = parseTokenUsage(dataJson)
                 val messageChunk = MessageChunk(
                     id = id ?: "",
