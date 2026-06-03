@@ -38,7 +38,22 @@ class KnowledgeStoreFactory(
             dao = knowledgeChunkDao,
             embedder = embedder,
             defaultNamespace = kb.id.toString(),
-            embeddingModelLabel = model.modelId,
+            embeddingModelLabel = embeddingSpaceLabel(providerSetting.baseUrl, model.modelId),
         )
+    }
+
+    companion object {
+        /**
+         * Identity of the embedding space a row's vector lives in, stored on each row so a later
+         * change is detectable on the read path ([RoomVectorStore.search] filters by it).
+         *
+         * Keyed by endpoint+model, NOT the model name alone: [KoogEmbedder] embeds against
+         * [ProviderSetting.OpenAI.baseUrl], and that baseUrl is mutable in provider settings.
+         * Editing only the baseUrl to point at a different model (same `modelId` string, same
+         * dimension) yields vectors in an incomparable space; if the label captured `modelId`
+         * alone, those stale rows would pass the read-path filter and be silently mis-ranked.
+         * Including the baseUrl makes such an edit relabel reads and exclude the stale rows.
+         */
+        fun embeddingSpaceLabel(baseUrl: String, modelId: String): String = "$baseUrl#$modelId"
     }
 }

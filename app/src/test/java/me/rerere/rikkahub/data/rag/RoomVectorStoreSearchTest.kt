@@ -171,6 +171,116 @@ class RoomVectorStoreSearchTest {
         assertEquals(listOf("valid"), ids)
     }
 
+    /** Seeds a row directly so its embedding_model label can differ from the store's current model. */
+    private fun seedRow(
+        dao: FakeDao,
+        id: String,
+        vector: Vector,
+        embeddingModel: String,
+        kbId: String = "kb1",
+        docId: String = "doc",
+    ) = dao.rows.add(
+        KnowledgeChunkEntity(
+            id = id,
+            kbId = kbId,
+            docId = docId,
+            sourceRef = "src",
+            chunkIndex = 0,
+            text = "x",
+            embedding = RoomVectorStore.encodeVector(vector),
+            embeddingModel = embeddingModel,
+        )
+    )
+
+    @Test
+    fun `search excludes chunks embedded under a different model`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", embeddingModelLabel = "fake-embed")
+
+        // Both rows are a perfect cosine match for the query "the cat" -> [1,0]; the only thing that
+        // distinguishes them is the embedding-model label. The same-model row must rank; the
+        // foreign-model row (vector lives in a different embedding space, comparison is garbage)
+        // must never appear, even though its cosine to the current query happens to be 1.0.
+        seedRow(dao, id = "same", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "fake-embed")
+        seedRow(dao, id = "foreign", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "other-embed")
+
+        val results = store.search(SimilaritySearchRequest(queryText = "the cat", limit = 10))
+        val ids = results.map { it.document.chunkId }
+        assertTrue("foreign-model chunk must be excluded, got $ids", "foreign" !in ids)
+        assertEquals(listOf("same"), ids)
+    }
+
+    @Test
+    fun `search over a KB embedded entirely under a foreign model returns nothing`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", embeddingModelLabel = "fake-embed")
+
+        // Every row was embedded under a model the store no longer uses. Comparing the current query
+        // vector against vectors from a foreign space is meaningless, so retrieval must yield nothing
+        // (the transformer's results.isEmpty() gate then injects no context).
+        seedRow(dao, id = "f1", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "other-embed")
+        seedRow(dao, id = "f2", vector = Vector(listOf(0.9, 0.1)), embeddingModel = "other-embed")
+
+        val results = store.search(SimilaritySearchRequest(queryText = "the cat", limit = 10))
+        assertTrue("foreign-model KB must return no results, got ${results.size}", results.isEmpty())
+    }
+
+    @Test
+    fun `search excludes rows embedded under the same model but a different endpoint`() = runBlocking {
+        // Issue #23 repro at the store layer: the KB's embedding model `baseUrl` was repointed at a
+        // different 1536-dim model while the `modelId` string stayed identical. The store's label
+        // therefore comes from endpoint+model (see KnowledgeStoreFactory.embeddingSpaceLabel), so a
+        // baseUrl-only edit changes it. Rows ingested under the old endpoint must be excluded even
+        // though their `modelId` substring is unchanged and their cosine to the query is 1.0.
+        val dao = FakeDao()
+        val modelId = "text-embedding-3-small"
+        val store = RoomVectorStore(
+            dao, FakeEmbedder(), "kb1",
+            embeddingModelLabel = KnowledgeStoreFactory.embeddingSpaceLabel(
+                baseUrl = "https://new-host.example/v1",
+                modelId = modelId,
+            ),
+        )
+
+        seedRow(
+            dao, id = "same", vector = Vector(listOf(1.0, 0.0)),
+            embeddingModel = KnowledgeStoreFactory.embeddingSpaceLabel(
+                baseUrl = "https://new-host.example/v1",
+                modelId = modelId,
+            ),
+        )
+        seedRow(
+            dao, id = "stale", vector = Vector(listOf(1.0, 0.0)),
+            embeddingModel = KnowledgeStoreFactory.embeddingSpaceLabel(
+                baseUrl = "https://api.openai.com/v1",
+                modelId = modelId,
+            ),
+        )
+
+        val results = store.search(SimilaritySearchRequest(queryText = "the cat", limit = 10))
+        val ids = results.map { it.document.chunkId }
+        assertTrue("row from the old endpoint must be excluded, got $ids", "stale" !in ids)
+        assertEquals(listOf("same"), ids)
+    }
+
+    @Test
+    fun `searchInDocuments excludes chunks embedded under a different model`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", embeddingModelLabel = "fake-embed")
+
+        seedRow(dao, id = "same", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "fake-embed", docId = "valid-doc")
+        seedRow(dao, id = "foreign", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "other-embed", docId = "valid-doc")
+
+        val results = store.searchInDocuments(
+            request = SimilaritySearchRequest(queryText = "the cat", limit = 10),
+            namespace = "kb1",
+            allowedDocIds = setOf("valid-doc"),
+        )
+        val ids = results.map { it.document.chunkId }
+        assertTrue("foreign-model chunk must be excluded, got $ids", "foreign" !in ids)
+        assertEquals(listOf("same"), ids)
+    }
+
     @Test
     fun `namespace scopes search to the requested knowledge base`() = runBlocking {
         val dao = FakeDao()

@@ -83,7 +83,12 @@ class RoomVectorStore(
         val kbId = namespace ?: defaultNamespace
         return withContext(Dispatchers.IO) {
             val query = embedder.embed(request.queryText)
-            val rows = dao.getByKb(kbId).map { it.toChunk() to decodeVector(it.embedding) }
+            val rows = dao.getByKb(kbId)
+                // Cosine ranking is only meaningful between vectors from the same embedding space.
+                // Rows embedded under a different model (dimension may even coincide, e.g. 1536) would
+                // be silently mis-ranked, so exclude them from this query — the rows stay in Room.
+                .filter { it.embeddingModel == embeddingModelLabel }
+                .map { it.toChunk() to decodeVector(it.embedding) }
             rankBySimilarity(query, rows, request, kbId)
         }
     }
@@ -108,7 +113,10 @@ class RoomVectorStore(
         val kbId = namespace ?: defaultNamespace
         return withContext(Dispatchers.IO) {
             val query = embedder.embed(request.queryText)
-            val rows = dao.getByKb(kbId).map { it.toChunk() to decodeVector(it.embedding) }
+            val rows = dao.getByKb(kbId)
+                // Same embedding-space invariant as [search]: drop rows embedded under another model.
+                .filter { it.embeddingModel == embeddingModelLabel }
+                .map { it.toChunk() to decodeVector(it.embedding) }
             rankBySimilarity(query, rows, request, kbId, allowedDocIds)
         }
     }
