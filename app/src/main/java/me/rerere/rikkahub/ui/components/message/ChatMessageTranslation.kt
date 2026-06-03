@@ -71,6 +71,7 @@ fun LanguageSelectionDialog(
             Locale.GERMAN,
             Locale("es", "ES"),
             Locale.ITALIAN,
+            Locale("id"),
         )
     }
 
@@ -87,6 +88,7 @@ fun LanguageSelectionDialog(
             Locale.GERMAN -> stringResource(R.string.language_german)
             Locale.ITALIAN -> stringResource(R.string.language_italian)
             Locale("es", "ES") -> stringResource(R.string.language_spanish)
+            Locale("id") -> stringResource(R.string.language_indonesian)
             else -> locale.getDisplayLanguage(Locale.getDefault())
         }
     }
