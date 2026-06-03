@@ -513,6 +513,51 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
+    fun `AT_DEPTH depth should be measured against original conversation when BOTTOM_OF_CHAT also injects`() {
+        val bottomId = Uuid.random()
+        val atDepthId = Uuid.random()
+
+        val injections = listOf(
+            createModeInjection(
+                id = bottomId,
+                position = InjectionPosition.BOTTOM_OF_CHAT,
+                content = "Bottom"
+            ),
+            createModeInjection(
+                id = atDepthId,
+                position = InjectionPosition.AT_DEPTH,
+                injectDepth = 2,
+                content = "At depth 2"
+            )
+        )
+
+        val messages = listOf(
+            UIMessage.system("System"),
+            UIMessage.user("Message 1"),
+            UIMessage.assistant("Response 1"),
+            UIMessage.user("Message 2")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(bottomId, atDepthId)),
+            modeInjections = injections,
+            lorebooks = emptyList()
+        )
+
+        // AT_DEPTH depth=2 must count back from the newest ORIGINAL message
+        // ([..., Response 1, Message 2]) ignoring the injected "Bottom" message,
+        // so it lands immediately before "Response 1" (the 2nd-from-newest original).
+        val atDepthIndex = result.indexOfFirst { getMessageText(it) == "At depth 2" }
+        val bottomIndex = result.indexOfFirst { getMessageText(it) == "Bottom" }
+
+        assertTrue(atDepthIndex >= 0)
+        assertEquals("Response 1", getMessageText(result[atDepthIndex + 1]))
+        // The depth anchor must precede the BOTTOM_OF_CHAT injection, not count it.
+        assertTrue(atDepthIndex < bottomIndex)
+    }
+
+    @Test
     fun `AT_DEPTH with depth 1 should insert before last message`() {
         val injectionId = Uuid.random()
         val injection = createModeInjection(

@@ -124,6 +124,11 @@ internal fun applyInjections(
 ): List<UIMessage> {
     val result = messages.toMutableList()
 
+    // AT_DEPTH 的深度必须相对于原始对话长度计算，而不是被先前注入（系统消息/
+    // TOP_OF_CHAT/BOTTOM_OF_CHAT）撑大后的 result.size，否则注入的消息会被错误地
+    // 计入深度，导致 AT_DEPTH 落点偏移。
+    val originalSize = messages.size
+
     // 找到系统消息的索引（通常是第一条）
     val systemIndex = result.indexOfFirst { it.role == MessageRole.SYSTEM }
 
@@ -209,9 +214,16 @@ internal fun applyInjections(
         val byDepth = atDepthInjections.groupBy { it.injectDepth }
         byDepth.keys.sortedDescending().forEach { depth ->
             val injections = byDepth[depth] ?: return@forEach
-            // 计算插入位置：result.size - depth，但要确保在有效范围内
-            // depth=1 表示在最后一条消息之前，depth=2 表示在倒数第二条之前...
-            var insertIndex = (result.size - depth.coerceAtLeast(1)).coerceIn(0, result.size)
+            // 计算插入位置：从最新的【原始】消息往前数 depth 条，确保不把先前注入的
+            // 消息计入深度。depth=1 表示在最后一条原始消息之前，depth=2 表示在倒数
+            // 第二条原始消息之前……再把该位置翻译到当前（可能已被注入撑大的）result 上。
+            val originalInsertIndex =
+                (originalSize - depth.coerceAtLeast(1)).coerceIn(0, originalSize)
+            var insertIndex = translateOriginalIndexToResult(
+                result = result,
+                originalMessages = messages,
+                originalIndex = originalInsertIndex,
+            )
             insertIndex = findSafeInsertIndex(result, insertIndex)
             createMergedInjectionMessages(injections).forEach { message ->
                 result.add(insertIndex, message)
@@ -221,6 +233,38 @@ internal fun applyInjections(
     }
 
     return result
+}
+
+/**
+ * 把【原始】消息列表中的一个插入位置 originalIndex 翻译成当前 result 列表中的索引。
+ *
+ * result 在 AT_DEPTH 处理前可能已经被系统消息合成、TOP_OF_CHAT、BOTTOM_OF_CHAT 等
+ * 注入撑大；这些注入都插在最后一条原始消息之前，会使原始消息整体后移。本函数通过
+ * 对象引用定位“原始第 originalIndex 条消息”在 result 中的当前位置，从而让 AT_DEPTH
+ * 的深度只相对原始消息计算，忽略已注入的消息。
+ *
+ * - originalIndex == originalMessages.size 表示插在所有原始消息之后（result 末尾）。
+ * - 原始系统消息在合成/改写时会被 copy 替换导致引用失效；此时退化为“第一条原始
+ *   消息之前”的语义，即 result 中第一条原始（USER/ASSISTANT/TOOL）消息的位置。
+ */
+private fun translateOriginalIndexToResult(
+    result: List<UIMessage>,
+    originalMessages: List<UIMessage>,
+    originalIndex: Int,
+): Int {
+    if (originalIndex >= originalMessages.size) return result.size
+
+    val target = originalMessages[originalIndex]
+    val byReference = result.indexOfFirst { it === target }
+    if (byReference >= 0) return byReference
+
+    // 引用丢失（仅可能发生在被改写的系统消息上）：退化为第一条原始消息之前。
+    for (i in (originalIndex + 1) until originalMessages.size) {
+        val next = originalMessages[i]
+        val idx = result.indexOfFirst { it === next }
+        if (idx >= 0) return idx
+    }
+    return result.size
 }
 
 /**
