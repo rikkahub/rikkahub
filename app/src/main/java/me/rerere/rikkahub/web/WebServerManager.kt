@@ -42,7 +42,8 @@ class WebServerManager(
     private val settingsStore: SettingsStore,
     private val filesManager: FilesManager
 ) {
-    private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
+    private val lifecycle =
+        WebServerLifecycle<EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>>()
     private val nsdRegistrar = NsdServiceRegistrar(context)
 
     private val _state = MutableStateFlow(WebServerState())
@@ -53,11 +54,6 @@ class WebServerManager(
         serviceName: String = DEFAULT_SERVICE_NAME,
         localhostOnly: Boolean = false
     ) {
-        if (server != null) {
-            Log.w(TAG, "Server already running")
-            return
-        }
-
         appScope.launch {
             // 仅本机模式绑定回环地址
             val host = if (localhostOnly) HOST_LOOPBACK else HOST_ALL_INTERFACES
@@ -74,9 +70,16 @@ class WebServerManager(
                     _state.value = baseState.copy(error = "Port $port is already in use")
                     return@launch
                 }
-                server = startWebServer(port = port, host = host) {
-                    configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
-                }.start(wait = false)
+                // 检查与赋值在同一把锁内原子完成，避免并发 start/restart 泄漏服务器实例
+                val started = lifecycle.start {
+                    startWebServer(port = port, host = host) {
+                        configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
+                    }.start(wait = false)
+                }
+                if (started == null) {
+                    Log.w(TAG, "Server already running")
+                    return@launch
+                }
 
                 _state.value = baseState.copy(isRunning = true)
                 // 仅局域网模式注册 mDNS
@@ -111,8 +114,7 @@ class WebServerManager(
         appScope.launch {
             try {
                 Log.i(TAG, "Stopping web server")
-                server?.stop(1000, 2000)
-                server = null
+                lifecycle.stop { it.stop(1000, 2000) }
                 runCatching {
                     nsdRegistrar.unregister()
                 }.onFailure {
