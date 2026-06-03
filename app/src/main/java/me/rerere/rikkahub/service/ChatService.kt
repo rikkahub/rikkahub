@@ -100,6 +100,12 @@ private const val TAG = "ChatService"
 // 单 token 间隔，避免逐 token IPC。
 internal const val WAKE_LOCK_RENEW_INTERVAL_MS = 60L * 1000L
 
+// 自动压缩保留的最近消息数：与手动压缩对话框（CompressContextDialog）的默认值一致。
+private const val AUTO_COMPACT_KEEP_RECENT_MESSAGES = 32
+
+// 自动压缩的目标摘要 token 数：与手动压缩对话框提供的中档默认一致。
+private const val AUTO_COMPACT_TARGET_TOKENS = 2000
+
 /**
  * 纯函数：给定上次续期时刻与当前时刻，判断是否到达续期间隔。抽出以便 JVM 单测（无 Android 依赖）。
  * [lastRenewAt] 为 0 表示尚未续期过——首个 chunk 即续期，使长任务的计时从首帧开始。
@@ -109,6 +115,32 @@ internal fun shouldRenewWakeLock(
     now: Long,
     intervalMs: Long = WAKE_LOCK_RENEW_INTERVAL_MS,
 ): Boolean = now - lastRenewAt >= intervalMs
+
+/**
+ * 纯函数：判断是否应在下一次请求前自动压缩对话历史。抽出以便 JVM 单测（无 Android/网络/模型依赖）。
+ *
+ * 仅当以下全部成立才触发：
+ * - [enabled]：用户显式开启（压缩会重写/丢弃历史，绝不静默进行）。
+ * - [contextMessageSize] > 0：助手设了有限的消息数上限。<=0 表示"无限制"——没有上限可取比例，
+ *   且这里不发明 token 估算器（那会是第二个可能严重偏差的压缩引擎）。
+ * - 当前消息数已达上限的 [threshold]（限制在 0..1）比例：limit = ceil(contextMessageSize * threshold)。
+ * - [messageCount] > [keepRecentMessages]：仍有可压缩的历史。等于或小于时无内容可压，
+ *   compressConversation 会抛"消息不足"，故提前挡住注定失败的压缩。
+ */
+internal fun shouldAutoCompact(
+    enabled: Boolean,
+    messageCount: Int,
+    contextMessageSize: Int,
+    threshold: Float,
+    keepRecentMessages: Int,
+): Boolean {
+    if (!enabled) return false
+    if (contextMessageSize <= 0) return false
+    val limit = kotlin.math.ceil(contextMessageSize * threshold.coerceIn(0f, 1f)).toInt()
+    if (messageCount < limit) return false
+    if (messageCount <= keepRecentMessages) return false
+    return true
+}
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -402,6 +434,12 @@ class ChatService(
                 )
                 saveConversation(conversationId, newConversation)
 
+                // 在生成下一次回复前，若达到阈值则自动压缩历史（仅限本 sendMessage 路径；
+                // regenerate / 工具审批续跑路径不在本次范围内）。判定抽成纯函数 [shouldAutoCompact]
+                // 以便 JVM 单测。压缩失败时降级——把错误上报后仍按未压缩的历史继续发送，绝不因压缩失败
+                // 阻断用户消息，也绝不静默吞掉异常。
+                maybeAutoCompact(conversationId, assistant)
+
                 // 开始补全
                 if (answer) {
                     handleMessageComplete(conversationId)
@@ -414,6 +452,32 @@ class ChatService(
             }
         }
         session.setJob(job)
+    }
+
+    // 自动压缩历史的触发与执行。判定用纯函数 [shouldAutoCompact]；满足条件时调用既有的
+    // compressConversation（保留最近 AUTO_COMPACT_KEEP_RECENT_MESSAGES 条），并在压缩后从 session
+    // 重新读取对话。失败时不抛——上报错误并按未压缩历史继续（降级而非阻断）。
+    private suspend fun maybeAutoCompact(conversationId: Uuid, assistant: Assistant) {
+        val conversation = getConversationFlow(conversationId).value
+        val shouldCompact = shouldAutoCompact(
+            enabled = assistant.autoCompactEnabled,
+            messageCount = conversation.currentMessages.size,
+            contextMessageSize = assistant.contextMessageSize,
+            threshold = assistant.autoCompactThreshold,
+            keepRecentMessages = AUTO_COMPACT_KEEP_RECENT_MESSAGES,
+        )
+        if (!shouldCompact) return
+
+        compressConversation(
+            conversationId = conversationId,
+            conversation = conversation,
+            additionalPrompt = "",
+            targetTokens = AUTO_COMPACT_TARGET_TOKENS,
+            keepRecentMessages = AUTO_COMPACT_KEEP_RECENT_MESSAGES,
+        ).onFailure {
+            it.printStackTrace()
+            addError(it, conversationId, title = context.getString(R.string.error_title_auto_compact))
+        }
     }
 
     private fun preprocessUserInputParts(parts: List<UIMessagePart>, assistant: Assistant): List<UIMessagePart> {

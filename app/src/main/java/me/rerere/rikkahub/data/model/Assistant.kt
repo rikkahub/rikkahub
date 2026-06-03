@@ -22,6 +22,8 @@ data class Assistant(
     val temperature: Float? = null,
     val topP: Float? = null,
     val contextMessageSize: Int = 0,
+    val autoCompactEnabled: Boolean = false, // 自动压缩历史（重写历史，默认关闭，需用户显式开启）
+    val autoCompactThreshold: Float = 0.8f,  // 触发阈值：消息数达到 contextMessageSize 的此比例时触发
     val streamOutput: Boolean = true,
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆

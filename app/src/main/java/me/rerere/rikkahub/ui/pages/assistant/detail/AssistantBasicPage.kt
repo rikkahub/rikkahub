@@ -371,6 +371,52 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_auto_compact))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_auto_compact_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.autoCompactEnabled,
+                        onCheckedChange = {
+                            onUpdate(assistant.copy(autoCompactEnabled = it))
+                        }
+                    )
+                }
+            ) {
+                if (assistant.autoCompactEnabled) {
+                    if (assistant.contextMessageSize <= 0) {
+                        Text(
+                            text = stringResource(R.string.assistant_page_auto_compact_needs_context_size),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Slider(
+                            value = assistant.autoCompactThreshold,
+                            onValueChange = {
+                                onUpdate(assistant.copy(autoCompactThreshold = it))
+                            },
+                            valueRange = 0.5f..0.95f,
+                            steps = 8,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.assistant_page_auto_compact_threshold,
+                                (assistant.autoCompactThreshold * 100).roundToInt()
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                        )
+                    }
+                }
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_stream_output))
                 },
                 description = {

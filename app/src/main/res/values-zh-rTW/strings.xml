@@ -1109,5 +1109,10 @@
   <string name="setting_model_page_fast_model">快速模型</string>
   <string name="setting_model_page_fast_model_desc">用於快速或背景任務的模型，未設置時也作為標題和建議模型的後備。</string>
   <string name="setting_model_page_enable_suggestion">啟用聊天建議</string>
+  <string name="assistant_page_auto_compact">自動壓縮歷史</string>
+  <string name="assistant_page_auto_compact_desc">在對話接近上下文訊息數上限時，於傳送前自動總結較早的訊息。此操作會重寫歷史，因此預設關閉。</string>
+  <string name="assistant_page_auto_compact_threshold">在上下文大小的 %d%% 時觸發</string>
+  <string name="assistant_page_auto_compact_needs_context_size">請在上方設定一個有限的上下文訊息數，自動壓縮才能生效。</string>
+  <string name="error_title_auto_compact">自動壓縮失敗</string>
 </resources>
 

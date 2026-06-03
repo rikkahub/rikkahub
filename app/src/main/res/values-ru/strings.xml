@@ -1111,5 +1111,10 @@
   <string name="setting_model_page_fast_model">Быстрая модель</string>
   <string name="setting_model_page_fast_model_desc">Модель для быстрых или фоновых задач, также используется как резервная для моделей заголовков и предложений, если не задана</string>
   <string name="setting_model_page_enable_suggestion">Включить подсказки чата</string>
+  <string name="assistant_page_auto_compact">Автосжатие истории</string>
+  <string name="assistant_page_auto_compact_desc">Автоматически суммировать старые сообщения перед отправкой, когда разговор приближается к лимиту количества сообщений в контексте. Это перезаписывает историю, поэтому по умолчанию отключено.</string>
+  <string name="assistant_page_auto_compact_threshold">Срабатывает при %d%% размера контекста</string>
+  <string name="assistant_page_auto_compact_needs_context_size">Чтобы автосжатие работало, задайте выше конечное количество сообщений контекста.</string>
+  <string name="error_title_auto_compact">Ошибка автосжатия</string>
 </resources>
 

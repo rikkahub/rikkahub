@@ -67,6 +67,10 @@
   <string name="assistant_page_context_message_desc">Controls how many historical messages will be sent to the model as context. Messages exceeding this number will be ignored, only the most recent N messages will be retained, which can save tokens</string>
   <string name="assistant_page_context_message_size">Context Message Size</string>
   <string name="assistant_page_context_message_unlimited">Unlimited context messages</string>
+  <string name="assistant_page_auto_compact">Auto compact history</string>
+  <string name="assistant_page_auto_compact_desc">Automatically summarize older messages before sending when the conversation approaches the context message size. This rewrites history, so it stays off by default.</string>
+  <string name="assistant_page_auto_compact_threshold">Trigger at %d%% of context size</string>
+  <string name="assistant_page_auto_compact_needs_context_size">Set a finite context message size above for auto compact to take effect.</string>
   <string name="assistant_page_creative">Creative</string>
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
@@ -329,6 +333,7 @@
   <string name="editing">Editing</string>
   <string name="emoji_picker_search_placeholder">Search emojis...</string>
   <string name="emoji_picker_select_skin_tone">Select Skin Tone</string>
+  <string name="error_title_auto_compact">Auto compact failed</string>
   <string name="error_title_compress_conversation">Conversation compression failed</string>
   <string name="error_title_generate_title">Auto title generation failed</string>
   <string name="error_title_generation">Message generation failed</string>
