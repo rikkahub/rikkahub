@@ -393,7 +393,51 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     }
                 }
             }
-        }.mergeCustomBody(params.customBody)
+        }.mergeCustomBody(params.customBody).let { merged ->
+            // mergeCustomBody runs last and replaces the `system` array wholesale
+            // when a custom body provides its own `system` (it only deep-merges
+            // JsonObjects, not arrays). In OAuth mode that drops the two mandatory
+            // fingerprint blocks and breaks the gate, so re-assert the invariant here.
+            // Only when the custom body actually overrode `system`: otherwise the
+            // original assembly above is untouched (and already cache_control-correct),
+            // and re-running it through textSystemBlock() would silently drop the
+            // prompt-cache breakpoint placed on the last system block.
+            val overrodeSystem = params.customBody.any { it.key.isNotBlank() && it.key == "system" }
+            if (providerSetting.authType == ClaudeAuthType.OAuth && overrodeSystem) {
+                ensureOAuthFingerprints(merged)
+            } else {
+                merged
+            }
+        }
+    }
+
+    // OAuth requires the two fingerprint blocks to be the first two system blocks.
+    // Strip any existing copies (anywhere in the array) and prepend them, preserving
+    // the rest of the merged system content. If `system` is absent or not the expected
+    // array-of-text-blocks shape, conservatively replace it with just the fingerprints
+    // rather than risk shipping a request that fails the gate.
+    private fun ensureOAuthFingerprints(request: JsonObject): JsonObject {
+        val fingerprints = buildJsonArray {
+            add(textSystemBlock(CLAUDE_FP_BILLING))
+            add(textSystemBlock(CLAUDE_FP_IDENTITY))
+        }
+        val existing = request["system"] as? JsonArray
+        val rest = existing
+            ?.filter { block ->
+                val text = (block as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull
+                text != CLAUDE_FP_BILLING && text != CLAUDE_FP_IDENTITY
+            }
+            .orEmpty()
+        val normalizedSystem = buildJsonArray {
+            fingerprints.forEach { add(it) }
+            rest.forEach { add(it) }
+        }
+        return JsonObject(request + ("system" to normalizedSystem))
+    }
+
+    private fun textSystemBlock(text: String) = buildJsonObject {
+        put("type", "text")
+        put("text", text)
     }
 
     private fun cacheControlEphemeral(promptCacheTtl: ClaudePromptCacheTtl) = buildJsonObject {
