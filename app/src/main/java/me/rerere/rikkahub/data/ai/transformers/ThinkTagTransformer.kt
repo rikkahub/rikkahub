@@ -8,7 +8,6 @@ import me.rerere.ai.ui.UIMessagePart
 import kotlin.time.Clock
 
 private val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
-private val CLOSING_TAG_REGEX = Regex("</think>")
 
 // 部分供应商不会返回reasoning parts, 所以需要这个transformer
 object ThinkTagTransformer : OutputMessageTransformer {
@@ -22,18 +21,18 @@ object ThinkTagTransformer : OutputMessageTransformer {
                     parts = message.parts.flatMap { part ->
                         if (part is UIMessagePart.Text && THINKING_REGEX.containsMatchIn(part.text)) {
                             val stripped = part.text.replace(THINKING_REGEX, "")
-                            val reasoning =
-                                THINKING_REGEX.find(part.text)?.groupValues?.getOrNull(1)?.trim()
-                                    ?: ""
-                            val hasClosingTag = CLOSING_TAG_REGEX.containsMatchIn(part.text)
-                            listOf(
+                            val createdAt =
+                                message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault())
+                            val now = Clock.System.now()
+                            val reasoningParts = THINKING_REGEX.findAll(part.text).map { match ->
+                                val hasClosingTag = match.value.endsWith("</think>")
                                 UIMessagePart.Reasoning(
-                                    reasoning = reasoning,
-                                    createdAt = message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault()),
-                                    finishedAt = if (hasClosingTag) Clock.System.now() else null,
-                                ),
-                                part.copy(text = stripped),
-                            )
+                                    reasoning = match.groupValues.getOrNull(1)?.trim() ?: "",
+                                    createdAt = createdAt,
+                                    finishedAt = if (hasClosingTag) now else null,
+                                )
+                            }.toList()
+                            reasoningParts + part.copy(text = stripped)
                         } else {
                             listOf(part)
                         }
@@ -56,17 +55,16 @@ object ThinkTagTransformer : OutputMessageTransformer {
                     parts = message.parts.flatMap { part ->
                         if (part is UIMessagePart.Text && THINKING_REGEX.containsMatchIn(part.text)) {
                             val stripped = part.text.replace(THINKING_REGEX, "")
-                            val reasoning =
-                                THINKING_REGEX.find(part.text)?.groupValues?.getOrNull(1)?.trim()
-                                    ?: ""
-                            listOf(
+                            val createdAt =
+                                message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault())
+                            val reasoningParts = THINKING_REGEX.findAll(part.text).map { match ->
                                 UIMessagePart.Reasoning(
-                                    reasoning = reasoning,
-                                    createdAt = message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault()),
+                                    reasoning = match.groupValues.getOrNull(1)?.trim() ?: "",
+                                    createdAt = createdAt,
                                     finishedAt = now,
-                                ),
-                                part.copy(text = stripped),
-                            )
+                                )
+                            }.toList()
+                            reasoningParts + part.copy(text = stripped)
                         } else {
                             listOf(part)
                         }
