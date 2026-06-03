@@ -41,6 +41,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.io.IOException
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -178,7 +179,10 @@ class OpenAIProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to generate embedding: ${response.code} ${response.body?.string()}")
+            // An HTTP error from the embedding endpoint (429/401/5xx) is an external-service / I/O
+            // failure, not a programming-state error. It must be an IOException so the sole caller
+            // (KnowledgeRetrievalTransformer) degrades RAG to best-effort instead of aborting the chat.
+            throw IOException("Failed to generate embedding: ${response.code} ${response.body?.string()}")
         }
 
         val bodyStr = response.body?.string() ?: ""
