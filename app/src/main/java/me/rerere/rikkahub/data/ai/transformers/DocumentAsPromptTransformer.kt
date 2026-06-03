@@ -20,26 +20,42 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
         return withContext(Dispatchers.IO) {
             messages.map { message ->
                 message.copy(
-                    parts = message.parts.toMutableList().apply {
-                        val documents = filterIsInstance<UIMessagePart.Document>()
-                        if (documents.isNotEmpty()) {
-                            documents.forEach { document ->
-                                val content = readDocumentContent(document)
-                                val prompt = """
-                  ## user sent a file: ${document.fileName}
-                  <content>
-                  ```
-                  $content
-                  ```
-                  </content>
-                  """.trimMargin()
-                                add(0, UIMessagePart.Text(prompt))
-                            }
-                        }
-                    }
+                    parts = buildPartsWithDocumentPrompts(message.parts, ::readDocumentContent)
                 )
             }
         }
+    }
+
+    /**
+     * Prepends a prompt for each Document part, preserving the original attachment order.
+     *
+     * The document prompts are inserted as a single ordered block at the front of the list. Inserting
+     * each prompt individually at index 0 (the previous behaviour) reversed the order: attachments
+     * A B C produced prompts C B A in the message sent to the model.
+     *
+     * Extracted as a pure function over a content-reader lambda so it is JVM unit testable without
+     * Android URI / disk IO.
+     */
+    fun buildPartsWithDocumentPrompts(
+        parts: List<UIMessagePart>,
+        readContent: (UIMessagePart.Document) -> String,
+    ): List<UIMessagePart> {
+        val documents = parts.filterIsInstance<UIMessagePart.Document>()
+        if (documents.isEmpty()) return parts
+        val prompts = documents.map { document ->
+            val content = readContent(document)
+            UIMessagePart.Text(
+                """
+                ## user sent a file: ${document.fileName}
+                <content>
+                ```
+                $content
+                ```
+                </content>
+                """.trimMargin()
+            )
+        }
+        return prompts + parts
     }
 
     private fun parsePdfAsText(file: File): String {
