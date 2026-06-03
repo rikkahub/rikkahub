@@ -298,6 +298,12 @@ dependencies {
     implementation(project(":speech"))
     implementation(project(":common"))
     implementation(project(":material3"))
+
+    // RAG: Koog lean abstraction modules only (contracts + Embedder/Vector).
+    // We implement the concrete Embedder/SearchStorage ourselves over :ai + :document.
+    implementation(libs.koog.rag.base)
+    implementation(libs.koog.embeddings.base)
+
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
 

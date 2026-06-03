@@ -109,6 +109,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBasePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
@@ -375,6 +376,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingPage()
                             }
 
+                            entry<Screen.KnowledgeBase> {
+                                KnowledgeBasePage()
+                            }
+
                             entry<Screen.Backup> {
                                 BackupPage()
                             }
@@ -596,6 +601,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Setting : Screen
+
+    @Serializable
+    data object KnowledgeBase : Screen
 
     @Serializable
     data object Backup : Screen

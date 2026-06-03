@@ -2,6 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:tools="http://schemas.android.com/tools">
 
+  <!--
+    Koog's rag-base / embeddings-base Android variants declare minSdk 35, but their code is pure
+    Kotlin/Multiplatform (kotlin-stdlib / coroutines / serialization / kotlinx-io only) and uses no
+    API-35 platform feature. Override the merge so the app keeps minSdk 26.
+  -->
+  <uses-sdk tools:overrideLibrary="ai.koog.rag.base, ai.koog.embeddings.base" />
+
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />

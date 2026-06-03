@@ -12,6 +12,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,6 +37,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.data.rag.KnowledgeBase
+import kotlin.uuid.Uuid
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
@@ -437,6 +442,23 @@ internal fun AssistantBasicContent(
             }
         }
 
+        val knowledgeBases = vm.settings.collectAsStateWithLifecycle().value.knowledgeBases
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text("Knowledge Base") },
+                description = { Text("Attach a knowledge base to enable retrieval-augmented answers (null = off)") },
+            ) {
+                KnowledgeBaseSelector(
+                    selectedId = assistant.knowledgeBaseId,
+                    knowledgeBases = knowledgeBases,
+                    onSelect = { kbId -> onUpdate(assistant.copy(knowledgeBaseId = kbId)) },
+                )
+            }
+        }
+
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
@@ -488,6 +510,32 @@ internal fun AssistantBasicContent(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeBaseSelector(
+    selectedId: Uuid?,
+    knowledgeBases: List<KnowledgeBase>,
+    onSelect: (Uuid?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = knowledgeBases.find { it.id == selectedId }?.name
+
+    TextButton(onClick = { expanded = true }) {
+        Text(selectedName ?: "None")
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenuItem(
+            text = { Text("None") },
+            onClick = { onSelect(null); expanded = false },
+        )
+        knowledgeBases.forEach { kb ->
+            DropdownMenuItem(
+                text = { Text(kb.name.ifBlank { "Knowledge Base" }) },
+                onClick = { onSelect(kb.id); expanded = false },
+            )
         }
     }
 }

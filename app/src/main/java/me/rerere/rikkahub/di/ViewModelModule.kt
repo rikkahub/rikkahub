@@ -10,6 +10,7 @@ import me.rerere.rikkahub.ui.pages.developer.DeveloperVM
 import me.rerere.rikkahub.ui.pages.favorite.FavoriteVM
 import me.rerere.rikkahub.ui.pages.search.SearchVM
 import me.rerere.rikkahub.ui.pages.history.HistoryVM
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBaseVM
 import me.rerere.rikkahub.ui.pages.stats.StatsVM
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
 import me.rerere.rikkahub.ui.pages.extensions.PromptVM
@@ -68,4 +69,13 @@ val viewModelModule = module {
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)
+    viewModel<KnowledgeBaseVM> {
+        KnowledgeBaseVM(
+            application = get(),
+            settingsStore = get(),
+            ingestUseCase = get(),
+            filesManager = get(),
+            knowledgeChunkDao = get(),
+        )
+    }
 }

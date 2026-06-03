@@ -35,6 +35,7 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -140,6 +141,7 @@ class SettingsStore(
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
+        val KNOWLEDGE_BASES = stringPreferencesKey("knowledge_bases")
 
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
@@ -230,6 +232,9 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                knowledgeBases = preferences[KNOWLEDGE_BASES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
@@ -402,6 +407,7 @@ class SettingsStore(
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
+            preferences[KNOWLEDGE_BASES] = JsonInstant.encodeToString(settings.knowledgeBases)
             preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
@@ -532,6 +538,7 @@ data class Settings(
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
+    val knowledgeBases: List<KnowledgeBase> = emptyList(),
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
@@ -654,6 +661,11 @@ fun Settings.getCurrentAssistant(): Assistant {
 
 fun Settings.getAssistantById(id: Uuid): Assistant? {
     return this.assistants.find { it.id == id }
+}
+
+fun Settings.findKnowledgeBase(id: Uuid?): KnowledgeBase? {
+    if (id == null) return null
+    return this.knowledgeBases.find { it.id == id }
 }
 
 fun Settings.getQuickMessagesOfAssistant(assistant: Assistant) =

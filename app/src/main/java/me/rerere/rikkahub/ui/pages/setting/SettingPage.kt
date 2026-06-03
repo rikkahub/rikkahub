@@ -55,6 +55,7 @@ import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
 import me.rerere.hugeicons.stroke.Package
+import me.rerere.hugeicons.stroke.Database
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
@@ -250,6 +251,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.ServerStack01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_web_server_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.KnowledgeBase) },
+                        leadingContent = { Icon(HugeIcons.Database, null) },
+                        supportingContent = { Text("Manage RAG knowledge bases and documents") },
+                        headlineContent = { Text("Knowledge Base") },
                     )
                 }
             }
