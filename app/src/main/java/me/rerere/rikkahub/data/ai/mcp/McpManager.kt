@@ -41,12 +41,24 @@ import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.checkDifferent
 import okhttp3.OkHttpClient
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 private const val TAG = "McpManager"
+
+// These maps are structurally mutated (put/remove) AND iterated (.entries/.keys)
+// concurrently from the parallel per-config add/remove launches, the
+// Dispatchers.IO add/remove/reconnect methods, and the arbitrary-thread
+// transport onClose/onError callbacks. A plain LinkedHashMap under that pattern
+// is undefined behavior (bucket corruption, lost entries -> leaked Client with a
+// live transport, or ConcurrentModificationException). ConcurrentHashMap makes
+// each op and each weakly-consistent iteration thread-safe; keys/values are
+// always non-null here, so its null prohibition is a non-issue.
+internal fun <K : Any, V : Any> newMcpConcurrentMap(): MutableMap<K, V> = ConcurrentHashMap()
+
 private const val MAX_RECONNECT_ATTEMPTS = 5
 private const val BASE_RECONNECT_DELAY_MS = 1000L
 private const val MAX_RECONNECT_DELAY_MS = 30000L
@@ -77,9 +89,9 @@ class McpManager(
         install(SSE)
     }
 
-    private val clients: MutableMap<McpServerConfig, Client> = mutableMapOf()
-    private val reconnectJobs: MutableMap<Uuid, Job> = mutableMapOf()
-    private val reconnectAttempts: MutableMap<Uuid, Int> = mutableMapOf()
+    private val clients: MutableMap<McpServerConfig, Client> = newMcpConcurrentMap()
+    private val reconnectJobs: MutableMap<Uuid, Job> = newMcpConcurrentMap()
+    private val reconnectAttempts: MutableMap<Uuid, Int> = newMcpConcurrentMap()
     val syncingStatus = MutableStateFlow<Map<Uuid, McpStatus>>(mapOf())
 
     init {
