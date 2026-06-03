@@ -412,7 +412,10 @@ sealed class UIMessagePart {
     data class Reasoning(
         val reasoning: String,
         val createdAt: Instant = Clock.System.now(),
-        val finishedAt: Instant? = Clock.System.now(),
+        // Default MUST stay null: the :ai json uses explicitNulls=false, so a null finishedAt is
+        // omitted on encode and falls back to this default on decode. A non-null default would
+        // resurrect an unfinished Reasoning into a fresh "finished now" timestamp on every load.
+        val finishedAt: Instant? = null,
         override var metadata: JsonObject? = null
     ) : UIMessagePart()
 

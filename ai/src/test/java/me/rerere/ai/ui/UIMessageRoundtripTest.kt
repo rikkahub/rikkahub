@@ -4,6 +4,7 @@ import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.util.json
+import kotlin.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -49,5 +50,29 @@ class UIMessageRoundtripTest {
         assertEquals(message, decoded)
         val decodedTool = decoded.parts.single() as UIMessagePart.Tool
         assertNull(decodedTool.streamIndex)
+    }
+
+    /**
+     * An unfinished Reasoning (finishedAt == null) must survive the encode-decode roundtrip as
+     * unfinished. The :ai json uses explicitNulls=false + encodeDefaults=true: a null finishedAt is
+     * omitted on encode, so on decode the constructor DEFAULT is used. If that default is a non-null
+     * Clock.System.now(), the null is silently resurrected into a fresh timestamp and the
+     * "still reasoning" state is lost. The default must be null so absent decodes back to null.
+     */
+    @Test
+    fun `unfinished Reasoning keeps null finishedAt across roundtrip`() {
+        val reasoning = UIMessagePart.Reasoning(
+            reasoning = "thinking...",
+            createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000L),
+            finishedAt = null,
+        )
+        val message = UIMessage(role = MessageRole.ASSISTANT, parts = listOf(reasoning))
+
+        val encoded = json.encodeToString(message)
+        val decoded = json.decodeFromString<UIMessage>(encoded)
+
+        val decodedReasoning = decoded.parts.single() as UIMessagePart.Reasoning
+        assertNull(decodedReasoning.finishedAt)
+        assertEquals(message, decoded)
     }
 }
