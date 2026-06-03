@@ -152,6 +152,51 @@ class RagCoreTest {
     }
 
     @Test
+    fun `non-finite NaN score is dropped and never sorted ahead of finite rows`() {
+        // koog's cosineSimilarity computes dotProduct / (magnitude * magnitude). When a STORED row's
+        // vector carries an extreme/Infinity component (e.g. a serialized value that overflowed on
+        // decode), its dot with the query and its magnitude both become Infinity, so the score is
+        // Infinity/Infinity = NaN. Double.compareTo orders NaN as greater than every real number, so
+        // on the unfixed code sortedByDescending pushes the NaN row to the front, displacing the
+        // genuinely-best match. The query here is an ordinary finite unit vector — only the bad row
+        // is pathological. The boundary guard must drop the non-finite row entirely.
+        val query = Vector(listOf(1.0, 0.0))
+        val rows = listOf(
+            chunk("nan", "bad") to Vector(listOf(Double.POSITIVE_INFINITY, 0.0)), // -> NaN
+            chunk("legit", "best") to Vector(listOf(1.0, 0.0)),                   // finite cos == 1.0
+        )
+        val results = RoomVectorStore.rankBySimilarity(
+            query = query,
+            rows = rows,
+            request = SimilaritySearchRequest(queryText = "q", limit = 10),
+        )
+        assertTrue("every emitted score must be finite", results.all { it.score.value.isFinite() })
+        assertEquals(1, results.size)
+        assertEquals("legit", results[0].document.chunkId)
+    }
+
+    @Test
+    fun `non-finite Infinity score from subnormal underflow is dropped`() {
+        // A subnormal component squares to underflow 0.0, so a non-zero vector reports magnitude
+        // 0.0 (koog's isNull() guard only catches exact all-zero components, not squared-magnitude
+        // underflow). A non-zero dotProduct / 0.0 = +Infinity, which passes a `>=` minScore filter
+        // and sorts to the top on the unfixed code. Query is an ordinary finite vector.
+        val query = Vector(listOf(1.0, 1.0))
+        val rows = listOf(
+            chunk("underflow", "bad") to Vector(listOf(4.9E-324, 4.9E-324)), // -> +Infinity
+            chunk("legit", "best") to Vector(listOf(1.0, 1.0)),              // finite cos == 1.0
+        )
+        val results = RoomVectorStore.rankBySimilarity(
+            query = query,
+            rows = rows,
+            request = SimilaritySearchRequest(queryText = "q", limit = 10),
+        )
+        assertTrue("every emitted score must be finite", results.all { it.score.value.isFinite() })
+        assertEquals(1, results.size)
+        assertEquals("legit", results[0].document.chunkId)
+    }
+
+    @Test
     fun `vector encode round-trips through string column`() {
         val v = Vector(listOf(0.1, -0.25, 1.5, 0.0))
         val decoded = RoomVectorStore.decodeVector(RoomVectorStore.encodeVector(v))

@@ -131,6 +131,13 @@ class RoomVectorStore(
                 // invariant by hiding orphan chunks whose document no longer exists.
                 .filter { (chunk, _) -> allowedDocIds?.contains(chunk.docId) ?: true }
                 .map { (chunk, vector) -> chunk to query.cosineSimilarity(vector) }
+                // koog's cosineSimilarity can emit NaN/±Infinity for extreme-magnitude vectors
+                // (overflow -> Inf/Inf = NaN; subnormal underflow -> non-zero dot / 0 magnitude =
+                // Inf). A non-finite score corrupts top-k: Double.compareTo orders NaN above every
+                // real number, so sortedByDescending would sort it to the front, and +Infinity also
+                // slips past the minScore `>=` filter. Drop such rows from this query's ranking —
+                // the chunk row stays in Room untouched, only this uncomputable similarity is hidden.
+                .filter { (_, score) -> score.isFinite() }
                 .filter { (_, score) -> request.minScore?.let { score >= it } ?: true }
                 .sortedByDescending { (_, score) -> score }
                 .drop(request.offset)
