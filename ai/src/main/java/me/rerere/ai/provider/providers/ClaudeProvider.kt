@@ -38,6 +38,7 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -251,8 +252,8 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
                     "error" -> {
                         val eventData = json.parseToJsonElement(data).jsonObject
-                        val error = eventData["error"]?.parseErrorDetail()
-                        close(error)
+                        close(resolveStreamError(eventData))
+                        return
                     }
                 }
 
@@ -398,6 +399,14 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
     private fun cacheControlEphemeral(promptCacheTtl: ClaudePromptCacheTtl) = buildJsonObject {
         put("type", "ephemeral")
         promptCacheTtl.apiValue?.let { put("ttl", it) }
+    }
+
+    // An `event: error` frame must always terminate the stream with a non-null Throwable;
+    // close(null) completes the callbackFlow as a success and silently swallows the error.
+    // Prefer the nested "error" object (preserves the well-formed message), otherwise parse
+    // the whole frame — parseErrorDetail is total and never returns null.
+    private fun resolveStreamError(frame: JsonObject): HttpException {
+        return (frame["error"] ?: frame).parseErrorDetail()
     }
 
     private fun buildMessages(
