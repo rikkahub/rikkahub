@@ -9,8 +9,10 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.rag.KnowledgeStoreFactory
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 import org.koin.core.context.startKoin
@@ -76,5 +78,19 @@ class KnowledgeRetrievalTransformerTest {
 
         val result = KnowledgeRetrievalTransformer.transform(ctx(assistant), messages)
         assertSame(messages, result)
+    }
+
+    // Regression for issue #22: retrieval used to build SimilaritySearchRequest WITHOUT minScore,
+    // so the store returned the top-k nearest chunks no matter how unrelated, polluting the context
+    // window with noise. The request must carry KnowledgeBase.DEFAULT_MIN_SCORE as the relevance
+    // floor. On the unfixed code minScore is null and this assertion fails.
+    @Test
+    fun `retrieval request applies the relevance floor`() {
+        val kb = KnowledgeBase(topK = 7)
+        val request = KnowledgeRetrievalTransformer.buildRetrievalRequest("how do cats purr", kb)
+
+        assertEquals(KnowledgeBase.DEFAULT_MIN_SCORE, request.minScore)
+        assertEquals(kb.topK, request.limit)
+        assertEquals("how do cats purr", request.queryText)
     }
 }

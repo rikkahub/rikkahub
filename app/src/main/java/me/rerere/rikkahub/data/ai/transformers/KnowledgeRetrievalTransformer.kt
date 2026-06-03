@@ -9,6 +9,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findKnowledgeBase
+import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.rag.KnowledgeStoreFactory
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -49,7 +50,7 @@ object KnowledgeRetrievalTransformer : InputMessageTransformer, KoinComponent {
             try {
                 ctx.processingStatus.value = "正在检索知识库..."
                 val results = store.search(
-                    request = SimilaritySearchRequest(queryText = queryText, limit = kb.topK),
+                    request = buildRetrievalRequest(queryText, kb),
                     namespace = kb.id.toString(),
                 )
                 if (results.isEmpty()) return@withContext messages
@@ -80,6 +81,20 @@ object KnowledgeRetrievalTransformer : InputMessageTransformer, KoinComponent {
             }
         }
     }
+
+    /**
+     * Builds the similarity-search request for a retrieval turn. Always attaches
+     * [KnowledgeBase.DEFAULT_MIN_SCORE] as the relevance floor: without it the store returns the
+     * top-k nearest chunks regardless of how unrelated they are, so every turn pays context-window
+     * tokens for noise (issue #22). Extracted as a pure function so the floor invariant is unit
+     * testable on the JVM without standing up the store/settings dependencies.
+     */
+    fun buildRetrievalRequest(queryText: String, kb: KnowledgeBase): SimilaritySearchRequest =
+        SimilaritySearchRequest(
+            queryText = queryText,
+            limit = kb.topK,
+            minScore = KnowledgeBase.DEFAULT_MIN_SCORE,
+        )
 
     private fun buildContextBlock(chunks: List<String>): String {
         val joined = chunks.joinToString("\n\n---\n\n")

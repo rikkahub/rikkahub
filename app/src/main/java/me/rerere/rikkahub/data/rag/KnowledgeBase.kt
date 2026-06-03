@@ -23,7 +23,17 @@ data class KnowledgeBase(
     val chunkOverlap: Int = Chunker.DEFAULT_OVERLAP,
     val topK: Int = 4,
     val documents: List<KnowledgeDocument> = emptyList(),
-)
+) {
+    companion object {
+        /**
+         * Cosine-similarity relevance floor applied to retrieval. Cosine ranges [-1, 1]; a value
+         * near 0 means the chunk is unrelated to the query. Retrieval must not inject top-k chunks
+         * that clear no relevance bar, or every turn pays context-window tokens for noise. 0.5
+         * excludes orthogonal/unrelated chunks while still admitting genuinely related ones.
+         */
+        const val DEFAULT_MIN_SCORE: Double = 0.5
+    }
+}
 
 @Serializable
 data class KnowledgeDocument(

@@ -5,6 +5,7 @@ import ai.koog.embeddings.base.Vector
 import ai.koog.rag.base.storage.search.ScoreMetric
 import ai.koog.rag.base.storage.search.SimilaritySearchRequest
 import kotlinx.coroutines.runBlocking
+import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.db.dao.KnowledgeChunkDAO
 import me.rerere.rikkahub.data.db.entity.KnowledgeChunkEntity
 import me.rerere.rikkahub.data.rag.store.Chunk
@@ -77,6 +78,57 @@ class RoomVectorStoreSearchTest {
         assertEquals("c2", results[1].document.chunkId)   // dog close to cat
         assertEquals(ScoreMetric.COSINE_SIMILARITY, results[0].score.metric)
         assertTrue(results[0].score.value >= results[1].score.value)
+    }
+
+    @Test
+    fun `relevance floor drops chunks the query is near-orthogonal to`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", "fake-embed")
+
+        // Only chunks that are near-orthogonal to the query "car" ([0,1]).
+        store.add(
+            listOf(
+                chunk("c1", "a cat sat"),   // [1,0] cosine ~0 to [0,1]
+                chunk("c2", "a dog ran"),   // [0.9,0.1] cosine ~0.11 to [0,1]
+            )
+        )
+
+        // The transformer now floors the request with KnowledgeBase.DEFAULT_MIN_SCORE.
+        // With no relevant chunk, the floored search returns nothing, so the transformer's
+        // results.isEmpty() gate fires and no <knowledge_base_context> block is injected.
+        val results = store.search(
+            SimilaritySearchRequest(
+                queryText = "the car",
+                limit = 4,
+                minScore = KnowledgeBase.DEFAULT_MIN_SCORE,
+            )
+        )
+        assertTrue(
+            "irrelevant chunks must be filtered out by the relevance floor, got ${results.size}",
+            results.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `relevance floor keeps genuinely relevant chunks`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", "fake-embed")
+        store.add(
+            listOf(
+                chunk("c1", "a cat sat"),    // [1,0] cosine ~0 to "car"
+                chunk("c3", "a car drove"),  // [0,1] cosine 1 to "car"
+            )
+        )
+
+        val results = store.search(
+            SimilaritySearchRequest(
+                queryText = "the car",
+                limit = 4,
+                minScore = KnowledgeBase.DEFAULT_MIN_SCORE,
+            )
+        )
+        assertEquals(1, results.size)
+        assertEquals("c3", results[0].document.chunkId)
     }
 
     @Test
