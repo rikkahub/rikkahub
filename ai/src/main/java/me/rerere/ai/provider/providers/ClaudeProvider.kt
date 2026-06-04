@@ -40,6 +40,7 @@ import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.bufferStreamChunks
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -351,7 +352,7 @@ class ClaudeProvider(
             Log.d(TAG, "Closing eventSource")
             eventSource.cancel()
         }
-    }
+    }.bufferStreamChunks()
 
     private fun buildMessageRequest(
         providerSetting: ProviderSetting.Claude,

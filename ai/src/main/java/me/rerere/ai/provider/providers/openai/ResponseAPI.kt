@@ -38,6 +38,7 @@ import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.STREAM_MAX_RETRIES
+import me.rerere.ai.util.bufferStreamChunks
 import me.rerere.ai.util.StreamRetryController
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -235,7 +236,7 @@ class ResponseAPI(
             println("[awaitClose] 关闭eventSource ")
             controller.close()
         }
-    }
+    }.bufferStreamChunks()
 
     internal fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,

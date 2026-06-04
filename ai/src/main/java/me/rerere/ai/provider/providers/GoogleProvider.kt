@@ -47,6 +47,7 @@ import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.bufferStreamChunks
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -365,7 +366,7 @@ class GoogleProvider(
             println("[awaitClose] 关闭eventSource")
             eventSource.cancel()
         }
-    }
+    }.bufferStreamChunks()
 
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,
