@@ -146,6 +146,31 @@ fun SearchPickerButton(
     }
 }
 
+/**
+ * Which sections the search-settings sheet renders for a given model.
+ *
+ * Invariant: at least one section is always shown — the sheet is never empty.
+ * `builtInActive` is derived from *actual* built-in-search support (model family),
+ * not merely from [BuiltInTools.Search] being present in [Model.tools]: any model can
+ * have that flag toggled in provider settings, but only the supported families
+ * (Gemini, gpt-) execute it server-side. Tying the provider-list visibility to real
+ * support keeps the provider list as the working fallback for every other model.
+ */
+internal data class SearchSheetSections(
+    val showBuiltInToggle: Boolean,
+    val showProviderList: Boolean,
+)
+
+internal fun searchSheetSections(model: Model?): SearchSheetSections {
+    val supportsBuiltIn = model != null &&
+        (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))
+    val builtInActive = supportsBuiltIn && model.tools.contains(BuiltInTools.Search)
+    return SearchSheetSections(
+        showBuiltInToggle = supportsBuiltIn,
+        showProviderList = !builtInActive,
+    )
+}
+
 @Composable
 private fun SearchPicker(
     enableSearch: Boolean,
@@ -157,14 +182,13 @@ private fun SearchPicker(
     onDismiss: () -> Unit
 ) {
     val navBackStack = LocalNavController.current
+    val sections = searchSheetSections(model)
 
-    // 模型内置搜索
-    if (model != null && (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))) {
+    if (sections.showBuiltInToggle && model != null) {
         BuiltInSearchSetting(model = model)
     }
 
-    // 如果没有开启内置搜索，显示搜索服务选择
-    if (model?.tools?.contains(BuiltInTools.Search) != true) {
+    if (sections.showProviderList) {
         AppSearchSettings(
             enableSearch = enableSearch,
             onDismiss = onDismiss,
