@@ -65,4 +65,23 @@ class IncompleteToolCallExecutionTest {
         val malformed = tool(input = "{not valid json}", finished = true)
         assertEquals(ToolCallExecutionState.Complete, malformed.toolCallExecutionState())
     }
+
+    @Test
+    fun `finished-false tool with lenient-only input yields Complete - matches executor leniency`() {
+        // ChatCompletions / Google have no per-tool terminating SSE event, and
+        // copy()/DB round-trip drops `finished`, so a fully-received tool often
+        // arrives finished=false. Its input is the relaxed JSON LLMs emit
+        // (unquoted key {action:"create"}) — lenient-parseable, hence executable.
+        // The classifier must agree with the executor's lenient parseToolArguments
+        // and route this to execution, NOT short-circuit to a truncated retry.
+        //
+        // Before the fix, isInputParseable() used strict JSON, classified this
+        // IncompleteTruncated, and the salvage in parseToolArguments never fired.
+        val lenientOnly = tool(input = "{action:\"create\"}", finished = false)
+        assertEquals(ToolCallExecutionState.Complete, lenientOnly.toolCallExecutionState())
+
+        // And the executor's parser does in fact accept the same input, so the
+        // classifier's verdict is sound (the two agree on "parseable").
+        parseToolArguments(lenientOnly.input)
+    }
 }

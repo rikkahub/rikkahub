@@ -151,6 +151,18 @@ class ToolCompletionMergeTest {
         assertEquals(ToolCallExecutionState.Complete, afterCopy.toolCallExecutionState())
     }
 
+    @Test
+    fun `not-finished tool with lenient-only input is Complete (relaxed-JSON regression)`() {
+        // The classifier's parseability check must match the executor's lenient
+        // tool-argument parser: both accept the relaxed JSON LLMs emit, e.g. the
+        // unquoted key {action:"create"}. With a strict check this finished=false
+        // tool was classified IncompleteTruncated and short-circuited to a retry
+        // result, so the executor's lenient salvage never ran — exactly on the
+        // ChatCompletions/Google providers most likely to emit relaxed JSON.
+        val tool = toolDelta(id = "call_1", name = "memory", input = "{action:\"create\"}", finished = false)
+        assertEquals(ToolCallExecutionState.Complete, tool.toolCallExecutionState())
+    }
+
     // ==================== (d) serialization + equality guards ============
 
     @Test

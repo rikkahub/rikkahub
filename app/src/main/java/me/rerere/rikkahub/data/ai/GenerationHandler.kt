@@ -11,6 +11,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -286,7 +287,7 @@ class GenerationHandler(
                             val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                                 ?: error("Tool ${tool.toolName} not found")
                             val args = runCatching {
-                                json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                                parseToolArguments(tool.input)
                             }.getOrElse {
                                 error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
                             }
@@ -554,6 +555,29 @@ class GenerationHandler(
  * truncated by a stream interruption. Extracted as a pure function so the
  * truncation decision can be unit-tested without a Context/Provider.
  */
+/**
+ * Lenient parser for LLM-emitted tool-call arguments. Models routinely produce
+ * relaxed JSON — most commonly unquoted object keys (`{action:"create"}`) — that
+ * strict [Json] rejects, aborting an otherwise-valid tool call. Mirrors the in-repo
+ * `isLenient = true` precedent (McpManager, PropertyEditor).
+ *
+ * Scope: this salvages unquoted keys/barewords only. It does NOT normalize
+ * single-quoted literals (kotlinx.serialization reads `'` as part of a bareword,
+ * not a string delimiter, so `{action:'create'}` -> the literal `'create'`), nor
+ * does it repair truncation (handled upstream by the IncompleteTruncated guard) or
+ * stream drops (handled by retry). Genuinely unparseable input — truncation
+ * ("Unexpected EOF"), bad escapes — still throws and surfaces via the existing
+ * "Invalid tool arguments JSON" error path.
+ */
+private val ToolArgsJson = Json {
+    isLenient = true
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+}
+
+internal fun parseToolArguments(input: String): JsonElement =
+    ToolArgsJson.parseToJsonElement(input.ifBlank { "{}" })
+
 internal fun truncatedToolResult(json: Json): List<UIMessagePart> = listOf(
     UIMessagePart.Text(
         json.encodeToString(

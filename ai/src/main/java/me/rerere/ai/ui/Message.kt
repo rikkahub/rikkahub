@@ -6,6 +6,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.MessageRole
@@ -562,8 +563,22 @@ fun UIMessagePart.Tool.toolCallExecutionState(): ToolCallExecutionState =
         ToolCallExecutionState.IncompleteTruncated
     }
 
+// Lenient parser for the truncation classifier. MUST match the leniency of the
+// executor's tool-argument parser (app GenerationHandler.parseToolArguments): both
+// accept the relaxed JSON LLMs emit — most commonly unquoted object keys like
+// {action:"create"}. If this stayed strict, finished=false tools (ChatCompletions/
+// Google have no terminating SSE event; copy()/DB round-trip also drops `finished`)
+// with lenient-but-not-strict input would be misclassified IncompleteTruncated and
+// short-circuited to a retry result before the executor's lenient parse ever runs.
+private val lenientToolInputJson = Json {
+    isLenient = true
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+    explicitNulls = false
+}
+
 private fun String.isInputParseable(): Boolean = runCatching {
-    json.parseToJsonElement(ifBlank { "{}" })
+    lenientToolInputJson.parseToJsonElement(ifBlank { "{}" })
 }.isSuccess
 
 /**
