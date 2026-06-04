@@ -38,6 +38,7 @@ import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.sync.S3Sync
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -244,17 +245,8 @@ val dataSourceModule = module {
         SponsorAPI.create(get())
     }
 
-    // 专用流式客户端：从共享 client 克隆，仅把 readTimeout 收紧到 120s 用于 SSE。
-    // 阈值理由：推理模型在两个*可见 token* 之间可合法暂停 >60s，但 SSE 传输层在此期间仍持续
-    // 投递帧/心跳/空白，因此 120s 这一阈值键于*传输存活*（任意字节，而非任意 token），
-    // 既能放行合法的推理暂停，又能在约 120s（而非共享客户端的 10 分钟）内捕获真正死掉的后台 socket。
-    // callTimeout 显式设为 0（不限），让一次完整生成不被整体时长上限误杀——只约束单次 socket 读。
-    // 不降低共享 client 的 10 分钟 readTimeout：非流式 generateText/listModels 仍依赖它。
     single<OkHttpClient>(named("stream")) {
-        get<OkHttpClient>().newBuilder()
-            .readTimeout(120, TimeUnit.SECONDS)
-            .callTimeout(0, TimeUnit.SECONDS)
-            .build()
+        buildStreamClient(get())
     }
 
     single {
@@ -309,3 +301,27 @@ val dataSourceModule = module {
         get<Retrofit>().create(RikkaHubAPI::class.java)
     }
 }
+
+/**
+ * 专用流式客户端：从共享 [base] 克隆，针对 SSE 收紧存活检测。
+ *
+ * readTimeout 收紧到 120s：推理模型在两个*可见 token* 之间可合法暂停 >60s，但 SSE 传输层在此
+ * 期间仍持续投递帧/心跳/空白，因此 120s 这一阈值键于*传输存活*（任意字节，而非任意 token），既能
+ * 放行合法的推理暂停，又能在约 120s（而非共享客户端的 10 分钟）内捕获真正死掉的后台 socket。
+ * callTimeout 显式设为 0（不限），让一次完整生成不被整体时长上限误杀——只约束单次 socket 读。
+ * 不降低共享 client 的 10 分钟 readTimeout：非流式 generateText/listModels 仍依赖它。
+ *
+ * 间歇性 ~120s 卡死的根因有二，仅靠 readTimeout 无法消除：
+ *  1. newBuilder() 会继承共享 client 的 ConnectionPool。被中间设备（NAT/代理/LB）静默回收的空闲
+ *     连接一旦被 SSE EventSource 复用，响应永远不会到达，只能等 120s readTimeout 触发才暴露。
+ *     给流式客户端一个*独立、短存活*的连接池（keepAlive 15s）可避免复用这类陈旧连接。
+ *  2. 缺少 HTTP/2 ping 保活：没有 ping 就无法主动探测死 socket，只能干等 readTimeout。
+ *     pingInterval 15s 让 OkHttp 在约 2 个 ping 周期内对死 socket 快速失败，而非卡满 120s。
+ */
+internal fun buildStreamClient(base: OkHttpClient): OkHttpClient =
+    base.newBuilder()
+        .readTimeout(120, TimeUnit.SECONDS)
+        .callTimeout(0, TimeUnit.SECONDS)
+        .pingInterval(15, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(maxIdleConnections = 1, keepAliveDuration = 15, TimeUnit.SECONDS))
+        .build()
