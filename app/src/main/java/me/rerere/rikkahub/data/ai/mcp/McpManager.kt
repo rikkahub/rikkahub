@@ -70,6 +70,10 @@ class McpManager(
 ) {
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
+        // This client also backs the long-lived SSE keepalive GET (see `client` below), so
+        // readTimeout is an inter-byte inactivity ceiling on that stream — not just the POSTs.
+        // Keep it tolerant (10 min) so a healthy-but-idle SSE keepalive is not torn every cycle;
+        // a silently-dropped stream is instead healed at call time (see callTool/isMcpTransportClosed).
         .readTimeout(10, TimeUnit.MINUTES)
         .writeTimeout(120, TimeUnit.SECONDS)
         .followSslRedirects(true)
@@ -150,7 +154,37 @@ class McpManager(
         val config = entry.key
         Log.i(TAG, "callTool: $toolName / $args (server: ${config.commonOptions.name})")
 
+        // Invariant fix: liveness was checked by reference-nullness (transport == null),
+        // but a transport can be non-null and already closed — the SSE keepalive GET dropped
+        // while the Client still holds the (now non-Operational) transport. The first send
+        // then fails with an IllegalStateException ("Not connected!" / "SseClientTransport is
+        // closed!") or McpException("Connection closed"), which previously escaped callTool. We
+        // now heal-and-retry once on that closed signal (see isMcpTransportClosed): re-open the
+        // connection via the existing reconnect machinery, re-resolve the (replaced) client from
+        // the map, and retry exactly once. A genuine tool-execution error is NOT a reconnect trigger.
         if (client.transport == null) client.connect(getTransport(config))
+        return callToolWithHeal(
+            initialCall = { invokeCallTool(client, toolName, args) },
+            isTransportClosed = ::isMcpTransportClosed,
+            reconnectInFlight = { reconnectJobs[config.id] },
+            heal = { reconnectClient(config) },
+            retryCall = {
+                val healed = clients.entries.find { it.key.id == serverId }?.value
+                    ?: error("mcp client for $serverId disappeared after reconnect")
+                invokeCallTool(healed, toolName, args)
+            },
+            onHealFailed = {
+                Log.e(TAG, "callTool heal failed for ${config.commonOptions.name}", it)
+                listOf(UIMessagePart.Text("Failed to execute tool: ${it.message ?: it.javaClass.name}"))
+            },
+        )
+    }
+
+    private suspend fun invokeCallTool(
+        client: Client,
+        toolName: String,
+        args: JsonObject,
+    ): List<UIMessagePart> {
         val result = client.callTool(
             request = CallToolRequest(
                 params = CallToolRequestParams(
@@ -161,7 +195,7 @@ class McpManager(
             options = RequestOptions(timeout = 120.seconds),
         )
         return result.content.map {
-            when(it) {
+            when (it) {
                 is TextContent -> UIMessagePart.Text(it.text)
                 is ImageContent -> convertImageContentToFilePart(it)
                 else -> UIMessagePart.Text(JsonInstant.encodeToString(it))
@@ -469,6 +503,69 @@ internal fun <T : AbstractTransport> attachReconnectCallbacks(
         }
     }
     return transport
+}
+
+// The SDK (kotlin-sdk 0.12.0) exposes no public closed/liveness getter, so a dead transport is
+// recognised from the exact failures its send/request path throws. Verified by decompiling the
+// pinned jars:
+//   - SseClientTransport.performSend throws plain IllegalStateException with
+//       "SseClientTransport is closed!"  (job null/inactive),
+//       "Not connected!"                 (endpoint deferred uncompleted — the dropped-keepalive case),
+//       "...Error POSTing to endpoint (HTTP <code>)..."  (POST failed).
+//   - Protocol.request throws McpException(-32000, "Connection closed") when onClose fires mid-call,
+//     and IllegalStateException("Not connected") on a pre-send guard.
+//   - StreamableHttpClientTransport.performSend throws StreamableHttpError on POST failure.
+//   - A dead underlying socket surfaces from OkHttp/ktor as an IOException.
+// These are exactly the closed/dropped-stream signals; "Request timed out" (McpException -32001, a
+// slow tool) and any other RPC error response are deliberately NOT matched, so a genuine
+// tool-execution error does not trigger a needless reconnect+retry. (The strings "Transport is not
+// ready" / "Error while sending message" the earlier draft matched do not exist anywhere in 0.12.0.)
+internal fun isMcpTransportClosed(t: Throwable): Boolean {
+    if (t is CancellationException) return false
+    if (t is java.io.IOException) return true
+    val message = t.message ?: return false
+    return message.contains("Connection closed", ignoreCase = true) ||
+        message.contains("Not connected", ignoreCase = true) ||
+        message.contains("is closed", ignoreCase = true) ||
+        message.contains("Error POSTing to endpoint", ignoreCase = true)
+}
+
+// Heal-and-retry control flow extracted as a pure suspend function (no Android deps) so the
+// closed-detection + single-heal + single-retry policy is JVM-unit-testable, mirroring the
+// attachReconnectCallbacks seam. Contract:
+//  - run initialCall; on success return it.
+//  - CancellationException is always rethrown (never swallow cancellation).
+//  - on a throwable where isTransportClosed == false, rethrow it (a real tool error is not a
+//    reconnect trigger — no catch-and-retry on non-transient failures).
+//  - on a throwable where isTransportClosed == true: if a reconnect job is already in flight,
+//    join() it (no double-connect); otherwise heal() synchronously. Then retryCall() exactly
+//    once, returning its result, or onHealFailed(originalError) if heal/retry itself throws.
+internal suspend fun callToolWithHeal(
+    initialCall: suspend () -> List<UIMessagePart>,
+    isTransportClosed: (Throwable) -> Boolean,
+    reconnectInFlight: () -> Job?,
+    heal: suspend () -> Unit,
+    retryCall: suspend () -> List<UIMessagePart>,
+    onHealFailed: (Throwable) -> List<UIMessagePart>,
+): List<UIMessagePart> {
+    val closedError = try {
+        return initialCall()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        if (!isTransportClosed(e)) throw e
+        e
+    }
+
+    return try {
+        val inFlight = reconnectInFlight()
+        if (inFlight != null) inFlight.join() else heal()
+        retryCall()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        onHealFailed(closedError)
+    }
 }
 
 internal val McpJson: Json by lazy {
