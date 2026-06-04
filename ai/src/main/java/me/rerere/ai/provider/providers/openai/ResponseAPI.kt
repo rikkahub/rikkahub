@@ -2,8 +2,10 @@ package me.rerere.ai.provider.providers.openai
 
 import android.util.Log
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
@@ -35,11 +37,16 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.STREAM_MAX_RETRIES
+import me.rerere.ai.util.StreamRetryController
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
+import me.rerere.ai.util.isRetryableStreamFailure
+import me.rerere.ai.util.jitteredBackoffMillis
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
+import me.rerere.ai.util.retryAfterMillisFromHeaders
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
@@ -126,13 +133,36 @@ class ResponseAPI(
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
-        val listener = object : EventSourceListener() {
+        val factory = EventSources.createFactory(streamClient)
+        lateinit var listener: EventSourceListener
+
+        // All pre-first-frame retry state lives in the controller behind one lock, so the okhttp
+        // dispatcher threads, the retry coroutine, and awaitClose cannot race on it (visibility +
+        // leak-on-cancel). Once the first SSE event lands the gate disarms permanently — retrying
+        // then would duplicate already-delivered content. See StreamRetryPolicy / StreamRetryController.
+        val controller = StreamRetryController(STREAM_MAX_RETRIES) {
+            StreamRetryController.Cancellable(factory.newEventSource(request, listener)::cancel)
+        }
+
+        fun scheduleRetry(attempt: Int, backoffMillis: Long) {
+            Log.i(TAG, "transient pre-first-frame failure, retrying (attempt $attempt/$STREAM_MAX_RETRIES)")
+            launch {
+                delay(backoffMillis)
+                controller.reopen()
+            }
+        }
+
+        listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
                 id: String?,
                 type: String?,
                 data: String
             ) {
+                // Any frame, including the terminal [DONE] sentinel, disarms the retry gate before
+                // the close() below — otherwise the post-[DONE] cancellation could be misread as a
+                // pre-first-frame transient and replay an already-completed request.
+                controller.onFrame()
                 if (data == "[DONE]") {
                     close()
                     return
@@ -149,6 +179,21 @@ class ResponseAPI(
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                val httpCode = response?.code
+                val retryAfterMs = retryAfterMillisFromHeaders(
+                    response?.header("retry-after-ms"),
+                    response?.header("Retry-After")
+                )
+                val outcome = controller.onFailure(
+                    transient = isRetryableStreamFailure(t, httpCode),
+                    backoffFor = { attempt -> jitteredBackoffMillis(attempt - 1, retryAfterMs) },
+                    error = t,
+                )
+                if (outcome is StreamRetryController.Outcome.Retry) {
+                    scheduleRetry(outcome.attempt, outcome.backoffMillis)
+                    return
+                }
+
                 var exception = t
 
                 t?.printStackTrace()
@@ -171,16 +216,24 @@ class ResponseAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                close()
+                // A clean EOF before the first frame is still a pre-first-frame death: retry it if
+                // budget remains, otherwise complete normally.
+                val outcome = controller.onClosed(
+                    backoffFor = { attempt -> jitteredBackoffMillis(attempt - 1, null) },
+                )
+                if (outcome is StreamRetryController.Outcome.Retry) {
+                    scheduleRetry(outcome.attempt, outcome.backoffMillis)
+                } else {
+                    close()
+                }
             }
         }
 
-        val eventSource = EventSources.createFactory(streamClient)
-            .newEventSource(request, listener)
+        controller.start()
 
         awaitClose {
             println("[awaitClose] 关闭eventSource ")
-            eventSource.cancel()
+            controller.close()
         }
     }
 
