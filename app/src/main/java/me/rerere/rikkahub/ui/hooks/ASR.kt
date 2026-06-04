@@ -12,12 +12,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import me.rerere.ai.provider.ClaudeAuthType
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.ASRState
+import me.rerere.asr.providers.AnthropicVoiceASRController
 import me.rerere.asr.providers.DashScopeASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
 import me.rerere.asr.providers.VolcengineASRController
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import okhttp3.OkHttpClient
@@ -34,8 +38,18 @@ fun rememberCustomAsrState(): CustomAsrState {
         CustomAsrStateImpl(context.applicationContext, httpClient)
     }
 
-    DisposableEffect(settings.selectedASRProviderId, settings.asrProviders) {
-        asrState.updateProvider(settings.getSelectedASRProvider())
+    // Key only on the resolved Claude OAuth fallback token, not the whole provider
+    // list: editing an unrelated chat provider must not tear down an in-progress
+    // recording. The fallback is only read when the selected ASR provider is
+    // AnthropicVoice with a blank token, so re-resolving on its change is sufficient.
+    val claudeOAuthFallback = resolveClaudeOAuthFallback(settings)
+
+    DisposableEffect(
+        settings.selectedASRProviderId,
+        settings.asrProviders,
+        claudeOAuthFallback
+    ) {
+        asrState.updateProvider(settings.getSelectedASRProvider(), settings)
         onDispose { }
     }
 
@@ -76,9 +90,9 @@ private class CustomAsrStateImpl(
     override val state: StateFlow<ASRState>
         get() = controller?.state ?: idleState
 
-    fun updateProvider(provider: ASRProviderSetting?) {
+    fun updateProvider(provider: ASRProviderSetting?, settings: Settings) {
         controller?.dispose()
-        controller = provider?.let { createController(it) }
+        controller = provider?.let { createController(it, settings) }
         if (controller == null) {
             idleState.value = ASRState()
         }
@@ -102,7 +116,7 @@ private class CustomAsrStateImpl(
         audioManager.abandonAudioFocusRequest(audioFocusRequest)
     }
 
-    private fun createController(provider: ASRProviderSetting): ASRController? {
+    private fun createController(provider: ASRProviderSetting, settings: Settings): ASRController? {
         return when (provider) {
             is ASRProviderSetting.OpenAIRealtime -> {
                 if (provider.apiKey.isBlank()) return null
@@ -118,6 +132,21 @@ private class CustomAsrStateImpl(
                 if (provider.apiKey.isBlank()) return null
                 VolcengineASRController(context, httpClient, provider)
             }
+
+            is ASRProviderSetting.AnthropicVoice -> {
+                val token = provider.oauthToken.ifBlank { resolveClaudeOAuthFallback(settings) }
+                if (token.isBlank()) return null
+                AnthropicVoiceASRController(context, httpClient, provider, token)
+            }
         }
     }
 }
+
+// First Claude provider configured for OAuth with a non-blank token, used as the
+// AnthropicVoice ASR fallback credential when the ASR provider has no token of its own.
+internal fun resolveClaudeOAuthFallback(settings: Settings): String =
+    settings.providers
+        .filterIsInstance<ProviderSetting.Claude>()
+        .firstOrNull { it.authType == ClaudeAuthType.OAuth && it.oauthToken.isNotBlank() }
+        ?.oauthToken
+        .orEmpty()

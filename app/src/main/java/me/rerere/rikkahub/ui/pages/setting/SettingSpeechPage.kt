@@ -557,6 +557,14 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
                     showBottomSheet = true
                 }
             )
+            DropdownMenuItem(
+                text = { Text("Anthropic Voice") },
+                onClick = {
+                    currentProvider = ASRProviderSetting.AnthropicVoice()
+                    showTypeMenu = false
+                    showBottomSheet = true
+                }
+            )
         }
     }
 
@@ -819,6 +827,7 @@ private fun ASRProviderItem(
                             is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
                             is ASRProviderSetting.DashScope -> "DashScope"
                             is ASRProviderSetting.Volcengine -> "Volcengine"
+                            is ASRProviderSetting.AnthropicVoice -> "Anthropic Voice"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -81,6 +81,7 @@ class SettingsRoutesRedactionTest {
         ),
         asrProviders = listOf(
             ASRProviderSetting.OpenAIRealtime(apiKey = "asr-apikey-secret"),
+            ASRProviderSetting.AnthropicVoice(oauthToken = "asr-oauth-secret"),
         ),
         webDavConfig = WebDavConfig(
             url = "https://dav.example",
@@ -113,6 +114,7 @@ class SettingsRoutesRedactionTest {
         assertFalse("search password leaked", json.contains("search-pass-secret"))
         assertFalse("tts apiKey leaked", json.contains("tts-apikey-secret"))
         assertFalse("asr apiKey leaked", json.contains("asr-apikey-secret"))
+        assertFalse("asr oauthToken leaked", json.contains("asr-oauth-secret"))
         assertFalse("webdav username leaked", json.contains("webdav-user-secret"))
         assertFalse("webdav password leaked", json.contains("webdav-pass-secret"))
         assertFalse("s3 accessKeyId leaked", json.contains("s3-access-secret"))

@@ -65,6 +65,30 @@ sealed class ASRProviderSetting {
     }
 
     @Serializable
+    @SerialName("anthropic_voice")
+    data class AnthropicVoice(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "Anthropic Voice ASR",
+        // OAuth access token reused from the Claude Code OAuth flow. When blank,
+        // the controller falls back to the first OAuth-authenticated Claude
+        // provider configured in settings.
+        val oauthToken: String = "",
+        val baseUrl: String = "https://api.anthropic.com",
+        val language: String = "multi",
+        val sampleRate: Int = 16000,
+    ) : ASRProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): ASRProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
+    @Serializable
     @SerialName("volcengine")
     data class Volcengine(
         override val id: Uuid = Uuid.random(),
@@ -91,6 +115,7 @@ sealed class ASRProviderSetting {
                 OpenAIRealtime::class,
                 DashScope::class,
                 Volcengine::class,
+                AnthropicVoice::class,
             )
         }
     }

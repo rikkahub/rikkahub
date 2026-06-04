@@ -66,6 +66,7 @@ internal fun ASRProviderSetting.redactSecrets(): ASRProviderSetting = when (this
     is ASRProviderSetting.OpenAIRealtime -> copy(apiKey = "")
     is ASRProviderSetting.DashScope -> copy(apiKey = "")
     is ASRProviderSetting.Volcengine -> copy(apiKey = "")
+    is ASRProviderSetting.AnthropicVoice -> copy(oauthToken = "")
 }
 
 internal fun WebDavConfig.redactSecrets(): WebDavConfig = copy(username = "", password = "")

@@ -35,6 +35,7 @@ fun ASRProviderConfigure(
                     is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
                     is ASRProviderSetting.DashScope -> "DashScope"
                     is ASRProviderSetting.Volcengine -> "Volcengine"
+                    is ASRProviderSetting.AnthropicVoice -> "Anthropic Voice"
                 },
                 onValueChange = {},
                 readOnly = true,
@@ -58,6 +59,7 @@ fun ASRProviderConfigure(
             is ASRProviderSetting.OpenAIRealtime -> OpenAIRealtimeASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.DashScope -> DashScopeASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.Volcengine -> VolcengineASRConfiguration(setting, onValueChange)
+            is ASRProviderSetting.AnthropicVoice -> AnthropicVoiceASRConfiguration(setting, onValueChange)
         }
     }
 }
@@ -313,6 +315,36 @@ private fun VolcengineASRConfiguration(
             onValueChange = { onValueChange(setting.copy(language = it)) },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("auto") }
+        )
+    }
+}
+
+@Composable
+private fun AnthropicVoiceASRConfiguration(
+    setting: ASRProviderSetting.AnthropicVoice,
+    onValueChange: (ASRProviderSetting) -> Unit
+) {
+    FormItem(
+        label = { Text("OAuth Token") },
+        description = { Text("Claude Code OAuth access token. Leave blank to reuse the token from the first OAuth Claude provider.") }
+    ) {
+        OutlinedTextField(
+            value = setting.oauthToken,
+            onValueChange = { onValueChange(setting.copy(oauthToken = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("sk-ant-oat...") }
+        )
+    }
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_language)) },
+        description = { Text("Deepgram language code, or \"multi\" for multilingual.") }
+    ) {
+        OutlinedTextField(
+            value = setting.language,
+            onValueChange = { onValueChange(setting.copy(language = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("multi") }
         )
     }
 }
