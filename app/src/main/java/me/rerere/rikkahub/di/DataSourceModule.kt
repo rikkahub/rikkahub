@@ -16,6 +16,7 @@ import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
+import me.rerere.rikkahub.data.ai.SECRET_HEADER_NAMES
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -224,9 +225,18 @@ val dataSourceModule = module {
             }
             .addNetworkInterceptor(RequestLoggingInterceptor())
             .addInterceptor(AIRequestInterceptor(remoteConfig = get()))
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.HEADERS
-            })
+            // Logcat header logging is debug-only and redacts every credential header:
+            // HttpLoggingInterceptor.HEADERS otherwise prints `Authorization: Bearer ...`
+            // (and provider API keys) verbatim to logcat — in release builds too —
+            // where any process with READ_LOGS or adb can harvest them.
+            .apply {
+                if (BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.HEADERS
+                        SECRET_HEADER_NAMES.forEach { redactHeader(it) }
+                    })
+                }
+            }
             .build().also { SearchService.init(it, get()) }
     }
 

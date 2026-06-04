@@ -12,7 +12,9 @@ const val REDACTED = "<redacted>"
 
 // Header names whose values carry credentials and must never reach the log buffer.
 // Matched case-insensitively. Covers all providers plus user-supplied customHeaders.
-private val SECRET_HEADER_NAMES = setOf(
+// Shared with the OkHttp HttpLoggingInterceptor (logcat) so both redaction paths stay
+// in sync from a single source of truth.
+internal val SECRET_HEADER_NAMES = setOf(
     "authorization",
     "x-api-key",
     "x-goog-api-key",
