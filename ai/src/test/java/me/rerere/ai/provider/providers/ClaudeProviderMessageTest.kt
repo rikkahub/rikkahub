@@ -1,9 +1,11 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -146,11 +148,16 @@ class ClaudeProviderMessageTest {
     }
 
     @Test
-    fun `thinking blocks should be included in assistant content`() {
+    fun `signed thinking blocks should be included in assistant content`() {
         val assistantMessage = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
-                UIMessagePart.Reasoning(reasoning = "Let me think about this..."),
+                UIMessagePart.Reasoning(
+                    reasoning = "Let me think about this...",
+                    metadata = buildJsonObject {
+                        put("signature", "anthropic-signature")
+                    }
+                ),
                 UIMessagePart.Text("Here is my response")
             )
         )
@@ -184,6 +191,45 @@ class ClaudeProviderMessageTest {
         }?.jsonObject
         assertEquals("Let me think about this...",
             thinkingBlock?.get("thinking")?.jsonPrimitive?.content)
+        assertEquals("anthropic-signature",
+            thinkingBlock?.get("signature")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `unsigned reasoning blocks should not be sent as thinking blocks`() {
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(reasoning = "Reasoning from another provider"),
+                UIMessagePart.Text("Here is my response")
+            )
+        )
+
+        val messages = listOf(
+            UIMessage.user("Question"),
+            assistantMessage
+        )
+
+        val result = invokeBuildMessages(messages)
+
+        val assistantMsg = result.find {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }?.jsonObject
+
+        assertTrue("Should have assistant message", assistantMsg != null)
+
+        val content = assistantMsg!!["content"]?.jsonArray
+        assertTrue("Content should not be null", content != null)
+
+        val hasThinking = content!!.any {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "thinking"
+        }
+        assertTrue("Should not have thinking block", !hasThinking)
+
+        val textBlock = content.find {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "text"
+        }?.jsonObject
+        assertEquals("Here is my response", textBlock?.get("text")?.jsonPrimitive?.content)
     }
 
     @Test
