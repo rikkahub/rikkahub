@@ -77,7 +77,17 @@ interface SearchService<T : SearchServiceOptions> {
         internal var keyRoulette: KeyRoulette = KeyRoulette.default()
 
         fun init(client: OkHttpClient, context: Context? = null) {
-            httpClient = client
+            // Web search must fail fast. The shared app client carries a 10-minute
+            // readTimeout tuned for long-running generation/SSE; using it verbatim
+            // lets a slow/hung provider (e.g. Firecrawl /v2/search) block the
+            // search_web tool — and therefore the whole agent turn — for up to ten
+            // minutes, which surfaces as "search not responding". Clone the shared
+            // client (keeping its connection pool + interceptors) but cap the
+            // timeouts to search-appropriate bounds so the tool always returns.
+            httpClient = client.newBuilder()
+                .readTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(45, TimeUnit.SECONDS)
+                .build()
             keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
         }
 
