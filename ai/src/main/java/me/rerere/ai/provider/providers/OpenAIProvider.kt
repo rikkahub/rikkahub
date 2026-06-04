@@ -21,6 +21,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.registry.guessModelType
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.ui.ImageAspectRatio
@@ -82,6 +83,7 @@ class OpenAIProvider(
                 Model(
                     modelId = id,
                     displayName = id,
+                    type = guessModelType(id),
                 )
             }
         }
