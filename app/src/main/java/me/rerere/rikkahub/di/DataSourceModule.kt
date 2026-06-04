@@ -305,22 +305,32 @@ val dataSourceModule = module {
 /**
  * 专用流式客户端：从共享 [base] 克隆，针对 SSE 收紧存活检测。
  *
- * readTimeout 收紧到 120s：推理模型在两个*可见 token* 之间可合法暂停 >60s，但 SSE 传输层在此
- * 期间仍持续投递帧/心跳/空白，因此 120s 这一阈值键于*传输存活*（任意字节，而非任意 token），既能
- * 放行合法的推理暂停，又能在约 120s（而非共享客户端的 10 分钟）内捕获真正死掉的后台 socket。
+ * readTimeout 设为 600s（10 分钟）：推理模型（如 OpenAI /v1/responses 上的 gpt-5.5-pro）在推理期间
+ * 可能传输层完全静默——连续 28s+ 没有任何 SSE 字节，且 Responses API 此时不发心跳——因此把 readTimeout
+ * 当作*传输存活*阈值是错的：120s 会误杀一个健康但安静的流。readTimeout 退化为一个宽松的单次 socket 读上限，
+ * 死 socket 的快速检测交给下面的 pingInterval。
+ * 600s 期间的快速死 socket 检测靠下面的 pingInterval(15s)，但**它只对 HTTP/2 连接有效**：OkHttp 的
+ * pingInterval 发送的是 HTTP/2 PING 帧，HTTP/1.1 协议没有 ping 帧，因此在 HTTP/1.1 上它是 no-op。
+ * 本 client 未限制 protocols()，会按 ALPN 与各端点协商 HTTP/2 或 HTTP/1.1，且被所有 provider 共享（包含用户
+ * 自配的 OpenAI 兼容端点：自建 vLLM/llama.cpp/ollama、明文 http:// 反代、仅 HTTP/1.1 的网关）。因此残留暴露面是：
+ * 一条**已建立的 HTTP/1.1 连接在流中途死掉**时，ping 探不到它，要等满 600s readTimeout 才暴露——比 #63 收紧的
+ * 120s 慢，UI 最长卡 10 分钟。这是个被接受的权衡：120s 会误杀健康但安静的推理流（本次要修的实际 bug），
+ * 而 #63 #1 根因（陈旧连接池复用）已被下面独立的 keepAlive=15s 连接池修复，与协议无关。不把 protocols 钉到
+ * HTTP/2 是为了不破坏明文/仅 HTTP/1.1 的自建端点。600s 取自权威先例：OpenAI 官方 SDK 用 600s（openai-python
+ * DEFAULT_TIMEOUT，流式同样使用），JetBrains Koog 用 900s socketTimeout 做流式；两者都不用短的流读超时。
  * callTimeout 显式设为 0（不限），让一次完整生成不被整体时长上限误杀——只约束单次 socket 读。
  * 不降低共享 client 的 10 分钟 readTimeout：非流式 generateText/listModels 仍依赖它。
  *
- * 间歇性 ~120s 卡死的根因有二，仅靠 readTimeout 无法消除：
+ * 死 socket 卡死的根因有二，仅靠 readTimeout 无法消除：
  *  1. newBuilder() 会继承共享 client 的 ConnectionPool。被中间设备（NAT/代理/LB）静默回收的空闲
- *     连接一旦被 SSE EventSource 复用，响应永远不会到达，只能等 120s readTimeout 触发才暴露。
+ *     连接一旦被 SSE EventSource 复用，响应永远不会到达，只能等 readTimeout 触发才暴露。
  *     给流式客户端一个*独立、短存活*的连接池（keepAlive 15s）可避免复用这类陈旧连接。
  *  2. 缺少 HTTP/2 ping 保活：没有 ping 就无法主动探测死 socket，只能干等 readTimeout。
- *     pingInterval 15s 让 OkHttp 在约 2 个 ping 周期内对死 socket 快速失败，而非卡满 120s。
+ *     pingInterval 15s 让 OkHttp 在约 2 个 ping 周期（~30s）内对（HTTP/2 的）死 socket 快速失败，而非卡满 readTimeout。
  */
 internal fun buildStreamClient(base: OkHttpClient): OkHttpClient =
     base.newBuilder()
-        .readTimeout(120, TimeUnit.SECONDS)
+        .readTimeout(600, TimeUnit.SECONDS)
         .callTimeout(0, TimeUnit.SECONDS)
         .pingInterval(15, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(maxIdleConnections = 1, keepAliveDuration = 15, TimeUnit.SECONDS))
