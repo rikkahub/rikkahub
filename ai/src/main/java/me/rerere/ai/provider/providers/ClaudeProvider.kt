@@ -590,11 +590,7 @@ class ClaudeProvider(
             }
         }
 
-        is UIMessagePart.Reasoning -> buildJsonObject {
-            put("type", "thinking")
-            put("thinking", reasoning)
-            metadata?.forEach { (key, value) -> put(key, value) }
-        }
+        is UIMessagePart.Reasoning -> reasoningContentBlock(reasoning, metadata)
 
         else -> null
     }
@@ -704,5 +700,30 @@ class ClaudeProvider(
             totalTokens = promptTokens + completionTokens,
             cachedTokens = cachedInputTokens,
         )
+    }
+}
+
+// Serialize a UIMessagePart.Reasoning into an Anthropic `thinking` content block — or
+// drop it (null) when it carries no signature.
+//
+// Anthropic requires a cryptographic `signature` on every `thinking` block replayed in the
+// message history. Reasoning produced by another provider (OpenAI Responses, DeepSeek,
+// <think> tags) has no Anthropic signature, so replaying it as a thinking block makes the
+// API reject the WHOLE request with 400 "messages.N.content.M.thinking.signature: Field
+// required" — reproducibly hit when switching OpenAI -> Claude mid-conversation. Switching
+// Claude -> OpenAI is fine because the OpenAI side does not require an Anthropic signature.
+// We omit an unsigned reasoning part (callers use mapNotNull, so null is dropped) rather
+// than send an invalid block; a signed, native-Claude reasoning part is preserved verbatim.
+internal fun reasoningContentBlock(reasoning: String, metadata: JsonObject?): JsonObject? {
+    if (metadata == null) return null
+    // The signature must be a non-blank STRING. A missing key, JsonNull, an empty/blank
+    // string, or a non-string (array/object) is not a usable Anthropic signature — keeping
+    // any of those would only move the 400 from "field required" to "invalid signature".
+    val signature = metadata["signature"] as? JsonPrimitive ?: return null
+    if (!signature.isString || signature.content.isBlank()) return null
+    return buildJsonObject {
+        put("type", "thinking")
+        put("thinking", reasoning)
+        metadata.forEach { (key, value) -> put(key, value) }
     }
 }

@@ -1,9 +1,11 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.ui.UIMessage
@@ -148,11 +150,15 @@ class ClaudeProviderMessageTest {
     }
 
     @Test
-    fun `thinking blocks should be included in assistant content`() {
+    fun `signed thinking blocks should be included in assistant content`() {
+        // Native-Claude reasoning carries a signature in metadata and must round-trip.
         val assistantMessage = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
-                UIMessagePart.Reasoning(reasoning = "Let me think about this..."),
+                UIMessagePart.Reasoning(
+                    reasoning = "Let me think about this...",
+                    metadata = buildJsonObject { put("signature", "native-claude-signature") },
+                ),
                 UIMessagePart.Text("Here is my response")
             )
         )
@@ -180,12 +186,42 @@ class ClaudeProviderMessageTest {
         }
         assertTrue("Should have thinking block", hasThinking)
 
-        // Verify thinking content
+        // Verify thinking content + signature preserved
         val thinkingBlock = content.find {
             it.jsonObject["type"]?.jsonPrimitive?.content == "thinking"
         }?.jsonObject
         assertEquals("Let me think about this...",
             thinkingBlock?.get("thinking")?.jsonPrimitive?.content)
+        assertEquals("native-claude-signature",
+            thinkingBlock?.get("signature")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `unsigned cross-provider reasoning is dropped, text preserved`() {
+        // OpenAI/DeepSeek reasoning has no Anthropic signature. Replaying it as a thinking
+        // block triggers Anthropic 400 "thinking.signature: Field required" (OpenAI->Claude
+        // switch). It must be dropped — but the assistant's text answer must survive.
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(reasoning = "openai reasoning summary, no signature"),
+                UIMessagePart.Text("Here is my response")
+            )
+        )
+
+        val result = invokeBuildMessages(listOf(UIMessage.user("Question"), assistantMessage))
+        val content = result.find {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }?.jsonObject?.get("content")?.jsonArray
+
+        assertTrue("Content should not be null", content != null)
+        assertTrue("unsigned reasoning must NOT become a thinking block",
+            content!!.none { it.jsonObject["type"]?.jsonPrimitive?.content == "thinking" })
+        assertTrue("the text answer must be preserved",
+            content.any {
+                it.jsonObject["type"]?.jsonPrimitive?.content == "text" &&
+                    it.jsonObject["text"]?.jsonPrimitive?.content == "Here is my response"
+            })
     }
 
     @Test
