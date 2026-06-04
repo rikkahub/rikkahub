@@ -170,7 +170,11 @@ class ClaudeProvider(
                 UIMessageChoice(
                     index = 0,
                     delta = null,
-                    message = parseMessage(content),
+                    // Non-streaming response: every tool_use block carries its
+                    // complete input inline, so each parsed Tool is finished.
+                    message = parseMessage(content).also { msg ->
+                        msg.parts.forEach { if (it is UIMessagePart.Tool) it.finished = true }
+                    },
                     finishReason = stopReason
                 )
             ),
@@ -199,6 +203,9 @@ class ClaudeProvider(
             Log.i(TAG, "streamText: $it")
         }
 
+        // Tracks which content-block indices are tool_use blocks so that
+        // content_block_stop can mark only those tools finished.
+        val toolBlockIndices = mutableSetOf<Int>()
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -217,6 +224,51 @@ class ClaudeProvider(
                 // the protocol key that disambiguates parallel tool calls, so
                 // attach it to any Tool delta parts for the streaming merge.
                 val blockIndex = dataJson["index"]?.jsonPrimitive?.intOrNull
+
+                // content_block_start opening a tool_use registers the block
+                // index as a tool block; content_block_stop on that index marks
+                // the open tool finished (its input is now complete). Emitted as
+                // a finished Tool delta carrying only the streamIndex so the merge
+                // flips the flag on the matching open tool via sticky-OR.
+                if (type == "content_block_start" && blockIndex != null &&
+                    dataJson["content_block"]?.jsonObject?.get("type")
+                        ?.jsonPrimitive?.contentOrNull == "tool_use"
+                ) {
+                    toolBlockIndices.add(blockIndex)
+                }
+                if (type == "content_block_stop" && blockIndex != null &&
+                    blockIndex in toolBlockIndices
+                ) {
+                    trySend(
+                        MessageChunk(
+                            id = id ?: "",
+                            model = "",
+                            choices = listOf(
+                                UIMessageChoice(
+                                    index = 0,
+                                    delta = UIMessage(
+                                        role = MessageRole.ASSISTANT,
+                                        parts = listOf(
+                                            UIMessagePart.Tool(
+                                                toolCallId = "",
+                                                toolName = "",
+                                                input = "",
+                                                output = emptyList()
+                                            ).also {
+                                                it.streamIndex = blockIndex
+                                                it.finished = true
+                                            }
+                                        )
+                                    ),
+                                    message = null,
+                                    finishReason = null
+                                )
+                            )
+                        )
+                    )
+                    return
+                }
+
                 val deltaMessage = parseMessage(buildJsonArray {
                     val contentBlockObj = dataJson["content_block"]?.jsonObject
                     val deltaObj = dataJson["delta"]?.jsonObject

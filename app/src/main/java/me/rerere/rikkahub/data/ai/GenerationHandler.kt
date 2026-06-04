@@ -25,9 +25,11 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.registry.ModelRegistry
+import me.rerere.ai.ui.ToolCallExecutionState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
+import me.rerere.ai.ui.toolCallExecutionState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
@@ -269,7 +271,17 @@ class GenerationHandler(
                     }
 
                     else -> {
-                        // Auto or Approved - execute the tool
+                        // Auto or Approved - execute the tool.
+                        // A tool call whose terminating stream event never arrived
+                        // (stream interrupted) has a truncated, un-parseable input.
+                        // Feeding that to json.parseToJsonElement surfaces a raw
+                        // "Unexpected EOF" the model cannot act on. Instead emit a
+                        // balanced, actionable tool_result asking it to re-issue —
+                        // an unbalanced tool_use would be rejected on the next turn.
+                        if (tool.toolCallExecutionState() is ToolCallExecutionState.IncompleteTruncated) {
+                            executedTools += tool.copy(output = truncatedToolResult(json))
+                            return@forEach
+                        }
                         runCatching {
                             val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                                 ?: error("Tool ${tool.toolName} not found")
@@ -536,3 +548,25 @@ class GenerationHandler(
         }
     }.flowOn(Dispatchers.IO)
 }
+
+/**
+ * The model-actionable tool_result emitted when a tool call's arguments were
+ * truncated by a stream interruption. Extracted as a pure function so the
+ * truncation decision can be unit-tested without a Context/Provider.
+ */
+internal fun truncatedToolResult(json: Json): List<UIMessagePart> = listOf(
+    UIMessagePart.Text(
+        json.encodeToString(
+            buildJsonObject {
+                put(
+                    "error",
+                    JsonPrimitive(
+                        "This tool call was cut off by a stream interruption and its " +
+                            "arguments are incomplete. Please re-issue the tool call with " +
+                            "complete arguments."
+                    )
+                )
+            }
+        )
+    )
+)

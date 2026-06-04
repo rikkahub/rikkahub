@@ -690,6 +690,32 @@ class ResponseAPI(
                             )
                         )
                     )
+                } else if (type == "function_call") {
+                    // Terminal event for this function call item: the tool's
+                    // arguments are complete. Mark it finished so a truncated
+                    // call (stream cut off before this event) is distinguishable.
+                    return MessageChunk(
+                        id = id,
+                        model = "",
+                        choices = listOf(
+                            UIMessageChoice(
+                                index = 0,
+                                delta = UIMessage(
+                                    role = MessageRole.ASSISTANT,
+                                    parts = listOf(
+                                        UIMessagePart.Tool(
+                                            toolCallId = id,
+                                            toolName = "",
+                                            input = "",
+                                            output = emptyList()
+                                        ).also { it.finished = true }
+                                    )
+                                ),
+                                message = null,
+                                finishReason = null
+                            )
+                        )
+                    )
                 }
             }
 
@@ -712,7 +738,11 @@ class ResponseAPI(
                                         toolName = "",
                                         input = arguments,
                                         output = emptyList()
-                                    )
+                                    ).also {
+                                        // Terminal event for this function call's
+                                        // arguments: the input is now complete.
+                                        it.finished = true
+                                    }
                                 )
                             ),
                             message = null,
@@ -774,7 +804,11 @@ class ResponseAPI(
                             toolName = name,
                             input = arguments,
                             output = emptyList()
-                        )
+                        ).also {
+                            // Non-streaming output: the function call carries its
+                            // complete arguments inline.
+                            it.finished = true
+                        }
                     )
                 }
 

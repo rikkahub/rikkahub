@@ -108,7 +108,10 @@ data class UIMessage(
                                     if (part === target) part.merge(deltaPart) else part
                                 }
                             } else {
-                                acc + deltaPart.copy().also { it.streamIndex = streamIndex }
+                                acc + deltaPart.copy().also {
+                                    it.streamIndex = streamIndex
+                                    it.finished = deltaPart.finished
+                                }
                             }
                         } else if (deltaPart.toolCallId.isBlank()) {
                             // No index and no ID - append to the last Tool
@@ -119,7 +122,7 @@ data class UIMessage(
                                     if (part === lastTool) part.merge(deltaPart) else part
                                 }
                             } else {
-                                acc + deltaPart.copy()
+                                acc + deltaPart.copy().also { it.finished = deltaPart.finished }
                             }
                         } else {
                             // Has ID - find and update by ID, or insert new
@@ -127,7 +130,7 @@ data class UIMessage(
                                 it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
                             } as? UIMessagePart.Tool
                             if (existsPart == null) {
-                                acc + deltaPart.copy()
+                                acc + deltaPart.copy().also { it.finished = deltaPart.finished }
                             } else {
                                 acc.map { part ->
                                     if (part is UIMessagePart.Tool && part.toolCallId == deltaPart.toolCallId) {
@@ -480,6 +483,19 @@ sealed class UIMessagePart {
         @Transient
         var streamIndex: Int? = null
 
+        /**
+         * Transient per-tool completion flag, parallel to [streamIndex].
+         * Set true only when the provider emits the terminating SSE event for
+         * this tool's block (Anthropic content_block_stop, Responses API
+         * function_call_arguments.done / output_item.done function_call) or at
+         * construction in the non-streaming parse paths. Excluded from
+         * serialization/equals/hashCode/copy/toString so the persisted schema and
+         * equality guards stay intact. false means the tool call was cut off by a
+         * stream interruption and its input may be truncated/un-parseable.
+         */
+        @Transient
+        var finished: Boolean = false
+
         /** Whether the tool has been executed (has output) */
         val isExecuted: Boolean get() = output.isNotEmpty()
 
@@ -507,10 +523,48 @@ sealed class UIMessagePart {
                 // the open tool's index (receiver wins) to keep it stable
                 // across N fragments.
                 it.streamIndex = this.streamIndex ?: other.streamIndex
+                // Sticky OR: once any fragment marks the tool finished, it stays
+                // finished regardless of fragment ordering.
+                it.finished = this.finished || other.finished
             }
         }
     }
 }
+
+/**
+ * Execution state of a streamed tool call.
+ *
+ * [Complete] is the fail-open default: a tool is only [IncompleteTruncated] when
+ * there is positive evidence the stream cut it off — the provider never emitted
+ * the tool's terminating event ([UIMessagePart.Tool.finished] is false) AND the
+ * accumulated [UIMessagePart.Tool.input] is non-blank but not parseable JSON.
+ *
+ * Why both conditions, not just `finished`: `finished` is a [Transient] body var.
+ * It is absent on providers that have no terminating SSE event (ChatCompletions,
+ * Google), and it is dropped by Tool.copy() and by the DB persistence round-trip
+ * that the approval/resume flow performs. Keying truncation off `finished` alone
+ * would mis-classify every complete-but-non-streamed or copied/persisted tool as
+ * truncated and block it. Input parseability survives copy and persistence, so it
+ * is the authority; `finished` only short-circuits the known-complete fast path.
+ */
+sealed interface ToolCallExecutionState {
+    /** Input is usable (parseable, or affirmatively signalled complete). */
+    data object Complete : ToolCallExecutionState
+
+    /** Stream ended before the tool's terminating event; input is truncated. */
+    data object IncompleteTruncated : ToolCallExecutionState
+}
+
+fun UIMessagePart.Tool.toolCallExecutionState(): ToolCallExecutionState =
+    if (finished || input.isInputParseable()) {
+        ToolCallExecutionState.Complete
+    } else {
+        ToolCallExecutionState.IncompleteTruncated
+    }
+
+private fun String.isInputParseable(): Boolean = runCatching {
+    json.parseToJsonElement(ifBlank { "{}" })
+}.isSuccess
 
 /**
  * Sort message parts by type priority:
