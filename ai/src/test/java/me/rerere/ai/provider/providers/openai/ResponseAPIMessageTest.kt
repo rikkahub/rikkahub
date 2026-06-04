@@ -13,6 +13,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.handleMessageChunk
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -354,7 +355,125 @@ class ResponseAPIMessageTest {
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
     }
 
+    @Test
+    fun `response_created event yields in-progress Reasoning chunk`() {
+        val event = parseToJsonObject("""{"type":"response.created","response":{"id":"resp_1"}}""")
+        val chunk = api.parseResponseDelta(event)
+
+        assertTrue("response.created must produce a chunk (live reasoning placeholder)", chunk != null)
+        val parts = chunk!!.choices.first().delta!!.parts
+        val reasoning = parts.filterIsInstance<UIMessagePart.Reasoning>()
+        assertEquals("delta must hold exactly one Reasoning part", 1, reasoning.size)
+        assertTrue("placeholder reasoning must be in-progress (finishedAt == null)", reasoning.first().finishedAt == null)
+        assertTrue(
+            "metadata must be non-null or the merge reducer drops the empty placeholder",
+            reasoning.first().metadata != null
+        )
+    }
+
+    @Test
+    fun `response_in_progress event yields in-progress Reasoning chunk`() {
+        val event = parseToJsonObject("""{"type":"response.in_progress","response":{"id":"resp_1"}}""")
+        val chunk = api.parseResponseDelta(event)
+
+        assertTrue("response.in_progress must produce a chunk", chunk != null)
+        val reasoning = chunk!!.choices.first().delta!!.parts.filterIsInstance<UIMessagePart.Reasoning>()
+        assertEquals(1, reasoning.size)
+        assertTrue(reasoning.first().finishedAt == null)
+        assertTrue(reasoning.first().metadata != null)
+    }
+
+    @Test
+    fun `summary delta merges into the same reasoning part as the placeholder`() {
+        val createdChunk = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.created","response":{"id":"resp_1"}}""")
+        )!!
+        val summaryChunk = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.reasoning_summary_text.delta","item_id":"x","delta":"hello"}""")
+        )!!
+
+        val seed = listOf(UIMessage(role = MessageRole.ASSISTANT, parts = emptyList()))
+        val afterCreated = seed.handleMessageChunk(createdChunk)
+        val afterSummary = afterCreated.handleMessageChunk(summaryChunk)
+
+        val reasoning = afterSummary.last().parts.filterIsInstance<UIMessagePart.Reasoning>()
+        assertEquals("placeholder + summary delta must merge into ONE reasoning part", 1, reasoning.size)
+        assertEquals("hello", reasoning.first().reasoning)
+        assertTrue("still streaming, so finishedAt stays null", reasoning.first().finishedAt == null)
+    }
+
+    @Test
+    fun `reasoning-absent flow must not emit a placeholder reasoning item into provider history`() {
+        // Regression: created -> in_progress -> output_text.delta (no reasoning item ever exists).
+        // The transient live-timer placeholder must NOT round-trip into the next request's input
+        // as a reasoning item lacking an id — that is an invalid (400-class) Responses item.
+        val created = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.created","response":{"id":"resp_1"}}""")
+        )!!
+        val inProgress = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.in_progress","response":{"id":"resp_1"}}""")
+        )!!
+        val textDelta = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.output_text.delta","item_id":"msg_1","delta":"answer"}""")
+        )!!
+
+        val seed = listOf(UIMessage(role = MessageRole.ASSISTANT, parts = emptyList()))
+        val assembled = seed
+            .handleMessageChunk(created)
+            .handleMessageChunk(inProgress)
+            .handleMessageChunk(textDelta)
+
+        // Prepend a user turn so the assistant message is uploaded as history.
+        val history = listOf(UIMessage.user("question")) + assembled
+        val result = invokeBuildMessages(history)
+
+        val reasoningItems = result.filter {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning"
+        }
+        assertTrue(
+            "no reasoning item must be emitted for a reasoning-absent response",
+            reasoningItems.isEmpty()
+        )
+    }
+
+    @Test
+    fun `reasoning-present flow emits exactly one reasoning item carrying its provider id`() {
+        // Positive companion: a real reasoning item (output_item.added carries reasoning_id) plus a
+        // summary delta must still serialize into exactly one reasoning item with the correct id.
+        val created = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.created","response":{"id":"resp_1"}}""")
+        )!!
+        val itemAdded = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.output_item.added","item":{"type":"reasoning","id":"rs_42"}}""")
+        )!!
+        val summaryDelta = api.parseResponseDelta(
+            parseToJsonObject("""{"type":"response.reasoning_summary_text.delta","item_id":"rs_42","delta":"thinking"}""")
+        )!!
+
+        val seed = listOf(UIMessage(role = MessageRole.ASSISTANT, parts = emptyList()))
+        val assembled = seed
+            .handleMessageChunk(created)
+            .handleMessageChunk(itemAdded)
+            .handleMessageChunk(summaryDelta)
+
+        val history = listOf(UIMessage.user("question")) + assembled
+        val result = invokeBuildMessages(history)
+
+        val reasoningItems = result.filter {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning"
+        }
+        assertEquals("exactly one reasoning item must be emitted", 1, reasoningItems.size)
+        assertEquals(
+            "the reasoning item must carry its provider id",
+            "rs_42",
+            reasoningItems.first().jsonObject["id"]?.jsonPrimitive?.content
+        )
+    }
+
     // ==================== Helper Functions ====================
+
+    private fun parseToJsonObject(raw: String): JsonObject =
+        kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonObject
 
     private fun createExecutedTool(
         callId: String,

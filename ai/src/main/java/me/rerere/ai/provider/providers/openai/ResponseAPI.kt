@@ -351,6 +351,16 @@ class ResponseAPI(
                     group.parts.forEach { part ->
                         when (part) {
                             is UIMessagePart.Reasoning -> {
+                                val reasoningId = part.metadata?.get("reasoning_id")
+                                    ?.jsonPrimitiveOrNull?.contentOrNull
+                                // Transient live-timer placeholder: emitted on
+                                // response.created/in_progress with blank text and no provider
+                                // reasoning_id. It must never round-trip into provider history —
+                                // a reasoning item with no id is a fabricated, identity-less item
+                                // that the Responses API rejects on the next request.
+                                if (part.reasoning.isBlank() && reasoningId == null) {
+                                    return@forEach
+                                }
                                 // 先输出累积的文本/图片内容
                                 if (contentBuffer.isNotEmpty()) {
                                     addContentItem(MessageRole.ASSISTANT, contentBuffer)
@@ -474,10 +484,46 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    internal fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
+            // The Responses API emits these before any reasoning/text item exists. Emitting an
+            // empty in-progress Reasoning placeholder here is what lets the UI start its live
+            // "reasoning in progress" timer immediately instead of waiting for the first summary
+            // delta. The metadata marker is load-bearing: the merge reducer in Message.kt drops
+            // empty-reasoning deltas whose metadata == null, so a null-metadata placeholder would
+            // be silently swallowed. The placeholder is transient-only: addAssistantItems() filters
+            // out any blank Reasoning part lacking a reasoning_id, so it is never serialized into
+            // provider history (it carries no provider identity and would be an invalid item).
+            "response.created", "response.in_progress" -> {
+                val id = jsonObject["response"]?.jsonObject?.get("id")?.jsonPrimitive?.contentOrNull ?: ""
+                return MessageChunk(
+                    id = id,
+                    model = "",
+                    choices = listOf(
+                        UIMessageChoice(
+                            index = 0,
+                            message = null,
+                            delta = UIMessage(
+                                role = MessageRole.ASSISTANT,
+                                parts = listOf(
+                                    UIMessagePart.Reasoning(
+                                        reasoning = "",
+                                        createdAt = Clock.System.now(),
+                                        finishedAt = null,
+                                        metadata = buildJsonObject {
+                                            put("reasoning_placeholder", true)
+                                        }
+                                    )
+                                )
+                            ),
+                            finishReason = null,
+                        )
+                    )
+                )
+            }
+
             "response.output_text.delta" -> {
                 return MessageChunk(
                     id = jsonObject["item_id"]?.jsonPrimitive?.contentOrNull ?: "",
