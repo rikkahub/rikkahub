@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,7 +25,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.context.LocalSettings
 import kotlin.math.max
 
 /**
@@ -45,6 +48,7 @@ fun DataTable(
     columnMinWidths: List<Dp> = emptyList(),
     columnMaxWidths: List<Dp> = emptyList(),
     cellAlignment: Alignment = Alignment.CenterStart,
+    outerBorder: BorderStroke? = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
 ) {
     val hScroll = rememberScrollState()
     val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
@@ -52,7 +56,9 @@ fun DataTable(
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.small)
-            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.small)
+            .then(
+                if (outerBorder != null) Modifier.border(outerBorder, MaterialTheme.shapes.small) else Modifier
+            )
             .horizontalScroll(hScroll)
     ) {
         SubcomposeLayout { constraints ->
@@ -209,37 +215,39 @@ private fun CellBox(
 @Preview(showBackground = true)
 @Composable
 private fun DataTablePreview() {
-    Surface {
-        val headers = listOf<@Composable () -> Unit>(
-            { Text("Semester", style = MaterialTheme.typography.labelLarge) },
-            { Text("Attendance", style = MaterialTheme.typography.labelLarge) },
-            { Text("Notes / Example", style = MaterialTheme.typography.labelLarge) },
-        )
+    CompositionLocalProvider(LocalSettings provides Settings()) {
+        Surface {
+            val headers = listOf<@Composable () -> Unit>(
+                { Text("Semester", style = MaterialTheme.typography.labelLarge) },
+                { Text("Attendance", style = MaterialTheme.typography.labelLarge) },
+                { Text("Notes / Example", style = MaterialTheme.typography.labelLarge) },
+            )
 
-        val rows = listOf<List<@Composable () -> Unit>>(
-            listOf<@Composable () -> Unit>(
-                { Text("Fall 2024") },
-                { Text("Excellent", style = MaterialTheme.typography.bodyMedium) },
-                { Text("x² + y² = 1") },
-            ),
-            listOf(
-                { Text("Fall 2024") },
-                { Text("Good", style = MaterialTheme.typography.bodyMedium) },
-                { Text("∑ k = n(n+1)/2", maxLines = 2, overflow = TextOverflow.Ellipsis) },
-            ),
-            listOf(
-                { Text("Fall 2024") },
-                { Text("Fair", style = MaterialTheme.typography.bodyMedium) },
-                { MarkdownBlock("这行更高会把整行拉齐! 这是一个很长的文本用来测试换行功能!  \n>haha") },
-            ),
-        )
+            val rows = listOf<List<@Composable () -> Unit>>(
+                listOf<@Composable () -> Unit>(
+                    { Text("Fall 2024") },
+                    { Text("Excellent", style = MaterialTheme.typography.bodyMedium) },
+                    { Text("x² + y² = 1") },
+                ),
+                listOf(
+                    { Text("Fall 2024") },
+                    { Text("Good", style = MaterialTheme.typography.bodyMedium) },
+                    { Text("∑ k = n(n+1)/2", maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                ),
+                listOf(
+                    { Text("Fall 2024") },
+                    { Text("Fair", style = MaterialTheme.typography.bodyMedium) },
+                    { MarkdownBlock("这行更高会把整行拉齐! 这是一个很长的文本用来测试换行功能!  \n>haha") },
+                ),
+            )
 
-        DataTable(
-            headers = headers,
-            rows = rows,
-            columnMinWidths = listOf(60.dp, 100.dp, 80.dp),
-            columnMaxWidths = listOf(120.dp, 100.dp, 200.dp),
-            zebraStriping = false,
-        )
+            DataTable(
+                headers = headers,
+                rows = rows,
+                columnMinWidths = listOf(60.dp, 100.dp, 80.dp),
+                columnMaxWidths = listOf(120.dp, 100.dp, 200.dp),
+                zebraStriping = false,
+            )
+        }
     }
 }

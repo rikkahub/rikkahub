@@ -1,13 +1,19 @@
 package me.rerere.rikkahub.ui.components.richtext
 
+import android.content.ClipData
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -36,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -45,6 +52,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -74,11 +83,17 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.toDp
 import org.intellij.markdown.IElementType
@@ -90,6 +105,7 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
+import kotlin.time.Clock
 
 private val flavour by lazy {
     GFMFlavourDescriptor(
@@ -847,14 +863,118 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
         }
     }
 
-    // 渲染表格
-    DataTable(
-        headers = headers,
-        rows = rowComposables,
-        modifier = modifier.padding(vertical = 8.dp),
-        columnMinWidths = List(columnCount) { 80.dp },
-        columnMaxWidths = List(columnCount) { 200.dp },
-    )
+    val clipboardManager = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // 表格原始markdown文本（用于复制）和CSV内容（用于下载）
+    val tableMarkdown = remember(node, content) { node.getTextInNode(content).trim() }
+    val tableCsv = remember(headerCells, rows) { buildTableCsv(headerCells, rows) }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                try {
+                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                        outputStream.write(tableCsv.toByteArray())
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    // 渲染表格卡片（工具栏 + 表格）
+    Column(
+        modifier = modifier
+            .padding(vertical = 8.dp)
+            .clip(MaterialTheme.shapes.large)
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "表格",
+                fontSize = 12.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val iconSize = 16.dp
+                val iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+
+                Icon(
+                    imageVector = HugeIcons.Copy01,
+                    contentDescription = "Copy",
+                    tint = iconTint,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .onClick {
+                            scope.launch {
+                                clipboardManager.setClipEntry(ClipEntry(ClipData.newPlainText("table", tableMarkdown)))
+                            }
+                        }
+                        .padding(4.dp)
+                        .size(iconSize)
+                )
+
+                Icon(
+                    imageVector = HugeIcons.Download04,
+                    contentDescription = "Download",
+                    tint = iconTint,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .onClick {
+                            createDocumentLauncher.launch(
+                                "table_${
+                                    Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                                }.csv"
+                            )
+                        }
+                        .padding(4.dp)
+                        .size(iconSize)
+                )
+            }
+        }
+        DataTable(
+            headers = headers,
+            rows = rowComposables,
+            columnMinWidths = List(columnCount) { 80.dp },
+            columnMaxWidths = List(columnCount) { 200.dp },
+            outerBorder = null,
+        )
+    }
+}
+
+// 构建CSV内容，对包含逗号/引号/换行的字段进行转义
+private fun buildTableCsv(headerCells: List<String>, rows: List<List<String>>): String {
+    fun escape(field: String): String {
+        return if (field.any { it == ',' || it == '"' || it == '\n' }) {
+            "\"${field.replace("\"", "\"\"")}\""
+        } else {
+            field
+        }
+    }
+    return buildString {
+        appendLine(headerCells.joinToString(",") { escape(it) })
+        rows.forEach { row ->
+            appendLine(row.joinToString(",") { escape(it) })
+        }
+    }
 }
 
 private fun AnnotatedString.Builder.appendMarkdownNodeContent(
