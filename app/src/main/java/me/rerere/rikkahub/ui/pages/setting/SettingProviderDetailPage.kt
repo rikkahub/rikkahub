@@ -134,11 +134,29 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 
+/**
+ * Merge the edited config draft with the currently-persisted model list.
+ *
+ * The Config tab edits config fields (apiKey/baseUrl/customHeaders/...) on [draft] while the
+ * Models tab persists model-list ops immediately into [persisted]. On Save we keep the draft's
+ * config but override its (stale) model snapshot with the persisted list, so a reorder/add done
+ * before Save survives. copyProvider() carries config fields forward from the receiver and only
+ * overrides the params passed — here just `models`.
+ */
+internal fun mergeConfigKeepingModels(
+    draft: ProviderSetting,
+    persisted: ProviderSetting,
+): ProviderSetting = draft.copyProvider(models = persisted.models)
+
 @Composable
 fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
+    // In-progress Config-tab edit draft, shared with the Models tab so listModels
+    // authenticates with the currently-edited apiKey/baseUrl/headers. Keyed on provider.id
+    // (NOT provider) so a model op re-emitting a new provider doesn't wipe unsaved edits.
+    var draft by remember(provider.id) { mutableStateOf(provider) }
     val pager = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -230,9 +248,13 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
             when (page) {
                 0 -> {
                     SettingProviderConfigPage(
-                        provider = provider,
-                        onEdit = {
-                            onEdit(it)
+                        provider = draft,
+                        onDraftChange = { draft = it },
+                        onSave = {
+                            // Persist the edited config from the draft, but keep the
+                            // currently-persisted model list so a reorder/add done in the
+                            // Models tab before Save isn't reverted by the draft's snapshot.
+                            onEdit(mergeConfigKeepingModels(draft, provider))
                             toaster.show(
                                 context.getString(R.string.setting_provider_page_save_success),
                                 type = ToastType.Success
@@ -247,6 +269,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 1 -> {
                     SettingProviderModelPage(
                         provider = provider,
+                        draft = draft,
                         onEdit = onEdit
                     )
                 }
@@ -258,10 +281,10 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
 @Composable
 private fun SettingProviderConfigPage(
     provider: ProviderSetting,
-    onEdit: (ProviderSetting) -> Unit,
+    onDraftChange: (ProviderSetting) -> Unit,
+    onSave: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var internalProvider by remember(provider) { mutableStateOf(provider) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -273,17 +296,17 @@ private fun SettingProviderConfigPage(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ProviderConfigure(
-            provider = internalProvider,
+            provider = provider,
             onEdit = {
-                internalProvider = it
+                onDraftChange(it)
             }
         )
 
-        if (internalProvider is ProviderSetting.OpenAI) {
+        if (provider is ProviderSetting.OpenAI) {
             SettingProviderBalanceOption(
-                provider = internalProvider,
-                balanceOption = internalProvider.balanceOption,
-                onEdit = { internalProvider = internalProvider.copyProvider(balanceOption = it) }
+                provider = provider,
+                balanceOption = provider.balanceOption,
+                onEdit = { onDraftChange(provider.copyProvider(balanceOption = it)) }
             )
             ProviderBalanceText(providerSetting = provider, style = MaterialTheme.typography.labelSmall)
         }
@@ -294,12 +317,12 @@ private fun SettingProviderConfigPage(
             verticalAlignment = Alignment.CenterVertically
         ) {
             ProviderConnectionTester(
-                internalProvider = internalProvider,
+                internalProvider = provider,
             )
 
             Spacer(Modifier.weight(1f))
 
-            if (!internalProvider.builtIn) {
+            if (!provider.builtIn) {
                 IconButton(
                     onClick = {
                         showDeleteDialog = true
@@ -311,9 +334,9 @@ private fun SettingProviderConfigPage(
 
             IconButton(
                 onClick = {
-                    internalProvider = internalProvider.resetBaseUrlToDefault()
+                    onDraftChange(provider.resetBaseUrlToDefault())
                 },
-                enabled = !internalProvider.isUsingDefaultBaseUrl(),
+                enabled = !provider.isUsingDefaultBaseUrl(),
             ) {
                 Icon(
                     imageVector = HugeIcons.Refresh03,
@@ -323,7 +346,7 @@ private fun SettingProviderConfigPage(
 
             Button(
                 onClick = {
-                    onEdit(internalProvider)
+                    onSave()
                 }
             ) {
                 Text(stringResource(R.string.setting_provider_page_save))
@@ -372,25 +395,42 @@ private fun SettingProviderConfigPage(
 @Composable
 private fun SettingProviderModelPage(
     provider: ProviderSetting,
+    draft: ProviderSetting,
     onEdit: (ProviderSetting) -> Unit
 ) {
     ModelList(
         providerSetting = provider,
+        draft = draft,
         onUpdateProvider = onEdit
     )
 }
 
+/**
+ * Picks which [ProviderSetting] authenticates the listModels fetch in the Models tab.
+ *
+ * Uses the live Config-tab [draft] (just-typed apiKey/baseUrl/headers) only while the draft is the
+ * same provider type as [persisted]. A pending (unsaved) type change makes the draft a different
+ * type than the persisted provider that model-list writes (add/del/edit/move) target; fetching that
+ * type's models and persisting them into the old-type provider would cross-contaminate the model
+ * list. In that case fall back to the persisted provider until the type change is saved.
+ */
+internal fun selectModelFetchSetting(
+    persisted: ProviderSetting,
+    draft: ProviderSetting
+): ProviderSetting = if (draft::class == persisted::class) draft else persisted
+
 @Composable
 private fun ModelList(
     providerSetting: ProviderSetting,
+    draft: ProviderSetting,
     onUpdateProvider: (ProviderSetting) -> Unit
 ) {
     val providerManager = koinInject<ProviderManager>()
-    val modelList by produceState(emptyList(), providerSetting) {
+    val fetchSetting = selectModelFetchSetting(providerSetting, draft)
+    val modelList by produceState(emptyList(), fetchSetting) {
         runCatching {
-            println("loading models...")
-            value = providerManager.getProviderByType(providerSetting)
-                .listModels(providerSetting)
+            value = providerManager.getProviderByType(fetchSetting)
+                .listModels(fetchSetting)
                 .sortedBy { it.modelId }
                 .toList()
         }.onFailure {
