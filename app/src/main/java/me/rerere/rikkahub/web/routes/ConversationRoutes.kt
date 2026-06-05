@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.BadRequestException
@@ -43,6 +45,25 @@ import me.rerere.rikkahub.web.dto.toListDto
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
+
+/**
+ * Resolves the regenerate target message, enforcing the load-bearing ordering: the persisted
+ * conversation must be loaded into the in-memory session ([initialize]) BEFORE the session state is
+ * read ([getConversation]). Without the [initialize] call, [getConversation] fabricates a fresh
+ * empty session (ChatService.getOrCreateSession) and the persisted message resolves to null —
+ * issue #76. Returns null when the message is genuinely absent (route maps that to 404).
+ */
+internal suspend fun resolveRegenerateTarget(
+    conversationId: Uuid,
+    messageId: Uuid,
+    initialize: suspend (Uuid) -> Unit,
+    getConversation: suspend (Uuid) -> Conversation,
+): UIMessage? {
+    initialize(conversationId)
+    val conversation = getConversation(conversationId)
+    val node = conversation.getMessageNodeByMessageId(messageId)
+    return node?.messages?.find { it.id == messageId }
+}
 
 fun Route.conversationRoutes(
     chatService: ChatService,
@@ -334,10 +355,12 @@ fun Route.conversationRoutes(
             val request = call.receive<RegenerateRequest>()
             val messageId = request.messageId.toUuid("message id")
 
-            val conversation = chatService.getConversationFlow(uuid).first()
-            val node = conversation.getMessageNodeByMessageId(messageId)
-            val message = node?.messages?.find { it.id == messageId }
-                ?: throw NotFoundException("Message not found")
+            val message = resolveRegenerateTarget(
+                conversationId = uuid,
+                messageId = messageId,
+                initialize = chatService::initializeConversation,
+                getConversation = { chatService.getConversationFlow(it).first() },
+            ) ?: throw NotFoundException("Message not found")
 
             chatService.regenerateAtMessage(uuid, message)
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
