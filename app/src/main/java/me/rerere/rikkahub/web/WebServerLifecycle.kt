@@ -18,6 +18,8 @@ import kotlinx.coroutines.sync.withLock
  * be serialized by one [Mutex] so they are atomic relative to each other. The
  * factory only runs when no server is currently live; the created handle is
  * stored under the same lock that the guard read, so the TOCTOU window is gone.
+ * [restart] is a first-class serialized primitive too: it performs stop+create
+ * atomically under the same lock so the transition cannot be interleaved.
  *
  * [T] is the server handle type (the production type is Ktor's
  * `EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>`),
@@ -49,5 +51,18 @@ class WebServerLifecycle<T : Any> {
     suspend fun stop(onStop: suspend (T) -> Unit) = mutex.withLock {
         server?.let { onStop(it) }
         server = null
+    }
+
+    /**
+     * Atomically replaces the live server: stops the current handle (if any) via
+     * [onStop], then runs [factory] and stores the new handle, all under the same
+     * lock. Because stop and create share one critical section, a concurrent
+     * start/stop/restart cannot observe an intermediate state, and the old socket
+     * is always released before [factory] runs. Returns the new handle.
+     */
+    suspend fun restart(onStop: suspend (T) -> Unit, factory: suspend () -> T): T = mutex.withLock {
+        server?.let { onStop(it) }
+        server = null
+        factory().also { server = it }
     }
 }

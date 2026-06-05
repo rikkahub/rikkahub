@@ -82,24 +82,7 @@ class WebServerManager(
                 }
 
                 _state.value = baseState.copy(isRunning = true)
-                // 仅局域网模式注册 mDNS
-                if (!localhostOnly) {
-                    runCatching {
-                        nsdRegistrar.register(
-                            port = port,
-                            serviceName = serviceName,
-                            onRegistered = { info ->
-                                _state.value = _state.value.copy(
-                                    serviceName = info.serviceName,
-                                    hostname = info.hostname,
-                                    address = info.address.hostAddress
-                                )
-                            }
-                        )
-                    }.onFailure {
-                        Log.w(TAG, "NSD register failed", it)
-                    }
-                }
+                registerNsd(port, serviceName, localhostOnly)
                 Log.i(TAG, "Web server started successfully on $host:$port")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start web server", e)
@@ -134,8 +117,59 @@ class WebServerManager(
         serviceName: String = _state.value.serviceName,
         localhostOnly: Boolean = _state.value.localhostOnly
     ) {
-        stop()
-        start(port, serviceName, localhostOnly)
+        appScope.launch {
+            val host = if (localhostOnly) HOST_LOOPBACK else HOST_ALL_INTERFACES
+            val baseState = WebServerState(
+                port = port,
+                serviceName = serviceName,
+                localhostOnly = localhostOnly
+            )
+            try {
+                _state.value = _state.value.copy(isLoading = true, error = null)
+                Log.i(TAG, "Restarting web server on $host:$port")
+                // stop+start run in one serialized critical section so the old socket
+                // is released before isPortAvailable runs and the new server binds.
+                lifecycle.restart(
+                    onStop = { server ->
+                        server.stop(1000, 2000)
+                        runCatching { nsdRegistrar.unregister() }
+                            .onFailure { Log.w(TAG, "NSD unregister failed", it) }
+                    },
+                    factory = {
+                        if (!isPortAvailable(port)) error("Port $port is already in use")
+                        startWebServer(port = port, host = host) {
+                            configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
+                        }.start(wait = false)
+                    }
+                )
+                _state.value = baseState.copy(isRunning = true)
+                registerNsd(port, serviceName, localhostOnly)
+                Log.i(TAG, "Web server restarted successfully on $host:$port")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restart web server", e)
+                _state.value = baseState.copy(error = e.message)
+            }
+        }
+    }
+
+    private suspend fun registerNsd(port: Int, serviceName: String, localhostOnly: Boolean) {
+        // 仅局域网模式注册 mDNS
+        if (localhostOnly) return
+        runCatching {
+            nsdRegistrar.register(
+                port = port,
+                serviceName = serviceName,
+                onRegistered = { info ->
+                    _state.value = _state.value.copy(
+                        serviceName = info.serviceName,
+                        hostname = info.hostname,
+                        address = info.address.hostAddress
+                    )
+                }
+            )
+        }.onFailure {
+            Log.w(TAG, "NSD register failed", it)
+        }
     }
 
     private fun isPortAvailable(port: Int): Boolean {
