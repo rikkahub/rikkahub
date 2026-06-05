@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
+import me.rerere.rikkahub.data.files.SkillImportLimits
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import org.json.JSONArray
@@ -60,7 +61,13 @@ class SkillsVM(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val fileName = FileUtils.getFileNameFromUri(appContext, uri).orEmpty()
-                val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val bytes = appContext.contentResolver.openInputStream(uri)?.use {
+                    SkillImportLimits.readBytesLimited(
+                        it,
+                        SkillImportLimits.MAX_INPUT_BYTES,
+                        fileName.ifBlank { "文件" },
+                    )
+                }
                     ?: run {
                         withContext(Dispatchers.Main) { onResult(false, "无法读取文件") }
                         return@launch
@@ -92,7 +99,8 @@ class SkillsVM(
 
                 // Collect all files recursively via GitHub Contents API
                 val files = mutableListOf<Pair<String, String>>() // relativePath -> downloadUrl
-                val listed = listFilesRecursively(info.owner, info.repo, info.branch, info.path, info.path, files)
+                val visited = intArrayOf(0)
+                val listed = listFilesRecursively(info.owner, info.repo, info.branch, info.path, info.path, files, visited, depth = 0)
                 if (!listed) {
                     withContext(Dispatchers.Main) { onResult(false, "读取 GitHub 目录失败") }
                     return@launch
@@ -116,12 +124,15 @@ class SkillsVM(
                 }
 
                 val fileContents = LinkedHashMap<String, String>()
+                var totalDownloaded = 0L
                 for ((relativePath, downloadUrl) in files) {
                     val content = downloadText(downloadUrl)
                     if (content == null) {
                         withContext(Dispatchers.Main) { onResult(false, "下载文件失败：$relativePath") }
                         return@launch
                     }
+                    totalDownloaded += content.toByteArray(Charsets.UTF_8).size
+                    SkillImportLimits.checkTotalAndCount(totalDownloaded, fileContents.size + 1)
                     fileContents[relativePath] = content
                 }
 
@@ -155,21 +166,8 @@ class SkillsVM(
     }
 
     private fun importSkillsFromZip(bytes: ByteArray): List<String> {
-        val files = LinkedHashMap<String, ByteArray>()
-        ZipInputStream(ByteArrayInputStream(bytes)).use { zipInput ->
-            while (true) {
-                val entry = zipInput.nextEntry ?: break
-                try {
-                    if (!entry.isDirectory) {
-                        val path = normalizeZipEntryPath(entry.name)
-                        if (path != null) {
-                            files[path] = zipInput.readBytes()
-                        }
-                    }
-                } finally {
-                    zipInput.closeEntry()
-                }
-            }
+        val files = ZipInputStream(ByteArrayInputStream(bytes)).use { zipInput ->
+            SkillImportLimits.scanZipEntries(zipInput, ::normalizeZipEntryPath)
         }
 
         val skillMdPaths = files.keys
@@ -263,29 +261,33 @@ class SkillsVM(
         dirPath: String,
         basePath: String,
         result: MutableList<Pair<String, String>>,
-    ): Boolean {
-        val apiUrl = "https://api.github.com/repos/$owner/$repo/contents/$dirPath?ref=$branch"
-        val json = downloadText(apiUrl) ?: return false
-        val array = JSONArray(json)
-        for (i in 0 until array.length()) {
-            val item = array.getJSONObject(i)
-            val type = item.getString("type")
-            val itemPath = item.getString("path")
-            val relativePath = itemPath.removePrefix("$basePath/").removePrefix(basePath)
-            when (type) {
-                "file" -> {
-                    val downloadUrl = item.optString("download_url").takeIf { it.isNotBlank() }
-                        ?: return false
-                    result.add(relativePath to downloadUrl)
-                }
+        visited: IntArray,
+        depth: Int,
+    ): Boolean = SkillImportLimits.traverseGitHubTree(
+        dirPath = dirPath,
+        basePath = basePath,
+        result = result,
+        visited = visited,
+        depth = depth,
+    ) { currentDir -> fetchGitHubDir(owner, repo, branch, currentDir) }
 
-                "dir" -> {
-                    val ok = listFilesRecursively(owner, repo, branch, itemPath, basePath, result)
-                    if (!ok) return false
-                }
-            }
+    private fun fetchGitHubDir(
+        owner: String,
+        repo: String,
+        branch: String,
+        dirPath: String,
+    ): List<SkillImportLimits.GitHubEntry>? {
+        val apiUrl = "https://api.github.com/repos/$owner/$repo/contents/$dirPath?ref=$branch"
+        val json = downloadText(apiUrl, SkillImportLimits.MAX_ENTRY_BYTES) ?: return null
+        val array = JSONArray(json)
+        return (0 until array.length()).map { i ->
+            val item = array.getJSONObject(i)
+            SkillImportLimits.GitHubEntry(
+                path = item.getString("path"),
+                type = item.getString("type"),
+                downloadUrl = item.optString("download_url"),
+            )
         }
-        return true
     }
 
     private data class GitHubRepoInfo(
@@ -309,14 +311,20 @@ class SkillsVM(
         return GitHubRepoInfo(owner, repo, branch, subPath)
     }
 
-    private fun downloadText(url: String): String? {
+    private fun downloadText(url: String, maxBytes: Long = SkillImportLimits.MAX_ENTRY_BYTES): String? {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = 10_000
         connection.readTimeout = 30_000
         connection.setRequestProperty("Accept", "application/vnd.github+json")
         return try {
-            if (connection.responseCode == 200) connection.inputStream.bufferedReader().readText()
-            else null
+            if (connection.responseCode == 200) {
+                val bytes = connection.inputStream.use {
+                    SkillImportLimits.readBytesLimited(it, maxBytes, url)
+                }
+                bytes.toString(Charsets.UTF_8)
+            } else {
+                null
+            }
         } finally {
             connection.disconnect()
         }
