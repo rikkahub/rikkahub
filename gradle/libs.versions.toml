@@ -8,6 +8,7 @@ kotlin = "2.3.21"
 kotest = "6.1.11"
 coreKtx = "1.18.0"
 junit = "4.13.2"
+kxml2 = "2.3.0"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 commons-text = "1.15.0"
@@ -79,6 +80,7 @@ jlatexmath = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath", ver
 jlatexmath-font-greek = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-greek", version.ref = "jlatexmath" }
 jlatexmath-font-cyrillic = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-cyrillic", version.ref = "jlatexmath" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
 kotest-property = { group = "io.kotest", name = "kotest-property", version.ref = "kotest" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }

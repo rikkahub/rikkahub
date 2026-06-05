@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.rag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import me.rerere.document.DocumentExtractionResult
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findKnowledgeBase
 import me.rerere.rikkahub.data.rag.chunk.Chunker
@@ -29,6 +30,9 @@ class IngestKnowledgeBaseUseCase(
 
         /** Parsed document had no usable text. */
         data object EmptyDocument : Result
+
+        /** Parser failed; [reason] is for user-facing diagnostics only and is never embedded. */
+        data class ParseFailed(val reason: String) : Result
     }
 
     suspend operator fun invoke(
@@ -45,7 +49,14 @@ class IngestKnowledgeBaseUseCase(
             ?: return@withContext Result.EmbeddingUnavailable
 
         onProgress(0f)
-        val text = DocumentTextExtractor.extract(file, mime)
+        // Only Success text may be chunked/embedded. A ParseFailed reason must never reach the
+        // store — that is the whole point of the typed extraction: an error string can no longer be
+        // mistaken for content (issue #83).
+        val text = when (val extraction = DocumentTextExtractor.extract(file, mime)) {
+            is DocumentExtractionResult.ParseFailed -> return@withContext Result.ParseFailed(extraction.reason)
+            DocumentExtractionResult.Empty -> return@withContext Result.EmptyDocument
+            is DocumentExtractionResult.Success -> extraction.text
+        }
         val pieces = Chunker.chunk(text, chunkSize = kb.chunkSize, overlap = kb.chunkOverlap)
         if (pieces.isEmpty()) return@withContext Result.EmptyDocument
 

@@ -33,6 +33,10 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     testImplementation(libs.junit)
+    // Real org.xmlpull implementation on the unit-test runtime. Without it,
+    // XmlPullParserFactory.newInstance() throws "not mocked" before any XML is read,
+    // so malformed-XML regression tests would pass without exercising the parse path.
+    testImplementation(libs.kxml2)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

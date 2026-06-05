@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.rag
 
+import me.rerere.document.DocumentExtractionResult
 import me.rerere.document.DocxParser
 import me.rerere.document.EpubParser
 import me.rerere.document.PdfParser
@@ -13,11 +14,20 @@ import java.io.File
  * reused by RAG ingestion (separate concern, separate entry point).
  */
 object DocumentTextExtractor {
-    fun extract(file: File, mime: String): String = when (mime) {
-        "application/pdf" -> PdfParser.parserPdf(file)
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> DocxParser.parse(file)
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> PptxParser.parse(file)
-        "application/epub+zip" -> EpubParser.parse(file)
-        else -> file.readText()
+    fun extract(file: File, mime: String): DocumentExtractionResult = when (mime) {
+        "application/pdf" -> PdfParser.parseTyped(file)
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> DocxParser.parseTyped(file)
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> PptxParser.parseTyped(file)
+        "application/epub+zip" -> EpubParser.parseTyped(file)
+        // Unknown MIME: read as plain text. A read failure (unreadable/binary) must surface as
+        // ParseFailed, not be silently swallowed into empty content.
+        else -> runCatching { file.readText() }
+            .fold(
+                onSuccess = { text ->
+                    if (text.isBlank()) DocumentExtractionResult.Empty
+                    else DocumentExtractionResult.Success(text)
+                },
+                onFailure = { e -> DocumentExtractionResult.ParseFailed(e.message ?: "Failed to read file") },
+            )
     }
 }

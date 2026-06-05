@@ -14,7 +14,12 @@ private data class SlideContent(
 )
 
 object PptxParser {
-    fun parse(file: File): String {
+    /**
+     * Typed extraction: parse failures and slide-less files become
+     * [DocumentExtractionResult.ParseFailed] instead of a content-shaped string, so RAG ingestion
+     * never embeds an error message.
+     */
+    fun parseTyped(file: File): DocumentExtractionResult {
         return try {
             ZipFile(file).use { zipFile ->
                 val slides = mutableListOf<SlideContent>()
@@ -27,7 +32,7 @@ object PptxParser {
                     }
 
                 if (slideEntries.isEmpty()) {
-                    return "No slides found in PPTX file"
+                    return DocumentExtractionResult.ParseFailed("No slides found in PPTX file")
                 }
 
                 // Parse each slide
@@ -49,11 +54,19 @@ object PptxParser {
                 }
 
                 // Format output
-                formatOutput(slides)
+                val text = formatOutput(slides)
+                if (text.isBlank()) DocumentExtractionResult.Empty
+                else DocumentExtractionResult.Success(text)
             }
         } catch (e: Exception) {
-            "Error parsing PPTX file: ${e.message}"
+            DocumentExtractionResult.ParseFailed(e.message ?: "Error parsing PPTX file")
         }
+    }
+
+    fun parse(file: File): String = when (val result = parseTyped(file)) {
+        is DocumentExtractionResult.Success -> result.text
+        DocumentExtractionResult.Empty -> ""
+        is DocumentExtractionResult.ParseFailed -> "Error parsing PPTX file: ${result.reason}"
     }
 
     private fun formatOutput(slides: List<SlideContent>): String {
@@ -74,31 +87,30 @@ object PptxParser {
         return result.toString().trim()
     }
 
+    // Parse failures propagate to parseTyped's outer catch so the whole extraction becomes
+    // ParseFailed; swallowing here and returning an error string would let RAG embed it as content
+    // (issue #83).
     private fun parseSlideXml(inputStream: InputStream): String {
-        return try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val parser = factory.newPullParser()
-            parser.setInput(inputStream, "UTF-8")
+        val factory = XmlPullParserFactory.newInstance()
+        factory.isNamespaceAware = true
+        val parser = factory.newPullParser()
+        parser.setInput(inputStream, "UTF-8")
 
-            val result = StringBuilder()
+        val result = StringBuilder()
 
-            while (parser.eventType != XmlPullParser.END_DOCUMENT) {
-                when (parser.eventType) {
-                    XmlPullParser.START_TAG -> {
-                        when (parser.name) {
-                            "sp" -> processShape(parser, result)  // Text box/shape
-                            "graphicFrame" -> processGraphicFrame(parser, result)  // Table
-                        }
+        while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "sp" -> processShape(parser, result)  // Text box/shape
+                        "graphicFrame" -> processGraphicFrame(parser, result)  // Table
                     }
                 }
-                parser.next()
             }
-
-            result.toString()
-        } catch (e: Exception) {
-            "Error parsing slide XML: ${e.message}\n"
+            parser.next()
         }
+
+        return result.toString()
     }
 
     private fun processShape(parser: XmlPullParser, result: StringBuilder) {
@@ -368,37 +380,35 @@ object PptxParser {
         return result.toString().trim()
     }
 
+    // Like parseSlideXml, a malformed notes XML propagates rather than being swallowed into "" —
+    // silently dropping notes hides corruption; the outer catch turns it into ParseFailed.
     private fun parseNotesXml(inputStream: InputStream): String {
-        return try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val parser = factory.newPullParser()
-            parser.setInput(inputStream, "UTF-8")
+        val factory = XmlPullParserFactory.newInstance()
+        factory.isNamespaceAware = true
+        val parser = factory.newPullParser()
+        parser.setInput(inputStream, "UTF-8")
 
-            val result = StringBuilder()
-            var inNotesShape = false
+        val result = StringBuilder()
+        var inNotesShape = false
 
-            while (parser.eventType != XmlPullParser.END_DOCUMENT) {
-                when (parser.eventType) {
-                    XmlPullParser.START_TAG -> {
-                        when (parser.name) {
-                            "sp" -> {
-                                // Check if this is a notes text shape (not the slide preview)
-                                inNotesShape = isNotesTextShape(parser)
-                                if (inNotesShape) {
-                                    extractShapeText(parser, result)
-                                }
+        while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "sp" -> {
+                            // Check if this is a notes text shape (not the slide preview)
+                            inNotesShape = isNotesTextShape(parser)
+                            if (inNotesShape) {
+                                extractShapeText(parser, result)
                             }
                         }
                     }
                 }
-                parser.next()
             }
-
-            result.toString().trim()
-        } catch (e: Exception) {
-            ""
+            parser.next()
         }
+
+        return result.toString().trim()
     }
 
     private fun isNotesTextShape(parser: XmlPullParser): Boolean {

@@ -18,7 +18,12 @@ private data class ParagraphProperties(
 )
 
 object DocxParser {
-    fun parse(file: File): String {
+    /**
+     * Typed extraction: a parse failure is reported as [DocumentExtractionResult.ParseFailed], never
+     * as a content-shaped success string. This is the entry point RAG ingestion must use so error
+     * text can never be embedded.
+     */
+    fun parseTyped(file: File): DocumentExtractionResult {
         return try {
             file.inputStream().use { fileInputStream ->
                 ZipInputStream(fileInputStream).use { zipStream ->
@@ -29,15 +34,21 @@ object DocxParser {
                         }
                         entry = zipStream.nextEntry
                     }
-                    "Unable to find document content in DOCX file"
+                    DocumentExtractionResult.ParseFailed("Unable to find document content in DOCX file")
                 }
             }
         } catch (e: Exception) {
-            "Error parsing DOCX file: ${e.message}"
+            DocumentExtractionResult.ParseFailed(e.message ?: "Error parsing DOCX file")
         }
     }
 
-    private fun parseDocumentXml(inputStream: InputStream): String {
+    fun parse(file: File): String = when (val result = parseTyped(file)) {
+        is DocumentExtractionResult.Success -> result.text
+        DocumentExtractionResult.Empty -> ""
+        is DocumentExtractionResult.ParseFailed -> "Error parsing DOCX file: ${result.reason}"
+    }
+
+    private fun parseDocumentXml(inputStream: InputStream): DocumentExtractionResult {
         return try {
             val factory = XmlPullParserFactory.newInstance()
             factory.isNamespaceAware = true
@@ -63,9 +74,11 @@ object DocxParser {
                 parser.next()
             }
 
-            result.toString().trim()
+            val text = result.toString().trim()
+            if (text.isBlank()) DocumentExtractionResult.Empty
+            else DocumentExtractionResult.Success(text)
         } catch (e: Exception) {
-            "Error parsing document XML: ${e.message}"
+            DocumentExtractionResult.ParseFailed(e.message ?: "Error parsing document XML")
         }
     }
 
