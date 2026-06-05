@@ -6,6 +6,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toolCallExecutionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -50,6 +51,28 @@ class IncompleteToolCallExecutionTest {
         assertFalse(text.contains("Unexpected EOF"))
         assertFalse(text.contains("Invalid tool arguments JSON"))
         assertEquals(true, text.contains("re-issue"))
+    }
+
+    @Test
+    fun `tool that succeeds with empty output is recorded as executed with an honest success placeholder`() {
+        // Regression for the data-loss trigger: a tool whose execute() returns
+        // emptyList() left output empty, so isExecuted stayed false. The agentic
+        // loop (line-184 filter) then re-ran it and sanitizeForUpload dropped the
+        // branch as an orphan tool_use, discarding the assistant's text/reasoning.
+        val result = emptyList<UIMessagePart>()
+        val recorded = tool(input = "{}", finished = true)
+            .copy(output = result.ifEmpty { emptyToolResultPlaceholder(json) })
+
+        // BEFORE the fix: tool.copy(output = emptyList()).isExecuted is false and
+        // emptyToolResultPlaceholder did not exist.
+        assertTrue("a successfully-executed empty-output tool must be executed", recorded.isExecuted)
+
+        val text = (recorded.output.single() as UIMessagePart.Text).text
+        // Honest success marker — not blank, not claiming failure.
+        assertFalse("placeholder must not be blank", text.isBlank())
+        assertTrue("placeholder must mark success", text.contains("ok"))
+        assertFalse("placeholder must not claim an error", text.contains("error"))
+        assertFalse("placeholder must not claim cancellation", text.contains("cancelled"))
     }
 
     @Test

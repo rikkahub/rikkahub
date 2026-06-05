@@ -293,7 +293,13 @@ class GenerationHandler(
                             }
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
                             val result = toolDef.execute(args)
-                            executedTools += tool.copy(output = result)
+                            // A tool that legitimately succeeds with no output still
+                            // MUST be recorded as executed (non-empty output), otherwise
+                            // isExecuted stays false: the agentic loop re-runs it
+                            // (line 184 filter) and sanitizeForUpload misclassifies it as
+                            // an orphan tool_use and drops the branch (data loss).
+                            val output = result.ifEmpty { emptyToolResultPlaceholder(json) }
+                            executedTools += tool.copy(output = output)
                         }.onFailure {
                             it.printStackTrace()
                             executedTools += tool.copy(
@@ -577,6 +583,23 @@ private val ToolArgsJson = Json {
 
 internal fun parseToolArguments(input: String): JsonElement =
     ToolArgsJson.parseToJsonElement(input.ifBlank { "{}" })
+
+/**
+ * Honest success marker for a tool that executed successfully but returned no
+ * output. Non-empty so [UIMessagePart.Tool.isExecuted] is true (the tool is not
+ * re-run and not misclassified as an orphan tool_use), and it does NOT claim
+ * failure — the tool succeeded, it simply had nothing to return.
+ */
+internal fun emptyToolResultPlaceholder(json: Json): List<UIMessagePart> = listOf(
+    UIMessagePart.Text(
+        json.encodeToString(
+            buildJsonObject {
+                put("status", JsonPrimitive("ok"))
+                put("result", JsonPrimitive(""))
+            }
+        )
+    )
+)
 
 internal fun truncatedToolResult(json: Json): List<UIMessagePart> = listOf(
     UIMessagePart.Text(

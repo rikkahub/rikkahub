@@ -97,10 +97,11 @@ class ConversationSanitizeTest {
         assertTrue("the 'again' user turn must not be lost", sentText.contains("again"))
     }
 
-    // case (b): an orphaned/unexecuted tool with no resumable approval must not be
-    // uploaded as an unbalanced tool_use.
+    // case (b): an orphaned/unexecuted tool with no resumable approval must be
+    // balanced in place (synthetic tool_result), never uploaded as an unbalanced
+    // tool_use. A tool-only node is retained (and balanced), not dropped.
     @Test
-    fun `orphaned unexecuted tool node is dropped`() {
+    fun `orphaned unexecuted tool node is retained and balanced`() {
         val orphanTool = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -120,9 +121,86 @@ class ConversationSanitizeTest {
         val sanitized = nodes.sanitizeForUpload()
         val sent = sanitized.map { it.currentMessage }
 
+        // The real invariant: no unbalanced orphan tool survives.
         assertTrue(
             "no unexecuted, non-resumable tool may be uploaded",
-            sent.flatMap { it.getTools() }.none { !it.isExecuted && !it.approvalState.canResumeToolExecution() }
+            sent.flatMap { it.getTools() }
+                .none { !it.isExecuted && !it.approvalState.canResumeToolExecution() }
+        )
+    }
+
+    // FIX B regression: an interrupted assistant turn that carries BOTH text and an
+    // orphan empty-output tool must keep its text (the drop discarded it) and the
+    // tool must be balanced.
+    @Test
+    fun `orphan empty-output tool preserves assistant text and balances the tool`() {
+        val partial = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Text("here is my almost-complete answer"),
+                UIMessagePart.Tool(
+                    toolCallId = "call_1",
+                    toolName = "search",
+                    input = "{}",
+                    output = emptyList()
+                ),
+            )
+        )
+        val nodes = listOf(
+            userNode("do something"),
+            partial.toMessageNode(),
+        )
+
+        val sanitized = nodes.sanitizeForUpload()
+        val sent = sanitized.map { it.currentMessage }
+
+        // BEFORE the fix: the whole branch was dropped -> the node disappeared and
+        // the assistant text was lost.
+        assertEquals("the assistant node must be retained", 2, sanitized.size)
+        val sentText = sent.joinToString("\n") { it.toText() }
+        assertTrue(
+            "the assistant's text must not be lost",
+            sentText.contains("here is my almost-complete answer")
+        )
+        assertTrue(
+            "the orphan tool must be balanced (no unbalanced tool_use survives)",
+            sent.flatMap { it.getTools() }
+                .none { !it.isExecuted && !it.approvalState.canResumeToolExecution() }
+        )
+    }
+
+    // Approval invariant: a legitimately Pending tool (awaiting user approval) must
+    // be kept untouched — output stays empty, state stays Pending — so the approval
+    // / resume UI path is unchanged.
+    @Test
+    fun `pending-approval tool with text is kept and not repaired`() {
+        val pending = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Text("let me check that for you"),
+                UIMessagePart.Tool(
+                    toolCallId = "call_1",
+                    toolName = "search",
+                    input = "{}",
+                    output = emptyList(),
+                    approvalState = me.rerere.ai.ui.ToolApprovalState.Pending
+                ),
+            )
+        )
+        val nodes = listOf(
+            userNode("do something"),
+            pending.toMessageNode(),
+        )
+
+        val sanitized = nodes.sanitizeForUpload()
+        val tools = sanitized.flatMap { it.currentMessage.getTools() }
+
+        assertEquals("the pending tool must be retained", 1, tools.size)
+        val tool = tools.single()
+        assertTrue("a pending tool must stay unexecuted", tool.output.isEmpty())
+        assertTrue(
+            "a pending tool must keep its Pending state",
+            tool.approvalState is me.rerere.ai.ui.ToolApprovalState.Pending
         )
     }
 

@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishReasoning
@@ -161,10 +162,10 @@ fun List<MessageNode>.sanitizeForUpload(): List<MessageNode> {
  * - finish any unterminated reasoning, and drop a reasoning part that was left
  *   unterminated by an interrupted stream AND carries no signature (it would be
  *   uploaded as an unsigned thinking block, which Anthropic rejects);
- * - if the selected message still has an unexecuted, non-resumable tool
- *   (orphaned tool_use), drop that branch (preferring an earlier valid
- *   sibling branch) rather than upload an unbalanced tool_use;
- * - drop the whole node if no uploadable branch remains.
+ * - REPAIR (not drop) any genuinely orphaned tool_use in place by giving it a
+ *   synthetic tool_result, so the tool_use is balanced while ALL text/reasoning
+ *   parts in the same message survive (dropping the branch discarded them);
+ * - drop the whole node only if no uploadable content remains.
  */
 private fun MessageNode.sanitizeNode(): MessageNode? {
     if (messages.isEmpty()) return null
@@ -172,27 +173,56 @@ private fun MessageNode.sanitizeNode(): MessageNode? {
     val node = if (selectIndex in messages.indices) this else copy(selectIndex = 0)
 
     val original = node.messages[node.selectIndex]
-    val selected = original.finishReasoning().dropUnterminatedUnsignedReasoning(original)
+    val selected = original.finishReasoning()
+        .dropUnterminatedUnsignedReasoning(original)
+        .repairOrphanTools()
 
     // A resumable (approved/denied/answered) but not-yet-executed tool is
-    // intentionally pending and must be kept for the resume path.
+    // intentionally pending and must be kept for the resume path. A legitimately
+    // Pending tool is also kept untouched (repairOrphanTools skips it).
     val hasResumableTool = selected.getTools()
         .any { !it.isExecuted && it.approvalState.canResumeToolExecution() }
-    val hasOrphanTool = selected.getTools()
-        .any { !it.isExecuted && !it.approvalState.canResumeToolExecution() }
-
-    if (hasOrphanTool && !hasResumableTool) {
-        // Drop the offending branch; fall back to a sibling if one exists.
-        val remaining = node.messages.filter { it.id != original.id }
-        if (remaining.isEmpty()) return null
-        return node.copy(messages = remaining, selectIndex = (node.selectIndex - 1).coerceAtLeast(0))
-    }
 
     if (!selected.isValidToUpload() && !hasResumableTool) return null
 
     if (selected == original && node === this) return this
     val newMessages = node.messages.toMutableList().also { it[node.selectIndex] = selected }
     return node.copy(messages = newMessages)
+}
+
+/**
+ * Balance a genuinely-orphaned tool_use (unexecuted, NOT resumable, and NOT
+ * legitimately Pending-awaiting-approval) by attaching a synthetic tool_result.
+ *
+ * The orphan arises when an assistant turn is interrupted after emitting a
+ * tool_use but before the tool ran. Previously sanitizeNode dropped the whole
+ * branch, which also discarded the assistant's text/reasoning in the same
+ * message (data loss). Repairing in place keeps that content and makes the
+ * tool_use balanced (mirrors ChatService.cancelToolByUser's cancelled marker,
+ * but does NOT flip approvalState — Denied is resumable and would change the
+ * persisted resume semantics).
+ *
+ * A Pending tool is left untouched so the approval/resume UI path is unchanged.
+ */
+private fun UIMessage.repairOrphanTools(): UIMessage {
+    val newParts = parts.map { part ->
+        if (part is UIMessagePart.Tool &&
+            !part.isExecuted &&
+            !part.approvalState.canResumeToolExecution() &&
+            part.approvalState !is ToolApprovalState.Pending
+        ) {
+            part.copy(
+                output = listOf(
+                    UIMessagePart.Text(
+                        """{"status":"cancelled","error":"Tool execution did not complete."}"""
+                    )
+                )
+            )
+        } else {
+            part
+        }
+    }
+    return if (newParts == parts) this else copy(parts = newParts)
 }
 
 /**
