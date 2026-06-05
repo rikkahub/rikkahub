@@ -9,10 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 
 @Composable
 fun rememberSharedPreferenceString(
@@ -103,7 +102,7 @@ fun SharedPreferences.getStringFlowForKey(keyForString: String, defaultValue: St
             ) // if you want to emit an initial pre-existing value
         }
         awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
-    }.buffer(Channel.UNLIMITED) // so trySend never fails
+    }.conflate() // a preference observer only needs the latest value; conflate keeps trySend always-succeeding while memory stays O(1)
 
 fun SharedPreferences.getBooleanFlowForKey(keyForBoolean: String, defaultValue: Boolean = false) =
     callbackFlow {
@@ -122,4 +121,4 @@ fun SharedPreferences.getBooleanFlowForKey(keyForBoolean: String, defaultValue: 
             ) // if you want to emit an initial pre-existing value
         }
         awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
-    }.buffer(Channel.UNLIMITED) // so trySend never fails
+    }.conflate() // a preference observer only needs the latest value; conflate keeps trySend always-succeeding while memory stays O(1)

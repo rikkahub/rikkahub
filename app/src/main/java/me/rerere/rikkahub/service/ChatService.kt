@@ -117,6 +117,10 @@ private const val AUTO_COMPACT_KEEP_RECENT_MESSAGES = 32
 // 自动压缩的目标摘要 token 数：与手动压缩对话框提供的中档默认一致。
 private const val AUTO_COMPACT_TARGET_TOKENS = 2000
 
+// 聊天错误列表上限：反复的 provider 失败（如断流重试、鉴权失败循环）会不断调用 addError，若无上限
+// _errors 会无界增长并常驻内存。保留最近 50 条足以让用户看到当前问题。
+internal const val MAX_CHAT_ERRORS = 50
+
 /**
  * 纯函数：给定上次续期时刻与当前时刻，判断是否到达续期间隔。抽出以便 JVM 单测（无 Android 依赖）。
  * [lastRenewAt] 为 0 表示尚未续期过——首个 chunk 即续期，使长任务的计时从首帧开始。
@@ -152,6 +156,16 @@ internal fun shouldAutoCompact(
     if (messageCount <= keepRecentMessages) return false
     return true
 }
+
+/**
+ * 纯函数：把 [new] 追加到错误列表并裁掉最旧的，保证列表至多 [max] 条。抽出以便 JVM 单测（无 Android
+ * 依赖）。用 takeLast：新错误总被保留，溢出时丢弃的是最旧的那条（有界 FIFO，最近优先）。
+ */
+internal fun appendChatError(
+    current: List<ChatError>,
+    new: ChatError,
+    max: Int = MAX_CHAT_ERRORS,
+): List<ChatError> = (current + new).takeLast(max)
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -224,7 +238,7 @@ class ChatService(
     ) {
         if (error is CancellationException) return
         _errors.update {
-            it + ChatError(title = title, error = error, conversationId = conversationId, solution = solution)
+            appendChatError(it, ChatError(title = title, error = error, conversationId = conversationId, solution = solution))
         }
     }
 
