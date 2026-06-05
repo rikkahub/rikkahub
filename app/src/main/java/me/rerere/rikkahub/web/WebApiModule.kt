@@ -10,6 +10,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.application.log
 import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.jwt
@@ -45,6 +46,19 @@ private const val WEB_ACCESS_TOKEN_QUERY_KEY = "access_token"
 private const val WEB_AUTH_REALM = "rikkahub-web-api"
 
 /**
+ * Map a thrown exception to a client-safe error response.
+ *
+ * [ApiException] subclasses carry a deliberately client-facing message and status, so they pass
+ * through unchanged. Any other exception is mapped to a generic 500 to avoid leaking implementation
+ * details (file paths, provider response snippets, config values) to web clients, which matters when
+ * the server is bound to a LAN interface. The real cause is logged by the StatusPages handler.
+ */
+internal fun mapThrowableToErrorResponse(cause: Throwable): Pair<HttpStatusCode, ErrorResponse> = when (cause) {
+    is ApiException -> cause.status to ErrorResponse(cause.message, cause.status.value)
+    else -> HttpStatusCode.InternalServerError to ErrorResponse("Internal server error", 500)
+}
+
+/**
  * Configure Web API for the Ktor application.
  * This should be called from app module when starting the web server.
  *
@@ -73,13 +87,13 @@ fun Application.configureWebApi(
             call.respond(status, ErrorResponse("Not Found", status.value))
         }
         exception<ApiException> { call, cause ->
-            call.respond(cause.status, ErrorResponse(cause.message, cause.status.value))
+            val (status, body) = mapThrowableToErrorResponse(cause)
+            call.respond(status, body)
         }
         exception<Throwable> { call, cause ->
-            call.respond(
-                HttpStatusCode.InternalServerError,
-                ErrorResponse(cause.message ?: "Internal server error", 500)
-            )
+            call.application.log.error("Unhandled web API error", cause)
+            val (status, body) = mapThrowableToErrorResponse(cause)
+            call.respond(status, body)
         }
     }
 
