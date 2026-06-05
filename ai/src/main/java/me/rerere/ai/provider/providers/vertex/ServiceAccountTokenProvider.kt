@@ -5,6 +5,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -86,14 +89,8 @@ class ServiceAccountTokenProvider(
         val now = Instant.now().epochSecond
         val exp = now + 3600 // 最长 1h
 
-        val headerJson = """{"alg":"RS256","typ":"JWT"}"""
-        val claimJson = """{
-          "iss":"$serviceAccountEmail",
-          "scope":"${scopes.joinToString(" ")}",
-          "aud":"https://oauth2.googleapis.com/token",
-          "iat":$now,
-          "exp":$exp
-        }""".trimIndent()
+        val headerJson = buildJwtHeader()
+        val claimJson = buildJwtClaim(serviceAccountEmail, scopes, now, exp)
 
         val headerB64 = base64UrlNoPad(headerJson.toByteArray(Charsets.UTF_8))
         val claimB64 = base64UrlNoPad(claimJson.toByteArray(Charsets.UTF_8))
@@ -141,6 +138,45 @@ class ServiceAccountTokenProvider(
         @SerialName("expires_in")
         val expiresIn: Long? = null
     )
+
+    /**
+     * Build the JWT header JSON. No untrusted input, but serialized via
+     * kotlinx.serialization for consistency with [buildJwtClaim].
+     */
+    internal fun buildJwtHeader(): String =
+        json.encodeToString(
+            JsonObject.serializer(),
+            buildJsonObject {
+                put("alg", "RS256")
+                put("typ", "JWT")
+            }
+        )
+
+    /**
+     * Build the JWT claim set JSON. [serviceAccountEmail] and [scopes] are
+     * attacker-influenceable (they come from user-pasted service-account
+     * JSON), so they MUST be escaped via kotlinx.serialization rather than
+     * string-interpolated — otherwise a value containing a double-quote could
+     * inject or override claims (e.g. `scope`) or produce malformed JSON.
+     *
+     * Pure and side-effect free (iat/exp passed in) so it is unit-testable.
+     */
+    internal fun buildJwtClaim(
+        serviceAccountEmail: String,
+        scopes: List<String>,
+        iat: Long,
+        exp: Long
+    ): String =
+        json.encodeToString(
+            JsonObject.serializer(),
+            buildJsonObject {
+                put("iss", serviceAccountEmail)
+                put("scope", scopes.joinToString(" "))
+                put("aud", "https://oauth2.googleapis.com/token")
+                put("iat", iat)
+                put("exp", exp)
+            }
+        )
 
     private fun base64UrlNoPad(bytes: ByteArray): String =
         Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
