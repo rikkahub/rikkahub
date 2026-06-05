@@ -48,6 +48,7 @@ import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.retryAfterMillisFromHeaders
+import me.rerere.ai.util.rethrowIfMediaTooLarge
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
@@ -466,7 +467,7 @@ class ResponseAPI(
 
                             is UIMessagePart.Image -> {
                                 add(buildJsonObject {
-                                    part.encodeBase64().onSuccess { encodedImage ->
+                                    part.encodeBase64().rethrowIfMediaTooLarge().onSuccess { encodedImage ->
                                         put("type", "input_image")
                                         put("image_url", encodedImage.base64)
                                     }.onFailure {

@@ -54,6 +54,7 @@ import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.removeElements
+import me.rerere.ai.util.rethrowIfMediaTooLarge
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
@@ -694,7 +695,7 @@ class GoogleProvider(
         }
 
         is UIMessagePart.Image -> {
-            encodeBase64(false).getOrNull()?.let { encoded ->
+            encodeBase64(false).rethrowIfMediaTooLarge().getOrNull()?.let { encoded ->
                 buildJsonObject {
                     put("inlineData", buildJsonObject {
                         put("mimeType", encoded.mimeType)
@@ -708,7 +709,7 @@ class GoogleProvider(
         }
 
         is UIMessagePart.Video -> {
-            encodeBase64(false).getOrNull()?.let { base64Data ->
+            encodeBase64(false).rethrowIfMediaTooLarge().getOrNull()?.let { base64Data ->
                 buildJsonObject {
                     put("inlineData", buildJsonObject {
                         put("mimeType", "video/mp4")
@@ -719,7 +720,7 @@ class GoogleProvider(
         }
 
         is UIMessagePart.Audio -> {
-            encodeBase64(false).getOrNull()?.let { base64Data ->
+            encodeBase64(false).rethrowIfMediaTooLarge().getOrNull()?.let { base64Data ->
                 buildJsonObject {
                     put("inlineData", buildJsonObject {
                         put("mimeType", "audio/mp3")

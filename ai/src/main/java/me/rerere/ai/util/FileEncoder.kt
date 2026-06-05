@@ -89,6 +89,9 @@ fun UIMessagePart.Video.encodeBase64(withPrefix: Boolean = true): Result<String>
             if (!file.exists()) {
                 throw IllegalArgumentException("File does not exist: ${this.url}")
             }
+            MediaEncodeLimits.checkMediaSizeWithinLimit(
+                file.length(), MediaEncodeLimits.MAX_VIDEO_BYTES, "video"
+            )
             val encoded = file.encodeToBase64Streaming()
             if (withPrefix) "data:video/mp4;base64,$encoded" else encoded
         }
@@ -106,6 +109,9 @@ fun UIMessagePart.Audio.encodeBase64(withPrefix: Boolean = true): Result<String>
             if (!file.exists()) {
                 throw IllegalArgumentException("File does not exist: ${this.url}")
             }
+            MediaEncodeLimits.checkMediaSizeWithinLimit(
+                file.length(), MediaEncodeLimits.MAX_AUDIO_BYTES, "audio"
+            )
             val encoded = file.encodeToBase64Streaming()
             if (withPrefix) "data:audio/mp3;base64,$encoded" else encoded
         }
@@ -120,8 +126,11 @@ private fun File.compressAndEncode(
     maxPixels: Long = 16_000_000L,
     quality: Int = 85
 ): Pair<String, String> {
-    // GIF 保持原样（可能是动图）
+    // GIF 保持原样（可能是动图），不经过尺寸/像素压缩，因此需要显式的字节上限
     if (mimeType == "image/gif") {
+        MediaEncodeLimits.checkMediaSizeWithinLimit(
+            length(), MediaEncodeLimits.MAX_IMAGE_BYTES, "image"
+        )
         return Pair(encodeToBase64Streaming(), mimeType)
     }
 

@@ -46,6 +46,7 @@ import me.rerere.ai.util.STREAM_MAX_RETRIES
 import me.rerere.ai.util.StreamRetryController
 import me.rerere.ai.util.bufferStreamChunks
 import me.rerere.ai.util.configureReferHeaders
+import me.rerere.ai.util.MediaTooLargeException
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.isRetryableStreamFailure
 import me.rerere.ai.util.jitteredBackoffMillis
@@ -693,6 +694,9 @@ class ClaudeProvider(
                     put("data", encoded.base64)
                 })
             }.onFailure {
+                // Oversized media is a user-facing rejection, not a benign encode failure:
+                // surface it instead of degrading to empty text.
+                if (it is MediaTooLargeException) throw it
                 Log.w(TAG, "encode image failed: $url", it)
                 put("type", "text")
                 put("text", "")

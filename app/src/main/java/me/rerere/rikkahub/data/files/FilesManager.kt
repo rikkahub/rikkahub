@@ -179,7 +179,7 @@ class FilesManager(
                     when (part) {
                         is UIMessagePart.Image -> {
                             if (part.url.startsWith("data:image")) {
-                                val sourceByteArray = Base64.decode(part.url.substringAfter("base64,").toByteArray())
+                                val sourceByteArray = Base64.decode(part.url.substringAfter("base64,"))
                                 val bitmap = BitmapFactory.decodeByteArray(sourceByteArray, 0, sourceByteArray.size)
                                 val byteArray = FileUtils.compressBitmapToPng(bitmap)
                                 val urls = createChatFilesByByteArrays(listOf(byteArray))
@@ -267,7 +267,9 @@ class FilesManager(
             base64Data
         }
 
-        val byteArray = Base64.decode(data.toByteArray())
+        // Decode straight from the CharSequence; data.toByteArray() would allocate a second
+        // full copy of the encoded payload purely to hit the ByteArray overload.
+        val byteArray = Base64.decode(data)
         val file = File(filePath)
         file.parentFile?.mkdirs()
         file.writeBytes(byteArray)
@@ -287,7 +289,7 @@ class FilesManager(
         val activity = requireNotNull(activityContext.getActivity()) { "Activity not found" }
         when {
             image.startsWith("data:image") -> {
-                val byteArray = Base64.decode(image.substringAfter("base64,").toByteArray())
+                val byteArray = Base64.decode(image.substringAfter("base64,"))
                 val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
                 activityContext.exportImage(activity, bitmap)
             }
