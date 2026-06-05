@@ -128,7 +128,7 @@ fun Route.filesRoutes(
             val file = File(filesDir, relativePath)
 
             // Ensure the file is within the app's files directory
-            if (!file.canonicalPath.startsWith(filesDir.canonicalPath)) {
+            if (!isPathWithin(filesDir, file)) {
                 throw BadRequestException("Invalid file path")
             }
 
