@@ -37,7 +37,7 @@ fun isJsonExprValid(input: String): Boolean = parseExpression(input).success
  * - 带转义的字符串字面量：`"text"`，支持`\n`、`\r`、`\t`、`\\`、`\"`
  * - 数字：整数和小数（例如，`1`、`3.14`）
  * - 一元运算符：`+expr`、`-expr`
- * - 算术运算符：`+`、`-`、`*`、`/`（`x`作为`*`的别名）
+ * - 算术运算符：`+`、`-`、`*`、`/`
  * - 字符串连接：`++`（操作数被强制转换为字符串）
  *
  * 解析和强制转换规则：
@@ -95,7 +95,6 @@ private class Lexer(private val src: String) {
             '-' -> { i++; return Token(TokenType.MINUS, "-", start) }
             '*' -> { i++; return Token(TokenType.STAR, "*", start) }
             '/' -> { i++; return Token(TokenType.SLASH, "/", start) }
-            'x', 'X' -> { i++; return Token(TokenType.STAR, c.toString(), start) }
             '"' -> return stringToken()
         }
 
@@ -264,7 +263,8 @@ private class Parser(private val lexer: Lexer) {
                 }
                 match(TokenType.LBRACKET) -> {
                     val numTok = expect(TokenType.NUMBER)
-                    val idxVal = numTok.lexeme.toDouble().toInt()
+                    val idxVal = numTok.lexeme.toIntOrNull()
+                        ?: throw error("Array index must be a non-negative integer, got '${numTok.lexeme}'")
                     parts.add(Index(idxVal))
                     expect(TokenType.RBRACKET)
                 }
@@ -353,7 +353,7 @@ private class Evaluator(private val root: JsonObject) {
         return when (elem) {
             is JsonPrimitive -> {
                 if (elem.isString) Value.Str(elem.content)
-                else elem.doubleOrNull()?.let { Value.Num("%.2f".format(it).toDouble()) } ?: Value.Str(elem.content)
+                else elem.doubleOrNull()?.let { Value.Num(it) } ?: Value.Str(elem.content)
             }
             is JsonObject, is JsonArray -> Value.Str(elem.toString())
             else -> Value.Str(elem.toString())
