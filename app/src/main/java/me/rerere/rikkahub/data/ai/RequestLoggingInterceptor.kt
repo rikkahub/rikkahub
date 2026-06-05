@@ -6,7 +6,6 @@ import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
-import okio.Buffer
 
 const val REDACTED = "<redacted>"
 
@@ -30,6 +29,27 @@ fun redactHeaders(headers: Headers): Map<String, String> {
     }
 }
 
+// AC #1 (issue #97): in-app request logs must NOT store raw AI prompts or document
+// contents by default. This OkHttp client carries only AI-provider traffic, so every
+// request body is an AI request body — user prompts, document text, base64 image/audio
+// payloads, and provider-specific secret fields. Storing the body (even truncated, even
+// with known secret fields stripped) still persists raw prompt/document text into the
+// in-memory log buffer that LogPage renders and lets the user copy out. Truncation is not
+// equivalent to "do not store raw prompts", and field-name redaction cannot cover secrets
+// nested in objects/arrays/numbers. So we store safe metadata only — never body content.
+//
+// Per-field redaction + truncation is intentionally not offered behind an opt-in here:
+// that is a separate "verbose logging" product decision outside issue #97's scope, and
+// keeping a single safe default avoids a fail-open path on unrecognized self-hosted hosts.
+// Called only for a present request body. byteCount is the body's known content length, or
+// null when the length is unknown (e.g. streamed) — we report "unknown" rather than read the
+// body to measure it, because reading raw AI/document content back is exactly what AC #1 bans.
+fun bodyMetadataForLog(byteCount: Long?, contentType: String?): String {
+    val size = byteCount?.let { "$it bytes" } ?: "unknown bytes"
+    val type = contentType?.takeIf { it.isNotBlank() } ?: "unknown"
+    return "<redacted request body: $size, content-type=$type>"
+}
+
 fun redactUrlSecrets(url: String): String {
     val httpUrl = url.toHttpUrlOrNull() ?: return url
     if (httpUrl.queryParameterNames.none { it.lowercase() in SECRET_QUERY_PARAMS }) return url
@@ -50,9 +70,12 @@ class RequestLoggingInterceptor : Interceptor {
         val requestHeaders = redactHeaders(request.headers)
         val requestUrl = redactUrlSecrets(request.url.toString())
         val requestBody = request.body?.let { body ->
-            val buffer = Buffer()
-            body.writeTo(buffer)
-            buffer.readUtf8()
+            // contentLength() can be -1 (unknown, e.g. streamed). NEVER call body.writeTo()
+            // here: a one-shot source would be exhausted before chain.proceed() sends it,
+            // and writing the body into a buffer reintroduces raw prompt/document retention
+            // that AC #1 forbids (see bodyMetadataForLog doc above). Report "unknown" size.
+            val byteCount = body.contentLength().takeIf { it >= 0 }
+            bodyMetadataForLog(byteCount, body.contentType()?.toString())
         }
 
         val response: Response
