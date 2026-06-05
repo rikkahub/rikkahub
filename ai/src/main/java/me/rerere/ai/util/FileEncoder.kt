@@ -224,45 +224,68 @@ internal fun calculateImageInSampleSize(
     return inSampleSize
 }
 
+// ISO-BMFF (HEIF/HEIC) major brands. HEVC-coded brands map to image/heic;
+// the generic HEIF brands map to image/heif. Strict allowlist so non-image
+// ftyp containers (MP4/MOV: isom/mp42/qt) fall through and are not misread.
+private val HEIC_BRANDS = setOf("heic", "heix", "heim", "heis", "hevc", "hevx")
+private val HEIF_BRANDS = setOf("mif1", "msf1")
+
+/**
+ * Sniff the image MIME type from an already-read header buffer by magic bytes.
+ * Returns null if the header does not match a known image signature.
+ * The caller guarantees [bytes] holds at least 12 readable bytes.
+ */
+internal fun sniffImageMimeType(bytes: ByteArray): String? {
+    if (bytes.size < 12) return null
+
+    // HEIF/HEIC: ISO-BMFF "ftyp" box at offset 4, 4-char major brand at offset 8.
+    if (bytes.copyOfRange(4, 8).toString(Charsets.US_ASCII) == "ftyp") {
+        val brand = bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII)
+        when (brand) {
+            in HEIC_BRANDS -> return "image/heic"
+            in HEIF_BRANDS -> return "image/heif"
+        }
+    }
+
+    // JPEG: 开头为 0xFF 0xD8
+    if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte()) {
+        return "image/jpeg"
+    }
+
+    // PNG: 开头为 89 50 4E 47 0D 0A 1A 0A
+    if (bytes.copyOfRange(0, 8).contentEquals(
+            byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        )
+    ) {
+        return "image/png"
+    }
+
+    // WebP: 开头为 "RIFF" + 4字节长度 + "WEBP"
+    if (bytes.copyOfRange(0, 4).toString(Charsets.US_ASCII) == "RIFF" &&
+        bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII) == "WEBP"
+    ) {
+        return "image/webp"
+    }
+
+    // GIF: 开头为 "GIF89a" 或 "GIF87a"
+    val header = bytes.copyOfRange(0, 6).toString(Charsets.US_ASCII)
+    if (header == "GIF89a" || header == "GIF87a") {
+        return "image/gif"
+    }
+
+    return null
+}
+
 private fun File.guessMimeType(): Result<String> = runCatching {
     inputStream().use { input ->
         val bytes = ByteArray(16)
         val read = input.read(bytes)
         if (read < 12) error("File too short to determine MIME type")
 
-        // 判断 HEIC 格式：包含 "ftypheic"
-        if (bytes.copyOfRange(4, 12).toString(Charsets.US_ASCII) == "ftypheic") {
-            return@runCatching "image/heic"
-        }
-
-        // 判断 JPEG 格式：开头为 0xFF 0xD8
-        if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte()) {
-            return@runCatching "image/jpeg"
-        }
-
-        // 判断 PNG 格式：开头为 89 50 4E 47 0D 0A 1A 0A
-        if (bytes.copyOfRange(0, 8).contentEquals(
-                byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
-            )
-        ) {
-            return@runCatching "image/png"
-        }
-
-        // 判断WebP格式：开头为 "RIFF" + 4字节长度 + "WEBP"
-        if (bytes.copyOfRange(0, 4).toString(Charsets.US_ASCII) == "RIFF" && bytes.copyOfRange(8, 12)
-                .toString(Charsets.US_ASCII) == "WEBP"
-        ) {
-            return@runCatching "image/webp"
-        }
-
-        // 判断 GIF 格式：开头为 "GIF89a" 或 "GIF87a"
-        val header = bytes.copyOfRange(0, 6).toString(Charsets.US_ASCII)
-        if (header == "GIF89a" || header == "GIF87a") {
-            return@runCatching "image/gif"
-        }
-
-        error(
-            "Failed to guess MIME type: $header, ${
+        return@runCatching sniffImageMimeType(bytes) ?: error(
+            "Failed to guess MIME type: ${
+                bytes.copyOfRange(0, 6).toString(Charsets.US_ASCII)
+            }, ${
                 bytes.joinToString(",") {
                     it.toUByte().toString()
                 }
