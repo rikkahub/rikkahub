@@ -47,7 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.HorizontalDivider
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OpenRouterRouting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
@@ -365,6 +367,10 @@ private fun ProviderConfigureOpenAI(
                 }
             )
         }
+        OpenRouterRoutingSection(
+            routing = provider.routing,
+            onChange = { onEdit(provider.copy(routing = it)) },
+        )
     }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -376,6 +382,99 @@ private fun ProviderConfigureOpenAI(
             checked = provider.includeHistoryReasoning,
             onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }
         )
+    }
+}
+
+@Composable
+private fun OpenRouterRoutingSection(
+    routing: OpenRouterRouting,
+    onChange: (OpenRouterRouting) -> Unit,
+) {
+    fun listToText(list: List<String>) = list.joinToString(", ")
+    fun textToList(text: String) = text.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+    Text("OpenRouter routing", style = MaterialTheme.typography.titleSmall)
+
+    // Sort
+    val sortOptions = listOf(null, "price", "throughput", "latency")
+    val sortLabels = listOf("Auto", "Price", "Throughput", "Latency")
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        sortOptions.forEachIndexed { index, option ->
+            SegmentedButton(
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = sortOptions.size),
+                selected = routing.sort == option,
+                onClick = { onChange(routing.copy(sort = option)) },
+                label = { Text(sortLabels[index]) },
+            )
+        }
+    }
+
+    OutlinedTextField(
+        value = listToText(routing.order),
+        onValueChange = { onChange(routing.copy(order = textToList(it))) },
+        label = { Text("Provider order (slugs, comma-separated)") },
+        placeholder = { Text("anthropic, google-vertex") },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = listToText(routing.only),
+        onValueChange = { onChange(routing.copy(only = textToList(it))) },
+        label = { Text("Only these providers") },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = listToText(routing.ignore),
+        onValueChange = { onChange(routing.copy(ignore = textToList(it))) },
+        label = { Text("Ignore these providers") },
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    RoutingToggle("Allow fallbacks beyond the list", routing.allowFallbacks) {
+        onChange(routing.copy(allowFallbacks = it))
+    }
+    RoutingToggle("Require providers to support all parameters", routing.requireParameters) {
+        onChange(routing.copy(requireParameters = it))
+    }
+    RoutingToggle("Block data-collecting providers", routing.dataCollection == "deny") {
+        onChange(routing.copy(dataCollection = if (it) "deny" else null))
+    }
+    RoutingToggle("Zero Data Retention only", routing.zdr) {
+        onChange(routing.copy(zdr = it))
+    }
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = routing.maxPricePrompt?.toString() ?: "",
+            onValueChange = { onChange(routing.copy(maxPricePrompt = it.toDoubleOrNull())) },
+            label = { Text("Max $/1M prompt") },
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedTextField(
+            value = routing.maxPriceCompletion?.toString() ?: "",
+            onValueChange = { onChange(routing.copy(maxPriceCompletion = it.toDoubleOrNull())) },
+            label = { Text("Max $/1M completion") },
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    OutlinedTextField(
+        value = listToText(routing.quantizations),
+        onValueChange = { onChange(routing.copy(quantizations = textToList(it))) },
+        label = { Text("Quantizations (e.g. fp8, fp16)") },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun RoutingToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
