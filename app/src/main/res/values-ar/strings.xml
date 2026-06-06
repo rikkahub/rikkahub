@@ -7,7 +7,7 @@
   <string name="about_page_version">الإصدار</string>
   <string name="about_page_website">الموقع الإلكتروني</string>
   <string name="add">إضافة</string>
-  <string name="app_name">RikkaHub</string>
+  <string name="app_name">RikkaHub Agent</string>
   <string name="assistant_detail_basic_desc">تكوين الاسم والصورة الرمزية والنموذج والمعاملات</string>
   <string name="assistant_detail_extensions_desc">إدارة الرسائل السريعة وحقن التوجيهات وكتب المعرفة والمهارات</string>
   <string name="assistant_detail_local_tools_desc">تمكين الأدوات المحلية مثل محرك JavaScript</string>

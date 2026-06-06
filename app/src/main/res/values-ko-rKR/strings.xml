@@ -7,7 +7,7 @@
   <string name="about_page_version">버전</string>
   <string name="about_page_website">웹사이트</string>
   <string name="add">추가</string>
-  <string name="app_name">RikkaHub</string>
+  <string name="app_name">RikkaHub Agent</string>
   <string name="asr_button_content_description">음성 인식</string>
   <string name="asr_button_stop">중지</string>
   <string name="assistant_detail_basic_desc">이름, 아바타, 모델 및 매개변수 구성</string>

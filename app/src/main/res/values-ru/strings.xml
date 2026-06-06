@@ -7,7 +7,7 @@
   <string name="about_page_version">Версия</string>
   <string name="about_page_website">Веб-сайт</string>
   <string name="add">Добавить</string>
-  <string name="app_name">RikkaHub</string>
+  <string name="app_name">RikkaHub Agent</string>
   <string name="asr_button_content_description">Распознавание речи</string>
   <string name="asr_button_stop">Стоп</string>
   <string name="assistant_detail_basic_desc">Настройте имя, аватар, модель и параметры</string>
