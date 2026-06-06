@@ -472,7 +472,7 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
-                e.printStackTrace()
+                if (e !is CancellationException) Log.e(TAG, "sendMessage: generation pipeline failed", e)
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
             }
         }
@@ -500,7 +500,7 @@ class ChatService(
             targetTokens = AUTO_COMPACT_TARGET_TOKENS,
             keepRecentMessages = AUTO_COMPACT_KEEP_RECENT_MESSAGES,
         ).onFailure {
-            it.printStackTrace()
+            if (it !is CancellationException) Log.e(TAG, "maybeAutoCompact: history compaction failed", it)
             addError(it, conversationId, title = context.getString(R.string.error_title_auto_compact))
         }
     }
@@ -765,7 +765,7 @@ class ChatService(
             }
         }.onFailure {
             // Live Update 通知的移除由 GenerationForegroundService 在 1->0 边负责（见 onCompletion 注释）。
-            it.printStackTrace()
+            if (it !is CancellationException) Log.e(TAG, "handleMessageComplete: generation failed", it)
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
@@ -863,7 +863,7 @@ class ChatService(
                 )
             }
         }.onFailure {
-            it.printStackTrace()
+            if (it !is CancellationException) Log.w(TAG, "generateTitle: title generation failed", it)
             addError(
                 error = it,
                 conversationId = conversationId,
@@ -918,7 +918,7 @@ class ChatService(
                 )
             )
         }.onFailure {
-            it.printStackTrace()
+            if (it !is CancellationException) Log.w(TAG, "generateSuggestion: chat suggestion generation failed", it)
         }
     }
 

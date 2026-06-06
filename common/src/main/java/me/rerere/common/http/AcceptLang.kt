@@ -131,8 +131,3 @@ class AcceptLanguageBuilder private constructor(
         return s.trimEnd('0').trimEnd('.')
     }
 }
-
-fun main() {
-    val builder = AcceptLanguageBuilder.fromJvmSystem()
-    println(builder.build())
-}
