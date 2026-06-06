@@ -36,6 +36,7 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.STREAM_MAX_RETRIES
 import me.rerere.ai.util.bufferStreamChunks
@@ -96,7 +97,7 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
+        AiLog.request(TAG, "openai-responses", params.model.modelId, false)
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
@@ -104,7 +105,6 @@ class ResponseAPI(
         }
 
         val bodyStr = response.body?.string() ?: ""
-        Log.i(TAG, "generateText: $bodyStr")
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val output = parseResponseOutput(bodyJson)
 
@@ -133,7 +133,7 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        AiLog.request(TAG, "openai-responses", params.model.modelId, true)
 
         val factory = EventSources.createFactory(streamClient)
         lateinit var listener: EventSourceListener
@@ -169,7 +169,7 @@ class ResponseAPI(
                     close()
                     return
                 }
-                Log.d(TAG, "onEvent: $id/$type $data")
+                AiLog.event(TAG, type, id)
                 val json = json.parseToJsonElement(data).jsonObject
                 val chunk = parseResponseDelta(json)
                 if (chunk != null) {
@@ -198,20 +198,16 @@ class ResponseAPI(
 
                 var exception = t
 
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
+                AiLog.failure(TAG, t, response?.code)
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
-                        Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    AiLog.parseFailure(TAG, e)
                 } finally {
                     close(exception)
                 }
@@ -234,7 +230,7 @@ class ResponseAPI(
         controller.start()
 
         awaitClose {
-            println("[awaitClose] 关闭eventSource ")
+            Log.d(TAG, "closing eventSource")
             controller.close()
         }
     }.bufferStreamChunks()
@@ -471,7 +467,9 @@ class ResponseAPI(
                                         put("type", "input_image")
                                         put("image_url", encodedImage.base64)
                                     }.onFailure {
-                                        it.printStackTrace()
+                                        // printStackTrace emits the throwable message, which can
+                                        // hold raw base64/file data (issue #96): log type only.
+                                        AiLog.failure(TAG, it, null)
                                         put("type", "input_text")
                                         put("text", "Error: Failed to encode image to base64")
                                     }
@@ -768,7 +766,6 @@ class ResponseAPI(
     }
 
     private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
-        println(jsonObject)
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
 

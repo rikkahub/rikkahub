@@ -40,6 +40,7 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.STREAM_MAX_RETRIES
@@ -155,7 +156,7 @@ class ClaudeProvider(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
+        AiLog.request(TAG, "claude", params.model.modelId, false)
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
@@ -206,11 +207,7 @@ class ClaudeProvider(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
-        requestBody["messages"]!!.jsonArray.forEach {
-            Log.i(TAG, "streamText: $it")
-        }
+        AiLog.request(TAG, "claude", params.model.modelId, true)
 
         // Tracks which content-block indices are tool_use blocks so that
         // content_block_stop can mark only those tools finished.
@@ -248,7 +245,7 @@ class ClaudeProvider(
                 // post-terminal cancellation could be misread as a pre-first-frame transient and
                 // replay an already-completed request.
                 controller.onFrame()
-                Log.d(TAG, "onEvent: type=$type, data=$data")
+                AiLog.event(TAG, type, id)
                 if (data == "[DONE]") {
                     return
                 }
@@ -371,19 +368,16 @@ class ClaudeProvider(
 
                 var exception = t
 
-                t?.printStackTrace()
-                Log.e(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response")
+                AiLog.failure(TAG, t, response?.code)
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        Log.i(TAG, "Error response: $bodyElement")
                         exception = bodyElement.parseErrorDetail()
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    AiLog.parseFailure(TAG, e)
                 } finally {
                     close(exception)
                 }
@@ -697,7 +691,9 @@ class ClaudeProvider(
                 // Oversized media is a user-facing rejection, not a benign encode failure:
                 // surface it instead of degrading to empty text.
                 if (it is MediaTooLargeException) throw it
-                Log.w(TAG, "encode image failed: $url", it)
+                // The throwable message and `url` can carry raw base64/file data (issue #96):
+                // log only the failure type, never the payload.
+                AiLog.failure(TAG, it, null)
                 put("type", "text")
                 put("text", "")
             }
@@ -757,8 +753,7 @@ class ClaudeProvider(
                 }
 
                 "redacted_thinking" -> {
-                    val data = block["data"]?.jsonPrimitiveOrNull?.contentOrNull
-                    println(data)
+                    // Encrypted reasoning is not surfaced; never log it.
                 }
 
                 "tool_use" -> {

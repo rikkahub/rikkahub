@@ -38,6 +38,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.bufferStreamChunks
 import me.rerere.ai.util.configureReferHeaders
@@ -91,7 +92,7 @@ class ChatCompletionsAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
+        AiLog.request(TAG, "openai-chat", params.model.modelId, false)
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
@@ -149,10 +150,7 @@ class ChatCompletionsAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
-        // just for debugging response body
-        // println(client.newCall(request).await().body?.string())
+        AiLog.request(TAG, "openai-chat", params.model.modelId, true)
 
         val listener = object : EventSourceListener() {
             override fun onEvent(
@@ -162,11 +160,11 @@ class ChatCompletionsAPI(
                 data: String
             ) {
                 if (data == "[DONE]") {
-                    println("[onEvent] (done) 结束流: $data")
+                    Log.d(TAG, "stream done")
                     close()
                     return
                 }
-                Log.d(TAG, "onEvent: $data")
+                AiLog.event(TAG, type, id)
                 data
                     .trim()
                     .split("\n")
@@ -215,20 +213,16 @@ class ChatCompletionsAPI(
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
+                AiLog.failure(TAG, t, response?.code)
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
-                        Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    AiLog.parseFailure(TAG, e)
                     exception = e
                 } finally {
                     close(exception)
@@ -243,7 +237,7 @@ class ChatCompletionsAPI(
         val eventSource = EventSources.createFactory(streamClient).newEventSource(request, listener)
 
         awaitClose {
-            println("[awaitClose] 关闭eventSource ")
+            Log.d(TAG, "closing eventSource")
             eventSource.cancel()
         }
     }.bufferStreamChunks()
@@ -551,7 +545,9 @@ class ChatCompletionsAPI(
                                             put("url", encodedImage.base64)
                                         })
                                     }.onFailure {
-                                        it.printStackTrace()
+                                        // printStackTrace emits the throwable message, which can
+                                        // hold raw base64/file data (issue #96): log type only.
+                                        AiLog.failure(TAG, it, null)
                                         put("type", "text")
                                         put("text", "")
                                     }
@@ -607,7 +603,9 @@ class ChatCompletionsAPI(
                                             put("url", encodedImage.base64)
                                         })
                                     }.onFailure {
-                                        it.printStackTrace()
+                                        // printStackTrace emits the throwable message, which can
+                                        // hold raw base64/file data (issue #96): log type only.
+                                        AiLog.failure(TAG, it, null)
                                         put("type", "text")
                                         put("text", "")
                                     }

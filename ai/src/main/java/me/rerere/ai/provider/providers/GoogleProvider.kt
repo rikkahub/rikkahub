@@ -45,6 +45,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.bufferStreamChunks
@@ -135,7 +136,6 @@ class GoogleProvider(
             val response = client.newCall(request).await()
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: error("empty body")
-                Log.d(TAG, "listModels: $body")
                 val bodyObject = json.parseToJsonElement(body).jsonObject
                 val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
 
@@ -262,7 +262,7 @@ class GoogleProvider(
                 .build()
         )
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        AiLog.request(TAG, "google", params.model.modelId, true)
 
         val listener = object : EventSourceListener() {
             override fun onEvent(
@@ -271,7 +271,7 @@ class GoogleProvider(
                 type: String?,
                 data: String
             ) {
-                Log.i(TAG, "onEvent: $data")
+                AiLog.event(TAG, type, id)
 
                 try {
                     val jsonData = json.parseToJsonElement(data).jsonObject
@@ -315,8 +315,9 @@ class GoogleProvider(
 
                     trySend(messageChunk)
                 } catch (e: Exception) {
-                    e.printStackTrace()
-                    println("[onEvent] 解析错误: $data")
+                    // A single malformed SSE frame must not kill the stream; skip it.
+                    // Log metadata only — the frame data may carry user/model content.
+                    AiLog.parseFailure(TAG, e)
                 }
             }
 
@@ -327,15 +328,13 @@ class GoogleProvider(
             ) {
                 var exception = t
 
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.message}")
+                AiLog.failure(TAG, t, response?.code)
 
                 try {
                     if (t == null && response != null) {
                         val bodyStr = response.body.stringSafe()
                         if (!bodyStr.isNullOrEmpty()) {
                             val bodyElement = json.parseToJsonElement(bodyStr)
-                            println(bodyElement)
                             if (bodyElement is JsonObject) {
                                 exception = Exception(
                                     bodyElement["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
@@ -347,7 +346,7 @@ class GoogleProvider(
                         }
                     }
                 } catch (e: Throwable) {
-                    e.printStackTrace()
+                    AiLog.parseFailure(TAG, e)
                     exception = e
                 } finally {
                     close(exception ?: Exception("Stream failed"))
@@ -355,7 +354,7 @@ class GoogleProvider(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                println("[onClosed] 连接已关闭")
+                Log.d(TAG, "stream closed")
                 close()
             }
         }
@@ -364,7 +363,7 @@ class GoogleProvider(
                 .newEventSource(request, listener)
 
         awaitClose {
-            println("[awaitClose] 关闭eventSource")
+            Log.d(TAG, "closing eventSource")
             eventSource.cancel()
         }
     }.bufferStreamChunks()
@@ -546,7 +545,6 @@ class GoogleProvider(
         } ?: emptyList()
 
         val groundingMetadata = message["groundingMetadata"]?.jsonObject
-        Log.i(TAG, "parseMessage: $groundingMetadata")
         val annotations = parseSearchGroundingMetadata(groundingMetadata)
 
         return UIMessage(
@@ -568,7 +566,6 @@ class GoogleProvider(
                 url = uri
             )
         }
-        Log.i(TAG, "parseSearchGroundingMetadata: $chunks")
         return chunks
     }
 
