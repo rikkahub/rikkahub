@@ -34,7 +34,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         FavoriteEntity::class,
         KnowledgeChunkEntity::class
     ],
-    version = 21,
+    version = 22,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),

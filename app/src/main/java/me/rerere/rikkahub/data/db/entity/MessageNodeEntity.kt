@@ -16,7 +16,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("conversation_id")]
+    indices = [Index(value = ["conversation_id", "node_index"])]
 )
 data class MessageNodeEntity(
     @PrimaryKey

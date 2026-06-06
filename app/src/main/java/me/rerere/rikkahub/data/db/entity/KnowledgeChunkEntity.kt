@@ -14,7 +14,10 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "knowledge_chunk",
-    indices = [Index("kb_id")],
+    indices = [
+        Index(value = ["kb_id", "embedding_model"]),
+        Index(value = ["kb_id", "doc_id"]),
+    ],
 )
 data class KnowledgeChunkEntity(
     @PrimaryKey
