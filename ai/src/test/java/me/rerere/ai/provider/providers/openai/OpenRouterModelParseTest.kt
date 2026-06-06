@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,6 +30,7 @@ class OpenRouterModelParseTest {
         val m = openRouterModelFromJson(obj)!!
         assertEquals("google/gemini-2.5-flash-image", m.modelId)
         assertEquals("Gemini 2.5 Flash Image", m.displayName)
+        assertEquals(ModelType.IMAGE, m.type)
         assertTrue(Modality.IMAGE in m.outputModalities)
         assertTrue(Modality.IMAGE in m.inputModalities)
         assertTrue(ModelAbility.TOOL in m.abilities)
@@ -45,6 +47,7 @@ class OpenRouterModelParseTest {
              "supported_parameters":["max_tokens","temperature"]}
         """.trimIndent()
         val m = openRouterModelFromJson(Json.parseToJsonElement(json).jsonObject)!!
+        assertEquals(ModelType.CHAT, m.type)
         assertTrue(Modality.IMAGE !in m.outputModalities)
         assertTrue(ModelAbility.TOOL !in m.abilities)
     }

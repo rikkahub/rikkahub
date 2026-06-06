@@ -13,6 +13,7 @@ import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.OpenRouterRouting
 
 /**
@@ -103,9 +104,14 @@ fun openRouterModelFromJson(modelObj: JsonObject): Model? {
         if ("reasoning" in supported || "include_reasoning" in supported) add(ModelAbility.REASONING)
     }
 
+    // Models that can output images are typed IMAGE so they appear in the image-generation
+    // model picker (which filters strictly by ModelType.IMAGE); others stay CHAT.
+    val type = if ("image" in outMods) ModelType.IMAGE else ModelType.CHAT
+
     return Model(
         modelId = id,
         displayName = name,
+        type = type,
         inputModalities = inputModalities,
         outputModalities = outputModalities,
         abilities = abilities,
