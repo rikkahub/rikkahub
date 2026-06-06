@@ -612,7 +612,7 @@
         errorLine1="                                context.getString(R.string.setting_provider_page_save_success),"
         errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderDetailPage.kt"
+            file="src/main/java/me/rerere/rikkahub/ui/pages/setting/providerdetail/SettingProviderDetailPage.kt"
             line="237"
             column="33"/>
     </issue>

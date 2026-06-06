@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.setting
+package me.rerere.rikkahub.ui.pages.setting.providerdetail
 
 import me.rerere.ai.provider.ProviderSetting
 import org.junit.Assert.assertSame
