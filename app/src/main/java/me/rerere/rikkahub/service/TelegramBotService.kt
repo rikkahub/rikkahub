@@ -1525,7 +1525,7 @@ class TelegramBotService : Service() {
     }
 
     /** Drop any pending clarify prompts for a chat — the user moved on or cancelled the turn. */
-    private fun clearClarifyForChat(chatId: Long) {
+    internal fun clearClarifyForChat(chatId: Long) {
         clarifyPending.values.removeAll { it.chatId == chatId }
     }
 

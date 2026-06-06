@@ -184,6 +184,9 @@ internal suspend fun TelegramBotService.handleResetCommand(chatId: Long) {
     // Edit dead approval keyboards in place so the user knows tapping them won't
     // do anything. Then drop the registry entries.
     cancelStaleApprovalKeyboards(chatId, reason = "/new")
+    // Drop any unanswered ask_user clarify so the user's next message starts fresh instead
+    // of being swallowed as the answer to a question from the discarded conversation.
+    clearClarifyForChat(chatId)
     chatRepo.deleteByChatId(chatId)
     val (modelName, _) = activeModelDisplay()
     val msg = """
@@ -210,6 +213,9 @@ internal suspend fun TelegramBotService.handleStopCommand(chatId: Long) {
     // approval iterations). Without this, the per-chat mutex stays held forever.
     turnJobs.remove(chatId)?.cancelAndJoin()
     cancelStaleApprovalKeyboards(chatId, reason = "/stop")
+    // Drop any unanswered ask_user clarify so the user's next message starts a new turn
+    // instead of being consumed as the answer to the stopped turn's question.
+    clearClarifyForChat(chatId)
     // Phase 11: cascading /stop. Cancel every active sub-agent dispatched from this
     // parent conversation. Spec hard constraint 8: "every model stops" — single tick.
     val cancelledSubAgents = runCatching {
