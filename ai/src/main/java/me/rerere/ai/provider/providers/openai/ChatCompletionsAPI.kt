@@ -798,7 +798,12 @@ class ChatCompletionsAPI(
                 }
                 toolCalls.forEach { toolCalls ->
                     val type = toolCalls.jsonObject["type"]?.jsonPrimitive?.contentOrNull
-                    if (!type.isNullOrEmpty() && type != "function") error("tool call type not supported: $type")
+                    if (!type.isNullOrEmpty() && type != "function") {
+                        // Skip unsupported tool-call types rather than throwing, which would
+                        // crash the stream. Today only "function" is handled.
+                        Log.w(TAG, "skipping unsupported tool call type: $type")
+                        return@forEach
+                    }
                     val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
                     val toolName =
                         toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
@@ -835,9 +840,9 @@ class ChatCompletionsAPI(
     }
 
     private fun parseAnnotations(jsonArray: JsonArray): List<UIMessageAnnotation> {
-        return jsonArray.map { element ->
+        return jsonArray.mapNotNull { element ->
             val type =
-                element.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: error("type is null")
+                element.jsonObject["type"]?.jsonPrimitive?.contentOrNull
             when (type) {
                 "url_citation" -> {
                     UIMessageAnnotation.UrlCitation(
@@ -848,7 +853,13 @@ class ChatCompletionsAPI(
                     )
                 }
 
-                else -> error("unknown annotation type: $type")
+                else -> {
+                    // Newer providers add annotation types (file_citation, web_search_result,
+                    // ...). Skip unknown/missing types instead of throwing, which would crash
+                    // the whole stream for the user.
+                    Log.w(TAG, "skipping unknown annotation type: $type")
+                    null
+                }
             }
         }
     }
