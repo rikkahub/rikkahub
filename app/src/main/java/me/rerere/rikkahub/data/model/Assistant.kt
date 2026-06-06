@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.model
 
+import android.util.Log
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
@@ -9,6 +10,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import kotlin.uuid.Uuid
+
+private const val TAG = "Assistant"
 
 @Serializable
 data class Assistant(
@@ -96,7 +99,7 @@ fun String.replaceRegexes(
                 // println("Regex: ${regex.findRegex} -> ${result}")
                 result
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.w(TAG, "replaceRegexes: invalid regex, returning original string", e)
                 // 如果正则表达式格式错误，返回原字符串
                 acc
             }

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.repository
 
 import android.database.sqlite.SQLiteBlobTooBigException
+import android.util.Log
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -34,6 +35,7 @@ class ConversationRepository(
     private val messageFtsManager: MessageFtsManager,
 ) {
     companion object {
+        private const val TAG = "ConversationRepository"
         private const val PAGE_SIZE = 20
         private const val INITIAL_LOAD_SIZE = 40
     }
@@ -341,11 +343,11 @@ class ConversationRepository(
                 val page = try {
                     messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
                 } catch (e: SQLiteBlobTooBigException) {
-                    e.printStackTrace()
+                    Log.w(TAG, "loadMessageNodes: skipping page at offset $offset (${e.javaClass.simpleName})", e)
                     offset += pageSize
                     continue
                 } catch (e: IllegalStateException) {
-                    e.printStackTrace()
+                    Log.w(TAG, "loadMessageNodes: skipping page at offset $offset (${e.javaClass.simpleName})", e)
                     offset += pageSize
                     continue
                 }

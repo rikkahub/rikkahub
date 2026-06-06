@@ -301,7 +301,7 @@ class GenerationHandler(
                             val output = result.ifEmpty { emptyToolResultPlaceholder(json) }
                             executedTools += tool.copy(output = output)
                         }.onFailure {
-                            it.printStackTrace()
+                            Log.w(TAG, "generateText: tool execution failed for ${tool.toolName}", it)
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
