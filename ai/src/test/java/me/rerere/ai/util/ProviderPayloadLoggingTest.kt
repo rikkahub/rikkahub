@@ -10,9 +10,14 @@ import java.io.File
  *
  * AI provider implementations must NOT log raw request bodies or raw streaming event
  * payloads to logcat. Those payloads carry system prompts, memories, user content, MCP
- * tool arguments, and base64 media. This test reads the four provider source files and
- * fails if any `Log.*`/`println` call interpolates a known payload identifier, so a
- * future edit cannot silently reintroduce the leak with a different surrounding literal.
+ * tool arguments, and base64 media. This test reads the scanned source files and fails if
+ * any `Log.*`/`println` call interpolates a known payload identifier, so a future edit
+ * cannot silently reintroduce the leak with a different surrounding literal.
+ *
+ * Message.kt is included as the UI-side delta-merge surface: its streaming fold over
+ * `UIMessagePart` deltas (text/image/reasoning/tool) sees the same payload content the
+ * providers do, so an unsupported-delta diagnostic there must not raw-`println` the part
+ * instance — only its type.
  *
  * It is a pure-JVM test (no Android runtime): under plain unit tests `android.util.Log`
  * is a no-op stub returning 0, so a behavioral assertion on `AiLog` would assert nothing
@@ -26,6 +31,7 @@ class ProviderPayloadLoggingTest {
         "src/main/java/me/rerere/ai/provider/providers/openai/ChatCompletionsAPI.kt",
         "src/main/java/me/rerere/ai/provider/providers/ClaudeProvider.kt",
         "src/main/java/me/rerere/ai/provider/providers/GoogleProvider.kt",
+        "src/main/java/me/rerere/ai/ui/Message.kt",
     )
 
     // The local identifiers across the provider files that hold a raw AI payload: request
@@ -98,6 +104,28 @@ class ProviderPayloadLoggingTest {
                         "throwable message (which can carry raw base64/file data). " +
                         "Use me.rerere.ai.util.AiLog.failure instead.\n    $line",
                     Regex("""\bprintStackTrace\s*\(""").containsMatchIn(code),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `scanned source files do not call println`() {
+        val moduleRoot = resolveModuleRoot()
+        val printlnRegex = Regex("""(?<![A-Za-z0-9_])println\s*\(""")
+        for (relative in relativeSources) {
+            val file = File(moduleRoot, relative)
+            file.readText().lineSequence().forEachIndexed { index, line ->
+                // println goes to raw stdout (not even logcat), so its argument is never
+                // redactable — `println(... $deltaPart)` dumps a whole UIMessagePart instance
+                // (text/tool args/base64 media) to stdout (issue #98). The `//` guard keeps
+                // explanatory comments that mention println from tripping it.
+                val code = line.substringBefore("//")
+                assertFalse(
+                    "$relative:${index + 1} must not call println(): it writes unredacted " +
+                        "output to stdout, which can carry raw AI payload. " +
+                        "Use me.rerere.ai.util.AiLog (type-only) instead.\n    $line",
+                    printlnRegex.containsMatchIn(code),
                 )
             }
         }

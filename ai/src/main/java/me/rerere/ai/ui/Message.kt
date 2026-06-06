@@ -1,5 +1,6 @@
 package me.rerere.ai.ui
 
+import android.util.Log
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -16,6 +17,8 @@ import me.rerere.ai.util.json
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
+
+private const val TAG = "UIMessage"
 
 // 公共消息抽象, 具体的Provider实现会转换为API接口需要的DTO
 @Serializable
@@ -143,7 +146,7 @@ data class UIMessage(
                     }
 
                     else -> {
-                        println("delta part append not supported: $deltaPart")
+                        Log.w(TAG, "delta part append not supported: type=${deltaPart::class.simpleName}")
                         acc
                     }
                 }
