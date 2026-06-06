@@ -248,7 +248,7 @@ fun createWorkspaceTools(
             },
         ),
         Tool(
-            name = "workspace_run_command",
+            name = "workspace_shell",
             description = """
                 Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace.
                 Use cwd for a path relative to the workspace files root. Requires Rootfs to be installed and ready.
