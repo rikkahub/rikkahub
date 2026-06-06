@@ -1,65 +1,53 @@
 package me.rerere.ai.provider
 
 import android.content.Context
-import me.rerere.ai.provider.providers.ClaudeProvider
-import me.rerere.ai.provider.providers.GoogleProvider
-import me.rerere.ai.provider.providers.OpenAIProvider
 import okhttp3.OkHttpClient
 
 /**
- * Provider管理器，负责注册和获取Provider实例
+ * Provider管理器，负责根据 ProviderSetting 调度对应的 Provider 实例
  *
  * @param client 共享 OkHttpClient，用于非流式调用（generateText/listModels），保留较长的 readTimeout
  * @param streamClient 专用流式 OkHttpClient，用于 SSE EventSource，带有更短的 readTimeout 以便快速失败。
  *   默认回退到 client 以保持向后兼容（现有调用方/测试无需改动即可编译）。
+ * @param providers 三个 sealed-typed Provider 实例，默认由 [ProviderInstances.default] 构造；
+ *   测试可注入 fake 实例以断言调度行为。
  */
 class ProviderManager(
     client: OkHttpClient,
     context: Context,
     streamClient: OkHttpClient = client,
+    providers: ProviderInstances = ProviderInstances.default(client, context, streamClient),
 ) {
-    // 存储已注册的Provider实例
-    private val providers = mutableMapOf<String, Provider<*>>()
-
-    init {
-        // 注册默认Provider
-        registerProvider("openai", OpenAIProvider(client, context, streamClient))
-        registerProvider("google", GoogleProvider(client, context, streamClient))
-        registerProvider("claude", ClaudeProvider(client, context, streamClient))
-    }
+    private val openAI = providers.openAI
+    private val google = providers.google
+    private val claude = providers.claude
 
     /**
-     * 注册Provider实例
+     * 按名称获取Provider实例（只读）
      *
-     * @param name Provider名称
-     * @param provider Provider实例
+     * @param name Provider名称（openai/google/claude）
+     * @return 对应的Provider实例
+     * @throws IllegalArgumentException 名称未知时抛出
      */
-    fun registerProvider(name: String, provider: Provider<*>) {
-        providers[name] = provider
-    }
-
-    /**
-     * 获取Provider实例
-     *
-     * @param name Provider名称
-     * @return Provider实例，如果不存在则返回null
-     */
-    fun getProvider(name: String): Provider<*> {
-        return providers[name] ?: throw IllegalArgumentException("Provider not found: $name")
+    fun getProvider(name: String): Provider<*> = when (name) {
+        "openai" -> openAI
+        "google" -> google
+        "claude" -> claude
+        else -> throw IllegalArgumentException("Provider not found: $name")
     }
 
     /**
      * 根据ProviderSetting获取对应的Provider实例
      *
      * @param setting Provider设置
-     * @return Provider实例，如果不存在则返回null
+     * @return 对应的Provider实例
      */
     fun <T : ProviderSetting> getProviderByType(setting: T): Provider<T> {
         @Suppress("UNCHECKED_CAST")
         return when (setting) {
-            is ProviderSetting.OpenAI -> getProvider("openai")
-            is ProviderSetting.Google -> getProvider("google")
-            is ProviderSetting.Claude -> getProvider("claude")
+            is ProviderSetting.OpenAI -> openAI
+            is ProviderSetting.Google -> google
+            is ProviderSetting.Claude -> claude
         } as Provider<T>
     }
 }

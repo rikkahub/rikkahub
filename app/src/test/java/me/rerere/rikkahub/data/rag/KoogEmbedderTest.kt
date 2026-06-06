@@ -7,6 +7,7 @@ import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
+import me.rerere.ai.provider.ProviderInstances
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
@@ -54,10 +55,53 @@ class KoogEmbedderTest {
         ): ImageGenerationResult = error("unused")
     }
 
+    private inner class FakeGoogleProvider : Provider<ProviderSetting.Google> {
+        override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> = emptyList()
+        override suspend fun generateText(
+            providerSetting: ProviderSetting.Google,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): MessageChunk = error("unused")
+        override suspend fun streamText(
+            providerSetting: ProviderSetting.Google,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): Flow<MessageChunk> = emptyFlow()
+        override suspend fun generateImage(
+            providerSetting: ProviderSetting,
+            params: ImageGenerationParams,
+        ): ImageGenerationResult = error("unused")
+    }
+
+    private inner class FakeClaudeProvider : Provider<ProviderSetting.Claude> {
+        override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> = emptyList()
+        override suspend fun generateText(
+            providerSetting: ProviderSetting.Claude,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): MessageChunk = error("unused")
+        override suspend fun streamText(
+            providerSetting: ProviderSetting.Claude,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): Flow<MessageChunk> = emptyFlow()
+        override suspend fun generateImage(
+            providerSetting: ProviderSetting,
+            params: ImageGenerationParams,
+        ): ImageGenerationResult = error("unused")
+    }
+
     @Test
     fun `float embedding maps to Vector of identical doubles and dimension`() = runBlocking {
-        val manager = ProviderManager(OkHttpClient(), ContextWrapper(null))
-        manager.registerProvider("openai", FakeOpenAIProvider())
+        val manager = ProviderManager(
+            OkHttpClient(),
+            ContextWrapper(null),
+            providers = ProviderInstances(
+                openAI = FakeOpenAIProvider(),
+                google = FakeGoogleProvider(),
+                claude = FakeClaudeProvider(),
+            ),
+        )
 
         val embedder = KoogEmbedder(
             providerManager = manager,
