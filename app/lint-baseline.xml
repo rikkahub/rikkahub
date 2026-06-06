@@ -425,8 +425,8 @@
         errorLine1="                                                            message = context.getString(R.string.imggen_page_image_saved_success),"
         errorLine2="                                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImgGenPage.kt"
-            line="630"
+            file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImageGalleryScreen.kt"
+            line="174"
             column="71"/>
     </issue>
 
@@ -436,8 +436,8 @@
         errorLine1="                                                            message = context.getString("
         errorLine2="                                                                      ^">
         <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImgGenPage.kt"
-            line="635"
+            file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImageGalleryScreen.kt"
+            line="179"
             column="71"/>
     </issue>
 
