@@ -1,11 +1,18 @@
 package me.rerere.ai.provider.providers.openai
 
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import me.rerere.ai.provider.Modality
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.OpenRouterRouting
 
 /**
@@ -63,4 +70,49 @@ private val DATA_URI_REGEX =
 fun parseImageDataUri(url: String): ParsedImageDataUri? {
     val m = DATA_URI_REGEX.matchEntire(url.trim()) ?: return null
     return ParsedImageDataUri(mime = m.groupValues[1], base64 = m.groupValues[2])
+}
+
+/**
+ * Map one item from OpenRouter's `GET /models` `data[]` into a [Model] with capabilities
+ * and pricing detected from `architecture` / `supported_parameters` / `pricing`, so image
+ * models, tool models and reasoning models work on import without manual toggling.
+ */
+fun openRouterModelFromJson(modelObj: JsonObject): Model? {
+    val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return null
+    val name = modelObj["name"]?.jsonPrimitive?.contentOrNull ?: id
+
+    val arch = modelObj["architecture"] as? JsonObject
+    fun strList(obj: JsonObject?, key: String): List<String> =
+        (obj?.get(key) as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+
+    val inMods = strList(arch, "input_modalities")
+    val outMods = strList(arch, "output_modalities")
+    val supported = strList(modelObj, "supported_parameters")
+    val pricing = modelObj["pricing"] as? JsonObject
+
+    val inputModalities = buildList {
+        add(Modality.TEXT)
+        if ("image" in inMods) add(Modality.IMAGE)
+    }.distinct()
+    val outputModalities = buildList {
+        add(Modality.TEXT)
+        if ("image" in outMods) add(Modality.IMAGE)
+    }.distinct()
+    val abilities = buildList {
+        if ("tools" in supported || "tool_choice" in supported) add(ModelAbility.TOOL)
+        if ("reasoning" in supported || "include_reasoning" in supported) add(ModelAbility.REASONING)
+    }
+
+    return Model(
+        modelId = id,
+        displayName = name,
+        inputModalities = inputModalities,
+        outputModalities = outputModalities,
+        abilities = abilities,
+        contextLength = modelObj["context_length"]?.jsonPrimitive?.intOrNull,
+        supportedParameters = supported,
+        // OpenRouter pricing values are strings of USD-per-token.
+        pricePromptPerToken = pricing?.get("prompt")?.jsonPrimitive?.contentOrNull?.toDoubleOrNull(),
+        priceCompletionPerToken = pricing?.get("completion")?.jsonPrimitive?.contentOrNull?.toDoubleOrNull(),
+    )
 }

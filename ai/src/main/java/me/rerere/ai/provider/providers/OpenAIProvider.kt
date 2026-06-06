@@ -25,6 +25,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
+import me.rerere.ai.provider.providers.openai.openRouterModelFromJson
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.ImageGenerationResult
@@ -112,14 +113,19 @@ class OpenAIProvider(
                 error("Failed to get models: response has no `data` field")
             }
 
+            val isOpenRouter = providerSetting.baseUrl.contains("openrouter.ai", ignoreCase = true)
             data.mapNotNull { modelJson ->
                 val modelObj = modelJson.jsonObject
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-
-                Model(
-                    modelId = id,
-                    displayName = id,
-                )
+                if (isOpenRouter) {
+                    // Rich capability + pricing detection from OpenRouter's catalog.
+                    openRouterModelFromJson(modelObj)
+                } else {
+                    val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    Model(
+                        modelId = id,
+                        displayName = id,
+                    )
+                }
             }
         }
 
