@@ -14,11 +14,27 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceStorageArea
 
-fun createWorkspaceTools(
+// 各工具的默认审批配置，工作区可通过 toolApprovals 覆盖
+val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
+    "workspace_list_files" to false,
+    "workspace_read_file" to false,
+    "workspace_write_file" to false,
+    "workspace_edit_file" to false,
+    "workspace_delete_file" to true,
+    "workspace_move_file" to true,
+    "workspace_shell" to true,
+)
+
+fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>): Boolean =
+    overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: false
+
+suspend fun createWorkspaceTools(
     workspaceId: String?,
     workspaceRepository: WorkspaceRepository,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
+    val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
+    fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
 
     return listOf(
         Tool(
@@ -35,6 +51,7 @@ fun createWorkspaceTools(
                     }
                 )
             },
+            needsApproval = needsApproval("workspace_list_files"),
             execute = {
                 val params = it.jsonObject
                 val path = params.string("path").orEmpty()
@@ -74,6 +91,7 @@ fun createWorkspaceTools(
                     required = listOf("path"),
                 )
             },
+            needsApproval = needsApproval("workspace_read_file"),
             execute = {
                 val path = it.jsonObject.string("path") ?: error("path is required")
                 val text = workspaceRepository.readText(workspaceId, path)
@@ -108,6 +126,7 @@ fun createWorkspaceTools(
                     required = listOf("path", "text"),
                 )
             },
+            needsApproval = needsApproval("workspace_write_file"),
             execute = {
                 val params = it.jsonObject
                 val path = params.string("path") ?: error("path is required")
@@ -143,6 +162,7 @@ fun createWorkspaceTools(
                     required = listOf("path", "old_text", "new_text"),
                 )
             },
+            needsApproval = needsApproval("workspace_edit_file"),
             execute = {
                 val params = it.jsonObject
                 val path = params.string("path") ?: error("path is required")
@@ -196,7 +216,7 @@ fun createWorkspaceTools(
                     required = listOf("path"),
                 )
             },
-            needsApproval = true,
+            needsApproval = needsApproval("workspace_delete_file"),
             execute = {
                 val params = it.jsonObject
                 val path = params.string("path") ?: error("path is required")
@@ -237,7 +257,7 @@ fun createWorkspaceTools(
                     required = listOf("source", "target"),
                 )
             },
-            needsApproval = true,
+            needsApproval = needsApproval("workspace_move_file"),
             execute = {
                 val params = it.jsonObject
                 val source = params.string("source") ?: error("source is required")
@@ -271,7 +291,7 @@ fun createWorkspaceTools(
                     required = listOf("command"),
                 )
             },
-            needsApproval = true,
+            needsApproval = needsApproval("workspace_shell"),
             execute = {
                 val params = it.jsonObject
                 val command = params.string("command") ?: error("command is required")

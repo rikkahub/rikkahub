@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceCommandResult
@@ -70,6 +71,18 @@ class WorkspaceRepository(
                 } else {
                     WorkspaceShellStatus.DISABLED.name
                 },
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+        return true
+    }
+
+    suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean {
+        val workspace = dao.getById(id) ?: return false
+        val overrides = workspace.toolApprovalOverrides() + (toolName to needsApproval)
+        dao.upsert(
+            workspace.copy(
+                toolApprovals = JsonInstant.encodeToString(overrides),
                 updatedAt = System.currentTimeMillis(),
             )
         )

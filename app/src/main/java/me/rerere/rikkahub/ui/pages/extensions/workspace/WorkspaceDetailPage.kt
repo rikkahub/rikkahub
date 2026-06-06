@@ -59,6 +59,7 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
@@ -143,6 +144,7 @@ fun WorkspaceDetailPage(id: String) {
                     installProgress = installProgress,
                     onShellEnabledChange = vm::setShellEnabled,
                     onInstallRootfs = { showInstallDialog = true },
+                    onToolApprovalChange = vm::setToolApproval,
                 )
 
                 1 -> WorkspaceFilesPage(
@@ -206,6 +208,7 @@ private fun WorkspaceBasicPage(
     installProgress: RootfsInstallProgress?,
     onShellEnabledChange: (Boolean) -> Unit,
     onInstallRootfs: () -> Unit,
+    onToolApprovalChange: (String, Boolean) -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -299,8 +302,87 @@ private fun WorkspaceBasicPage(
                 }
             }
         }
+
+        item {
+            WorkspaceToolApprovalCard(
+                workspace = workspace,
+                onToolApprovalChange = onToolApprovalChange,
+            )
+        }
     }
 }
+
+@Composable
+private fun WorkspaceToolApprovalCard(
+    workspace: WorkspaceEntity?,
+    onToolApprovalChange: (String, Boolean) -> Unit,
+) {
+    val overrides = workspace?.toolApprovalOverrides().orEmpty()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "工具审批",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "开启后，AI 调用该工具前需要用户确认",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            WorkspaceToolApprovalItems.forEach { (toolName, label) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = toolName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Switch(
+                        checked = resolveWorkspaceToolApproval(toolName, overrides),
+                        onCheckedChange = { onToolApprovalChange(toolName, it) },
+                        enabled = workspace != null,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val WorkspaceToolApprovalItems = listOf(
+    "workspace_list_files" to "列出文件",
+    "workspace_read_file" to "读取文件",
+    "workspace_write_file" to "写入文件",
+    "workspace_edit_file" to "编辑文件",
+    "workspace_delete_file" to "删除文件",
+    "workspace_move_file" to "移动文件",
+    "workspace_shell" to "执行命令",
+)
 
 @Composable
 private fun WorkspaceInfoRow(

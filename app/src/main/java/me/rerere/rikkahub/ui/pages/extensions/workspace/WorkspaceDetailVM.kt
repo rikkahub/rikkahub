@@ -114,6 +114,14 @@ class WorkspaceDetailVM(
         }
     }
 
+    fun setToolApproval(toolName: String, needsApproval: Boolean) {
+        viewModelScope.launch {
+            val workspace = state.value.workspace ?: return@launch
+            repository.setToolApproval(workspace.id, toolName, needsApproval)
+            loadWorkspace()
+        }
+    }
+
     fun installRootfs(url: String) {
         viewModelScope.launch {
             _installError.value = null
