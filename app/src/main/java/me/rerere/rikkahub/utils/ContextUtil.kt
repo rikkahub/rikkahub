@@ -140,10 +140,10 @@ fun Context.exportImage(
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
             }
             val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                outputStream = contentResolver.openOutputStream(it)
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream!!)
-            }
+                ?: error("MediaStore returned no URI for $fileName")
+            outputStream = contentResolver.openOutputStream(uri)
+                ?: error("Could not open output stream for $fileName")
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
         } else {
             // Android 9及以下直接写入文件
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
@@ -160,6 +160,7 @@ fun Context.exportImage(
         Log.i(TAG, "Image saved successfully: $fileName")
     } catch (e: Exception) {
         Log.e(TAG, "Failed to save image", e)
+        throw e
     } finally {
         outputStream?.close()
     }
@@ -195,10 +196,10 @@ fun Context.exportImageFile(
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
             }
             val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                outputStream = contentResolver.openOutputStream(it)
-                file.inputStream().copyTo(outputStream!!)
-            }
+                ?: error("MediaStore returned no URI for $fileName")
+            outputStream = contentResolver.openOutputStream(uri)
+                ?: error("Could not open output stream for $fileName")
+            file.inputStream().copyTo(outputStream)
         } else {
             // Android 9及以下直接写入文件
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
@@ -214,6 +215,7 @@ fun Context.exportImageFile(
         Log.i(TAG, "Image file saved successfully: $fileName")
     } catch (e: Exception) {
         Log.e(TAG, "Failed to save image file", e)
+        throw e
     } finally {
         outputStream?.close()
     }

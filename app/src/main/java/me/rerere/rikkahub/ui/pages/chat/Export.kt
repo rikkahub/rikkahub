@@ -427,8 +427,9 @@ private suspend fun exportToImage(
             bitmap.compress(Bitmap.CompressFormat.PNG, 90, fos)
         }
 
-        // Save to gallery
-        context.exportImage(activity, bitmap, filename)
+        // Save to gallery (best-effort; a gallery-save failure must not abort sharing)
+        runCatching { context.exportImage(activity, bitmap, filename) }
+            .onFailure { it.printStackTrace() }
 
         // Share the file
         val uri = FileProvider.getUriForFile(
