@@ -47,6 +47,24 @@ class DocumentTextExtractorFailureTest {
     }
 
     @Test
+    fun extract_unknownBinaryFile_isParseFailed_notSuccess() {
+        // Issue #84: an unknown-MIME binary file must NOT reach the raw readText() fallback and be
+        // decoded as text. NUL bytes make it sniff as binary, so it must surface as ParseFailed and
+        // never be chunked/embedded.
+        val file = File.createTempFile("unknown-binary", ".bin").apply {
+            deleteOnExit()
+            writeBytes(byteArrayOf(0x00, 0x01, 0x02, 0x00, 0x7F, 0x00, 0x10, 0x00))
+        }
+
+        val result = DocumentTextExtractor.extract(file, "application/octet-stream")
+
+        assertTrue(
+            "unknown binary file must extract to ParseFailed, got $result",
+            result is DocumentExtractionResult.ParseFailed,
+        )
+    }
+
+    @Test
     fun extract_validPlainText_isSuccess() {
         val file = File.createTempFile("valid-text", ".txt").apply {
             deleteOnExit()

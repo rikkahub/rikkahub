@@ -19,6 +19,8 @@ import me.rerere.rikkahub.data.db.dao.KnowledgeChunkDAO
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.rag.IngestKnowledgeBaseUseCase
 import me.rerere.rikkahub.data.rag.KnowledgeBase
+import me.rerere.rikkahub.data.rag.RagIngestLimitException
+import me.rerere.rikkahub.data.rag.RagIngestLimits
 import java.io.File
 import kotlin.uuid.Uuid
 
@@ -120,9 +122,19 @@ class KnowledgeBaseVM(
 
     fun ingest(kbId: Uuid, uri: Uri) {
         viewModelScope.launch {
-            val fileName = filesManager.getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "document"
+            val rawFileName = filesManager.getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "document"
+            // Display-only metadata: strip path separators / control chars / .. and bound length. The
+            // raw provider name never touches the filesystem (temp path is uuid + sanitized ext).
+            val fileName = RagIngestLimits.sanitizeDisplayName(rawFileName)
             val mime = filesManager.getFileMimeType(uri) ?: "application/octet-stream"
-            val tempFile = copyToTemp(uri, fileName)
+            val tempFile = try {
+                copyToTemp(uri, rawFileName)
+            } catch (e: RagIngestLimitException) {
+                // Oversized input is a distinct, expected outcome — surface "too large" rather than
+                // the generic "failed to read".
+                _events.value = Event.IngestFailed(kbId, e.message ?: "File is too large")
+                return@launch
+            }
             if (tempFile == null) {
                 _events.value = Event.IngestFailed(kbId, "Failed to read file")
                 return@launch
@@ -160,6 +172,10 @@ class KnowledgeBaseVM(
                     is IngestKnowledgeBaseUseCase.Result.ParseFailed ->
                         // Surface that parsing failed without embedding the raw parser error text.
                         _events.value = Event.IngestFailed(kbId, "Could not parse this file")
+
+                    is IngestKnowledgeBaseUseCase.Result.Rejected ->
+                        // Resource limit hit (text/chunks too large); reason is a safe diagnostic.
+                        _events.value = Event.IngestFailed(kbId, result.reason)
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -175,15 +191,25 @@ class KnowledgeBaseVM(
     }
 
     private suspend fun copyToTemp(uri: Uri, fileName: String): File? = withContext(Dispatchers.IO) {
-        runCatching {
-            val dir = File(application.cacheDir, "rag_ingest").apply { mkdirs() }
-            val target = File(dir, "${Uuid.random()}_$fileName")
+        val dir = File(application.cacheDir, "rag_ingest").apply { mkdirs() }
+        // UUID + sanitized extension only: the provider-supplied fileName can contribute nothing to
+        // the path beyond an alnum extension, so separators / .. / huge names can't escape the dir.
+        val target = RagIngestLimits.tempFileForDisplayName(dir, fileName)
+        try {
             application.contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
+                target.outputStream().use { output ->
+                    // Abort + reject if the source exceeds the input cap, instead of filling the disk.
+                    RagIngestLimits.copyLimited(input, output, RagIngestLimits.MAX_INPUT_BYTES)
+                }
             } ?: error("Cannot open input stream for $uri")
             target
-        }.getOrElse { e ->
+        } catch (e: RagIngestLimitException) {
+            // Drop the partial oversized copy and re-throw so the caller surfaces "too large".
+            target.delete()
+            throw e
+        } catch (e: Throwable) {
             if (e is CancellationException) throw e
+            target.delete()
             null
         }
     }

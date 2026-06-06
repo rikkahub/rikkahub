@@ -33,6 +33,13 @@ class IngestKnowledgeBaseUseCase(
 
         /** Parser failed; [reason] is for user-facing diagnostics only and is never embedded. */
         data class ParseFailed(val reason: String) : Result
+
+        /**
+         * Ingestion exceeded a resource limit (extracted text too large, too many chunks) and was
+         * rejected before any embedding/store work (issue #84). [reason] is a user-facing diagnostic
+         * only and is never embedded, same discipline as [ParseFailed].
+         */
+        data class Rejected(val reason: String) : Result
     }
 
     suspend operator fun invoke(
@@ -57,8 +64,22 @@ class IngestKnowledgeBaseUseCase(
             DocumentExtractionResult.Empty -> return@withContext Result.EmptyDocument
             is DocumentExtractionResult.Success -> extraction.text
         }
+        // Reject pathologically large extracted text BEFORE chunking/embedding so a huge document
+        // can't generate runaway embedding calls/cost (issue #84).
+        if (!RagIngestLimits.enforceMaxChars(text.length)) {
+            return@withContext Result.Rejected(
+                "Document text is too large (over ${RagIngestLimits.MAX_EXTRACTED_CHARS} characters)"
+            )
+        }
         val pieces = Chunker.chunk(text, chunkSize = kb.chunkSize, overlap = kb.chunkOverlap)
         if (pieces.isEmpty()) return@withContext Result.EmptyDocument
+        // Reject too many chunks BEFORE the embed loop / first store.add(), so an oversized document
+        // can't drive thousands of embedding calls before any work is wasted (issue #84).
+        if (!RagIngestLimits.enforceMaxChunks(pieces.size)) {
+            return@withContext Result.Rejected(
+                "Document produced too many chunks (over ${RagIngestLimits.MAX_CHUNKS})"
+            )
+        }
 
         val docId = Uuid.random()
         val docIdStr = docId.toString()
