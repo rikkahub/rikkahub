@@ -41,6 +41,7 @@ import me.rerere.hugeicons.stroke.Database
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File01
 import me.rerere.rikkahub.data.rag.KnowledgeBase
+import me.rerere.rikkahub.data.rag.RagDocumentPolicy
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -204,7 +205,7 @@ private fun KnowledgeBaseCard(
                 )
             } else {
                 TextButton(
-                    onClick = { picker.launch(arrayOf("*/*")) },
+                    onClick = { picker.launch(RagDocumentPolicy.pickerMimeTypes) },
                     enabled = kb.embeddingModelId != null,
                 ) {
                     Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))

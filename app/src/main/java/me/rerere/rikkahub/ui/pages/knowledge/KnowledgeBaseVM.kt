@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.rag.IngestKnowledgeBaseUseCase
 import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.rag.RagIngestLimitException
+import me.rerere.rikkahub.data.rag.RagDocumentPolicy
 import me.rerere.rikkahub.data.rag.RagIngestLimits
 import java.io.File
 import kotlin.uuid.Uuid
@@ -127,6 +128,13 @@ class KnowledgeBaseVM(
             // raw provider name never touches the filesystem (temp path is uuid + sanitized ext).
             val fileName = RagIngestLimits.sanitizeDisplayName(rawFileName)
             val mime = filesManager.getFileMimeType(uri) ?: "application/octet-stream"
+            // Authoritative type gate: reject unsupported files BEFORE copying bytes to temp, so an
+            // unsupported binary never lands on disk only to be rejected downstream. The picker MIME
+            // filter is advisory (providers can report octet-stream), so this check is the real gate.
+            if (RagDocumentPolicy.resolve(fileName, mime) == null) {
+                _events.value = Event.IngestFailed(kbId, "Unsupported file type")
+                return@launch
+            }
             val tempFile = try {
                 copyToTemp(uri, rawFileName)
             } catch (e: RagIngestLimitException) {
