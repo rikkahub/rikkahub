@@ -403,8 +403,8 @@
         errorLine1="                                    context.getString(R.string.chat_input_file_read_failed, fileName),"
         errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt"
-            line="324"
+            file="src/main/java/me/rerere/rikkahub/ui/components/ai/chatinput/ChatInput.kt"
+            line="295"
             column="37"/>
     </issue>
 
@@ -414,8 +414,8 @@
         errorLine1="                            context.getString(R.string.chat_input_unsupported_file_type, fileName),"
         errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt"
-            line="332"
+            file="src/main/java/me/rerere/rikkahub/ui/components/ai/chatinput/ChatInput.kt"
+            line="303"
             column="29"/>
     </issue>
 
