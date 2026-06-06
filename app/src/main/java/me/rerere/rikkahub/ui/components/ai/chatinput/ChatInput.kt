@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +55,7 @@ import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.blur.materials.HazeMaterials
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
@@ -145,6 +147,7 @@ fun ChatInput(
 
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
+    val scope = rememberCoroutineScope()
     val asr = LocalASRState.current
     val asrState by asr.state.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
@@ -183,8 +186,10 @@ fun ChatInput(
     var cameraOutputFile by remember { mutableStateOf<File?>(null) }
     val (_, launchCameraCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
-            state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
-            dismissExpand()
+            scope.launch {
+                state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
+                dismissExpand()
+            }
         },
         onCleanup = {
             cameraOutputFile?.delete()
@@ -195,11 +200,14 @@ fun ChatInput(
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captureSuccessful ->
         if (captureSuccessful && cameraOutputUri != null) {
             if (settings.displaySetting.skipCropImage) {
-                state.addImages(filesManager.createChatFilesByContents(listOf(cameraOutputUri!!)))
-                cameraOutputFile?.delete()
-                cameraOutputFile = null
-                cameraOutputUri = null
-                dismissExpand()
+                val capturedUri = cameraOutputUri!!
+                scope.launch {
+                    state.addImages(filesManager.createChatFilesByContents(listOf(capturedUri)))
+                    cameraOutputFile?.delete()
+                    cameraOutputFile = null
+                    cameraOutputUri = null
+                    dismissExpand()
+                }
             } else {
                 launchCameraCrop(cameraOutputUri!!)
             }
@@ -225,8 +233,10 @@ fun ChatInput(
     var preCropTempFile by remember { mutableStateOf<File?>(null) }
     val (_, launchImageCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
-            state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
-            dismissExpand()
+            scope.launch {
+                state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
+                dismissExpand()
+            }
         },
         onCleanup = {
             preCropTempFile?.delete()
@@ -238,8 +248,10 @@ fun ChatInput(
             if (selectedUris.isNotEmpty()) {
                 Log.d("ImagePickButton", "Selected URIs: $selectedUris")
                 if (settings.displaySetting.skipCropImage) {
-                    state.addImages(filesManager.createChatFilesByContents(selectedUris))
-                    dismissExpand()
+                    scope.launch {
+                        state.addImages(filesManager.createChatFilesByContents(selectedUris))
+                        dismissExpand()
+                    }
                 } else {
                     if (selectedUris.size == 1) {
                         val tempFile = File(context.appTempFolder, "pick_temp_${System.currentTimeMillis()}.jpg")
@@ -254,8 +266,10 @@ fun ChatInput(
                             launchImageCrop(selectedUris.first())
                         }
                     } else {
-                        state.addImages(filesManager.createChatFilesByContents(selectedUris))
-                        dismissExpand()
+                        scope.launch {
+                            state.addImages(filesManager.createChatFilesByContents(selectedUris))
+                            dismissExpand()
+                        }
                     }
                 }
             } else {
@@ -267,8 +281,10 @@ fun ChatInput(
     val videoPickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
             if (selectedUris.isNotEmpty()) {
-                state.addVideos(filesManager.createChatFilesByContents(selectedUris))
-                dismissExpand()
+                scope.launch {
+                    state.addVideos(filesManager.createChatFilesByContents(selectedUris))
+                    dismissExpand()
+                }
             }
         }
 
@@ -276,8 +292,10 @@ fun ChatInput(
     val audioPickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
             if (selectedUris.isNotEmpty()) {
-                state.addAudios(filesManager.createChatFilesByContents(selectedUris))
-                dismissExpand()
+                scope.launch {
+                    state.addAudios(filesManager.createChatFilesByContents(selectedUris))
+                    dismissExpand()
+                }
             }
         }
 
@@ -285,30 +303,32 @@ fun ChatInput(
     val filePickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNotEmpty()) {
-                val documents = uris.mapNotNull { uri ->
-                    val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
-                    val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
-                    if (isAllowedFileType(fileName, mime)) {
-                        val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
-                            ?: run {
-                                toaster.show(
-                                    context.getString(R.string.chat_input_file_read_failed, fileName),
-                                    type = ToastType.Error
-                                )
-                                return@mapNotNull null
-                            }
-                        UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime)
-                    } else {
-                        toaster.show(
-                            context.getString(R.string.chat_input_unsupported_file_type, fileName),
-                            type = ToastType.Error
-                        )
-                        null
+                scope.launch {
+                    val documents = uris.mapNotNull { uri ->
+                        val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
+                        val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
+                        if (isAllowedFileType(fileName, mime)) {
+                            val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
+                                ?: run {
+                                    toaster.show(
+                                        context.getString(R.string.chat_input_file_read_failed, fileName),
+                                        type = ToastType.Error
+                                    )
+                                    return@mapNotNull null
+                                }
+                            UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime)
+                        } else {
+                            toaster.show(
+                                context.getString(R.string.chat_input_unsupported_file_type, fileName),
+                                type = ToastType.Error
+                            )
+                            null
+                        }
                     }
-                }
-                if (documents.isNotEmpty()) {
-                    state.addFiles(documents)
-                    dismissExpand()
+                    if (documents.isNotEmpty()) {
+                        state.addFiles(documents)
+                        dismissExpand()
+                    }
                 }
             }
         }

@@ -136,10 +136,10 @@ object ConversationMutations {
      * part 经 [copyPart] 缝隙转换（默认恒等；ChatService 注入本地文件拷贝），其余会话元数据原样保留。
      * 找不到目标抛 [NotFoundException]。不在此持久化。
      */
-    fun forkAtMessage(
+    suspend fun forkAtMessage(
         conversation: Conversation,
         messageId: Uuid,
-        copyPart: (UIMessagePart) -> UIMessagePart = { it },
+        copyPart: suspend (UIMessagePart) -> UIMessagePart = { it },
     ): Conversation {
         val targetNodeIndex = conversation.messageNodes.indexOfFirst { node ->
             node.messages.any { it.id == messageId }

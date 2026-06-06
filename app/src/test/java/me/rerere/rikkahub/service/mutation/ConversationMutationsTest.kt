@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.service.mutation
 
+import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -166,7 +167,7 @@ class ConversationMutationsTest {
     // ---- forkAtMessage ----
 
     @Test
-    fun `forkAtMessage copies through target node drops the rest and regenerates ids`() {
+    fun `forkAtMessage copies through target node drops the rest and regenerates ids`() = runBlocking {
         val n0 = MessageNode(messages = listOf(msg(text = "n0")))
         val target = msg(text = "n1")
         val n1 = MessageNode(messages = listOf(target))
@@ -197,7 +198,7 @@ class ConversationMutationsTest {
     }
 
     @Test
-    fun `forkAtMessage runs copyPart on every part proving the file-copy seam is external`() {
+    fun `forkAtMessage runs copyPart on every part proving the file-copy seam is external`() = runBlocking {
         val target = msg(text = "a")
         val conversation = conversationOf(
             MessageNode(messages = listOf(target, msg(text = "b"))),
@@ -217,8 +218,9 @@ class ConversationMutationsTest {
     }
 
     @Test(expected = NotFoundException::class)
-    fun `forkAtMessage throws NotFoundException for an absent target`() {
+    fun `forkAtMessage throws NotFoundException for an absent target`() = runBlocking {
         val conversation = conversationOf(MessageNode(messages = listOf(msg())))
         ConversationMutations.forkAtMessage(conversation, Uuid.random())
+        Unit
     }
 }
