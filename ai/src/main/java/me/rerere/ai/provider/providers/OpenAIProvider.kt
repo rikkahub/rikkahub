@@ -295,6 +295,7 @@ class OpenAIProvider(
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
 
         val items = parseImageGenerationItems(data)
+        if (items.isEmpty()) error("No image returned by the provider.")
 
         ImageGenerationResult(items = items)
     }
@@ -427,6 +428,7 @@ class OpenAIProvider(
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
 
         val items = parseImageGenerationItems(data)
+        if (items.isEmpty()) error("No image returned by the provider.")
 
         ImageGenerationResult(items = items)
     }

@@ -846,6 +846,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 )
             } else null
         }
+        if (items.isEmpty()) error("No images in response (the model may have refused the prompt).")
 
         ImageGenerationResult(items = items)
     }
