@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
+import me.rerere.rikkahub.data.db.fts.expectedFtsRowCount
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
@@ -258,6 +259,17 @@ class ConversationRepository(
         }
     }
 
+    suspend fun checkFtsConsistency(): FtsConsistencyResult {
+        val conversations = conversationDAO.getAllIds().mapNotNull { id ->
+            val entity = conversationDAO.getConversationById(id) ?: return@mapNotNull null
+            val nodes = loadMessageNodes(entity.id)
+            conversationEntityToConversation(entity, nodes)
+        }
+        val expected = expectedFtsRowCount(conversations)
+        val indexed = messageFtsManager.indexedRowCount()
+        return FtsConsistencyResult(expected = expected, indexed = indexed, consistent = expected == indexed)
+    }
+
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {
         getConversationsOfAssistant(assistantId).first().forEach { conversation ->
             deleteConversation(conversation)
@@ -399,4 +411,16 @@ data class LightConversationEntity(
 data class ConversationPageResult(
     val items: List<Conversation>,
     val nextOffset: Int?,
+)
+
+/**
+ * Result of a lightweight FTS index consistency check (issue #122). [expected] is how many rows the
+ * source-of-truth conversations should produce; [indexed] is the live `message_fts` COUNT(*). They
+ * differ only when the index has drifted. Reporting is intentional: repair stays the explicit
+ * rebuild action, so a recurring index-write bug is surfaced rather than masked by silent rebuilds.
+ */
+data class FtsConsistencyResult(
+    val expected: Int,
+    val indexed: Int,
+    val consistent: Boolean,
 )

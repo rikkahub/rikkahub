@@ -37,6 +37,11 @@ class MessageFtsManager(private val database: AppDatabase) {
         db.execSQL("DELETE FROM message_fts")
     }
 
+    suspend fun indexedRowCount(): Int = withContext(Dispatchers.IO) {
+        val cursor = db.query("SELECT COUNT(*) FROM message_fts")
+        cursor.use { if (it.moveToNext()) it.getInt(0) else 0 }
+    }
+
     suspend fun search(keyword: String): List<MessageSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<MessageSearchResult>()
         val cursor = db.query(
@@ -110,6 +115,21 @@ internal fun reindexConversationFts(db: SupportSQLiteDatabase, conversation: Con
         db.endTransaction()
     }
 }
+
+/**
+ * Number of FTS rows that [reindexConversationFts] WOULD insert for the given conversations.
+ *
+ * It applies the SAME predicate as the INSERT guard above — `extractFtsText().isNotBlank()` — so the
+ * consistency baseline can never disagree with what the indexer actually writes. Pure over the
+ * in-memory model so the consistency check is unit-testable without the native FTS5 extensions.
+ * Issue #122.
+ */
+internal fun expectedFtsRowCount(conversations: List<Conversation>): Int =
+    conversations.sumOf { conversation ->
+        conversation.messageNodes.sumOf { node ->
+            node.messages.count { it.extractFtsText().isNotBlank() }
+        }
+    }
 
 private fun UIMessage.extractFtsText(): String =
     parts.filterIsInstance<UIMessagePart.Text>()

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.FtsConsistencyResult
 
 class SearchVM(
     private val conversationRepo: ConversationRepository,
@@ -26,6 +27,10 @@ class SearchVM(
     var isRebuilding by mutableStateOf(false)
         private set
     var rebuildProgress by mutableStateOf(0 to 0)
+        private set
+    var ftsConsistency by mutableStateOf<FtsConsistencyResult?>(null)
+        private set
+    var isCheckingConsistency by mutableStateOf(false)
         private set
 
     init {
@@ -57,6 +62,17 @@ class SearchVM(
                 }
             } finally {
                 isRebuilding = false
+            }
+        }
+    }
+
+    fun checkConsistency() {
+        viewModelScope.launch {
+            isCheckingConsistency = true
+            try {
+                ftsConsistency = conversationRepo.checkFtsConsistency()
+            } finally {
+                isCheckingConsistency = false
             }
         }
     }
