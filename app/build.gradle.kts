@@ -13,6 +13,22 @@ plugins {
     alias(libs.plugins.firebase.crashlytics)
 }
 
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        load(FileInputStream(localPropertiesFile))
+    }
+}
+
+fun localStringProperty(name: String, envName: String? = null): String {
+    val value = (localProperties.getProperty(name)
+        ?: envName?.let(System::getenv)
+        ?: "")
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+    return "\"$value\""
+}
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 37
@@ -25,6 +41,9 @@ android {
         versionName = "2.2.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "VOICE_AGENT_BASE_URL_OVERRIDE", localStringProperty("voiceAgentBaseUrlOverride", "VOICE_AGENT_BASE_URL_OVERRIDE"))
+        buildConfigField("String", "VOICE_AGENT_CF_ACCESS_CLIENT_ID", localStringProperty("voiceAgentCloudflareClientId", "CF_ACCESS_CLIENT_ID"))
+        buildConfigField("String", "VOICE_AGENT_CF_ACCESS_CLIENT_SECRET", localStringProperty("voiceAgentCloudflareClientSecret", "CF_ACCESS_CLIENT_SECRET"))
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
@@ -45,25 +64,18 @@ android {
 
     signingConfigs {
         create("release") {
-            val localProperties = Properties()
-            val localPropertiesFile = rootProject.file("local.properties")
+            val storeFilePath = localProperties.getProperty("storeFile")
+            val storePasswordValue = localProperties.getProperty("storePassword")
+            val keyAliasValue = localProperties.getProperty("keyAlias")
+            val keyPasswordValue = localProperties.getProperty("keyPassword")
 
-            if (localPropertiesFile.exists()) {
-                localProperties.load(FileInputStream(localPropertiesFile))
-
-                val storeFilePath = localProperties.getProperty("storeFile")
-                val storePasswordValue = localProperties.getProperty("storePassword")
-                val keyAliasValue = localProperties.getProperty("keyAlias")
-                val keyPasswordValue = localProperties.getProperty("keyPassword")
-
-                if (storeFilePath != null && storePasswordValue != null &&
-                    keyAliasValue != null && keyPasswordValue != null
-                ) {
-                    storeFile = file(storeFilePath)
-                    storePassword = storePasswordValue
-                    keyAlias = keyAliasValue
-                    keyPassword = keyPasswordValue
-                }
+            if (storeFilePath != null && storePasswordValue != null &&
+                keyAliasValue != null && keyPasswordValue != null
+            ) {
+                storeFile = file(storeFilePath)
+                storePassword = storePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
             }
         }
     }
@@ -300,6 +312,7 @@ dependencies {
 
     // tests
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

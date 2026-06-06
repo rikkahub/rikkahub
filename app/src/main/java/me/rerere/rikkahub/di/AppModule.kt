@@ -16,6 +16,7 @@ import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.UpdateChecker
+import me.rerere.rikkahub.voiceagent.VoiceAgentViewModelFactory
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
@@ -85,6 +86,15 @@ val appModule = module {
             mcpManager = get(),
             filesManager = get(),
             skillManager = get()
+        )
+    }
+
+    single {
+        VoiceAgentViewModelFactory(
+            context = get(),
+            chatService = get(),
+            settingsStore = get(),
+            okHttpClient = get(),
         )
     }
 

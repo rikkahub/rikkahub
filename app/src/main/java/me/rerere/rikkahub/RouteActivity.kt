@@ -123,12 +123,43 @@ import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
+import me.rerere.rikkahub.voiceagent.VoiceAgentRoute
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
+private const val EXTRA_CONVERSATION_ID = "conversationId"
+private const val EXTRA_VOICE_AGENT_CONVERSATION_ID = "voiceAgentConversationId"
+
+internal fun conversationIntentScreen(conversationId: String?): Screen.Chat? {
+    return conversationId?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { id -> runCatching { Uuid.parse(id).toString() }.getOrNull() }
+        ?.let { id -> Screen.Chat(id = id) }
+}
+
+internal fun voiceAgentIntentScreen(conversationId: String?): Screen.VoiceAgent? {
+    return conversationId?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { id -> runCatching { Uuid.parse(id).toString() }.getOrNull() }
+        ?.let { id -> Screen.VoiceAgent(conversationId = id) }
+}
+
+internal fun MutableList<NavKey>.openConversationIntent(conversationId: String?): Boolean {
+    val screen = conversationIntentScreen(conversationId) ?: return false
+    clear()
+    add(screen)
+    return true
+}
+
+internal fun MutableList<NavKey>.openVoiceAgentIntent(conversationId: String?): Boolean {
+    val screen = voiceAgentIntentScreen(conversationId) ?: return false
+    clear()
+    add(screen)
+    return true
+}
 
 class RouteActivity : ComponentActivity() {
     private val highlighter by inject<Highlighter>()
@@ -220,10 +251,10 @@ class RouteActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Navigate to the chat screen if a conversation ID is provided
-        intent.getStringExtra("conversationId")?.let { text ->
-            navStack?.add(Screen.Chat(text))
-        }    }
+        setIntent(intent)
+        navStack?.openVoiceAgentIntent(intent.getStringExtra(EXTRA_VOICE_AGENT_CONVERSATION_ID))
+            ?: navStack?.openConversationIntent(intent.getStringExtra(EXTRA_CONVERSATION_ID))
+    }
 
     @Composable
     fun AppRoutes() {
@@ -241,16 +272,18 @@ class RouteActivity : ComponentActivity() {
         }
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
 
-        val startScreen = Screen.Chat(
-            id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
-                Uuid.random().toString()
-            } else {
-                readStringPreference(
-                    "lastConversationId",
+        val startScreen = voiceAgentIntentScreen(intent?.getStringExtra(EXTRA_VOICE_AGENT_CONVERSATION_ID))
+            ?: conversationIntentScreen(intent?.getStringExtra(EXTRA_CONVERSATION_ID))
+            ?: Screen.Chat(
+                id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
                     Uuid.random().toString()
-                ) ?: Uuid.random().toString()
-            }
-        )
+                } else {
+                    readStringPreference(
+                        "lastConversationId",
+                        Uuid.random().toString()
+                    ) ?: Uuid.random().toString()
+                }
+            )
 
         val backStack = rememberNavBackStack(startScreen)
         SideEffect { this@RouteActivity.navStack = backStack }
@@ -314,6 +347,10 @@ class RouteActivity : ComponentActivity() {
                                     files = key.files.map { it.toUri() },
                                     nodeId = key.nodeId?.let { Uuid.parse(it) }
                                 )
+                            }
+
+                            entry<Screen.VoiceAgent> { key ->
+                                VoiceAgentRoute(conversationId = Uuid.parse(key.conversationId))
                             }
 
                             entry<Screen.ShareHandler> { key ->
@@ -554,6 +591,9 @@ sealed interface Screen : NavKey {
         val files: List<String> = emptyList(),
         val nodeId: String? = null
     ) : Screen
+
+    @Serializable
+    data class VoiceAgent(val conversationId: String) : Screen
 
     @Serializable
     data class ShareHandler(val text: String, val streamUri: String? = null) : Screen

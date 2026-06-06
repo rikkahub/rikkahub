@@ -109,6 +109,7 @@ androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version
 jetbrains-markdown = { module = "com.github.rikkahub:markdown", version.ref = "markdown" }
 metadata-extractor = { module = "com.drewnoakes:metadata-extractor", version.ref = "metadataExtractor" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 okhttp-sse = { group = "com.squareup.okhttp3", name = "okhttp-sse", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }

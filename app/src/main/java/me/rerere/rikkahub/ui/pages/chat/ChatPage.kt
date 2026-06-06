@@ -3,8 +3,10 @@ package me.rerere.rikkahub.ui.pages.chat
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -52,7 +54,9 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
+import me.rerere.hugeicons.stroke.Voice
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -69,6 +73,7 @@ import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.navigateToChatPage
+import me.rerere.rikkahub.voiceagent.voiceAgentLaunchLabel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -272,6 +277,9 @@ private fun ChatPageContent(
                     onClickMenu = {
                         previewMode = !previewMode
                     },
+                    onVoiceAgent = {
+                        navController.navigate(Screen.VoiceAgent(conversation.id.toString()))
+                    },
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     }
@@ -445,6 +453,7 @@ private fun TopBar(
     bigScreen: Boolean,
     previewMode: Boolean,
     onClickMenu: () -> Unit,
+    onVoiceAgent: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -504,6 +513,13 @@ private fun TopBar(
             }
         },
         actions = {
+            TextButton(onClick = onVoiceAgent) {
+                val label = voiceAgentLaunchLabel()
+                Icon(HugeIcons.Voice, label)
+                Spacer(Modifier.width(8.dp))
+                Text(label, maxLines = 1)
+            }
+
             IconButton(
                 onClick = {
                     onClickMenu()
