@@ -38,14 +38,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,11 +77,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.rerere.hugeicons.HugeIcons
@@ -103,67 +97,14 @@ import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.ast.LeafASTNode
 import org.intellij.markdown.flavours.gfm.GFMElementTypes
-import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
-import org.intellij.markdown.parser.MarkdownParser
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 
 private const val TAG = "Markdown"
 
-private val flavour by lazy {
-    GFMFlavourDescriptor(
-        makeHttpsAutoLinks = true, useSafeLinks = true
-    )
-}
-
-private val parser by lazy {
-    MarkdownParser(flavour)
-}
-
-private val INLINE_LATEX_REGEX = Regex("\\\\\\((.+?)\\\\\\)")
-private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MATCHES_ALL)
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
-private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
-private val LATEX_BLOCK_LINE_BREAK_REGEX = Regex("""[ \t]*\r?\n[ \t]*""")
-
-// 预处理markdown内容
-private fun preProcess(content: String): String {
-    // 先找出所有代码块的位置
-    val codeBlocks = mutableListOf<IntRange>()
-    CODE_BLOCK_REGEX.findAll(content).forEach { match ->
-        codeBlocks.add(match.range)
-    }
-
-    // 检查位置是否在代码块内
-    fun isInCodeBlock(position: Int): Boolean {
-        return codeBlocks.any { range -> position in range }
-    }
-
-    // 替换行内公式 \( ... \) 到 $ ... $，但跳过代码块内的内容
-    var result = INLINE_LATEX_REGEX.replace(content) { matchResult ->
-        if (isInCodeBlock(matchResult.range.first)) {
-            matchResult.value // 保持原样
-        } else {
-            "$" + matchResult.groupValues[1] + "$"
-        }
-    }
-
-    // 替换块级公式 \[ ... \] 到 $$ ... $$，但跳过代码块内的内容
-    result = BLOCK_LATEX_REGEX.replace(result) { matchResult ->
-        if (isInCodeBlock(matchResult.range.first)) {
-            matchResult.value // 保持原样
-        } else {
-            val formula = matchResult.groupValues[1]
-                .trim()
-                .replace(LATEX_BLOCK_LINE_BREAK_REGEX, " ")
-            "$$" + formula + "$$"
-        }
-    }
-
-    return result
-}
 
 @Preview(showBackground = true)
 @Composable
@@ -214,23 +155,6 @@ private fun MarkdownPreview() {
     }
 }
 
-private data class MarkdownParseResult(
-    val preprocessed: String,
-    val astTree: ASTNode,
-    val hasHtml: Boolean,
-)
-
-private fun ASTNode.containsHtml(): Boolean {
-    if (type == MarkdownElementTypes.HTML_BLOCK || type == MarkdownTokenTypes.HTML_TAG) return true
-    return children.any { it.containsHtml() }
-}
-
-private fun parseMarkdown(content: String): MarkdownParseResult {
-    val preprocessed = preProcess(content)
-    val astTree = parser.buildMarkdownTreeFromString(preprocessed)
-    return MarkdownParseResult(preprocessed, astTree, astTree.containsHtml())
-}
-
 @Composable
 fun MarkdownBlock(
     content: String,
@@ -238,24 +162,22 @@ fun MarkdownBlock(
     style: TextStyle = LocalTextStyle.current,
     onClickCitation: (String) -> Unit = {}
 ) {
-    var (data, setData) = remember { mutableStateOf(parseMarkdown(content)) }
-
-    // 监听内容变化，重新解析AST树
-    // 这里在后台线程解析AST树, 防止频繁更新的时候掉帧
-    val updatedContent by rememberUpdatedState(content)
-    LaunchedEffect(Unit) {
-        snapshotFlow { updatedContent }
-            .distinctUntilChanged()
-            .mapLatest { parseMarkdown(it) }
-            .catch { exception ->
-                if (exception is CancellationException) throw exception
-                Log.e(TAG, "Failed to parse markdown", exception)
-            }
-            .flowOn(Dispatchers.Default)
-            .collect { setData(it) }
+    // 在后台线程解析AST树, 防止首帧及频繁更新时在主线程解析导致掉帧。
+    // produceState 的初始值为 null：解析完成前不渲染任何内容；解析失败时保留上一次的有效结果。
+    val data by produceState<MarkdownParseResult?>(initialValue = null, key1 = content) {
+        value = withContext(Dispatchers.Default) {
+            runCatching { parseMarkdown(content) }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    Log.e(TAG, "Failed to parse markdown", it)
+                }
+                .getOrNull() ?: value
+        }
     }
 
-    if (data.hasHtml) {
+    val result = data ?: return
+
+    if (result.hasHtml) {
         MarkdownNew(
             content = content,
             modifier = modifier,
@@ -267,9 +189,9 @@ fun MarkdownBlock(
             Column(
                 modifier = modifier.padding(horizontal = 4.dp)
             ) {
-                data.astTree.children.fastForEach { child ->
+                result.astTree.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = data.preprocessed, onClickCitation = onClickCitation
+                        node = child, content = result.preprocessed, onClickCitation = onClickCitation
                     )
                 }
             }
