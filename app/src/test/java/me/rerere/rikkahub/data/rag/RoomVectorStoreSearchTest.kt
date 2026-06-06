@@ -36,11 +36,21 @@ class RoomVectorStoreSearchTest {
 
     private class FakeDao : KnowledgeChunkDAO {
         val rows = mutableListOf<KnowledgeChunkEntity>()
+        // Records which read path search() takes, so a regression test can pin the SQL-filtered seam
+        // (getByKbAndModel) instead of the old load-all-then-Kotlin-filter (getByKb).
+        var getByKbCalls = 0
+        var getByKbAndModelCalls = 0
         override suspend fun insertAll(chunks: List<KnowledgeChunkEntity>) {
             chunks.forEach { c -> rows.removeAll { it.id == c.id }; rows.add(c) }
         }
-        override suspend fun getByKb(kbId: String): List<KnowledgeChunkEntity> =
-            rows.filter { it.kbId == kbId }
+        override suspend fun getByKb(kbId: String): List<KnowledgeChunkEntity> {
+            getByKbCalls++
+            return rows.filter { it.kbId == kbId }
+        }
+        override suspend fun getByKbAndModel(kbId: String, embeddingModel: String): List<KnowledgeChunkEntity> {
+            getByKbAndModelCalls++
+            return rows.filter { it.kbId == kbId && it.embeddingModel == embeddingModel }
+        }
         override suspend fun getByIds(ids: List<String>): List<KnowledgeChunkEntity> =
             rows.filter { it.id in ids }
         override suspend fun countByKb(kbId: String): Int = rows.count { it.kbId == kbId }
@@ -208,6 +218,51 @@ class RoomVectorStoreSearchTest {
         val ids = results.map { it.document.chunkId }
         assertTrue("foreign-model chunk must be excluded, got $ids", "foreign" !in ids)
         assertEquals(listOf("same"), ids)
+    }
+
+    @Test
+    fun `search loads only same-model rows via the SQL-filtered query`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", embeddingModelLabel = "fake-embed")
+
+        // One same-model row and one foreign-model row, both perfect cosine matches. The fix pushes
+        // the embedding-model predicate into SQL, so search() must go through getByKbAndModel and
+        // never load the whole KB via getByKb. On the unfixed code search() calls getByKb(...) then
+        // filters in Kotlin, so getByKbCalls == 1 / getByKbAndModelCalls == 0 -> this fails.
+        seedRow(dao, id = "same", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "fake-embed")
+        seedRow(dao, id = "foreign", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "other-embed")
+
+        val results = store.search(SimilaritySearchRequest(queryText = "the cat", limit = 10))
+
+        assertEquals(listOf("same"), results.map { it.document.chunkId })
+        assertTrue(
+            "search must use the SQL-filtered getByKbAndModel path, calls=${dao.getByKbAndModelCalls}",
+            dao.getByKbAndModelCalls >= 1,
+        )
+        assertEquals(
+            "search must not load the whole KB via getByKb (foreign-model rows never decoded)",
+            0,
+            dao.getByKbCalls,
+        )
+    }
+
+    @Test
+    fun `searchInDocuments loads only same-model rows via the SQL-filtered query`() = runBlocking {
+        val dao = FakeDao()
+        val store = RoomVectorStore(dao, FakeEmbedder(), "kb1", embeddingModelLabel = "fake-embed")
+
+        seedRow(dao, id = "same", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "fake-embed", docId = "valid-doc")
+        seedRow(dao, id = "foreign", vector = Vector(listOf(1.0, 0.0)), embeddingModel = "other-embed", docId = "valid-doc")
+
+        val results = store.searchInDocuments(
+            request = SimilaritySearchRequest(queryText = "the cat", limit = 10),
+            namespace = "kb1",
+            allowedDocIds = setOf("valid-doc"),
+        )
+
+        assertEquals(listOf("same"), results.map { it.document.chunkId })
+        assertTrue(dao.getByKbAndModelCalls >= 1)
+        assertEquals(0, dao.getByKbCalls)
     }
 
     @Test

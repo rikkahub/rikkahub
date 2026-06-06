@@ -122,6 +122,33 @@ class RankBySimilarityPropertyTest {
         }
     }
 
+    /**
+     * Regression for the minScore=NaN edge. The pure core's minScore filter must mirror the old
+     * `.filter { score >= minScore }` exactly: a NaN threshold makes `score >= NaN` false for every
+     * row, so ALL rows are dropped (reject-all). The negated form `score < NaN` is always false and
+     * would instead KEEP every row, flipping the behavior. The property generator only emits finite
+     * minScore (see arbCase), so this case is covered here as an explicit example.
+     */
+    @Test
+    fun `rankBySimilarity with NaN minScore rejects all rows`() = runBlocking {
+        val rows = listOf(
+            Chunk("c0", "doc", "src", 0, "a") to Vector(listOf(1.0, 0.0)),
+            Chunk("c1", "doc", "src", 1, "b") to Vector(listOf(0.0, 1.0)),
+        )
+        val request = SimilaritySearchRequest(
+            queryText = "",
+            limit = 10,
+            offset = 0,
+            minScore = Double.NaN,
+        )
+        val results = RoomVectorStore.rankBySimilarity(
+            query = Vector(listOf(1.0, 0.0)),
+            rows = rows,
+            request = request,
+        )
+        assertEquals(0, results.size)
+    }
+
     private data class Case(
         val query: Vector,
         val rows: List<Pair<Chunk, Vector>>,

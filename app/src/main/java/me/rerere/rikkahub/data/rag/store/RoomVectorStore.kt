@@ -83,11 +83,11 @@ class RoomVectorStore(
         val kbId = namespace ?: defaultNamespace
         return withContext(Dispatchers.IO) {
             val query = embedder.embed(request.queryText)
-            val rows = dao.getByKb(kbId)
-                // Cosine ranking is only meaningful between vectors from the same embedding space.
-                // Rows embedded under a different model (dimension may even coincide, e.g. 1536) would
-                // be silently mis-ranked, so exclude them from this query — the rows stay in Room.
-                .filter { it.embeddingModel == embeddingModelLabel }
+            // Cosine ranking is only meaningful between vectors from the same embedding space. Rows
+            // embedded under a different model (dimension may even coincide, e.g. 1536) would be
+            // silently mis-ranked, so the embedding-model predicate is pushed into SQL — foreign-model
+            // rows are never loaded or decoded, and the rows stay in Room.
+            val rows = dao.getByKbAndModel(kbId, embeddingModelLabel)
                 .map { it.toChunk() to decodeVector(it.embedding) }
             rankBySimilarity(query, rows, request, kbId)
         }
@@ -113,9 +113,9 @@ class RoomVectorStore(
         val kbId = namespace ?: defaultNamespace
         return withContext(Dispatchers.IO) {
             val query = embedder.embed(request.queryText)
-            val rows = dao.getByKb(kbId)
-                // Same embedding-space invariant as [search]: drop rows embedded under another model.
-                .filter { it.embeddingModel == embeddingModelLabel }
+            // Same embedding-space invariant as [search], enforced in SQL: rows embedded under another
+            // model are never loaded.
+            val rows = dao.getByKbAndModel(kbId, embeddingModelLabel)
                 .map { it.toChunk() to decodeVector(it.embedding) }
             rankBySimilarity(query, rows, request, kbId, allowedDocIds)
         }
@@ -134,32 +134,73 @@ class RoomVectorStore(
             namespace: String? = null,
             allowedDocIds: Set<String>? = null,
         ): List<SearchResult<Chunk>> {
-            return rows.asSequence()
+            // Scored, manifest- and minScore-filtered candidates, each tagged with its input index so
+            // ties can be broken by original order (matching the stable sortedByDescending this used to
+            // be). The index is the rank key, NOT the row's identity, so it is assigned over the
+            // filtered sequence in encounter order.
+            val candidates = ArrayList<Scored>()
+            var index = 0
+            rows.forEach { (chunk, vector) ->
                 // null = allow all (used by non-manifest callers/tests); a set enforces the manifest
                 // invariant by hiding orphan chunks whose document no longer exists.
-                .filter { (chunk, _) -> allowedDocIds?.contains(chunk.docId) ?: true }
-                .map { (chunk, vector) -> chunk to query.cosineSimilarity(vector) }
+                if (allowedDocIds != null && !allowedDocIds.contains(chunk.docId)) return@forEach
+                val score = query.cosineSimilarity(vector)
                 // koog's cosineSimilarity can emit NaN/±Infinity for extreme-magnitude vectors
                 // (overflow -> Inf/Inf = NaN; subnormal underflow -> non-zero dot / 0 magnitude =
                 // Inf). A non-finite score corrupts top-k: Double.compareTo orders NaN above every
-                // real number, so sortedByDescending would sort it to the front, and +Infinity also
-                // slips past the minScore `>=` filter. Drop such rows from this query's ranking —
-                // the chunk row stays in Room untouched, only this uncomputable similarity is hidden.
-                .filter { (_, score) -> score.isFinite() }
-                .filter { (_, score) -> request.minScore?.let { score >= it } ?: true }
-                .sortedByDescending { (_, score) -> score }
+                // real number, so a descending sort would put it first, and +Infinity also slips past
+                // the minScore `>=` filter. Drop such rows — the chunk row stays in Room untouched.
+                if (!score.isFinite()) return@forEach
+                // Mirror the old `.filter { score >= minScore }` exactly, including its NaN edge:
+                // a NaN minScore makes `score >= minScore` false for every row, so all rows are
+                // dropped. Writing the negated form `score < minScore` would instead KEEP every row
+                // (`score < NaN` is always false), flipping reject-all to keep-all and breaking the
+                // stated behavior-preserving contract.
+                if (request.minScore?.let { !(score >= it) } == true) return@forEach
+                candidates.add(Scored(chunk, score, index++))
+            }
+
+            // Bounded top-k selection. We only need the first offset+limit of the descending order, so
+            // keep a min-heap of size k (worst-of-the-best at the head) and evict the worst once full:
+            // O(n log k) instead of the old O(n log n) full sort. The result is byte-for-byte identical
+            // to sortedByDescending(score).drop(offset).take(limit) because the heap orders by the same
+            // (score DESC, input-index ASC) key the stable sort produced.
+            val k = request.offset + request.limit
+            if (k <= 0) return emptyList()
+
+            // Heap comparator is the INVERSE of the output order so poll() yields the worst candidate.
+            val worstFirst = Comparator<Scored> { a, b ->
+                val byScore = a.score.compareTo(b.score)          // ascending score: smallest at head
+                if (byScore != 0) byScore else b.index.compareTo(a.index) // larger index = "worse" tie
+            }
+            val heap = java.util.PriorityQueue(worstFirst)
+            candidates.forEach { c ->
+                if (heap.size < k) {
+                    heap.add(c)
+                } else if (worstFirst.compare(c, heap.peek()) > 0) {
+                    heap.poll()
+                    heap.add(c)
+                }
+            }
+
+            val bestFirst = Comparator<Scored> { a, b ->
+                val byScore = b.score.compareTo(a.score)          // descending score
+                if (byScore != 0) byScore else a.index.compareTo(b.index) // smaller index wins ties
+            }
+            return heap.sortedWith(bestFirst)
                 .drop(request.offset)
                 .take(request.limit)
-                .map { (chunk, score) ->
+                .map { scored ->
                     SearchResult(
-                        document = chunk,
-                        score = Score(value = score, metric = ScoreMetric.COSINE_SIMILARITY),
-                        id = chunk.chunkId,
+                        document = scored.chunk,
+                        score = Score(value = scored.score, metric = ScoreMetric.COSINE_SIMILARITY),
+                        id = scored.chunk.chunkId,
                         namespace = namespace,
                     )
                 }
-                .toList()
         }
+
+        private class Scored(val chunk: Chunk, val score: Double, val index: Int)
 
         fun encodeVector(vector: Vector): String =
             vector.values.joinToString(",")
