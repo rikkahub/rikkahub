@@ -34,6 +34,22 @@ class SkillPathsTest {
     }
 
     @Test
+    fun `resolve rejects NUL and control characters fail-closed`() {
+        val skillsRoot = Files.createTempDirectory("skills-root").toFile()
+        val skillDir = File(skillsRoot, "foo").apply { mkdirs() }
+
+        try {
+            // A NUL byte makes File.canonicalFile throw IOException; the resolver
+            // must fail closed (return null) rather than let it propagate.
+            assertNull(SkillPaths.resolveSkillDir(skillsRoot, "evil\u0000"))
+            assertNull(SkillPaths.resolveSkillFile(skillDir, "evil\u0000.txt"))
+            assertNull(SkillPaths.resolveSkillFile(skillDir, "evil\u0007.txt"))
+        } finally {
+            skillsRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `resolve skill file rejects sibling prefix escape`() {
         val skillsRoot = Files.createTempDirectory("skills-root").toFile()
         val skillDir = File(skillsRoot, "foo").apply { mkdirs() }
