@@ -210,7 +210,13 @@ class AssistantDetailVM(
 
     fun updateMemory(memory: AssistantMemory) {
         viewModelScope.launch {
-            memoryRepository.updateContent(id = memory.id, content = memory.content)
+            runCatching {
+                memoryRepository.updateContent(id = memory.id, content = memory.content)
+            }.onFailure {
+                // The record may have been deleted (e.g. by the memory tool) between opening
+                // the editor and saving; don't crash the VM scope, the update is moot.
+                Log.e(TAG, "Failed to update memory #${memory.id}", it)
+            }
         }
     }
 
