@@ -200,6 +200,72 @@ private val FRESHNESS_TTL_MS_BY_TOOL: Map<String, Long> = mapOf(
     "list_jobs" to 60_000L,
 )
 
+/**
+ * UI-observation tools that read screen/device state without changing it. Used by the loop
+ * guard's reset rule below: when the model drives a UI it runs an act-observe cycle and
+ * naturally repeats the same observation call (read_window_tree / take_screenshot with
+ * identical args) after every action. Those repeats are progress, NOT a loop, so an
+ * intervening ACTION (any executed tool NOT in this set) resets the observation repeat count.
+ * Tools that ARE in this set do not reset each other, so a model that merely alternates
+ * observers on a frozen screen still trips the guard (the token-drain case we must catch).
+ *
+ * This is the freshness-sensitive realtime readers plus find_node (the other pure screen
+ * reader). Keep it to genuine read-only observers: wrongly adding an ACTION tool here would
+ * stop it from resetting the counter and reintroduce the false-positive loop_detected.
+ */
+private val READ_ONLY_OBSERVATION_TOOLS: Set<String> =
+    FRESHNESS_TTL_MS_BY_TOOL.keys + "find_node"
+
+/** One prior executed tool call in the current turn, in chronological order. */
+internal data class PriorToolCall(
+    val toolName: String,
+    val signature: String,
+    val epochMs: Long,
+)
+
+internal data class LoopGuardDecision(
+    val block: Boolean,
+    val priorOccurrences: Int,
+)
+
+/**
+ * Pure, testable loop-detection decision, extracted from [GenerationHandler.generateText] so
+ * the act-observe reset and freshness-TTL rules can be unit-tested without an Android Context.
+ */
+internal object LoopGuard {
+    fun evaluate(
+        priorCalls: List<PriorToolCall>,
+        toolName: String,
+        signature: String,
+        nowMs: Long,
+        threshold: Int = LOOP_GUARD_REPEAT_THRESHOLD,
+        readOnlyTools: Set<String> = READ_ONLY_OBSERVATION_TOOLS,
+        freshnessTtlMs: Map<String, Long> = FRESHNESS_TTL_MS_BY_TOOL,
+    ): LoopGuardDecision {
+        // For observation tools, only repeats since the most recent ACTION count: acting on
+        // the world is progress, so identical observations taken before it are stale for
+        // loop-detection purposes. Side-effecting tools count every identical call in the
+        // turn (re-sending the same message 3x is a loop regardless of what ran between).
+        val relevant = if (toolName in readOnlyTools) {
+            val lastActionIdx = priorCalls.indexOfLast { it.toolName !in readOnlyTools }
+            if (lastActionIdx >= 0) priorCalls.subList(lastActionIdx + 1, priorCalls.size)
+            else priorCalls
+        } else {
+            priorCalls
+        }
+        val matching = relevant.filter { it.signature == signature }
+        val priorOccurrences = matching.size
+        if (priorOccurrences < threshold) return LoopGuardDecision(false, priorOccurrences)
+        // Freshness-TTL bypass: a real-time reader re-called after its TTL is a refresh, not
+        // a loop; let it through so the model gets a fresh reading instead of a stale one.
+        val ttl = freshnessTtlMs[toolName]
+        if (ttl != null && nowMs - matching.maxOf { it.epochMs } >= ttl) {
+            return LoopGuardDecision(false, priorOccurrences)
+        }
+        return LoopGuardDecision(true, priorOccurrences)
+    }
+}
+
 class GenerationHandler(
     private val context: Context,
     private val providerManager: ProviderManager,
@@ -585,32 +651,24 @@ class GenerationHandler(
                             (turnStartIndex + 1).coerceAtLeast(0),
                             messages.size
                         )
-                        // Pair each prior matching tool with its parent message so we can
-                        // tell HOW LONG AGO the most recent identical call ran (needed for
-                        // the freshness-TTL bypass below).
-                        val priorMatching = turnSlice.flatMap { msg ->
+                        // Flatten this turn's executed tool calls in chronological order. The
+                        // epoch ms (for the freshness-TTL bypass) comes from the parent
+                        // message's finish/create time, matching the prior inline behaviour.
+                        val priorCalls = turnSlice.flatMap { msg ->
+                            val epochMs = (msg.finishedAt ?: msg.createdAt)
+                                .toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
                             msg.parts.filterIsInstance<UIMessagePart.Tool>()
-                                .filter { it.isExecuted && it.toolName + "::" + it.input == signature }
-                                .map { it to msg }
+                                .filter { it.isExecuted }
+                                .map { PriorToolCall(it.toolName, it.toolName + "::" + it.input, epochMs) }
                         }
-                        val priorOccurrences = priorMatching.size
-                        // Freshness-TTL bypass: read-only tools that measure a real-time
-                        // signal (battery, screenshot, sensors) get a TTL window after
-                        // which an identical call is treated as a refresh, not a loop.
-                        // Without this, the model's "/battery" gets loop_detected and the
-                        // user sees the stale earlier reading served as if fresh.
-                        val ttlMs = FRESHNESS_TTL_MS_BY_TOOL[tool.toolName]
-                        val mostRecentCallEpochMs = if (ttlMs != null && priorMatching.isNotEmpty()) {
-                            priorMatching.maxOf { (_, msg) ->
-                                val ts = msg.finishedAt ?: msg.createdAt
-                                ts.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
-                            }
-                        } else 0L
-                        val ageMs = if (mostRecentCallEpochMs > 0L) {
-                            System.currentTimeMillis() - mostRecentCallEpochMs
-                        } else Long.MAX_VALUE
-                        val ttlBypass = ttlMs != null && ageMs >= ttlMs
-                        if (priorOccurrences >= LOOP_GUARD_REPEAT_THRESHOLD && !ttlBypass) {
+                        val loopDecision = LoopGuard.evaluate(
+                            priorCalls = priorCalls,
+                            toolName = tool.toolName,
+                            signature = signature,
+                            nowMs = System.currentTimeMillis(),
+                        )
+                        val priorOccurrences = loopDecision.priorOccurrences
+                        if (loopDecision.block) {
                             loopGuardTripCount++
                             Log.w(TAG, "generateText: loop-guard tripped on $signature (${priorOccurrences + 1} repeat, trip #$loopGuardTripCount this turn); injecting bail-out envelope")
                             executedTools += tool.copy(
