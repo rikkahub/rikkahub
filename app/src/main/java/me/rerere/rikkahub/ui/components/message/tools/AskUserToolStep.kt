@@ -44,7 +44,7 @@ internal fun ChainOfThoughtScope.AskUserToolStep(
 ) {
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isAnswered = tool.approvalState is ToolApprovalState.Answered
-    val arguments = tool.inputAsJson()
+    val arguments = remember(tool.input) { tool.inputAsJson() }
 
     // Parse questions from arguments
     val questions = remember(arguments) {

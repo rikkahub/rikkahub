@@ -62,7 +62,6 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.modifier.shimmer
-import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import org.koin.compose.koinInject
 
@@ -125,18 +124,12 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val scope = rememberCoroutineScope()
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
-    val arguments = tool.inputAsJson()
+    val arguments = remember(tool.input) { tool.inputAsJson() }
     val memoryAction = arguments.getStringContent("action")
-    val content = if (tool.isExecuted) {
-        runCatching {
-            JsonInstant.parseToJsonElement(
-                tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-            )
-        }.getOrElse { JsonObject(emptyMap()) }
-    } else {
-        null
+    val content = remember(tool.output, tool.isExecuted) {
+        parseToolOutputContent(tool.output, tool.isExecuted)
     }
-    val images = tool.output.filterIsInstance<UIMessagePart.Image>()
+    val images = remember(tool.output) { tool.output.filterIsInstance<UIMessagePart.Image>() }
 
     val title = when (tool.toolName) {
         ToolNames.MEMORY -> when (memoryAction) {

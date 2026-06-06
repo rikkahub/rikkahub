@@ -1,12 +1,14 @@
 package me.rerere.rikkahub.ui.components.message.tools
 
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
@@ -56,6 +58,19 @@ internal fun buildAskUserAnswerPayload(
         })
     }
     return answerPayload.toString()
+}
+
+/**
+ * Parse a tool's executed output into a [JsonElement] (issue #109). Holds the exact logic
+ * previously inlined in ChatMessageToolStep so the value can be memoized in the composable
+ * without changing behaviour: null when the tool is not yet executed, otherwise the
+ * newline-joined [UIMessagePart.Text] parts parsed as JSON, falling back to an empty
+ * [JsonObject] on a parse failure.
+ */
+internal fun parseToolOutputContent(output: List<UIMessagePart>, isExecuted: Boolean): JsonElement? {
+    if (!isExecuted) return null
+    val text = output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+    return runCatching { JsonInstant.parseToJsonElement(text) }.getOrElse { JsonObject(emptyMap()) }
 }
 
 internal fun extractAskUserAnsweredText(rawAnswer: String, questionId: String): String {

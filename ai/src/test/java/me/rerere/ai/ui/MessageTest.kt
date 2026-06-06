@@ -707,6 +707,36 @@ class MessageTest {
         assertTrue(assistantParts[2] is UIMessagePart.Image)
     }
 
+    // ==================== Tool.inputAsJson Tests (issue #109) ====================
+
+    // inputAsJson() re-parses every call, so each invocation yields a referentially
+    // distinct instance that is NOT === the previous one. This is the root-cause
+    // property behind issue #109: using inputAsJson() directly as a Compose
+    // remember() key destabilizes it on every recomposition. The stable key is the
+    // tool's `input` String, which IS identity-equal across reads.
+    @Test
+    fun `inputAsJson returns referentially distinct instance each call`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "id",
+            toolName = "ask_user",
+            input = """{"questions":[{"id":"q1","question":"Pick one"}]}"""
+        )
+        val first = tool.inputAsJson()
+        val second = tool.inputAsJson()
+        assertFalse("inputAsJson must not return the same instance twice", first === second)
+        assertEquals("parsed value must still be stable across calls", first, second)
+    }
+
+    @Test
+    fun `input String is the stable remember key across reads`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "id",
+            toolName = "ask_user",
+            input = """{"questions":[]}"""
+        )
+        assertTrue("input String must be referentially stable", tool.input === tool.input)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createTestMessages(count: Int): List<UIMessage> {

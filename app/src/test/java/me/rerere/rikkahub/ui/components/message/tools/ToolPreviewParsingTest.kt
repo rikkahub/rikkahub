@@ -1,10 +1,12 @@
 package me.rerere.rikkahub.ui.components.message.tools
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -174,5 +176,49 @@ class ToolPreviewParsingTest {
             })
         }.toString()
         assertEquals(raw, extractAskUserAnsweredText(raw, "q1"))
+    }
+
+    // ---- parseToolOutputContent (issue #109) ----
+
+    @Test
+    fun `parseToolOutputContent returns null when not executed even with output`() {
+        val output = listOf(UIMessagePart.Text("""{"a":1}"""))
+        assertNull(parseToolOutputContent(output, isExecuted = false))
+    }
+
+    @Test
+    fun `parseToolOutputContent parses single Text part JSON object`() {
+        val output = listOf(UIMessagePart.Text("""{"answer":"42"}"""))
+        val result = parseToolOutputContent(output, isExecuted = true)
+        assertEquals("42", result!!.jsonObject["answer"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `parseToolOutputContent joins multiple Text parts with newline before parsing`() {
+        // Neither part alone is valid JSON; only the newline-joined whole parses.
+        val output = listOf(
+            UIMessagePart.Text("{"),
+            UIMessagePart.Text(""""key":"value"}"""),
+        )
+        val result = parseToolOutputContent(output, isExecuted = true)
+        assertEquals("value", result!!.jsonObject["key"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `parseToolOutputContent falls back to empty JsonObject on unparseable output`() {
+        val output = listOf(UIMessagePart.Text("not json at all"))
+        val result = parseToolOutputContent(output, isExecuted = true)
+        assertTrue(result is JsonObject)
+        assertTrue((result as JsonObject).isEmpty())
+    }
+
+    @Test
+    fun `parseToolOutputContent ignores non-Text parts in the join`() {
+        val output = listOf(
+            UIMessagePart.Image(url = "file://x.png"),
+            UIMessagePart.Text("""{"k":"v"}"""),
+        )
+        val result = parseToolOutputContent(output, isExecuted = true)
+        assertEquals("v", result!!.jsonObject["k"]!!.jsonPrimitive.content)
     }
 }
