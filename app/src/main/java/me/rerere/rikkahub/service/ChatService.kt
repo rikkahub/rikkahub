@@ -84,6 +84,8 @@ import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundController
+import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -91,8 +93,6 @@ import me.rerere.rikkahub.utils.sendNotification
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
@@ -217,14 +217,9 @@ class ChatService(
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
-    // 活跃生成引用计数：跨会话计数，只有 0->1 边启动前台服务、1->0 边停止。
-    private val generationTracker = GenerationActivityTracker()
-
-    // 前台服务是否被认为已成功启动。与 generationTracker（纯 job 生命周期计数）解耦：计数的
-    // acquire/release 严格由 job.invokeOnCompletion 配对，不能因 FGS 启动失败而回滚（否则会与
-    // 完成时的 release 形成对单次 acquire 的双重 release）。是否真正向服务发 ACTION_STOP 由这个
-    // 独立标志决定，避免在从未启动的服务上发停止意图。
-    private val foregroundServiceRunning = AtomicBoolean(false)
+    // 活跃生成 -> 前台服务的生命周期状态机。引用计数（0->1 启动、1->0 停止）、前台服务运行标志、
+    // WakeLock 续期节流统一由协调器独占持有；ChatService 只委派，不再直接调用 GenerationForegroundService。
+    private val foregroundCoordinator = GenerationForegroundCoordinator(AndroidGenerationForegroundController(context))
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -290,8 +285,8 @@ class ChatService(
                 ),
                 scope = appScope,
                 onIdle = { removeSession(it) },
-                onGenerationStart = { onActiveGenerationStart() },
-                onGenerationStop = { onActiveGenerationStop() },
+                onGenerationStart = { foregroundCoordinator.onGenerationStart() },
+                onGenerationStop = { foregroundCoordinator.onGenerationStop() },
             ).also {
                 _sessionsVersion.value++
                 Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
@@ -309,50 +304,6 @@ class ChatService(
             session.cleanup()
             _sessionsVersion.value++
             Log.i(TAG, "removeSession: $conversationId (remaining: ${sessions.size})")
-        }
-    }
-
-    // ---- 活跃生成 -> 前台服务 ----
-
-    // 由 ConversationSession.setJob 在设置非空 job 时触发。仅 0->1 边启动前台服务（其中获取
-    // wake/wifi 锁）。锁不在 ChatService 持有，避免泄漏面。
-    //
-    // startForegroundService 在 Android 12+ 的纯后台进程（如 Web 服务器在息屏时收到发消息请求）
-    // 会抛 ForegroundServiceStartNotAllowedException。setJob 在协程 try/catch 之外调用，未捕获时
-    // 异常会逃逸并崩溃进程——恰好是本 PR 要修的后台发消息场景。runCatching 兜住启动失败：生成本身
-    // 仍在 appScope 继续，只是失去前台保活/锁（降级而非崩溃）。启动成功才置位标志，使后续停止只对
-    // 真正启动过的服务发 ACTION_STOP。
-    private fun onActiveGenerationStart() {
-        if (generationTracker.acquire() != GenerationActivityTracker.Transition.STARTED) return
-        runCatching { GenerationForegroundService.start(context) }
-            .onSuccess { foregroundServiceRunning.set(true) }
-            .onFailure {
-                Log.w(TAG, "onActiveGenerationStart: foreground service start failed, degraded", it)
-            }
-    }
-
-    // 由 job.invokeOnCompletion 触发（成功/失败/取消三条终止路径都会经过）。仅 1->0 边停止前台
-    // 服务，且仅当启动确实成功过时才发 ACTION_STOP（startService 在后台对未启动的服务也可能抛
-    // IllegalStateException）。服务在 ACTION_STOP / onDestroy 释放锁。
-    private fun onActiveGenerationStop() {
-        if (generationTracker.release() != GenerationActivityTracker.Transition.STOPPED) return
-        if (foregroundServiceRunning.compareAndSet(true, false)) {
-            runCatching { GenerationForegroundService.stop(context) }
-                .onFailure { Log.w(TAG, "onActiveGenerationStop: foreground service stop failed", it) }
-        }
-    }
-
-    // 上次向前台服务发送 WakeLock 续期的时刻（跨会话共享同一个锁，故单一时间戳即可）。
-    private val lastWakeLockRenewAt = AtomicLong(0L)
-
-    // 流式进展时按时间节流地续期前台服务 WakeLock。节流判定抽成纯函数 [shouldRenewWakeLock] 以便
-    // JVM 单测；仅当服务确实在运行且距上次续期超过间隔时才发 IPC。
-    private fun renewForegroundServiceIfDue(now: Long = System.currentTimeMillis()) {
-        if (!foregroundServiceRunning.get()) return
-        val last = lastWakeLockRenewAt.get()
-        if (!shouldRenewWakeLock(last, now)) return
-        if (lastWakeLockRenewAt.compareAndSet(last, now)) {
-            runCatching { GenerationForegroundService.renew(context) }
         }
     }
 
@@ -750,7 +701,7 @@ class ChatService(
                     is GenerationChunk.Messages -> {
                         // 任何流式进展都重置前台服务的 WakeLock 超时，使长 agentic 循环（工具/MCP/搜索
                         // 跨多段子-120s SSE）在息屏下不会在 15 分钟处误超时停机。按时间节流，避免逐 token IPC。
-                        renewForegroundServiceIfDue()
+                        foregroundCoordinator.onStreamingProgress()
 
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
