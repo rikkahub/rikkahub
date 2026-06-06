@@ -9,7 +9,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services)
 }
 
 android {
@@ -17,7 +16,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "me.rerere.rikkahub"
+        applicationId = "excp.rikkahub"
         minSdk = 26
         targetSdk = 37
         versionCode = 162
@@ -191,10 +190,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.androidx.material3.adaptive.navigation3)
 
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.config)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
@@ -300,6 +295,8 @@ dependencies {
 
     // Google Play Services Location (FusedLocationProvider)
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    // kotlinx.coroutines.tasks.await for Task<*> (was previously transitive via Firebase)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
 
     // AndroidX Biometric (BiometricPrompt)
     implementation("androidx.biometric:biometric:1.2.0-alpha05")

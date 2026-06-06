@@ -38,7 +38,6 @@ val viewModelModule = module {
             conversationRepo = get(),
             chatService = get(),
             updateChecker = get(),
-            analytics = get(),
             filesManager = get(),
             favoriteRepository = get(),
         )
