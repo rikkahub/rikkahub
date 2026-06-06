@@ -896,14 +896,23 @@ class GenerationHandler(
                 buildRecentChatsPrompt(assistant, conversationRepo)
             } else ""
             val toolPrompts = tools.map { tool -> tool.systemPrompt(model, messages) }
-            val system = systemPromptBuilder.build(
+            // Split into stable (assistant + tools) and volatile (memory + recent chats +
+            // addendum) so prompt caching survives memory injection: the stable part is the
+            // cached prefix, the volatile part sits after it. See SystemPromptBuilder.
+            val (stableSystem, volatileSystem) = systemPromptBuilder.buildSections(
                 assistantPrompt = effectiveSystemPrompt,
                 memoryPrompt = memoryPrompt,
                 recentChatsPrompt = recentChatsPrompt,
                 toolPrompts = toolPrompts,
                 systemAddendum = systemAddendum,
             )
-            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
+            val systemParts = buildList {
+                if (stableSystem.isNotBlank()) add(UIMessagePart.Text(stableSystem))
+                if (volatileSystem.isNotBlank()) add(UIMessagePart.Text(volatileSystem))
+            }
+            if (systemParts.isNotEmpty()) {
+                add(UIMessage(role = MessageRole.SYSTEM, parts = systemParts))
+            }
             addAll(messages.limitContext(assistant.contextMessageSize).ageOldToolImages())
         }.transforms(
             transformers = transformers,

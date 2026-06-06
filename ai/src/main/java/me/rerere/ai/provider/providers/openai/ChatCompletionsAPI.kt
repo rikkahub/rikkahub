@@ -255,7 +255,11 @@ class ChatCompletionsAPI(
         // (OpenAI/DeepSeek/Grok/MiniMax) have the field stripped by OpenRouter. So this is safe
         // for any model and, unlike top-level cache_control, never pins routing to one upstream.
         val openRouterCache = host == "openrouter.ai" && providerSetting.promptCaching
-        val messagesArray = buildMessages(messages, providerSetting.includeHistoryReasoning).let {
+        val messagesArray = buildMessages(
+            messages,
+            providerSetting.includeHistoryReasoning,
+            openRouterCache = openRouterCache,
+        ).let {
             if (openRouterCache) insertOpenRouterCacheControl(it) else it
         }
         return buildJsonObject {
@@ -442,12 +446,42 @@ class ChatCompletionsAPI(
         }
         val userTarget = if (userIndices.size >= 2) userIndices[userIndices.size - 2] else -1
 
-        val targets = setOf(systemIndex, userTarget).filter { it >= 0 }
-        if (targets.isEmpty()) return messages
+        if (systemIndex < 0 && userTarget < 0) return messages
 
         return JsonArray(messages.mapIndexed { index, msg ->
-            if (index in targets) msg.jsonObject.withCacheControlOnLastBlock() else msg
+            when (index) {
+                // System: breakpoint on the FIRST (stable) block so the volatile block
+                // (memory / recent chats) after it does not invalidate the cached prefix.
+                systemIndex -> msg.jsonObject.withCacheControlOnFirstBlock()
+                userTarget -> msg.jsonObject.withCacheControlOnLastBlock()
+                else -> msg
+            }
         })
+    }
+
+    private fun JsonObject.withCacheControlOnFirstBlock(): JsonObject {
+        val ephemeral = buildJsonObject { put("type", "ephemeral") }
+        val newContent: JsonArray = when (val content = this["content"]) {
+            is JsonPrimitive -> buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "text")
+                    put("text", content.contentOrNull ?: "")
+                    put("cache_control", ephemeral)
+                })
+            }
+
+            is JsonArray -> {
+                if (content.isEmpty()) return this
+                JsonArray(content.mapIndexed { idx, block ->
+                    if (idx == 0 && block is JsonObject) {
+                        JsonObject(block + ("cache_control" to ephemeral))
+                    } else block
+                })
+            }
+
+            else -> return this
+        }
+        return JsonObject(this + ("content" to newContent))
     }
 
     // Attach cache_control to the last content block, promoting a plain-string content
@@ -481,14 +515,18 @@ class ChatCompletionsAPI(
         return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
     }
 
-    private fun buildMessages(messages: List<UIMessage>, includeHistoryReasoning: Boolean = true) = buildJsonArray {
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean = true,
+        openRouterCache: Boolean = false,
+    ) = buildJsonArray {
         val filteredMessages = messages.filter { it.isValidToUpload() }
 
         filteredMessages.forEach { message ->
             if (message.role == MessageRole.ASSISTANT) {
                 addAssistantMessages(message, includeReasoning = includeHistoryReasoning)
             } else {
-                addNonAssistantMessage(message)
+                addNonAssistantMessage(message, openRouterCache = openRouterCache)
             }
         }
     }
@@ -661,11 +699,30 @@ class ChatCompletionsAPI(
         }
     }
 
-    private fun JsonArrayBuilder.addNonAssistantMessage(message: UIMessage) {
+    private fun JsonArrayBuilder.addNonAssistantMessage(message: UIMessage, openRouterCache: Boolean = false) {
         add(buildJsonObject {
             put("role", JsonPrimitive(message.role.name.lowercase()))
 
-            if (message.parts.isOnlyTextPart()) {
+            val textParts = message.parts.filterIsInstance<UIMessagePart.Text>()
+            val allText = message.parts.isNotEmpty() && message.parts.all { it is UIMessagePart.Text }
+
+            if (message.role == MessageRole.SYSTEM && allText && openRouterCache && textParts.size >= 2) {
+                // Emit the system prompt as content blocks [stable, volatile] so the
+                // cache_control breakpoint can land on the stable (first) block; the
+                // volatile block after it does not bust the prefix hash.
+                putJsonArray("content") {
+                    textParts.forEach { part ->
+                        add(buildJsonObject {
+                            put("type", "text")
+                            put("text", part.text)
+                        })
+                    }
+                }
+            } else if (message.role == MessageRole.SYSTEM && allText) {
+                // Non-caching path: join the stable+volatile parts into a single string,
+                // byte-identical to the combined system prompt other providers received.
+                put("content", textParts.joinToString("\n") { it.text })
+            } else if (message.parts.isOnlyTextPart()) {
                 put("content", message.parts.filterIsInstance<UIMessagePart.Text>().first().text)
             } else {
                 putJsonArray("content") {
