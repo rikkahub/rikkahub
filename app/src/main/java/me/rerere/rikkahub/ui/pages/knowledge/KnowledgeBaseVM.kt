@@ -169,6 +169,9 @@ class KnowledgeBaseVM(
                     IngestKnowledgeBaseUseCase.Result.EmptyDocument ->
                         _events.value = Event.IngestFailed(kbId, "No extractable text in this file")
 
+                    IngestKnowledgeBaseUseCase.Result.UnsupportedType ->
+                        _events.value = Event.IngestFailed(kbId, "Unsupported file type")
+
                     is IngestKnowledgeBaseUseCase.Result.ParseFailed ->
                         // Surface that parsing failed without embedding the raw parser error text.
                         _events.value = Event.IngestFailed(kbId, "Could not parse this file")

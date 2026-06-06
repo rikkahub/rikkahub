@@ -6,13 +6,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.document.DocxParser
-import me.rerere.document.EpubParser
-import me.rerere.document.PdfParser
-import me.rerere.document.PptxParser
-import java.io.File
+import me.rerere.rikkahub.data.document.DocumentExtractionResult
+import me.rerere.rikkahub.data.document.DocumentPromptRenderer
+import me.rerere.rikkahub.data.document.DocumentSource
+import me.rerere.rikkahub.data.document.DocumentTextExtractor
 
 object DocumentAsPromptTransformer : InputMessageTransformer {
+
+    // Shared with RAG ingestion (issue #102): one resolver/extractor, so chat and RAG route formats
+    // identically and a parse failure can never be embedded into the prompt as document content.
+    private val extractor = DocumentTextExtractor()
+
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
@@ -31,65 +35,30 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
      *
      * The document prompts are inserted as a single ordered block at the front of the list. Inserting
      * each prompt individually at index 0 (the previous behaviour) reversed the order: attachments
-     * A B C produced prompts C B A in the message sent to the model.
+     * A B C produced prompts C B A in the message sent to the model (issue #20).
      *
-     * Extracted as a pure function over a content-reader lambda so it is JVM unit testable without
-     * Android URI / disk IO.
+     * Extracted as a pure function over a result-producing reader lambda so it is JVM unit testable
+     * without Android URI / disk IO. The reader returns a typed [DocumentExtractionResult]; only
+     * [DocumentExtractionResult.Success] is rendered as `<content>` — failures become a metadata-only
+     * note (issue #102), never error text masquerading as document content.
      */
     fun buildPartsWithDocumentPrompts(
         parts: List<UIMessagePart>,
-        readContent: (UIMessagePart.Document) -> String,
+        readContent: (UIMessagePart.Document) -> DocumentExtractionResult,
     ): List<UIMessagePart> {
         val documents = parts.filterIsInstance<UIMessagePart.Document>()
         if (documents.isEmpty()) return parts
         val prompts = documents.map { document ->
-            val content = readContent(document)
             UIMessagePart.Text(
-                """
-                ## user sent a file: ${document.fileName}
-                <content>
-                ```
-                $content
-                ```
-                </content>
-                """.trimMargin()
+                DocumentPromptRenderer.render(document.fileName, readContent(document))
             )
         }
         return prompts + parts
     }
 
-    private fun parsePdfAsText(file: File): String {
-        return PdfParser.parserPdf(file)
-    }
-
-    private fun parseDocxAsText(file: File): String {
-        return DocxParser.parse(file)
-    }
-
-    private fun parsePptxAsText(file: File): String {
-        return PptxParser.parse(file)
-    }
-
-    private fun parseEpubAsText(file: File): String {
-        return EpubParser.parse(file)
-    }
-
-    private fun readDocumentContent(document: UIMessagePart.Document): String {
+    private fun readDocumentContent(document: UIMessagePart.Document): DocumentExtractionResult {
         val file = runCatching { document.url.toUri().toFile() }.getOrNull()
-            ?: return "[ERROR, invalid file uri: ${document.fileName}]"
-        if (!file.exists() || !file.isFile) {
-            return "[ERROR, file not found: ${document.fileName}]"
-        }
-        return runCatching {
-            when (document.mime) {
-                "application/pdf" -> parsePdfAsText(file)
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> parseDocxAsText(file)
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> parsePptxAsText(file)
-                "application/epub+zip" -> parseEpubAsText(file)
-                else -> file.readText()
-            }
-        }.getOrElse {
-            "[ERROR, failed to read file: ${document.fileName}]"
-        }
+            ?: return DocumentExtractionResult.ParseFailed("invalid file uri: ${document.fileName}")
+        return extractor.extract(DocumentSource(file, document.fileName, document.mime))
     }
 }

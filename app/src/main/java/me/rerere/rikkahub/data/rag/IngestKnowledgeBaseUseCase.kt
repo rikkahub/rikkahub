@@ -3,7 +3,9 @@ package me.rerere.rikkahub.data.rag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
-import me.rerere.document.DocumentExtractionResult
+import me.rerere.rikkahub.data.document.DocumentExtractionResult
+import me.rerere.rikkahub.data.document.DocumentSource
+import me.rerere.rikkahub.data.document.DocumentTextExtractor
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findKnowledgeBase
 import me.rerere.rikkahub.data.rag.chunk.Chunker
@@ -21,6 +23,7 @@ import kotlin.uuid.Uuid
 class IngestKnowledgeBaseUseCase(
     private val settingsStore: SettingsStore,
     private val storeFactory: KnowledgeStoreFactory,
+    private val documentExtractor: DocumentTextExtractor = DocumentTextExtractor(),
 ) {
     sealed interface Result {
         data class Success(val document: KnowledgeDocument) : Result
@@ -30,6 +33,12 @@ class IngestKnowledgeBaseUseCase(
 
         /** Parsed document had no usable text. */
         data object EmptyDocument : Result
+
+        /**
+         * The file is not one of the supported document types (and did not sniff as plain text). RAG
+         * is strict: no fallback read, no ingestion (issue #102).
+         */
+        data object UnsupportedType : Result
 
         /** Parser failed; [reason] is for user-facing diagnostics only and is never embedded. */
         data class ParseFailed(val reason: String) : Result
@@ -59,8 +68,12 @@ class IngestKnowledgeBaseUseCase(
         // Only Success text may be chunked/embedded. A ParseFailed reason must never reach the
         // store — that is the whole point of the typed extraction: an error string can no longer be
         // mistaken for content (issue #83).
-        val text = when (val extraction = DocumentTextExtractor.extract(file, mime)) {
+        val text = when (
+            val extraction = documentExtractor.extract(DocumentSource(file, fileName, mime))
+        ) {
             is DocumentExtractionResult.ParseFailed -> return@withContext Result.ParseFailed(extraction.reason)
+            is DocumentExtractionResult.Rejected -> return@withContext Result.Rejected(extraction.reason.name)
+            DocumentExtractionResult.UnsupportedType -> return@withContext Result.UnsupportedType
             DocumentExtractionResult.Empty -> return@withContext Result.EmptyDocument
             is DocumentExtractionResult.Success -> extraction.text
         }

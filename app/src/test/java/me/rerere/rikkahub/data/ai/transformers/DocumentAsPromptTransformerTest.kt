@@ -1,14 +1,18 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.document.DocumentExtractionResult
+import me.rerere.rikkahub.data.document.DocumentType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Regression coverage for the attachment-ordering bug (issue #20): the transformer inserted each
- * document prompt at index 0 inside a forEach loop, reversing the order of multiple documents so
- * attachment order A B C reached the model as C B A.
+ * Regression coverage for the attachment-ordering bug (issue #20) and the typed-result rendering
+ * contract (issue #102): the transformer must keep multiple documents in order, prepend the prompt
+ * block, and — critically — render only `Success` as `<content>`. A parse failure must never be
+ * embedded as document content.
  */
 class DocumentAsPromptTransformerTest {
 
@@ -17,6 +21,9 @@ class DocumentAsPromptTransformerTest {
         fileName = name,
         mime = "text/plain",
     )
+
+    private fun success(text: String) =
+        DocumentExtractionResult.Success(text, DocumentType.PlainText, "text/plain")
 
     @Test
     fun `multiple documents keep their original order in the prompt block`() {
@@ -28,13 +35,13 @@ class DocumentAsPromptTransformerTest {
         )
 
         val result = DocumentAsPromptTransformer.buildPartsWithDocumentPrompts(parts) { doc ->
-            "content of ${doc.fileName}"
+            success("content of ${doc.fileName}")
         }
 
         val joined = result.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-        val idxA = joined.indexOf("user sent a file: A.txt")
-        val idxB = joined.indexOf("user sent a file: B.txt")
-        val idxC = joined.indexOf("user sent a file: C.txt")
+        val idxA = joined.indexOf("A.txt")
+        val idxB = joined.indexOf("B.txt")
+        val idxC = joined.indexOf("C.txt")
 
         assertTrue("A header present", idxA >= 0)
         assertTrue("B header present", idxB >= 0)
@@ -52,11 +59,11 @@ class DocumentAsPromptTransformerTest {
         )
 
         val result = DocumentAsPromptTransformer.buildPartsWithDocumentPrompts(parts) { doc ->
-            "content of ${doc.fileName}"
+            success("content of ${doc.fileName}")
         }
 
         val texts = result.filterIsInstance<UIMessagePart.Text>().map { it.text }
-        assertTrue("first text is the document prompt", texts.first().contains("user sent a file: A.txt"))
+        assertTrue("first text is the document prompt", texts.first().contains("A.txt"))
         assertEquals("user question", texts.last())
     }
 
@@ -64,8 +71,26 @@ class DocumentAsPromptTransformerTest {
     fun `parts without documents are returned unchanged`() {
         val parts = listOf<UIMessagePart>(UIMessagePart.Text("just text"))
 
-        val result = DocumentAsPromptTransformer.buildPartsWithDocumentPrompts(parts) { "unused" }
+        val result = DocumentAsPromptTransformer.buildPartsWithDocumentPrompts(parts) { success("unused") }
 
         assertEquals(parts, result)
+    }
+
+    @Test
+    fun `parse failure is not embedded as document content`() {
+        // Issue #102 core regression: the old path wrapped the reader's error string in <content>.
+        val parts = listOf(
+            document("broken.pdf"),
+            UIMessagePart.Text("user question"),
+        )
+
+        val result = DocumentAsPromptTransformer.buildPartsWithDocumentPrompts(parts) {
+            DocumentExtractionResult.ParseFailed("internal parser stacktrace")
+        }
+
+        val prompt = result.filterIsInstance<UIMessagePart.Text>().first().text
+        assertFalse("must not embed failure in <content>", prompt.contains("<content>"))
+        assertFalse("must not leak parser reason", prompt.contains("internal parser stacktrace"))
+        assertTrue("attachment is still acknowledged", prompt.contains("broken.pdf"))
     }
 }
