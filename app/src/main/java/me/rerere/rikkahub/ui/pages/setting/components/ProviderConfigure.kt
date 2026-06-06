@@ -51,6 +51,7 @@ import androidx.compose.material3.HorizontalDivider
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.OpenRouterRouting
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -443,17 +444,38 @@ private fun OpenRouterRoutingSection(
         onChange(routing.copy(zdr = it))
     }
 
+    Text(
+        "Max price (USD per 1M tokens). Leave empty or tap the clear icon for no price limit.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = routing.maxPricePrompt?.toString() ?: "",
             onValueChange = { onChange(routing.copy(maxPricePrompt = it.toDoubleOrNull())) },
             label = { Text("Max $/1M prompt") },
+            singleLine = true,
+            trailingIcon = {
+                if (routing.maxPricePrompt != null) {
+                    IconButton(onClick = { onChange(routing.copy(maxPricePrompt = null)) }) {
+                        Icon(HugeIcons.Cancel01, contentDescription = "Clear")
+                    }
+                }
+            },
             modifier = Modifier.weight(1f),
         )
         OutlinedTextField(
             value = routing.maxPriceCompletion?.toString() ?: "",
             onValueChange = { onChange(routing.copy(maxPriceCompletion = it.toDoubleOrNull())) },
             label = { Text("Max $/1M completion") },
+            singleLine = true,
+            trailingIcon = {
+                if (routing.maxPriceCompletion != null) {
+                    IconButton(onClick = { onChange(routing.copy(maxPriceCompletion = null)) }) {
+                        Icon(HugeIcons.Cancel01, contentDescription = "Clear")
+                    }
+                }
+            },
             modifier = Modifier.weight(1f),
         )
     }

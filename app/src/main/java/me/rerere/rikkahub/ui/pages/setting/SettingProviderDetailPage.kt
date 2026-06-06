@@ -706,16 +706,7 @@ private fun AddModelButton(
             models = models,
             selectedModels = selectedModels,
             onModelSelected = { model ->
-                val inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId)
-                val outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId)
-                val abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
-                onAddModel(
-                    model.copy(
-                        inputModalities = inputModalities,
-                        outputModalities = outputModalities,
-                        abilities = abilities
-                    )
-                )
+                onAddModel(model.enrichCapabilities())
             },
             onModelDeselected = { model ->
                 onRemoveModel(model)
@@ -725,13 +716,7 @@ private fun AddModelButton(
                     parentProvider.copyProvider(
                         models = parentProvider.models + it.filter { model ->
                             parentProvider.models.none { existing -> existing.modelId == model.modelId }
-                        }.map { model ->
-                            model.copy(
-                                inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId),
-                                outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId),
-                                abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
-                            )
-                        }
+                        }.map { model -> model.enrichCapabilities() }
                     )
                 )
             },
@@ -953,13 +938,7 @@ private fun ModelPicker(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        val modelMeta = remember(it) {
-                                            it.copy(
-                                                inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(it.modelId),
-                                                outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(it.modelId),
-                                                abilities = ModelRegistry.MODEL_ABILITIES.getData(it.modelId),
-                                            )
-                                        }
+                                        val modelMeta = remember(it) { it.enrichCapabilities() }
                                         ModelModalityTag(
                                             model = modelMeta,
                                         )
@@ -1581,3 +1560,20 @@ private fun ProviderOverrideSettings(
         }
     }
 }
+
+/**
+ * Prefer capabilities auto-detected at fetch time (OpenRouter's /models populates
+ * supportedParameters, modalities, abilities and the IMAGE model type); only fall back to
+ * the static ModelRegistry lookup for providers that return bare model ids. Without this,
+ * the registry lookup clobbered OpenRouter's detected image/tool/reasoning capabilities.
+ */
+private fun Model.enrichCapabilities(): Model =
+    if (supportedParameters.isNotEmpty()) {
+        this
+    } else {
+        copy(
+            inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(modelId),
+            outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(modelId),
+            abilities = ModelRegistry.MODEL_ABILITIES.getData(modelId),
+        )
+    }
