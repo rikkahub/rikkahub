@@ -1,5 +1,3 @@
-@file:OptIn(dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi::class)
-
 package me.rerere.rikkahub.ui.components.ai
 
 import android.content.Intent
@@ -153,6 +151,11 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.SoundEffectPlayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.runtime.collectAsState
+import me.rerere.asr.ASRStatus
+import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.utils.isAllowedFileType
 import org.koin.compose.koinInject
 import java.io.File

@@ -103,16 +103,6 @@ fun SettingPermissionsPage() {
                 )
                 CardGroup {
                     rowsForGroup.forEach { row ->
-                        val statusText = when (row.status) {
-                            Status.GRANTED -> stringResource(R.string.setting_page_permissions_status_granted)
-                            Status.AUTO_GRANTED -> stringResource(R.string.setting_page_permissions_status_auto_granted)
-                            Status.DENIED -> stringResource(R.string.setting_page_permissions_status_denied)
-                        }
-                        val tint = when (row.status) {
-                            Status.GRANTED -> MaterialTheme.colorScheme.primary
-                            Status.AUTO_GRANTED -> MaterialTheme.colorScheme.outline
-                            Status.DENIED -> MaterialTheme.colorScheme.error
-                        }
                         val grantAction = row.grant
                         val click: (() -> Unit)? = when {
                             grantAction is GrantAction.Runtime
@@ -129,6 +119,16 @@ fun SettingPermissionsPage() {
                             headlineContent = { Text(row.label) },
                             supportingContent = { Text(row.description) },
                             trailingContent = {
+                                val statusText = when (row.status) {
+                                    Status.GRANTED -> stringResource(R.string.setting_page_permissions_status_granted)
+                                    Status.AUTO_GRANTED -> stringResource(R.string.setting_page_permissions_status_auto_granted)
+                                    Status.DENIED -> stringResource(R.string.setting_page_permissions_status_denied)
+                                }
+                                val tint = when (row.status) {
+                                    Status.GRANTED -> MaterialTheme.colorScheme.primary
+                                    Status.AUTO_GRANTED -> MaterialTheme.colorScheme.outline
+                                    Status.DENIED -> MaterialTheme.colorScheme.error
+                                }
                                 Text(
                                     text = statusText,
                                     color = tint,

@@ -55,7 +55,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         WorkflowRunEntity::class,
         AgentRun::class,
     ],
-    version = 24,
+    version = 25,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -74,6 +74,9 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         AutoMigration(from = 20, to = 21, spec = Migration_20_21::class),
         AutoMigration(from = 21, to = 22, spec = Migration_21_22::class),
         AutoMigration(from = 22, to = 23, spec = Migration_22_23::class),
+        // v25: upstream 2.2.6 added conversation-level custom_system_prompt / mode_injection_ids
+        // / lorebook_ids columns (all carry defaultValue, so a plain auto-migration suffices).
+        AutoMigration(from = 24, to = 25),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
