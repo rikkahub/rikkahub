@@ -401,7 +401,10 @@ class TelegramBotService : Service() {
                     stopSelf(); return
                 }
                 consecutiveErrors++
-                delay(computeBackoffMs(consecutiveErrors))
+                // Honour Telegram's flood-control retry_after (429) so we don't hammer the
+                // API during a flood-wait; otherwise fall back to exponential backoff.
+                val retryAfterMs = e.retryAfterSec?.let { it * 1000L + 1000L } ?: 0L
+                delay(maxOf(computeBackoffMs(consecutiveErrors), retryAfterMs))
             } catch (e: Throwable) {
                 android.util.Log.e(TAG, "pollLoop: unexpected error in cycle=$cycle", e)
                 consecutiveErrors++
