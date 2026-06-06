@@ -52,6 +52,41 @@ def cli(ctx):
         app.run()
 
 
+@cli.command("test-connection")
+def test_connection():
+    """测试 AI 服务连接
+
+    \b
+    示例：
+        locale-tui test-connection
+    """
+    config = load_config()
+
+    if not config.openai_api_key:
+        click.echo("错误：未设置 OPENAI_API_KEY，无法测试连接。", err=True)
+        sys.exit(1)
+
+    click.echo("AI 服务配置：")
+    click.echo(f"  Base URL: {config.openai_base_url}")
+    click.echo(f"  Model: {config.translation_model}")
+    click.echo("正在测试连接...")
+
+    async def test_async():
+        translator = AITranslator(config)
+        return await translator.test_connection()
+
+    try:
+        content = asyncio.run(test_async())
+        click.echo("✓ 连接成功")
+        if content:
+            click.echo(f"响应: {content}")
+        else:
+            click.echo("响应为空，但 API 已返回有效结果。")
+    except Exception as e:
+        click.echo(f"✗ 连接失败: {e}", err=True)
+        sys.exit(1)
+
+
 @cli.command()
 @click.argument("key")
 @click.argument("value")
@@ -127,9 +162,8 @@ def add(key: str, value: str, module: str, skip_translate: bool):
         async def translate_async():
             translator = AITranslator(config)
 
-            for lang_code in target_languages:
+            async def translate_one(lang_code: str):
                 lang_name = config.get_language_name(lang_code)
-                click.echo(f"翻译到 {lang_name}...", nl=False)
 
                 try:
                     translations = await translator.translate_batch(
@@ -137,19 +171,28 @@ def add(key: str, value: str, module: str, skip_translate: bool):
                     )
 
                     if key in translations:
-                        translated_value = translations[key]
-                        entry.set_translation(lang_code, translated_value)
-
-                        # Save to file
-                        target_file = res_dir / lang_code / "strings.xml"
-                        StringsXmlParser.update_entry(target_file, key, translated_value)
-
-                        click.echo(f" ✓ {translated_value}")
-                    else:
-                        click.echo(" ✗ 翻译失败（未返回结果）", err=True)
-
+                        return lang_code, lang_name, translations[key], None
+                    return lang_code, lang_name, None, "翻译失败（未返回结果）"
                 except Exception as e:
-                    click.echo(f" ✗ 错误: {e}", err=True)
+                    return lang_code, lang_name, None, str(e)
+
+            tasks = [translate_one(lang_code) for lang_code in target_languages]
+            results = await asyncio.gather(*tasks)
+
+            for lang_code, lang_name, translated_value, error in results:
+                click.echo(f"翻译到 {lang_name}...", nl=False)
+
+                if error:
+                    click.echo(f" ✗ 错误: {error}", err=True)
+                    continue
+
+                entry.set_translation(lang_code, translated_value)
+
+                # Save to file
+                target_file = res_dir / lang_code / "strings.xml"
+                StringsXmlParser.update_entry(target_file, key, translated_value)
+
+                click.echo(f" ✓ {translated_value}")
 
         asyncio.run(translate_async())
         click.echo("完成！")

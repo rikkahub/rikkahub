@@ -68,6 +68,7 @@ sealed class ProviderSetting {
         // need them explicitly; auto-caching providers have the field stripped upstream, so
         // it is applied to every model on the OpenRouter host. See ChatCompletionsAPI.
         var promptCaching: Boolean = true,
+        var includeHistoryReasoning: Boolean = true,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

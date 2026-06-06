@@ -1,7 +1,6 @@
 package me.rerere.highlight
 
 import android.content.Context
-import com.whl.quickjs.android.QuickJSLoader
 import com.whl.quickjs.wrapper.QuickJSArray
 import com.whl.quickjs.wrapper.QuickJSContext
 import com.whl.quickjs.wrapper.QuickJSObject
@@ -30,8 +29,6 @@ class Highlighter(ctx: Context) {
 
     init {
         executor.submit {
-            QuickJSLoader.init()
-
             context // init context
         }
     }

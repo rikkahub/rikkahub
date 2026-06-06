@@ -22,9 +22,9 @@ import kotlin.uuid.Uuid
 interface SearchService<T : SearchServiceOptions> {
     val name: String
 
-    val parameters: InputSchema?
+    fun parameters(options: T): InputSchema?
 
-    val scrapingParameters: InputSchema?
+    fun scrapingParameters(options: T): InputSchema?
 
     @Composable
     fun Description()
@@ -61,6 +61,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.RikkaHubOptions -> RikkaHubSearchService
                 is SearchServiceOptions.GrokOptions -> GrokSearchService
                 is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
+                is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
             } as SearchService<T>
         }
 
@@ -130,6 +131,9 @@ data class ScrapedResultMetadata(
 sealed class SearchServiceOptions {
     abstract val id: Uuid
 
+    open val displayName: String
+        get() = TYPES[this::class] ?: "Unknown"
+
     companion object {
         val DEFAULT = BingLocalOptions()
 
@@ -150,6 +154,7 @@ sealed class SearchServiceOptions {
             BochaOptions::class to "博查",
             GrokOptions::class to "Grok",
             TinyfishOptions::class to "Tinyfish",
+            CustomJsOptions::class to "Custom JS",
         )
     }
 
@@ -278,6 +283,51 @@ sealed class SearchServiceOptions {
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
     ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("custom_js")
+    data class CustomJsOptions(
+        override val id: Uuid = Uuid.random(),
+        val name: String = "",
+        val searchScript: String = DEFAULT_SEARCH_SCRIPT,
+        val scrapeScript: String = "",
+    ) : SearchServiceOptions() {
+        override val displayName: String
+            get() = name.ifBlank { "Custom JS" }
+        companion object {
+            const val DEFAULT_SCRAPE_SCRIPT = """// Implement scrape(urls) function
+// urls is an array of URL strings
+// Use fetch(url, options?) for HTTP requests
+// fetch() returns { status, ok, text(), json() }
+// Return { urls: [{ url, content, metadata?: { title?, description?, language? } }] }
+
+function scrape(urls) {
+  return {
+    urls: urls.map(function(url) {
+      const res = fetch(url);
+      const body = res.text();
+      return { url: url, content: body };
+    })
+  };
+}"""
+
+            const val DEFAULT_SEARCH_SCRIPT = """// Implement search(query, resultSize) function
+// Use fetch(url, options?) for HTTP requests
+// fetch() returns { status, ok, text(), json() }
+// Return { items: [{ title, url, text }], answer?: string }
+
+function search(query, resultSize) {
+  const encoded = encodeURIComponent(query);
+  const res = fetch("https://example.com/search?q=" + encoded + "&limit=" + resultSize);
+  const data = res.json();
+  return {
+    items: data.results.map(function(r) {
+      return { title: r.title, url: r.url, text: r.snippet };
+    })
+  };
+}"""
+        }
+    }
 }
 
 internal suspend fun Call.await(): Response {

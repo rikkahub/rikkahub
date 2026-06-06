@@ -44,6 +44,18 @@ fun LocalDateTime.toLocalString(): String {
     return formatter.format(this)
 }
 
+/**
+ * 消息时间显示：当天只显示时间（如 14:30），非当天显示「月日 + 时间」（如 5月20日 14:30）。
+ */
+fun LocalDateTime.toMessageTimeString(): String {
+    val locale = Locale.getDefault()
+    return if (this.toLocalDate() == LocalDate.now()) {
+        DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(this)
+    } else {
+        this.toLocalString()
+    }
+}
+
 fun LocalDate.toLocalString(includeYear: Boolean): String {
     val locale = Locale.getDefault()
     val formatter = if (includeYear) {

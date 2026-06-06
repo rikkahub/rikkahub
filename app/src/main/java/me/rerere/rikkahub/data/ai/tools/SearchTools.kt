@@ -30,7 +30,7 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                         index = settings.searchServiceSelected,
                         defaultValue = { SearchServiceOptions.DEFAULT })
                     val service = SearchService.getService(options)
-                    service.parameters
+                    service.parameters(options)
                 },
                 execute = {
                     val options = settings.searchServices.getOrElse(
@@ -63,7 +63,7 @@ fun createSearchTools(settings: Settings): Set<Tool> {
             index = settings.searchServiceSelected,
             defaultValue = { SearchServiceOptions.DEFAULT })
         val service = SearchService.getService(options)
-        if (service.scrapingParameters != null) {
+        if (service.scrapingParameters(options) != null) {
             add(
                 Tool(
                     name = "scrape_web",
@@ -77,7 +77,7 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                             index = settings.searchServiceSelected,
                             defaultValue = { SearchServiceOptions.DEFAULT })
                         val service = SearchService.getService(options)
-                        service.scrapingParameters
+                        service.scrapingParameters(options)
                     },
                     execute = {
                         val options = settings.searchServices.getOrElse(

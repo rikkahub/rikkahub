@@ -399,17 +399,11 @@ private fun HtmlParagraphContent(
 @Composable
 private fun HtmlHeading(element: Element, onClickCitation: (String) -> Unit) {
     val level = element.tagName().removePrefix("h").toIntOrNull() ?: 1
-    val headingStyle = when (level) {
-        1 -> HeaderStyle.H1
-        2 -> HeaderStyle.H2
-        3 -> HeaderStyle.H3
-        4 -> HeaderStyle.H4
-        5 -> HeaderStyle.H5
-        else -> HeaderStyle.H6
-    }
-    val verticalPadding = when (level) {
-        1 -> 16.dp; 2 -> 14.dp; 3 -> 12.dp; 4 -> 10.dp; 5 -> 8.dp; else -> 6.dp
-    }
+    val headingStyle = HeaderStyle.fromLevel(
+        level = level,
+        fontSizeRatio = LocalSettings.current.displaySetting.fontSizeRatio,
+    )
+    val verticalPadding = HeaderStyle.verticalPadding(level)
     ProvideTextStyle(LocalTextStyle.current.merge(headingStyle)) {
         Box(modifier = Modifier.padding(vertical = verticalPadding)) {
             HtmlParagraph(element = element, onClickCitation = onClickCitation)
@@ -911,7 +905,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
 
         "code" -> withStyle(
             SpanStyle(
-                fontFamily = FontFamily.Monospace,
+                fontFamily = JetbrainsMono,
                 fontSize = 0.95.em,
                 background = colorScheme.surfaceVariant,
                 color = colorScheme.primary,

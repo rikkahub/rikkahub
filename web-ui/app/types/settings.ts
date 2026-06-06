@@ -67,6 +67,8 @@ export interface AssistantProfile {
   mcpServers?: string[];
   modeInjectionIds?: string[];
   lorebookIds?: string[];
+  allowConversationPromptInjection?: boolean;
+  allowConversationSystemPrompt?: boolean;
   name: string;
   avatar?: AssistantAvatar;
   useAssistantAvatar?: boolean;

@@ -37,7 +37,7 @@ private val CardGroupCorner = 20.dp
 private val CardGroupItemSpacing = 2.dp
 private val CardGroupInnerCorner = 4.dp
 
-data class CardGroupItem(
+private data class CardGroupItem(
     val onClick: (() -> Unit)?,
     val modifier: Modifier,
     val overlineContent: (@Composable () -> Unit)?,
@@ -48,9 +48,11 @@ data class CardGroupItem(
     val colors: ListItemColors?,
 )
 
-class CardGroupScope {
-    internal val items = mutableListOf<CardGroupItem>()
+@DslMarker
+private annotation class CardGroupDsl
 
+@CardGroupDsl
+interface CardGroupScope {
     fun item(
         onClick: (() -> Unit)? = null,
         modifier: Modifier = Modifier,
@@ -59,6 +61,21 @@ class CardGroupScope {
         leadingContent: (@Composable () -> Unit)? = null,
         trailingContent: (@Composable () -> Unit)? = null,
         colors: ListItemColors? = null,
+        headlineContent: @Composable () -> Unit,
+    )
+}
+
+private class CardGroupScopeImpl : CardGroupScope {
+    val items = mutableListOf<CardGroupItem>()
+
+    override fun item(
+        onClick: (() -> Unit)?,
+        modifier: Modifier,
+        overlineContent: (@Composable () -> Unit)?,
+        supportingContent: (@Composable () -> Unit)?,
+        leadingContent: (@Composable () -> Unit)?,
+        trailingContent: (@Composable () -> Unit)?,
+        colors: ListItemColors?,
         headlineContent: @Composable () -> Unit,
     ) {
         items.add(
@@ -130,15 +147,15 @@ private fun CardGroupListItem(
 fun CardGroup(
     modifier: Modifier = Modifier,
     title: (@Composable () -> Unit)? = null,
-    content: @Composable CardGroupScope.() -> Unit,
+    content: CardGroupScope.() -> Unit,
 ) {
-    // Cache the scope across recompositions instead of allocating a fresh CardGroupScope
+    // Cache the scope across recompositions instead of allocating a fresh CardGroupScopeImpl
     // + N CardGroupItem records every time the parent recomposes. On dense pages (the
     // Local Tools toggle list has 30+ rows) the per-tap allocation churn raced the
     // Switch's 150ms thumb-slide for main-thread frames and animations dropped to a
     // visible <10 fps. Reusing the scope and clearing its items in place avoids the
     // churn without changing the public DSL.
-    val scope = remember { CardGroupScope() }
+    val scope = remember { CardGroupScopeImpl() }
     scope.items.clear()
     scope.content()
 

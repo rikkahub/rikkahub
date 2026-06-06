@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -259,7 +260,7 @@ private fun ChatPageContent(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
-        AssistantBackground(setting = setting)
+        AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         Scaffold(
             topBar = {
                 TopBar(
@@ -345,6 +346,10 @@ private fun ChatPageContent(
                             )
                         )
                     },
+                    onUpdateConversation = {
+                        vm.updateConversation(it)
+                        vm.saveConversationAsync()
+                    },
                     onUpdateSearchService = { index ->
                         vm.updateSettings(
                             setting.copy(
@@ -428,6 +433,10 @@ private fun ChatPageContent(
                 },
                 onToggleFavorite = { node ->
                     vm.toggleMessageFavorite(node)
+                },
+                onConversationSystemPromptChange = { newPrompt ->
+                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
+                    vm.saveConversationAsync()
                 },
             )
         }

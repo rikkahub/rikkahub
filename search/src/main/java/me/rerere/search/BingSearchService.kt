@@ -23,8 +23,8 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
         Text(stringResource(R.string.bing_desc))
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.BingLocalOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -34,7 +34,7 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.BingLocalOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,

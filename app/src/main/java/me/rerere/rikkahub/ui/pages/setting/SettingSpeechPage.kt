@@ -43,7 +43,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -120,7 +121,9 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor
+            ) {
                 NavigationBarItem(
                     selected = selectedPage == 0,
                     onClick = { selectedPage = 0 },
@@ -157,7 +160,7 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
 
     // Edit TTS Provider Bottom Sheet
     editingTTSProvider?.let { provider ->
-        val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val bottomSheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
         var currentProvider by remember(provider) { mutableStateOf(provider) }
 
         ModalBottomSheet(
@@ -220,7 +223,7 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
     }
 
     editingASRProvider?.let { provider ->
-        val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val bottomSheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
         var currentProvider by remember(provider) { mutableStateOf(provider) }
 
         ModalBottomSheet(
@@ -456,7 +459,7 @@ private fun AddTTSProviderButton(onAdd: (TTSProviderSetting) -> Unit) {
     }
 
     if (showBottomSheet) {
-        val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val bottomSheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
         ModalBottomSheet(
             onDismissRequest = {
                 showBottomSheet = false
@@ -558,7 +561,7 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
     }
 
     if (showBottomSheet) {
-        val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val bottomSheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
         ModalBottomSheet(
             onDismissRequest = {
                 showBottomSheet = false

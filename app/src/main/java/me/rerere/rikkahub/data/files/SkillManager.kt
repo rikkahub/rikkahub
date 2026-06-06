@@ -159,6 +159,13 @@ class SkillManager(
     }
 
     fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
+        return saveSkillFileBytesAtomically(
+            skillName = skillName,
+            files = files.mapValues { it.value.toByteArray() },
+        )
+    }
+
+    fun saveSkillFileBytesAtomically(skillName: String, files: Map<String, ByteArray>): Boolean {
         val skillsDir = getSkillsDir()
         val targetDir = resolveSkillDir(skillName) ?: return false
         val stagingDir = createTempSkillDir(skillsDir, skillName, "staging") ?: return false
@@ -168,7 +175,7 @@ class SkillManager(
             for ((relativePath, content) in files) {
                 val target = SkillPaths.resolveSkillFile(stagingDir, relativePath) ?: return false
                 target.parentFile?.mkdirs()
-                target.writeText(content)
+                target.writeBytes(content)
             }
 
             if (!stagingDir.resolve("SKILL.md").exists()) return false

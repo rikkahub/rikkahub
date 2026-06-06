@@ -6,10 +6,8 @@ import me.rerere.hugeicons.stroke.Earth
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Github
 import me.rerere.hugeicons.stroke.SmartPhone01
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -137,8 +135,6 @@ fun SettingAboutPage() {
                             modifier = Modifier.combinedClickable(
                                 onClick = {},
                                 onLongClick = { navController.navigate(Screen.Debug) },
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = LocalIndication.current,
                             ),
                             leadingContent = { Icon(HugeIcons.Code, null) },
                             supportingContent = {

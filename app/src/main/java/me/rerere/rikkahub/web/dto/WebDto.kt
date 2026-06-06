@@ -13,7 +13,9 @@ import me.rerere.rikkahub.data.model.MessageNode
 
 @Serializable
 data class SendMessageRequest(
-    val parts: List<UIMessagePart>
+    val parts: List<UIMessagePart>,
+    val modeInjectionIds: List<String>? = null,
+    val lorebookIds: List<String>? = null,
 )
 
 @Serializable
@@ -61,6 +63,12 @@ data class MoveConversationRequest(
 @Serializable
 data class UpdateConversationTitleRequest(
     val title: String
+)
+
+@Serializable
+data class UpdateConversationInjectionsRequest(
+    val modeInjectionIds: List<String>,
+    val lorebookIds: List<String>,
 )
 
 @Serializable
@@ -163,6 +171,9 @@ data class ConversationDto(
     val messages: List<MessageNodeDto>,
     val chatSuggestions: List<String>,
     val isPinned: Boolean,
+    val customSystemPrompt: String? = null,
+    val modeInjectionIds: List<String> = emptyList(),
+    val lorebookIds: List<String> = emptyList(),
     val createAt: Long,
     val updateAt: Long,
     val isGenerating: Boolean = false
@@ -284,6 +295,9 @@ fun Conversation.toDto(isGenerating: Boolean = false) = ConversationDto(
     messages = messageNodes.map { it.toDto() },
     chatSuggestions = chatSuggestions,
     isPinned = isPinned,
+    customSystemPrompt = customSystemPrompt,
+    modeInjectionIds = modeInjectionIds.map { it.toString() },
+    lorebookIds = lorebookIds.map { it.toString() },
     createAt = createAt.toEpochMilli(),
     updateAt = updateAt.toEpochMilli(),
     isGenerating = isGenerating

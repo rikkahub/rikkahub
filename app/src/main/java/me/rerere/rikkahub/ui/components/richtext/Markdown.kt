@@ -1,14 +1,20 @@
 package me.rerere.rikkahub.ui.components.richtext
 
+import android.content.ClipData
 import android.content.Intent
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -16,10 +22,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,11 +37,13 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -43,6 +53,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -73,10 +85,17 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.toDp
 import org.intellij.markdown.IElementType
@@ -88,6 +107,7 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
+import kotlin.time.Clock
 
 private const val TAG = "Markdown"
 
@@ -106,6 +126,7 @@ private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MAT
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
+private val LATEX_BLOCK_LINE_BREAK_REGEX = Regex("""[ \t]*\r?\n[ \t]*""")
 
 // 预处理markdown内容
 private fun preProcess(content: String): String {
@@ -134,7 +155,10 @@ private fun preProcess(content: String): String {
         if (isInCodeBlock(matchResult.range.first)) {
             matchResult.value // 保持原样
         } else {
-            "$$" + matchResult.groupValues[1] + "$$"
+            val formula = matchResult.groupValues[1]
+                .trim()
+                .replace(LATEX_BLOCK_LINE_BREAK_REGEX, " ")
+            "$$" + formula + "$$"
         }
     }
 
@@ -145,16 +169,18 @@ private fun preProcess(content: String): String {
 @Composable
 private fun MarkdownPreview() {
     MaterialTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            MarkdownBlock(
-                content = "Hi there!", modifier = Modifier.background(Color.Red)
-            )
-            MarkdownBlock(
-                content = """
+        CompositionLocalProvider(LocalSettings provides Settings()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                MarkdownBlock(
+                    content = "Hi there!", modifier = Modifier.background(Color.Red)
+                )
+                MarkdownBlock(
+                    content = """
                     ### 🌍 This is Markdown Test This Markdown Test
                     1. How many roads must a man walk down
                         * the slings and arrows of outrageous fortune, Or to take arms against a sea of troubles,
@@ -181,9 +207,9 @@ private fun MarkdownPreview() {
 
                     ## HTML Escaping
                     This is a &gt;  test
-
                 """.trimIndent()
-            )
+                )
+            }
         }
     }
 }
@@ -249,28 +275,57 @@ fun MarkdownBlock(
 }
 
 object HeaderStyle {
-    val H1 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 24.sp
+    private const val LINE_HEIGHT_RATIO = 1.25f
+
+    fun fromLevel(level: Int, fontSizeRatio: Float): TextStyle {
+        val fontSize = when (level) {
+            1 -> 24.sp
+            2 -> 22.sp
+            3 -> 20.sp
+            4 -> 18.sp
+            5 -> 16.sp
+            else -> 14.sp
+        } * fontSizeRatio
+
+        return TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = fontSize,
+            lineHeight = fontSize * LINE_HEIGHT_RATIO,
+        )
+    }
+
+    fun verticalPadding(level: Int) = when (level) {
+        1 -> 16.dp
+        2 -> 14.dp
+        3 -> 12.dp
+        4 -> 10.dp
+        5 -> 8.dp
+        else -> 6.dp
+    }
+
+    fun fromMarkdownType(type: IElementType, fontSizeRatio: Float): TextStyle = fromLevel(
+        level = when (type) {
+            MarkdownElementTypes.ATX_1 -> 1
+            MarkdownElementTypes.ATX_2 -> 2
+            MarkdownElementTypes.ATX_3 -> 3
+            MarkdownElementTypes.ATX_4 -> 4
+            MarkdownElementTypes.ATX_5 -> 5
+            MarkdownElementTypes.ATX_6 -> 6
+            else -> 6
+        },
+        fontSizeRatio = fontSizeRatio,
     )
 
-    val H2 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 22.sp
-    )
-
-    val H3 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 20.sp
-    )
-
-    val H4 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 18.sp
-    )
-
-    val H5 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 16.sp
-    )
-
-    val H6 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 14.sp
+    fun verticalPadding(type: IElementType) = verticalPadding(
+        level = when (type) {
+            MarkdownElementTypes.ATX_1 -> 1
+            MarkdownElementTypes.ATX_2 -> 2
+            MarkdownElementTypes.ATX_3 -> 3
+            MarkdownElementTypes.ATX_4 -> 4
+            MarkdownElementTypes.ATX_5 -> 5
+            else -> 6
+        }
     )
 }
 
@@ -301,25 +356,12 @@ private fun MarkdownNode(
 
         // 标题
         MarkdownElementTypes.ATX_1, MarkdownElementTypes.ATX_2, MarkdownElementTypes.ATX_3, MarkdownElementTypes.ATX_4, MarkdownElementTypes.ATX_5, MarkdownElementTypes.ATX_6 -> {
-            val style = when (node.type) {
-                MarkdownElementTypes.ATX_1 -> HeaderStyle.H1
-                MarkdownElementTypes.ATX_2 -> HeaderStyle.H2
-                MarkdownElementTypes.ATX_3 -> HeaderStyle.H3
-                MarkdownElementTypes.ATX_4 -> HeaderStyle.H4
-                MarkdownElementTypes.ATX_5 -> HeaderStyle.H5
-                MarkdownElementTypes.ATX_6 -> HeaderStyle.H6
-                else -> throw IllegalArgumentException("Unknown header type")
-            }
-            val headingPadding = when (node.type) {
-                MarkdownElementTypes.ATX_1 -> 16.dp
-                MarkdownElementTypes.ATX_2 -> 14.dp
-                MarkdownElementTypes.ATX_3 -> 12.dp
-                MarkdownElementTypes.ATX_4 -> 10.dp
-                MarkdownElementTypes.ATX_5 -> 8.dp
-                MarkdownElementTypes.ATX_6 -> 6.dp
-                else -> 8.dp
-            }
-            ProvideTextStyle(value = style) {
+            val style = HeaderStyle.fromMarkdownType(
+                type = node.type,
+                fontSizeRatio = LocalSettings.current.displaySetting.fontSizeRatio,
+            )
+            val headingPadding = HeaderStyle.verticalPadding(node.type)
+            ProvideTextStyle(value = LocalTextStyle.current.merge(style)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.children.fastForEach { node ->
                         if (node.type == MarkdownTokenTypes.ATX_CONTENT) {
@@ -341,7 +383,7 @@ private fun MarkdownNode(
             UnorderedListNode(
                 node = node,
                 content = content,
-                modifier = modifier.padding(vertical = 4.dp),
+                modifier = modifier,
                 onClickCitation = onClickCitation,
                 level = listLevel
             )
@@ -351,7 +393,7 @@ private fun MarkdownNode(
             OrderedListNode(
                 node = node,
                 content = content,
-                modifier = modifier.padding(vertical = 4.dp),
+                modifier = modifier,
                 onClickCitation = onClickCitation,
                 level = listLevel
             )
@@ -525,7 +567,7 @@ private fun MarkdownNode(
         MarkdownElementTypes.CODE_SPAN -> {
             val code = node.getTextInNode(content).trim('`')
             Text(
-                text = code, fontFamily = FontFamily.Monospace, modifier = modifier
+                text = code, fontFamily = JetbrainsMono, modifier = modifier
             )
         }
 
@@ -824,14 +866,118 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
         }
     }
 
-    // 渲染表格
-    DataTable(
-        headers = headers,
-        rows = rowComposables,
-        modifier = modifier.padding(vertical = 8.dp),
-        columnMinWidths = List(columnCount) { 80.dp },
-        columnMaxWidths = List(columnCount) { 200.dp },
-    )
+    val clipboardManager = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // 表格原始markdown文本（用于复制）和CSV内容（用于下载）
+    val tableMarkdown = remember(node, content) { node.getTextInNode(content).trim() }
+    val tableCsv = remember(headerCells, rows) { buildTableCsv(headerCells, rows) }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                try {
+                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                        outputStream.write(tableCsv.toByteArray())
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    // 渲染表格卡片（工具栏 + 表格）
+    Column(
+        modifier = modifier
+            .padding(vertical = 8.dp)
+            .clip(MaterialTheme.shapes.large)
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "表格",
+                fontSize = 12.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val iconSize = 16.dp
+                val iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+
+                Icon(
+                    imageVector = HugeIcons.Copy01,
+                    contentDescription = "Copy",
+                    tint = iconTint,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .onClick {
+                            scope.launch {
+                                clipboardManager.setClipEntry(ClipEntry(ClipData.newPlainText("table", tableMarkdown)))
+                            }
+                        }
+                        .padding(4.dp)
+                        .size(iconSize)
+                )
+
+                Icon(
+                    imageVector = HugeIcons.Download04,
+                    contentDescription = "Download",
+                    tint = iconTint,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .onClick {
+                            createDocumentLauncher.launch(
+                                "table_${
+                                    Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                                }.csv"
+                            )
+                        }
+                        .padding(4.dp)
+                        .size(iconSize)
+                )
+            }
+        }
+        DataTable(
+            headers = headers,
+            rows = rowComposables,
+            columnMinWidths = List(columnCount) { 80.dp },
+            columnMaxWidths = List(columnCount) { 200.dp },
+            outerBorder = null,
+        )
+    }
+}
+
+// 构建CSV内容，对包含逗号/引号/换行的字段进行转义
+private fun buildTableCsv(headerCells: List<String>, rows: List<List<String>>): String {
+    fun escape(field: String): String {
+        return if (field.any { it == ',' || it == '"' || it == '\n' }) {
+            "\"${field.replace("\"", "\"\"")}\""
+        } else {
+            field
+        }
+    }
+    return buildString {
+        appendLine(headerCells.joinToString(",") { escape(it) })
+        rows.forEach { row ->
+            appendLine(row.joinToString(",") { escape(it) })
+        }
+    }
 }
 
 private fun AnnotatedString.Builder.appendMarkdownNodeContent(
@@ -991,7 +1137,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             val code = node.getTextInNode(content).trim('`')
             withStyle(
                 SpanStyle(
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = JetbrainsMono,
                     fontSize = 0.95.em,
                     background = colorScheme.surfaceVariant,
                     color = colorScheme.primary,

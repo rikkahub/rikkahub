@@ -22,7 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,7 +93,7 @@ fun SearchPickerButton(
                     )
                 } else if (enableSearch && currentService != null) {
                     AutoAIIcon(
-                        name = SearchServiceOptions.TYPES[currentService::class] ?: "Search",
+                        name = currentService.displayName,
                         color = Color.Transparent
                     )
                 } else {
@@ -108,7 +109,7 @@ fun SearchPickerButton(
     if (showSearchPicker) {
         ModalBottomSheet(
             onDismissRequest = { showSearchPicker = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
         ) {
             Column(
                 modifier = Modifier
@@ -267,14 +268,14 @@ private fun AppSearchSettings(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AutoAIIcon(
-                        name = SearchServiceOptions.TYPES[service::class] ?: "Search",
+                        name = service.displayName,
                         modifier = Modifier.size(24.dp)
                     )
                     Column(
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(
-                            text = SearchServiceOptions.TYPES[service::class] ?: "Unknown",
+                            text = service.displayName,
                             style = MaterialTheme.typography.titleMedium,
                         )
                         SearchAbilityTagLine(

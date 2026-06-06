@@ -36,12 +36,14 @@ import { Textarea } from "~/components/ui/textarea";
 import { resolveFileUrl } from "~/lib/files";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import type { UIMessagePart, UploadFilesResponseDto } from "~/types";
+import type { ConversationDto, UIMessagePart, UploadFilesResponseDto } from "~/types";
 
 export interface ChatInputProps {
   value: string;
   attachments: UIMessagePart[];
   suggestions?: string[];
+  conversation?: ConversationDto | null;
+  draftKey?: string | null;
   ready?: boolean;
   disabled?: boolean;
   isGenerating?: boolean;
@@ -177,6 +179,8 @@ function ChatInputInner({
   value,
   attachments,
   suggestions = [],
+  conversation = null,
+  draftKey = null,
   ready = true,
   disabled = false,
   isGenerating = false,
@@ -702,7 +706,11 @@ function ChatInputInner({
               <SearchPickerButton disabled={!canSwitchModel} />
               <ReasoningPickerButton disabled={!canSwitchModel} />
               <McpPickerButton disabled={!canSwitchModel} />
-              <ExtensionPickerButton disabled={!canSwitchModel} />
+              <ExtensionPickerButton
+                conversation={conversation}
+                draftKey={draftKey}
+                disabled={!canSwitchModel}
+              />
               <QuickMessageButton
                 quickMessages={quickMessages}
                 disabled={!canUseQuickMessage}

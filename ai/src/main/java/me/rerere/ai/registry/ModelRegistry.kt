@@ -81,6 +81,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GPT_5_6 = defineModel {
+        tokens("gpt", "5", "6")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val GEMINI_20_FLASH = defineModel {
         tokens("gemini", "2", "0", "flash")
         visionInput()
@@ -149,6 +155,12 @@ object ModelRegistry {
         reasoningAbility()
     }
 
+    val GEMINI_3_5 = defineModel {
+        tokens("gemini", "3", "5")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     val GEMINI_FLASH_LATEST = defineModel {
         exact("gemini-flash-latest")
         visionInput()
@@ -166,7 +178,7 @@ object ModelRegistry {
     }
 
     val GEMINI_3_SERIES = defineGroup {
-        add(GEMINI_3_PRO, GEMINI_3_FLASH, GEMINI_3_1_PRO_PREVIEW, GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS)
+        add(GEMINI_3_PRO, GEMINI_3_FLASH, GEMINI_3_1_PRO_PREVIEW, GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS, GEMINI_3_5)
     }
 
     val GEMINI_SERIES = defineGroup {
@@ -215,8 +227,23 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val CLAUDE_OPUS_4_8 = defineModel {
+        tokens("claude", "opus", "4", "8")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     val CLAUDE_SERIES = defineGroup {
-        add(CLAUDE_SONNET_3_5, CLAUDE_SONNET_3_7, CLAUDE_4, CLAUDE_4_5, CLAUDE_SONNET_4_6, CLAUDE_OPUS_4_6, CLAUDE_OPUS_4_7)
+        add(
+            CLAUDE_SONNET_3_5,
+            CLAUDE_SONNET_3_7,
+            CLAUDE_4,
+            CLAUDE_4_5,
+            CLAUDE_SONNET_4_6,
+            CLAUDE_OPUS_4_6,
+            CLAUDE_OPUS_4_7,
+            CLAUDE_OPUS_4_8
+        )
     }
 
     private val DEEPSEEK_V3_MODEL = defineModel {
@@ -284,6 +311,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val QWEN_3_7 = defineModel {
+        tokens("qwen", "3", "7")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val DOUBAO_1_6 = defineModel {
         tokens("doubao", "1", "6")
         visionInput()
@@ -321,6 +354,12 @@ object ModelRegistry {
 
     private val STEP_3 = defineModel {
         tokens("step", "3")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val STEP_3_7_FLASH = defineModel {
+        tokens("step", "3", "7", "flash")
         visionInput()
         toolReasoningAbility()
     }
@@ -371,6 +410,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val MINIMAX_M3 = defineModel {
+        tokens("minimax", "m", "3")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val XIAOMI_MIMO_V2 = defineModel {
         tokens("mimo", "v", "2")
         toolReasoningAbility()
@@ -409,6 +454,7 @@ object ModelRegistry {
         GPT_5_4_MINI,
         GPT_5_4_NANO,
         GPT_5_5,
+        GPT_5_6,
         GEMINI_20_FLASH,
         GEMINI_2_5_FLASH,
         GEMINI_2_5_PRO,
@@ -420,6 +466,7 @@ object ModelRegistry {
         GEMINI_3_1_PRO_PREVIEW,
         GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS,
         GEMINI_3_1_FLASH_IMAGE,
+        GEMINI_3_5,
         GEMINI_FLASH_LATEST,
         GEMINI_PRO_LATEST,
         CLAUDE_SONNET_3_5,
@@ -429,6 +476,7 @@ object ModelRegistry {
         CLAUDE_SONNET_4_6,
         CLAUDE_OPUS_4_6,
         CLAUDE_OPUS_4_7,
+        CLAUDE_OPUS_4_8,
         DEEPSEEK_V3_MODEL,
         DEEPSEEK_CHAT,
         DEEPSEEK_R1_MODEL,
@@ -440,6 +488,7 @@ object ModelRegistry {
         QWEN_3,
         QWEN_3_5,
         QWEN_3_6,
+        QWEN_3_7,
         DOUBAO_1_6,
         DOUBAO_1_8,
         GROK_4,
@@ -447,6 +496,7 @@ object ModelRegistry {
         KIMI_K2_5,
         KIMI_K2_6,
         STEP_3,
+        STEP_3_7_FLASH,
         INTERN_S1,
         GLM_4_5,
         GLM_4_6,
@@ -456,6 +506,7 @@ object ModelRegistry {
         MINIMAX_M2,
         MINIMAX_M2_5,
         MINIMAX_M2_7,
+        MINIMAX_M3,
         XIAOMI_MIMO_V2,
         XIAOMI_MIMO_V2_PRO,
         XIAOMI_MIMO_V2_5,

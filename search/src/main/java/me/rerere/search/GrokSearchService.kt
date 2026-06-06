@@ -41,8 +41,8 @@ object GrokSearchService : SearchService<SearchServiceOptions.GrokOptions> {
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.GrokOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -52,7 +52,7 @@ object GrokSearchService : SearchService<SearchServiceOptions.GrokOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.GrokOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,

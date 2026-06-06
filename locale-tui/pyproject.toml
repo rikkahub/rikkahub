@@ -17,3 +17,11 @@ dependencies = [
 [project.scripts]
 locale-tui = "src.main:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

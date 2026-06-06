@@ -23,7 +23,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,6 +73,7 @@ internal fun FilesPicker(
     mcpManager: McpManager,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
+    onUpdateConversation: (Conversation) -> Unit,
     showInjectionSheet: Boolean,
     onShowInjectionSheetChange: (Boolean) -> Unit,
     showCompressDialog: Boolean,
@@ -123,8 +125,16 @@ internal fun FilesPicker(
         }
 
         // Extensions (Quick Messages + Prompt Injections + Skills)
+        val modeAndLorebookCount =
+            if (assistant.allowConversationPromptInjection) {
+                conversation.modeInjectionIds.size + conversation.lorebookIds.size
+            } else {
+                assistant.modeInjectionIds.size + assistant.lorebookIds.size
+            }
         val activeCount =
-            assistant.quickMessageIds.size + assistant.modeInjectionIds.size + assistant.lorebookIds.size + assistant.enabledSkills.size
+            assistant.quickMessageIds.size +
+                modeAndLorebookCount +
+                assistant.enabledSkills.size
         ListItem(
             leadingContent = {
                 Icon(
@@ -182,9 +192,11 @@ internal fun FilesPicker(
     // Injection Bottom Sheet
     if (showInjectionSheet) {
         InjectionQuickConfigSheet(
+            conversation = conversation,
             assistant = assistant,
             settings = settings,
             onUpdateAssistant = onUpdateAssistant,
+            onUpdateConversation = onUpdateConversation,
             onDismiss = { onShowInjectionSheetChange(false) })
     }
 
@@ -201,9 +213,14 @@ internal fun FilesPicker(
 
 @Composable
 private fun InjectionQuickConfigSheet(
-    assistant: Assistant, settings: Settings, onUpdateAssistant: (Assistant) -> Unit, onDismiss: () -> Unit
+    conversation: Conversation,
+    assistant: Assistant,
+    settings: Settings,
+    onUpdateAssistant: (Assistant) -> Unit,
+    onUpdateConversation: (Conversation) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
 
@@ -221,6 +238,8 @@ private fun InjectionQuickConfigSheet(
                 assistant = assistant,
                 settings = settings,
                 onUpdate = onUpdateAssistant,
+                conversation = conversation,
+                onUpdateConversation = onUpdateConversation,
                 modifier = Modifier.weight(1f),
                 onNavigateToQuickMessages = {
                     scope.launch {
@@ -262,22 +281,12 @@ private fun ImagePickButton(onClick: () -> Unit = {}) {
 
 @Composable
 fun TakePicButton(onLaunchCamera: () -> Unit = {}) {
-    val cameraPermission = rememberPermissionState(PermissionCamera)
-
-    PermissionManager(
-        permissionState = cameraPermission
-    ) {
-        BigIconTextButton(icon = {
-            Icon(HugeIcons.Camera01, null)
-        }, text = {
-            Text(stringResource(R.string.take_picture))
-        }) {
-            if (cameraPermission.allRequiredPermissionsGranted) {
-                onLaunchCamera()
-            } else {
-                cameraPermission.requestPermissions()
-            }
-        }
+    BigIconTextButton(icon = {
+        Icon(HugeIcons.Camera01, null)
+    }, text = {
+        Text(stringResource(R.string.take_picture))
+    }) {
+        onLaunchCamera()
     }
 }
 

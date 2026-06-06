@@ -255,7 +255,7 @@ class ChatCompletionsAPI(
         // (OpenAI/DeepSeek/Grok/MiniMax) have the field stripped by OpenRouter. So this is safe
         // for any model and, unlike top-level cache_control, never pins routing to one upstream.
         val openRouterCache = host == "openrouter.ai" && providerSetting.promptCaching
-        val messagesArray = buildMessages(messages).let {
+        val messagesArray = buildMessages(messages, providerSetting.includeHistoryReasoning).let {
             if (openRouterCache) insertOpenRouterCacheControl(it) else it
         }
         return buildJsonObject {
@@ -381,6 +381,23 @@ class ChatCompletionsAPI(
                         }
                     }
 
+                    "integrate.api.nvidia.com" -> {
+                        if ("deepseek-v4" in params.model.modelId.lowercase()) {
+                            if (level != ReasoningLevel.AUTO) {
+                                val effort = when (level) {
+                                    ReasoningLevel.XHIGH -> "max"
+                                    ReasoningLevel.OFF -> "none"
+                                    else -> "high"
+                                }
+                                put("reasoning_effort", effort)
+                            }
+                        } else {
+                            if (level != ReasoningLevel.AUTO) {
+                                put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
+                            }
+                        }
+                    }
+
                     else -> {
                         // OpenAI 官方
                         // 文档中，completions API 只支持 "low", "medium", "high"
@@ -464,12 +481,12 @@ class ChatCompletionsAPI(
         return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
     }
 
-    private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    private fun buildMessages(messages: List<UIMessage>, includeHistoryReasoning: Boolean = true) = buildJsonArray {
         val filteredMessages = messages.filter { it.isValidToUpload() }
 
         filteredMessages.forEach { message ->
             if (message.role == MessageRole.ASSISTANT) {
-                addAssistantMessages(message, includeReasoning = true)
+                addAssistantMessages(message, includeReasoning = includeHistoryReasoning)
             } else {
                 addNonAssistantMessage(message)
             }

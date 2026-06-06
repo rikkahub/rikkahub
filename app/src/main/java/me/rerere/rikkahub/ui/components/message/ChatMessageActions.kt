@@ -15,12 +15,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +62,7 @@ import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.utils.copyMessageToClipboard
 import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import me.rerere.rikkahub.utils.toLocalString
+import me.rerere.rikkahub.utils.toMessageTimeString
 import java.util.Locale
 
 @Composable
@@ -75,6 +76,7 @@ fun ColumnScope.ChatMessageActionButtons(
     onClearTranslation: (UIMessage) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val settings = LocalSettings.current
     var isPendingDelete by remember { mutableStateOf(false) }
     var showTranslateDialog by remember { mutableStateOf(false) }
     var showRegenerateConfirm by remember { mutableStateOf(false) }
@@ -90,6 +92,8 @@ fun ColumnScope.ChatMessageActionButtons(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
+        val actionIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+
         Icon(
             imageVector = HugeIcons.Copy01,
             contentDescription = stringResource(R.string.copy),
@@ -97,7 +101,8 @@ fun ColumnScope.ChatMessageActionButtons(
                 .clip(CircleShape)
                 .clickable { context.copyMessageToClipboard(message) }
                 .padding(8.dp)
-                .size(16.dp)
+                .size(16.dp),
+            tint = actionIconColor
         )
 
         Icon(
@@ -113,7 +118,8 @@ fun ColumnScope.ChatMessageActionButtons(
                     }
                 }
                 .padding(8.dp)
-                .size(16.dp)
+                .size(16.dp),
+            tint = actionIconColor
         )
 
         if (message.role == MessageRole.ASSISTANT) {
@@ -146,7 +152,7 @@ fun ColumnScope.ChatMessageActionButtons(
                     )
                     .padding(8.dp)
                     .size(16.dp),
-                tint = if (isAvailable) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.38f)
+                tint = if (isAvailable) actionIconColor else actionIconColor.copy(alpha = 0.38f)
             )
 
             // Translation button
@@ -164,7 +170,8 @@ fun ColumnScope.ChatMessageActionButtons(
                             }
                         )
                         .padding(8.dp)
-                        .size(16.dp)
+                        .size(16.dp),
+                    tint = actionIconColor
                 )
             }
         }
@@ -182,13 +189,23 @@ fun ColumnScope.ChatMessageActionButtons(
                     }
                 )
                 .padding(8.dp)
-                .size(16.dp)
+                .size(16.dp),
+            tint = actionIconColor
         )
 
         ChatMessageBranchSelector(
             node = node,
             onUpdate = onUpdate,
         )
+
+        if (settings.displaySetting.showDateTimeInMessage) {
+            Text(
+                text = message.createdAt.toJavaLocalDateTime().toMessageTimeString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                maxLines = 1,
+            )
+        }
     }
 
     // Translation dialog
@@ -239,7 +256,7 @@ fun ChatMessageActionsSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
     ) {
         Column(
             modifier = Modifier

@@ -59,6 +59,8 @@ data class Assistant(
     // through to the LLM whenever in doubt. Per-tool HARDLINE / approval still apply at
     // the dispatch level; v1 only matches read-only tools so approval is a non-issue.
     val fastPathRouterEnabled: Boolean = false,
+    val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
+    val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
 )
 
 @Serializable

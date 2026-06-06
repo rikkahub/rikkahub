@@ -83,6 +83,7 @@ import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TextArea
+import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.UiState
@@ -197,6 +198,58 @@ private fun AssistantPromptContent(
                     }
                 }
             }
+        }
+
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_allow_conversation_system_prompt))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_allow_conversation_system_prompt_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.allowConversationSystemPrompt,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    allowConversationSystemPrompt = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+        }
+
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_allow_conversation_prompt_injection))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_allow_conversation_prompt_injection_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.allowConversationPromptInjection,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    allowConversationPromptInjection = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
         }
 
         Card(
@@ -322,17 +375,19 @@ private fun AssistantPromptContent(
                     )
                 }
                 preview.onSuccess {
-                    it.fastForEach { message ->
-                        ChatMessage(
-                            node = message.toMessageNode(),
-                            onFork = {},
-                            onRegenerate = {},
-                            onEdit = {},
-                            onShare = {},
-                            onDelete = {},
-                            onUpdate = {},
-                            lastMessage = false,
-                        )
+                    ChatFontProvider(displaySetting = settings.displaySetting) {
+                        it.fastForEach { message ->
+                            ChatMessage(
+                                node = message.toMessageNode(),
+                                onFork = {},
+                                onRegenerate = {},
+                                onEdit = {},
+                                onShare = {},
+                                onDelete = {},
+                                onUpdate = {},
+                                lastMessage = false,
+                            )
+                        }
                     }
                 }
             }

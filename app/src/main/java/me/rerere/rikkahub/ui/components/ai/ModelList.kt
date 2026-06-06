@@ -34,7 +34,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -92,6 +93,71 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 
+class ModelListState internal constructor(
+    modelId: Uuid?,
+    providers: List<ProviderSetting>,
+    type: ModelType,
+) {
+    var modelId by mutableStateOf(modelId)
+        private set
+
+    var providers by mutableStateOf(providers)
+        private set
+
+    var type by mutableStateOf(type)
+        private set
+
+    var visible by mutableStateOf(false)
+        private set
+
+    val currentModel: Model?
+        get() = modelId?.let { providers.findModelById(it) }
+
+    val filteredProviders: List<ProviderSetting>
+        get() = providers.fastFilter { provider ->
+            provider.enabled && provider.models.fastAny { model -> model.type == type }
+        }
+
+    fun open() {
+        visible = true
+    }
+
+    fun close() {
+        visible = false
+    }
+
+    internal fun update(
+        modelId: Uuid?,
+        providers: List<ProviderSetting>,
+        type: ModelType,
+    ) {
+        this.modelId = modelId
+        this.providers = providers
+        this.type = type
+    }
+}
+
+@Composable
+fun rememberModelListState(
+    modelId: Uuid?,
+    providers: List<ProviderSetting>,
+    type: ModelType,
+): ModelListState {
+    return remember {
+        ModelListState(
+            modelId = modelId,
+            providers = providers,
+            type = type,
+        )
+    }.also {
+        it.update(
+            modelId = modelId,
+            providers = providers,
+            type = type,
+        )
+    }
+}
+
 @Composable
 fun ModelSelector(
     modelId: Uuid?,
@@ -102,9 +168,12 @@ fun ModelSelector(
     allowClear: Boolean = false,
     onSelect: (Model) -> Unit
 ) {
-    var popup by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val model = providers.findModelById(modelId ?: Uuid.random())
+    val state = rememberModelListState(
+        modelId = modelId,
+        providers = providers,
+        type = type,
+    )
+    val model = state.currentModel
 
     if (!onlyIcon) {
         Row(
@@ -112,7 +181,7 @@ fun ModelSelector(
         ) {
             TextButton(
                 onClick = {
-                    popup = true
+                    state.open()
                 },
                 modifier = modifier
             ) {
@@ -147,7 +216,7 @@ fun ModelSelector(
     } else {
         IconButton(
             onClick = {
-                popup = true
+                state.open()
             },
         ) {
             if (model != null) {
@@ -166,43 +235,57 @@ fun ModelSelector(
         }
     }
 
-    if (popup) {
-        val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = {
-                popup = false
-            },
-            sheetState = state,
+    ModelListSheet(
+        state = state,
+        onSelect = onSelect,
+    )
+}
+
+@Composable
+fun ModelListSheet(
+    state: ModelListState,
+    onSelect: (Model) -> Unit,
+) {
+    if (!state.visible) return
+
+    val coroutineScope = rememberCoroutineScope()
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+    )
+
+    fun dismiss() {
+        coroutineScope.launch {
+            sheetState.hide()
+            state.close()
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            state.close()
+        },
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(8.dp)
+                .fillMaxHeight(0.8f)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(8.dp)
-                    .fillMaxHeight(0.8f)
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                val filteredProviderSettings = providers.fastFilter {
-                    it.enabled && it.models.fastAny { model -> model.type == type }
+            ModelList(
+                currentModel = state.modelId,
+                providers = state.filteredProviders,
+                modelType = state.type,
+                onSelect = {
+                    onSelect(it)
+                    dismiss()
+                },
+                onDismiss = {
+                    dismiss()
                 }
-                ModelList(
-                    currentModel = modelId,
-                    providers = filteredProviderSettings,
-                    modelType = type,
-                    onSelect = {
-                        onSelect(it)
-                        scope.launch {
-                            state.hide()
-                            popup = false
-                        }
-                    },
-                    onDismiss = {
-                        scope.launch {
-                            state.hide()
-                            popup = false
-                        }
-                    }
-                )
-            }
+            )
         }
     }
 }

@@ -1,3 +1,3 @@
-[submodule "ai/src/main/cpp/mnn"]
-	path = ai/src/main/cpp/mnn
-	url = git@github.com:alibaba/MNN.git
+[submodule "material3/material-color-utilities"]
+	path = material3/material-color-utilities
+	url = https://github.com/material-foundation/material-color-utilities.git

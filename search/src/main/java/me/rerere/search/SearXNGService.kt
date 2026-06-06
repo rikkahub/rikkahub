@@ -32,8 +32,8 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
         Text(stringResource(R.string.searxng_desc_2))
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.SearXNGOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -43,7 +43,7 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.SearXNGOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,
@@ -129,10 +129,6 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
 
     @Serializable
     data class SearXNGResponse(
-        @SerialName("query")
-        val query: String,
-        @SerialName("number_of_results")
-        val numberOfResults: Int,
         @SerialName("results")
         val results: List<SearXNGResult>,
     )
@@ -145,29 +141,5 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
         val title: String,
         @SerialName("content")
         val content: String,
-        @SerialName("thumbnail")
-        val thumbnail: String? = null,
-        @SerialName("engine")
-        val engine: String,
-        @SerialName("template")
-        val template: String,
-        @SerialName("parsed_url")
-        val parsedUrl: List<String> = emptyList(),
-        @SerialName("img_src")
-        val imgSrc: String? = null,
-        @SerialName("priority")
-        val priority: String? = null,
-        @SerialName("engines")
-        val engines: List<String> = emptyList(),
-        @SerialName("positions")
-        val positions: List<Int> = emptyList(),
-        @SerialName("score")
-        val score: Double = 0.0,
-        @SerialName("category")
-        val category: String = "",
-        @SerialName("publishedDate")
-        val publishedDate: String? = null,
-        @SerialName("iframe_src")
-        val iframeSrc: String? = null
     )
 }

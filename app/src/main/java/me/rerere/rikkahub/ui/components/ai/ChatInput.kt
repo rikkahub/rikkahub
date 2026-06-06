@@ -11,6 +11,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -99,8 +103,9 @@ import com.dokar.sonner.ToastType
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.blurEffect
 import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.HazeMaterials
+import dev.chrisbanes.haze.blur.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
@@ -140,19 +145,19 @@ import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.utils.SoundEffectPlayer
+import me.rerere.rikkahub.utils.isAllowedFileType
 import org.koin.compose.koinInject
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
-
-enum class ExpandState {
-    Collapsed, Files,
-}
 
 @Composable
 fun ChatInput(
@@ -167,6 +172,7 @@ fun ChatInput(
     modifier: Modifier = Modifier,
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
+    onUpdateConversation: (Conversation) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onCancelClick: () -> Unit,
@@ -176,6 +182,7 @@ fun ChatInput(
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
+    val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -192,25 +199,49 @@ fun ChatInput(
         if (loading) onCancelClick() else onLongSendClick()
     }
 
-    var expand by remember { mutableStateOf(ExpandState.Collapsed) }
+    var showFilesSheet by remember { mutableStateOf(false) }
     var showInjectionSheet by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
     fun dismissExpand() {
-        expand = ExpandState.Collapsed
+        showFilesSheet = false
         showInjectionSheet = false
         showCompressDialog = false
     }
 
-    fun expandToggle(type: ExpandState) {
-        if (expand == type) {
-            dismissExpand()
-        } else {
-            expand = type
-        }
-    }
-
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
+    val asr = LocalASRState.current
+    val asrState by asr.state.collectAsState()
+    val hapticFeedback = LocalHapticFeedback.current
+    val soundEffectPlayer: SoundEffectPlayer = koinInject()
+    LaunchedEffect(Unit) {
+        soundEffectPlayer.preload(R.raw.asr_start, R.raw.asr_stop)
+    }
+    val asrPermission = rememberPermissionState(PermissionRecordAudio)
+    PermissionManager(permissionState = asrPermission)
+    val cameraPermission = rememberPermissionState(PermissionCamera)
+    PermissionManager(permissionState = cameraPermission)
+    var asrBaseText by remember { mutableStateOf("") }
+    LaunchedEffect(asrState.status) {
+        when (asrState.status) {
+            ASRStatus.Listening -> {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                soundEffectPlayer.play(R.raw.asr_start)
+            }
+
+            ASRStatus.Stopping -> {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                soundEffectPlayer.play(R.raw.asr_stop)
+            }
+
+            else -> {}
+        }
+    }
+    LaunchedEffect(asrState.errorMessage) {
+        asrState.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            toaster.show(message = message, type = ToastType.Error)
+        }
+    }
 
     // Camera launcher
     var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
@@ -244,11 +275,15 @@ fun ChatInput(
         }
     }
     val onLaunchCamera: () -> Unit = {
-        cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
-        cameraOutputUri = FileProvider.getUriForFile(
-            context, "${context.packageName}.fileprovider", cameraOutputFile!!
-        )
-        cameraLauncher.launch(cameraOutputUri!!)
+        if (cameraPermission.allRequiredPermissionsGranted) {
+            cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
+            cameraOutputUri = FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", cameraOutputFile!!
+            )
+            cameraLauncher.launch(cameraOutputUri!!)
+        } else {
+            cameraPermission.requestPermissions()
+        }
     }
 
     // Image picker launcher
@@ -315,42 +350,18 @@ fun ChatInput(
     val filePickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNotEmpty()) {
-                val allowedMimeTypes = setOf(
-                    "text/plain", "text/html", "text/css", "text/javascript", "text/csv", "text/xml",
-                    "application/json", "application/javascript", "application/pdf",
-                    "application/msword",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    "application/vnd.ms-excel",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "application/vnd.ms-powerpoint",
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    "application/epub+zip"
-                )
                 val documents = uris.mapNotNull { uri ->
                     val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
                     val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
-                    val isAllowed = allowedMimeTypes.contains(mime) || mime.startsWith("text/") ||
-                        mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-                        mime == "application/pdf" ||
-                        fileName.endsWith(".txt", ignoreCase = true) ||
-                        fileName.endsWith(".md", ignoreCase = true) ||
-                        fileName.endsWith(".csv", ignoreCase = true) ||
-                        fileName.endsWith(".json", ignoreCase = true) ||
-                        fileName.endsWith(".js", ignoreCase = true) ||
-                        fileName.endsWith(".html", ignoreCase = true) ||
-                        fileName.endsWith(".css", ignoreCase = true) ||
-                        fileName.endsWith(".xml", ignoreCase = true) ||
-                        fileName.endsWith(".py", ignoreCase = true) ||
-                        fileName.endsWith(".java", ignoreCase = true) ||
-                        fileName.endsWith(".kt", ignoreCase = true) ||
-                        fileName.endsWith(".ts", ignoreCase = true) ||
-                        fileName.endsWith(".tsx", ignoreCase = true) ||
-                        fileName.endsWith(".markdown", ignoreCase = true) ||
-                        fileName.endsWith(".mdx", ignoreCase = true) ||
-                        fileName.endsWith(".yml", ignoreCase = true) ||
-                        fileName.endsWith(".yaml", ignoreCase = true)
-                    if (isAllowed) {
-                        val localUri = filesManager.createChatFilesByContents(listOf(uri))[0]
+                    if (isAllowedFileType(fileName, mime)) {
+                        val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
+                            ?: run {
+                                toaster.show(
+                                    context.getString(R.string.chat_input_file_read_failed, fileName),
+                                    type = ToastType.Error
+                                )
+                                return@mapNotNull null
+                            }
                         UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime)
                     } else {
                         toaster.show(
@@ -367,16 +378,8 @@ fun ChatInput(
             }
         }
 
-    // Collapse when ime is visible
-    val imeVisile = WindowInsets.isImeVisible
-    LaunchedEffect(imeVisile, showInjectionSheet, showCompressDialog) {
-        if (imeVisile && !showInjectionSheet && !showCompressDialog) {
-            dismissExpand()
-        }
-    }
-
     Surface(
-        color = Color.Transparent,
+        color = if (assistant.background != null) Color.Transparent else MaterialTheme.colorScheme.background,
     ) {
         Column(
             modifier = modifier
@@ -391,13 +394,17 @@ fun ChatInput(
                     .clip(MaterialTheme.shapes.largeIncreased)
                     .then(
                         if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
-                        )
+                            state = hazeState
+                        ) {
+                            blurEffect {
+                                style = inputHazeStyle
+                            }
+                        }
                         else Modifier
                     ),
                 shape = MaterialTheme.shapes.largeIncreased,
                 tonalElevation = 0.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
             ) {
                 Column(
@@ -489,10 +496,10 @@ fun ChatInput(
 
                         ActionIconButton(
                             onClick = {
-                                expandToggle(ExpandState.Files)
+                                showFilesSheet = true
                             }) {
                             Icon(
-                                imageVector = if (expand == ExpandState.Files) HugeIcons.Cancel01 else HugeIcons.Add01,
+                                imageVector = HugeIcons.Add01,
                                 contentDescription = stringResource(R.string.more_options)
                             )
                         }
@@ -547,54 +554,32 @@ fun ChatInput(
                 }
             }
 
-            // Expanded content
-            Box(
-                modifier = Modifier
-                    .animateContentSize()
-                    .fillMaxWidth()
-            ) {
-                BackHandler(
-                    enabled = expand != ExpandState.Collapsed,
-                ) {
-                    dismissExpand()
-                }
-                if (expand == ExpandState.Files) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
-                            .then(
-                                if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
-                                    state = hazeState,
-                                    style = HazeMaterials.ultraThin()
-                                )
-                                else Modifier
-                            ),
-                        shape = RoundedCornerShape(20.dp),
-                        tonalElevation = 0.dp,
-                        color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
-                    ) {
-                        FilesPicker(
-                            conversation = conversation,
-                            state = state,
-                            assistant = assistant,
-                            mcpManager = mcpManager,
-                            onCompressContext = onCompressContext,
-                            onUpdateAssistant = onUpdateAssistant,
-                            showInjectionSheet = showInjectionSheet,
-                            onShowInjectionSheetChange = { showInjectionSheet = it },
-                            showCompressDialog = showCompressDialog,
-                            onShowCompressDialogChange = { showCompressDialog = it },
-                            onDismiss = { dismissExpand() },
-                            onTakePic = onLaunchCamera,
-                            onPickImage = { imagePickerLauncher.launch("image/*") },
-                            onPickVideo = { videoPickerLauncher.launch("video/*") },
-                            onPickAudio = { audioPickerLauncher.launch("audio/*") },
-                            onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
-                        )
-                    }
-                }
-            }
+        }
+    }
+
+    if (showFilesSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { dismissExpand() },
+        ) {
+            FilesPicker(
+                conversation = conversation,
+                state = state,
+                assistant = assistant,
+                mcpManager = mcpManager,
+                onCompressContext = onCompressContext,
+                onUpdateAssistant = onUpdateAssistant,
+                onUpdateConversation = onUpdateConversation,
+                showInjectionSheet = showInjectionSheet,
+                onShowInjectionSheetChange = { showInjectionSheet = it },
+                showCompressDialog = showCompressDialog,
+                onShowCompressDialogChange = { showCompressDialog = it },
+                onDismiss = { dismissExpand() },
+                onTakePic = onLaunchCamera,
+                onPickImage = { imagePickerLauncher.launch("image/*") },
+                onPickVideo = { videoPickerLauncher.launch("video/*") },
+                onPickAudio = { audioPickerLauncher.launch("audio/*") },
+                onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+            )
         }
     }
 }
@@ -719,8 +704,8 @@ private fun TextInputRow(
             colors = TextFieldDefaults.colors().copy(
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
             ),
             trailingIcon = {
                 if (isFocused) {

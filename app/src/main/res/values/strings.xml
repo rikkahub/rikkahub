@@ -8,6 +8,8 @@
   <string name="about_page_website">Website</string>
   <string name="add">Add</string>
   <string name="app_name">RikkaHub</string>
+  <string name="asr_button_content_description">Speech Recognition</string>
+  <string name="asr_button_stop">Stop</string>
   <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
   <string name="assistant_detail_extensions_desc">Manage quick messages, prompt injections, lorebooks and skills</string>
   <string name="assistant_detail_local_tools_desc">Enable local tools like JavaScript engine</string>
@@ -40,6 +42,10 @@
   <string name="assistant_page_add">Add</string>
   <string name="assistant_page_add_body">Add Body</string>
   <string name="assistant_page_add_header">Add Header</string>
+  <string name="assistant_page_allow_conversation_system_prompt">Per-Conversation System Prompt</string>
+  <string name="assistant_page_allow_conversation_system_prompt_desc">Allow each conversation to override the assistant\'s system prompt</string>
+  <string name="assistant_page_allow_conversation_prompt_injection">Per-Conversation Prompt Injections</string>
+  <string name="assistant_page_allow_conversation_prompt_injection_desc">Allow each conversation to bind its own prompt injections and lorebooks</string>
   <string name="assistant_page_available_variables">"Available variables: "</string>
   <string name="assistant_page_background_opacity">Background Opacity</string>
   <string name="assistant_page_background_opacity_desc">Adjust chat background image visibility</string>
@@ -79,99 +85,14 @@
   <string name="assistant_page_invalid_json">Invalid JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">Allow the AI to ask you questions for clarification</string>
   <string name="assistant_page_local_tools_ask_user_title">Ask User</string>
-  <string name="assistant_page_local_tools_audio_info_desc">Read ringer mode, music-active state, headphone connection, and output devices.</string>
-  <string name="assistant_page_local_tools_audio_info_title">Audio info</string>
-  <string name="assistant_page_local_tools_battery_desc">Read battery level, charging state, plug type, temperature, and health.</string>
-  <string name="assistant_page_local_tools_battery_title">Battery</string>
-  <string name="assistant_page_local_tools_brightness_desc">Read and set screen brightness. Setting requires WRITE_SETTINGS.</string>
-  <string name="assistant_page_local_tools_brightness_title">Brightness</string>
   <string name="assistant_page_local_tools_clipboard_desc">Read or write plain text from the device clipboard</string>
   <string name="assistant_page_local_tools_clipboard_title">Clipboard</string>
-  <string name="assistant_page_local_tools_download_desc">Download files from URLs into the public Downloads folder, and save text content (notes, transcripts, jokes, scripts) as files there.</string>
-  <string name="assistant_page_local_tools_download_title">Download</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">Execute JavaScript code with QuickJS engine for calculations and scripting</string>
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScript Engine</string>
-  <string name="assistant_page_local_tools_listening_toast">Listening — speak now…</string>
-  <string name="assistant_page_local_tools_section_automation">Automation</string>
-  <string name="assistant_page_local_tools_cron_jobs_title">Scheduled jobs</string>
-  <string name="assistant_page_local_tools_cron_jobs_desc">Let the assistant schedule prompts to run in the background later — once or on an interval. Jobs survive app close and reboot.</string>
-  <string name="assistant_page_local_tools_section_network">Network</string>
-  <string name="assistant_page_local_tools_ssh_title">SSH</string>
-  <string name="assistant_page_local_tools_ssh_desc">Let the assistant run shell commands and transfer files on remote machines via SSH/SFTP. Saved hosts, password or private-key auth, accept-new host-key checking.</string>
-  <string name="assistant_page_local_tools_telegram_title">Telegram bot</string>
-  <string name="assistant_page_local_tools_telegram_desc">Run the assistant as a Telegram bot — send/receive messages, files, manage /commands. Configured entirely via tools (set token, whitelist, default chat, then enable). Foreground service handles long-poll.</string>
-  <string name="setting_page_telegram">Telegram bot</string>
-  <string name="setting_page_telegram_desc">Run the LLM as a Telegram bot — chat with it remotely from any device.</string>
-  <string name="setting_page_workflows">Workflows</string>
-  <string name="setting_page_workflows_desc">Trigger-based automations: when something happens on the device, run a sequence of tools.</string>
-  <string name="setting_page_scheduled_jobs">Scheduled jobs</string>
-  <string name="setting_page_scheduled_jobs_desc">Time-based jobs the assistant scheduled — one-shots and recurring cron expressions.</string>
-  <string name="setting_page_doctor">Doctor</string>
-  <string name="setting_page_doctor_desc">Diagnose and fix the app — permissions, services, database, network, Termux.</string>
-  <string name="setting_page_doctor_run_again">Run again</string>
-  <string name="setting_page_doctor_running">Running…</string>
-  <string name="setting_page_doctor_copy_report">Copy report</string>
-  <string name="setting_page_doctor_report_copied">Diagnostic report copied to clipboard.</string>
-  <string name="setting_page_tool_approvals">Tool approvals</string>
-  <string name="setting_page_tool_approvals_desc">Tools you\'ve permanently granted via "Always Allow". Revoke any time.</string>
-  <string name="setting_page_tool_approvals_header">Tools below run without asking, ever, on this device. Revoke if you no longer trust the model with this capability.</string>
-  <string name="setting_page_tool_approvals_empty">No tools have been "Always Allow"-granted yet. The bot will ask before running any side-effecting tool.</string>
-  <string name="setting_page_tool_approvals_revoke">Revoke</string>
-  <string name="setting_page_tool_approvals_revoke_all">Revoke all</string>
-  <string name="setting_page_telegram_token">Bot token</string>
-  <string name="setting_page_telegram_token_desc">From @BotFather. The bot must be stopped to edit.</string>
-  <string name="setting_page_telegram_default_chat">Default chat</string>
-  <string name="setting_page_telegram_default_chat_desc">Where outbound messages go when the LLM omits chat_id (e.g. cron job alerts). Use your numeric Telegram user id.</string>
-  <string name="setting_page_telegram_whitelist">Allowed chat IDs</string>
-  <string name="setting_page_telegram_whitelist_desc">Comma-separated. Empty = nobody. Find your id with @userinfobot.</string>
-  <string name="setting_page_telegram_status_running">Running</string>
-  <string name="setting_page_telegram_status_starting">Starting…</string>
-  <string name="setting_page_telegram_status_stopped">Stopped</string>
-  <string name="setting_page_telegram_start">Start</string>
-  <string name="setting_page_telegram_stop">Stop</string>
-  <string name="setting_page_telegram_no_token_toast">Set the bot token first.</string>
-  <string name="setting_page_telegram_boot_note">When started, the bot also auto-starts on device boot.</string>
-  <string name="setting_page_telegram_battery_ok">Battery optimization: whitelisted</string>
-  <string name="setting_page_telegram_battery_needed">Battery optimization: not whitelisted - tap to fix</string>
-  <string name="setting_page_telegram_battery_desc">When the screen turns off, aggressive OEM ROMs (Xiaomi, OPPO, OnePlus, Vivo) cut network for non-whitelisted apps. The bot will only deliver during occasional maintenance windows. Tap to whitelist RikkaHub.</string>
-  <string name="setting_page_telegram_battery_already_ok">Already whitelisted from battery optimization.</string>
-  <string name="assistant_page_local_tools_media_player_desc">Play and stop audio from a file path or URL.</string>
-  <string name="assistant_page_local_tools_media_player_title">Media player</string>
-  <string name="assistant_page_local_tools_media_scanner_desc">Notify Android\'s media scanner about new files so they appear in gallery/music apps.</string>
-  <string name="assistant_page_local_tools_media_scanner_title">Media scanner</string>
-  <string name="assistant_page_local_tools_notification_desc">Post Android notifications on the user\'s behalf.</string>
-  <string name="assistant_page_local_tools_notification_title">Notification</string>
-  <string name="assistant_page_local_tools_perm_denied_toast">%1$s permission denied</string>
-  <string name="assistant_page_local_tools_perm_needed">Permission required — tap to grant</string>
-  <string name="assistant_page_local_tools_perm_special_dialog_message">This tool needs system access. You\'ll be sent to the system settings page to grant it. Return here when done.</string>
-  <string name="assistant_page_local_tools_perm_special_dialog_title">Permission needed</string>
-  <string name="assistant_page_local_tools_section_device_info">Device info</string>
-  <string name="assistant_page_local_tools_section_existing">Built-in tools</string>
-  <string name="assistant_page_local_tools_section_hardware">Hardware control</string>
-  <string name="assistant_page_local_tools_section_media">Media</string>
-  <string name="assistant_page_local_tools_section_output">Output</string>
-  <string name="assistant_page_local_tools_sensors_desc">List device sensors and read short samples (accelerometer, gyroscope, light, etc.).</string>
-  <string name="assistant_page_local_tools_sensors_title">Sensors</string>
-  <string name="assistant_page_local_tools_share_desc">Open the system share sheet to send text or a URL to other apps.</string>
-  <string name="assistant_page_local_tools_share_title">Share</string>
-  <string name="assistant_page_local_tools_storage_desc">Read total/free/used storage on internal and external volumes.</string>
-  <string name="assistant_page_local_tools_storage_title">Storage info</string>
-  <string name="assistant_page_local_tools_telephony_desc">Read SIM and network info (carrier, network type). Requires READ_PHONE_STATE.</string>
-  <string name="assistant_page_local_tools_telephony_title">Telephony info</string>
   <string name="assistant_page_local_tools_time_info_desc">Get current date, weekday, time, and timezone info from the device</string>
   <string name="assistant_page_local_tools_time_info_title">Time Info</string>
-  <string name="assistant_page_local_tools_toast_desc">Show a brief toast popup over whatever is currently on screen.</string>
-  <string name="assistant_page_local_tools_toast_title">Toast</string>
-  <string name="assistant_page_local_tools_torch_desc">Turn the camera flashlight on or off.</string>
-  <string name="assistant_page_local_tools_torch_title">Torch</string>
   <string name="assistant_page_local_tools_tts_desc">Let the AI speak text aloud to you using the device TTS engine</string>
   <string name="assistant_page_local_tools_tts_title">Text to Speech</string>
-  <string name="assistant_page_local_tools_vibrate_desc">Vibrate the device with a duration or pattern.</string>
-  <string name="assistant_page_local_tools_vibrate_title">Vibrate</string>
-  <string name="assistant_page_local_tools_volume_desc">Read and set audio stream volumes. Ring/notification streams require DND access.</string>
-  <string name="assistant_page_local_tools_volume_title">Volume</string>
-  <string name="assistant_page_local_tools_wifi_desc">Read current Wi-Fi connection (SSID, IP, signal). Requires location permission for SSID.</string>
-  <string name="assistant_page_local_tools_wifi_title">Wi-Fi info</string>
   <string name="assistant_page_manage_memory_title">Manage Memory</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
@@ -218,6 +139,7 @@
   <string name="assistant_page_tab_request">Custom Request</string>
   <string name="assistant_page_tags">Tags</string>
   <string name="assistant_page_temperature">Temperature</string>
+  <string name="assistant_page_temperature_warning">Usually 1. Not recommended to change for reasoning models.</string>
   <string name="assistant_page_template_preview">Preview:</string>
   <string name="assistant_page_template_variable_date">Date</string>
   <string name="assistant_page_template_variable_message">Content</string>
@@ -257,7 +179,7 @@
   <string name="backup_page_export_desc">Export app data to a file</string>
   <string name="backup_page_exporting">Exporting...</string>
   <string name="backup_page_files">Files</string>
-  <string name="backup_page_import_chatbox_desc">Import ChatBox provider configurations</string>
+  <string name="backup_page_import_chatbox_desc">Import ChatBox provider configurations and full chat history</string>
   <string name="backup_page_import_cherry_studio_desc">Import Cherry Studio provider configurations</string>
   <string name="backup_page_import_desc">Import local backup file</string>
   <string name="backup_page_import_export">Local</string>
@@ -310,6 +232,7 @@
   <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
   <string name="chat_input_placeholder">Chat with AI</string>
   <string name="chat_input_unsupported_file_type">Unsupported file type: %s</string>
+  <string name="chat_input_file_read_failed">Failed to read file: %s</string>
   <string name="chat_message_add_favorite">Add Favorite</string>
   <string name="chat_message_remove_favorite">Remove Favorite</string>
   <string name="chat_message_tool_approve">Approve</string>
@@ -326,14 +249,6 @@
   <string name="chat_message_tool_deny">Deny</string>
   <string name="chat_message_tool_deny_dialog_hint">Reason (optional)</string>
   <string name="chat_message_tool_deny_dialog_title">Deny Tool Execution</string>
-  <string name="chat_message_tool_schedule_job_warning">⏰ Scheduled jobs run autonomously without per-tool approval. Approving this lets the job run with full tool access whenever it fires. Hardline-blocked commands still cannot run.</string>
-  <string name="setting_page_tool_approvals_yolo_title">I AM STUPID — auto-approve everything</string>
-  <string name="setting_page_tool_approvals_yolo_on">🚨 ON. Every tool runs without prompting. Hardline blocks (rm -rf /, mkfs, shutdown …) still apply.</string>
-  <string name="setting_page_tool_approvals_yolo_off">Off. Side-effecting tools prompt for approval before running.</string>
-  <string name="setting_page_tool_approvals_yolo_dialog_title">Turn off all approval prompts?</string>
-  <string name="setting_page_tool_approvals_yolo_dialog_body">Every tool — local shell, SSH, file writes, screen automation, Telegram outbound, MCP — will run without asking you. The agent could send messages, run commands on remote hosts, take photos, write files, schedule jobs, all without confirmation.\n\nHARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block devices, fork bomb, encoded payload pipes — those keep blocking.\n\nThis is a foot-gun. Only enable if you trust the model + assistant config + your own prompts to behave responsibly.</string>
-  <string name="setting_page_tool_approvals_yolo_dialog_confirm">Yes, I AM STUPID, enable</string>
-  <string name="setting_page_tool_approvals_yolo_dialog_cancel">Keep approvals on</string>
   <string name="chat_message_tool_edit_memory">Updated memory</string>
   <string name="chat_message_tool_get_time">Get time info</string>
   <string name="chat_message_tool_scrape_prefix">Scrape website: %1$s</string>
@@ -343,6 +258,7 @@
   <string name="chat_message_tool_search_web">Search web: %1$s</string>
   <string name="chat_message_tool_submit">Submit</string>
   <string name="chat_page_cancel">Cancel</string>
+  <string name="chat_page_check_title_model_settings">Check title model settings</string>
   <string name="chat_page_clear_all_errors">Clear all</string>
   <string name="chat_page_compress_additional_prompt">Additional Instructions (Optional)</string>
   <string name="chat_page_compress_additional_prompt_hint">Specify what to preserve or focus on</string>
@@ -354,6 +270,10 @@
   <string name="chat_page_compress_target_tokens">Target Token Size</string>
   <string name="chat_page_compress_warning">⚠️ Compressing context will reset all messages in the current conversation</string>
   <string name="chat_page_compressing">Compressing...</string>
+  <string name="chat_page_conversation_system_prompt">Conversation System Prompt</string>
+  <string name="chat_page_conversation_system_prompt_clear">Clear</string>
+  <string name="chat_page_conversation_system_prompt_hint">Override the assistant\'s system prompt for this conversation</string>
+  <string name="chat_page_conversation_system_prompt_save">Save</string>
   <string name="chat_page_delete">Delete</string>
   <string name="chat_page_dismiss_error">Dismiss error</string>
   <string name="chat_page_edit_nickname">Edit Nickname</string>
@@ -488,18 +408,15 @@
   <string name="imggen_page_save_failed">Save failed: %1$s</string>
   <string name="imggen_page_settings_title">Image Generation Settings</string>
   <string name="imggen_page_title">Image Generation</string>
-  <string name="language_arabic">🇸🇦 العربية</string>
   <string name="language_english">🇺🇸 English</string>
   <string name="language_french">🇫🇷 Français</string>
   <string name="language_german">🇩🇪 Deutsch</string>
   <string name="language_italian">🇮🇹 Italiano</string>
   <string name="language_japanese">🇯🇵 日本語</string>
   <string name="language_korean">🇰🇷 한국어</string>
-  <string name="language_persian">🇮🇷 فارسی</string>
   <string name="language_simplified_chinese">🇨🇳 简体中文</string>
   <string name="language_spanish">🇪🇸 Español</string>
   <string name="language_traditional_chinese">🇨🇳 繁體中文</string>
-  <string name="language_urdu">🇵🇰 اردو</string>
   <string name="mcp_picker_syncing">Syncing MCP servers...</string>
   <string name="mcp_picker_title">MCP Servers</string>
   <string name="menu">Menu</string>
@@ -535,10 +452,12 @@
   <string name="permission_desc_require_permission">In order to provide a better user experience, the app requires the following permissions:</string>
   <string name="permission_diaog_title">Permission Request</string>
   <string name="permission_go_to_settings">Go to Setting</string>
+  <string name="permission_local_network">Local Network</string>
+  <string name="permission_local_network_desc">Allow the web server to be accessed from devices on the same local network</string>
+  <string name="permission_microphone">Microphone</string>
+  <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
-  <string name="permission_local_network">Local Network</string>
-  <string name="permission_local_network_desc">Required on Android 17+ for SSH and the LAN web server</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
   <string name="permission_required">Required</string>
   <string name="photo">Photo</string>
@@ -597,7 +516,7 @@
   <string name="prompt_page_priority_format">Priority: %d</string>
   <string name="prompt_page_priority_label">Priority</string>
   <string name="prompt_page_role_assistant">Assistant (prefill)</string>
-  <string name="prompt_page_role_user">User (wrapped in system tag)</string>
+  <string name="prompt_page_role_user">User</string>
   <string name="prompt_page_scan_depth">Scan Depth (Messages)</string>
   <string name="prompt_page_title">Prompt Injection</string>
   <string name="prompt_page_unnamed">Unnamed</string>
@@ -623,6 +542,9 @@
   <string name="reasoning_medium_desc">The model will use more reasoning to answer questions.</string>
   <string name="reasoning_off">Off</string>
   <string name="reasoning_off_desc">Turn off reasoning functionality, the model will directly answer questions.</string>
+  <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>
+  <string name="reasoning_picker_title">Adjust Model Thinking Depth</string>
+  <string name="reasoning_xhigh">XHigh</string>
   <string name="regenerate">Regenerate</string>
   <string name="regenerate_confirm_message">Are you sure you want to regenerate this message?</string>
   <string name="render_with_webview">Render with WebView</string>
@@ -637,6 +559,28 @@
   <string name="safe_mode_title">Safe Mode</string>
   <string name="search_ability_scrape">Scrape</string>
   <string name="search_ability_search">Search</string>
+  <string name="search_detail_api_key">API Key</string>
+  <string name="search_detail_api_url">API URL</string>
+  <string name="search_detail_custom_search_placeholder">My Custom Search</string>
+  <string name="search_detail_custom_url">Custom URL</string>
+  <string name="search_detail_depth">Depth</string>
+  <string name="search_detail_engines">Engines</string>
+  <string name="search_detail_language">Language</string>
+  <string name="search_detail_max_tokens">Max Tokens</string>
+  <string name="search_detail_max_tokens_per_page">Max Tokens / Page</string>
+  <string name="search_detail_model">Model</string>
+  <string name="search_detail_name">Name</string>
+  <string name="search_detail_password">Password</string>
+  <string name="search_detail_scrape_script">Scrape Script</string>
+  <string name="search_detail_scrape_script_desc">Optional. Implement scrape(urls) returning { urls: [{ url, content, metadata? }] }</string>
+  <string name="search_detail_scrape_url">Scrape URL</string>
+  <string name="search_detail_search_script">Search Script</string>
+  <string name="search_detail_search_url">Search URL</string>
+  <string name="search_detail_summary">Summary</string>
+  <string name="search_detail_summary_desc">Enable summary generation</string>
+  <string name="search_detail_system_prompt">System Prompt</string>
+  <string name="search_detail_unknown_error">Unknown error</string>
+  <string name="search_detail_username">Username</string>
   <string name="search_page_hint">Enter keywords and press Search to find messages</string>
   <string name="search_page_no_results">No results</string>
   <string name="search_page_placeholder">Search message content...</string>
@@ -650,6 +594,37 @@
   <string name="search_picker_title">Search Settings</string>
   <string name="select_and_copy">Select and Copy</string>
   <string name="send">Send</string>
+  <string name="setting_asr_configure_api_key">API Key</string>
+  <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API key</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">Server VAD sensitivity, set 0 to disable VAD</string>
+  <string name="setting_asr_configure_dashscope_websocket_desc">DashScope realtime websocket endpoint</string>
+  <string name="setting_asr_configure_language">Language</string>
+  <string name="setting_asr_configure_language_code_desc">Optional language code, e.g. zh-CN, en-US, ja-JP</string>
+  <string name="setting_asr_configure_language_iso_desc">Optional ISO language code, such as zh or en</string>
+  <string name="setting_asr_configure_model">Model</string>
+  <string name="setting_asr_configure_model_desc">Realtime transcription model</string>
+  <string name="setting_asr_configure_name">Name</string>
+  <string name="setting_asr_configure_name_desc">Custom name for this ASR provider</string>
+  <string name="setting_asr_configure_openai_api_key_desc">OpenAI API key used by the realtime websocket</string>
+  <string name="setting_asr_configure_openai_websocket_desc">OpenAI realtime websocket endpoint</string>
+  <string name="setting_asr_configure_prefix_padding">Prefix Padding</string>
+  <string name="setting_asr_configure_prefix_padding_desc">Audio kept before detected speech, in milliseconds</string>
+  <string name="setting_asr_configure_prompt">Prompt</string>
+  <string name="setting_asr_configure_prompt_desc">Optional hint for names, terms, or formatting</string>
+  <string name="setting_asr_configure_provider_type">Provider Type</string>
+  <string name="setting_asr_configure_provider_type_desc">Realtime speech recognition provider</string>
+  <string name="setting_asr_configure_resource_id">Resource ID</string>
+  <string name="setting_asr_configure_resource_id_desc">X-Api-Resource-Id for billing</string>
+  <string name="setting_asr_configure_silence_duration">Silence Duration</string>
+  <string name="setting_asr_configure_silence_duration_desc">Silence duration that ends a turn, in milliseconds</string>
+  <string name="setting_asr_configure_vad_desc">Server VAD sensitivity, usually 0.3 - 0.8</string>
+  <string name="setting_asr_configure_vad_threshold">VAD Threshold</string>
+  <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine API key (X-Api-Key)</string>
+  <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine streaming ASR endpoint</string>
+  <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
+  <string name="setting_asr_page_add_provider">Add ASR Provider</string>
+  <string name="setting_asr_page_default_name">ASR</string>
+  <string name="setting_asr_page_edit_provider">Edit ASR Provider</string>
   <string name="setting_display_page_amoled_dark_mode_desc">Use pure black background in dark theme, suitable for AMOLED screens</string>
   <string name="setting_display_page_amoled_dark_mode_title">AMOLED Dark Mode</string>
   <string name="setting_display_page_auto_collapse_thinking_desc">Automatically collapse thinking content after thinking is complete</string>
@@ -657,6 +632,7 @@
   <string name="setting_display_page_auto_play_tts_desc">Automatically play TTS after assistant message generation completes</string>
   <string name="setting_display_page_auto_play_tts_title">Auto-play TTS After Generation</string>
   <string name="setting_display_page_chat_font_family_default">Default</string>
+  <string name="setting_display_page_chat_font_family_custom">Custom</string>
   <string name="setting_display_page_chat_font_family_monospace">Monospace</string>
   <string name="setting_display_page_chat_font_family_serif">Serif</string>
   <string name="setting_display_page_chat_font_family_title">Chat Font</string>
@@ -668,6 +644,12 @@
   <string name="setting_display_page_code_block_auto_wrap_title">Code Block Auto Wrap</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Create a new conversation when the app starts</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">New chat on launch</string>
+  <string name="setting_display_page_custom_font_import">Import custom font</string>
+  <string name="setting_display_page_custom_font_import_failed">Failed to import font: %1$s</string>
+  <string name="setting_display_page_custom_font_import_success">Custom font imported</string>
+  <string name="setting_display_page_custom_font_not_imported">No custom font imported. Supports .ttf, .otf, and .ttc files.</string>
+  <string name="setting_display_page_custom_font_remove">Remove custom font</string>
+  <string name="setting_display_page_custom_font_title">Custom Font</string>
   <string name="setting_display_page_enable_auto_scroll_desc">Automatically scroll to the bottom when AI is generating content</string>
   <string name="setting_display_page_enable_auto_scroll_title">Auto Scroll</string>
   <string name="setting_display_page_enable_blur_effect_desc">Enable blur effect on chat input bar</string>
@@ -691,8 +673,8 @@
   <string name="setting_display_page_send_on_enter_title">Send on Enter</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Whether to show bubble background for assistant messages</string>
   <string name="setting_display_page_show_assistant_bubble_title">Show Assistant Message Bubble</string>
-  <string name="setting_display_page_show_date_below_name_desc">Whether to show message date below nickname or model name</string>
-  <string name="setting_display_page_show_date_below_name_title">Show Date Below Name</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">Show date and time below each message</string>
+  <string name="setting_display_page_show_datetime_in_message_title">Show Date and Time in Message</string>
   <string name="setting_display_page_show_line_numbers_desc">Display line numbers in code blocks</string>
   <string name="setting_display_page_show_line_numbers_title">Show Line Numbers</string>
   <string name="setting_display_page_show_message_jumper_desc">Display quick jump buttons on the right when scrolling the chat list</string>
@@ -763,6 +745,8 @@
   <string name="setting_model_page_chat_model">Chat Model</string>
   <string name="setting_model_page_chat_model_desc">Global default chat model</string>
   <string name="setting_model_page_compress_model">Compress Model</string>
+  <string name="setting_model_page_fast_model">Fast Model</string>
+  <string name="setting_model_page_fast_model_desc">Model for fast or background tasks, also used as fallback for title and suggestion models when not set</string>
   <string name="setting_model_page_compress_model_desc">Model for compressing conversation history</string>
   <string name="setting_model_page_compress_prompt_vars">Variables: {content}, {target_tokens}, {additional_context}</string>
   <string name="setting_model_page_ocr_model">OCR Model</string>
@@ -770,12 +754,13 @@
   <string name="setting_model_page_ocr_prompt_vars">Variables: Image data: {images}</string>
   <string name="setting_model_page_prompt">Prompt</string>
   <string name="setting_model_page_reset_to_default">Reset to default</string>
+  <string name="setting_model_page_enable_suggestion">Enable Chat Suggestions</string>
   <string name="setting_model_page_suggestion_model">Chat Suggestion Model</string>
-  <string name="setting_model_page_suggestion_model_desc">Model used to generate conversation suggestions, recommend using fast and inexpensive models</string>
+  <string name="setting_model_page_suggestion_model_desc">Model used to generate conversation suggestions. If not set, uses the fast model</string>
   <string name="setting_model_page_suggestion_prompt_vars">Variables: Conversation content: {content}, Language: {locale}</string>
   <string name="setting_model_page_title">Model Settings</string>
   <string name="setting_model_page_title_model">Title Summary Model</string>
-  <string name="setting_model_page_title_model_desc">Model used to summarize conversation titles, recommend using fast and inexpensive models</string>
+  <string name="setting_model_page_title_model_desc">Model used to summarize conversation titles. If not set, uses the fast model</string>
   <string name="setting_model_page_translate_model">Translation Model</string>
   <string name="setting_model_page_translate_model_desc">The model used for translation features</string>
   <string name="setting_model_page_translate_prompt_vars">Variables: Source text: {source_text}, Target language: {target_lang}</string>
@@ -785,12 +770,12 @@
   <string name="setting_page_assistant_desc">Set up personalized assistants (agents)</string>
   <string name="setting_page_built_in_tools">Built-in Tools</string>
   <string name="setting_page_built_in_tools_desc">Select built-in tools supported by the model. These tools are directly provided by the API without requiring app support. Currently, this feature is only supported by the official Gemini API.</string>
+  <string name="setting_page_built_in_tools_image_generation">Image Generation</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">Enable image generation capability</string>
   <string name="setting_page_built_in_tools_search">Search</string>
   <string name="setting_page_built_in_tools_search_desc">Enable Google Search integration</string>
   <string name="setting_page_built_in_tools_url_context">URL Context</string>
   <string name="setting_page_built_in_tools_url_context_desc">Enable URL content processing</string>
-  <string name="setting_page_built_in_tools_image_generation">Image Generation</string>
-  <string name="setting_page_built_in_tools_image_generation_desc">Enable image generation capability</string>
   <string name="setting_page_chat_storage">Chat Storage</string>
   <string name="setting_page_chat_storage_desc">%1$d files, %2$.2f MB</string>
   <string name="setting_page_code_display_settings">Code Display</string>
@@ -808,12 +793,22 @@
   <string name="setting_page_default_model_desc">Set default models for each feature</string>
   <string name="setting_page_display_setting">Display Settings</string>
   <string name="setting_page_display_setting_desc">Manage display settings</string>
+  <string name="setting_page_preferences">Preferences</string>
+  <string name="setting_page_preferences_desc">Theme, notifications, UI and general settings</string>
+  <string name="setting_page_preferences_theme">Theme</string>
+  <string name="setting_page_preferences_theme_desc">Dynamic color, theme, AMOLED dark mode</string>
+  <string name="setting_page_preferences_notification">Notifications</string>
+  <string name="setting_page_preferences_notification_desc">Update alerts, message generation notifications</string>
+  <string name="setting_page_preferences_general">General</string>
+  <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
+  <string name="setting_page_preferences_ui">UI Preferences</string>
+  <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
   <string name="setting_page_donate">Donate</string>
   <string name="setting_page_donate_desc">If you like it, sponsor the author\'s work</string>
   <string name="setting_page_dynamic_color">Dynamic Color</string>
-  <string name="setting_page_dynamic_color_desc">Use dynamic color</string>
+  <string name="setting_page_dynamic_color_desc">Generate the app theme colors dynamically from your wallpaper</string>
   <string name="setting_page_extensions">Extensions</string>
   <string name="setting_page_extensions_desc">Manage prompt injections, skills and more</string>
   <string name="setting_page_general_settings">General Settings</string>
@@ -829,10 +824,14 @@
   <string name="setting_page_request_logs_desc">View HTTP request logs</string>
   <string name="setting_page_search_add_provider">Add Provider</string>
   <string name="setting_page_search_common_options">Common Options</string>
+  <string name="setting_page_search_config">Configuration</string>
   <string name="setting_page_search_delete_provider">Delete Provider</string>
   <string name="setting_page_search_result_size">Result Size</string>
   <string name="setting_page_search_service">Search Service</string>
   <string name="setting_page_search_service_desc">Set up search service</string>
+  <string name="setting_page_search_test">Test Search</string>
+  <string name="setting_page_search_test_query_hint">Enter test query…</string>
+  <string name="setting_page_search_test_run">Run Test</string>
   <string name="setting_page_search_title">Search Service</string>
   <string name="setting_page_share">Share</string>
   <string name="setting_page_share_desc">Share this app with friends</string>
@@ -841,9 +840,26 @@
   <string name="setting_page_sponsor_alert_desc">You have launched the app over 100 times! If you enjoy using it, please consider supporting the developer.</string>
   <string name="setting_page_sponsor_alert_dismiss">Not Now</string>
   <string name="setting_page_sponsor_alert_title">Support the Developer</string>
-  <string name="setting_page_theme_setting">Theme Settings</string>
-  <string name="setting_page_tts_service">Text-to-Speech Service</string>
-  <string name="setting_page_tts_service_desc">Configure text-to-speech service providers</string>
+  <string name="setting_page_theme_setting">Theme</string>
+  <string name="setting_page_theme_setting_desc">Customize app color scheme</string>
+  <string name="setting_theme_page_preset_themes">Preset Themes</string>
+  <string name="setting_theme_page_custom_themes">Custom Themes</string>
+  <string name="setting_theme_page_add_theme">New</string>
+  <string name="setting_theme_page_no_custom_themes">No custom themes yet</string>
+  <string name="setting_theme_page_create_theme">Create Theme</string>
+  <string name="setting_theme_page_edit_theme">Edit Theme</string>
+  <string name="setting_theme_page_theme_name">Theme Name</string>
+  <string name="setting_theme_page_primary_color">Primary Color</string>
+  <string name="setting_theme_page_secondary_color">Secondary Color</string>
+  <string name="setting_theme_page_tertiary_color">Tertiary Color</string>
+  <string name="setting_theme_page_preview">Preview</string>
+  <string name="setting_theme_page_save">Save</string>
+  <string name="setting_theme_page_import_theme">Import</string>
+  <string name="setting_theme_page_export_success">Theme JSON copied to clipboard</string>
+  <string name="setting_theme_page_import_success">Theme imported successfully</string>
+  <string name="setting_theme_page_dynamic_color_hint">Dynamic color is enabled. Disable it in Preferences &gt; Theme to use custom themes.</string>
+  <string name="setting_page_tts_service">Speech Services</string>
+  <string name="setting_page_tts_service_desc">Configure text-to-speech and speech recognition providers</string>
   <string name="setting_page_tts_settings">TTS Settings</string>
   <string name="setting_page_web_server">Web Server</string>
   <string name="setting_page_web_server_address_note">Address Notes</string>
@@ -880,6 +896,9 @@
   <string name="setting_provider_page_balance_json_key">Result Json Key</string>
   <string name="setting_provider_page_basic_settings">Basic Settings</string>
   <string name="setting_provider_page_chat_model">Chat</string>
+  <string name="setting_provider_page_claude_prompt_cache_ttl">Prompt cache TTL</string>
+  <string name="setting_provider_page_claude_prompt_cache_ttl_1h">1 hour</string>
+  <string name="setting_provider_page_claude_prompt_cache_ttl_5m">5 minutes</string>
   <string name="setting_provider_page_claude_prompt_caching">Prompt caching (cache_control)</string>
   <string name="setting_provider_page_configuration">Configuration</string>
   <string name="setting_provider_page_configure_provider_override">Configure Provider Override</string>
@@ -897,6 +916,7 @@
   <string name="setting_provider_page_image_qr_decode_failed">Failed to parse QR code from image: %s</string>
   <string name="setting_provider_page_import_dialog_message">Please select import method:</string>
   <string name="setting_provider_page_import_dialog_title">Import Provider Configuration</string>
+  <string name="setting_provider_page_import_service_account_json">Import Service Account JSON</string>
   <string name="setting_provider_page_import_success">Import successful</string>
   <string name="setting_provider_page_input_modality">Input Modality</string>
   <string name="setting_provider_page_location">Location (e.g. us-central1)</string>
@@ -934,8 +954,8 @@
   <string name="setting_provider_page_text">Text</string>
   <string name="setting_provider_page_title">Providers</string>
   <string name="setting_provider_page_tool">Tool</string>
-  <string name="setting_provider_page_vertex_ai">Vertex AI</string>
   <string name="setting_provider_page_use_service_account">Use Service Account</string>
+  <string name="setting_provider_page_vertex_ai">Vertex AI</string>
   <string name="setting_tts_page_add">Add</string>
   <string name="setting_tts_page_add_provider">Add TTS Provider</string>
   <string name="setting_tts_page_add_provider_content_description">Add TTS Provider</string>
@@ -994,25 +1014,6 @@
   <string name="skill_detail_page_file_name_invalid">Invalid file name</string>
   <string name="skill_detail_page_new_file">New File</string>
   <string name="skill_detail_page_save">Save</string>
-  <string name="skill_catalog_install">Install</string>
-  <string name="skill_catalog_installing">Installing…</string>
-  <string name="skill_catalog_install_failed">Install failed: %s</string>
-  <string name="skill_catalog_installed">Installed</string>
-  <string name="skill_catalog_title">Featured skills</string>
-  <string name="skill_import_from_file_label">Import from file</string>
-  <string name="skill_import_from_file_picker_title">Choose a .md or .zip skill file</string>
-  <string name="skill_import_missing_skill_md">No SKILL.md found inside the zip.</string>
-  <string name="skill_import_path_traversal">Zip contains an unsafe path; refusing to extract.</string>
-  <string name="skill_import_unsupported_file_type">Unsupported file. Use a .md file or a .zip with SKILL.md inside.</string>
-  <string name="skill_import_zip_too_large">Zip is too large (cap 20 MB / 200 files).</string>
-  <string name="skill_import_md_too_large">File is too large (cap 1 MB for .md files).</string>
-  <string name="skill_import_empty_file">The file is empty — nothing to import.</string>
-  <string name="skill_tester_prompt_placeholder">Type a prompt to test this skill…</string>
-  <string name="skill_tester_run">Run</string>
-  <string name="skill_tester_running">Running skill…</string>
-  <string name="skill_tester_done_no_text">(No text response — see image parts above.)</string>
-  <string name="skill_tester_timeout_error">Timed out after 2 minutes. The skill is still running in the background.</string>
-  <string name="skill_tester_title">Test %s</string>
   <string name="skills_page_add_title">Add Skill</string>
   <string name="skills_page_delete_message">Are you sure you want to delete "%s"? This action cannot be undone.</string>
   <string name="skills_page_delete_title">Delete Skill</string>
@@ -1034,6 +1035,9 @@
   <string name="skills_page_skill_content_label">SKILL.md Content</string>
   <string name="skills_page_skill_name">Skill name: %s</string>
   <string name="skills_page_title">Agent Skills</string>
+  <string name="speech_page_title">Speech</string>
+  <string name="speech_tab_asr">Speech Recognition</string>
+  <string name="speech_tab_tts">Text to Speech</string>
   <string name="stats_page_cached_tokens">Cached Tokens</string>
   <string name="stats_page_dow_fri">Fri</string>
   <string name="stats_page_dow_mon">Mon</string>
@@ -1091,39 +1095,155 @@
   <string name="video">Video</string>
   <string name="web_search_disabled">Web search disabled</string>
   <string name="web_search_enabled">Web search enabled</string>
-  <string name="setting_provider_page_import_service_account_json">Import Service Account JSON</string>
-  <string name="reasoning_xhigh">XHigh</string>
-  <string name="reasoning_picker_title">Adjust Model Thinking Depth</string>
-  <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>
+  <string name="setting_theme_page_delete_theme_title">Delete Theme</string>
+  <string name="setting_theme_page_delete_theme_message">Are you sure you want to delete this theme?</string>
+  <string name="skills_page_import_from_file">Import from File</string>
+  <string name="skills_page_add_manually">Add manually</string>
+  <string name="setting_model_page_tab_model">Model</string>
+  <string name="setting_model_page_tab_prompt">Prompts</string>
+  <string name="setting_model_page_prompt_translation">Translation</string>
+  <string name="setting_model_page_prompt_title">Title Generation</string>
+  <string name="setting_model_page_prompt_suggestion">Chat Reply Suggestions</string>
+  <string name="setting_model_page_prompt_ocr">OCR Recognition</string>
+  <string name="setting_model_page_prompt_compress">Context Compression</string>
+  <string name="setting_display_page_bubble_opacity_title">Bubble Opacity</string>
+  <string name="setting_provider_page_include_history_reasoning">Include History Reasoning</string>
 
-  <!-- Phase 2 — Personal data tools -->
+  <!-- fork (agent) strings preserved from merge -->
+  <string name="assistant_page_local_tools_audio_info_desc">Read ringer mode, music-active state, headphone connection, and output devices.</string>
+  <string name="assistant_page_local_tools_audio_info_title">Audio info</string>
+  <string name="assistant_page_local_tools_battery_desc">Read battery level, charging state, plug type, temperature, and health.</string>
+  <string name="assistant_page_local_tools_battery_title">Battery</string>
+  <string name="assistant_page_local_tools_brightness_desc">Read and set screen brightness. Setting requires WRITE_SETTINGS.</string>
+  <string name="assistant_page_local_tools_brightness_title">Brightness</string>
+  <string name="assistant_page_local_tools_download_desc">Download files from URLs into the public Downloads folder, and save text content (notes, transcripts, jokes, scripts) as files there.</string>
+  <string name="assistant_page_local_tools_download_title">Download</string>
+  <string name="assistant_page_local_tools_listening_toast">Listening — speak now…</string>
+  <string name="assistant_page_local_tools_section_automation">Automation</string>
+  <string name="assistant_page_local_tools_cron_jobs_title">Scheduled jobs</string>
+  <string name="assistant_page_local_tools_cron_jobs_desc">Let the assistant schedule prompts to run in the background later — once or on an interval. Jobs survive app close and reboot.</string>
+  <string name="assistant_page_local_tools_section_network">Network</string>
+  <string name="assistant_page_local_tools_ssh_title">SSH</string>
+  <string name="assistant_page_local_tools_ssh_desc">Let the assistant run shell commands and transfer files on remote machines via SSH/SFTP. Saved hosts, password or private-key auth, accept-new host-key checking.</string>
+  <string name="assistant_page_local_tools_telegram_title">Telegram bot</string>
+  <string name="assistant_page_local_tools_telegram_desc">Run the assistant as a Telegram bot — send/receive messages, files, manage /commands. Configured entirely via tools (set token, whitelist, default chat, then enable). Foreground service handles long-poll.</string>
+  <string name="setting_page_telegram">Telegram bot</string>
+  <string name="setting_page_telegram_desc">Run the LLM as a Telegram bot — chat with it remotely from any device.</string>
+  <string name="setting_page_workflows">Workflows</string>
+  <string name="setting_page_workflows_desc">Trigger-based automations: when something happens on the device, run a sequence of tools.</string>
+  <string name="setting_page_scheduled_jobs">Scheduled jobs</string>
+  <string name="setting_page_scheduled_jobs_desc">Time-based jobs the assistant scheduled — one-shots and recurring cron expressions.</string>
+  <string name="setting_page_doctor">Doctor</string>
+  <string name="setting_page_doctor_desc">Diagnose and fix the app — permissions, services, database, network, Termux.</string>
+  <string name="setting_page_doctor_run_again">Run again</string>
+  <string name="setting_page_doctor_running">Running…</string>
+  <string name="setting_page_doctor_copy_report">Copy report</string>
+  <string name="setting_page_doctor_report_copied">Diagnostic report copied to clipboard.</string>
+  <string name="setting_page_tool_approvals">Tool approvals</string>
+  <string name="setting_page_tool_approvals_desc">Tools you\'ve permanently granted via "Always Allow". Revoke any time.</string>
+  <string name="setting_page_tool_approvals_header">Tools below run without asking, ever, on this device. Revoke if you no longer trust the model with this capability.</string>
+  <string name="setting_page_tool_approvals_empty">No tools have been "Always Allow"-granted yet. The bot will ask before running any side-effecting tool.</string>
+  <string name="setting_page_tool_approvals_revoke">Revoke</string>
+  <string name="setting_page_tool_approvals_revoke_all">Revoke all</string>
+  <string name="setting_page_telegram_token">Bot token</string>
+  <string name="setting_page_telegram_token_desc">From @BotFather. The bot must be stopped to edit.</string>
+  <string name="setting_page_telegram_default_chat">Default chat</string>
+  <string name="setting_page_telegram_default_chat_desc">Where outbound messages go when the LLM omits chat_id (e.g. cron job alerts). Use your numeric Telegram user id.</string>
+  <string name="setting_page_telegram_whitelist">Allowed chat IDs</string>
+  <string name="setting_page_telegram_whitelist_desc">Comma-separated. Empty = nobody. Find your id with @userinfobot.</string>
+  <string name="setting_page_telegram_status_running">Running</string>
+  <string name="setting_page_telegram_status_starting">Starting…</string>
+  <string name="setting_page_telegram_status_stopped">Stopped</string>
+  <string name="setting_page_telegram_start">Start</string>
+  <string name="setting_page_telegram_stop">Stop</string>
+  <string name="setting_page_telegram_no_token_toast">Set the bot token first.</string>
+  <string name="setting_page_telegram_boot_note">When started, the bot also auto-starts on device boot.</string>
+  <string name="setting_page_telegram_battery_ok">Battery optimization: whitelisted</string>
+  <string name="setting_page_telegram_battery_needed">Battery optimization: not whitelisted - tap to fix</string>
+  <string name="setting_page_telegram_battery_desc">When the screen turns off, aggressive OEM ROMs (Xiaomi, OPPO, OnePlus, Vivo) cut network for non-whitelisted apps. The bot will only deliver during occasional maintenance windows. Tap to whitelist RikkaHub.</string>
+  <string name="setting_page_telegram_battery_already_ok">Already whitelisted from battery optimization.</string>
+  <string name="assistant_page_local_tools_media_player_desc">Play and stop audio from a file path or URL.</string>
+  <string name="assistant_page_local_tools_media_player_title">Media player</string>
+  <string name="assistant_page_local_tools_media_scanner_desc">Notify Android\'s media scanner about new files so they appear in gallery/music apps.</string>
+  <string name="assistant_page_local_tools_media_scanner_title">Media scanner</string>
+  <string name="assistant_page_local_tools_notification_desc">Post Android notifications on the user\'s behalf.</string>
+  <string name="assistant_page_local_tools_notification_title">Notification</string>
+  <string name="assistant_page_local_tools_perm_denied_toast">%1$s permission denied</string>
+  <string name="assistant_page_local_tools_perm_needed">Permission required — tap to grant</string>
+  <string name="assistant_page_local_tools_perm_special_dialog_message">This tool needs system access. You\'ll be sent to the system settings page to grant it. Return here when done.</string>
+  <string name="assistant_page_local_tools_perm_special_dialog_title">Permission needed</string>
+  <string name="assistant_page_local_tools_section_device_info">Device info</string>
+  <string name="assistant_page_local_tools_section_existing">Built-in tools</string>
+  <string name="assistant_page_local_tools_section_hardware">Hardware control</string>
+  <string name="assistant_page_local_tools_section_media">Media</string>
+  <string name="assistant_page_local_tools_section_output">Output</string>
+  <string name="assistant_page_local_tools_sensors_desc">List device sensors and read short samples (accelerometer, gyroscope, light, etc.).</string>
+  <string name="assistant_page_local_tools_sensors_title">Sensors</string>
+  <string name="assistant_page_local_tools_share_desc">Open the system share sheet to send text or a URL to other apps.</string>
+  <string name="assistant_page_local_tools_share_title">Share</string>
+  <string name="assistant_page_local_tools_storage_desc">Read total/free/used storage on internal and external volumes.</string>
+  <string name="assistant_page_local_tools_storage_title">Storage info</string>
+  <string name="assistant_page_local_tools_telephony_desc">Read SIM and network info (carrier, network type). Requires READ_PHONE_STATE.</string>
+  <string name="assistant_page_local_tools_telephony_title">Telephony info</string>
+  <string name="assistant_page_local_tools_toast_desc">Show a brief toast popup over whatever is currently on screen.</string>
+  <string name="assistant_page_local_tools_toast_title">Toast</string>
+  <string name="assistant_page_local_tools_torch_desc">Turn the camera flashlight on or off.</string>
+  <string name="assistant_page_local_tools_torch_title">Torch</string>
+  <string name="assistant_page_local_tools_vibrate_desc">Vibrate the device with a duration or pattern.</string>
+  <string name="assistant_page_local_tools_vibrate_title">Vibrate</string>
+  <string name="assistant_page_local_tools_volume_desc">Read and set audio stream volumes. Ring/notification streams require DND access.</string>
+  <string name="assistant_page_local_tools_volume_title">Volume</string>
+  <string name="assistant_page_local_tools_wifi_desc">Read current Wi-Fi connection (SSID, IP, signal). Requires location permission for SSID.</string>
+  <string name="assistant_page_local_tools_wifi_title">Wi-Fi info</string>
+  <string name="chat_message_tool_schedule_job_warning">⏰ Scheduled jobs run autonomously without per-tool approval. Approving this lets the job run with full tool access whenever it fires. Hardline-blocked commands still cannot run.</string>
+  <string name="setting_page_tool_approvals_yolo_title">I AM STUPID — auto-approve everything</string>
+  <string name="setting_page_tool_approvals_yolo_on">🚨 ON. Every tool runs without prompting. Hardline blocks (rm -rf /, mkfs, shutdown …) still apply.</string>
+  <string name="setting_page_tool_approvals_yolo_off">Off. Side-effecting tools prompt for approval before running.</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_title">Turn off all approval prompts?</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_body">Every tool — local shell, SSH, file writes, screen automation, Telegram outbound, MCP — will run without asking you. The agent could send messages, run commands on remote hosts, take photos, write files, schedule jobs, all without confirmation.\n\nHARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block devices, fork bomb, encoded payload pipes — those keep blocking.\n\nThis is a foot-gun. Only enable if you trust the model + assistant config + your own prompts to behave responsibly.</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_confirm">Yes, I AM STUPID, enable</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_cancel">Keep approvals on</string>
+  <string name="language_arabic">🇸🇦 العربية</string>
+  <string name="language_persian">🇮🇷 فارسی</string>
+  <string name="language_urdu">🇵🇰 اردو</string>
+  <string name="setting_display_page_show_date_below_name_desc">Whether to show message date below nickname or model name</string>
+  <string name="setting_display_page_show_date_below_name_title">Show Date Below Name</string>
+  <string name="skill_catalog_install">Install</string>
+  <string name="skill_catalog_installing">Installing…</string>
+  <string name="skill_catalog_install_failed">Install failed: %s</string>
+  <string name="skill_catalog_installed">Installed</string>
+  <string name="skill_catalog_title">Featured skills</string>
+  <string name="skill_import_from_file_label">Import from file</string>
+  <string name="skill_import_from_file_picker_title">Choose a .md or .zip skill file</string>
+  <string name="skill_import_missing_skill_md">No SKILL.md found inside the zip.</string>
+  <string name="skill_import_path_traversal">Zip contains an unsafe path; refusing to extract.</string>
+  <string name="skill_import_unsupported_file_type">Unsupported file. Use a .md file or a .zip with SKILL.md inside.</string>
+  <string name="skill_import_zip_too_large">Zip is too large (cap 20 MB / 200 files).</string>
+  <string name="skill_import_md_too_large">File is too large (cap 1 MB for .md files).</string>
+  <string name="skill_import_empty_file">The file is empty — nothing to import.</string>
+  <string name="skill_tester_prompt_placeholder">Type a prompt to test this skill…</string>
+  <string name="skill_tester_run">Run</string>
+  <string name="skill_tester_running">Running skill…</string>
+  <string name="skill_tester_done_no_text">(No text response — see image parts above.)</string>
+  <string name="skill_tester_timeout_error">Timed out after 2 minutes. The skill is still running in the background.</string>
+  <string name="skill_tester_title">Test %s</string>
   <string name="assistant_page_local_tools_section_personal_data">Personal data</string>
-
   <string name="assistant_page_local_tools_location_title">Location</string>
   <string name="assistant_page_local_tools_location_desc">Read the device\'s current location (latitude, longitude, accuracy).</string>
-
   <string name="assistant_page_local_tools_contacts_title">Contacts</string>
   <string name="assistant_page_local_tools_contacts_desc">Search or list device contacts (name, phone numbers, emails).</string>
-
   <string name="assistant_page_local_tools_call_log_title">Call log</string>
   <string name="assistant_page_local_tools_call_log_desc">Read recent calls (incoming, outgoing, missed) with duration and timestamps.</string>
-
   <string name="assistant_page_local_tools_sms_inbox_title">SMS inbox</string>
   <string name="assistant_page_local_tools_sms_inbox_desc">Read or search SMS inbox messages.</string>
-
   <string name="assistant_page_local_tools_camera_photo_title">Camera (photo)</string>
   <string name="assistant_page_local_tools_camera_photo_desc">Open the system camera so the user can take a photo and return its file path.</string>
-
   <string name="assistant_page_local_tools_mic_recorder_title">Mic recorder</string>
   <string name="assistant_page_local_tools_mic_recorder_desc">Record audio from the microphone for a bounded duration to a local file.</string>
-
   <string name="assistant_page_local_tools_speech_to_text_title">Speech to text</string>
   <string name="assistant_page_local_tools_speech_to_text_desc">Listen to the microphone and convert spoken words to text.</string>
-
   <string name="assistant_page_local_tools_fingerprint_title">Fingerprint</string>
   <string name="assistant_page_local_tools_fingerprint_desc">Show the system biometric prompt to verify the user\'s identity.</string>
-
-  <!-- Phase 4 — Screen automation -->
   <string name="accessibility_service_summary">Lets RikkaHub tap, swipe, scroll, read screen content, and take screenshots when the LLM uses the Screen automation tools.</string>
   <string name="assistant_page_local_tools_section_screen_automation">Screen automation</string>
   <string name="assistant_page_local_tools_screen_automation_title">Screen automation</string>
@@ -1227,47 +1347,28 @@
   <string name="setting_page_notifications_action_ago_seconds">%1$ds ago</string>
   <string name="setting_page_notifications_action_ago_minutes">%1$dm ago</string>
   <string name="setting_page_notifications_action_ago_hours">%1$dh ago</string>
-
-  <!-- Phase 16 — Fast-path router toggle (per-assistant). Lives inline in the basic
-       assistant settings page; the audit-log of recent matches is logcat-only in v1. -->
   <string name="assistant_page_fast_path_router">Fast-path router</string>
   <string name="assistant_page_fast_path_router_desc">Skip the LLM for high-confidence requests like \"what\'s my battery\", \"what time is it\", or \"list workflows\". The matching tool runs directly and you get an instant answer. Conservative — anything ambiguous still goes to the model. Logged to logcat (tag: FastPathRouter).</string>
-
-  <!-- Phase 16 — Skill import toggle. Privilege-escalation-adjacent (skills can carry
-       arbitrary tool calls), so per-call approval is mandatory and Always-Allow is
-       forbidden. -->
   <string name="assistant_page_local_tools_skill_import_title">Skill import</string>
   <string name="assistant_page_local_tools_skill_import_desc">Let the assistant install skills from a URL OR from text it already has (e.g. fetched via SSH / curl / MCP for authenticated servers). Native, openclaw, and Hermes formats. Per-call approval required for every install (Always Allow is disabled — you review the source each time).</string>
-
-  <!-- Phase 18 — JS skills + system intents. -->
   <string name="assistant_page_local_tools_js_skills_title">JS skills</string>
   <string name="assistant_page_local_tools_js_skills_desc">Let the assistant run JavaScript skills (calculate hash, query Wikipedia, generate QR codes, render maps, etc.) inside a hidden WebView. The skill\'s code defines what it does; per-call approval each time. Compatible with skills written for Google AI Edge Gallery — drop them into your skills folder and they just work.</string>
   <string name="assistant_page_local_tools_system_intents_title">System intents</string>
   <string name="assistant_page_local_tools_system_intents_desc">Let the assistant pre-fill system apps for you to finalise: Calendar event, new Contact, email composer, SMS composer, WiFi settings, Maps. Nothing is saved or sent without your tap in the destination app.</string>
-
-  <!-- Workflows toggle setup-hint (audit fix 2026-05-07). Many trigger types need extra
-       runtime permissions / system services — surface them at enable time so the user
-       isn\'t surprised that their geofence / notification / app-launch workflow never fires. -->
   <string name="assistant_page_local_tools_workflows_hint_title">Workflows need extra setup</string>
   <string name="assistant_page_local_tools_workflows_hint_message">Workflows are enabled. Some trigger types need permissions the toggle can\'t request:\n\n• Geofences (you arrive somewhere): Settings → Apps → RikkaHub → Permissions → Location → Allow all the time.\n• Notification arrives: Settings → Apps → Special access → Notification access → enable RikkaHub.\n• App launches/closes: Settings → Accessibility → enable RikkaHub.\n• Bluetooth connect/disconnect: grant BLUETOOTH_CONNECT when the system asks.\n\nSchedule, WiFi, headphones, power, screen on/off, and battery triggers work right out of the box. The assistant will flag any extra setup at the moment you author a workflow that needs it.</string>
-
-  <!-- Phase 12 — Workflows. Top-level Settings page + detail screen + per-assistant
-       toggle. Strings are grouped by surface. Translations deferred (English-only). -->
   <string name="assistant_page_local_tools_workflows_title">Workflows</string>
   <string name="assistant_page_local_tools_workflows_desc">Let the assistant create automations that run on triggers — WiFi connect, schedule, geofence, notification arrival, and more.</string>
-
   <string name="setting_page_workflows_empty">No workflows yet. Ask your assistant to create one.</string>
   <string name="setting_page_workflows_how_it_works">How workflows work</string>
   <string name="setting_page_workflows_how_it_works_dialog_title">How workflows work</string>
   <string name="setting_page_workflows_how_it_works_dialog_body">A workflow is a trigger plus a list of actions. The trigger is what starts it (WiFi connects, a schedule fires, you arrive at a place, a notification arrives). The actions are tool calls run in order — the same tools you can run in chat.\n\nConditions filter when a triggered workflow actually fires (\"only after sunset\", \"only if charging\"). All conditions must pass.\n\nWorkflows run in headless mode — your assistant pre-authorised the tools when it created the workflow, so each fire doesn\'t prompt you. The HARDLINE filter still blocks dangerous shell commands and writes to system paths regardless. You\'ll see the result in the workflow\'s history list.</string>
   <string name="setting_page_workflows_how_it_works_dialog_dismiss">Got it</string>
-
   <string name="setting_page_workflows_subtitle_when">When: %1$s</string>
   <string name="setting_page_workflows_subtitle_never_run">Never run</string>
   <string name="setting_page_workflows_subtitle_ran_success">Ran %1$s • Success</string>
   <string name="setting_page_workflows_subtitle_ran_failed">Failed %1$s</string>
   <string name="setting_page_workflows_subtitle_ran_skipped">Skipped %1$s</string>
-
   <string name="setting_page_workflow_detail_section_description">Description</string>
   <string name="setting_page_workflow_detail_section_trigger">Trigger</string>
   <string name="setting_page_workflow_detail_section_conditions">Conditions</string>
@@ -1285,7 +1386,6 @@
   <string name="setting_page_workflow_detail_delete_confirm_no">Cancel</string>
   <string name="setting_page_workflow_detail_run_now_done">Run finished: %1$s</string>
   <string name="setting_page_workflow_detail_edit_prefill">Edit the workflow named &#8220;%1$s&#8221;.</string>
-
   <string name="setting_page_workflow_detail_stat_last_run">Last run: %1$s</string>
   <string name="setting_page_workflow_detail_stat_last_run_never">Last run: never</string>
   <string name="setting_page_workflow_detail_stat_runs_today">Today: %1$d run(s)</string>
@@ -1293,8 +1393,6 @@
   <string name="setting_page_workflow_detail_stat_cooldown_none">Cooldown: none</string>
   <string name="setting_page_workflow_detail_stat_daily_cap">Daily cap: %1$d</string>
   <string name="setting_page_workflow_detail_stat_daily_cap_unlimited">Daily cap: unlimited</string>
-
-  <!-- Scheduled jobs (Phase 9.5 cron system) — list + detail -->
   <string name="setting_page_scheduled_jobs_empty">No scheduled jobs yet. Ask your assistant to create one.</string>
   <string name="setting_page_scheduled_jobs_how_it_works">How scheduled jobs work</string>
   <string name="setting_page_scheduled_jobs_how_it_works_title">How scheduled jobs work</string>
@@ -1333,25 +1431,18 @@
   <string name="setting_page_scheduled_jobs_stat_runs">Total fires: %1$d</string>
   <string name="setting_page_scheduled_jobs_stat_runs_capped">Total fires: %1$d / %2$d</string>
   <string name="setting_page_scheduled_jobs_stat_catchup">Catch-up: %1$s</string>
-
-  <!-- Relative-time fragments for "Ran 2h ago" / "Ran just now" / "Ran 3d ago" formats -->
   <string name="relative_time_just_now">just now</string>
   <string name="relative_time_seconds_ago">%1$ds ago</string>
   <string name="relative_time_minutes_ago">%1$dm ago</string>
   <string name="relative_time_hours_ago">%1$dh ago</string>
   <string name="relative_time_days_ago">%1$dd ago</string>
-
-  <!-- Browser feature: Settings entry, Settings page, BrowserActivity chrome. -->
   <string name="setting_page_browser">Browser</string>
   <string name="setting_page_browser_desc">AI-driven web browser and skill viewer.</string>
-
   <string name="assistant_page_local_tools_section_browser">Browser</string>
   <string name="assistant_page_local_tools_browser_title">Browser</string>
   <string name="assistant_page_local_tools_browser_desc">AI-driven web browser. 17 individually-togglable tools — configure read/write access in Settings → Browser.</string>
   <string name="assistant_page_local_tools_web_fetch_title">Web fetch</string>
   <string name="assistant_page_local_tools_web_fetch_desc">Lightweight HTTP GET/POST tool. 30s timeout, response body capped at 8 KB. Requires approval on each call.</string>
-
-  <!-- Phase 25 — Phase 3 second cut + ExternalStorage + Archive. -->
   <string name="assistant_page_local_tools_section_privileged">Privileged tools</string>
   <string name="assistant_page_local_tools_sms_send_title">SMS send</string>
   <string name="assistant_page_local_tools_sms_send_desc">Send SMS messages programmatically. Requires SEND_SMS permission. Approval required per call.</string>
@@ -1366,7 +1457,6 @@
   <string name="assistant_page_local_tools_external_storage_desc">Lets file tools work on USB drives, SD cards, Downloads, and cloud storage. Each tree requires a one-time grant via the SAF picker.</string>
   <string name="assistant_page_local_tools_archive_title">Archive (zip)</string>
   <string name="assistant_page_local_tools_archive_desc">Create and extract .zip archives directly. No password support in v1. Works on file:// and content:// URIs.</string>
-
   <string name="assistant_page_local_tools_section_keyboard">Keyboard control</string>
   <string name="assistant_page_local_tools_keyboard_title">Keyboard control</string>
   <string name="assistant_page_local_tools_keyboard_desc">Drive the active text field through the co-signed agent-keyboard app: type, read, press keys, delete, move the cursor, and select text. 8 tools. Write tools require approval per call.</string>
@@ -1374,7 +1464,6 @@
   <string name="assistant_page_local_tools_keyboard_setup_message">Keyboard control needs the companion agent-keyboard app installed AND set as the active keyboard. Install it, then go to Settings &gt; System &gt; Languages &amp; input &gt; On-screen keyboard and switch to agent-keyboard. Without both, every keyboard tool will return an error.</string>
   <string name="assistant_page_local_tools_keyboard_status_not_installed">agent-keyboard app not installed</string>
   <string name="assistant_page_local_tools_keyboard_status_installed">agent-keyboard installed - set it as the active keyboard to use these tools</string>
-
   <string name="setting_browser_title">Browser</string>
   <string name="setting_browser_section_browser">Browser</string>
   <string name="setting_browser_open">Open browser</string>
@@ -1385,12 +1474,10 @@
   <string name="setting_browser_clear_data_confirm_body">This clears all cookies, local storage, and cached pages. You will need to re-log in to any site the AI was using.</string>
   <string name="setting_browser_clear_data_confirm">Clear</string>
   <string name="setting_browser_clear_data_done">Browsing data cleared.</string>
-
   <string name="setting_browser_tools_enabled_title">Tools enabled</string>
   <string name="setting_browser_category_read">Read</string>
   <string name="setting_browser_category_write">Write</string>
   <string name="setting_browser_category_loop_control">Loop control</string>
-
   <string name="setting_browser_tool_open_title">Open URL</string>
   <string name="setting_browser_tool_open_desc">Navigate to a URL.</string>
   <string name="setting_browser_tool_current_url_title">Current URL</string>
@@ -1425,7 +1512,6 @@
   <string name="setting_browser_tool_eval_js_desc">Execute arbitrary JS in the page (HARDLINE-checked).</string>
   <string name="setting_browser_tool_done_title">Browser-done</string>
   <string name="setting_browser_tool_done_desc">Let the AI signal it has finished a task.</string>
-
   <string name="setting_browser_section_defaults">Defaults &amp; limits</string>
   <string name="setting_browser_search_engine">Search engine</string>
   <string name="setting_browser_search_engine_desc">DuckDuckGo (default) — switching takes effect once browser_search ships.</string>
@@ -1435,13 +1521,9 @@
   <string name="setting_browser_single_task_timeout">Single-task timeout</string>
   <string name="setting_browser_single_task_timeout_desc">Hard cap on one AI-driven browser task to bound runaway loops. Range 1 min to 60 min.</string>
   <string name="setting_browser_single_task_timeout_unit">minutes</string>
-
-  <!-- Settings → Termux -->
   <string name="setting_page_termux">Termux</string>
   <string name="setting_page_termux_desc">Shell commands, timeouts, and Termux integration.</string>
-
   <string name="setting_termux_title">Termux</string>
-
   <string name="setting_termux_section_status">Status</string>
   <string name="setting_termux_status_app">Termux app</string>
   <string name="setting_termux_status_app_installed">Installed — tap to open</string>
@@ -1461,7 +1543,6 @@
   <string name="setting_termux_verify_allow_external_apps">Timed out — allow-external-apps=true may not be set in ~/.termux/termux.properties.</string>
   <string name="setting_termux_verify_unexpected_output">Unexpected output from smoke test.</string>
   <string name="setting_termux_verify_other_error">Verify failed: %s</string>
-
   <string name="setting_termux_section_timeouts">Timeouts</string>
   <string name="setting_termux_command_timeout">Default command timeout</string>
   <string name="setting_termux_command_timeout_desc">How long to wait for a background shell command to return output. Range 5 s to 600 s.</string>
@@ -1472,7 +1553,6 @@
   <string name="setting_termux_unit_seconds">seconds</string>
   <string name="setting_termux_unit_minutes">minutes</string>
   <string name="setting_termux_unit_bytes">bytes</string>
-
   <string name="setting_termux_section_defaults">Defaults &amp; limits</string>
   <string name="setting_termux_working_dir">Default working directory</string>
   <string name="setting_termux_max_stdout">Stdout capture cap</string>
@@ -1481,11 +1561,9 @@
   <string name="setting_termux_max_stderr_desc">Max bytes of stderr returned to the AI per command. Range 500 to 16 000.</string>
   <string name="setting_termux_apt_wrap">Auto-wrap apt/dpkg as noninteractive</string>
   <string name="setting_termux_apt_wrap_desc">Prepend DEBIAN_FRONTEND=noninteractive so apt upgrades do not hang waiting for interactive prompts.</string>
-
   <string name="setting_termux_section_help">Setup help</string>
   <string name="setting_termux_help_allow_external_apps_title">How to enable allow-external-apps</string>
   <string name="setting_termux_help_allow_external_apps_body">In Termux, run:\n\n  mkdir -p ~/.termux\n  echo \'allow-external-apps=true\' >> ~/.termux/termux.properties\n\nThen force-stop Termux from Android App Info and reopen it. After that, tap the verify row above to confirm the link is working.</string>
-
   <string name="browser_address_bar_close">Close browser</string>
   <string name="browser_address_bar_back">Browser back</string>
   <string name="browser_address_bar_forward">Browser forward</string>
@@ -1507,7 +1585,6 @@
   <string name="browser_ai_stripe_active">AI: %1$s</string>
   <string name="browser_ai_stripe_expand">Show recent</string>
   <string name="browser_ai_stripe_collapse">Hide</string>
-
   <string name="local_llm_litert_name">Local · LiteRT</string>
   <string name="local_llm_default_disabled">Run open models on this device. ~1.5 GB download required (Qwen2.5 1.5B Q8).</string>
   <string name="local_llm_download_title">Download default model</string>
@@ -1559,50 +1636,6 @@
   <string name="local_llm_catalog_tag_multimodal">Multimodal</string>
   <string name="local_llm_catalog_tag_thinking">Thinking</string>
   <string name="local_llm_catalog_tag_speculative">Speculative decoding</string>
-  <string name="asr_button_content_description">Speech Recognition</string>
-  <string name="asr_button_stop">Stop</string>
-  <string name="assistant_page_temperature_warning">Usually 1. Not recommended to change for reasoning models.</string>
-  <string name="chat_page_check_title_model_settings">Check title model settings</string>
-  <string name="permission_microphone">Microphone</string>
-  <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
-  <string name="speech_page_title">Speech</string>
-  <string name="speech_tab_tts">Text to Speech</string>
-  <string name="speech_tab_asr">Speech Recognition</string>
-  <string name="setting_asr_page_edit_provider">Edit ASR Provider</string>
-  <string name="setting_asr_page_add_provider">Add ASR Provider</string>
-  <string name="setting_asr_page_default_name">ASR</string>
-  <string name="setting_provider_page_claude_prompt_cache_ttl">Prompt cache TTL</string>
-  <string name="setting_provider_page_claude_prompt_cache_ttl_5m">5 minutes</string>
-  <string name="setting_provider_page_claude_prompt_cache_ttl_1h">1 hour</string>
-  <string name="setting_asr_configure_provider_type">Provider Type</string>
-  <string name="setting_asr_configure_provider_type_desc">Realtime speech recognition provider</string>
-  <string name="setting_asr_configure_name">Name</string>
-  <string name="setting_asr_configure_name_desc">Custom name for this ASR provider</string>
-  <string name="setting_asr_configure_api_key">API Key</string>
-  <string name="setting_asr_configure_openai_api_key_desc">OpenAI API key used by the realtime websocket</string>
-  <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
-  <string name="setting_asr_configure_openai_websocket_desc">OpenAI realtime websocket endpoint</string>
-  <string name="setting_asr_configure_model">Model</string>
-  <string name="setting_asr_configure_model_desc">Realtime transcription model</string>
-  <string name="setting_asr_configure_language">Language</string>
-  <string name="setting_asr_configure_language_iso_desc">Optional ISO language code, such as zh or en</string>
-  <string name="setting_asr_configure_prompt">Prompt</string>
-  <string name="setting_asr_configure_prompt_desc">Optional hint for names, terms, or formatting</string>
-  <string name="setting_asr_configure_vad_threshold">VAD Threshold</string>
-  <string name="setting_asr_configure_vad_desc">Server VAD sensitivity, usually 0.3 - 0.8</string>
-  <string name="setting_asr_configure_prefix_padding">Prefix Padding</string>
-  <string name="setting_asr_configure_prefix_padding_desc">Audio kept before detected speech, in milliseconds</string>
-  <string name="setting_asr_configure_silence_duration">Silence Duration</string>
-  <string name="setting_asr_configure_silence_duration_desc">Silence duration that ends a turn, in milliseconds</string>
-  <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API key</string>
-  <string name="setting_asr_configure_dashscope_websocket_desc">DashScope realtime websocket endpoint</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">Server VAD sensitivity, set 0 to disable VAD</string>
-  <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine API key (X-Api-Key)</string>
-  <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine streaming ASR endpoint</string>
-  <string name="setting_asr_configure_resource_id">Resource ID</string>
-  <string name="setting_asr_configure_resource_id_desc">X-Api-Resource-Id for billing</string>
-  <string name="setting_asr_configure_language_code_desc">Optional language code, e.g. zh-CN, en-US, ja-JP</string>
-  <!-- Phase 26.1 — extracted from hardcoded Chinese string literals in Kotlin (2026-05-14) -->
   <string name="mcp_error_reconnect_exhausted">Connection lost — maximum reconnect attempts reached</string>
   <string name="ocr_status_recognizing">Recognizing image…</string>
   <string name="share_sheet_title">Share your LLM models</string>
@@ -1624,3 +1657,4 @@
   <string name="update_download_description">Downloading update…</string>
   <string name="chat_stop_generation_before_delete">Please stop generation before deleting messages</string>
 </resources>
+

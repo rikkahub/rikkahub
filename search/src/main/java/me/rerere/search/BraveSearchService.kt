@@ -35,8 +35,8 @@ object BraveSearchService : SearchService<SearchServiceOptions.BraveOptions> {
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.BraveOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -46,7 +46,7 @@ object BraveSearchService : SearchService<SearchServiceOptions.BraveOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.BraveOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,

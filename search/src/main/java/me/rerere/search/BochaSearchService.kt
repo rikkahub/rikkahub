@@ -37,8 +37,8 @@ object BochaSearchService : SearchService<SearchServiceOptions.BochaOptions> {
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.BochaOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -48,7 +48,7 @@ object BochaSearchService : SearchService<SearchServiceOptions.BochaOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.BochaOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,

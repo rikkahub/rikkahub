@@ -33,8 +33,8 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.OllamaOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
@@ -44,7 +44,7 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.OllamaOptions): InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,
