@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -141,6 +142,19 @@ private fun HeatmapCard(conversationsPerDay: Map<LocalDate, Int>, modifier: Modi
     }
 }
 
+/**
+ * Quantile thresholds (q1/q2/q3) of active (>0) daily conversation counts, used to
+ * bucket heatmap cell intensities. Pure and input-derived so it can be memoized via
+ * remember(conversationsPerDay). Fallbacks 1/2/3 apply when there is no data at a quantile.
+ */
+internal fun heatmapQuantiles(conversationsPerDay: Map<LocalDate, Int>): Triple<Int, Int, Int> {
+    val activeCounts = conversationsPerDay.values.filter { it > 0 }.sorted()
+    val q1 = activeCounts.getOrElse((activeCounts.size * 0.25).toInt()) { 1 }
+    val q2 = activeCounts.getOrElse((activeCounts.size * 0.50).toInt()) { 2 }
+    val q3 = activeCounts.getOrElse((activeCounts.size * 0.75).toInt()) { 3 }
+    return Triple(q1, q2, q3)
+}
+
 @Composable
 private fun ChatHeatmap(conversationsPerDay: Map<LocalDate, Int>) {
     val today = LocalDate.now()
@@ -149,10 +163,7 @@ private fun ChatHeatmap(conversationsPerDay: Map<LocalDate, Int>) {
         .minusWeeks(52)
 
     val numWeeks = 53
-    val activeCounts = conversationsPerDay.values.filter { it > 0 }.sorted()
-    val q1 = activeCounts.getOrElse((activeCounts.size * 0.25).toInt()) { 1 }
-    val q2 = activeCounts.getOrElse((activeCounts.size * 0.50).toInt()) { 2 }
-    val q3 = activeCounts.getOrElse((activeCounts.size * 0.75).toInt()) { 3 }
+    val (q1, q2, q3) = remember(conversationsPerDay) { heatmapQuantiles(conversationsPerDay) }
     val cellSize = 11.dp
     val cellSpacing = 2.dp
     // Month label row height

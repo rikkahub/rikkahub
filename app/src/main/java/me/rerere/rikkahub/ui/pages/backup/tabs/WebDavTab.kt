@@ -365,7 +365,7 @@ fun WebDavTab(
                         contentPadding = PaddingValues(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(it) { item ->
+                        items(it, key = { backupItem -> backupItem.href }) { item ->
                             WebDavBackupItemCard(
                                 item = item,
                                 isRestoring = restoringItemName == item.displayName,
