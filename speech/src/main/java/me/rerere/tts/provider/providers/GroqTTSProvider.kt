@@ -35,7 +35,7 @@ class GroqTTSProvider : TTSProvider<TTSProviderSetting.Groq> {
             put("response_format", "wav")
         }
 
-        Log.i(TAG, "generateSpeech: $requestBody")
+        Log.i(TAG, "generateSpeech: model=${providerSetting.model} voice=${providerSetting.voice}")
 
         val httpRequest = Request.Builder()
             .url("${providerSetting.baseUrl}/audio/speech")
@@ -44,15 +44,13 @@ class GroqTTSProvider : TTSProvider<TTSProviderSetting.Groq> {
             .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = httpClient.newCall(httpRequest).execute()
-
-        if (!response.isSuccessful) {
-            Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
-            Log.e(TAG, "generateSpeech: ${response.body?.string()}")
-            throw Exception("Groq TTS request failed: ${response.code} ${response.message}")
+        val audioData = httpClient.newCall(httpRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
+                throw Exception("Groq TTS request failed: ${response.code} ${response.message}")
+            }
+            response.body.bytes()
         }
-
-        val audioData = response.body.bytes()
 
         emit(
             AudioChunk(

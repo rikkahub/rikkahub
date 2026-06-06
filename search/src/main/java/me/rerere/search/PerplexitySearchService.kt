@@ -81,7 +81,7 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
                 }
             }
 
-            Log.i(TAG, "search: $body")
+            Log.i(TAG, "search: service=Perplexity")
 
             val request = Request.Builder()
                 .url(PERPLEXITY_ENDPOINT)
@@ -90,31 +90,32 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<PerplexityResponse>(it)
-                }
-
-                val items = responseBody.results
-                    .filter { !it.title.isNullOrBlank() && !it.url.isNullOrBlank() }
-                    .take(commonOptions.resultSize)
-                    .map {
-                        SearchResultItem(
-                            title = it.title!!,
-                            url = it.url!!,
-                            text = it.snippet ?: it.text ?: ""
-                        )
+            httpClient.newCall(request).await().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string().let {
+                        json.decodeFromString<PerplexityResponse>(it)
                     }
 
-                return@withContext Result.success(
-                    SearchResult(
-                        answer = responseBody.answer,
-                        items = items
+                    val items = responseBody.results
+                        .filter { !it.title.isNullOrBlank() && !it.url.isNullOrBlank() }
+                        .take(commonOptions.resultSize)
+                        .map {
+                            SearchResultItem(
+                                title = it.title!!,
+                                url = it.url!!,
+                                text = it.snippet ?: it.text ?: ""
+                            )
+                        }
+
+                    return@withContext Result.success(
+                        SearchResult(
+                            answer = responseBody.answer,
+                            items = items
+                        )
                     )
-                )
-            } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                } else {
+                    error("response failed #${response.code}")
+                }
             }
         }
     }

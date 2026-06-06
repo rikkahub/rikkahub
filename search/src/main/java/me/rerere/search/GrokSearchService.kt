@@ -90,7 +90,7 @@ object GrokSearchService : SearchService<SearchServiceOptions.GrokOptions> {
                 put("store", JsonPrimitive(false))
             }
 
-            Log.i(TAG, "search: $query")
+            Log.i(TAG, "search: service=Grok")
 
             val request = Request.Builder()
                 .url(serviceOptions.customUrl)
@@ -99,41 +99,42 @@ object GrokSearchService : SearchService<SearchServiceOptions.GrokOptions> {
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<GrokResponse>(it)
-                }
+            httpClient.newCall(request).await().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string().let {
+                        json.decodeFromString<GrokResponse>(it)
+                    }
 
-                val messageOutput = responseBody.output.firstOrNull {
-                    it.type == "message" && it.role == "assistant"
-                }
-                val textContent = messageOutput?.content?.firstOrNull {
-                    it.type == "output_text"
-                }
+                    val messageOutput = responseBody.output.firstOrNull {
+                        it.type == "message" && it.role == "assistant"
+                    }
+                    val textContent = messageOutput?.content?.firstOrNull {
+                        it.type == "output_text"
+                    }
 
-                val answer = textContent?.text
+                    val answer = textContent?.text
 
-                val items = textContent?.annotations
-                    ?.filter { it.type == "url_citation" && !it.url.isNullOrBlank() }
-                    ?.distinctBy { it.url }
-                    ?.take(commonOptions.resultSize)
-                    ?.map { annotation ->
-                        SearchResultItem(
-                            title = annotation.url!!,
-                            url = annotation.url,
-                            text = ""
+                    val items = textContent?.annotations
+                        ?.filter { it.type == "url_citation" && !it.url.isNullOrBlank() }
+                        ?.distinctBy { it.url }
+                        ?.take(commonOptions.resultSize)
+                        ?.map { annotation ->
+                            SearchResultItem(
+                                title = annotation.url!!,
+                                url = annotation.url,
+                                text = ""
+                            )
+                        } ?: emptyList()
+
+                    return@withContext Result.success(
+                        SearchResult(
+                            answer = answer,
+                            items = items
                         )
-                    } ?: emptyList()
-
-                return@withContext Result.success(
-                    SearchResult(
-                        answer = answer,
-                        items = items
                     )
-                )
-            } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                } else {
+                    error("response failed #${response.code}")
+                }
             }
         }
     }

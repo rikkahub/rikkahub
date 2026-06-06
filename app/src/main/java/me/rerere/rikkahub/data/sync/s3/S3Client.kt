@@ -17,6 +17,7 @@ import io.ktor.utils.io.readAvailable
 import io.ktor.util.cio.readChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.rerere.common.android.redactAndTruncate
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
 import java.io.InputStream
@@ -55,7 +56,7 @@ class S3Client(
 
             if (!response.status.isSuccess()) {
                 val errorBody = response.bodyAsText()
-                Log.e(TAG, "putObject failed: ${response.status} - $errorBody")
+                Log.e(TAG, "putObject failed: ${response.status} - ${redactAndTruncate(errorBody)}")
                 throw S3Exception("Failed to put object: ${response.status}", errorBody)
             }
 
@@ -92,7 +93,7 @@ class S3Client(
 
             if (!response.status.isSuccess()) {
                 val errorBody = response.bodyAsText()
-                Log.e(TAG, "putObject(file) failed: ${response.status} - $errorBody")
+                Log.e(TAG, "putObject(file) failed: ${response.status} - ${redactAndTruncate(errorBody)}")
                 throw S3Exception("Failed to put object: ${response.status}", errorBody)
             }
 
@@ -119,7 +120,7 @@ class S3Client(
 
             if (!response.status.isSuccess()) {
                 val errorBody = response.bodyAsText()
-                Log.e(TAG, "getObject failed: ${response.status} - $errorBody")
+                Log.e(TAG, "getObject failed: ${response.status} - ${redactAndTruncate(errorBody)}")
                 throw S3Exception("Failed to get object: ${response.status}", errorBody)
             }
 
@@ -146,7 +147,7 @@ class S3Client(
 
             if (!response.status.isSuccess()) {
                 val errorBody = response.bodyAsText()
-                Log.e(TAG, "getObjectStream failed: ${response.status} - $errorBody")
+                Log.e(TAG, "getObjectStream failed: ${response.status} - ${redactAndTruncate(errorBody)}")
                 throw S3Exception("Failed to get object stream: ${response.status}", errorBody)
             }
 
@@ -173,7 +174,7 @@ class S3Client(
             }.execute { response ->
                 if (!response.status.isSuccess()) {
                     val errorBody = response.bodyAsText()
-                    Log.e(TAG, "downloadObjectToFile failed: ${response.status} - $errorBody")
+                    Log.e(TAG, "downloadObjectToFile failed: ${response.status} - ${redactAndTruncate(errorBody)}")
                     throw S3Exception("Failed to download object: ${response.status}", errorBody)
                 }
 
@@ -211,7 +212,7 @@ class S3Client(
 
             if (!response.status.isSuccess()) {
                 val errorBody = response.bodyAsText()
-                Log.e(TAG, "deleteObject failed: ${response.status} - $errorBody")
+                Log.e(TAG, "deleteObject failed: ${response.status} - ${redactAndTruncate(errorBody)}")
                 throw S3Exception("Failed to delete object: ${response.status}", errorBody)
             }
 
@@ -281,7 +282,7 @@ class S3Client(
 
             if (!response.status.isSuccess()) {
                 val errorBody = response.bodyAsText()
-                Log.e(TAG, "listObjects failed: ${response.status} - $errorBody")
+                Log.e(TAG, "listObjects failed: ${response.status} - ${redactAndTruncate(errorBody)}")
                 throw S3Exception("Failed to list objects: ${response.status}", errorBody)
             }
 

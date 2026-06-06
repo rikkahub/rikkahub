@@ -83,28 +83,29 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            Log.i(TAG, "search: $query")
+            Log.i(TAG, "search: service=LinkUp")
 
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<LinkUpSearchResponse>(it)
-                }
+            httpClient.newCall(request).await().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string().let {
+                        json.decodeFromString<LinkUpSearchResponse>(it)
+                    }
 
-                return@withContext Result.success(
-                    SearchResult(
-                        answer = responseBody.answer,
-                        items = responseBody.sources.take(commonOptions.resultSize).map {
-                            SearchResultItem(
-                                title = it.name,
-                                url = it.url,
-                                text = it.snippet
-                            )
-                        }
+                    return@withContext Result.success(
+                        SearchResult(
+                            answer = responseBody.answer,
+                            items = responseBody.sources.take(commonOptions.resultSize).map {
+                                SearchResultItem(
+                                    title = it.name,
+                                    url = it.url,
+                                    text = it.snippet
+                                )
+                            }
+                        )
                     )
-                )
-            } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                } else {
+                    error("response failed #${response.code}")
+                }
             }
         }
     }
@@ -131,24 +132,25 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<LinkUpFetchResponse>(it)
-                }
+            httpClient.newCall(request).await().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string().let {
+                        json.decodeFromString<LinkUpFetchResponse>(it)
+                    }
 
-                return@withContext Result.success(
-                    ScrapedResult(
-                        urls = listOf(
-                            ScrapedResultUrl(
-                                url = url,
-                                content = responseBody.markdown
+                    return@withContext Result.success(
+                        ScrapedResult(
+                            urls = listOf(
+                                ScrapedResultUrl(
+                                    url = url,
+                                    content = responseBody.markdown
+                                )
                             )
                         )
                     )
-                )
-            } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                } else {
+                    error("response failed #${response.code}")
+                }
             }
         }
     }

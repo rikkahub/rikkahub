@@ -17,6 +17,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
+import me.rerere.common.android.redactDecodeError
 import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
@@ -85,31 +86,31 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                 .addHeader("Authorization", "Bearer $apiKey")
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val bodyRaw = response.body.string()
-                val response = runCatching {
-                    json.decodeFromString<ExaData>(bodyRaw)
-                }.onFailure {
-                    it.printStackTrace()
-                    println(bodyRaw)
-                    error("Failed to decode response: $bodyRaw")
-                }.getOrThrow()
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyRaw = response.body.string()
+                    val exaResponse = runCatching {
+                        json.decodeFromString<ExaData>(bodyRaw)
+                    }.onFailure {
+                        println("Exa decode failed: ${redactDecodeError(it)}")
+                        error("Failed to decode response: ${redactDecodeError(it)}")
+                    }.getOrThrow()
 
-                return@withContext Result.success(
-                    SearchResult(
-                        answer = response.output?.content,
-                        items = response.results.map {
-                            SearchResultItem(
-                                title = it.title,
-                                url = it.url,
-                                text = it.text ?: ""
-                            )
-                        }
-                    ))
-            } else {
-                println(response.body.string())
-                error("response failed #${response.code}")
+                    return@withContext Result.success(
+                        SearchResult(
+                            answer = exaResponse.output?.content,
+                            items = exaResponse.results.map {
+                                SearchResultItem(
+                                    title = it.title,
+                                    url = it.url,
+                                    text = it.text ?: ""
+                                )
+                            }
+                        ))
+                } else {
+                    println("Exa request failed: code=${response.code}")
+                    error("response failed #${response.code}")
+                }
             }
         }
     }

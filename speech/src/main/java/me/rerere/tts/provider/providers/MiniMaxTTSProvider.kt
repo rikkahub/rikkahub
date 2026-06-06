@@ -65,7 +65,7 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
             })
         }
 
-        Log.i(TAG, "generateSpeech: $requestBody")
+        Log.i(TAG, "generateSpeech: model=${providerSetting.model} voice=${providerSetting.voiceId}")
 
         val httpRequest = Request.Builder()
             .url("${providerSetting.baseUrl}/t2a_v2")
@@ -103,7 +103,9 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
                         )
                         hasEmittedAudio = true
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to process audio chunk", e)
+                        // Issue #99: the throwable message embeds a snippet of the SSE
+                        // payload (the TTS audio hex), so log the class only.
+                        Log.e(TAG, "Failed to process audio chunk: ${e::class.simpleName}")
                     }
                 }
 

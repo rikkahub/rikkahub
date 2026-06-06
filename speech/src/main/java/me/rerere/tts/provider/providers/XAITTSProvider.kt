@@ -34,7 +34,7 @@ class XAITTSProvider : TTSProvider<TTSProviderSetting.XAI> {
             put("language", providerSetting.language)
         }
 
-        Log.i(TAG, "generateSpeech: $requestBody")
+        Log.i(TAG, "generateSpeech: voice=${providerSetting.voiceId}")
 
         val httpRequest = Request.Builder()
             .url("${providerSetting.baseUrl}/tts")
@@ -43,16 +43,13 @@ class XAITTSProvider : TTSProvider<TTSProviderSetting.XAI> {
             .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = httpClient.newCall(httpRequest).execute()
-
-        if (!response.isSuccessful) {
-            val errorBody = response.body?.string()
-            Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
-            Log.e(TAG, "generateSpeech: $errorBody")
-            throw Exception("xAI TTS request failed: ${response.code} ${response.message}")
+        val audioData = httpClient.newCall(httpRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
+                throw Exception("xAI TTS request failed: ${response.code} ${response.message}")
+            }
+            response.body.bytes()
         }
-
-        val audioData = response.body.bytes()
 
         emit(
             AudioChunk(

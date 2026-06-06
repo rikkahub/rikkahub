@@ -15,6 +15,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
+import me.rerere.common.android.redactDecodeError
 import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
@@ -71,32 +72,31 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val bodyRaw = response.body?.string() ?: error("Failed to get response body")
-                val searchResponse = runCatching {
-                    json.decodeFromString<MetasoSearchResponse>(bodyRaw)
-                }.onFailure {
-                    it.printStackTrace()
-                    println("Failed to decode Metaso response: $bodyRaw")
-                    error("Failed to decode response: $bodyRaw")
-                }.getOrThrow()
+            httpClient.newCall(request).await().use { response ->
+                if (response.isSuccessful) {
+                    val bodyRaw = response.body?.string() ?: error("Failed to get response body")
+                    val searchResponse = runCatching {
+                        json.decodeFromString<MetasoSearchResponse>(bodyRaw)
+                    }.onFailure {
+                        println("Metaso decode failed: ${redactDecodeError(it)}")
+                        error("Failed to decode response: ${redactDecodeError(it)}")
+                    }.getOrThrow()
 
-                return@withContext Result.success(
-                    SearchResult(
-                        items = searchResponse.webpages.map { webpage ->
-                            SearchResultItem(
-                                title = webpage.title,
-                                url = webpage.link,
-                                text = webpage.snippet ?: ""
-                            )
-                        }
+                    return@withContext Result.success(
+                        SearchResult(
+                            items = searchResponse.webpages.map { webpage ->
+                                SearchResultItem(
+                                    title = webpage.title,
+                                    url = webpage.link,
+                                    text = webpage.snippet ?: ""
+                                )
+                            }
+                        )
                     )
-                )
-            } else {
-                val errorBody = response.body?.string()
-                println("Metaso search failed with code ${response.code}: $errorBody")
-                error("Search request failed with code ${response.code}: $errorBody")
+                } else {
+                    println("Metaso search failed with code ${response.code}")
+                    error("Search request failed with code ${response.code}")
+                }
             }
         }
     }

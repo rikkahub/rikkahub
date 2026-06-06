@@ -61,28 +61,29 @@ object RikkaHubSearchService : SearchService<SearchServiceOptions.RikkaHubOption
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            Log.i(TAG, "search: $query")
+            Log.i(TAG, "search: service=RikkaHub")
 
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<RikkaHubSearchResponse>(it)
-                }
+            httpClient.newCall(request).await().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string().let {
+                        json.decodeFromString<RikkaHubSearchResponse>(it)
+                    }
 
-                return@withContext Result.success(
-                    SearchResult(
-                        answer = responseBody.answer,
-                        items = responseBody.sources.take(commonOptions.resultSize).map {
-                            SearchResultItem(
-                                title = it.name,
-                                url = it.url,
-                                text = it.snippet
-                            )
-                        }
+                    return@withContext Result.success(
+                        SearchResult(
+                            answer = responseBody.answer,
+                            items = responseBody.sources.take(commonOptions.resultSize).map {
+                                SearchResultItem(
+                                    title = it.name,
+                                    url = it.url,
+                                    text = it.snippet
+                                )
+                            }
+                        )
                     )
-                )
-            } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                } else {
+                    error("response failed #${response.code}")
+                }
             }
         }
     }

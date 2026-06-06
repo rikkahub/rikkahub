@@ -15,6 +15,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
+import me.rerere.common.android.redactDecodeError
 import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
@@ -70,30 +71,30 @@ object ZhipuSearchService : SearchService<SearchServiceOptions.ZhipuOptions> {
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val bodyRaw = response.body?.string() ?: error("Failed to get response body")
-                val response = runCatching {
-                    json.decodeFromString<ZhipuDto>(bodyRaw)
-                }.onFailure {
-                    it.printStackTrace()
-                    println(bodyRaw)
-                    error("Failed to decode response: $bodyRaw")
-                }.getOrThrow()
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyRaw = response.body?.string() ?: error("Failed to get response body")
+                    val zhipuResponse = runCatching {
+                        json.decodeFromString<ZhipuDto>(bodyRaw)
+                    }.onFailure {
+                        println("Zhipu decode failed: ${redactDecodeError(it)}")
+                        error("Failed to decode response: ${redactDecodeError(it)}")
+                    }.getOrThrow()
 
-                return@withContext Result.success(
-                    SearchResult(
-                        items = response.searchResult.map {
-                            SearchResultItem(
-                                title = it.title,
-                                url = it.link,
-                                text = it.content,
-                            )
-                        }
-                    ))
-            } else {
-                println(response.body?.string())
-                error("response failed #${response.code}")
+                    return@withContext Result.success(
+                        SearchResult(
+                            items = zhipuResponse.searchResult.map {
+                                SearchResultItem(
+                                    title = it.title,
+                                    url = it.link,
+                                    text = it.content,
+                                )
+                            }
+                        ))
+                } else {
+                    println("Zhipu request failed: code=${response.code}")
+                    error("response failed #${response.code}")
+                }
             }
         }
     }
