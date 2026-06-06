@@ -22,6 +22,7 @@ import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.rag.RagIngestLimitException
 import me.rerere.rikkahub.data.rag.RagDocumentPolicy
 import me.rerere.rikkahub.data.rag.RagIngestLimits
+import me.rerere.rikkahub.data.rag.RagIngestState
 import java.io.File
 import kotlin.uuid.Uuid
 
@@ -36,20 +37,17 @@ class KnowledgeBaseVM(
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings(init = true, providers = emptyList()))
 
-    /** Per-knowledge-base ingestion progress in [0,1]; absent key = idle. */
-    private val _ingestProgress = MutableStateFlow<Map<Uuid, Float>>(emptyMap())
-    val ingestProgress: StateFlow<Map<Uuid, Float>> = _ingestProgress.asStateFlow()
+    /**
+     * Explicit single-document ingest state: replaces the old `Map<Uuid, Float>` progress map plus a
+     * transient event pair, which split one operation's status across two flows. Only one ingest runs
+     * at a time (the picker is hidden while [RagIngestState.Running]), so a single value suffices.
+     */
+    private val _ingestState = MutableStateFlow<RagIngestState>(RagIngestState.Idle)
+    val ingestState: StateFlow<RagIngestState> = _ingestState.asStateFlow()
 
-    sealed interface Event {
-        data class IngestDone(val kbId: Uuid, val fileName: String, val chunkCount: Int) : Event
-        data class IngestFailed(val kbId: Uuid, val reason: String) : Event
-    }
-
-    private val _events = MutableStateFlow<Event?>(null)
-    val events: StateFlow<Event?> = _events.asStateFlow()
-
-    fun consumeEvent() {
-        _events.value = null
+    /** Return to [RagIngestState.Idle] after the UI has shown the terminal toast. */
+    fun consumeIngestState() {
+        _ingestState.value = RagIngestState.Idle
     }
 
     fun createKnowledgeBase(name: String, embeddingModelId: Uuid?) {
@@ -123,6 +121,7 @@ class KnowledgeBaseVM(
 
     fun ingest(kbId: Uuid, uri: Uri) {
         viewModelScope.launch {
+            _ingestState.value = RagIngestState.Running(kbId, "", RagIngestState.Stage.Resolving, 0f)
             val rawFileName = filesManager.getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "document"
             // Display-only metadata: strip path separators / control chars / .. and bound length. The
             // raw provider name never touches the filesystem (temp path is uuid + sanitized ext).
@@ -132,70 +131,52 @@ class KnowledgeBaseVM(
             // unsupported binary never lands on disk only to be rejected downstream. The picker MIME
             // filter is advisory (providers can report octet-stream), so this check is the real gate.
             if (RagDocumentPolicy.resolve(fileName, mime) == null) {
-                _events.value = Event.IngestFailed(kbId, "Unsupported file type")
+                _ingestState.value = RagIngestState.Error(kbId, fileName, "Unsupported file type")
                 return@launch
             }
             val tempFile = try {
+                _ingestState.value =
+                    RagIngestState.Running(kbId, fileName, RagIngestState.Stage.Copying, 0f)
                 copyToTemp(uri, rawFileName)
             } catch (e: RagIngestLimitException) {
                 // Oversized input is a distinct, expected outcome — surface "too large" rather than
                 // the generic "failed to read".
-                _events.value = Event.IngestFailed(kbId, e.message ?: "File is too large")
+                _ingestState.value =
+                    RagIngestState.Error(kbId, fileName, e.message ?: "File is too large")
                 return@launch
             }
             if (tempFile == null) {
-                _events.value = Event.IngestFailed(kbId, "Failed to read file")
+                _ingestState.value = RagIngestState.Error(kbId, fileName, "Failed to read file")
                 return@launch
             }
             try {
-                _ingestProgress.value = _ingestProgress.value + (kbId to 0f)
                 val result = ingestUseCase(
                     knowledgeBaseId = kbId,
                     file = tempFile,
                     fileName = fileName,
                     mime = mime,
-                    onProgress = { p -> _ingestProgress.value = _ingestProgress.value + (kbId to p) },
+                    onStage = { stage, progress ->
+                        _ingestState.value = RagIngestState.Running(kbId, fileName, stage, progress)
+                    },
                 )
-                when (result) {
-                    is IngestKnowledgeBaseUseCase.Result.Success -> {
-                        settingsStore.update { current ->
-                            current.copy(
-                                knowledgeBases = current.knowledgeBases.map { kb ->
-                                    if (kb.id == kbId) kb.copy(documents = kb.documents + result.document) else kb
-                                }
-                            )
-                        }
-                        _events.value = Event.IngestDone(kbId, fileName, result.document.chunkCount)
-                    }
-
-                    IngestKnowledgeBaseUseCase.Result.EmbeddingUnavailable ->
-                        _events.value = Event.IngestFailed(
-                            kbId,
-                            "Set an OpenAI-compatible embedding model for this knowledge base first"
+                if (result is IngestKnowledgeBaseUseCase.Result.Success) {
+                    settingsStore.update { current ->
+                        current.copy(
+                            knowledgeBases = current.knowledgeBases.map { kb ->
+                                if (kb.id == kbId) kb.copy(documents = kb.documents + result.document) else kb
+                            }
                         )
-
-                    IngestKnowledgeBaseUseCase.Result.EmptyDocument ->
-                        _events.value = Event.IngestFailed(kbId, "No extractable text in this file")
-
-                    IngestKnowledgeBaseUseCase.Result.UnsupportedType ->
-                        _events.value = Event.IngestFailed(kbId, "Unsupported file type")
-
-                    is IngestKnowledgeBaseUseCase.Result.ParseFailed ->
-                        // Surface that parsing failed without embedding the raw parser error text.
-                        _events.value = Event.IngestFailed(kbId, "Could not parse this file")
-
-                    is IngestKnowledgeBaseUseCase.Result.Rejected ->
-                        // Resource limit hit (text/chunks too large); reason is a safe diagnostic.
-                        _events.value = Event.IngestFailed(kbId, result.reason)
+                    }
                 }
+                _ingestState.value = ingestResultToState(result, kbId, fileName)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 // Ingestion rolled back its partial chunks (see IngestKnowledgeBaseUseCase) and
                 // rethrew; surface the failure to the user instead of letting the coroutine die
                 // silently with orphaned UI state.
-                _events.value = Event.IngestFailed(kbId, e.message ?: "Ingestion failed")
+                _ingestState.value =
+                    RagIngestState.Error(kbId, fileName, e.message ?: "Ingestion failed")
             } finally {
-                _ingestProgress.value = _ingestProgress.value - kbId
                 tempFile.delete()
             }
         }
@@ -224,4 +205,39 @@ class KnowledgeBaseVM(
             null
         }
     }
+}
+
+/**
+ * Map an ingest [IngestKnowledgeBaseUseCase.Result] to the terminal [RagIngestState]. Pure (no
+ * VM/Room/Android), so the result-to-state contract — including the safe user-facing strings that
+ * keep raw parser text out of the UI — is unit-testable on the JVM.
+ */
+fun ingestResultToState(
+    result: IngestKnowledgeBaseUseCase.Result,
+    kbId: Uuid,
+    fileName: String,
+): RagIngestState = when (result) {
+    is IngestKnowledgeBaseUseCase.Result.Success ->
+        RagIngestState.Success(kbId, fileName, result.document.chunkCount)
+
+    IngestKnowledgeBaseUseCase.Result.EmbeddingUnavailable ->
+        RagIngestState.Error(
+            kbId,
+            fileName,
+            "Set an OpenAI-compatible embedding model for this knowledge base first"
+        )
+
+    IngestKnowledgeBaseUseCase.Result.EmptyDocument ->
+        RagIngestState.Error(kbId, fileName, "No extractable text in this file")
+
+    IngestKnowledgeBaseUseCase.Result.UnsupportedType ->
+        RagIngestState.Error(kbId, fileName, "Unsupported file type")
+
+    is IngestKnowledgeBaseUseCase.Result.ParseFailed ->
+        // Surface that parsing failed without leaking the raw parser error text.
+        RagIngestState.Error(kbId, fileName, "Could not parse this file")
+
+    is IngestKnowledgeBaseUseCase.Result.Rejected ->
+        // Resource limit hit (text/chunks too large); reason is a safe diagnostic.
+        RagIngestState.Error(kbId, fileName, result.reason)
 }

@@ -42,6 +42,7 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File01
 import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.rag.RagDocumentPolicy
+import me.rerere.rikkahub.data.rag.RagIngestState
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -51,25 +52,27 @@ import kotlin.uuid.Uuid
 @Composable
 fun KnowledgeBasePage(vm: KnowledgeBaseVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val progress by vm.ingestProgress.collectAsStateWithLifecycle()
-    val event by vm.events.collectAsStateWithLifecycle()
+    val ingestState by vm.ingestState.collectAsStateWithLifecycle()
     val toaster = LocalToaster.current
 
     var showCreateDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(event) {
-        when (val e = event) {
-            is KnowledgeBaseVM.Event.IngestDone -> {
-                toaster.show("Added \"${e.fileName}\" (${e.chunkCount} chunks)", type = ToastType.Success)
-                vm.consumeEvent()
+    LaunchedEffect(ingestState) {
+        when (val state = ingestState) {
+            is RagIngestState.Success -> {
+                toaster.show(
+                    "Added \"${state.fileName}\" (${state.chunkCount} chunks)",
+                    type = ToastType.Success
+                )
+                vm.consumeIngestState()
             }
 
-            is KnowledgeBaseVM.Event.IngestFailed -> {
-                toaster.show(e.reason, type = ToastType.Error)
-                vm.consumeEvent()
+            is RagIngestState.Error -> {
+                toaster.show(state.message, type = ToastType.Error)
+                vm.consumeIngestState()
             }
 
-            null -> Unit
+            is RagIngestState.Running, RagIngestState.Idle -> Unit
         }
     }
 
@@ -102,11 +105,12 @@ fun KnowledgeBasePage(vm: KnowledgeBaseVM = koinViewModel()) {
                 }
             }
             items(settings.knowledgeBases, key = { it.id.toString() }) { kb ->
+                val running = (ingestState as? RagIngestState.Running)?.takeIf { it.kbId == kb.id }
                 KnowledgeBaseCard(
                     kb = kb,
                     providers = settings.providers,
-                    ingesting = progress.containsKey(kb.id),
-                    progress = progress[kb.id] ?: 0f,
+                    ingesting = running != null,
+                    progress = running?.progress ?: 0f,
                     onEmbeddingModelChange = { modelId ->
                         vm.updateKnowledgeBase(kb.copy(embeddingModelId = modelId))
                     },

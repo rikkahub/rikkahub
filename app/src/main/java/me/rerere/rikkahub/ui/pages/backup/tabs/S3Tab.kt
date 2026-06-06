@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +61,7 @@ import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.pages.backup.BackupOperationState
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.fileSizeToString
@@ -79,12 +81,61 @@ fun S3Tab(
     val settings by vm.settings.collectAsStateWithLifecycle()
     val s3Config = settings.s3Config
     val backupItemsState by vm.s3BackupItems.collectAsStateWithLifecycle()
+    val operationState by vm.operationState.collectAsStateWithLifecycle()
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showBackupFiles by remember { mutableStateOf(false) }
-    var restoringItemId by remember { mutableStateOf<String?>(null) }
-    var isBackingUp by remember { mutableStateOf(false) }
+
+    val isBackingUp = operationState ==
+        BackupOperationState.Running(BackupOperationState.Kind.S3Backup)
+    // Carry the active item's display name in Running.message so only that row shows the spinner,
+    // matching the old restoringItemId behavior with no extra UI-owned state.
+    val restoringItemName = (operationState as? BackupOperationState.Running)
+        ?.takeIf { it.kind == BackupOperationState.Kind.S3Restore }
+        ?.message
+
+    // Terminal S3 backup/restore outcomes are owned by the VM now; the tab only renders them.
+    LaunchedEffect(operationState) {
+        when (val state = operationState) {
+            is BackupOperationState.Success -> {
+                when (state.kind) {
+                    BackupOperationState.Kind.S3Backup -> {
+                        vm.loadS3BackupFileItems()
+                        toaster.show(
+                            context.getString(R.string.backup_page_backup_success),
+                            type = ToastType.Success
+                        )
+                        vm.acknowledgeOperation()
+                    }
+
+                    BackupOperationState.Kind.S3Restore -> {
+                        toaster.show(
+                            context.getString(R.string.backup_page_restore_success),
+                            type = ToastType.Success
+                        )
+                        vm.acknowledgeOperation()
+                    }
+
+                    else -> Unit
+                }
+            }
+
+            is BackupOperationState.Error -> {
+                when (state.kind) {
+                    BackupOperationState.Kind.S3Backup,
+                    BackupOperationState.Kind.S3Restore -> {
+                        toaster.show(state.message, type = ToastType.Error)
+                        vm.acknowledgeOperation()
+                    }
+
+                    else -> Unit
+                }
+            }
+
+            is BackupOperationState.Running, BackupOperationState.Idle -> Unit
+        }
+    }
 
     fun updateS3Config(newConfig: S3Config) {
         vm.updateSettings(settings.copy(s3Config = newConfig))
@@ -274,26 +325,7 @@ fun S3Tab(
             }
 
             Button(
-                onClick = {
-                    scope.launch {
-                        isBackingUp = true
-                        runCatching {
-                            vm.backupToS3()
-                            vm.loadS3BackupFileItems()
-                            toaster.show(
-                                context.getString(R.string.backup_page_backup_success),
-                                type = ToastType.Success
-                            )
-                        }.onFailure {
-                            Log.e(TAG, "S3 backup failed", it)
-                            toaster.show(
-                                it.message ?: context.getString(R.string.backup_page_unknown_error),
-                                type = ToastType.Error
-                            )
-                        }
-                        isBackingUp = false
-                    }
-                },
+                onClick = { vm.backupToS3() },
                 enabled = !isBackingUp
             ) {
                 if (isBackingUp) {
@@ -343,7 +375,7 @@ fun S3Tab(
                         items(it) { item ->
                             S3BackupItemCard(
                                 item = item,
-                                isRestoring = restoringItemId == item.displayName,
+                                isRestoring = restoringItemName == item.displayName,
                                 onDelete = {
                                     scope.launch {
                                         runCatching {
@@ -366,27 +398,11 @@ fun S3Tab(
                                     }
                                 },
                                 onRestore = { restoreItem ->
-                                    scope.launch {
-                                        restoringItemId = restoreItem.displayName
-                                        runCatching {
-                                            vm.restoreFromS3(item = restoreItem)
-                                            toaster.show(
-                                                context.getString(R.string.backup_page_restore_success),
-                                                type = ToastType.Success
-                                            )
-                                            showBackupFiles = false
-                                            onShowRestartDialog()
-                                        }.onFailure { err ->
-                                            Log.e(TAG, "S3 restore failed", err)
-                                            toaster.show(
-                                                context.getString(
-                                                    R.string.backup_page_restore_failed,
-                                                    err.message ?: ""
-                                                ),
-                                                type = ToastType.Error
-                                            )
-                                        }
-                                        restoringItemId = null
+                                    // Restore success/error toasts come from the operationState
+                                    // LaunchedEffect; the onSuccess hook only drives UI navigation.
+                                    vm.restoreFromS3(item = restoreItem) {
+                                        showBackupFiles = false
+                                        onShowRestartDialog()
                                     }
                                 },
                             )

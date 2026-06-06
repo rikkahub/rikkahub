@@ -17,7 +17,8 @@ import kotlin.uuid.Uuid
  * Orchestrates ingestion of one document into a knowledge base:
  * parse (:document parsers) -> chunk ([Chunker]) -> embed + persist ([RoomVectorStore]).
  *
- * Progress is reported through [onProgress] (0.0..1.0). Returns the new [KnowledgeDocument] manifest
+ * Progress is reported through [onStage] as a typed (stage, fraction-in-[0,1]) pair so the caller can
+ * show which step is running, not just a bare number. Returns the new [KnowledgeDocument] manifest
  * entry on success; the caller persists it onto the [KnowledgeBase] in Settings.
  */
 class IngestKnowledgeBaseUseCase(
@@ -56,7 +57,7 @@ class IngestKnowledgeBaseUseCase(
         file: File,
         fileName: String,
         mime: String,
-        onProgress: (Float) -> Unit = {},
+        onStage: (RagIngestState.Stage, Float) -> Unit = { _, _ -> },
     ): Result = withContext(Dispatchers.IO) {
         val settings = settingsStore.settingsFlow.value
         val kb = settings.findKnowledgeBase(knowledgeBaseId)
@@ -64,7 +65,7 @@ class IngestKnowledgeBaseUseCase(
         val store = storeFactory.buildStore(kb, settings)
             ?: return@withContext Result.EmbeddingUnavailable
 
-        onProgress(0f)
+        onStage(RagIngestState.Stage.Extracting, 0f)
         // Only Success text may be chunked/embedded. A ParseFailed reason must never reach the
         // store — that is the whole point of the typed extraction: an error string can no longer be
         // mistaken for content (issue #83).
@@ -84,6 +85,7 @@ class IngestKnowledgeBaseUseCase(
                 "Document text is too large (over ${RagIngestLimits.MAX_EXTRACTED_CHARS} characters)"
             )
         }
+        onStage(RagIngestState.Stage.Chunking, 0f)
         val pieces = Chunker.chunk(text, chunkSize = kb.chunkSize, overlap = kb.chunkOverlap)
         if (pieces.isEmpty()) return@withContext Result.EmptyDocument
         // Reject too many chunks BEFORE the embed loop / first store.add(), so an oversized document
@@ -111,7 +113,7 @@ class IngestKnowledgeBaseUseCase(
                     content = content,
                 )
                 store.add(listOf(chunk), namespace = kb.id.toString())
-                onProgress((index + 1).toFloat() / pieces.size)
+                onStage(RagIngestState.Stage.Embedding, (index + 1).toFloat() / pieces.size)
             }
         } catch (e: Throwable) {
             // Rollback must run even when the failure is cancellation (caller navigates away mid-ingest,
@@ -125,6 +127,7 @@ class IngestKnowledgeBaseUseCase(
             throw e
         }
 
+        onStage(RagIngestState.Stage.Persisting, 1f)
         Result.Success(
             KnowledgeDocument(
                 id = docId,

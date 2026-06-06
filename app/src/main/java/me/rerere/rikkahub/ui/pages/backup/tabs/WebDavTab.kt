@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +61,7 @@ import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.pages.backup.BackupOperationState
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.fileSizeToString
@@ -79,12 +81,62 @@ fun WebDavTab(
     val settings by vm.settings.collectAsStateWithLifecycle()
     val webDavConfig = settings.webDavConfig
     val backupItemsState by vm.webDavBackupItems.collectAsStateWithLifecycle()
+    val operationState by vm.operationState.collectAsStateWithLifecycle()
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showBackupFiles by remember { mutableStateOf(false) }
-    var restoringItemId by remember { mutableStateOf<String?>(null) }
-    var isBackingUp by remember { mutableStateOf(false) }
+
+    val isBackingUp = operationState ==
+        BackupOperationState.Running(BackupOperationState.Kind.WebDavBackup)
+    // Carry the active item's display name in Running.message so only that row shows the spinner,
+    // matching the old restoringItemId behavior with no extra UI-owned state.
+    val restoringItemName = (operationState as? BackupOperationState.Running)
+        ?.takeIf { it.kind == BackupOperationState.Kind.WebDavRestore }
+        ?.message
+
+    // Terminal backup/restore outcomes are owned by the VM now; the tab only renders them. Both
+    // kinds map to the same success/failure toast text the inline handlers showed before.
+    LaunchedEffect(operationState) {
+        when (val state = operationState) {
+            is BackupOperationState.Success -> {
+                when (state.kind) {
+                    BackupOperationState.Kind.WebDavBackup -> {
+                        vm.loadBackupFileItems()
+                        toaster.show(
+                            context.getString(R.string.backup_page_backup_success),
+                            type = ToastType.Success
+                        )
+                        vm.acknowledgeOperation()
+                    }
+
+                    BackupOperationState.Kind.WebDavRestore -> {
+                        toaster.show(
+                            context.getString(R.string.backup_page_restore_success),
+                            type = ToastType.Success
+                        )
+                        vm.acknowledgeOperation()
+                    }
+
+                    else -> Unit
+                }
+            }
+
+            is BackupOperationState.Error -> {
+                when (state.kind) {
+                    BackupOperationState.Kind.WebDavBackup,
+                    BackupOperationState.Kind.WebDavRestore -> {
+                        toaster.show(state.message, type = ToastType.Error)
+                        vm.acknowledgeOperation()
+                    }
+
+                    else -> Unit
+                }
+            }
+
+            is BackupOperationState.Running, BackupOperationState.Idle -> Unit
+        }
+    }
 
     fun updateWebDavConfig(newConfig: WebDavConfig) {
         vm.updateSettings(settings.copy(webDavConfig = newConfig))
@@ -266,26 +318,7 @@ fun WebDavTab(
                 Text(stringResource(R.string.backup_page_restore))
             }
             Button(
-                onClick = {
-                    scope.launch {
-                        isBackingUp = true
-                        runCatching {
-                            vm.backup()
-                            vm.loadBackupFileItems()
-                            toaster.show(
-                                context.getString(R.string.backup_page_backup_success),
-                                type = ToastType.Success
-                            )
-                        }.onFailure {
-                            Log.e(TAG, "WebDav backup failed", it)
-                            toaster.show(
-                                it.message ?: context.getString(R.string.backup_page_unknown_error),
-                                type = ToastType.Error
-                            )
-                        }
-                        isBackingUp = false
-                    }
-                },
+                onClick = { vm.backup() },
                 enabled = !isBackingUp
             ) {
                 if (isBackingUp) {
@@ -335,7 +368,7 @@ fun WebDavTab(
                         items(it) { item ->
                             WebDavBackupItemCard(
                                 item = item,
-                                isRestoring = restoringItemId == item.displayName,
+                                isRestoring = restoringItemName == item.displayName,
                                 onDelete = {
                                     scope.launch {
                                         runCatching {
@@ -358,27 +391,11 @@ fun WebDavTab(
                                     }
                                 },
                                 onRestore = { restoreItem ->
-                                    scope.launch {
-                                        restoringItemId = restoreItem.displayName
-                                        runCatching {
-                                            vm.restore(item = restoreItem)
-                                            toaster.show(
-                                                context.getString(R.string.backup_page_restore_success),
-                                                type = ToastType.Success
-                                            )
-                                            showBackupFiles = false
-                                            onShowRestartDialog()
-                                        }.onFailure { err ->
-                                            Log.e(TAG, "WebDav restore failed", err)
-                                            toaster.show(
-                                                context.getString(
-                                                    R.string.backup_page_restore_failed,
-                                                    err.message ?: ""
-                                                ),
-                                                type = ToastType.Error
-                                            )
-                                        }
-                                        restoringItemId = null
+                                    // Restore success/error toasts come from the operationState
+                                    // LaunchedEffect; the onSuccess hook only drives UI navigation.
+                                    vm.restore(item = restoreItem) {
+                                        showBackupFiles = false
+                                        onShowRestartDialog()
                                     }
                                 },
                             )

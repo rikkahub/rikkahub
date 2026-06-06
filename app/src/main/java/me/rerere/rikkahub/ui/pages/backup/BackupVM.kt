@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -35,6 +37,20 @@ class BackupVM(
 
     val webDavBackupItems = MutableStateFlow<UiState<List<WebDavBackupItem>>>(UiState.Idle)
     val s3BackupItems = MutableStateFlow<UiState<List<S3BackupItem>>>(UiState.Idle)
+
+    /**
+     * Explicit state for the imperative backup/restore operations, keyed by [BackupOperationState.Kind]
+     * so one flow drives every button. The backup *list* stays as the [UiState] flows above; this is a
+     * separate concern (issue #105). Raw exception text is mapped to a safe string here, at the VM
+     * boundary, and cancellation never becomes an error.
+     */
+    private val _operationState = MutableStateFlow<BackupOperationState>(BackupOperationState.Idle)
+    val operationState = _operationState.asStateFlow()
+
+    /** Return to [BackupOperationState.Idle] after the UI has shown the terminal toast. */
+    fun acknowledgeOperation() {
+        _operationState.value = BackupOperationState.Idle
+    }
 
     init {
         loadBackupFileItems()
@@ -68,12 +84,47 @@ class BackupVM(
         webDavSync.testConnection(settings.value.webDavConfig)
     }
 
-    suspend fun backup() {
+    /**
+     * Run one backup/restore operation under [BackupOperationState], on [viewModelScope] so its
+     * lifecycle is the VM's, not a transient UI scope. [onSuccess] runs only on the success path
+     * (UI navigation / list refresh). Cancellation is rethrown — it must never surface as an Error
+     * toast — while any other failure is mapped to a safe user-facing string.
+     */
+    private fun runOperation(
+        kind: BackupOperationState.Kind,
+        runningMessage: String? = null,
+        onSuccess: () -> Unit = {},
+        block: suspend () -> Unit,
+    ) {
+        if (_operationState.value is BackupOperationState.Running) return
+        viewModelScope.launch {
+            _operationState.value = BackupOperationState.Running(kind, runningMessage)
+            try {
+                block()
+                _operationState.value = BackupOperationState.Success(kind)
+                onSuccess()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Backup operation $kind failed", e)
+                _operationState.value = backupThrowableToState(kind, e)
+            }
+        }
+    }
+
+    fun backup(onSuccess: () -> Unit = {}) = runOperation(
+        kind = BackupOperationState.Kind.WebDavBackup,
+        onSuccess = onSuccess,
+    ) {
         webDavSync.backup(settings.value.webDavConfig)
         recordBackupTime()
     }
 
-    suspend fun restore(item: WebDavBackupItem) {
+    fun restore(item: WebDavBackupItem, onSuccess: () -> Unit = {}) = runOperation(
+        kind = BackupOperationState.Kind.WebDavRestore,
+        runningMessage = item.displayName,
+        onSuccess = onSuccess,
+    ) {
         webDavSync.restore(config = settings.value.webDavConfig, item = item)
     }
 
@@ -81,14 +132,39 @@ class BackupVM(
         webDavSync.deleteBackupFile(settings.value.webDavConfig, item)
     }
 
-    suspend fun exportToFile(): File {
+    /**
+     * Export a backup, then hand the prepared file to [consume] (the caller streams it to the
+     * user-chosen destination). The whole flow — prepare + copy-out — is one operation so a
+     * copy-out failure is still reported as a backup error, not a silent half-success.
+     */
+    fun exportToFile(onSuccess: () -> Unit = {}, consume: suspend (File) -> Unit) = runOperation(
+        kind = BackupOperationState.Kind.LocalExport,
+        onSuccess = onSuccess,
+    ) {
         val file = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
-        recordBackupTime()
-        return file
+        try {
+            consume(file)
+            recordBackupTime()
+        } finally {
+            file.delete()
+        }
     }
 
-    suspend fun restoreFromLocalFile(file: File) {
-        webDavSync.restoreFromLocalFile(file, settings.value.webDavConfig)
+    /**
+     * Restore from a local file the caller has already materialized via [prepare] (URI -> temp).
+     * Driving the prepare + restore + cleanup as one operation keeps the temp file cleanup on every
+     * terminal path, including failure.
+     */
+    fun restoreFromLocalFile(onSuccess: () -> Unit = {}, prepare: suspend () -> File) = runOperation(
+        kind = BackupOperationState.Kind.LocalRestore,
+        onSuccess = onSuccess,
+    ) {
+        val file = prepare()
+        try {
+            webDavSync.restoreFromLocalFile(file, settings.value.webDavConfig)
+        } finally {
+            file.delete()
+        }
     }
 
     suspend fun restoreFromChatBox(file: File): ChatboxRestoreResult {
@@ -175,12 +251,19 @@ class BackupVM(
         s3Sync.testS3(settings.value.s3Config)
     }
 
-    suspend fun backupToS3() {
+    fun backupToS3(onSuccess: () -> Unit = {}) = runOperation(
+        kind = BackupOperationState.Kind.S3Backup,
+        onSuccess = onSuccess,
+    ) {
         s3Sync.backupToS3(settings.value.s3Config)
         recordBackupTime()
     }
 
-    suspend fun restoreFromS3(item: S3BackupItem) {
+    fun restoreFromS3(item: S3BackupItem, onSuccess: () -> Unit = {}) = runOperation(
+        kind = BackupOperationState.Kind.S3Restore,
+        runningMessage = item.displayName,
+        onSuccess = onSuccess,
+    ) {
         s3Sync.restoreFromS3(config = settings.value.s3Config, item = item)
     }
 
@@ -206,3 +289,23 @@ data class ChatboxRestoreResult(
     val skippedImageParts: Int,
     val skippedEmptyMessages: Int,
 )
+
+/**
+ * Map a backup/restore [Throwable] to a safe, user-facing message. Pure (no Android), so the
+ * "never leak raw throwable text past a fallback" contract is unit-testable on the JVM. A blank or
+ * null message collapses to a generic fallback instead of an empty toast.
+ */
+fun backupErrorMessage(e: Throwable): String =
+    e.message?.takeIf { it.isNotBlank() } ?: "Backup operation failed"
+
+/**
+ * Map a backup/restore terminal outcome to [BackupOperationState]. A null [throwable] is success;
+ * any other throwable becomes a safe [BackupOperationState.Error]. Pure, so the contract — including
+ * that the error message is the mapped safe string, never the raw throwable — is JVM-testable.
+ */
+fun backupThrowableToState(
+    kind: BackupOperationState.Kind,
+    throwable: Throwable?,
+): BackupOperationState =
+    if (throwable == null) BackupOperationState.Success(kind)
+    else BackupOperationState.Error(kind, backupErrorMessage(throwable))
