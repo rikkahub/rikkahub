@@ -362,7 +362,7 @@ class ChatService(
         getOrCreateSession(conversationId) // 确保 session 存在
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
-            updateConversation(conversationId, conversation)
+            updateConversationWithFileCleanup(conversationId, conversation)
             settingsStore.updateAssistant(conversation.assistantId)
         } else {
             // 新建对话, 并添加预设消息
@@ -373,7 +373,7 @@ class ChatService(
                 assistantId = assistant.id,
                 newConversation = true
             ).updateCurrentMessages(assistant.presetMessages)
-            updateConversation(conversationId, newConversation)
+            updateConversationWithFileCleanup(conversationId, newConversation)
         }
     }
 
@@ -596,7 +596,7 @@ class ChatService(
         runCatching {
 
             // reset suggestions
-            updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
+            updateConversationStateOnly(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
@@ -703,7 +703,7 @@ class ChatService(
 
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
-                        updateConversation(conversationId, updatedConversation)
+                        updateConversationStateOnly(conversationId, updatedConversation)
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
@@ -737,7 +737,7 @@ class ChatService(
 
     private fun checkInvalidMessages(conversationId: Uuid) {
         val conversation = getConversationFlow(conversationId).value
-        updateConversation(
+        updateConversationWithFileCleanup(
             conversationId,
             conversation.copy(messageNodes = conversation.messageNodes.sanitizeForUpload())
         )
@@ -834,7 +834,7 @@ class ChatService(
             val provider = model.findProvider(settings.providers) ?: return
 
             sessions[conversationId]?.let { session ->
-                updateConversation(
+                updateConversationWithFileCleanup(
                     conversationId,
                     session.state.value.copy(chatSuggestions = emptyList())
                 )
@@ -961,7 +961,12 @@ class ChatService(
 
     // ---- 对话状态更新 ----
 
-    private fun updateConversation(conversationId: Uuid, conversation: Conversation) {
+    private fun updateConversationStateOnly(conversationId: Uuid, conversation: Conversation) {
+        if (conversation.id != conversationId) return
+        getOrCreateSession(conversationId).state.value = conversation
+    }
+
+    private fun updateConversationWithFileCleanup(conversationId: Uuid, conversation: Conversation) {
         if (conversation.id != conversationId) return
         val session = getOrCreateSession(conversationId)
         checkFilesDelete(conversation, session.state.value)
@@ -970,18 +975,17 @@ class ChatService(
 
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
         val current = getConversationFlow(conversationId).value
-        updateConversation(conversationId, update(current))
+        updateConversationWithFileCleanup(conversationId, update(current))
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
-        val newFiles = newConversation.files
-        val oldFiles = oldConversation.files
-        val deletedFiles = oldFiles.filter { file ->
-            newFiles.none { it == file }
-        }
-        if (deletedFiles.isNotEmpty()) {
-            filesManager.deleteChatFiles(deletedFiles)
-            Log.w(TAG, "checkFilesDelete: $deletedFiles")
+        val deleted = removedFileUris(
+            oldFiles = oldConversation.files.map { it.toString() },
+            newFiles = newConversation.files.map { it.toString() },
+        )
+        if (deleted.isNotEmpty()) {
+            filesManager.deleteChatFiles(deleted.map { it.toUri() })
+            Log.w(TAG, "checkFilesDelete: $deleted")
         }
     }
 
@@ -992,7 +996,7 @@ class ChatService(
         }
 
         val updatedConversation = conversation.copy()
-        updateConversation(conversationId, updatedConversation)
+        updateConversationWithFileCleanup(conversationId, updatedConversation)
 
         if (!exists) {
             conversationRepo.insertConversation(updatedConversation)
@@ -1048,7 +1052,7 @@ class ChatService(
     ) {
         val currentConversation = getConversationFlow(conversationId).value
         val result = ConversationMutations.updateTranslation(currentConversation, messageId, translationText)
-        updateConversation(conversationId, result)
+        updateConversationWithFileCleanup(conversationId, result)
     }
 
     // ---- 消息操作 ----
@@ -1147,7 +1151,7 @@ class ChatService(
     fun clearTranslationField(conversationId: Uuid, messageId: Uuid) {
         val currentConversation = getConversationFlow(conversationId).value
         val result = ConversationMutations.updateTranslation(currentConversation, messageId, null)
-        updateConversation(conversationId, result)
+        updateConversationWithFileCleanup(conversationId, result)
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
@@ -1157,4 +1161,18 @@ class ChatService(
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)
     }
+}
+
+/**
+ * Pure file-diff decision used by [ChatService.checkFilesDelete]. Returns the file URIs present
+ * in [oldFiles] but absent from [newFiles] (i.e. references that a mutation removed).
+ *
+ * Extracted as a top-level function over plain String URIs so it can be JVM unit-tested:
+ * [Conversation.files] returns `List<Uri>` and `android.net.Uri` is unavailable under
+ * `unitTests.isReturnDefaultValues = true` (its methods return null/defaults), so the logic
+ * cannot be exercised through the Uri-typed path on the JVM.
+ */
+internal fun removedFileUris(oldFiles: List<String>, newFiles: List<String>): List<String> {
+    val newSet = newFiles.toHashSet()
+    return oldFiles.filter { it !in newSet }
 }
