@@ -136,25 +136,36 @@ internal fun applyInjections(
 
         if (beforeContent.isNotEmpty() || afterContent.isNotEmpty()) {
             val systemMessage = result[systemIndex]
-            val originalText = systemMessage.parts
-                .filterIsInstance<UIMessagePart.Text>()
-                .joinToString("") { it.text }
+            // Preserve the system message's multi-part structure. The assistant builds it as
+            // [stable, volatile] Text parts so OpenRouter prompt caching can anchor a
+            // cache_control breakpoint on the stable block; collapsing everything into one
+            // part (the old behaviour) busted that cache whenever any injection fired.
+            // Prepend BEFORE content to the first text part, append AFTER content to the last.
+            val parts = systemMessage.parts.toMutableList()
+            val firstText = parts.indexOfFirst { it is UIMessagePart.Text }
+            val lastText = parts.indexOfLast { it is UIMessagePart.Text }
 
-            val newText = buildString {
-                if (beforeContent.isNotEmpty()) {
-                    append(beforeContent)
-                    appendLine()
+            if (firstText < 0) {
+                val combined = buildString {
+                    if (beforeContent.isNotEmpty()) append(beforeContent)
+                    if (afterContent.isNotEmpty()) {
+                        if (isNotEmpty()) appendLine()
+                        append(afterContent)
+                    }
                 }
-                append(originalText)
+                parts.add(0, UIMessagePart.Text(combined))
+            } else {
+                if (beforeContent.isNotEmpty()) {
+                    val part = parts[firstText] as UIMessagePart.Text
+                    parts[firstText] = part.copy(text = beforeContent + "\n" + part.text)
+                }
                 if (afterContent.isNotEmpty()) {
-                    appendLine()
-                    append(afterContent)
+                    val part = parts[lastText] as UIMessagePart.Text
+                    parts[lastText] = part.copy(text = part.text + "\n" + afterContent)
                 }
             }
 
-            result[systemIndex] = systemMessage.copy(
-                parts = listOf(UIMessagePart.Text(newText))
-            )
+            result[systemIndex] = systemMessage.copy(parts = parts)
         }
     } else {
         // 没有系统消息时，创建一个新的系统消息

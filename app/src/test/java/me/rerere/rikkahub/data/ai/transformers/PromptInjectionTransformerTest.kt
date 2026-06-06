@@ -355,6 +355,42 @@ class PromptInjectionTransformerTest {
         assertTrue(systemText.startsWith("Original system prompt"))
         assertTrue(systemText.endsWith("Appended content"))
     }
+
+    @Test
+    fun `injection preserves multi-part system message for prompt caching`() {
+        // The assistant builds the system message as [stable, volatile] text parts so
+        // OpenRouter can anchor a cache_control breakpoint on the stable block. Injection
+        // must not collapse those parts into one, or prompt caching silently breaks.
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+            content = "Appended content"
+        )
+
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.SYSTEM,
+                parts = listOf(
+                    UIMessagePart.Text("stable prefix"),
+                    UIMessagePart.Text("volatile suffix"),
+                )
+            ),
+            UIMessage.user("Hello")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        val systemParts = result[0].parts.filterIsInstance<UIMessagePart.Text>()
+        assertEquals(2, systemParts.size)
+        assertEquals("stable prefix", systemParts[0].text)
+        assertTrue(systemParts[1].text.endsWith("Appended content"))
+    }
     // endregion
 
     // region BEFORE_SYSTEM_PROMPT tests
