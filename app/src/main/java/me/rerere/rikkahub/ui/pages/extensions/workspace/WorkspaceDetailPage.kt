@@ -104,8 +104,10 @@ fun WorkspaceDetailPage(id: String) {
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(HugeIcons.Refresh01, contentDescription = null)
                     }
-                    IconButton(onClick = { navController.navigate(Screen.WorkspaceTerminal(id)) }) {
-                        Icon(HugeIcons.ComputerTerminal01, contentDescription = null)
+                    if (state.workspace?.shellEnabled == true) {
+                        IconButton(onClick = { navController.navigate(Screen.WorkspaceTerminal(id)) }) {
+                            Icon(HugeIcons.ComputerTerminal01, contentDescription = null)
+                        }
                     }
                 },
                 colors = CustomColors.topBarColors,
