@@ -79,8 +79,8 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundController
 import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
+import me.rerere.rikkahub.service.mutation.ConversationMutations
 import me.rerere.rikkahub.service.notification.ChatNotificationSender
-import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.time.Instant
@@ -1047,22 +1047,8 @@ class ChatService(
         translationText: String
     ) {
         val currentConversation = getConversationFlow(conversationId).value
-        val updatedNodes = currentConversation.messageNodes.map { node ->
-            if (node.messages.any { it.id == messageId }) {
-                val updatedMessages = node.messages.map { msg ->
-                    if (msg.id == messageId) {
-                        msg.copy(translation = translationText)
-                    } else {
-                        msg
-                    }
-                }
-                node.copy(messages = updatedMessages)
-            } else {
-                node
-            }
-        }
-
-        updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+        val result = ConversationMutations.updateTranslation(currentConversation, messageId, translationText)
+        updateConversation(conversationId, result)
     }
 
     // ---- 消息操作 ----
@@ -1079,26 +1065,14 @@ class ChatService(
         val assistant = settings.getAssistantById(currentConversation.assistantId)
             ?: settings.getCurrentAssistant()
         val processedParts = preprocessUserInputParts(parts, assistant)
-        var edited = false
 
-        val updatedNodes = currentConversation.messageNodes.map { node ->
-            if (!node.messages.any { it.id == messageId }) {
-                return@map node
-            }
-            edited = true
+        // role 占位：ConversationMutations.editMessage 会对每个命中节点用 node.role 重新落款，
+        // 这里的 role 仅为构造合法 UIMessage，最终被覆盖（保持原“按节点 role 落款”语义不变）。
+        val newMessage = UIMessage(role = MessageRole.USER, parts = processedParts)
+        val result = ConversationMutations.editMessage(currentConversation, messageId, newMessage)
+            ?: return
 
-            node.copy(
-                messages = node.messages + UIMessage(
-                    role = node.role,
-                    parts = processedParts,
-                ),
-                selectIndex = node.messages.size
-            )
-        }
-
-        if (!edited) return
-
-        saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+        saveConversation(conversationId, result)
     }
 
     suspend fun forkConversationAtMessage(
@@ -1106,36 +1080,9 @@ class ChatService(
         messageId: Uuid
     ): Conversation {
         val currentConversation = getConversationFlow(conversationId).value
-        val targetNodeIndex = currentConversation.messageNodes.indexOfFirst { node ->
-            node.messages.any { it.id == messageId }
+        val forkConversation = ConversationMutations.forkAtMessage(currentConversation, messageId) {
+            it.copyWithForkedFileUrl()
         }
-        if (targetNodeIndex == -1) {
-            throw NotFoundException("Message not found")
-        }
-
-        val copiedNodes = currentConversation.messageNodes
-            .subList(0, targetNodeIndex + 1)
-            .map { node ->
-                node.copy(
-                    id = Uuid.random(),
-                    messages = node.messages.map { message ->
-                        message.copy(
-                            parts = message.parts.map { part ->
-                                part.copyWithForkedFileUrl()
-                            }
-                        )
-                    }
-                )
-            }
-
-        val forkConversation = Conversation(
-            id = Uuid.random(),
-            assistantId = currentConversation.assistantId,
-            messageNodes = copiedNodes,
-            customSystemPrompt = currentConversation.customSystemPrompt,
-            modeInjectionIds = currentConversation.modeInjectionIds,
-            lorebookIds = currentConversation.lorebookIds,
-        )
 
         saveConversation(forkConversation.id, forkConversation)
         return forkConversation
@@ -1147,26 +1094,13 @@ class ChatService(
         selectIndex: Int
     ) {
         val currentConversation = getConversationFlow(conversationId).value
-        val targetNode = currentConversation.messageNodes.firstOrNull { it.id == nodeId }
-            ?: throw NotFoundException("Message node not found")
-
-        if (selectIndex !in targetNode.messages.indices) {
-            throw BadRequestException("Invalid selectIndex")
-        }
-
-        if (targetNode.selectIndex == selectIndex) {
+        val updated = ConversationMutations.selectMessageNode(currentConversation, nodeId, selectIndex)
+        // 无变更（目标索引已是当前选中值）时 helper 返回原实例 —— 据引用相等跳过持久化，保留原早退不落库语义。
+        if (updated === currentConversation) {
             return
         }
 
-        val updatedNodes = currentConversation.messageNodes.map { node ->
-            if (node.id == nodeId) {
-                node.copy(selectIndex = selectIndex)
-            } else {
-                node
-            }
-        }
-
-        saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+        saveConversation(conversationId, updated)
     }
 
     suspend fun deleteMessage(
@@ -1175,7 +1109,7 @@ class ChatService(
         failIfMissing: Boolean = true,
     ) {
         val currentConversation = getConversationFlow(conversationId).value
-        val updatedConversation = buildConversationAfterMessageDelete(currentConversation, messageId)
+        val updatedConversation = ConversationMutations.deleteMessage(currentConversation, messageId)
 
         if (updatedConversation == null) {
             if (failIfMissing) {
@@ -1192,37 +1126,6 @@ class ChatService(
         message: UIMessage,
     ) {
         deleteMessage(conversationId, message.id, failIfMissing = false)
-    }
-
-    private fun buildConversationAfterMessageDelete(
-        conversation: Conversation,
-        messageId: Uuid,
-    ): Conversation? {
-        val targetNodeIndex = conversation.messageNodes.indexOfFirst { node ->
-            node.messages.any { it.id == messageId }
-        }
-        if (targetNodeIndex == -1) {
-            return null
-        }
-
-        val updatedNodes = conversation.messageNodes.mapIndexedNotNull { index, node ->
-            if (index != targetNodeIndex) {
-                return@mapIndexedNotNull node
-            }
-
-            val nextMessages = node.messages.filterNot { it.id == messageId }
-            if (nextMessages.isEmpty()) {
-                return@mapIndexedNotNull null
-            }
-
-            val nextSelectIndex = node.selectIndex.coerceAtMost(nextMessages.lastIndex)
-            node.copy(
-                messages = nextMessages,
-                selectIndex = nextSelectIndex,
-            )
-        }
-
-        return conversation.copy(messageNodes = updatedNodes)
     }
 
     private fun UIMessagePart.copyWithForkedFileUrl(): UIMessagePart {
@@ -1243,22 +1146,8 @@ class ChatService(
 
     fun clearTranslationField(conversationId: Uuid, messageId: Uuid) {
         val currentConversation = getConversationFlow(conversationId).value
-        val updatedNodes = currentConversation.messageNodes.map { node ->
-            if (node.messages.any { it.id == messageId }) {
-                val updatedMessages = node.messages.map { msg ->
-                    if (msg.id == messageId) {
-                        msg.copy(translation = null)
-                    } else {
-                        msg
-                    }
-                }
-                node.copy(messages = updatedMessages)
-            } else {
-                node
-            }
-        }
-
-        updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+        val result = ConversationMutations.updateTranslation(currentConversation, messageId, null)
+        updateConversation(conversationId, result)
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
