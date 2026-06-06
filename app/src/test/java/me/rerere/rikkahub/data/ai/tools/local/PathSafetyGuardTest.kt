@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import me.rerere.rikkahub.BuildConfig
 
 class PathSafetyGuardTest {
 
@@ -18,15 +19,15 @@ class PathSafetyGuardTest {
     }
 
     @Test fun `own app data path is allowed`() {
-        assertNull(PathSafetyGuard.check("/data/data/me.rerere.rikkahub/files/prefs.json"))
+        assertNull(PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/files/prefs.json"))
     }
 
     @Test fun `own debug app data path is allowed`() {
-        assertNull(PathSafetyGuard.check("/data/data/me.rerere.rikkahub.debug/cache/tmp.bin"))
+        assertNull(PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/cache/tmp.bin"))
     }
 
     @Test fun `external files dir is allowed`() {
-        assertNull(PathSafetyGuard.check("/storage/emulated/0/Android/data/me.rerere.rikkahub/files"))
+        assertNull(PathSafetyGuard.check("/storage/emulated/0/Android/data/${BuildConfig.APPLICATION_ID}/files"))
     }
 
     // ---- system path blocks ----
