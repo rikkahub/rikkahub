@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.chat
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Book02
@@ -110,6 +111,8 @@ import java.time.LocalDateTime
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
+private const val TAG = "ChatExport"
+
 @Composable
 fun ChatExportSheet(
     visible: Boolean,
@@ -216,7 +219,7 @@ fun ChatExportSheet(
                                                 options = imageExportOptions
                                             )
                                         }.onFailure {
-                                            it.printStackTrace()
+                                            Log.e(TAG, "Export image failed", it)
                                             toaster.show(
                                                 message = "Failed to export image: ${it.message}",
                                                 type = ToastType.Error
@@ -375,7 +378,7 @@ private fun exportToMarkdown(
         shareFile(context, uri, "text/markdown")
 
     } catch (e: Exception) {
-        e.printStackTrace()
+        Log.e(TAG, "Export markdown failed", e)
     }
 }
 
@@ -438,7 +441,7 @@ private suspend fun exportToImage(
         )
         shareFile(context, uri, "image/png")
     } catch (e: Exception) {
-        e.printStackTrace()
+        Log.e(TAG, "Export image failed", e)
         withContext(Dispatchers.Main) {
             Toast.makeText(context, "Failed to export image: ${e.message}", Toast.LENGTH_SHORT).show()
         }

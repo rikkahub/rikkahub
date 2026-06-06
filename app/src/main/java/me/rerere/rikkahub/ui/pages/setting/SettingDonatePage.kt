@@ -128,7 +128,6 @@ private fun Sponsors(modifier: Modifier = Modifier) {
         value = UiState.Loading
         runCatching {
             val sponsors = sponsorAPI.getSponsors()
-            println(sponsors)
             value = UiState.Success(sponsors)
         }.onFailure {
             value = UiState.Error(it)

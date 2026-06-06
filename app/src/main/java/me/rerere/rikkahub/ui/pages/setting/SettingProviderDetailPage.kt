@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.util.Log
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Connect
@@ -133,6 +134,8 @@ import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
+
+private const val TAG = "SettingProviderDetailPage"
 
 /**
  * Merge the edited config draft with the currently-persisted model list.
@@ -434,7 +437,11 @@ private fun ModelList(
                 .sortedBy { it.modelId }
                 .toList()
         }.onFailure {
-            it.printStackTrace()
+            if (it is kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "listModels cancelled")
+            } else {
+                Log.e(TAG, "listModels failed", it)
+            }
         }
     }
     var expanded by rememberSaveable { mutableStateOf(true) }

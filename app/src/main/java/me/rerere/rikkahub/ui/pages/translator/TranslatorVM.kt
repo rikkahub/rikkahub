@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.translator
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -81,7 +82,11 @@ class TranslatorVM(
                     _translatedText.value = translatedText
                 }.collect { /* Final translation already handled in onStreamUpdate */ }
             }.onFailure {
-                it.printStackTrace()
+                if (it is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "translation cancelled")
+                } else {
+                    Log.e(TAG, "translation failed", it)
+                }
                 errorFlow.emit(it)
             }
 

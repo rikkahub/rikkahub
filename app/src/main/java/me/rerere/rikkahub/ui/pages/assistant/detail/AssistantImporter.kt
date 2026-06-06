@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +46,8 @@ import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.R
 import org.koin.compose.koinInject
 
+private const val TAG = "AssistantImporter"
+
 @Composable
 fun AssistantImporter(
     modifier: Modifier = Modifier,
@@ -85,7 +88,7 @@ private fun SillyTavernImporter(
                             filesManager = filesManager,
                         )
                     }.onFailure { exception ->
-                        exception.printStackTrace()
+                        Log.e(TAG, "Assistant import failed", exception)
                         toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))
                     }
                 } finally {
@@ -111,7 +114,7 @@ private fun SillyTavernImporter(
                             filesManager = filesManager,
                         )
                     }.onFailure { exception ->
-                        exception.printStackTrace()
+                        Log.e(TAG, "Assistant import failed", exception)
                         toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))
                     }
                 } finally {
@@ -282,7 +285,7 @@ private suspend fun importAssistantFromUri(
         val assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
         onImport(assistant)
     } catch (exception: Exception) {
-        exception.printStackTrace()
+        Log.e(TAG, "Assistant import failed", exception)
         toaster.show(
             message = exception.message ?: context.getString(R.string.assistant_importer_import_failed),
             type = ToastType.Error

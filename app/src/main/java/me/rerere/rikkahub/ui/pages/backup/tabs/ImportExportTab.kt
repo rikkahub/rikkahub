@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.backup.tabs
 
+import android.util.Log
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File01
 import me.rerere.hugeicons.stroke.FileImport
@@ -35,6 +36,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+
+private const val TAG = "ImportExportTab"
 
 @Composable
 fun ImportExportTab(
@@ -76,7 +79,7 @@ fun ImportExportTab(
                         type = ToastType.Success
                     )
                 }.onFailure { e ->
-                    e.printStackTrace()
+                    Log.e(TAG, "Export failed", e)
                     toaster.show(
                         context.getString(R.string.backup_page_restore_failed, e.message ?: ""),
                         type = ToastType.Error
@@ -157,7 +160,7 @@ fun ImportExportTab(
                     )
                     onShowRestartDialog()
                 }.onFailure { e ->
-                    e.printStackTrace()
+                    Log.e(TAG, "Import failed", e)
                     toaster.show(
                         context.getString(R.string.backup_page_restore_failed, e.message ?: ""),
                         type = ToastType.Error

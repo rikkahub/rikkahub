@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.extensions
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.io.ByteArrayInputStream
@@ -20,6 +21,8 @@ import me.rerere.rikkahub.data.files.SkillImportLimits
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import org.json.JSONArray
+
+private const val TAG = "SkillsVM"
 
 class SkillsVM(
     private val skillManager: SkillManager,
@@ -145,7 +148,7 @@ class SkillsVM(
                 _skills.value = skillManager.listSkills()
                 withContext(Dispatchers.Main) { onResult(true, name) }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Skill import/save failed", e)
                 withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }
             }
         }
