@@ -177,9 +177,11 @@ internal suspend fun runCommandCapture(
             )
             if (bundle == null && intent.extras == null) return  // empty ack, wait for real fire
             if (bundle != null) {
+                // Do NOT log stdout/stderr content: command output can carry secrets and
+                // lands in logcat in release builds. Log only non-sensitive metadata.
                 android.util.Log.i(
                     "RikkaTermux",
-                    "result bundle keys=${bundle.keySet().joinToString(",")} stdout='${bundle.getString(RESULT_KEY_STDOUT, "<null>").take(200)}' stderr='${bundle.getString(RESULT_KEY_STDERR, "<null>").take(200)}' exit=${bundle.getInt(RESULT_KEY_EXIT_CODE, -999)} err=${bundle.getInt(RESULT_KEY_ERR, -999)} errmsg='${bundle.getString(RESULT_KEY_ERRMSG, "<null>")}'",
+                    "result bundle keys=${bundle.keySet().joinToString(",")} exit=${bundle.getInt(RESULT_KEY_EXIT_CODE, -999)} err=${bundle.getInt(RESULT_KEY_ERR, -999)} errmsg='${bundle.getString(RESULT_KEY_ERRMSG, "<null>")}'",
                 )
             }
             // Some Termux variants put the keys directly on the broadcast intent rather than
