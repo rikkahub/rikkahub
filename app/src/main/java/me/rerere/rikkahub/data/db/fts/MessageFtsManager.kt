@@ -1,13 +1,13 @@
 package me.rerere.rikkahub.data.db.fts
 
 import android.util.Log
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.MessageNode
 import java.time.Instant
 
 data class MessageSearchResult(
@@ -26,26 +26,7 @@ class MessageFtsManager(private val database: AppDatabase) {
     private val db get() = database.openHelper.writableDatabase
 
     suspend fun indexConversation(conversation: Conversation) = withContext(Dispatchers.IO) {
-        val conversationId = conversation.id.toString()
-        db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
-        conversation.messageNodes.forEach { node ->
-            node.messages.forEach { message ->
-                val text = message.extractFtsText()
-                if (text.isNotBlank()) {
-                    db.execSQL(
-                        "INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at) VALUES (?, ?, ?, ?, ?, ?)",
-                        arrayOf(
-                            text,
-                            node.id.toString(),
-                            message.id.toString(),
-                            conversationId,
-                            conversation.title,
-                            conversation.updateAt.toEpochMilli().toString(),
-                        )
-                    )
-                }
-            }
-        }
+        reindexConversationFts(db, conversation)
     }
 
     suspend fun deleteConversation(conversationId: String) = withContext(Dispatchers.IO) {
@@ -85,6 +66,48 @@ class MessageFtsManager(private val database: AppDatabase) {
             }
         }
         results
+    }
+}
+
+/**
+ * Reindex the whole FTS table for one conversation in a SINGLE explicit transaction.
+ *
+ * The DELETE-then-reinsert-all strategy is unchanged; the only behavior change is atomicity: the
+ * delete and every per-message insert now commit together. Without the transaction wrapper each
+ * `execSQL` auto-commits on its own, so an interrupt between the DELETE and the last INSERT leaves
+ * the conversation half-indexed (some rows gone, never re-added), and the N auto-commits also pay N
+ * fsync round-trips on a large conversation. Issue #113.
+ *
+ * Extracted as a pure top-level helper over the [SupportSQLiteDatabase] interface so the
+ * begin/delete/insert/commit sequencing is unit-testable on the JVM without the native FTS5
+ * (jieba/simple_snippet) extensions.
+ */
+internal fun reindexConversationFts(db: SupportSQLiteDatabase, conversation: Conversation) {
+    val conversationId = conversation.id.toString()
+    db.beginTransaction()
+    try {
+        db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
+        conversation.messageNodes.forEach { node ->
+            node.messages.forEach { message ->
+                val text = message.extractFtsText()
+                if (text.isNotBlank()) {
+                    db.execSQL(
+                        "INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at) VALUES (?, ?, ?, ?, ?, ?)",
+                        arrayOf(
+                            text,
+                            node.id.toString(),
+                            message.id.toString(),
+                            conversationId,
+                            conversation.title,
+                            conversation.updateAt.toEpochMilli().toString(),
+                        )
+                    )
+                }
+            }
+        }
+        db.setTransactionSuccessful()
+    } finally {
+        db.endTransaction()
     }
 }
 
