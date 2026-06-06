@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import android.content.Intent
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,8 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Share03
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.io.encoding.Base64
+
+private const val TAG = "ShareSheet"
 
 @Composable
 fun ShareSheet(
@@ -66,7 +69,7 @@ fun ShareSheet(
                             try {
                                 context.startActivity(Intent.createChooser(intent, null))
                             } catch (e: Exception) {
-                                e.printStackTrace()
+                                Log.e(TAG, "Failed to start share chooser", e)
                             }
                         }
                     ) {

@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.ClipData
 import android.content.Intent
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -105,7 +106,10 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
+
+private const val TAG = "Markdown"
 
 private val flavour by lazy {
     GFMFlavourDescriptor(
@@ -243,7 +247,10 @@ fun MarkdownBlock(
         snapshotFlow { updatedContent }
             .distinctUntilChanged()
             .mapLatest { parseMarkdown(it) }
-            .catch { exception -> exception.printStackTrace() }
+            .catch { exception ->
+                if (exception is CancellationException) throw exception
+                Log.e(TAG, "Failed to parse markdown", exception)
+            }
             .flowOn(Dispatchers.Default)
             .collect { setData(it) }
     }
@@ -272,7 +279,7 @@ fun MarkdownBlock(
 
 // for debug
 private fun dumpAst(node: ASTNode, text: String, indent: String = "") {
-    println("$indent${node.type} ${if (node.children.isEmpty()) node.getTextInNode(text) else ""} | ${node.javaClass.simpleName}")
+    Log.d(TAG, "$indent${node.type} ${if (node.children.isEmpty()) node.getTextInNode(text) else ""} | ${node.javaClass.simpleName}")
     node.children.fastForEach {
         dumpAst(it, text, "$indent  ")
     }
@@ -880,8 +887,10 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
                     context.contentResolver.openOutputStream(it)?.use { outputStream ->
                         outputStream.write(tableCsv.toByteArray())
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(TAG, "Failed to write table CSV", e)
                 }
             }
         }

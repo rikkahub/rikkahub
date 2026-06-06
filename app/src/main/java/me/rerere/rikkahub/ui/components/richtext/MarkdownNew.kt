@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.richtext
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +84,9 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
+import kotlin.coroutines.cancellation.CancellationException
+
+private const val TAG = "MarkdownNew"
 
 // ---- Preprocessing (mirrors Markdown.kt logic) ----
 
@@ -138,7 +142,10 @@ fun MarkdownNew(
         snapshotFlow { updatedContent }
             .distinctUntilChanged()
             .mapLatest { generateMarkdownHtml(it) }
-            .catch { it.printStackTrace() }
+            .catch {
+                if (it is CancellationException) throw it
+                Log.e(TAG, "Failed to generate markdown html", it)
+            }
             .flowOn(Dispatchers.Default)
             .collect { html = it }
     }

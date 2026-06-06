@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,9 @@ import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.compose.koinInject
+import kotlin.coroutines.cancellation.CancellationException
+
+private const val TAG = "ImagePreviewDialog"
 
 @Composable
 fun ImagePreviewDialog(
@@ -72,7 +76,8 @@ fun ImagePreviewDialog(
                                 filesManager.saveMessageImage(context, imgUrl)
                                 toaster.show(message = "已保存图片", type = ToastType.Success)
                             }.onFailure {
-                                it.printStackTrace()
+                                if (it is CancellationException) throw it
+                                Log.e(TAG, "Failed to save message image", it)
                                 toaster.show(
                                     message = it.toString(),
                                     type = ToastType.Error

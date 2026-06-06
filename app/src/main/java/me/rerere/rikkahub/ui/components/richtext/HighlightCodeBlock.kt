@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.ClipData
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -82,8 +83,10 @@ import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.toDp
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 
+private const val TAG = "HighlightCodeBlock"
 private const val COLLAPSE_LINES = 10
 private val PREVIEWABLE_LANGUAGES = setOf("html", "svg")
 
@@ -127,8 +130,10 @@ fun HighlightCodeBlock(
                     context.contentResolver.openOutputStream(it)?.use { outputStream ->
                         outputStream.write(code.toByteArray())
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(TAG, "Failed to write code block to file", e)
                 }
             }
         }

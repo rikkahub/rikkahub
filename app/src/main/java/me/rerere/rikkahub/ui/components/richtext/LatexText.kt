@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import android.graphics.Rect
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LocalTextStyle
@@ -15,6 +16,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.TextUnit
 import ru.noties.jlatexmath.JLatexMathDrawable
+
+private const val TAG = "LatexText"
 
 fun assumeLatexSize(latex: String, fontSize: Float): Rect {
     return runCatching {
@@ -51,7 +54,7 @@ fun LatexText(
                 )
             }
         }.onFailure {
-            it.printStackTrace()
+            Log.e(TAG, "Failed to render LaTeX", it)
         }.getOrNull()
     }
 
@@ -91,7 +94,7 @@ fun getLatexDrawable(
             .align(JLatexMathDrawable.ALIGN_LEFT)
             .build()
     }.onFailure {
-        it.printStackTrace()
+        Log.e(TAG, "Failed to render LaTeX", it)
     }.getOrNull()
 }
 
