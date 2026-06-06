@@ -449,15 +449,25 @@ private fun OpenRouterRoutingSection(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    // Local edit buffers so a partial decimal entry ("0.") isn't snapped away while typing:
+    // the parsed Double drives routing, the raw text drives the field.
+    var promptPriceText by remember { mutableStateOf(routing.maxPricePrompt?.toString() ?: "") }
+    var completionPriceText by remember { mutableStateOf(routing.maxPriceCompletion?.toString() ?: "") }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
-            value = routing.maxPricePrompt?.toString() ?: "",
-            onValueChange = { onChange(routing.copy(maxPricePrompt = it.toDoubleOrNull())) },
+            value = promptPriceText,
+            onValueChange = {
+                promptPriceText = it
+                onChange(routing.copy(maxPricePrompt = it.toDoubleOrNull()))
+            },
             label = { Text("Max $/1M prompt") },
             singleLine = true,
             trailingIcon = {
-                if (routing.maxPricePrompt != null) {
-                    IconButton(onClick = { onChange(routing.copy(maxPricePrompt = null)) }) {
+                if (promptPriceText.isNotEmpty()) {
+                    IconButton(onClick = {
+                        promptPriceText = ""
+                        onChange(routing.copy(maxPricePrompt = null))
+                    }) {
                         Icon(HugeIcons.Cancel01, contentDescription = "Clear")
                     }
                 }
@@ -465,13 +475,19 @@ private fun OpenRouterRoutingSection(
             modifier = Modifier.weight(1f),
         )
         OutlinedTextField(
-            value = routing.maxPriceCompletion?.toString() ?: "",
-            onValueChange = { onChange(routing.copy(maxPriceCompletion = it.toDoubleOrNull())) },
+            value = completionPriceText,
+            onValueChange = {
+                completionPriceText = it
+                onChange(routing.copy(maxPriceCompletion = it.toDoubleOrNull()))
+            },
             label = { Text("Max $/1M completion") },
             singleLine = true,
             trailingIcon = {
-                if (routing.maxPriceCompletion != null) {
-                    IconButton(onClick = { onChange(routing.copy(maxPriceCompletion = null)) }) {
+                if (completionPriceText.isNotEmpty()) {
+                    IconButton(onClick = {
+                        completionPriceText = ""
+                        onChange(routing.copy(maxPriceCompletion = null))
+                    }) {
                         Icon(HugeIcons.Cancel01, contentDescription = "Clear")
                     }
                 }
