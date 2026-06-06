@@ -1,11 +1,7 @@
 package me.rerere.rikkahub.service
 
 import android.app.Application
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -48,10 +44,7 @@ import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
-import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
-import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -86,10 +79,10 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundController
 import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
+import me.rerere.rikkahub.service.notification.ChatNotificationSender
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
-import me.rerere.rikkahub.utils.sendNotification
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -220,6 +213,9 @@ class ChatService(
     // 活跃生成 -> 前台服务的生命周期状态机。引用计数（0->1 启动、1->0 停止）、前台服务运行标志、
     // WakeLock 续期节流统一由协调器独占持有；ChatService 只委派，不再直接调用 GenerationForegroundService。
     private val foregroundCoordinator = GenerationForegroundCoordinator(AndroidGenerationForegroundController(context))
+
+    // 通知发送器：封装"生成完成"与"Live Update"通知的构建，不持有会话状态（内容由调用方传入）。
+    private val notificationSender = ChatNotificationSender(context)
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -694,7 +690,9 @@ class ChatService(
 
                 // Show notification if app is not in foreground
                 if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
-                    sendGenerationDoneNotification(conversationId, senderName)
+                    val preview = getConversationFlow(conversationId).value.currentMessages
+                        .lastOrNull()?.toText()?.take(50)?.trim() ?: ""
+                    notificationSender.sendGenerationDone(conversationId, senderName, preview)
                 }
             }.collect { chunk ->
                 when (chunk) {
@@ -709,7 +707,9 @@ class ChatService(
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
-                            sendLiveUpdateNotification(conversationId, chunk.messages, senderName)
+                            chunk.messages.lastOrNull()?.parts?.let {
+                                notificationSender.sendLiveUpdate(conversationId, senderName, it)
+                            }
                         }
                     }
                 }
@@ -957,116 +957,6 @@ class ChatService(
         )
 
         saveConversation(conversationId, newConversation)
-    }
-
-    // ---- 通知 ----
-
-    private fun sendGenerationDoneNotification(conversationId: Uuid, senderName: String) {
-        // 不在此取消 Live Update 通知：它现在是前台服务持有的同一条常驻通知，由 FGS 在 1->0 边移除。
-        val conversation = getConversationFlow(conversationId).value
-        context.sendNotification(
-            channelId = CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,
-            notificationId = 1
-        ) {
-            title = senderName
-            content = conversation.currentMessages.lastOrNull()?.toText()?.take(50)?.trim() ?: ""
-            autoCancel = true
-            useDefaults = true
-            category = NotificationCompat.CATEGORY_MESSAGE
-            contentIntent = getPendingIntent(context, conversationId)
-        }
-    }
-
-    // 单一常驻通知：复用前台服务的通知 ID，让 Live Update 富文本就地更新 GenerationForegroundService
-    // 启动时占位的同一条通知，而不是再发一条 per-conversation 的常驻通知（否则后台生成时会出现两条
-    // 常驻通知）。通知的取消由前台服务在 1->0 边 stopForeground(STOP_FOREGROUND_REMOVE) 唯一负责，
-    // 因此多会话并发时单个会话结束不会误删这条共享通知。
-    private fun getLiveUpdateNotificationId(): Int {
-        return GenerationForegroundService.NOTIFICATION_ID
-    }
-
-    private fun sendLiveUpdateNotification(
-        conversationId: Uuid,
-        messages: List<UIMessage>,
-        senderName: String
-    ) {
-        val lastMessage = messages.lastOrNull() ?: return
-        val parts = lastMessage.parts
-
-        // 确定当前状态
-        val (chipText, statusText, contentText) = determineNotificationContent(parts)
-
-        context.sendNotification(
-            channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
-            notificationId = getLiveUpdateNotificationId()
-        ) {
-            title = senderName
-            content = contentText
-            subText = statusText
-            ongoing = true
-            onlyAlertOnce = true
-            category = NotificationCompat.CATEGORY_PROGRESS
-            useBigTextStyle = true
-            contentIntent = getPendingIntent(context, conversationId)
-            requestPromotedOngoing = true
-            shortCriticalText = chipText
-        }
-    }
-
-    private fun determineNotificationContent(parts: List<UIMessagePart>): Triple<String, String, String> {
-        // 检查最近的 part 来确定状态
-        val lastReasoning = parts.filterIsInstance<UIMessagePart.Reasoning>().lastOrNull()
-        val lastTool = parts.filterIsInstance<UIMessagePart.Tool>().lastOrNull()
-        val lastText = parts.filterIsInstance<UIMessagePart.Text>().lastOrNull()
-
-        return when {
-            // 正在执行工具
-            lastTool != null && !lastTool.isExecuted -> {
-                val toolName = lastTool.toolName.removePrefix("mcp__")
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_tool),
-                    context.getString(R.string.notification_live_update_tool, toolName),
-                    lastTool.input.take(100)
-                )
-            }
-            // 正在思考（Reasoning 未结束）
-            lastReasoning != null && lastReasoning.finishedAt == null -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_thinking),
-                    context.getString(R.string.notification_live_update_thinking),
-                    lastReasoning.reasoning.takeLast(200)
-                )
-            }
-            // 正在写回复
-            lastText != null -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_writing),
-                    context.getString(R.string.notification_live_update_writing),
-                    lastText.text.takeLast(200)
-                )
-            }
-            // 默认状态
-            else -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_writing),
-                    context.getString(R.string.notification_live_update_title),
-                    ""
-                )
-            }
-        }
-    }
-
-    private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {
-        val intent = Intent(context, RouteActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("conversationId", conversationId.toString())
-        }
-        return PendingIntent.getActivity(
-            context,
-            conversationId.hashCode(),
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
     }
 
     // ---- 对话状态更新 ----
