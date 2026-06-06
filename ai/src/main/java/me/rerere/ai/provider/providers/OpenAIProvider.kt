@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -26,6 +27,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.provider.providers.openai.openRouterModelFromJson
+import me.rerere.ai.provider.providers.openai.parseImageDataUri
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.ImageGenerationResult
@@ -254,6 +256,12 @@ class OpenAIProvider(
 
         val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
 
+        // OpenRouter has no /images/generations endpoint (that 404s to its website). Image
+        // generation goes through /chat/completions with modalities:["image","text"].
+        if (providerSetting.baseUrl.contains("openrouter.ai", ignoreCase = true)) {
+            return@withContext generateImageViaChatCompletions(providerSetting, params, key)
+        }
+
         val requestBody = json.encodeToString(
             buildJsonObject {
                 put("model", params.model.modelId)
@@ -289,6 +297,68 @@ class OpenAIProvider(
         val items = parseImageGenerationItems(data)
 
         ImageGenerationResult(items = items)
+    }
+
+    /** OpenRouter image generation via /chat/completions with modalities:["image","text"]. */
+    private suspend fun generateImageViaChatCompletions(
+        providerSetting: ProviderSetting.OpenAI,
+        params: ImageGenerationParams,
+        key: String,
+    ): ImageGenerationResult {
+        val body = buildJsonObject {
+            put("model", params.model.modelId)
+            putJsonArray("messages") {
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("content", params.prompt)
+                })
+            }
+            putJsonArray("modalities") {
+                add("image")
+                add("text")
+            }
+            put("image_config", buildJsonObject {
+                put(
+                    "aspect_ratio", when (params.aspectRatio) {
+                        ImageAspectRatio.SQUARE -> "1:1"
+                        ImageAspectRatio.LANDSCAPE -> "16:9"
+                        ImageAspectRatio.PORTRAIT -> "9:16"
+                    }
+                )
+            })
+        }.mergeCustomBody(params.customBody)
+
+        val request = Request.Builder()
+            .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
+            .headers(params.customHeaders.toHeaders())
+            .addHeader("Authorization", "Bearer $key")
+            .addHeader("Content-Type", "application/json")
+            .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val response = client.newCall(request).await()
+        val bodyStr = response.body.string()
+        if (!response.isSuccessful) {
+            error("Failed to generate image: ${response.code} $bodyStr")
+        }
+        val message = json.parseToJsonElement(bodyStr).jsonObject["choices"]?.jsonArray
+            ?.getOrNull(0)?.jsonObject?.get("message")?.jsonObject
+            ?: error("No choices in image response")
+        val images = message["images"]?.jsonArray ?: JsonArray(emptyList())
+        val items = images.mapNotNull { img ->
+            val url = img.jsonObject["image_url"]?.jsonObject?.get("url")
+                ?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val parsed = parseImageDataUri(url) ?: return@mapNotNull null
+            ImageGenerationItem(data = parsed.base64, mimeType = parsed.mime)
+        }
+        if (items.isEmpty()) {
+            val text = message["content"]?.jsonPrimitive?.contentOrNull
+            error(
+                "No image returned. The model may not support image output or returned text only." +
+                    (text?.takeIf { it.isNotBlank() }?.let { " Model said: $it" } ?: "")
+            )
+        }
+        return ImageGenerationResult(items = items)
     }
 
     override suspend fun editImage(
