@@ -69,6 +69,8 @@ sealed class ProviderSetting {
         // it is applied to every model on the OpenRouter host. See ChatCompletionsAPI.
         var promptCaching: Boolean = true,
         var includeHistoryReasoning: Boolean = true,
+        // OpenRouter only: provider-routing preferences emitted as the `provider` object.
+        var routing: OpenRouterRouting = OpenRouterRouting(),
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

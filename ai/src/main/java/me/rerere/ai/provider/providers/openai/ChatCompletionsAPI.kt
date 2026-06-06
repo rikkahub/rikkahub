@@ -289,6 +289,13 @@ class ChatCompletionsAPI(
                         add("text")
                     })
                 }
+                // Provider routing preferences (sort/order/only/ignore/max_price/...).
+                // Forces require_parameters when the request carries tools so a provider
+                // that can't do tool-calling isn't picked and silently drops them.
+                val hasTools = params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+                buildProviderObject(providerSetting.routing, hasToolsOrSchema = hasTools)?.let {
+                    put("provider", it)
+                }
             }
 
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
