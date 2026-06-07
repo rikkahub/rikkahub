@@ -9,6 +9,8 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,6 +26,14 @@ import org.koin.android.ext.android.inject
 
 private const val TAG = "WebServerService"
 
+/**
+ * 纯函数：判断 service 协程抛出的异常是否应当被记录。抽出以便 JVM 单测（无 Android/Log 依赖）。
+ * 可恢复的失败（设置更新、通知更新、前台服务调用、状态收集）应当记录，否则失败的 job 会静默停止
+ * 或经默认未捕获处理器升级为进程崩溃；而 CancellationException 是结构化并发的正常拆解（如 onDestroy
+ * 取消 serviceScope），不应作为错误记录。
+ */
+internal fun shouldLogServiceError(t: Throwable): Boolean = t !is CancellationException
+
 class WebServerService : Service() {
 
     companion object {
@@ -37,7 +47,11 @@ class WebServerService : Service() {
     private val webServerManager: WebServerManager by inject()
     private val settingsStore: SettingsStore by inject()
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, e ->
+            if (shouldLogServiceError(e)) Log.e(TAG, "WebServerService coroutine failed", e)
+        }
+    )
     private var stateObserverJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
