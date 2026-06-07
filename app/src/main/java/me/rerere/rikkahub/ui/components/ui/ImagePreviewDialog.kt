@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,8 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import coil3.compose.rememberAsyncImagePainter
 import com.dokar.sonner.ToastType
 import com.jvziyaoyao.scale.image.pager.ImagePager
@@ -42,7 +41,7 @@ fun ImagePreviewDialog(
     val filesManager: FilesManager = koinInject()
     val state = rememberZoomablePagerState { images.size }
     val toaster = LocalToaster.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(
@@ -69,7 +68,7 @@ fun ImagePreviewDialog(
             ) {
                 IconButton(
                     onClick = {
-                        lifecycleOwner.lifecycleScope.launch {
+                        scope.launch {
                             runCatching {
                                 toaster.show("正在保存")
                                 val imgUrl = images[state.currentPage]
