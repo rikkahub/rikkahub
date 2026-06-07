@@ -433,8 +433,12 @@ class ChatService(
         return session.processingStatus
     }
 
-    fun getConversationJobs(): Flow<Map<Uuid, Job?>> {
-        return _sessionsVersion.flatMapLatest {
+    // 不在这里 catch/降级：本流是对一组 in-memory StateFlow（每个 session 的 generationJob，热流、
+    // 永不完成、永不抛）做 combine，没有可重试的瞬时故障。下游对错误的诉求各不相同，故把错误边界下放到
+    // 各消费者本身——ChatVM 的 stateIn 收集器需在异常下存活（见 #92，catch 置于 stateIn 之前）；
+    // web 的 .first()/SSE 则应让真实异常以 HTTP 500 上抛，而非被静默改写成“无活跃任务”的 200。
+    fun getConversationJobs(): Flow<Map<Uuid, Job?>> =
+        _sessionsVersion.flatMapLatest {
             val currentSessions = sessions.values.toList()
             if (currentSessions.isEmpty()) {
                 flowOf(emptyMap())
@@ -446,7 +450,6 @@ class ChatService(
                 }
             }
         }
-    }
 
     // ---- 初始化对话 ----
 

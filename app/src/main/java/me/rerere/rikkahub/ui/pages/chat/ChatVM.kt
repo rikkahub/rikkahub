@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -75,8 +76,18 @@ class ChatVM(
         chatService
             .getProcessingStatusFlow(_conversationId)
 
-    val conversationJobs = chatService
+    // #92: getConversationJobs() 本身不做错误降级（见 ChatService）。这里在 stateIn 之前加 catch，
+    // 使一次上游异常不会永久杀死这条 UI StateFlow 的收集协程——异常被记录、降级为空 map（“无活跃任务”），
+    // UI 继续可用。底层是对 in-memory StateFlow 的 combine，正常不会抛；真抛说明是非瞬时的程序错误，
+    // 故只降级 + 记录，不重试（重试只会立刻再抛成死循环）。CancellationException 仍由 catch 透传，
+    // 不会被吞（结构化并发的取消语义保持）。
+    val conversationJobs: StateFlow<Map<Uuid, Job?>> = chatService
         .getConversationJobs()
+        .catch { e ->
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+            android.util.Log.e(TAG, "conversationJobs flow failed; degrading to empty map", e)
+            emit(emptyMap())
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     init {
