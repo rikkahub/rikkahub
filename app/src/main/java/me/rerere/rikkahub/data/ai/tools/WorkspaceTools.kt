@@ -10,8 +10,11 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.utils.generateUnifiedDiff
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
 
@@ -213,14 +216,17 @@ private fun createEditFileTool(
 
         val updated = if (replaceAll) original.replace(oldText, newText) else original.replaceFirst(oldText, newText)
         val entry = workspaceRepository.writeText(workspaceId, path, updated, overwrite = true)
+        val diff = generateUnifiedDiff(original, updated, entry.path)
         listOf(
             UIMessagePart.Text(
-                buildJsonObject {
+                text = buildJsonObject {
                     put("path", entry.path)
                     put("replacements", if (replaceAll) occurrences else 1)
                     put("sizeBytes", entry.sizeBytes)
                     put("updatedAt", entry.updatedAt)
-                }.toString()
+                }.toString(),
+                // diff 存入 metadata 供 UI 渲染 diff view, 不会随工具结果发送给 API
+                metadata = diff?.let { d -> DiffMetadata(diff = d).toMetadata() },
             )
         )
     },

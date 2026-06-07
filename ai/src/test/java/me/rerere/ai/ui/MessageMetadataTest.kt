@@ -132,4 +132,14 @@ class MessageMetadataTest {
         val rewritten = legacy.metadataAs<GoogleThoughtMetadata>()?.toMetadata()
         assertEquals(JsonObject(emptyMap()), rewritten)
     }
+
+    @Test
+    fun `diff metadata round trip`() {
+        val diff = "--- a/file.txt\n+++ b/file.txt\n@@ -1,1 +1,1 @@\n-old\n+new"
+        val part = UIMessagePart.Text(
+            text = "{}",
+            metadata = DiffMetadata(diff = diff).toMetadata(),
+        )
+        assertEquals(diff, part.metadataAs<DiffMetadata>()?.diff)
+    }
 }

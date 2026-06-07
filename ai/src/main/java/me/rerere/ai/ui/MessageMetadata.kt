@@ -48,6 +48,15 @@ data class GoogleThoughtMetadata(
 ) : PartMetadata
 
 /**
+ * 文件编辑类工具(如 workspace_edit_file)输出部件的元数据,
+ * 携带 unified diff 文本供 UI 渲染 diff view, 不会发送给 API
+ */
+@Serializable
+data class DiffMetadata(
+    val diff: String? = null,
+) : PartMetadata
+
+/**
  * 将 metadata 解析为类型化的 [PartMetadata], 解析失败或 metadata 为 null 时返回 null
  *
  * 由于 json 配置了 ignoreUnknownKeys, 不同 provider 的 metadata 互不干扰

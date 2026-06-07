@@ -223,6 +223,9 @@ dependencies {
     // pebble (template engine)
     implementation(libs.pebble)
 
+    // java-diff-utils (unified diff)
+    implementation(libs.diffutils)
+
     // coil
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
