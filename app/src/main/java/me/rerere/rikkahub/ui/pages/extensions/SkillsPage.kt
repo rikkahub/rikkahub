@@ -35,6 +35,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,11 +86,28 @@ fun SkillsPage() {
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        vm.importSkillFromFile(context, uri) { success, message ->
-            if (success) {
-                toaster.show(context.getString(R.string.skills_page_import_success, message))
-            } else {
-                toaster.show(context.getString(R.string.skills_page_import_failed, message))
+        vm.importSkillFromFile(context, uri)
+    }
+
+    LaunchedEffect(Unit) {
+        vm.events.collect { event ->
+            when (event) {
+                is SkillsEvent.ImportDone -> {
+                    if (event.source == SkillImportSource.GITHUB) showImportDialog = false
+                    toaster.show(context.getString(R.string.skills_page_import_success, event.name))
+                }
+
+                is SkillsEvent.ImportFailed -> {
+                    if (event.source == SkillImportSource.GITHUB) showImportDialog = false
+                    toaster.show(context.getString(R.string.skills_page_import_failed, event.message))
+                }
+
+                SkillsEvent.SaveDone -> showAddDialog = false
+
+                SkillsEvent.SaveFailed -> {
+                    showAddDialog = false
+                    toaster.show(context.getString(R.string.skills_page_save_failed))
+                }
             }
         }
     }
@@ -184,12 +202,7 @@ fun SkillsPage() {
         AddSkillDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { name, content ->
-                vm.saveSkill(name, content) { success ->
-                    showAddDialog = false
-                    if (!success) {
-                        toaster.show(context.getString(R.string.skills_page_save_failed))
-                    }
-                }
+                vm.saveSkill(name, content)
             },
         )
     }
@@ -198,14 +211,7 @@ fun SkillsPage() {
         ImportSkillDialog(
             onDismiss = { showImportDialog = false },
             onConfirm = { repoUrl ->
-                vm.importSkillFromGitHub(repoUrl) { success, message ->
-                    showImportDialog = false
-                    if (success) {
-                        toaster.show(context.getString(R.string.skills_page_import_success, message))
-                    } else {
-                        toaster.show(context.getString(R.string.skills_page_import_failed, message))
-                    }
-                }
+                vm.importSkillFromGitHub(repoUrl)
             },
         )
     }

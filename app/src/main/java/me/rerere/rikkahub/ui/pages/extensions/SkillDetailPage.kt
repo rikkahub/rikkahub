@@ -72,6 +72,22 @@ fun SkillDetailPage(skillName: String) {
     var deleteTarget by remember { mutableStateOf<SkillFile?>(null) }
     val deleteFailedMsg = stringResource(R.string.skill_detail_page_delete_failed)
 
+    LaunchedEffect(Unit) {
+        vm.events.collect { event ->
+            when (event) {
+                is SkillDetailEvent.SaveDone ->
+                    when (event.origin) {
+                        SkillSaveOrigin.EDIT -> editingFile = null
+                        SkillSaveOrigin.ADD -> showAddDialog = false
+                    }
+
+                is SkillDetailEvent.SaveFailed -> toaster.show(event.message)
+                SkillDetailEvent.DeleteDone -> {}
+                SkillDetailEvent.DeleteFailed -> toaster.show(deleteFailedMsg)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -110,10 +126,7 @@ fun SkillDetailPage(skillName: String) {
             initialContent = remember(skillFile.relativePath) { vm.readFile(skillFile) },
             onDismiss = { editingFile = null },
             onConfirm = { content ->
-                vm.saveFile(skillFile.relativePath, content) { error ->
-                    if (error == null) editingFile = null
-                    else toaster.show(error)
-                }
+                vm.saveFile(skillFile.relativePath, content, SkillSaveOrigin.EDIT)
             },
         )
     }
@@ -122,10 +135,7 @@ fun SkillDetailPage(skillName: String) {
         AddFileDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { fileName, content ->
-                vm.saveFile(fileName, content) { error ->
-                    if (error == null) showAddDialog = false
-                    else toaster.show(error)
-                }
+                vm.saveFile(fileName, content, SkillSaveOrigin.ADD)
             },
         )
     }
@@ -137,9 +147,7 @@ fun SkillDetailPage(skillName: String) {
         dismissText = stringResource(R.string.cancel),
         onConfirm = {
             deleteTarget?.let { skillFile ->
-                vm.deleteFile(skillFile) { success ->
-                    if (!success) toaster.show(deleteFailedMsg)
-                }
+                vm.deleteFile(skillFile)
             }
             deleteTarget = null
         },
