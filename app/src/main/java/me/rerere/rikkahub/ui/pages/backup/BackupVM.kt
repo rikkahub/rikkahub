@@ -19,6 +19,7 @@ import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.S3Sync
 import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.shouldRethrowVmError
 import java.io.File
 
 private const val TAG = "BackupVM"
@@ -75,7 +76,9 @@ class BackupVM(
                     )
                 )
             }.onFailure {
-                webDavBackupItems.emit(UiState.Error(it))
+                backupListThrowableToState<List<WebDavBackupItem>>(it)?.let { state ->
+                    webDavBackupItems.emit(state)
+                } ?: throw it
             }
         }
     }
@@ -242,7 +245,9 @@ class BackupVM(
                     )
                 )
             }.onFailure {
-                s3BackupItems.emit(UiState.Error(it))
+                backupListThrowableToState<List<S3BackupItem>>(it)?.let { state ->
+                    s3BackupItems.emit(state)
+                } ?: throw it
             }
         }
     }
@@ -309,3 +314,13 @@ fun backupThrowableToState(
 ): BackupOperationState =
     if (throwable == null) BackupOperationState.Success(kind)
     else BackupOperationState.Error(kind, backupErrorMessage(throwable))
+
+/**
+ * Map a backup-*list*-load [Throwable] to the terminal [UiState] the list flow should emit, OR null
+ * when the throwable must be rethrown instead of reported. Cancellation (per [shouldRethrowVmError])
+ * returns null so the caller rethrows it — a navigated-away list load must never surface as
+ * [UiState.Error]; every other throwable maps to [UiState.Error]. Pure (no Android, no coroutines),
+ * so the rethrow-vs-report contract is JVM-testable, mirroring [backupThrowableToState].
+ */
+fun <T> backupListThrowableToState(throwable: Throwable): UiState<T>? =
+    if (shouldRethrowVmError(throwable)) null else UiState.Error(throwable)

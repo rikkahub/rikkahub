@@ -182,8 +182,11 @@ class ImgGenVM(
                 }
 
                 _currentGeneratedImages.value = newImages
+            } catch (e: CancellationException) {
+                // cancelGeneration()/startNewSession() cancels cancelJob; rethrow so the coroutine
+                // completes with cancellation as its cause instead of completing normally.
+                throw e
             } catch (e: Exception) {
-                if(e is CancellationException) return@launch
                 Log.e(TAG, "Failed to generate image", e)
                 _error.value = e.message ?: "Unknown error occurred"
             } finally {
@@ -246,8 +249,11 @@ class ImgGenVM(
                 }
 
                 _currentGeneratedImages.value = newImages
+            } catch (e: CancellationException) {
+                // cancelGeneration()/startNewSession() cancels cancelJob; rethrow so the coroutine
+                // completes with cancellation as its cause instead of completing normally.
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) return@launch
                 Log.e(TAG, "Failed to edit image", e)
                 _error.value = e.message ?: "Unknown error occurred"
             } finally {

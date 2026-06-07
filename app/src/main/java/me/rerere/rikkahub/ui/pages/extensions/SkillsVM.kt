@@ -10,6 +10,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.LinkedHashMap
 import java.util.zip.ZipInputStream
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,6 +87,9 @@ class SkillsVM(
                 withContext(Dispatchers.Main) {
                     onResult(true, importedNames.joinToString())
                 }
+            } catch (e: CancellationException) {
+                // VM cleared / coroutine cancelled: propagate teardown, never report it as a failed import.
+                throw e
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }
             }
@@ -147,6 +151,9 @@ class SkillsVM(
 
                 _skills.value = skillManager.listSkills()
                 withContext(Dispatchers.Main) { onResult(true, name) }
+            } catch (e: CancellationException) {
+                // VM cleared / coroutine cancelled: propagate teardown, never report it as a failed import.
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Skill import/save failed", e)
                 withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }

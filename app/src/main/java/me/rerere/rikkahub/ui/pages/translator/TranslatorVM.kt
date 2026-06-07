@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.utils.shouldRethrowVmError
 import java.util.Locale
 
 private const val TAG = "TranslatorVM"
@@ -82,11 +83,10 @@ class TranslatorVM(
                     _translatedText.value = translatedText
                 }.collect { /* Final translation already handled in onStreamUpdate */ }
             }.onFailure {
-                if (it is kotlinx.coroutines.CancellationException) {
-                    Log.d(TAG, "translation cancelled")
-                } else {
-                    Log.e(TAG, "translation failed", it)
-                }
+                // cancelTranslation() cancels currentJob; that CancellationException must propagate so
+                // structured-concurrency teardown holds and is never shown to the user as an error.
+                if (shouldRethrowVmError(it)) throw it
+                Log.e(TAG, "translation failed", it)
                 errorFlow.emit(it)
             }
 
