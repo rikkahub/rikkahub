@@ -1,11 +1,12 @@
 package me.rerere.rikkahub.utils
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,13 +18,17 @@ import java.io.IOException
  * Pure-JVM regression test for [runEmitting], the cancellation-vs-error event classifier that backs
  * [launchEmitting]. The VMs it serves (SkillsVM / SkillDetailVM) used to deliver results through a
  * Composable-captured `onResult` callback after long IO work; a disposed screen left the VM calling a
- * stale lambda. The fix routes results through a one-shot SharedFlow collected with lifecycle.
+ * stale lambda. The fix routes results through a one-shot event transport collected with lifecycle.
  *
  * The behavioral invariant this guards — and the exact reason a test on the old code would fail — is:
- *   - success: [block] emits its own success event (here a literal sealed event).
- *   - non-cancellation failure: the escaping throwable becomes a failure event via onError, and that
- *     event is delivered RELIABLY (suspending emit) even when the flow's buffer slot is already full.
- *   - cancellation: rethrown, and NO failure event is emitted (teardown is not a failed operation).
+ *   - success: [block] sends its own success event (here a literal sealed event).
+ *   - non-cancellation failure: the escaping throwable becomes a failure event via onError.
+ *   - cancellation: rethrown, and NO failure event is sent (teardown is not a failed operation).
+ *   - data-loss: an event produced while NO collector is subscribed (the UI's `LaunchedEffect`
+ *     collector is torn down whenever the screen leaves composition) must still reach a late
+ *     collector. A no-replay SharedFlow DROPS it; a buffered Channel retains it. The two
+ *     `survives a window with no active collector` cases pin this and fail on the old SharedFlow
+ *     transport (the late collector times out because the value was dropped).
  *
  * runEmitting is exercised directly (not through viewModelScope) precisely so the test needs no
  * coroutines-test / Robolectric — viewModelScope binds Dispatchers.Main which is unavailable on the
@@ -38,20 +43,20 @@ class RunEmittingEventTest {
 
     private class JobCancelled : CancellationException("job cancelled")
 
-    private fun newEvents() = MutableSharedFlow<Event>(extraBufferCapacity = 1)
+    private fun newEvents() = Channel<Event>(Channel.BUFFERED)
 
     @Test
     fun `success path emits the block's own event`() = runBlocking {
         val events = newEvents()
         val collected = mutableListOf<Event>()
         coroutineScope {
-            val collector = launch { events.collect { collected.add(it) } }
+            val collector = launch { events.receiveAsFlow().collect { collected.add(it) } }
             yield() // let the collector subscribe before any emission
             runEmitting(
                 events = events,
                 onError = { Event.Failed(it.message ?: "unknown") },
             ) {
-                events.tryEmit(Event.Done("my-skill"))
+                events.send(Event.Done("my-skill"))
             }
             yield()
             collector.cancel()
@@ -64,7 +69,7 @@ class RunEmittingEventTest {
         val events = newEvents()
         val collected = mutableListOf<Event>()
         coroutineScope {
-            val collector = launch { events.collect { collected.add(it) } }
+            val collector = launch { events.receiveAsFlow().collect { collected.add(it) } }
             yield()
             runEmitting(
                 events = events,
@@ -81,99 +86,66 @@ class RunEmittingEventTest {
     @Test
     fun `cancellation rethrows and emits no failure event`() = runBlocking {
         val events = newEvents()
-        val collected = mutableListOf<Event>()
         var rethrown = false
-        coroutineScope {
-            val collector = launch { events.collect { collected.add(it) } }
-            yield()
-            try {
-                runEmitting(
-                    events = events,
-                    onError = { Event.Failed("should never be emitted on cancellation") },
-                ) {
-                    throw JobCancelled()
-                }
-            } catch (e: CancellationException) {
-                rethrown = true
+        try {
+            runEmitting(
+                events = events,
+                onError = { Event.Failed("should never be emitted on cancellation") },
+            ) {
+                throw JobCancelled()
             }
-            yield()
-            collector.cancel()
+        } catch (e: CancellationException) {
+            rethrown = true
         }
         assertTrue("CancellationException must propagate, not be swallowed", rethrown)
-        assertTrue("cancellation must not emit a failure event", collected.isEmpty())
+        assertTrue("cancellation must not emit a failure event", events.tryReceive().isFailure)
     }
 
     @Test
-    fun `failure event is delivered even when the buffer slot is already full`() = runBlocking {
-        // Mirrors SkillsVM/SkillDetailVM: MutableSharedFlow(extraBufferCapacity = 1, SUSPEND).
-        // A busy collector leaves the single buffer slot full when the error path runs. With the old
-        // non-suspending tryEmit, the failure event — the ONE path that must be reliable — is silently
-        // dropped (tryEmit returns false). Suspending emit instead waits for the collector to drain,
-        // so the failure is never lost.
-        val events = MutableSharedFlow<Event>(extraBufferCapacity = 1)
-        val collected = mutableListOf<Event>()
-        val gate = CompletableDeferred<Unit>()
-
-        coroutineScope {
-            // Collector takes the first value then blocks on the gate, modelling a busy UI collector.
-            val collector = launch {
-                events.collect { event ->
-                    collected.add(event)
-                    if (event == Event.Done("processing")) gate.await()
-                }
-            }
-            yield() // let the collector subscribe
-
-            // First value is handed to the (now-busy) collector; the second fills the single buffer slot.
-            events.emit(Event.Done("processing"))
-            events.emit(Event.Done("buffered"))
-
-            // Buffer is full and the collector is blocked: the error emission must suspend, not drop.
-            val producer = launch {
-                runEmitting(
-                    events = events,
-                    onError = { Event.Failed(it.message ?: "unknown") },
-                ) {
-                    throw IOException("disk full")
-                }
-            }
-            yield()
-            assertTrue("error emission must still be suspended while buffer is full", producer.isActive)
-
-            gate.complete(Unit) // release the collector; it drains the buffer and the suspended error
-            producer.join()
-            yield()
-            yield()
-            collector.cancel()
+    fun `failure event survives a window with no active collector`() = runBlocking {
+        // Models the data-loss bug: the screen has left composition (LaunchedEffect collector torn
+        // down) while the IO operation finishes. The error event is produced with NO subscriber. A
+        // no-replay SharedFlow would drop it; a buffered Channel must retain it for a late collector.
+        val events = newEvents()
+        runEmitting(
+            events = events,
+            onError = { Event.Failed(it.message ?: "unknown") },
+        ) {
+            throw IOException("disk full")
         }
+        val received = withTimeout(1_000) { events.receive() }
+        assertEquals(Event.Failed("disk full"), received)
+    }
 
-        assertTrue(
-            "failure event must not be dropped when the buffer was full: $collected",
-            collected.contains(Event.Failed("disk full")),
-        )
+    @Test
+    fun `success event survives a window with no active collector`() = runBlocking {
+        // Same no-collector window as above, but on the success path: a save/import that completes
+        // after the screen leaves composition must still deliver its terminal event to a late collector.
+        val events = newEvents()
+        runEmitting(
+            events = events,
+            onError = { Event.Failed(it.message ?: "unknown") },
+        ) {
+            events.send(Event.Done("late-skill"))
+        }
+        val received = withTimeout(1_000) { events.receive() }
+        assertEquals(Event.Done("late-skill"), received)
     }
 
     @Test
     fun `bare CancellationException also rethrows without a failure event`() = runBlocking {
         val events = newEvents()
-        val collected = mutableListOf<Event>()
-        coroutineScope {
-            val collector = launch { events.collect { collected.add(it) } }
-            yield()
-            try {
-                runEmitting(
-                    events = events,
-                    onError = { Event.Failed("nope") },
-                ) {
-                    throw CancellationException()
-                }
-                fail("expected CancellationException to propagate")
-            } catch (e: CancellationException) {
-                // expected
+        try {
+            runEmitting(
+                events = events,
+                onError = { Event.Failed("nope") },
+            ) {
+                throw CancellationException()
             }
-            yield()
-            collector.cancel()
+            fail("expected CancellationException to propagate")
+        } catch (e: CancellationException) {
+            // expected
         }
-        assertTrue(collected.isEmpty())
+        assertTrue(events.tryReceive().isFailure)
     }
 }

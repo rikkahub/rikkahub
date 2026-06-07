@@ -72,13 +72,23 @@ fun SkillDetailPage(skillName: String) {
     var deleteTarget by remember { mutableStateOf<SkillFile?>(null) }
     val deleteFailedMsg = stringResource(R.string.skill_detail_page_delete_failed)
 
+    // Per-dialog save-invocation identity. The token is minted by the VM (vm.nextSaveToken) so it
+    // survives config change with the in-flight save on viewModelScope, and the page's recorded token is
+    // held in rememberSaveable so it never has a shorter lifetime than the dialog state it guards
+    // (showAddDialog above is also rememberSaveable, so addSaveToken must survive the same recreation;
+    // editingFile is plain remember, so its dialog auto-closes on config change and editSaveToken being
+    // saveable is simply harmless). A completion dismisses its dialog only when its token still matches
+    // the open instance, so a late save whose dialog was dismissed-and-reopened never closes the new one.
+    var editSaveToken by rememberSaveable { mutableStateOf<Long?>(null) }
+    var addSaveToken by rememberSaveable { mutableStateOf<Long?>(null) }
+
     LaunchedEffect(Unit) {
         vm.events.collect { event ->
             when (event) {
                 is SkillDetailEvent.SaveDone ->
-                    when (event.origin) {
-                        SkillSaveOrigin.EDIT -> editingFile = null
-                        SkillSaveOrigin.ADD -> showAddDialog = false
+                    when (event.target.origin) {
+                        SkillSaveOrigin.EDIT -> if (event.target.token == editSaveToken) editingFile = null
+                        SkillSaveOrigin.ADD -> if (event.target.token == addSaveToken) showAddDialog = false
                     }
 
                 is SkillDetailEvent.SaveFailed -> toaster.show(event.message)
@@ -98,7 +108,7 @@ fun SkillDetailPage(skillName: String) {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
+            FloatingActionButton(onClick = { showAddDialog = true; addSaveToken = null }) {
                 Icon(Lucide.Plus, contentDescription = null)
             }
         },
@@ -114,7 +124,7 @@ fun SkillDetailPage(skillName: String) {
             FileTree(
                 nodes = tree,
                 depth = 0,
-                onEdit = { editingFile = it },
+                onEdit = { editingFile = it; editSaveToken = null },
                 onDelete = { deleteTarget = it },
             )
         }
@@ -124,18 +134,22 @@ fun SkillDetailPage(skillName: String) {
         EditFileDialog(
             skillFile = skillFile,
             initialContent = remember(skillFile.relativePath) { vm.readFile(skillFile) },
-            onDismiss = { editingFile = null },
+            onDismiss = { editingFile = null; editSaveToken = null },
             onConfirm = { content ->
-                vm.saveFile(skillFile.relativePath, content, SkillSaveOrigin.EDIT)
+                val token = vm.nextSaveToken()
+                editSaveToken = token
+                vm.saveFile(skillFile.relativePath, content, SkillSaveTarget(SkillSaveOrigin.EDIT, token))
             },
         )
     }
 
     if (showAddDialog) {
         AddFileDialog(
-            onDismiss = { showAddDialog = false },
+            onDismiss = { showAddDialog = false; addSaveToken = null },
             onConfirm = { fileName, content ->
-                vm.saveFile(fileName, content, SkillSaveOrigin.ADD)
+                val token = vm.nextSaveToken()
+                addSaveToken = token
+                vm.saveFile(fileName, content, SkillSaveTarget(SkillSaveOrigin.ADD, token))
             },
         )
     }

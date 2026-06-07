@@ -11,10 +11,10 @@ import java.net.URL
 import java.util.LinkedHashMap
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
@@ -37,8 +37,14 @@ enum class SkillImportSource { FILE, GITHUB }
 sealed interface SkillsEvent {
     data class ImportDone(val source: SkillImportSource, val name: String) : SkillsEvent
     data class ImportFailed(val source: SkillImportSource, val message: String) : SkillsEvent
-    object SaveDone : SkillsEvent
-    object SaveFailed : SkillsEvent
+
+    /**
+     * [token] is the manual-add dialog's save-invocation identity (minted at the confirm call site).
+     * The collector dismisses the add dialog only when the token still matches the open instance, so a
+     * stale save whose dialog was already dismissed-and-reopened never closes the fresh dialog.
+     */
+    data class SaveDone(val token: Long) : SkillsEvent
+    data class SaveFailed(val token: Long) : SkillsEvent
 }
 
 class SkillsVM(
@@ -47,8 +53,13 @@ class SkillsVM(
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
 
-    private val _events = MutableSharedFlow<SkillsEvent>(extraBufferCapacity = 1)
-    val events = _events.asSharedFlow()
+    private val _events = Channel<SkillsEvent>(Channel.BUFFERED)
+    val events = _events.receiveAsFlow()
+
+    private val saveTokens = SkillSaveTokens()
+
+    /** Mint a save-invocation token. VM-owned so it survives config change with the in-flight save. */
+    fun nextSaveToken(): Long = saveTokens.next()
 
     init {
         loadSkills()
@@ -60,15 +71,15 @@ class SkillsVM(
         }
     }
 
-    fun saveSkill(name: String, content: String) {
+    fun saveSkill(name: String, content: String, token: Long) {
         launchEmitting(
             events = _events,
             context = Dispatchers.IO,
-            onError = { SkillsEvent.SaveFailed },
+            onError = { SkillsEvent.SaveFailed(token) },
         ) {
             val result = skillManager.saveSkill(name, content)
             _skills.value = skillManager.listSkills()
-            _events.emit(if (result != null) SkillsEvent.SaveDone else SkillsEvent.SaveFailed)
+            _events.send(if (result != null) SkillsEvent.SaveDone(token) else SkillsEvent.SaveFailed(token))
         }
     }
 
@@ -97,7 +108,7 @@ class SkillsVM(
                 )
             }
                 ?: run {
-                    _events.emit(SkillsEvent.ImportFailed(SkillImportSource.FILE, "无法读取文件"))
+                    _events.send(SkillsEvent.ImportFailed(SkillImportSource.FILE, "无法读取文件"))
                     return@launchEmitting
                 }
 
@@ -108,7 +119,7 @@ class SkillsVM(
             }
 
             _skills.value = skillManager.listSkills()
-            _events.emit(SkillsEvent.ImportDone(SkillImportSource.FILE, importedNames.joinToString()))
+            _events.send(SkillsEvent.ImportDone(SkillImportSource.FILE, importedNames.joinToString()))
         }
     }
 
@@ -122,7 +133,7 @@ class SkillsVM(
             },
         ) {
             val info = parseGitHubUrl(repoUrl) ?: run {
-                _events.emit(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "无效的 GitHub 仓库链接"))
+                _events.send(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "无效的 GitHub 仓库链接"))
                 return@launchEmitting
             }
 
@@ -131,24 +142,24 @@ class SkillsVM(
             val visited = intArrayOf(0)
             val listed = listFilesRecursively(info.owner, info.repo, info.branch, info.path, info.path, files, visited, depth = 0)
             if (!listed) {
-                _events.emit(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "读取 GitHub 目录失败"))
+                _events.send(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "读取 GitHub 目录失败"))
                 return@launchEmitting
             }
 
             val skillMdEntry = files.find { it.first == "SKILL.md" } ?: run {
-                _events.emit(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "目录中未找到 SKILL.md"))
+                _events.send(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "目录中未找到 SKILL.md"))
                 return@launchEmitting
             }
 
             val skillMdContent = downloadText(skillMdEntry.second) ?: run {
-                _events.emit(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "下载 SKILL.md 失败，请检查链接或网络"))
+                _events.send(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "下载 SKILL.md 失败，请检查链接或网络"))
                 return@launchEmitting
             }
 
             val frontmatter = SkillFrontmatterParser.parse(skillMdContent)
             val name = frontmatter["name"]
             if (name.isNullOrBlank()) {
-                _events.emit(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "SKILL.md 格式错误：缺少 name 字段"))
+                _events.send(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "SKILL.md 格式错误：缺少 name 字段"))
                 return@launchEmitting
             }
 
@@ -157,7 +168,7 @@ class SkillsVM(
             for ((relativePath, downloadUrl) in files) {
                 val content = downloadText(downloadUrl)
                 if (content == null) {
-                    _events.emit(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "下载文件失败：$relativePath"))
+                    _events.send(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "下载文件失败：$relativePath"))
                     return@launchEmitting
                 }
                 totalDownloaded += content.toByteArray(Charsets.UTF_8).size
@@ -167,12 +178,12 @@ class SkillsVM(
 
             val saved = skillManager.saveSkillFilesAtomically(name, fileContents)
             if (!saved) {
-                _events.emit(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "保存失败"))
+                _events.send(SkillsEvent.ImportFailed(SkillImportSource.GITHUB, "保存失败"))
                 return@launchEmitting
             }
 
             _skills.value = skillManager.listSkills()
-            _events.emit(SkillsEvent.ImportDone(SkillImportSource.GITHUB, name))
+            _events.send(SkillsEvent.ImportDone(SkillImportSource.GITHUB, name))
         }
     }
 

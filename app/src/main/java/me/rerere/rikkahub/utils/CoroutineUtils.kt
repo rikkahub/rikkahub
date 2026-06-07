@@ -6,8 +6,8 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
@@ -42,21 +42,25 @@ fun ViewModel.launchVm(
 }
 
 /**
- * Launches [block] on [viewModelScope] to drive a one-shot [MutableSharedFlow] of events instead of a
- * UI callback lambda. [block] emits its own success / known-failure events through the flow; this
+ * Launches [block] on [viewModelScope] to drive a one-shot [SendChannel] of events instead of a UI
+ * callback lambda. [block] sends its own success / known-failure events through the channel; this
  * wrapper only owns the EXCEPTIONAL path: a non-cancellation throwable that escapes [block] is turned
- * into a failure event via [onError] and emitted, while cancellation is rethrown (per
+ * into a failure event via [onError] and sent, while cancellation is rethrown (per
  * [shouldRethrowVmError]) so a disposed screen tearing the VM down is never reported as a failed
- * operation. Emission uses suspending [MutableSharedFlow.emit] so the failure event — the one path
- * that must be delivered reliably — is never dropped; a missing collector during teardown makes emit
- * return immediately, so there is nothing to block on.
+ * operation.
  *
  * Root cause this addresses: VMs used to invoke a Composable-captured callback after long IO work,
- * which the screen may already have disposed (stale lambda). Routing results through a
- * lifecycle-collected SharedFlow decouples VM work from UI callback lifetime.
+ * which the screen may already have disposed (stale lambda). The first fix routed results through a
+ * no-replay SharedFlow — but a SharedFlow(replay = 0) DROPS any event produced while no collector is
+ * subscribed, and the UI collector lives in a `LaunchedEffect` that is torn down whenever the screen
+ * leaves composition. A save/import finishing in that no-collector window had its terminal event
+ * permanently lost (dialog never dismissed, toast never shown). extraBufferCapacity cannot help: that
+ * buffer only keeps the PRODUCER from suspending, it is never replayed to a future subscriber. The
+ * transport is therefore a buffered [SendChannel]: it RETAINS sent events until a consumer reads them,
+ * so an event emitted during the no-collector window is still delivered to the next collector.
  */
 fun <E> ViewModel.launchEmitting(
-    events: MutableSharedFlow<E>,
+    events: SendChannel<E>,
     context: CoroutineContext = EmptyCoroutineContext,
     onError: (Throwable) -> E,
     block: suspend CoroutineScope.() -> Unit,
@@ -67,12 +71,12 @@ fun <E> ViewModel.launchEmitting(
 /**
  * Pure, scope-free core of [launchEmitting] — kept separate so the cancellation-vs-error event
  * classification can be unit-tested on the JVM without coroutines-test or Android. Runs [block]
- * (which emits its own success / known-failure events into [events]); a non-cancellation throwable
+ * (which sends its own success / known-failure events into [events]); a non-cancellation throwable
  * becomes a failure event via [onError], cancellation is rethrown so structured-concurrency teardown
  * is never reported as a failed operation.
  */
 suspend fun <E> CoroutineScope.runEmitting(
-    events: MutableSharedFlow<E>,
+    events: SendChannel<E>,
     onError: (Throwable) -> E,
     block: suspend CoroutineScope.() -> Unit,
 ) {
@@ -80,7 +84,7 @@ suspend fun <E> CoroutineScope.runEmitting(
         block()
     } catch (t: Throwable) {
         if (shouldRethrowVmError(t)) throw t
-        events.emit(onError(t))
+        events.send(onError(t))
     }
 }
 

@@ -82,6 +82,13 @@ fun SkillsPage() {
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+
+    // Save-invocation identity for the manual-add dialog. The token is minted by the VM
+    // (vm.nextSaveToken) so it survives config change with the in-flight save, and the page's recorded
+    // token is held in rememberSaveable so it survives the same recreation as showAddDialog above. A
+    // completion dismisses the dialog only when its token still matches the open instance, so a stale
+    // save (dialog dismissed then reopened) does not close the fresh one.
+    var addSaveToken by rememberSaveable { mutableStateOf<Long?>(null) }
     val fileImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -102,10 +109,10 @@ fun SkillsPage() {
                     toaster.show(context.getString(R.string.skills_page_import_failed, event.message))
                 }
 
-                SkillsEvent.SaveDone -> showAddDialog = false
+                is SkillsEvent.SaveDone -> if (event.token == addSaveToken) showAddDialog = false
 
-                SkillsEvent.SaveFailed -> {
-                    showAddDialog = false
+                is SkillsEvent.SaveFailed -> {
+                    if (event.token == addSaveToken) showAddDialog = false
                     toaster.show(context.getString(R.string.skills_page_save_failed))
                 }
             }
@@ -179,6 +186,7 @@ fun SkillsPage() {
             onAddManually = {
                 showImportSheet = false
                 showAddDialog = true
+                addSaveToken = null
             },
             onImportFromFile = {
                 showImportSheet = false
@@ -200,9 +208,11 @@ fun SkillsPage() {
 
     if (showAddDialog) {
         AddSkillDialog(
-            onDismiss = { showAddDialog = false },
+            onDismiss = { showAddDialog = false; addSaveToken = null },
             onConfirm = { name, content ->
-                vm.saveSkill(name, content)
+                val token = vm.nextSaveToken()
+                addSaveToken = token
+                vm.saveSkill(name, content, token)
             },
         )
     }
