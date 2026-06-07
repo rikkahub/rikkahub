@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,6 +124,97 @@ internal fun shouldRenewWakeLock(
     now: Long,
     intervalMs: Long = WAKE_LOCK_RENEW_INTERVAL_MS,
 ): Boolean = now - lastRenewAt >= intervalMs
+
+// 流式 UI 状态合并窗口：约两帧（60Hz）。远大于单 token 间隔（合并掉逐 token 的整 Conversation
+// StateFlow 重写，避免聊天页每 token 全量重组），又小到足以保持"实时"观感。落在 issue #108 建议的
+// 16-50ms 区间内。仅决定"何时"把已合并好的状态推给 UI，绝不改变合并出的规范状态本身——最终值总会被强制刷新。
+internal const val STREAMING_UI_COALESCE_INTERVAL_MS = 32L
+
+/**
+ * 纯函数：给定上次发布时刻与当前时刻，判断是否应把流式合并状态写入 UI StateFlow。抽出以便 JVM 单测
+ * （无 Android/协程依赖），与 [shouldRenewWakeLock] 同构。
+ * [lastPublishAt] 为 0 表示尚未发布过——首个 chunk 立即发布，使首 token 无启动延迟地显示。
+ */
+internal fun shouldPublishStreamingUpdate(
+    lastPublishAt: Long,
+    now: Long,
+    intervalMs: Long = STREAMING_UI_COALESCE_INTERVAL_MS,
+): Boolean = now - lastPublishAt >= intervalMs
+
+/**
+ * 纯函数：流终止时是否需要强制刷新最后一次合并的 chunk。
+ *
+ * 仅当存在已记住的最后一帧（[hasLastMessages]）且它尚未被节流窗口发布出去（[lastChunkPublished] 为
+ * false）时才需刷新——否则末帧已经在 UI StateFlow 里，再写一次纯属重复。慢流（每帧都越过窗口）的末帧
+ * 已发布，返回 false，不产生重复写。
+ */
+internal fun shouldFlushFinalStreamingUpdate(
+    hasLastMessages: Boolean,
+    lastChunkPublished: Boolean,
+): Boolean = hasLastMessages && !lastChunkPublished
+
+/**
+ * 流式 UI 发布的合并器：把 #108 的"何时把合并状态写给 UI"决策（逐 chunk 窗口节流 + 终止强制刷新）
+ * 收拢成一个纯状态机，由生产（[ChatService.handleMessageComplete]）与 JVM 单测共同驱动——publish 副作用
+ * 由调用方注入（生产写 StateFlow，测试记录到 list）。把这层逻辑从 collect 闭包里抽出来，使得：
+ *  - 删掉生产对 [finish] 的调用 → 末帧不再刷新 → 直接驱动本类的单测变红；
+ *  - 把 [onChunk] 改成无条件 publish（绕过节流）→ 合并语义改变 → 单测变红。
+ * 这样回归测试真正守住生产接线，而不是测一份手抄的 collect 循环。
+ *
+ * [now] 由调用方传入（生产 = System.currentTimeMillis()，测试 = 注入的时钟），保持纯函数可单测。
+ */
+internal class StreamingUiCoalescer<T>(
+    private val intervalMs: Long = STREAMING_UI_COALESCE_INTERVAL_MS,
+    private val publish: (T) -> Unit,
+) {
+    private var lastPublishAt = 0L
+    private var lastValue: T? = null
+    private var hasValue = false
+    private var lastChunkPublished = false
+
+    /** 处理一个 chunk：记住其合并值，并按窗口节流决定是否立即 publish。 */
+    fun onChunk(now: Long, value: T) {
+        lastValue = value
+        hasValue = true
+        if (shouldPublishStreamingUpdate(lastPublishAt, now, intervalMs)) {
+            lastPublishAt = now
+            lastChunkPublished = true
+            publish(value)
+        } else {
+            lastChunkPublished = false
+        }
+    }
+
+    /** 流终止时强制刷新被节流窗口丢弃的末帧（若有且未发布）。任何终止路径都必须调用。 */
+    fun finish() {
+        if (shouldFlushFinalStreamingUpdate(hasValue, lastChunkPublished)) {
+            @Suppress("UNCHECKED_CAST")
+            publish(lastValue as T)
+        }
+    }
+
+    /**
+     * 把 [source] 装饰成一条"逐 chunk 节流 publish + 终止强制刷新末帧"的流：每个元素先跑 [sideEffect]
+     * （WakeLock 续期、Live Update 通知等与 UI 发布解耦的副作用），再 [onChunk]（按窗口节流 publish）；
+     * 并在**任何**终止路径（正常完成/取消/异常）的 onCompletion 里调 [finish] 强制刷新末帧。返回装饰后的
+     * 流（不 collect），让调用方在其下游再链自己的 onCompletion——本 onCompletion 在上游、故 [finish] 先于
+     * 下游的定型/持久化执行，保证它们读到已刷新的精确最终状态。
+     *
+     * 这是 #108 的接线点：onChunk（节流）+ onCompletion(finish)（终止刷新）都封在这一处，生产与 JVM 单测
+     * 共用同一逻辑。删掉这里的 finish 调用 → 测试 collect 这条流时末帧不再刷新 → 单测变红（不再是手抄
+     * collect 循环那种假阳性）。
+     */
+    fun coalesce(
+        source: Flow<T>,
+        now: () -> Long = { System.currentTimeMillis() },
+        sideEffect: suspend (T) -> Unit = {},
+    ): Flow<T> = source
+        .onEach { value ->
+            sideEffect(value)
+            onChunk(now(), value)
+        }
+        .onCompletion { finish() }
+}
 
 /**
  * 纯函数：判断是否应在下一次请求前自动压缩对话历史。抽出以便 JVM 单测（无 Android/网络/模型依赖）。
@@ -615,6 +707,19 @@ class ChatService(
 
             // start generating
             val session = getOrCreateSession(conversationId)
+
+            // 流式 UI 合并状态：每个 chunk 携带累计全量 messages（按 id 合并，见 GenerationHandler）。把
+            // "何时把合并状态写给 UI"的窗口节流 + 终止刷新决策收拢进 StreamingUiCoalescer（纯状态机，与 JVM
+            // 单测共用）。publish 副作用：把传入的合并 messages 重新合并进**当时的** live StateFlow（而非写回
+            // 一个陈旧的整 Conversation 快照），故一次并发的 UI 写入（收藏切换/编辑/标题等非消息字段，
+            // updateCurrentMessages 按节点 id 合并只动 messages，保留 isFavorite 等）不会被覆盖
+            // （last-writer-wins → idempotent merge-onto-current）。
+            val uiCoalescer = StreamingUiCoalescer<List<UIMessage>>(
+                publish = { messages ->
+                    val merged = getConversationFlow(conversationId).value.updateCurrentMessages(messages)
+                    updateConversationStateOnly(conversationId, merged)
+                }
+            )
             generationHandler.generateText(
                 settings = settings,
                 model = model,
@@ -668,10 +773,39 @@ class ChatService(
                         )
                     }
                 },
-            ).onCompletion {
+            ).let { chunkFlow ->
+                // UI 发布生命周期统一交给合并器：把累计全量 chunk.messages 流过 uiCoalescer.coalesce，逐 chunk
+                // 节流写 UI，并在任何终止路径强制刷新末帧（finish）。这是 #108 的接线点——节流 + 终止刷新都封在
+                // coalesce 里，生产与 JVM 单测共用同一逻辑（删掉其 finish 调用会令单测变红）。coalesce 的
+                // onCompletion 在上游、故 finish 先于下面的持久化 onCompletion 执行，保证定型/通知读到刷新后的
+                // 精确最终状态。
+                uiCoalescer.coalesce(
+                    source = chunkFlow.map { chunk ->
+                        when (chunk) {
+                            is GenerationChunk.Messages -> chunk.messages
+                        }
+                    },
+                    sideEffect = { messages ->
+                        // 任何流式进展都重置前台服务的 WakeLock 超时，使长 agentic 循环（工具/MCP/搜索跨多段
+                        // 子-120s SSE）在息屏下不会在 15 分钟处误超时停机。按时间节流，避免逐 token IPC。
+                        foregroundCoordinator.onStreamingProgress()
+
+                        // 如果应用不在前台，发送 Live Update 通知
+                        if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
+                            messages.lastOrNull()?.parts?.let {
+                                notificationSender.sendLiveUpdate(conversationId, senderName, it)
+                            }
+                        }
+                    },
+                )
+            }.onCompletion {
                 // Live Update 通知的移除由 GenerationForegroundService 在 1->0 边
                 // stopForeground(STOP_FOREGROUND_REMOVE) 唯一负责，这里不再 per-conversation 取消，
                 // 否则多会话并发时单个会话结束会误删其它会话仍在使用的共享常驻通知。
+
+                // UI 末帧强制刷新由上游 coalesce 的 onCompletion 负责，已先于此处执行——下面读
+                // getConversationFlow().value 的定型保存与通知预览都已看到刷新后的精确最终状态。这里只负责与
+                // UI 发布无关的持久化与完成通知。
 
                 // 可能被取消了，或者意外结束，兜底更新。
                 // 中断的 assistant turn 在这里第一次被定型；必须把清洗后的有效状态
@@ -694,26 +828,7 @@ class ChatService(
                         .lastOrNull()?.toText()?.take(50)?.trim() ?: ""
                     notificationSender.sendGenerationDone(conversationId, senderName, preview)
                 }
-            }.collect { chunk ->
-                when (chunk) {
-                    is GenerationChunk.Messages -> {
-                        // 任何流式进展都重置前台服务的 WakeLock 超时，使长 agentic 循环（工具/MCP/搜索
-                        // 跨多段子-120s SSE）在息屏下不会在 15 分钟处误超时停机。按时间节流，避免逐 token IPC。
-                        foregroundCoordinator.onStreamingProgress()
-
-                        val updatedConversation = getConversationFlow(conversationId).value
-                            .updateCurrentMessages(chunk.messages)
-                        updateConversationStateOnly(conversationId, updatedConversation)
-
-                        // 如果应用不在前台，发送 Live Update 通知
-                        if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
-                            chunk.messages.lastOrNull()?.parts?.let {
-                                notificationSender.sendLiveUpdate(conversationId, senderName, it)
-                            }
-                        }
-                    }
-                }
-            }
+            }.collect { /* 终端消费：所有 chunk 副作用已在 coalesce 内完成 */ }
         }.onFailure {
             // Live Update 通知的移除由 GenerationForegroundService 在 1->0 边负责（见 onCompletion 注释）。
             if (it !is CancellationException) Log.e(TAG, "handleMessageComplete: generation failed", it)
