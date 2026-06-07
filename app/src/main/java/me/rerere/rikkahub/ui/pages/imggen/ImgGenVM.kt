@@ -28,8 +28,8 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.GenMediaRepository
+import me.rerere.rikkahub.utils.shouldRethrowVmError
 import java.io.File
-import kotlin.coroutines.cancellation.CancellationException
 
 @Serializable
 data class GeneratedImage(
@@ -39,6 +39,18 @@ data class GeneratedImage(
     val timestamp: Long,
     val model: String
 )
+
+/**
+ * Map a throwable that escaped image generation/edit to the message to surface in `_error`, OR null
+ * when it must be rethrown instead of reported. Cancellation (per [shouldRethrowVmError]) returns null
+ * so the caller rethrows it — cancelling generation must reset state without surfacing an error; every
+ * other throwable, Exception OR Error, maps to a non-null message so a non-Exception Throwable (e.g.
+ * OutOfMemoryError) is reported to local UI state instead of escaping the root coroutine to the scope's
+ * uncaught handler (which CrashHandler.install turns into markCrashed -> safe-mode). Pure (no Android,
+ * no coroutines), so the rethrow-vs-report contract is JVM-testable, mirroring [backupListThrowableToState].
+ */
+fun imgGenErrorMessage(t: Throwable): String? =
+    if (shouldRethrowVmError(t)) null else t.message ?: "Unknown error occurred"
 
 private fun GenMediaEntity.toGeneratedImage(filesManager: FilesManager): GeneratedImage {
     val imagesDir = filesManager.getImagesDir()
@@ -182,13 +194,10 @@ class ImgGenVM(
                 }
 
                 _currentGeneratedImages.value = newImages
-            } catch (e: CancellationException) {
-                // cancelGeneration()/startNewSession() cancels cancelJob; rethrow so the coroutine
-                // completes with cancellation as its cause instead of completing normally.
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to generate image", e)
-                _error.value = e.message ?: "Unknown error occurred"
+            } catch (t: Throwable) {
+                val message = imgGenErrorMessage(t) ?: throw t
+                Log.e(TAG, "Failed to generate image", t)
+                _error.value = message
             } finally {
                 _isGenerating.value = false
             }
@@ -249,13 +258,10 @@ class ImgGenVM(
                 }
 
                 _currentGeneratedImages.value = newImages
-            } catch (e: CancellationException) {
-                // cancelGeneration()/startNewSession() cancels cancelJob; rethrow so the coroutine
-                // completes with cancellation as its cause instead of completing normally.
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to edit image", e)
-                _error.value = e.message ?: "Unknown error occurred"
+            } catch (t: Throwable) {
+                val message = imgGenErrorMessage(t) ?: throw t
+                Log.e(TAG, "Failed to edit image", t)
+                _error.value = message
             } finally {
                 _isGenerating.value = false
             }
