@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.repository
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
@@ -189,10 +190,13 @@ class WorkspaceRepository(
         id: String,
         command: String,
         cwd: String = "",
-    ): WorkspaceCommandResult = withContext(Dispatchers.IO) {
+    ): WorkspaceCommandResult {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
-        manager.ensureWorkspace(workspace.root)
-        manager.executeCommand(workspace.root, command, cwd)
+        // runInterruptible 让协程取消转化为线程中断，从而打断阻塞的 Process.waitFor 并杀掉进程
+        return runInterruptible(Dispatchers.IO) {
+            manager.ensureWorkspace(workspace.root)
+            manager.executeCommand(workspace.root, command, cwd)
+        }
     }
 
     suspend fun delete(id: String): Boolean {

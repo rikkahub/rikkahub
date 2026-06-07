@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -282,6 +283,8 @@ class GenerationHandler(
                             val result = toolDef.execute(args)
                             executedTools += tool.copy(output = result)
                         }.onFailure {
+                            // 取消必须向上传播，否则停止生成会被误报为工具执行错误
+                            if (it is CancellationException) throw it
                             it.printStackTrace()
                             executedTools += tool.copy(
                                 output = listOf(
