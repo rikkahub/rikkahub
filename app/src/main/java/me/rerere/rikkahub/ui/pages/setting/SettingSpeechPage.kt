@@ -46,7 +46,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -639,8 +638,8 @@ private fun TTSProviderItem(
 ) {
     var showDropdownMenu by remember { mutableStateOf(false) }
     val tts = LocalTTSState.current
-    val isSpeaking by tts.isSpeaking.collectAsState()
-    val isAvailable by tts.isAvailable.collectAsState()
+    val isSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
+    val isAvailable by tts.isAvailable.collectAsStateWithLifecycle()
 
     Card(
         modifier = modifier,

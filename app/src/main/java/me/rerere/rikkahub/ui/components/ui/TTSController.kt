@@ -16,7 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -43,7 +43,7 @@ fun TTSController() {
     val context = LocalContext.current
     val ttsState = LocalTTSState.current
 
-    val isSpeaking by ttsState.isSpeaking.collectAsState()
+    val isSpeaking by ttsState.isSpeaking.collectAsStateWithLifecycle()
     var isVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(isSpeaking) {
@@ -57,7 +57,7 @@ fun TTSController() {
         tag = "tts_controller",
         visibility = isVisible
     ) {
-        val playbackState by ttsState.playbackState.collectAsState()
+        val playbackState by ttsState.playbackState.collectAsStateWithLifecycle()
         var expand by remember { mutableStateOf(false) }
         Surface(
             shape = CircleShape,
