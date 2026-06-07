@@ -438,18 +438,10 @@ class ChatService(
     // 各消费者本身——ChatVM 的 stateIn 收集器需在异常下存活（见 #92，catch 置于 stateIn 之前）；
     // web 的 .first()/SSE 则应让真实异常以 HTTP 500 上抛，而非被静默改写成“无活跃任务”的 200。
     fun getConversationJobs(): Flow<Map<Uuid, Job?>> =
-        _sessionsVersion.flatMapLatest {
-            val currentSessions = sessions.values.toList()
-            if (currentSessions.isEmpty()) {
-                flowOf(emptyMap())
-            } else {
-                combine(currentSessions.map { s ->
-                    s.generationJob.map { job -> s.id to job }
-                }) { pairs ->
-                    pairs.filter { it.second != null }.toMap()
-                }
-            }
-        }
+        assembleConversationJobsFlow(
+            version = _sessionsVersion,
+            sessionsSnapshot = { sessions.values.toList().map { it.id to it.generationJob } }
+        )
 
     // ---- 初始化对话 ----
 
@@ -1294,3 +1286,31 @@ internal fun removedFileUris(oldFiles: List<String>, newFiles: List<String>): Li
     val newSet = newFiles.toHashSet()
     return oldFiles.filter { it !in newSet }
 }
+
+/**
+ * Pure flow-assembly seam behind [ChatService.getConversationJobs]. Rebuilds a combined
+ * `Map<Uuid, Job?>` of every session's active generation job each time [version] ticks, by combining
+ * the per-session `generationJob` flows from [sessionsSnapshot].
+ *
+ * Extracted as a top-level function over plain [Flow]s so the #92 invariant can be JVM unit-tested
+ * against production wiring rather than a hand-copied mirror.
+ *
+ * INVARIANT (issue #92): this seam carries NO `catch`/no emptyMap-on-error degradation. An upstream
+ * throw must PROPAGATE — the error boundary is each consumer's (ChatVM's `stateIn` collector degrades
+ * to emptyMap; web's `.first()`/SSE lets the throw surface as HTTP 500). Re-adding a swallowing catch
+ * here silently rewrites a web failure into a false-success "no active jobs" 200 — the exact #92 bug.
+ */
+internal fun assembleConversationJobsFlow(
+    version: Flow<Long>,
+    sessionsSnapshot: () -> List<Pair<Uuid, Flow<Job?>>>,
+): Flow<Map<Uuid, Job?>> =
+    version.flatMapLatest {
+        val current = sessionsSnapshot()
+        if (current.isEmpty()) {
+            flowOf(emptyMap())
+        } else {
+            combine(current.map { (id, jobFlow) -> jobFlow.map { job -> id to job } }) { pairs ->
+                pairs.filter { it.second != null }.toMap()
+            }
+        }
+    }
