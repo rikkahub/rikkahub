@@ -41,6 +41,7 @@ import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
+import me.rerere.rikkahub.utils.launchVm
 import java.util.Locale
 import kotlin.uuid.Uuid
 
@@ -126,7 +127,7 @@ class ChatVM(
 
     // 更新设置
     fun updateSettings(newSettings: Settings) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             val oldSettings = settings.value
             // 检查用户头像是否有变化，如果有则删除旧头像
             checkUserAvatarDelete(oldSettings, newSettings)
@@ -146,7 +147,7 @@ class ChatVM(
 
     // 设置聊天模型
     fun setChatModel(assistant: Assistant, model: Model) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             settingsStore.update { settings ->
                 settings.copy(
                     assistants = settings.assistants.map {
@@ -183,7 +184,7 @@ class ChatVM(
         if (parts.isEmptyInputMessage()) return
         analytics.logEvent("ai_edit_message", null)
 
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             chatService.editMessage(_conversationId, messageId, parts)
         }
     }
@@ -207,7 +208,7 @@ class ChatVM(
     }
 
     fun deleteMessage(message: UIMessage) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             chatService.deleteMessage(_conversationId, message)
         }
     }
@@ -252,33 +253,33 @@ class ChatVM(
     }
 
     fun saveConversationAsync() {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             chatService.saveConversation(_conversationId, conversation.value)
         }
     }
 
     fun updateTitle(title: String) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             val updatedConversation = conversation.value.copy(title = title)
             chatService.saveConversation(_conversationId, updatedConversation)
         }
     }
 
     fun deleteConversation(conversation: Conversation) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             conversationRepo.deleteConversation(conversation)
         }
     }
 
     fun updatePinnedStatus(conversation: Conversation) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             conversationRepo.togglePinStatus(conversation.id)
         }
     }
 
     fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
-        viewModelScope.launch {
-            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
+        launchVm(onError = { reportOperationError(it) }) {
+            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launchVm
             val updatedConversation = conversationFull.copy(assistantId = targetAssistantId)
             if (conversation.id == _conversationId) {
                 chatService.saveConversation(_conversationId, updatedConversation)
@@ -294,16 +295,24 @@ class ChatVM(
     }
 
     fun generateTitle(conversation: Conversation, force: Boolean = false) {
-        viewModelScope.launch {
-            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
+        launchVm(onError = { reportOperationError(it) }) {
+            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launchVm
             chatService.generateTitle(_conversationId, conversationFull, force)
         }
     }
 
     fun generateSuggestion(conversation: Conversation) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             chatService.generateSuggestion(_conversationId, conversation)
         }
+    }
+
+    private fun reportOperationError(error: Throwable) {
+        chatService.addError(
+            error = error,
+            conversationId = _conversationId,
+            title = context.getString(R.string.error_title_operation)
+        )
     }
 
     fun clearTranslationField(messageId: Uuid) {
@@ -317,7 +326,7 @@ class ChatVM(
     }
 
     fun toggleMessageFavorite(node: MessageNode) {
-        viewModelScope.launch {
+        launchVm(onError = { reportOperationError(it) }) {
             val currentlyFavorited = favoriteRepository.isNodeFavorited(_conversationId, node.id)
             if (currentlyFavorited) {
                 favoriteRepository.removeNodeFavorite(_conversationId, node.id)

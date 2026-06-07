@@ -1,12 +1,14 @@
 package me.rerere.rikkahub.ui.pages.assistant
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
@@ -14,6 +16,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.utils.launchVm
 
 class AssistantVM(
     private val settingsStore: SettingsStore,
@@ -24,14 +27,21 @@ class AssistantVM(
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
+    var lastError by mutableStateOf<Throwable?>(null)
+        private set
+
+    fun clearError() {
+        lastError = null
+    }
+
     fun updateSettings(settings: Settings) {
-        viewModelScope.launch {
+        launchVm(onError = { lastError = it }) {
             settingsStore.update(settings)
         }
     }
 
     fun addAssistant(assistant: Assistant) {
-        viewModelScope.launch {
+        launchVm(onError = { lastError = it }) {
             val settings = settings.value
             settingsStore.update(
                 settings.copy(
@@ -42,7 +52,7 @@ class AssistantVM(
     }
 
     fun removeAssistant(assistant: Assistant) {
-        viewModelScope.launch {
+        launchVm(onError = { lastError = it }) {
             cleanupAssistantFiles(assistant)
 
             val settings = settings.value
@@ -68,7 +78,7 @@ class AssistantVM(
     }
 
     fun copyAssistant(assistant: Assistant) {
-        viewModelScope.launch {
+        launchVm(onError = { lastError = it }) {
             val settings = settings.value
             val copiedAssistant = assistant.copy(
                 id = kotlin.uuid.Uuid.random(),

@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FtsConsistencyResult
+import me.rerere.rikkahub.utils.launchVm
+import me.rerere.rikkahub.utils.shouldRethrowVmError
 
 class SearchVM(
     private val conversationRepo: ConversationRepository,
@@ -32,6 +34,12 @@ class SearchVM(
         private set
     var isCheckingConsistency by mutableStateOf(false)
         private set
+    var searchError by mutableStateOf<Throwable?>(null)
+        private set
+
+    fun clearError() {
+        searchError = null
+    }
 
     init {
         viewModelScope.launch {
@@ -47,13 +55,13 @@ class SearchVM(
     }
 
     fun search() {
-        viewModelScope.launch {
+        launchVm(onError = { searchError = it }) {
             performSearch(searchQuery)
         }
     }
 
     fun rebuildIndex() {
-        viewModelScope.launch {
+        launchVm(onError = { searchError = it }) {
             isRebuilding = true
             rebuildProgress = 0 to 0
             try {
@@ -67,7 +75,7 @@ class SearchVM(
     }
 
     fun checkConsistency() {
-        viewModelScope.launch {
+        launchVm(onError = { searchError = it }) {
             isCheckingConsistency = true
             try {
                 ftsConsistency = conversationRepo.checkFtsConsistency()
@@ -78,6 +86,7 @@ class SearchVM(
     }
 
     private suspend fun performSearch(query: String) {
+        searchError = null
         if (query.isBlank()) {
             results = emptyList()
             return
@@ -85,6 +94,11 @@ class SearchVM(
         isLoading = true
         try {
             results = conversationRepo.searchMessages(query)
+        } catch (t: Throwable) {
+            // Report the failure without letting it escape the debounce collector — a single failed
+            // query must not kill the long-lived collectLatest, otherwise the next query is dead.
+            if (shouldRethrowVmError(t)) throw t
+            searchError = t
         } finally {
             isLoading = false
         }

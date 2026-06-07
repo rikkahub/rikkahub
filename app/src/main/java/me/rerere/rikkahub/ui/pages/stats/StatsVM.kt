@@ -1,18 +1,17 @@
 package me.rerere.rikkahub.ui.pages.stats
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.getMessageCountPerDay
 import me.rerere.rikkahub.data.db.dao.getTokenStats
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.utils.launchVm
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
@@ -26,6 +25,7 @@ data class AppStats(
     val totalCachedTokens: Long = 0L,
     val conversationsPerDay: Map<LocalDate, Int> = emptyMap(),
     val launchCount: Int = 0,
+    val error: Throwable? = null,
 )
 
 class StatsVM(
@@ -37,8 +37,14 @@ class StatsVM(
     private val _stats = MutableStateFlow(AppStats())
     val stats = _stats.asStateFlow()
 
+    fun clearError() {
+        _stats.value = _stats.value.copy(error = null)
+    }
+
     init {
-        viewModelScope.launch { loadStats() }
+        launchVm(onError = { t ->
+            _stats.value = _stats.value.copy(isLoading = false, error = t)
+        }) { loadStats() }
     }
 
     private suspend fun loadStats() {
