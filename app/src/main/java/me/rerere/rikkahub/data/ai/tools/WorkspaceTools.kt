@@ -12,7 +12,10 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
+
+private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 
 val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_list_files" to false,
@@ -323,6 +326,13 @@ private fun createShellTool(
                     put("type", "string")
                     put("description", "Working directory relative to the workspace files root. Defaults to root.")
                 })
+                put("timeout", buildJsonObject {
+                    put("type", "integer")
+                    put(
+                        "description",
+                        "Command timeout in seconds. Defaults to 30, max $SHELL_TIMEOUT_MAX_SECONDS."
+                    )
+                })
             },
             required = listOf("command"),
         )
@@ -332,7 +342,11 @@ private fun createShellTool(
         val params = it.jsonObject
         val command = params.string("command") ?: error("command is required")
         val cwd = params.string("cwd").orEmpty()
-        val result = workspaceRepository.executeCommand(workspaceId, command, cwd)
+        val timeoutMillis = params.string("timeout")?.toLongOrNull()
+            ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
+            ?.times(1_000L)
+            ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
+        val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {

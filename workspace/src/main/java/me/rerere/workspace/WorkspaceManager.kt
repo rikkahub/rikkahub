@@ -123,7 +123,7 @@ class WorkspaceManager(
         private const val FILES_DIR = "files"
         private const val LINUX_DIR = "linux"
         private const val TEMP_DIR = "tmp"
-        private const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
+        const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
         private val ROOT_NAME_REGEX = Regex("[A-Za-z0-9._-]+")
     }
 }
