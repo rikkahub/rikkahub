@@ -11,14 +11,18 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import me.rerere.rikkahub.AppScope
+import org.koin.compose.koinInject
 import java.io.File
 
 @Stable
@@ -63,13 +67,36 @@ class ExporterState<T>(
     }
 
     internal fun writeToUri(uri: Uri) {
-        scope.launch(Dispatchers.IO) {
+        val content = value
+        launchOwnedWrite(scope) {
             context.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(value.toByteArray())
+                output.write(content.toByteArray())
             }
         }
     }
 }
+
+/**
+ * Scope-ownership seam for [ExporterState.writeToUri] (#88). The fix is that [scope] here is the
+ * application-wide AppScope, not `rememberCoroutineScope()`: the IO must outlive the screen that
+ * started it. This helper is the exact production launch path, extracted so the ownership invariant
+ * can be unit-tested on the JVM without a ContentResolver — pass an AppScope-like owner and a
+ * caller-child owner to prove the write survives caller cancellation only on the former.
+ *
+ * The [yield] surrenders the dispatcher before the write runs, so a caller that cancels right after
+ * triggering the action loses the write iff the work is bound to its (cancelled) Job — which is the
+ * data-loss the AppScope move prevents. [dispatcher] defaults to IO for production; tests inject a
+ * confined dispatcher to make the cancel-before-resume ordering deterministic.
+ */
+internal fun launchOwnedWrite(
+    owner: CoroutineScope,
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    write: suspend () -> Unit,
+): Job =
+    owner.launch(dispatcher) {
+        yield()
+        write()
+    }
 
 @Composable
 fun <T> rememberExporter(
@@ -77,7 +104,7 @@ fun <T> rememberExporter(
     serializer: ExportSerializer<T>,
 ): ExporterState<T> {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope = koinInject<AppScope>()
 
     var pendingState by remember { mutableStateOf<ExporterState<T>?>(null) }
 
@@ -132,7 +159,7 @@ fun <T> rememberImporter(
     onResult: (Result<T>) -> Unit,
 ): ImporterState<T> {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope = koinInject<AppScope>()
 
     var pendingState by remember { mutableStateOf<ImporterState<T>?>(null) }
 
