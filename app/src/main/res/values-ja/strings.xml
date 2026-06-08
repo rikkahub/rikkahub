@@ -1123,5 +1123,15 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="image_preview_saving">保存中...</string>
   <string name="image_preview_saved">画像を保存しました</string>
   <string name="markdown_table_label">テーブル</string>
+  <string name="translator_page_paste">テキストを貼り付け</string>
+  <string name="translator_page_copy_result">翻訳結果をコピー</string>
+  <string name="translator_page_error">エラー</string>
+  <string name="setting_provider_page_discount">10%オフ</string>
+  <string name="donate_page_afdian_name">Afdian</string>
+  <string name="setting_provider_page_test_non_streaming">非ストリーミング</string>
+  <string name="setting_provider_page_test_streaming">ストリーミング</string>
+  <string name="setting_provider_page_test_tool_calling">ツール呼び出し</string>
+  <string name="setting_provider_page_test_tool_called">呼び出し: %1$s  入力: %2$s</string>
+  <string name="setting_provider_page_test_no_tool_called">ツールは呼び出されませんでした。応答: %1$s</string>
 </resources>
 

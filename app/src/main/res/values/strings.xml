@@ -1121,5 +1121,15 @@
   <string name="image_preview_saving">Saving...</string>
   <string name="image_preview_saved">Image saved</string>
   <string name="markdown_table_label">Table</string>
+  <string name="translator_page_paste">Paste text</string>
+  <string name="translator_page_copy_result">Copy translation result</string>
+  <string name="translator_page_error">Error</string>
+  <string name="setting_provider_page_discount">10% off</string>
+  <string name="donate_page_afdian_name">Afdian</string>
+  <string name="setting_provider_page_test_non_streaming">Non-streaming</string>
+  <string name="setting_provider_page_test_streaming">Streaming</string>
+  <string name="setting_provider_page_test_tool_calling">Tool calling</string>
+  <string name="setting_provider_page_test_tool_called">Call: %1$s  Input: %2$s</string>
+  <string name="setting_provider_page_test_no_tool_called">No tool called, response: %1$s</string>
 </resources>
 

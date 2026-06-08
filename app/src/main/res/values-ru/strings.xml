@@ -1123,5 +1123,15 @@
   <string name="image_preview_saving">Сохранение...</string>
   <string name="image_preview_saved">Изображение сохранено</string>
   <string name="markdown_table_label">Таблица</string>
+  <string name="translator_page_paste">Вставить текст</string>
+  <string name="translator_page_copy_result">Копировать результат перевода</string>
+  <string name="translator_page_error">Ошибка</string>
+  <string name="setting_provider_page_discount">Скидка 10%</string>
+  <string name="donate_page_afdian_name">Afdian</string>
+  <string name="setting_provider_page_test_non_streaming">Без потоковой передачи</string>
+  <string name="setting_provider_page_test_streaming">Потоковая передача</string>
+  <string name="setting_provider_page_test_tool_calling">Вызов инструмента</string>
+  <string name="setting_provider_page_test_tool_called">Вызов: %1$s  Параметры: %2$s</string>
+  <string name="setting_provider_page_test_no_tool_called">Инструмент не вызван, ответ: %1$s</string>
 </resources>
 

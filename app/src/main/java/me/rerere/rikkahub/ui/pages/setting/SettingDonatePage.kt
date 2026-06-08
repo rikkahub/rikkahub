@@ -116,7 +116,7 @@ private fun DonateMethodsCardGroup() {
                 )
             },
             supportingContent = { Text(stringResource(R.string.donate_page_afdian_desc)) },
-            headlineContent = { Text("爱发电") },
+            headlineContent = { Text(stringResource(R.string.donate_page_afdian_name)) },
         )
     }
 }

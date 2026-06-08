@@ -55,6 +55,8 @@ fun ProviderConnectionTester(
     var showTestDialog by remember { mutableStateOf(false) }
     val providerManager = koinInject<ProviderManager>()
     val scope = rememberCoroutineScope()
+    val toolCalledTemplate = stringResource(R.string.setting_provider_page_test_tool_called)
+    val noToolCalledTemplate = stringResource(R.string.setting_provider_page_test_no_tool_called)
 
     IconButton(onClick = { showTestDialog = true }) {
         Icon(HugeIcons.Connect, null)
@@ -93,19 +95,19 @@ fun ProviderConnectionTester(
                     }
 
                     TestResultItem(
-                        label = "非流式",
+                        label = stringResource(R.string.setting_provider_page_test_non_streaming),
                         state = nonStreamingState,
                         resultText = (nonStreamingState as? UiState.Success)?.data ?: ""
                     )
 
                     TestResultItem(
-                        label = "流式",
+                        label = stringResource(R.string.setting_provider_page_test_streaming),
                         state = streamingState,
                         resultText = streamingText
                     )
 
                     TestResultItem(
-                        label = "工具调用",
+                        label = stringResource(R.string.setting_provider_page_test_tool_calling),
                         state = toolsState,
                         resultText = (toolsState as? UiState.Success)?.data ?: ""
                     )
@@ -184,12 +186,16 @@ fun ProviderConnectionTester(
                                         ?.filterIsInstance<UIMessagePart.Tool>()
                                         ?.firstOrNull()
                                     val result = if (toolCall != null) {
-                                        "调用: ${toolCall.toolName}  入参: ${toolCall.input}"
+                                        String.format(
+                                            toolCalledTemplate,
+                                            toolCall.toolName,
+                                            toolCall.input
+                                        )
                                     } else {
                                         val text = message?.parts
                                             ?.filterIsInstance<UIMessagePart.Text>()
                                             ?.joinToString("") { it.text } ?: ""
-                                        "未调用工具，响应: $text"
+                                        String.format(noToolCalledTemplate, text)
                                     }
                                     toolsState = UiState.Success(result)
                                 }.onFailure { toolsState = UiState.Error(it) }

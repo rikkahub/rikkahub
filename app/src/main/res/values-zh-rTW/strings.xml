@@ -1121,5 +1121,15 @@
   <string name="image_preview_saving">儲存中...</string>
   <string name="image_preview_saved">圖片已儲存</string>
   <string name="markdown_table_label">表格</string>
+  <string name="translator_page_paste">貼上文字</string>
+  <string name="translator_page_copy_result">複製翻譯結果</string>
+  <string name="translator_page_error">錯誤</string>
+  <string name="setting_provider_page_discount">10% 優惠</string>
+  <string name="donate_page_afdian_name">Afdian</string>
+  <string name="setting_provider_page_test_non_streaming">非串流</string>
+  <string name="setting_provider_page_test_streaming">串流</string>
+  <string name="setting_provider_page_test_tool_calling">工具呼叫</string>
+  <string name="setting_provider_page_test_tool_called">呼叫: %1$s  參數: %2$s</string>
+  <string name="setting_provider_page_test_no_tool_called">未呼叫工具，回應: %1$s</string>
 </resources>
 

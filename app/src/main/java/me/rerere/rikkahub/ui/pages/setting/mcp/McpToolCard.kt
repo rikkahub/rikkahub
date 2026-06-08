@@ -89,7 +89,7 @@ internal fun McpToolCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        text = "启用",
+                        text = stringResource(R.string.setting_mcp_page_enable),
                         style = MaterialTheme.typography.labelSmall,
                     )
                     Switch(
