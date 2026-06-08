@@ -1114,5 +1114,12 @@
   <string name="assistant_page_auto_compact_threshold">在上下文大小的 %d%% 時觸發</string>
   <string name="assistant_page_auto_compact_needs_context_size">請在上方設定一個有限的上下文訊息數，自動壓縮才能生效。</string>
   <string name="error_title_auto_compact">自動壓縮失敗</string>
+  <string name="share_sheet_title">分享您的LLM模型</string>
+  <string name="chat_drawer_statistics">統計</string>
+  <string name="chat_page_select_model_first">請先選擇一個模型</string>
+  <string name="chat_vm_stop_generation_before_delete">請在刪除訊息前停止生成</string>
+  <string name="image_preview_saving">儲存中...</string>
+  <string name="image_preview_saved">圖片已儲存</string>
+  <string name="markdown_table_label">表格</string>
 </resources>
 

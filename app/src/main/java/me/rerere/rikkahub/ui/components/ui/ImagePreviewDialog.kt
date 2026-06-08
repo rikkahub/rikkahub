@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -25,6 +26,7 @@ import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Download01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.compose.koinInject
@@ -42,6 +44,8 @@ fun ImagePreviewDialog(
     val state = rememberZoomablePagerState { images.size }
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
+    val savingMessage = stringResource(R.string.image_preview_saving)
+    val savedMessage = stringResource(R.string.image_preview_saved)
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(
@@ -70,10 +74,10 @@ fun ImagePreviewDialog(
                     onClick = {
                         scope.launch {
                             runCatching {
-                                toaster.show("正在保存")
+                                toaster.show(savingMessage)
                                 val imgUrl = images[state.currentPage]
                                 filesManager.saveMessageImage(context, imgUrl)
-                                toaster.show(message = "已保存图片", type = ToastType.Success)
+                                toaster.show(message = savedMessage, type = ToastType.Success)
                             }.onFailure {
                                 if (it is CancellationException) throw it
                                 Log.e(TAG, "Failed to save message image", it)

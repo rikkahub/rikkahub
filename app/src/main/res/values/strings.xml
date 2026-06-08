@@ -1114,5 +1114,12 @@
   <string name="setting_model_page_prompt_compress">Context Compression</string>
   <string name="setting_display_page_bubble_opacity_title">Bubble Opacity</string>
   <string name="setting_provider_page_include_history_reasoning">Include History Reasoning</string>
+  <string name="share_sheet_title">Share your LLM model</string>
+  <string name="chat_drawer_statistics">Statistics</string>
+  <string name="chat_page_select_model_first">Please select a model first</string>
+  <string name="chat_vm_stop_generation_before_delete">Please stop generating before deleting the message</string>
+  <string name="image_preview_saving">Saving...</string>
+  <string name="image_preview_saved">Image saved</string>
+  <string name="markdown_table_label">Table</string>
 </resources>
 

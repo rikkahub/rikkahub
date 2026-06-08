@@ -250,6 +250,7 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
+    val selectModelFirstMessage = stringResource(R.string.chat_page_select_model_first)
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
@@ -294,7 +295,7 @@ private fun ChatPageContent(
                     },
                     onSendClick = {
                         if (currentChatModel == null) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
+                            toaster.show(selectModelFirstMessage, type = ToastType.Error)
                             return@ChatInput
                         }
                         if (inputState.isEditing()) {

@@ -1116,5 +1116,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_auto_compact_threshold">コンテキストサイズの %d%% で起動</string>
   <string name="assistant_page_auto_compact_needs_context_size">自動圧縮を有効にするには、上で有限のコンテキストメッセージ数を設定してください。</string>
   <string name="error_title_auto_compact">自動圧縮に失敗しました</string>
+  <string name="share_sheet_title">LLMモデルを共有</string>
+  <string name="chat_drawer_statistics">統計</string>
+  <string name="chat_page_select_model_first">最初にモデルを選択してください</string>
+  <string name="chat_vm_stop_generation_before_delete">メッセージを削除する前に、生成を停止してください。</string>
+  <string name="image_preview_saving">保存中...</string>
+  <string name="image_preview_saved">画像を保存しました</string>
+  <string name="markdown_table_label">テーブル</string>
 </resources>
 

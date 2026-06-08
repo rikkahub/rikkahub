@@ -1116,5 +1116,12 @@
   <string name="assistant_page_auto_compact_threshold">Срабатывает при %d%% размера контекста</string>
   <string name="assistant_page_auto_compact_needs_context_size">Чтобы автосжатие работало, задайте выше конечное количество сообщений контекста.</string>
   <string name="error_title_auto_compact">Ошибка автосжатия</string>
+  <string name="share_sheet_title">Поделиться своей LLM моделью</string>
+  <string name="chat_drawer_statistics">Статистика</string>
+  <string name="chat_page_select_model_first">Пожалуйста, сначала выберите модель</string>
+  <string name="chat_vm_stop_generation_before_delete">Пожалуйста, остановите генерацию перед удалением сообщения</string>
+  <string name="image_preview_saving">Сохранение...</string>
+  <string name="image_preview_saved">Изображение сохранено</string>
+  <string name="markdown_table_label">Таблица</string>
 </resources>
 
