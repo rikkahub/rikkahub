@@ -117,4 +117,118 @@ class MarkdownParsingTest {
         if (repoRootRelative.isDirectory) return repoRootRelative
         return moduleRelative
     }
+
+    // ---- (C) inline-LaTeX wrapping + hollow-character regression guard (issue #209) ----
+
+    /**
+     * Structural FAILS-before / PASSES-after guard for the upstream LaTeX rendering port
+     * (rikkahub/rikkahub@08b3038c). Two coupled device-only defects sit behind issue #209:
+     *
+     *  1. Hollow / outline glyphs — a font/glyph bug inside the jlatexmath-android AAR, fixed
+     *     solely by bumping the library 1.3 -> 1.4. There is no Kotlin seam for it, so the only
+     *     guard we can assert in a JVM test is the pinned version in libs.versions.toml.
+     *  2. Long inline formulas clipped off-screen — Compose InlineTextContent placeholders are
+     *     atomic and never wrap, so a single full-width formula placeholder is clipped. The fix
+     *     decomposes the formula via JLatexMathSplitter (new in 1.4) into several narrow
+     *     drawables joined by zero-width-space break points so the text flow can wrap them.
+     *
+     * Why this is a source-scan and not a behavioural split test: JLatexMathSplitter and
+     * JLatexMathDrawable are android.graphics-backed (Canvas/Rect/Paint). CI runs only
+     * testDebugUnitTest on the plain JVM with unitTests.isReturnDefaultValues = true and no
+     * Robolectric, so calling splitLatex() here would hit stubbed graphics and split nothing
+     * real — a fake test. The defect is device-only; the structural invariant ("inline math is
+     * decomposed into wrappable units, and the AAR is pinned to the glyph-fixed version") is
+     * the honest, non-fakeable guard — the same contract as part (B) above for issue #110.
+     */
+    @Test
+    fun `LatexText exposes the splitter seam and single-drawable composable`() {
+        val richtextDir = resolveRichtextDir()
+        assertTrue(
+            "Could not locate the richtext source dir (CWD=${File("").absolutePath}); " +
+                "test would otherwise pass vacuously",
+            richtextDir.isDirectory
+        )
+        val file = File(richtextDir, "LatexText.kt")
+        assertTrue("Expected source file ${file.path} to exist", file.isFile)
+        val source = file.readText()
+        assertTrue("LatexText.kt is empty; would pass vacuously", source.isNotEmpty())
+
+        assertTrue(
+            "LatexText.kt must import JLatexMathSplitter (issue #209: needed to split long " +
+                "inline formulas into wrappable drawables)",
+            source.contains("ru.noties.jlatexmath.JLatexMathSplitter")
+        )
+        assertTrue(
+            "LatexText.kt must declare splitLatex(...) (issue #209)",
+            source.contains("fun splitLatex(")
+        )
+        assertTrue(
+            "LatexText.kt must declare the LatexDrawable composable that renders one split " +
+                "drawable (issue #209)",
+            source.contains("fun LatexDrawable(")
+        )
+    }
+
+    @Test
+    fun `Markdown inline-math path splits long formulas with zero-width-space breaks`() {
+        val richtextDir = resolveRichtextDir()
+        assertTrue(
+            "Could not locate the richtext source dir (CWD=${File("").absolutePath}); " +
+                "test would otherwise pass vacuously",
+            richtextDir.isDirectory
+        )
+        val file = File(richtextDir, "Markdown.kt")
+        assertTrue("Expected source file ${file.path} to exist", file.isFile)
+        val source = file.readText()
+        assertTrue("Markdown.kt is empty; would pass vacuously", source.isNotEmpty())
+
+        assertTrue(
+            "Markdown.kt's inline-math path must call splitLatex(...) so long formulas become " +
+                "multiple wrappable drawables instead of one clipped placeholder (issue #209)",
+            source.contains("splitLatex(")
+        )
+        assertTrue(
+            "Markdown.kt must insert a zero-width-space (U+200B) break point between formula " +
+                "segments so the text flow can wrap them (issue #209)",
+            source.contains("\\u200B") || source.contains("​")
+        )
+        assertTrue(
+            "Markdown.kt must render each split segment via LatexDrawable(...) (issue #209)",
+            source.contains("LatexDrawable(")
+        )
+    }
+
+    @Test
+    fun `jlatexmath is pinned to the glyph-fixed 1_4 release`() {
+        val toml = resolveVersionCatalog()
+        assertTrue(
+            "Could not locate gradle/libs.versions.toml (CWD=${File("").absolutePath}); " +
+                "test would otherwise pass vacuously",
+            toml.isFile
+        )
+        val source = toml.readText()
+        assertTrue("libs.versions.toml is empty; would pass vacuously", source.isNotEmpty())
+
+        assertTrue(
+            "jlatexmath must be pinned to 1.4 — the only guard for the hollow-character half of " +
+                "issue #209 (the glyph fix ships inside the AAR) and the source of the " +
+                "JLatexMathSplitter API used by the wrapping fix",
+            source.contains("jlatexmath = \"1.4\"")
+        )
+        assertFalse(
+            "jlatexmath must NOT remain pinned to 1.3 (lacks JLatexMathSplitter + the glyph fix, " +
+                "issue #209)",
+            source.contains("jlatexmath = \"1.3\"")
+        )
+    }
+
+    private fun resolveVersionCatalog(): File {
+        val rel = "gradle/libs.versions.toml"
+        // Unit tests run with the module dir (app/) as CWD; the catalog lives at the repo root.
+        val fromModule = File("../$rel")
+        if (fromModule.isFile) return fromModule
+        val fromRepoRoot = File(rel)
+        if (fromRepoRoot.isFile) return fromRepoRoot
+        return fromModule
+    }
 }

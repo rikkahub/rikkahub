@@ -16,8 +16,21 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.TextUnit
 import ru.noties.jlatexmath.JLatexMathDrawable
+import ru.noties.jlatexmath.JLatexMathSplitter
 
 private const val TAG = "LatexText"
+
+/**
+ * Cache key for one split inline-formula segment's [InlineTextContent].
+ *
+ * The segment's drawable bakes the text color in at build time and the caller's
+ * inlineContents map is remembered and never cleared, so the key MUST carry
+ * [colorArgb]: on a live theme toggle the color changes, the drawable is rebuilt,
+ * and a color-independent key would let the map's putIfAbsent no-op and keep
+ * rendering the stale-colored glyph.
+ */
+internal fun latexSegmentKey(colorArgb: Int, formula: String, index: Int): String =
+    "latex:$colorArgb:${formula.hashCode()}:$index"
 
 fun assumeLatexSize(latex: String, fontSize: Float): Rect {
     return runCatching {
@@ -96,6 +109,42 @@ fun getLatexDrawable(
     }.onFailure {
         Log.e(TAG, "Failed to render LaTeX", it)
     }.getOrNull()
+}
+
+/**
+ * Split one inline formula horizontally at top-level operators into multiple drawables so it can
+ * wrap within the text flow, preventing a single oversized formula from being clipped off-screen.
+ * Returns an empty list on failure; the caller must fall back to single-placeholder rendering.
+ */
+fun splitLatex(
+    latex: String,
+    maxWidthPx: Float,
+    fontSize: Float,
+    color: Int
+): List<JLatexMathDrawable> {
+    return runCatching {
+        JLatexMathSplitter.split(processLatex(latex), maxWidthPx, fontSize, color)
+    }.onFailure {
+        Log.e(TAG, "Failed to split LaTeX", it)
+    }.getOrElse { emptyList() }
+}
+
+@Composable
+fun LatexDrawable(
+    drawable: JLatexMathDrawable,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    with(density) {
+        Canvas(
+            modifier = modifier.size(
+                width = drawable.bounds.width().toDp(),
+                height = drawable.bounds.height().toDp()
+            )
+        ) {
+            drawable.draw(drawContext.canvas.nativeCanvas)
+        }
+    }
 }
 
 private val inlineDollarRegex = Regex("""^\$(.*?)\$""", RegexOption.DOT_MATCHES_ALL)
