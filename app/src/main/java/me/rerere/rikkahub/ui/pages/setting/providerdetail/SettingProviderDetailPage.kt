@@ -161,6 +161,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 0 -> {
                     SettingProviderConfigPage(
                         provider = draft,
+                        persisted = provider,
                         onDraftChange = { draft = it },
                         onSave = {
                             // Persist the edited config from the draft, but keep the

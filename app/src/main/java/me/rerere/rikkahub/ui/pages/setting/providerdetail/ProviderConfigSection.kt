@@ -42,6 +42,7 @@ import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
 @Composable
 internal fun SettingProviderConfigPage(
     provider: ProviderSetting,
+    persisted: ProviderSetting,
     onDraftChange: (ProviderSetting) -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit
@@ -77,8 +78,11 @@ internal fun SettingProviderConfigPage(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Feed the tester the draft's config (apiKey/baseUrl under test) with the LIVE
+            // persisted model list, so a model added in the Models tab shows in the tester's
+            // picker immediately, without exit+re-enter re-seeding the draft (issue #208).
             ProviderConnectionTester(
-                internalProvider = provider,
+                internalProvider = mergeConfigKeepingModels(draft = provider, persisted = persisted),
             )
 
             Spacer(Modifier.weight(1f))
