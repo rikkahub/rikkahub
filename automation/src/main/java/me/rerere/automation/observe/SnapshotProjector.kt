@@ -1,0 +1,105 @@
+package me.rerere.automation.observe
+
+import me.rerere.automation.backend.RawNode
+import me.rerere.automation.backend.RawTree
+import me.rerere.automation.backend.RawWindow
+
+/**
+ * Projects a backend's raw window forest into the compact, coordinate-free [UiSnapshot] the model
+ * is allowed to see (#187 design §4). The output is ~10x smaller than the raw tree (an "action
+ * table", not a DOM dump) and is the trust boundary: everything the projector strips (host app,
+ * password text, secure windows, raw coordinates) can never reach the model.
+ *
+ * Rules (design §4 / properties P1–P7):
+ *  - Host package [HOST_PACKAGE] is excluded entirely (P2). If it is the foreground, the snapshot
+ *    is [ScreenState.FOREGROUND_IS_HOST] with no targets (the agent must pause/re-ground, P12).
+ *  - FLAG_SECURE window or an empty forest ⇒ [ScreenState.SECURE_WINDOW], no targets (design I1).
+ *  - A node is a target iff `(visible && hasArea) || hasId || hasText`; recursion still descends
+ *    into invisible containers so a visible descendant is not lost (P4).
+ *  - A password node's real text is replaced with bullets (P1).
+ *  - [UiTarget.tid] is a dense index, unique within the snapshot and only valid for this stateSeq
+ *    (P3). Projection is deterministic/idempotent: a pre-order walk gives stable ordering (P5).
+ *
+ * Pure and stateless — same [RawTree] in ⇒ identical [UiSnapshot] out (no [System] reads).
+ */
+class SnapshotProjector {
+
+    fun project(tree: RawTree): UiSnapshot {
+        val foregroundIsHost = tree.foregroundPkg == HOST_PACKAGE
+
+        // Windows the model may see: never the host, never a secure window's contents.
+        val visibleWindows = tree.windows.filter { it.pkg != HOST_PACKAGE }
+
+        val screenState = when {
+            foregroundIsHost -> ScreenState.FOREGROUND_IS_HOST
+            visibleWindows.isEmpty() -> ScreenState.SECURE_WINDOW
+            visibleWindows.any { it.secure } && visibleWindows.all { it.secure } ->
+                ScreenState.SECURE_WINDOW
+            visibleWindows.any { it.systemWindow } -> ScreenState.DIALOG
+            else -> ScreenState.READY
+        }
+
+        val targets = if (screenState == ScreenState.FOREGROUND_IS_HOST ||
+            screenState == ScreenState.SECURE_WINDOW
+        ) {
+            emptyList()
+        } else {
+            // Deterministic order: windows as given, each tree pre-order. Dense tid assigned last so
+            // it is unique and stable for this snapshot (P3/P5). Secure windows contribute nothing.
+            val collected = ArrayList<RawNode>()
+            for (window in visibleWindows) {
+                if (window.secure) continue
+                window.root?.let { collect(it, collected) }
+            }
+            collected.mapIndexed { index, node -> toTarget(index, node) }
+        }
+
+        return UiSnapshot(
+            stateSeq = tree.stateSeq,
+            foregroundPkg = tree.foregroundPkg,
+            screenState = screenState,
+            targets = targets,
+        )
+    }
+
+    /** Pre-order collection: a node is emitted iff it passes the projection rule; recursion always
+     * continues into children (incl. invisible containers) so passing descendants survive (P4). */
+    private fun collect(node: RawNode, out: MutableList<RawNode>) {
+        if (isTarget(node)) out.add(node)
+        for (child in node.children) collect(child, out)
+    }
+
+    private fun isTarget(node: RawNode): Boolean =
+        (node.visible && node.hasArea) || node.hasId || node.hasText
+
+    private fun toTarget(tid: Int, node: RawNode): UiTarget {
+        val flags = buildSet {
+            if (node.clickable) add(UiFlag.CLICK)
+            if (node.editable) add(UiFlag.EDIT)
+            if (node.scrollable) add(UiFlag.SCROLL)
+            if (node.checkable && node.checked) add(UiFlag.CHECKED)
+            if (node.password) add(UiFlag.PASSWORD)
+        }
+        // Password text is never surfaced as-is (design I1/P1): mask to bullets sized to the input
+        // so the model knows a value is present without learning it.
+        val rawText = node.text ?: node.contentDescription
+        val text = if (node.password) {
+            rawText?.let { "•".repeat(it.length.coerceAtMost(MAX_MASK_LENGTH)) }
+        } else {
+            rawText
+        }
+        return UiTarget(
+            tid = tid,
+            role = node.className ?: "node",
+            text = text,
+            flags = flags,
+            semanticKey = node.contentDescription?.takeIf { it.isNotEmpty() },
+            formKey = node.resourceId?.takeIf { it.isNotEmpty() && node.editable },
+        )
+    }
+
+    companion object {
+        const val HOST_PACKAGE = "me.rerere.rikkahub"
+        private const val MAX_MASK_LENGTH = 32
+    }
+}
