@@ -1,154 +1,88 @@
 package me.rerere.rikkahub.service
 
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.element
+import io.kotest.property.arbitrary.int
+import io.kotest.property.checkAll
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pure-logic test for [shouldAutoCompact], the trigger predicate that decides whether a conversation's
- * history should be auto-compacted before the next request. Keeping the decision pure lets it run on the
- * JVM without any Android / network / model dependency, mirroring [shouldRenewWakeLock].
+ * Circuit-breaker state-machine properties for design #193 Stage 1 (CB1-CB3), the one real
+ * availability fix: without it, a conversation that is irrecoverably over its context window would
+ * fire auto-compact every turn and each attempt is a doomed model call. The breaker stops retrying
+ * after [MAX_AUTO_COMPACT_FAILURES] consecutive non-cancellation failures.
  *
- * The invariant this guards: auto-compact must only fire when (1) the user opted in, (2) the assistant
- * has a finite message-count limit (contextMessageSize > 0 — "unlimited" never auto-triggers because
- * there is no limit to take a fraction of, and we deliberately do NOT invent a token estimator), (3) the
- * message count has reached the configured fraction of that limit, and (4) there are actually enough
- * messages to compress (mirroring compressConversation's keepRecentMessages guard, so we never kick off a
- * compaction that would immediately throw "not enough messages").
+ * The transition is extracted as a pure function ([nextAutoCompactFailureCount]) and the trip test as
+ * [autoCompactBreakerTripped], both consumed by [ChatService.maybeAutoCompact], so these properties
+ * exercise the production decision logic on the JVM without the Android/Koin stack. The token-based
+ * trigger predicate itself (P1-P10, M1) is tested in the :ai module where it lives.
  */
 class AutoCompactTriggerTest {
 
-    private val keepRecent = 32
+    // ---- CB1: monotonicity ----
 
     @Test
-    fun `disabled never triggers`() {
-        assertFalse(
-            shouldAutoCompact(
-                enabled = false,
-                messageCount = 10_000,
-                contextMessageSize = 100,
-                threshold = 0.8f,
-                keepRecentMessages = keepRecent,
-            )
-        )
+    fun `CB1 failure increments and success resets`() {
+        assertEquals(1, nextAutoCompactFailureCount(0, AutoCompactOutcome.FAILURE))
+        assertEquals(3, nextAutoCompactFailureCount(2, AutoCompactOutcome.FAILURE))
+        assertEquals(0, nextAutoCompactFailureCount(5, AutoCompactOutcome.SUCCESS))
+        assertEquals(0, nextAutoCompactFailureCount(0, AutoCompactOutcome.SUCCESS))
     }
 
     @Test
-    fun `unlimited context size never triggers`() {
-        // contextMessageSize <= 0 means "no message-count cap". There is no limit to take a fraction of,
-        // and inventing a token estimator here would be a second, possibly-wrong compaction engine.
-        assertFalse(
-            shouldAutoCompact(
-                enabled = true,
-                messageCount = 10_000,
-                contextMessageSize = 0,
-                threshold = 0.8f,
-                keepRecentMessages = keepRecent,
-            )
-        )
+    fun `CB1 counter only moves by the documented rule for every outcome`() {
+        runBlocking {
+            checkAll(
+                Arb.int(0..100),
+                Arb.element(AutoCompactOutcome.entries),
+            ) { current, outcome ->
+                val next = nextAutoCompactFailureCount(current, outcome)
+                when (outcome) {
+                    AutoCompactOutcome.SUCCESS -> assertEquals(0, next)
+                    AutoCompactOutcome.FAILURE -> assertEquals(current + 1, next)
+                    AutoCompactOutcome.CANCELLATION -> assertEquals(current, next)
+                }
+            }
+        }
+    }
+
+    // ---- CB3: cancellation neutrality ----
+
+    @Test
+    fun `CB3 cancellation leaves the counter unchanged`() {
+        assertEquals(0, nextAutoCompactFailureCount(0, AutoCompactOutcome.CANCELLATION))
+        assertEquals(2, nextAutoCompactFailureCount(2, AutoCompactOutcome.CANCELLATION))
+        // A run of cancellations never trips the breaker on its own.
+        var failures = 0
+        repeat(10) { failures = nextAutoCompactFailureCount(failures, AutoCompactOutcome.CANCELLATION) }
+        assertFalse(autoCompactBreakerTripped(failures))
+    }
+
+    // ---- CB2: trip dominance / idempotent skip ----
+
+    @Test
+    fun `CB2 breaker trips exactly at the max failure count`() {
+        assertFalse(autoCompactBreakerTripped(MAX_AUTO_COMPACT_FAILURES - 1))
+        assertTrue(autoCompactBreakerTripped(MAX_AUTO_COMPACT_FAILURES))
+        assertTrue(autoCompactBreakerTripped(MAX_AUTO_COMPACT_FAILURES + 5))
     }
 
     @Test
-    fun `below threshold does not trigger`() {
-        // limit = ceil(100 * 0.8) = 80; 79 messages is still under the line.
-        assertFalse(
-            shouldAutoCompact(
-                enabled = true,
-                messageCount = 79,
-                contextMessageSize = 100,
-                threshold = 0.8f,
-                keepRecentMessages = keepRecent,
-            )
-        )
-    }
+    fun `CB2 consecutive failures trip then a success clears the trip`() {
+        var failures = 0
+        // Drive up to the trip point with failures.
+        repeat(MAX_AUTO_COMPACT_FAILURES) {
+            assertFalse("must not be tripped before reaching max", autoCompactBreakerTripped(failures))
+            failures = nextAutoCompactFailureCount(failures, AutoCompactOutcome.FAILURE)
+        }
+        assertTrue("tripped at max", autoCompactBreakerTripped(failures))
 
-    @Test
-    fun `at or above threshold triggers`() {
-        // limit = ceil(100 * 0.8) = 80.
-        assertTrue(
-            shouldAutoCompact(
-                enabled = true,
-                messageCount = 80,
-                contextMessageSize = 100,
-                threshold = 0.8f,
-                keepRecentMessages = keepRecent,
-            )
-        )
-        assertTrue(
-            shouldAutoCompact(
-                enabled = true,
-                messageCount = 81,
-                contextMessageSize = 100,
-                threshold = 0.8f,
-                keepRecentMessages = keepRecent,
-            )
-        )
-    }
-
-    @Test
-    fun `not enough messages to compress does not trigger`() {
-        // Even past the threshold, if messageCount <= keepRecentMessages there is nothing to compress:
-        // compressConversation would throw "not enough messages". Guard so we never start a doomed pass.
-        // limit = ceil(40 * 0.8) = 32; messageCount 32 == keepRecentMessages 32 => nothing compressible.
-        assertFalse(
-            shouldAutoCompact(
-                enabled = true,
-                messageCount = 32,
-                contextMessageSize = 40,
-                threshold = 0.8f,
-                keepRecentMessages = keepRecent,
-            )
-        )
-        // One above keepRecentMessages and still over the limit => compressible => triggers.
-        assertTrue(
-            shouldAutoCompact(
-                enabled = true,
-                messageCount = 33,
-                contextMessageSize = 40,
-                threshold = 0.8f,
-                keepRecentMessages = keepRecent,
-            )
-        )
-    }
-
-    @Test
-    fun `fraction of limit and exact boundary`() {
-        // 0.8 of 10 = 8.0 -> ceil = 8. Triggers at >= 8 (given keepRecentMessages small enough to allow it).
-        assertFalse(
-            shouldAutoCompact(
-                enabled = true, messageCount = 7, contextMessageSize = 10,
-                threshold = 0.8f, keepRecentMessages = 4,
-            )
-        )
-        assertTrue(
-            shouldAutoCompact(
-                enabled = true, messageCount = 8, contextMessageSize = 10,
-                threshold = 0.8f, keepRecentMessages = 4,
-            )
-        )
-    }
-
-    @Test
-    fun `threshold is clamped into 0 to 1`() {
-        // threshold > 1 clamps to 1: limit = ceil(100 * 1) = 100; 99 below, 100 at boundary.
-        assertFalse(
-            shouldAutoCompact(
-                enabled = true, messageCount = 99, contextMessageSize = 100,
-                threshold = 5f, keepRecentMessages = keepRecent,
-            )
-        )
-        assertTrue(
-            shouldAutoCompact(
-                enabled = true, messageCount = 100, contextMessageSize = 100,
-                threshold = 5f, keepRecentMessages = keepRecent,
-            )
-        )
-        // threshold < 0 clamps to 0: limit = ceil(100 * 0) = 0; any positive count past keepRecent triggers.
-        assertTrue(
-            shouldAutoCompact(
-                enabled = true, messageCount = 33, contextMessageSize = 100,
-                threshold = -1f, keepRecentMessages = keepRecent,
-            )
-        )
+        // A single success resets and clears the trip (CB1/CB2).
+        failures = nextAutoCompactFailureCount(failures, AutoCompactOutcome.SUCCESS)
+        assertFalse(autoCompactBreakerTripped(failures))
     }
 }

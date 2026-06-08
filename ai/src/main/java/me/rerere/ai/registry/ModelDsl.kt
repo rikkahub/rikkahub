@@ -11,7 +11,11 @@ class ModelDefinition(
     private val matcher: TokenMatcher,
     val inputModalities: Set<Modality>,
     val outputModalities: Set<Modality>,
-    val abilities: Set<ModelAbility>
+    val abilities: Set<ModelAbility>,
+    // Per-family context window (in tokens) when known. null = unknown for this family; the
+    // resolver falls back to a conservative default. Seeded only for the few large-window
+    // families; most ids leave this null and inherit the default.
+    val contextWindow: Int? = null,
 ) : ModelSelector {
     override fun match(modelId: String): Boolean {
         val tokens = tokenize(modelId)
@@ -46,6 +50,7 @@ class ModelDefinitionBuilder {
     private val inputModalities = mutableSetOf(Modality.TEXT)
     private val outputModalities = mutableSetOf(Modality.TEXT)
     private val abilities = mutableSetOf<ModelAbility>()
+    private var contextWindow: Int? = null
 
     fun tokens(vararg specs: String) {
         matchers += TokenSequenceMatcher(specs.map(::parseTokenSpec))
@@ -81,6 +86,10 @@ class ModelDefinitionBuilder {
         this.abilities.addAll(abilities)
     }
 
+    fun contextWindow(tokens: Int) {
+        contextWindow = tokens
+    }
+
     fun build(): ModelDefinition {
         val matcher = when {
             matchers.isEmpty() -> MatchNone
@@ -91,7 +100,8 @@ class ModelDefinitionBuilder {
             matcher = matcher,
             inputModalities = inputModalities.toSet(),
             outputModalities = outputModalities.toSet(),
-            abilities = abilities.toSet()
+            abilities = abilities.toSet(),
+            contextWindow = contextWindow,
         )
     }
 }

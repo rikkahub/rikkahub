@@ -34,10 +34,16 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
+import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.contextTokens
+import me.rerere.ai.core.resolveReserveOutput
+import me.rerere.ai.core.shouldAutoCompact
+import me.rerere.ai.core.tokenPressure
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.registry.ModelRegistry.getContextWindowForModel
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -84,6 +90,7 @@ import me.rerere.rikkahub.service.mutation.ConversationMutations
 import me.rerere.rikkahub.service.notification.ChatNotificationSender
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
+import me.rerere.rikkahub.utils.shouldRethrowVmError
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -110,6 +117,10 @@ private const val AUTO_COMPACT_KEEP_RECENT_MESSAGES = 32
 
 // 自动压缩的目标摘要 token 数：与手动压缩对话框提供的中档默认一致。
 private const val AUTO_COMPACT_TARGET_TOKENS = 2000
+
+// 自动压缩熔断阈值（design #193 R5）：同一会话连续失败达到此次数后，停止再尝试自动压缩，避免在
+// 不可逆超限的会话上每轮发起注定失败的压缩调用。值 3 与成熟实现一致。
+internal const val MAX_AUTO_COMPACT_FAILURES = 3
 
 // 聊天错误列表上限：反复的 provider 失败（如断流重试、鉴权失败循环）会不断调用 addError，若无上限
 // _errors 会无界增长并常驻内存。保留最近 50 条足以让用户看到当前问题。
@@ -217,32 +228,6 @@ internal class StreamingUiCoalescer<T>(
 }
 
 /**
- * 纯函数：判断是否应在下一次请求前自动压缩对话历史。抽出以便 JVM 单测（无 Android/网络/模型依赖）。
- *
- * 仅当以下全部成立才触发：
- * - [enabled]：用户显式开启（压缩会重写/丢弃历史，绝不静默进行）。
- * - [contextMessageSize] > 0：助手设了有限的消息数上限。<=0 表示"无限制"——没有上限可取比例，
- *   且这里不发明 token 估算器（那会是第二个可能严重偏差的压缩引擎）。
- * - 当前消息数已达上限的 [threshold]（限制在 0..1）比例：limit = ceil(contextMessageSize * threshold)。
- * - [messageCount] > [keepRecentMessages]：仍有可压缩的历史。等于或小于时无内容可压，
- *   compressConversation 会抛"消息不足"，故提前挡住注定失败的压缩。
- */
-internal fun shouldAutoCompact(
-    enabled: Boolean,
-    messageCount: Int,
-    contextMessageSize: Int,
-    threshold: Float,
-    keepRecentMessages: Int,
-): Boolean {
-    if (!enabled) return false
-    if (contextMessageSize <= 0) return false
-    val limit = kotlin.math.ceil(contextMessageSize * threshold.coerceIn(0f, 1f)).toInt()
-    if (messageCount < limit) return false
-    if (messageCount <= keepRecentMessages) return false
-    return true
-}
-
-/**
  * 纯函数：把 [new] 追加到错误列表并裁掉最旧的，保证列表至多 [max] 条。抽出以便 JVM 单测（无 Android
  * 依赖）。用 takeLast：新错误总被保留，溢出时丢弃的是最旧的那条（有界 FIFO，最近优先）。
  */
@@ -251,6 +236,54 @@ internal fun appendChatError(
     new: ChatError,
     max: Int = MAX_CHAT_ERRORS,
 ): List<ChatError> = (current + new).takeLast(max)
+
+/** Terminal outcome of one auto-compact attempt, for the per-session circuit breaker (design #193 R5). */
+internal enum class AutoCompactOutcome { SUCCESS, FAILURE, CANCELLATION }
+
+/**
+ * 纯函数：熔断器是否已跳闸。抽出以便 JVM 单测（无 Android 依赖）。失败计数达到 [max] 即跳闸——此后
+ * [maybeAutoCompact] 整体跳过，直到一次成功把计数清零（CB2）。
+ */
+internal fun autoCompactBreakerTripped(
+    failures: Int,
+    max: Int = MAX_AUTO_COMPACT_FAILURES,
+): Boolean = failures >= max
+
+/**
+ * 纯函数：给定当前连续失败计数与本次压缩的终态，返回新的计数。抽出以便 JVM 单测（无 Android/协程依赖），
+ * 把熔断器的状态转移与 [maybeAutoCompact] 的副作用（压缩调用、错误上报）解耦，使 CB1-CB3 可单测且测的是
+ * 生产真正使用的转移逻辑（改坏其中任一分支即令单测变红）。
+ *
+ * - [AutoCompactOutcome.SUCCESS]：清零（CB1）。
+ * - [AutoCompactOutcome.FAILURE]：自增（CB1）——同一会话连续失败累加。
+ * - [AutoCompactOutcome.CANCELLATION]：保持不变（CB3）——用户取消不是失败，绝不计入。
+ */
+internal fun nextAutoCompactFailureCount(
+    current: Int,
+    outcome: AutoCompactOutcome,
+): Int = when (outcome) {
+    AutoCompactOutcome.SUCCESS -> 0
+    AutoCompactOutcome.FAILURE -> current + 1
+    AutoCompactOutcome.CANCELLATION -> current
+}
+
+/**
+ * 纯函数：把一条「保留」消息的 [TokenUsage] 中**唯一**因压缩而失真的字段——压力锚 [TokenUsage.totalTokens]
+ * ——置零，其余三项（prompt/completion/cached）原样保留。抽出以便 JVM 单测（无 Android/协程依赖）。
+ *
+ * 为什么只清 totalTokens：压缩把被保留消息之前的历史折成摘要后，这些消息记录的 totalTokens 反映的是一个
+ * **包含已被摘要前缀**的旧请求大小，已偏高且失真；而 contextTokens 的锚谓词正是 `totalTokens > 0`
+ * （[me.rerere.ai.core.contextTokens]），故把它置零即让锚跳过该消息、回落到对压缩后较小历史的保守估算，
+ * 避免 token 触发/尺寸告警每回合误触（并在约三回合内拉闸熔断）。
+ *
+ * 为什么**不**清整个 usage：prompt/completion/cachedTokens 是该消息真实的逐条统计，并非失真的锚——
+ * 它们被 [me.rerere.rikkahub.data.db.dao.getTokenStats] 的终身聚合（直接 SUM 持久化 JSON 里的
+ * `$.usage.promptTokens/completionTokens/cachedTokens`）与 nerd 行逐条读取。压缩会 saveConversation 把
+ * 结果写回 Room，故置 null 会**永久**抹掉这些 token、不可还原；只清锚则两者均不受损。这是设计 #193 Stage-1
+ * 对失真测量锚的最小化诚实失效，非 summarizer 行为变更（仍是 Stage-2 非目标）。
+ */
+internal fun invalidateStalePressureAnchor(usage: TokenUsage?): TokenUsage? =
+    usage?.copy(totalTokens = 0)
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -506,24 +539,59 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
-                if (e !is CancellationException) Log.e(TAG, "sendMessage: generation pipeline failed", e)
+                // 用户主动停止（stopGeneration 取消本 job）是协作式取消，不是“发送失败”：CancellationException
+                // 必须重新抛出让取消沿结构化并发向上传播，绝不被当作普通异常吞掉。旧代码 catch(Exception) 捕获了
+                // 它却不重抛、落到 addError（addError 虽对取消早退、不上报，但本 job 会“正常完成”而非传播取消，破坏
+                // 结构化并发）。maybeAutoCompact 在取消路径重新抛出的 CancellationException 同样经此重抛传播。
+                // 复用全局分类器 shouldRethrowVmError（与 launchVm/runEmitting 同一约定）；仅捕获 Exception，保留
+                // 原 Error 不被本块捕获的语义。
+                if (shouldRethrowVmError(e)) throw e
+                Log.e(TAG, "sendMessage: generation pipeline failed", e)
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
             }
         }
         session.setJob(job)
     }
 
-    // 自动压缩历史的触发与执行。判定用纯函数 [shouldAutoCompact]；满足条件时调用既有的
-    // compressConversation（保留最近 AUTO_COMPACT_KEEP_RECENT_MESSAGES 条），并在压缩后从 session
-    // 重新读取对话。失败时不抛——上报错误并按未压缩历史继续（降级而非阻断）。
+    // 自动压缩历史的触发与执行（design #193 Stage 1：token 触发器 + 熔断器）。
+    //
+    // 触发判定改用真实 token 压力而非消息条数：以最后一条带 usage 的消息的真实 totalTokens 为锚，加上
+    // 锚之后（待发送的用户轮）的保守估算（contextTokens），对照按模型上下文窗口推导的软/硬阈值
+    // （tokenPressure）。窗口由 getContextWindowForModel 解析（覆盖 -> 注册表族 -> 128k 默认）。
+    //
+    // 熔断器（R5，本阶段真正修复的可用性 bug）：一旦某会话不可逆超限，token 触发器会每轮触发压缩，而每次
+    // 压缩本身又是一次注定失败的模型调用。连续非取消失败累加到 [MAX_AUTO_COMPACT_FAILURES] 后整体跳过；
+    // 成功清零（CB1）；用户取消（CancellationException）不计入、不上报（CB3）。
+    //
+    // 失败时不抛——上报错误并按未压缩历史继续（降级而非阻断），绝不因压缩失败阻断用户消息，也绝不静默吞
+    // 异常。compressConversation 直接调用 provider（不经 agentic loop / 不回到本函数），故不存在“压缩中再触发
+    // 压缩”的递归；熔断器进一步给任何未来重构兜底。
     private suspend fun maybeAutoCompact(conversationId: Uuid, assistant: Assistant) {
-        val conversation = getConversationFlow(conversationId).value
+        val session = getOrCreateSession(conversationId)
+        // 熔断跳过优先于一切（CB2：trip 后不论压力如何都不压缩，直到一次成功清零）。
+        if (autoCompactBreakerTripped(session.consecutiveAutoCompactFailures)) return
+
+        if (!assistant.autoCompactEnabled) return
+
+        val conversation = session.state.value
+        val settings = settingsStore.settingsFlow.first()
+        // 即将接收下一次请求的对话模型——其窗口才是触发判定的依据（压缩模型可能不同，与触发无关）。
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+
+        val window = getContextWindowForModel(model)
+        val messages = conversation.currentMessages
+        val pressure = tokenPressure(
+            contextTokens = contextTokens(messages),
+            window = window,
+            thresholdFraction = assistant.autoCompactThreshold,
+            reserveOutput = resolveReserveOutput(assistant.maxTokens),
+        )
         val shouldCompact = shouldAutoCompact(
-            enabled = assistant.autoCompactEnabled,
-            messageCount = conversation.currentMessages.size,
-            contextMessageSize = assistant.contextMessageSize,
-            threshold = assistant.autoCompactThreshold,
-            keepRecentMessages = AUTO_COMPACT_KEEP_RECENT_MESSAGES,
+            enabled = true, // 已在上方早退
+            // 仍有可压缩历史：等于或小于 keepRecent 时无内容可压，compressConversation 会抛“消息不足”。
+            hasCompressibleHistory = messages.size > AUTO_COMPACT_KEEP_RECENT_MESSAGES,
+            breakerTripped = false, // 已在上方早退
+            pressure = pressure,
         )
         if (!shouldCompact) return
 
@@ -533,8 +601,23 @@ class ChatService(
             additionalPrompt = "",
             targetTokens = AUTO_COMPACT_TARGET_TOKENS,
             keepRecentMessages = AUTO_COMPACT_KEEP_RECENT_MESSAGES,
-        ).onFailure {
-            if (it !is CancellationException) Log.e(TAG, "maybeAutoCompact: history compaction failed", it)
+        ).onSuccess {
+            session.consecutiveAutoCompactFailures =
+                nextAutoCompactFailureCount(session.consecutiveAutoCompactFailures, AutoCompactOutcome.SUCCESS)
+        }.onFailure {
+            // CB3：用户取消不是失败——计数保持不变（neutral），且必须重新抛出，让取消协作式向上传播。
+            // compressConversation 用 runCatching 把异常（含 CancellationException）收成 Result.failure，
+            // 若这里只是“分类后吞掉”，stopGeneration 触发的取消就被静默吃掉、结构化并发被破坏。
+            if (it is CancellationException) {
+                session.consecutiveAutoCompactFailures = nextAutoCompactFailureCount(
+                    session.consecutiveAutoCompactFailures, AutoCompactOutcome.CANCELLATION
+                )
+                throw it
+            }
+            session.consecutiveAutoCompactFailures = nextAutoCompactFailureCount(
+                session.consecutiveAutoCompactFailures, AutoCompactOutcome.FAILURE
+            )
+            Log.e(TAG, "maybeAutoCompact: history compaction failed", it)
             addError(it, conversationId, title = context.getString(R.string.error_title_auto_compact))
         }
     }
@@ -1053,12 +1136,38 @@ class ChatService(
                 .awaitAll()
         }
 
-        // Create new conversation with compressed history as multiple user messages + kept messages
+        // Create new conversation with compressed history as multiple user messages + kept messages.
+        //
+        // Invalidate ONLY the stale pressure anchor on the kept messages (design #193), not the whole
+        // TokenUsage: a kept message's totalTokens recorded the prompt size of a request that INCLUDED
+        // the now-summarized prefix, so after this rewrite that total is stale-high. contextTokens()
+        // anchors on the last message whose totalTokens > 0, so leaving it would make the token trigger /
+        // size warning re-fire every turn on a conversation we just shrank, defeating the very point of
+        // compaction (and tripping the circuit breaker in ~3 turns). Zeroing totalTokens lets
+        // contextTokens fall back to a conservative estimate of the smaller post-compaction history until
+        // the next real generation writes a fresh, accurate usage. See invalidateStalePressureAnchor.
+        //
+        // The other three fields (prompt/completion/cachedTokens) are NOT anchors — they are this
+        // message's true per-message stats. They feed the irreversible lifetime aggregate
+        // (getTokenStats SUMs them straight out of the persisted JSON) and the per-message nerd line,
+        // and saveConversation below persists this rewrite to Room. Nulling the whole usage (the prior
+        // approach) would erase those tokens permanently with no round-trip; invalidating only the
+        // anchor preserves them while still skipping the kept message in the trigger.
+        //
+        // This is a deliberate Stage-1 trade-off (NOT a summarizer change), at the compaction write site
+        // because compaction IS the event that makes prior totalTokens stale. The contextTokens-side
+        // `totalTokens > 0` anchor only covers all-zero usage, not a stale NON-zero total; making the
+        // measurement skip stale anchors generically would require a compaction-boundary marker, an
+        // explicit Stage-2 non-goal (design R7: boundary metadata recorded but not consumed in Stage 1).
         val newMessageNodes = buildList {
             compressedSummaries.forEach { summary ->
                 add(UIMessage.user(summary).toMessageNode())
             }
-            addAll(messagesToKeep.map { it.toMessageNode() })
+            addAll(
+                messagesToKeep.map {
+                    it.copy(usage = invalidateStalePressureAnchor(it.usage)).toMessageNode()
+                },
+            )
         }
         val newConversation = conversation.copy(
             messageNodes = newMessageNodes,

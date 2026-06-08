@@ -68,9 +68,8 @@
   <string name="assistant_page_context_message_size">Context Message Size</string>
   <string name="assistant_page_context_message_unlimited">Unlimited context messages</string>
   <string name="assistant_page_auto_compact">Auto compact history</string>
-  <string name="assistant_page_auto_compact_desc">Automatically summarize older messages before sending when the conversation approaches the context message size. This rewrites history, so it stays off by default.</string>
+  <string name="assistant_page_auto_compact_desc">Automatically summarize older messages before sending when the conversation approaches the model\'s context window. This rewrites history, so it stays off by default.</string>
   <string name="assistant_page_auto_compact_threshold">Trigger at %d%% of context size</string>
-  <string name="assistant_page_auto_compact_needs_context_size">Set a finite context message size above for auto compact to take effect.</string>
   <string name="assistant_page_creative">Creative</string>
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>

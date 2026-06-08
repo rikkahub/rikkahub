@@ -1112,9 +1112,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_fast_model_desc">高速タスクまたはバックグラウンドタスク用のモデル。タイトルモデルとサジェストモデルが設定されていない場合のフォールバックとしても使用されます。</string>
   <string name="setting_model_page_enable_suggestion">チャット提案を有効にする</string>
   <string name="assistant_page_auto_compact">履歴を自動圧縮</string>
-  <string name="assistant_page_auto_compact_desc">会話がコンテキストメッセージ数の上限に近づくと、送信前に古いメッセージを自動で要約します。履歴を書き換えるため、デフォルトでは無効です。</string>
+  <string name="assistant_page_auto_compact_desc">会話がモデルのコンテキストウィンドウに近づくと、送信前に古いメッセージを自動で要約します。履歴を書き換えるため、デフォルトでは無効です。</string>
   <string name="assistant_page_auto_compact_threshold">コンテキストサイズの %d%% で起動</string>
-  <string name="assistant_page_auto_compact_needs_context_size">自動圧縮を有効にするには、上で有限のコンテキストメッセージ数を設定してください。</string>
   <string name="error_title_auto_compact">自動圧縮に失敗しました</string>
   <string name="share_sheet_title">LLMモデルを共有</string>
   <string name="chat_drawer_statistics">統計</string>

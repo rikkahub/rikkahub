@@ -17,6 +17,10 @@ data class Model(
     val abilities: List<ModelAbility> = emptyList(),
     val tools: Set<BuiltInTools> = emptySet(),
     val providerOverwrite: ProviderSetting? = null,
+    // Optional explicit context-window override (in tokens). null delegates to the registry
+    // family lookup, then a conservative default. Additive @Serializable default keeps
+    // previously-persisted models loading unchanged (no migration).
+    val contextWindow: Int? = null,
 )
 
 @Serializable

@@ -44,6 +44,13 @@ class ConversationSession(
     // 空闲检查任务
     private var idleCheckJob: Job? = null
 
+    // 自动压缩熔断器（design #193 R5）。一旦某会话已不可逆地超出上限，token 触发器会在每一轮都触发压缩，
+    // 而每次压缩本身又是一次注定失败的模型调用——已知的昂贵失败模式（可累积数千次连续无效调用）。
+    // 连续非取消失败累加；成功清零；用户取消（CancellationException）不计入（CB3）。跨轮存活、随会话重置，
+    // 故内聚在 session 上。仅在 sendMessage 协程内单线程读写，@Volatile 足以保证跨调度器可见性。
+    @Volatile
+    var consecutiveAutoCompactFailures: Int = 0
+
     fun acquire(): Int = refCount.incrementAndGet().also {
         cancelIdleCheck()
         Log.d(TAG, "acquire $id (refs=$it)")

@@ -250,16 +250,6 @@ private fun ChatListNormal(
     // 自动跟随键盘滚动
     ImeLazyListAutoScroller(lazyListState = state)
 
-    // 对话大小警告对话框
-    val sizeInfo = rememberConversationSizeInfo(conversation)
-    var showSizeWarningDialog by rememberSaveable(conversation.id) { mutableStateOf(true) }
-    if (sizeInfo.showWarning && showSizeWarningDialog) {
-        ConversationSizeWarningDialog(
-            sizeInfo = sizeInfo,
-            onDismiss = { showSizeWarningDialog = false }
-        )
-    }
-
     val assistant = remember(settings.assistants, conversation.assistantId) {
         settings.getAssistantById(conversation.assistantId)
     }
@@ -267,6 +257,25 @@ private fun ChatListNormal(
         settings.providers
             .flatMap { it.models }
             .associateBy { it.id }
+    }
+
+    // 对话大小警告对话框：模型相对的 token 压力（与自动压缩触发器同一度量），故需解析该对话即将使用的
+    // 对话模型以取得其上下文窗口（assistant.chatModelId ?: 全局 chatModelId）。
+    val chatModel = remember(modelById, assistant, settings.chatModelId) {
+        modelById[assistant?.chatModelId ?: settings.chatModelId]
+    }
+    val sizeInfo = rememberConversationSizeInfo(
+        conversation = conversation,
+        model = chatModel,
+        assistantMaxTokens = assistant?.maxTokens,
+        autoCompactThreshold = assistant?.autoCompactThreshold,
+    )
+    var showSizeWarningDialog by rememberSaveable(conversation.id) { mutableStateOf(true) }
+    if (sizeInfo.showWarning && showSizeWarningDialog) {
+        ConversationSizeWarningDialog(
+            sizeInfo = sizeInfo,
+            onDismiss = { showSizeWarningDialog = false }
+        )
     }
     val lastMessageIndex = conversation.messageNodes.lastIndex
 

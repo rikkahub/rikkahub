@@ -1,6 +1,7 @@
 package me.rerere.ai.registry
 
 import me.rerere.ai.provider.Modality
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 
 fun interface ModelData<T> {
@@ -12,12 +13,14 @@ object ModelRegistry {
         tokens("gpt", "4", "o")
         visionInput()
         toolAbility()
+        contextWindow(128_000)
     }
 
     private val GPT_4_1 = defineModel {
         tokens("gpt", "4", "1")
         visionInput()
         toolAbility()
+        contextWindow(1_000_000)
     }
 
     val OPENAI_O_MODELS = defineModel {
@@ -37,60 +40,70 @@ object ModelRegistry {
         notTokens("gpt", "5", "chat")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_1 = defineModel {
         tokens("gpt", "5", "1")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_2 = defineModel {
         tokens("gpt", "5", "2")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_3 = defineModel {
         tokens("gpt", "5", "3")
         visionInput()
         toolAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_4 = defineModel {
         tokens("gpt", "5", "4")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_4_MINI = defineModel {
         tokens("gpt", "5", "4", "mini")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_4_NANO = defineModel {
         tokens("gpt", "5", "4", "nano")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_5 = defineModel {
         tokens("gpt", "5", "5")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GPT_5_6 = defineModel {
         tokens("gpt", "5", "6")
         visionInput()
         toolReasoningAbility()
+        contextWindow(400_000)
     }
 
     private val GEMINI_20_FLASH = defineModel {
         tokens("gemini", "2", "0", "flash")
         visionInput()
         toolAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_2_5_FLASH = defineModel {
@@ -98,12 +111,14 @@ object ModelRegistry {
         notTokens("image")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_2_5_PRO = defineModel {
         tokens("gemini", "2", "5", "pro")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_2_5_IMAGE = defineModel {
@@ -128,24 +143,28 @@ object ModelRegistry {
         tokens("gemini", "3", "pro")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_3_FLASH = defineModel {
         tokens("gemini", "3", "flash")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_3_1_PRO_PREVIEW = defineModel {
         tokens("gemini", "3", "1", "pro", "preview")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = defineModel {
         tokens("gemini", "3", "1", "pro", "preview", "customtools")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_3_1_FLASH_IMAGE = defineModel {
@@ -159,18 +178,21 @@ object ModelRegistry {
         tokens("gemini", "3", "5")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_FLASH_LATEST = defineModel {
         exact("gemini-flash-latest")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_PRO_LATEST = defineModel {
         exact("gemini-pro-latest")
         visionInput()
         toolReasoningAbility()
+        contextWindow(1_000_000)
     }
 
     val GEMINI_LATEST = defineGroup {
@@ -189,48 +211,56 @@ object ModelRegistry {
         tokens("claude", "3", "5", "sonnet")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     private val CLAUDE_SONNET_3_7 = defineModel {
         tokens("claude", "3", "7", "sonnet")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     private val CLAUDE_4 = defineModel {
         tokens("claude", "4")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     val CLAUDE_4_5 = defineModel {
         tokens("claude", "4", "5")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     private val CLAUDE_SONNET_4_6 = defineModel {
         tokens("claude", "sonnet", "4", "6")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     private val CLAUDE_OPUS_4_6 = defineModel {
         tokens("claude", "opus", "4", "6")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     private val CLAUDE_OPUS_4_7 = defineModel {
         tokens("claude", "opus", "4", "7")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     private val CLAUDE_OPUS_4_8 = defineModel {
         tokens("claude", "opus", "4", "8")
         visionInput()
         toolReasoningAbility()
+        contextWindow(200_000)
     }
 
     val CLAUDE_SERIES = defineGroup {
@@ -531,6 +561,31 @@ object ModelRegistry {
             if (ModelAbility.REASONING in abilities) add(ModelAbility.REASONING)
         }
     }
+
+    // Conservative default context window (tokens) when neither an explicit Model.contextWindow
+    // override nor a registry family match supplies one. 128k errs slightly toward compacting
+    // early (safer than a hard provider 4xx); big-window families are seeded explicitly above.
+    const val DEFAULT_CONTEXT_WINDOW = 128_000
+
+    // Per-family context window in tokens, resolved by the same best-score matcher as abilities.
+    // Returns null when no matched family declares a window (caller falls back to the default).
+    val MODEL_CONTEXT_WINDOW = ModelData<Int?> { modelId ->
+        resolveModels(modelId)
+            .firstNotNullOfOrNull { it.contextWindow }
+    }
+
+    /**
+     * Single source of truth for a model's usable context window (tokens), resolved in priority
+     * order: explicit [Model.contextWindow] override -> registry family lookup -> conservative
+     * [DEFAULT_CONTEXT_WINDOW]. Always returns a value >= 2 — the minimum every downstream consumer
+     * (`tokenPressure` / `computeAllowedTokens` both `require(window >= 2)`) needs, so a sub-2 explicit
+     * override (reachable on a @Serializable Model via config import / backup-restore / hand-edit) is
+     * ignored rather than poisoning the trigger with an IllegalArgumentException.
+     */
+    fun getContextWindowForModel(model: Model): Int =
+        model.contextWindow?.takeIf { it >= 2 }
+            ?: MODEL_CONTEXT_WINDOW.getData(model.modelId)?.takeIf { it >= 2 }
+            ?: DEFAULT_CONTEXT_WINDOW
 
     private fun resolveModels(modelId: String): List<ModelDefinition> {
         var bestScore: Int? = null

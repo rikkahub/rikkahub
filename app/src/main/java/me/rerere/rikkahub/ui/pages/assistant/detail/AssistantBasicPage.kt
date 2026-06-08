@@ -385,32 +385,28 @@ internal fun AssistantBasicContent(
                     )
                 }
             ) {
+                // 触发改为按上下文窗口的 token 占用判定（design #193），与 contextMessageSize 解耦：无论是否
+                // 设了有限的消息数上限，自动压缩都能工作，故始终展示阈值滑块（不再要求先设 contextMessageSize）。
                 if (assistant.autoCompactEnabled) {
-                    if (assistant.contextMessageSize <= 0) {
-                        Text(
-                            text = stringResource(R.string.assistant_page_auto_compact_needs_context_size),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    } else {
-                        Slider(
-                            value = assistant.autoCompactThreshold,
-                            onValueChange = {
-                                onUpdate(assistant.copy(autoCompactThreshold = it))
-                            },
-                            valueRange = 0.5f..0.95f,
-                            steps = 8,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.assistant_page_auto_compact_threshold,
-                                (assistant.autoCompactThreshold * 100).roundToInt()
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
-                        )
-                    }
+                    Slider(
+                        value = assistant.autoCompactThreshold,
+                        onValueChange = {
+                            onUpdate(assistant.copy(autoCompactThreshold = it))
+                        },
+                        // 阈值现表示“上下文窗口占用比例”（design #193），取值带 [0.05, 1.0] 的钳制区间；
+                        // 放宽滑块范围以匹配新语义，0.05 为步进（20 个取值）。
+                        valueRange = 0.05f..1.0f,
+                        steps = 18,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_auto_compact_threshold,
+                            (assistant.autoCompactThreshold * 100).roundToInt()
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                    )
                 }
             }
             HorizontalDivider()
