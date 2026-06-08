@@ -35,8 +35,8 @@ class DebugVM(
     }
 
     /**
-     * 创建一个超大的对话用于测试 CursorWindow 限制
-     * @param sizeMB 目标大小（MB）
+     * Create an oversized conversation to test the CursorWindow limit
+     * @param sizeMB target size (MB)
      */
     fun createOversizedConversation(sizeMB: Int = 3) {
         viewModelScope.launch {
@@ -44,14 +44,15 @@ class DebugVM(
             val messageNodes = mutableListOf<MessageNode>()
             var currentSize = 0
 
-            // 生成大量消息直到达到目标大小
+            // Generate many messages until the target size is reached
             var index = 0
             while (currentSize < targetSize) {
-                // 生成一个包含大量文本的消息（约 100KB 每条）
+                // Generate a message with a lot of text (~100KB each)
                 val largeText = buildString {
                     repeat(100) {
-                        append("这是一段很长的测试文本，用于测试 CursorWindow 的大小限制。")
-                        append("Row too big to fit into CursorWindow 错误通常发生在单行数据超过 2MB 时。")
+                        append("This is a very long block of test text used to exercise the CursorWindow size limit. ")
+                        append("The 'Row too big to fit into CursorWindow' error usually occurs ")
+                        append("when a single row exceeds 2MB. ")
                         append("Lorem ipsum dolor sit amet, consectetur adipiscing elit. ")
                         append("Index: $index, Block: $it. ")
                     }
@@ -66,21 +67,21 @@ class DebugVM(
                 val assistantMessage = UIMessage(
                     id = Uuid.random(),
                     role = MessageRole.ASSISTANT,
-                    parts = listOf(UIMessagePart.Text("回复: $largeText")),
+                    parts = listOf(UIMessagePart.Text("Reply: $largeText")),
                     createdAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()),
                 )
 
                 messageNodes.add(MessageNode.of(userMessage))
                 messageNodes.add(MessageNode.of(assistantMessage))
 
-                currentSize += largeText.length * 2 * 2 // 大约估算
+                currentSize += largeText.length * 2 * 2 // rough estimate
                 index++
             }
 
             val conversation = Conversation(
                 id = Uuid.random(),
                 assistantId = DEFAULT_ASSISTANT_ID,
-                title = "超大对话测试 (${sizeMB}MB)",
+                title = "Oversized Conversation Test (${sizeMB}MB)",
                 messageNodes = messageNodes,
             )
 
@@ -106,7 +107,7 @@ class DebugVM(
             val conversation = Conversation(
                 id = Uuid.random(),
                 assistantId = DEFAULT_ASSISTANT_ID,
-                title = "${messageCount}条消息测试",
+                title = "${messageCount} Messages Test",
                 messageNodes = messageNodes,
             )
 
@@ -116,11 +117,11 @@ class DebugVM(
 
     private fun randomMessageText(index: Int, role: MessageRole): String {
         val fragments = listOf(
-            "快速", "随机", "消息", "样例", "用于", "测试", "列表", "渲染", "滚动", "性能",
-            "聊天", "对话", "内容", "结构", "验证", "分页", "顺序", "稳定", "系统",
+            "fast", "random", "message", "sample", "used", "test", "list", "render", "scroll", "performance",
+            "chat", "conversation", "content", "structure", "verify", "paging", "order", "stable", "system",
         )
         val wordCount = Random.nextInt(6, 14)
-        val prefix = if (role == MessageRole.USER) "用户" else "助手"
+        val prefix = if (role == MessageRole.USER) "User" else "Assistant"
         val body = List(wordCount) { fragments.random() }.joinToString(" ")
         return "$prefix#${index + 1}: $body"
     }

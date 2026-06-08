@@ -182,9 +182,9 @@ private fun MainPage(vm: DebugVM) {
         val toaster = LocalToaster.current
         Button(
             onClick = {
-                toaster.show("测试 ${counter++}")
-                toaster.show("测试 ${counter++}", type = ToastType.Info)
-                toaster.show("测试 ${counter++}", type = ToastType.Error)
+                toaster.show("Test ${counter++}")
+                toaster.show("Test ${counter++}", type = ToastType.Info)
+                toaster.show("Test ${counter++}", type = ToastType.Error)
             }
         ) {
             Text("toast")
@@ -198,33 +198,33 @@ private fun MainPage(vm: DebugVM) {
                 )
             }
         ) {
-            Text("重置Chat模型")
+            Text("Reset Chat Model")
         }
 
         Button(
             onClick = {
-                error("测试崩溃 ${Random.nextInt(0..1000)}")
+                error("Test crash ${Random.nextInt(0..1000)}")
             }
         ) {
-            Text("崩溃")
+            Text("Crash")
         }
 
         Button(
             onClick = {
                 vm.createOversizedConversation(30)
-                toaster.show("正在创建 30MB 超大对话...")
+                toaster.show("Creating 30MB oversized conversation...")
             }
         ) {
-            Text("创建超大对话 (30MB)")
+            Text("Create Oversized Conversation (30MB)")
         }
 
         Button(
             onClick = {
                 vm.createConversationWithMessages(1024)
-                toaster.show("正在创建 1024 条消息对话...")
+                toaster.show("Creating conversation with 1024 messages...")
             }
         ) {
-            Text("创建 1024 个消息的聊天")
+            Text("Create Chat with 1024 Messages")
         }
 
         HorizontalDivider()
