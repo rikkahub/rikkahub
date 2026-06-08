@@ -703,16 +703,15 @@ class ChatService(
             // start generating
             val session = getOrCreateSession(conversationId)
 
-            // 流式 UI 合并状态：每个 chunk 携带累计全量 messages（按 id 合并，见 GenerationHandler）。把
-            // "何时把合并状态写给 UI"的窗口节流 + 终止刷新决策收拢进 StreamingUiCoalescer（纯状态机，与 JVM
-            // 单测共用）。publish 副作用：把传入的合并 messages 重新合并进**当时的** live StateFlow（而非写回
-            // 一个陈旧的整 Conversation 快照），故一次并发的 UI 写入（收藏切换/编辑/标题等非消息字段，
-            // updateCurrentMessages 按节点 id 合并只动 messages，保留 isFavorite 等）不会被覆盖
-            // （last-writer-wins → idempotent merge-onto-current）。
+            // 流式 UI 合并状态：每个 chunk 携带累计全量 messages（节点按 INDEX 合并、节点内消息按 id 匹配，
+            // 见 Conversation.updateCurrentMessages）。把"何时把合并状态写给 UI"的窗口节流 + 终止刷新决策收拢进
+            // StreamingUiCoalescer（纯状态机，与 JVM 单测共用）。publish 副作用经 publishStreamingMessages 以单次
+            // CAS（StateFlow.update）把合并 messages 重新合并进**当时的** live StateFlow（而非读一个陈旧快照再写
+            // 回），故一次并发的 UI 写入（收藏切换/编辑/标题等非消息字段）不会被覆盖——updateCurrentMessages 经
+            // node.copy 重建节点、保留 isFavorite 等非消息字段，last-writer-wins → idempotent merge-onto-current。
             val uiCoalescer = StreamingUiCoalescer<List<UIMessage>>(
                 publish = { messages ->
-                    val merged = getConversationFlow(conversationId).value.updateCurrentMessages(messages)
-                    updateConversationStateOnly(conversationId, merged)
+                    publishStreamingMessages(getOrCreateSession(conversationId).state, messages)
                 }
             )
             generationHandler.generateText(
@@ -1083,9 +1082,25 @@ class ChatService(
         session.state.value = conversation
     }
 
+    // 把 UI 侧的 read-modify-write 折成单次 CAS，使其无法丢失一次并发的流式 publish 或另一处 UI 写入（#108 的第
+    // 二个竞态读写口）。CAS 闭包必须无副作用——[update] 在三个调用点都是纯变换（.copy/返回新 Conversation），可在
+    // 竞争下安全重跑。保留原 id-guard 语义：变换后 id 与会话不符则不换（早退不写、不清理文件），与旧
+    // updateConversationWithFileCleanup 的 id 校验一致。
+    //
+    // 关键：文件清理这一破坏性副作用必须配对“本次 CAS 真正换入的那一对（old, new）”。这里用 compareAndSet 自旋，
+    // 在同一次成功的迭代里同时拿到 old 与本次换入的 new，CAS 成功后才在闭包之外只跑一次 checkFilesDelete。不能用
+    // getAndUpdate(原子 old) 再 .value 读 new：那是两次非原子读，跨调度器竞争下别的 writer 会在两步之间把状态换掉，
+    // 使 new 与 old 并非相邻转换，差量算错可能误删仍被最终会话引用的文件（悬空 URI / 丢数据）。
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
-        val current = getConversationFlow(conversationId).value
-        updateConversationWithFileCleanup(conversationId, update(current))
+        val session = getOrCreateSession(conversationId)
+        casUpdateState(
+            state = session.state,
+            update = { current ->
+                val updated = update(current)
+                if (updated.id != conversationId) current else updated
+            },
+            onTransition = { old, new -> checkFilesDelete(newConversation = new, oldConversation = old) },
+        )
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
@@ -1285,6 +1300,59 @@ class ChatService(
 internal fun removedFileUris(oldFiles: List<String>, newFiles: List<String>): List<String> {
     val newSet = newFiles.toHashSet()
     return oldFiles.filter { it !in newSet }
+}
+
+/**
+ * Atomic streaming-UI publish seam (issue #108). Merges the accumulated [messages] into the LIVE
+ * conversation as a single compare-and-set ([MutableStateFlow.update]) read-modify-write, replacing the
+ * old non-atomic `state.value.updateCurrentMessages(messages)` + `state.value = merged` pair.
+ *
+ * Why CAS, not read-then-set: the streaming publish (background) and a UI write that flips a non-message
+ * field — e.g. the @Transient [MessageNode.isFavorite] via [ChatService.updateConversationState] — mutate
+ * the same StateFlow from different dispatchers. With the old pair, a favorite landing between the read
+ * and the write was lost (TOCTOU). `update {}` re-applies the merge onto the LATEST value, and
+ * [Conversation.updateCurrentMessages] rebuilds each node via `node.copy(messages=..., selectIndex=...)`
+ * (preserving isFavorite), so last-writer-wins is idempotent merge-onto-current and the favorite survives.
+ *
+ * Extracted as a top-level pure function so the lost-update regression is JVM-unit-tested against this
+ * exact production wiring: reverting the body to the read-then-`.value=` pair reddens
+ * StreamingPublishAtomicityTest.
+ */
+internal fun publishStreamingMessages(state: MutableStateFlow<Conversation>, messages: List<UIMessage>) {
+    state.update { current -> current.updateCurrentMessages(messages) }
+}
+
+/**
+ * Atomic state read-modify-write that PAIRS a destructive side effect with the exact transition it
+ * installed (issue #108).
+ *
+ * [update] must be side-effect-free: under contention it is re-run on the LATEST value each lost-CAS
+ * iteration. [onTransition] runs at most once, AFTER a successful [MutableStateFlow.compareAndSet],
+ * with the precise `(old, new)` pair that this call's CAS swapped — `old` is the value the CAS
+ * replaced, `new` is the value it installed, and they are guaranteed adjacent.
+ *
+ * Why not `getAndUpdate { ... }` then a second `state.value` read: that is two non-atomic reads. A
+ * cross-dispatcher writer can swap the state between them, so the second read is some LATER value, not
+ * the one paired with the `old` from `getAndUpdate`. Diffing that mismatched pair drives
+ * [ChatService.checkFilesDelete] to delete bytes the live conversation still references (dangling URI /
+ * data loss). Extracted as a top-level generic function so this pairing invariant is JVM-unit-tested
+ * against the production wiring rather than a hand-copied mirror, and over a plain [T] so the test need
+ * not construct a `Conversation` whose `files` route through `android.net.Uri` (null under unit tests).
+ */
+internal inline fun <T> casUpdateState(
+    state: MutableStateFlow<T>,
+    update: (T) -> T,
+    onTransition: (old: T, new: T) -> Unit,
+) {
+    while (true) {
+        val old = state.value
+        val new = update(old)
+        if (new === old) return
+        if (state.compareAndSet(old, new)) {
+            onTransition(old, new)
+            return
+        }
+    }
 }
 
 /**
