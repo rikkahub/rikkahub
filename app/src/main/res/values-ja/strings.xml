@@ -1157,5 +1157,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_subagent_max_steps">サブエージェントの最大ステップ数</string>
   <string name="assistant_page_subagent_max_steps_desc">このアシスタントがサブエージェントとして実行されるときの最大ツール使用ステップ。デフォルトを使用するには空のままにしてください</string>
   <string name="chat_subagent_running">%1$s を実行中</string>
+  <string name="automation_a11y_service_label">RikkaHub UI自動化</string>
+  <string name="automation_a11y_service_description">有効なアシスタントが他のアプリの画面を（読み取り専用で）観察してあなたを助けます。タップ、入力、スクロールはできません。浮動STOPボタンからいつでも停止できます。</string>
+  <string name="automation_kill_switch_stop">停止</string>
+  <string name="assistant_page_ui_automation">UI自動化（画面コントロール）</string>
+  <string name="assistant_page_ui_automation_desc">このアシスタントが他のアプリの画面を観察することを許可します（読み取り専用）。システム設定でRikkaHubのアクセシビリティサービスを有効にする必要があります。読み取り専用：タップや入力はできません。</string>
+  <string name="automation_kill_switch_unavailable">自動化を開始できません：「停止」キルスイッチを表示できませんでした。rikkahub のユーザー補助サービスとオーバーレイを有効にして、もう一度お試しください。</string>
 </resources>
 

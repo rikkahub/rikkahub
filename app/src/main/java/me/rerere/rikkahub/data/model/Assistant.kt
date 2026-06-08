@@ -53,6 +53,11 @@ data class Assistant(
     val description: String = "", // 面向父助手的机器可读说明（"何时调用我"），供 subagent 派发时广告
     val spawnable: Boolean = false, // 是否可被其他助手作为 subagent 派发
     val maxSteps: Int? = null, // subagent 运行时的最大步数，null = 继承引擎默认值
+    // On-device UI automation (#187 v1, read-only). Default OFF + empty surface = inert/deny-all
+    // until the user explicitly enables it: with no in-chat approval reachable while another app is
+    // foreground, the conservative fail-closed posture is the only safe default. Additive with a
+    // default, so no DataStore migration is required (assistants persist as JSON via JsonInstant).
+    val uiAutomationEnabled: Boolean = false,
 )
 
 @Serializable

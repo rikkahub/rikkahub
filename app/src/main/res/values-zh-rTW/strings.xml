@@ -1155,5 +1155,11 @@
   <string name="assistant_page_subagent_max_steps">子代理最大步驟</string>
   <string name="assistant_page_subagent_max_steps_desc">此助手作為子代理運行時的最大工具使用步驟。若要使用默認設置，請留空</string>
   <string name="chat_subagent_running">正在執行 %1$s</string>
+  <string name="automation_a11y_service_label">RikkaHub 使用者介面自動化</string>
+  <string name="automation_a11y_service_description">允許已啟用的助手以只讀方式觀察其他應用程式的螢幕，以幫助您。它無法點擊、輸入或滾動。您可以隨時從浮動的停止按鈕中停止它。</string>
+  <string name="automation_kill_switch_stop">停止</string>
+  <string name="assistant_page_ui_automation">UI 自動化（螢幕控制）</string>
+  <string name="assistant_page_ui_automation_desc">允許此助手觀察其他應用的螢幕（只讀）。需要在系統設定中啟用 RikkaHub 的輔助功能服務。只讀：無法點擊或輸入。</string>
+  <string name="automation_kill_switch_unavailable">無法啟動自動化：無法顯示「停止」緊急開關。請啟用 rikkahub 的無障礙服務和懸浮視窗權限後重試。</string>
 </resources>
 

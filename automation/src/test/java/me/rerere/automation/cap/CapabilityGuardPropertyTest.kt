@@ -315,6 +315,54 @@ class CapabilityGuardPropertyTest {
         }
     }
 
+    // ---- P20 (in-flight, suspend delegate): CapabilityGuard.guardInFlight wires the production
+    // observe through the same revoke-cancels-in-flight mechanism the kernel proves above. ----
+    @Test
+    fun `guardInFlight suspend delegate cancels the in-flight observe on revoke`() {
+        runBlocking {
+            val backend = FakeBackend()
+            backend.armGate() // the next snapshotRawTree() parks until the owning coroutine is cancelled
+            val g = guard()
+            val started = CompletableDeferred<Unit>()
+            val job: Job = launch(Dispatchers.Default) {
+                val self = coroutineContext[Job]
+                g.guardInFlight(
+                    cancel = { self?.cancel() }, // revoke fires this ⇒ the owning coroutine is cancelled
+                    onAlreadyRevoked = { },
+                    block = {
+                        started.complete(Unit)
+                        backend.snapshotRawTree()
+                    },
+                )
+            }
+            started.await()
+            repeat(20) { yield() } // let it park in the gated backend
+            g.revoke()
+            job.join()
+            assertTrue("revoke must cancel the in-flight observe routed through the guard", job.isCancelled)
+            assertEquals("the gated capture must never complete", 0, backend.snapshotCount)
+        }
+    }
+
+    @Test
+    fun `guardInFlight suspend delegate runs onAlreadyRevoked when the guard is pre-revoked`() {
+        runBlocking {
+            val backend = FakeBackend()
+            val g = guard()
+            g.revoke()
+            val result = g.guardInFlight(
+                cancel = { },
+                onAlreadyRevoked = { "denied" },
+                block = {
+                    backend.snapshotRawTree()
+                    "captured"
+                },
+            )
+            assertEquals("a pre-revoked guard must take onAlreadyRevoked", "denied", result)
+            assertEquals("and must never touch the backend", 0, backend.snapshotCount)
+        }
+    }
+
     // ---- S2: every tool path calls the guard BEFORE the backend ----
     @Test
     fun `S2 guard denial prevents any backend capture`() {

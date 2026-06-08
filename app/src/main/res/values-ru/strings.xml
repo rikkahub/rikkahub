@@ -1157,5 +1157,11 @@
   <string name="assistant_page_subagent_max_steps">Макс. шагов подагента</string>
   <string name="assistant_page_subagent_max_steps_desc">Максимальное количество шагов использования инструментов, когда этот ассистент работает как подагент. Оставьте пустым, чтобы использовать по умолчанию</string>
   <string name="chat_subagent_running">Выполняется %1$s</string>
+  <string name="automation_a11y_service_label">Автоматизация интерфейса RikkaHub</string>
+  <string name="automation_a11y_service_description">Позволяет включенному помощнику наблюдать (только для чтения) за экраном других приложений, чтобы помочь вам. Он не может нажимать, вводить текст или прокручивать. Вы можете остановить его в любое время с помощью плавающей кнопки ОСТАНОВИТЬ.</string>
+  <string name="automation_kill_switch_stop">СТОП</string>
+  <string name="assistant_page_ui_automation">Автоматизация интерфейса (управление экраном)</string>
+  <string name="assistant_page_ui_automation_desc">Разрешите этому ассистенту наблюдать за экраном других приложений (только для чтения). Требуется включение службы доступности RikkaHub в системных настройках. Только для чтения: без нажатий или ввода текста.</string>
+  <string name="automation_kill_switch_unavailable">Не удалось запустить автоматизацию: не удалось показать аварийный выключатель «СТОП». Включите службу специальных возможностей rikkahub и наложение, затем повторите попытку.</string>
 </resources>
 

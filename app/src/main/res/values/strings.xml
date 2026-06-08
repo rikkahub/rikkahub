@@ -1155,5 +1155,11 @@
   <string name="assistant_page_subagent_max_steps">Subagent Max Steps</string>
   <string name="assistant_page_subagent_max_steps_desc">Maximum tool-use steps when this assistant runs as a subagent. Leave empty to use the default</string>
   <string name="chat_subagent_running">Running %1$s</string>
+  <string name="automation_a11y_service_label">RikkaHub UI Automation</string>
+  <string name="automation_a11y_service_description">Lets an enabled assistant observe (read-only) the screen of other apps to help you. It cannot tap, type, or scroll. You can stop it any time from the floating STOP button.</string>
+  <string name="automation_kill_switch_stop">STOP</string>
+  <string name="assistant_page_ui_automation">UI automation (screen control)</string>
+  <string name="assistant_page_ui_automation_desc">Allow this assistant to observe the screen of other apps (read-only). Requires enabling the RikkaHub accessibility service in system settings. Read-only: no tapping or typing.</string>
+  <string name="automation_kill_switch_unavailable">Automation could not start: the STOP kill-switch could not be shown. Enable the rikkahub Accessibility service and overlay, then try again.</string>
 </resources>
 

@@ -52,6 +52,33 @@ class RevocationToken {
         }
     }
 
+    /**
+     * `suspend` sibling of [guardInFlight] for a coroutine-based in-flight call (the production
+     * `ui_observe` backend hit). Identical register → recheck → run → unregister contract, but
+     * [block] is a `suspend` function so the real backend's `snapshotRawTree()` can be routed through
+     * the revoke-cancels-in-flight mechanism (design I9/P20) without a `runBlocking` bridge. [cancel]
+     * is typically the owning coroutine's `Job.cancel`, so a concurrent [revoke] tears down the parked
+     * capture; [onAlreadyRevoked] runs (and [block] never does) when revoke wins the
+     * authorize → backend window.
+     */
+    suspend fun <T> guardInFlightSuspending(
+        cancel: () -> Unit,
+        onAlreadyRevoked: suspend () -> T,
+        block: suspend () -> T,
+    ): T {
+        if (isRevoked) return onAlreadyRevoked()
+        val handle = register(cancel)
+        try {
+            if (isRevoked) {
+                cancel()
+                return onAlreadyRevoked()
+            }
+            return block()
+        } finally {
+            unregister(handle)
+        }
+    }
+
     /** Flip to revoked and fire every registered in-flight canceller exactly once. */
     fun revoke() {
         if (!revoked.compareAndSet(false, true)) return

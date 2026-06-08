@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuration for AccessibilityRuntime (#187 v1, read-only UI automation).
+
+  Read-only by construction: only window state/content change events are observed (to advance the
+  monotonic stateSeq) and window content is retrieved (canRetrieveWindowContent). NO
+  canPerformGestures here — gesture dispatch / write verbs are #198 and must not be granted by this
+  config. flagRetrieveInteractiveWindows gives multi-window awareness (app + system dialogs) so
+  permission/system UI is observable (but never actionable — design I8).
+
+  The service is inert until the user explicitly enables it in system accessibility settings.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/automation_a11y_service_description"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:notificationTimeout="100" />

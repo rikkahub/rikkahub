@@ -12,6 +12,8 @@ import me.rerere.rikkahub.data.ai.subagent.SubagentRunner
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.automation.AutomationKillSwitch
+import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
@@ -76,6 +78,14 @@ val appModule = module {
         SubagentRunner(generationHandler = get())
     }
 
+    // UI automation (#187 v1). The AccessibilityService is instantiated by the Android system, NOT by
+    // Koin, so it cannot be a `single { AccessibilityRuntime }` (that would build a dead, never-
+    // connected object). The registry is the faithful equivalent: it exposes the live
+    // AccessibilityRuntime.instance as the pure backend. The kill-switch is a process-wide STOP
+    // dispatch shared by the overlay and the in-app Stop.
+    single { AutomationRuntimeRegistry() }
+    single { AutomationKillSwitch() }
+
     single {
         ChatService(
             context = get(),
@@ -90,7 +100,9 @@ val appModule = module {
             localTools = get(),
             mcpManager = get(),
             filesManager = get(),
-            skillManager = get()
+            skillManager = get(),
+            automationRegistry = get(),
+            automationKillSwitch = get()
         )
     }
 

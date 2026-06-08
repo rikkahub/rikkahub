@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import me.rerere.automation.cap.CapabilityGuard
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
@@ -50,6 +51,19 @@ class ConversationSession(
     // 故内聚在 session 上。仅在 sendMessage 协程内单线程读写，@Volatile 足以保证跨调度器可见性。
     @Volatile
     var consecutiveAutoCompactFailures: Int = 0
+
+    // Per-generation UI-automation capability guard (#187 v1). Minted in ChatService once per
+    // generation when the assistant has automation enabled, closed over by the ui_observe tool, and
+    // revoked by either kill-switch (floating STOP overlay or the in-app generation Stop). Lives on
+    // the session so the kill-switch can reach the currently-active grant; cleared when generation
+    // ends. Only touched from the sendMessage coroutine + the kill-switch thread, so @Volatile.
+    @Volatile
+    var activeAutomationGuard: CapabilityGuard? = null
+
+    /** Kill-switch (design I9): revoke the active automation grant — future authorize ⇒ DENY. */
+    fun revokeAutomation() {
+        activeAutomationGuard?.revoke()
+    }
 
     fun acquire(): Int = refCount.incrementAndGet().also {
         cancelIdleCheck()

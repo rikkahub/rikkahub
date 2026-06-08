@@ -581,6 +581,30 @@ internal fun AssistantBasicContent(
                     )
                 }
             }
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_ui_automation))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_ui_automation_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.uiAutomationEnabled,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    uiAutomationEnabled = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
         }
 
         Card(

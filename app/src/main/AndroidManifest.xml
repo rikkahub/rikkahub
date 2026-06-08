@@ -127,6 +127,25 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
+    <!--
+      On-device UI-automation accessibility service (#187 v1, read-only). Inert until the user
+      enables it in system accessibility settings. Read-only: the config grants no gestures (write
+      verbs are #198). The floating STOP kill-switch is a TYPE_ACCESSIBILITY_OVERLAY granted with the
+      service, so no SYSTEM_ALERT_WINDOW permission is needed.
+    -->
+    <service
+      android:name=".service.automation.AccessibilityRuntime"
+      android:exported="false"
+      android:label="@string/automation_a11y_service_label"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/accessibility_service_config" />
+    </service>
+
     <provider
       android:name="androidx.core.content.FileProvider"
       android:authorities="${applicationId}.fileprovider"

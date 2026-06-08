@@ -117,5 +117,19 @@ class CapabilityGuard(
      */
     fun revoke() = capability.revocation.revoke()
 
+    /**
+     * Run [block] (a coroutine backend call) under this capability's shared [RevocationToken] so that
+     * a concurrent [revoke] both (a) cancels the call in flight via [cancel] and (b) wins the race
+     * where revoke() fires between [authorize] and the backend call — in which case [onAlreadyRevoked]
+     * runs and [block] never does (design I9/P20). This is the production wiring of the
+     * "revoke cancels in-flight" invariant the kernel's P20 already proves; the tool layer must route
+     * every backend call through here, never call the backend directly after an ADMIT.
+     */
+    suspend fun <T> guardInFlight(
+        cancel: () -> Unit,
+        onAlreadyRevoked: suspend () -> T,
+        block: suspend () -> T,
+    ): T = capability.revocation.guardInFlightSuspending(cancel, onAlreadyRevoked, block)
+
     val isRevoked: Boolean get() = capability.isRevoked
 }
