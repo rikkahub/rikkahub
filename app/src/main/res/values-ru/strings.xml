@@ -1133,5 +1133,23 @@
   <string name="setting_provider_page_test_tool_calling">Вызов инструмента</string>
   <string name="setting_provider_page_test_tool_called">Вызов: %1$s  Параметры: %2$s</string>
   <string name="setting_provider_page_test_no_tool_called">Инструмент не вызван, ответ: %1$s</string>
+  <string name="skills_import_unknown_error">Неизвестная ошибка</string>
+  <string name="skills_import_default_filename">файл</string>
+  <string name="skills_import_read_file_failed">Не удалось прочитать файл</string>
+  <string name="skills_import_invalid_github_url">Недействительная ссылка на репозиторий GitHub</string>
+  <string name="skills_import_read_github_dir_failed">Не удалось прочитать каталог GitHub</string>
+  <string name="skills_import_skill_md_not_found">Файл SKILL.md не найден в каталоге</string>
+  <string name="skills_import_download_skill_md_failed">Не удалось загрузить SKILL.md, проверьте ссылку или сеть</string>
+  <string name="skills_import_missing_description_field">Ошибка формата SKILL.md: отсутствует поле description</string>
+  <string name="skills_import_download_file_failed">Не удалось загрузить файл: %s</string>
+  <string name="skills_import_save_failed">Не удалось сохранить</string>
+  <string name="skills_import_skill_md_not_found_in_zip">Файл SKILL.md не найден в архиве</string>
+  <string name="skills_import_read_failed">Не удалось прочитать: %s</string>
+  <string name="skills_import_missing_name_field_in">Ошибка формата %s: отсутствует поле name</string>
+  <string name="skills_import_missing_description_field_in">Ошибка формата %s: отсутствует поле description</string>
+  <string name="skills_import_save_failed_named">Не удалось сохранить: %s</string>
+  <string name="skill_detail_save_failed">Не удалось сохранить</string>
+  <string name="skill_detail_name_immutable">Переименование навыка не допускается (поле name должно быть \"%s\")</string>
+  <string name="skills_page_skill_content_placeholder">содержимое инструкции...</string>
 </resources>
 

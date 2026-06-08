@@ -1131,5 +1131,23 @@
   <string name="setting_provider_page_test_tool_calling">Tool calling</string>
   <string name="setting_provider_page_test_tool_called">Call: %1$s  Input: %2$s</string>
   <string name="setting_provider_page_test_no_tool_called">No tool called, response: %1$s</string>
+  <string name="skills_import_unknown_error">Unknown error</string>
+  <string name="skills_import_default_filename">file</string>
+  <string name="skills_import_read_file_failed">Unable to read file</string>
+  <string name="skills_import_invalid_github_url">Invalid GitHub repository link</string>
+  <string name="skills_import_read_github_dir_failed">Failed to read GitHub directory</string>
+  <string name="skills_import_skill_md_not_found">SKILL.md not found in the directory</string>
+  <string name="skills_import_download_skill_md_failed">Failed to download SKILL.md, please check the link or network</string>
+  <string name="skills_import_missing_description_field">Invalid SKILL.md format: missing description field</string>
+  <string name="skills_import_download_file_failed">Failed to download file: %s</string>
+  <string name="skills_import_save_failed">Save failed</string>
+  <string name="skills_import_skill_md_not_found_in_zip">SKILL.md not found in the archive</string>
+  <string name="skills_import_read_failed">Read failed: %s</string>
+  <string name="skills_import_missing_name_field_in">Invalid format of %s: missing name field</string>
+  <string name="skills_import_missing_description_field_in">Invalid format of %s: missing description field</string>
+  <string name="skills_import_save_failed_named">Save failed: %s</string>
+  <string name="skill_detail_save_failed">Save failed</string>
+  <string name="skill_detail_name_immutable">Renaming the skill is not allowed (the name field must be \"%s\")</string>
+  <string name="skills_page_skill_content_placeholder">instruction content...</string>
 </resources>
 

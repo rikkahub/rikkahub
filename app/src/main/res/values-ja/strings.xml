@@ -1133,5 +1133,23 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_test_tool_calling">ツール呼び出し</string>
   <string name="setting_provider_page_test_tool_called">呼び出し: %1$s  入力: %2$s</string>
   <string name="setting_provider_page_test_no_tool_called">ツールは呼び出されませんでした。応答: %1$s</string>
+  <string name="skills_import_unknown_error">不明なエラー</string>
+  <string name="skills_import_default_filename">ファイル</string>
+  <string name="skills_import_read_file_failed">ファイルを読み取れません</string>
+  <string name="skills_import_invalid_github_url">無効な GitHub リポジトリリンク</string>
+  <string name="skills_import_read_github_dir_failed">GitHub ディレクトリの読み取りに失敗しました</string>
+  <string name="skills_import_skill_md_not_found">ディレクトリに SKILL.md が見つかりません</string>
+  <string name="skills_import_download_skill_md_failed">SKILL.md のダウンロードに失敗しました。リンクまたはネットワークを確認してください</string>
+  <string name="skills_import_missing_description_field">SKILL.md の形式エラー：description フィールドがありません</string>
+  <string name="skills_import_download_file_failed">ファイルのダウンロードに失敗しました：%s</string>
+  <string name="skills_import_save_failed">保存に失敗しました</string>
+  <string name="skills_import_skill_md_not_found_in_zip">アーカイブに SKILL.md が見つかりません</string>
+  <string name="skills_import_read_failed">読み取りに失敗しました：%s</string>
+  <string name="skills_import_missing_name_field_in">%s の形式エラー：name フィールドがありません</string>
+  <string name="skills_import_missing_description_field_in">%s の形式エラー：description フィールドがありません</string>
+  <string name="skills_import_save_failed_named">保存に失敗しました：%s</string>
+  <string name="skill_detail_save_failed">保存に失敗しました</string>
+  <string name="skill_detail_name_immutable">スキル名の変更は許可されていません（name フィールドは \"%s\" である必要があります）</string>
+  <string name="skills_page_skill_content_placeholder">指示内容...</string>
 </resources>
 

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -8,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.utils.launchEmitting
@@ -62,6 +64,7 @@ sealed interface SkillDetailEvent {
 }
 
 class SkillDetailVM(
+    private val context: Application,
     private val skillManager: SkillManager,
 ) : ViewModel() {
 
@@ -110,13 +113,19 @@ class SkillDetailVM(
         launchEmitting(
             events = _events,
             context = Dispatchers.IO,
-            onError = { SkillDetailEvent.SaveFailed(it.message ?: "保存失败") },
+            onError = {
+                SkillDetailEvent.SaveFailed(
+                    it.message ?: context.getString(R.string.skill_detail_save_failed)
+                )
+            },
         ) {
             if (relativePath == "SKILL.md") {
                 val name = SkillFrontmatterParser.parse(content)["name"]
                 if (name != skillName) {
                     _events.send(
-                        SkillDetailEvent.SaveFailed("不允许修改技能名称（name 字段必须为 \"$skillName\"）")
+                        SkillDetailEvent.SaveFailed(
+                            context.getString(R.string.skill_detail_name_immutable, skillName)
+                        )
                     )
                     return@launchEmitting
                 }
@@ -124,7 +133,11 @@ class SkillDetailVM(
             val success = skillManager.saveSkillFile(skillName, relativePath, content)
             loadFiles()
             _events.send(
-                if (success) SkillDetailEvent.SaveDone(target) else SkillDetailEvent.SaveFailed("保存失败")
+                if (success) {
+                    SkillDetailEvent.SaveDone(target)
+                } else {
+                    SkillDetailEvent.SaveFailed(context.getString(R.string.skill_detail_save_failed))
+                }
             )
         }
     }

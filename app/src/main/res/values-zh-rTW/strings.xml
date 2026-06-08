@@ -1131,5 +1131,23 @@
   <string name="setting_provider_page_test_tool_calling">工具呼叫</string>
   <string name="setting_provider_page_test_tool_called">呼叫: %1$s  參數: %2$s</string>
   <string name="setting_provider_page_test_no_tool_called">未呼叫工具，回應: %1$s</string>
+  <string name="skills_import_unknown_error">未知錯誤</string>
+  <string name="skills_import_default_filename">檔案</string>
+  <string name="skills_import_read_file_failed">無法讀取檔案</string>
+  <string name="skills_import_invalid_github_url">無效的 GitHub 倉庫連結</string>
+  <string name="skills_import_read_github_dir_failed">讀取 GitHub 目錄失敗</string>
+  <string name="skills_import_skill_md_not_found">目錄中未找到 SKILL.md</string>
+  <string name="skills_import_download_skill_md_failed">下載 SKILL.md 失敗，請檢查連結或網路</string>
+  <string name="skills_import_missing_description_field">SKILL.md 格式錯誤：缺少 description 欄位</string>
+  <string name="skills_import_download_file_failed">下載檔案失敗：%s</string>
+  <string name="skills_import_save_failed">儲存失敗</string>
+  <string name="skills_import_skill_md_not_found_in_zip">壓縮包中未找到 SKILL.md</string>
+  <string name="skills_import_read_failed">讀取失敗：%s</string>
+  <string name="skills_import_missing_name_field_in">%s 格式錯誤：缺少 name 欄位</string>
+  <string name="skills_import_missing_description_field_in">%s 格式錯誤：缺少 description 欄位</string>
+  <string name="skills_import_save_failed_named">儲存失敗：%s</string>
+  <string name="skill_detail_save_failed">儲存失敗</string>
+  <string name="skill_detail_name_immutable">不允許修改技能名稱（name 欄位必須為 \"%s\"）</string>
+  <string name="skills_page_skill_content_placeholder">指令內容...</string>
 </resources>
 
