@@ -504,6 +504,88 @@ internal fun AssistantBasicContent(
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_subagent_description))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_subagent_description_desc))
+                }
+            ) {
+                OutlinedTextField(
+                    value = assistant.description,
+                    onValueChange = {
+                        onUpdate(
+                            assistant.copy(
+                                description = it
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_spawnable))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_spawnable_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.spawnable,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    spawnable = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+
+            if (assistant.spawnable) {
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = {
+                        Text(stringResource(R.string.assistant_page_subagent_max_steps))
+                    },
+                    description = {
+                        Text(stringResource(R.string.assistant_page_subagent_max_steps_desc))
+                    }
+                ) {
+                    OutlinedTextField(
+                        value = assistant.maxSteps?.toString() ?: "",
+                        onValueChange = { text ->
+                            val steps = if (text.isBlank()) {
+                                null
+                            } else {
+                                text.toIntOrNull()?.takeIf { it > 0 }
+                            }
+                            onUpdate(
+                                assistant.copy(
+                                    maxSteps = steps
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                }
+            }
+        }
+
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
             BackgroundPicker(
                 modifier = Modifier.padding(8.dp),
                 background = assistant.background,

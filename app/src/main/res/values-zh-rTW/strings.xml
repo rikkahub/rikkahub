@@ -1148,5 +1148,11 @@
   <string name="skill_detail_save_failed">儲存失敗</string>
   <string name="skill_detail_name_immutable">不允許修改技能名稱（name 欄位必須為 \"%s\"）</string>
   <string name="skills_page_skill_content_placeholder">指令內容...</string>
+  <string name="assistant_page_subagent_description">子代理描述</string>
+  <string name="assistant_page_subagent_description_desc">機器面向父助手的提示詞，用於決定何時委派給此助手</string>
+  <string name="assistant_page_spawnable">可作為子代理生成</string>
+  <string name="assistant_page_spawnable_desc">允許其他助理將子任務委派給此助理</string>
+  <string name="assistant_page_subagent_max_steps">子代理最大步驟</string>
+  <string name="assistant_page_subagent_max_steps_desc">此助手作為子代理運行時的最大工具使用步驟。若要使用默認設置，請留空</string>
 </resources>
 

@@ -1150,5 +1150,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="skill_detail_save_failed">保存に失敗しました</string>
   <string name="skill_detail_name_immutable">スキル名の変更は許可されていません（name フィールドは \"%s\" である必要があります）</string>
   <string name="skills_page_skill_content_placeholder">指示内容...</string>
+  <string name="assistant_page_subagent_description">サブエージェントの説明</string>
+  <string name="assistant_page_subagent_description_desc">このアシスタントに委任するタイミングを決定するために親アシスタントが読む機械向けのヒント</string>
+  <string name="assistant_page_spawnable">サブエージェントとして生成可能</string>
+  <string name="assistant_page_spawnable_desc">他のアシスタントがこのアシスタントにサブタスクを委任できるようにする</string>
+  <string name="assistant_page_subagent_max_steps">サブエージェントの最大ステップ数</string>
+  <string name="assistant_page_subagent_max_steps_desc">このアシスタントがサブエージェントとして実行されるときの最大ツール使用ステップ。デフォルトを使用するには空のままにしてください</string>
 </resources>
 

@@ -50,6 +50,9 @@ data class Assistant(
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
     val knowledgeBaseId: Uuid? = null, // 附加的知识库 ID, null = 不启用 RAG 检索
+    val description: String = "", // 面向父助手的机器可读说明（"何时调用我"），供 subagent 派发时广告
+    val spawnable: Boolean = false, // 是否可被其他助手作为 subagent 派发
+    val maxSteps: Int? = null, // subagent 运行时的最大步数，null = 继承引擎默认值
 )
 
 @Serializable

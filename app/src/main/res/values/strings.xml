@@ -1148,5 +1148,11 @@
   <string name="skill_detail_save_failed">Save failed</string>
   <string name="skill_detail_name_immutable">Renaming the skill is not allowed (the name field must be \"%s\")</string>
   <string name="skills_page_skill_content_placeholder">instruction content...</string>
+  <string name="assistant_page_subagent_description">Subagent Description</string>
+  <string name="assistant_page_subagent_description_desc">Machine-facing hint the parent assistant reads to decide when to delegate to this assistant</string>
+  <string name="assistant_page_spawnable">Spawnable as Subagent</string>
+  <string name="assistant_page_spawnable_desc">Allow other assistants to delegate sub-tasks to this assistant</string>
+  <string name="assistant_page_subagent_max_steps">Subagent Max Steps</string>
+  <string name="assistant_page_subagent_max_steps_desc">Maximum tool-use steps when this assistant runs as a subagent. Leave empty to use the default</string>
 </resources>
 

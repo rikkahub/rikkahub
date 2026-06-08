@@ -1150,5 +1150,11 @@
   <string name="skill_detail_save_failed">Не удалось сохранить</string>
   <string name="skill_detail_name_immutable">Переименование навыка не допускается (поле name должно быть \"%s\")</string>
   <string name="skills_page_skill_content_placeholder">содержимое инструкции...</string>
+  <string name="assistant_page_subagent_description">Описание подагента</string>
+  <string name="assistant_page_subagent_description_desc">Машиночитаемая подсказка, которую читает родительский ассистент, чтобы решить, когда делегировать задачу этому ассистенту</string>
+  <string name="assistant_page_spawnable">Доступен как подагент</string>
+  <string name="assistant_page_spawnable_desc">Позвольте другим помощникам делегировать подзадачи этому помощнику</string>
+  <string name="assistant_page_subagent_max_steps">Макс. шагов подагента</string>
+  <string name="assistant_page_subagent_max_steps_desc">Максимальное количество шагов использования инструментов, когда этот ассистент работает как подагент. Оставьте пустым, чтобы использовать по умолчанию</string>
 </resources>
 
