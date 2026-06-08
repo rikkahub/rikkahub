@@ -35,8 +35,8 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.checkDifferent
@@ -133,18 +133,14 @@ class McpManager(
         return clients.entries.find { it.key.id == config.id }?.value
     }
 
-    fun getAllAvailableTools(): List<Pair<Uuid, McpTool>> {
-        val settings = settingsStore.settingsFlow.value
-        val assistant = settings.getCurrentAssistant()
-        return settings.mcpServers
-            .filter {
-                it.commonOptions.enable && it.id in assistant.mcpServers
-            }
-            .flatMap { server ->
-                server.commonOptions.tools
-                    .filter { tool -> tool.enable }
-                    .map { tool -> server.id to tool }
-            }
+    // Tools must be selected for the TARGET assistant of the generation, not for the GLOBAL
+    // current assistant. A subagent (issue #201) runs as a *different* assistant than the one
+    // selected in the UI; keying off settings.getCurrentAssistant() here would hand a subagent
+    // the PARENT's MCP servers. The target assistant is passed in so the caller (ChatService /
+    // SubagentRunner) controls whose allowlist applies. Pure selection lives in
+    // selectMcpToolsForAssistant so it is JVM-unit-testable without SettingsStore.
+    fun getAllAvailableTools(assistant: Assistant): List<Pair<Uuid, McpTool>> {
+        return selectMcpToolsForAssistant(settingsStore.settingsFlow.value.mcpServers, assistant)
     }
 
     suspend fun callTool(serverId: Uuid, toolName: String, args: JsonObject): List<UIMessagePart> {
@@ -569,6 +565,23 @@ internal suspend fun callToolWithHeal(
         onHealFailed(closedError)
     }
 }
+
+// Pure server/tool selection for a given assistant — extracted from getAllAvailableTools so the
+// load-bearing rule (a server's tools are included iff the server is enabled AND its id is in the
+// TARGET assistant's allowlist, NOT the global current assistant's) is JVM-unit-testable without a
+// SettingsStore. Issue #201: a subagent runs as a different assistant; selecting by the passed-in
+// assistant is what keeps a subagent from inheriting the parent's MCP servers.
+internal fun selectMcpToolsForAssistant(
+    mcpServers: List<McpServerConfig>,
+    assistant: Assistant,
+): List<Pair<Uuid, McpTool>> =
+    mcpServers
+        .filter { it.commonOptions.enable && it.id in assistant.mcpServers }
+        .flatMap { server ->
+            server.commonOptions.tools
+                .filter { tool -> tool.enable }
+                .map { tool -> server.id to tool }
+        }
 
 internal val McpJson: Json by lazy {
     Json {

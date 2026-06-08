@@ -1154,5 +1154,6 @@
   <string name="assistant_page_spawnable_desc">允許其他助理將子任務委派給此助理</string>
   <string name="assistant_page_subagent_max_steps">子代理最大步驟</string>
   <string name="assistant_page_subagent_max_steps_desc">此助手作為子代理運行時的最大工具使用步驟。若要使用默認設置，請留空</string>
+  <string name="chat_subagent_running">正在執行 %1$s</string>
 </resources>
 

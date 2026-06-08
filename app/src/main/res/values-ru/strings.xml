@@ -1156,5 +1156,6 @@
   <string name="assistant_page_spawnable_desc">Позвольте другим помощникам делегировать подзадачи этому помощнику</string>
   <string name="assistant_page_subagent_max_steps">Макс. шагов подагента</string>
   <string name="assistant_page_subagent_max_steps_desc">Максимальное количество шагов использования инструментов, когда этот ассистент работает как подагент. Оставьте пустым, чтобы использовать по умолчанию</string>
+  <string name="chat_subagent_running">Выполняется %1$s</string>
 </resources>
 

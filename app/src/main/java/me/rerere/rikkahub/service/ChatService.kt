@@ -55,6 +55,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.subagent.SubagentRunner
+import me.rerere.rikkahub.data.ai.subagent.buildSpawnTool
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
@@ -324,6 +326,7 @@ class ChatService(
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
     private val generationHandler: GenerationHandler,
+    private val subagentRunner: SubagentRunner,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
@@ -770,7 +773,7 @@ class ChatService(
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (settings.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+                if (settings.enableWebSearch || mcpManager.getAllAvailableTools(assistant).isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,
@@ -836,7 +839,7 @@ class ChatService(
                             )
                         )
                     }
-                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
+                    mcpManager.getAllAvailableTools(assistant).forEach { (serverId, tool) ->
                         add(
                             Tool(
                                 name = "mcp__" + tool.name,
@@ -845,6 +848,56 @@ class ChatService(
                                 needsApproval = tool.needsApproval,
                                 execute = {
                                     mcpManager.callTool(serverId, tool.name, it.jsonObject)
+                                },
+                            )
+                        )
+                    }
+                    // Subagent spawn tool (issue #201). Built ONLY here so a subagent's own pool
+                    // (via SubagentRunner -> generateText, which bypasses this buildList) never
+                    // contains it — the structural recursion guard. No-op when nothing is spawnable.
+                    val spawnableAssistants = settings.assistants.filter { it.spawnable }
+                    if (spawnableAssistants.isNotEmpty()) {
+                        add(
+                            buildSpawnTool(
+                                spawnableAssistants = spawnableAssistants,
+                                runner = subagentRunner,
+                                parentModelId = assistant.chatModelId,
+                                settings = settings,
+                                // The subagent's pool is built from the TARGET (sub) assistant's own
+                                // allowlist — local tools + skills + MCP keyed off `sub` (the C3
+                                // MCP-by-target-assistant fix). The spawn tool is never built here
+                                // for the sub, so it can't recurse; SubagentRunner additionally
+                                // filters it, and needsApproval tools are dropped at the spawn site.
+                                buildSubagentTools = { sub ->
+                                    buildList {
+                                        addAll(localTools.getTools(sub.localTools))
+                                        if (sub.enabledSkills.isNotEmpty()) {
+                                            addAll(
+                                                createSkillTools(
+                                                    enabledSkills = sub.enabledSkills,
+                                                    allSkills = skillManager.listSkills(),
+                                                    skillManager = skillManager,
+                                                )
+                                            )
+                                        }
+                                        mcpManager.getAllAvailableTools(sub).forEach { (serverId, tool) ->
+                                            add(
+                                                Tool(
+                                                    name = "mcp__" + tool.name,
+                                                    description = tool.description ?: "",
+                                                    parameters = { tool.inputSchema },
+                                                    needsApproval = tool.needsApproval,
+                                                    execute = {
+                                                        mcpManager.callTool(serverId, tool.name, it.jsonObject)
+                                                    },
+                                                )
+                                            )
+                                        }
+                                    }
+                                },
+                                processingStatus = session.processingStatus,
+                                progressLabel = { subName ->
+                                    context.getString(R.string.chat_subagent_running, subName)
                                 },
                             )
                         )

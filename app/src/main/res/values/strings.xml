@@ -1154,5 +1154,6 @@
   <string name="assistant_page_spawnable_desc">Allow other assistants to delegate sub-tasks to this assistant</string>
   <string name="assistant_page_subagent_max_steps">Subagent Max Steps</string>
   <string name="assistant_page_subagent_max_steps_desc">Maximum tool-use steps when this assistant runs as a subagent. Leave empty to use the default</string>
+  <string name="chat_subagent_running">Running %1$s</string>
 </resources>
 

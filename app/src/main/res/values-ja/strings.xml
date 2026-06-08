@@ -1156,5 +1156,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_spawnable_desc">他のアシスタントがこのアシスタントにサブタスクを委任できるようにする</string>
   <string name="assistant_page_subagent_max_steps">サブエージェントの最大ステップ数</string>
   <string name="assistant_page_subagent_max_steps_desc">このアシスタントがサブエージェントとして実行されるときの最大ツール使用ステップ。デフォルトを使用するには空のままにしてください</string>
+  <string name="chat_subagent_running">%1$s を実行中</string>
 </resources>
 
