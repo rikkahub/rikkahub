@@ -19,13 +19,9 @@ import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
-import me.rerere.rikkahub.voiceagent.VoiceAgentLaunchConfig
-import me.rerere.rikkahub.voiceagent.VoiceAgentViewModel
-import me.rerere.rikkahub.voiceagent.VoiceAgentViewModelFactory
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
-import kotlin.uuid.Uuid
 
 val viewModelModule = module {
     viewModel<ChatVM> { params ->
@@ -60,12 +56,6 @@ val viewModelModule = module {
         ShareHandlerVM(
             text = it.get(),
             settingsStore = get(),
-        )
-    }
-    viewModel<VoiceAgentViewModel> { params ->
-        get<VoiceAgentViewModelFactory>().create(
-            conversationId = Uuid.parse(params.get<String>()),
-            config = params.get<VoiceAgentLaunchConfig>(),
         )
     }
     viewModelOf(::BackupVM)

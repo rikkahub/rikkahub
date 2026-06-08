@@ -10,7 +10,9 @@
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
   <uses-feature
@@ -101,6 +103,18 @@
       <property
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="local web server for LLM chat UI" />
+    </service>
+    <service
+      android:name=".voiceagent.VoiceAgentCallService"
+      android:exported="false"
+      android:foregroundServiceType="microphone" />
+    <service
+      android:name=".voiceagent.VoiceAgentConnectionService"
+      android:exported="true"
+      android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+      <intent-filter>
+        <action android:name="android.telecom.ConnectionService" />
+      </intent-filter>
     </service>
 
     <provider

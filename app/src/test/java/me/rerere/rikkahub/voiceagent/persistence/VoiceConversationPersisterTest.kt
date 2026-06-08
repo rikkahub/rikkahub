@@ -101,6 +101,62 @@ class VoiceConversationPersisterTest {
     }
 
     @Test
+    fun `upsert transcript keeps same turn id from different voice sessions`() {
+        val persister = VoiceConversationPersister()
+        val conversation = Conversation.ofId(Uuid.random())
+
+        val afterFirst = persister.upsertUserTranscriptTurn(
+            conversation = conversation,
+            text = "first session text",
+            turnId = "user-1",
+            sessionId = "session-a",
+            status = VoiceTranscriptStatus.Complete,
+        )
+        val afterSecond = persister.upsertUserTranscriptTurn(
+            conversation = afterFirst,
+            text = "second session text",
+            turnId = "user-1",
+            sessionId = "session-b",
+            status = VoiceTranscriptStatus.Complete,
+        )
+
+        val texts = afterSecond.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Text>()
+            .map { it.text }
+
+        assertEquals(listOf("first session text", "second session text"), texts)
+    }
+
+    @Test
+    fun `upsert transcript with session id does not replace legacy transcript without session id`() {
+        val persister = VoiceConversationPersister()
+        val conversation = Conversation.ofId(Uuid.random())
+
+        val legacyTranscript = persister.upsertUserTranscriptTurn(
+            conversation = conversation,
+            text = "legacy text",
+            turnId = "user-1",
+            sessionId = null,
+            status = VoiceTranscriptStatus.Complete,
+        )
+        val newSessionTranscript = persister.upsertUserTranscriptTurn(
+            conversation = legacyTranscript,
+            text = "new session text",
+            turnId = "user-1",
+            sessionId = "session-b",
+            status = VoiceTranscriptStatus.Complete,
+        )
+
+        val texts = newSessionTranscript.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Text>()
+            .map { it.text }
+
+        assertEquals(listOf("legacy text", "new session text"), texts)
+    }
+
+    @Test
     fun `user transcript upsert preserves partial and session closed statuses`() {
         val persister = VoiceConversationPersister()
         val conversation = emptyConversation()

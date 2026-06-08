@@ -3,12 +3,22 @@ package me.rerere.rikkahub.voiceagent.gemini
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 
 sealed interface GeminiLiveDebugEvent {
     data object Open : GeminiLiveDebugEvent
+    data class Setup(
+        val hasAskHermesTool: Boolean,
+        val toolConfigMode: String?,
+        val allowedFunctionNames: List<String>,
+        val responseModalities: List<String>,
+        val systemInstructionChars: Int,
+    ) : GeminiLiveDebugEvent
+
     data class Send(
         val kind: String,
         val sent: Boolean,
@@ -92,6 +102,7 @@ class TestableGeminiLiveVoiceClient(
             liveConnectConfig = liveConnectConfig.withInitialHistoryConfigIfNeeded(contextTurns),
             systemInstruction = systemInstruction,
         )
+        setupMessage.geminiDebugSetupEvent()?.let(debugObserver)
         val pendingContext = contextTurns
             .takeIf { it.isNotEmpty() }
             ?.let {
@@ -503,6 +514,54 @@ private fun String.geminiDebugAudioDataBytes(): Int? = runCatching {
         ?: return null
     data.estimatedBase64DecodedBytes()
 }.getOrNull()
+
+private fun String.geminiDebugSetupEvent(): GeminiLiveDebugEvent.Setup? = runCatching {
+    val setup = JsonInstant.parseToJsonElement(this)
+        .jsonObject["setup"]
+        ?.jsonObject
+        ?: return null
+    val functionCallingConfig = setup["toolConfig"]
+        ?.jsonObject
+        ?.get("functionCallingConfig")
+        ?.jsonObject
+    val generationConfig = setup["generationConfig"]?.jsonObject
+    GeminiLiveDebugEvent.Setup(
+        hasAskHermesTool = setup.declaresAskHermesTool(),
+        toolConfigMode = functionCallingConfig
+            ?.get("mode")
+            ?.jsonPrimitive
+            ?.contentOrNull,
+        allowedFunctionNames = functionCallingConfig
+            ?.get("allowedFunctionNames")
+            ?.jsonArray
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+            ?: emptyList(),
+        responseModalities = generationConfig
+            ?.get("responseModalities")
+            ?.jsonArray
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+            ?: emptyList(),
+        systemInstructionChars = setup["systemInstruction"]
+            ?.jsonObject
+            ?.get("parts")
+            ?.jsonArray
+            ?.sumOf { part ->
+                part.jsonObject["text"]?.jsonPrimitive?.contentOrNull?.length ?: 0
+            }
+            ?: 0,
+    )
+}.getOrNull()
+
+private fun JsonObject.declaresAskHermesTool(): Boolean =
+    this["tools"]
+        ?.jsonArray
+        ?.any { tool ->
+            tool.jsonObject["functionDeclarations"]
+                ?.jsonArray
+                ?.any { declaration ->
+                    declaration.jsonObject["name"]?.jsonPrimitive?.contentOrNull == VoiceAgentToolNames.ASK_HERMES
+                } == true
+        } == true
 
 private fun String.estimatedBase64DecodedBytes(): Int {
     val padding = takeLastWhile { it == '=' }.length.coerceAtMost(2)

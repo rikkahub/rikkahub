@@ -45,6 +45,26 @@ class VoiceAudioDebugInjectorTest {
     }
 
     @Test
+    fun `inject notifies active capture when delivered prompt is complete`() {
+        VoiceAudioDebugInjector.clearForTest()
+        var completionCount = 0
+        val registration = VoiceAudioDebugInjector.registerCapture(
+            onPcm16 = {},
+            onInjectionComplete = { completionCount += 1 },
+        )
+
+        val result = VoiceAudioDebugInjector.injectPcm16(
+            pcm16 = byteArrayOf(1, 2, 3, 4),
+            chunkBytes = 2,
+            chunkDelayMs = 0L,
+        )
+
+        assertTrue(result.delivered)
+        assertEquals(1, completionCount)
+        registration.close()
+    }
+
+    @Test
     fun `closed registration no longer receives injected chunks`() {
         VoiceAudioDebugInjector.clearForTest()
         val chunks = mutableListOf<ByteArray>()

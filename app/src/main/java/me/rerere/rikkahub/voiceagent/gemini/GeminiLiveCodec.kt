@@ -13,6 +13,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 
 class GeminiLiveCodec(
     private val json: Json = JsonInstant,
@@ -39,7 +40,7 @@ class GeminiLiveCodec(
                             putJsonObject("functionCallingConfig") {
                                 put("mode", "ANY")
                                 putJsonArray("allowedFunctionNames") {
-                                    add(JsonPrimitive(ASK_HERMES_TOOL_NAME))
+                                    add(JsonPrimitive(VoiceAgentToolNames.ASK_HERMES))
                                 }
                             }
                         }
@@ -120,7 +121,7 @@ class GeminiLiveCodec(
                     add(
                         buildJsonObject {
                             put("id", callId)
-                            put("name", ASK_HERMES_TOOL_NAME)
+                            put("name", VoiceAgentToolNames.ASK_HERMES)
                             putJsonObject("response") {
                                 put("answer", answer)
                             }
@@ -194,7 +195,7 @@ class GeminiLiveCodec(
                 ?: return@mapNotNull null
             val name = functionCall["name"]?.stringContentOrNull()?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
-            if (name != ASK_HERMES_TOOL_NAME) {
+            if (name != VoiceAgentToolNames.ASK_HERMES) {
                 unsupportedCalls += GeminiLiveEvent.UnsupportedToolCall(
                     callId = callId,
                     name = name,
@@ -247,7 +248,7 @@ class GeminiLiveCodec(
                     ?.any { declaration ->
                         declaration.jsonObjectOrNull()
                             ?.get("name")
-                            ?.stringContentOrNull() == ASK_HERMES_TOOL_NAME
+                            ?.stringContentOrNull() == VoiceAgentToolNames.ASK_HERMES
                     } == true
             } == true
 
@@ -306,9 +307,5 @@ class GeminiLiveCodec(
     private fun JsonElement.booleanContentOrNull(): Boolean? {
         val primitive = jsonPrimitiveOrNull() ?: return null
         return primitive.takeUnless { it.isString }?.booleanOrNull
-    }
-
-    private companion object {
-        const val ASK_HERMES_TOOL_NAME = "ask_hermes"
     }
 }

@@ -77,6 +77,14 @@ class OkHttpGeminiLiveVoiceClient(
             GeminiLiveDebugEvent.Open -> Log.d(TAG, "open")
             is GeminiLiveDebugEvent.Event -> Log.d(TAG, "event kind=${event.kind}")
             is GeminiLiveDebugEvent.Receive -> Log.d(TAG, "receive kind=${event.kind}")
+            is GeminiLiveDebugEvent.Setup -> Log.d(
+                TAG,
+                "setup_diag hasAskHermesTool=${event.hasAskHermesTool} " +
+                    "toolConfigMode=${event.toolConfigMode ?: "none"} " +
+                    "allowedFunctionNames=${event.allowedFunctionNames.joinToString()} " +
+                    "responseModalities=${event.responseModalities.joinToString()} " +
+                    "systemInstructionChars=${event.systemInstructionChars}",
+            )
             is GeminiLiveDebugEvent.Send -> Log.d(
                 TAG,
                 "send kind=${event.kind} sent=${event.sent} dataBytes=${event.dataBytes ?: "n/a"}",

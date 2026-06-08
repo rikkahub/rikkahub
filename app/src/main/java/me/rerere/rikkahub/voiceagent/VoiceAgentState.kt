@@ -34,10 +34,20 @@ sealed interface VoicePersistenceStatus {
     data class SaveFailed(val message: String) : VoicePersistenceStatus
 }
 
+sealed interface VoiceCallStatus {
+    data object Idle : VoiceCallStatus
+    data object ForegroundStarting : VoiceCallStatus
+    data object BackgroundCapable : VoiceCallStatus
+    data class Degraded(val message: String) : VoiceCallStatus
+    data object Ending : VoiceCallStatus
+    data object Ended : VoiceCallStatus
+}
+
 data class VoiceAgentUiState(
     val session: VoiceSessionStatus = VoiceSessionStatus.Idle,
     val audio: VoiceAudioStatus = VoiceAudioStatus.Listening,
     val tool: VoiceToolStatus = VoiceToolStatus.Idle,
+    val call: VoiceCallStatus = VoiceCallStatus.Idle,
     val toolCalls: Map<String, VoiceToolStatus> = emptyMap(),
     val persistence: VoicePersistenceStatus = VoicePersistenceStatus.Idle,
     val inputTranscript: String = "",

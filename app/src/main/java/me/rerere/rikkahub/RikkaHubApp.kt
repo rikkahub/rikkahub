@@ -44,6 +44,7 @@ private const val TAG = "RikkaHubApp"
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
+const val VOICE_AGENT_NOTIFICATION_CHANNEL_ID = "voice_agent"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -188,6 +189,13 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(webServerChannel)
+
+        val voiceAgentChannel = NotificationChannelCompat
+            .Builder(VOICE_AGENT_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName("Voice Agent")
+            .setDescription("Ongoing Voice Agent call status")
+            .build()
+        notificationManager.createNotificationChannel(voiceAgentChannel)
     }
 
     override fun onTerminate() {

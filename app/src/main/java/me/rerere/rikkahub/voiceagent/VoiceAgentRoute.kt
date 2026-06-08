@@ -28,7 +28,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,13 +35,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.flow.StateFlow
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -53,12 +52,11 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalNavController
-import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
 @Composable
@@ -76,16 +74,23 @@ fun VoiceAgentRoute(conversationId: Uuid) {
 
     when (val result = configResult) {
         is VoiceAgentConfigResult.Available -> {
-            val vm: VoiceAgentViewModel = koinViewModel(
-                parameters = {
-                    parametersOf(conversationId.toString(), result.config)
-                }
-            )
+            val context = LocalContext.current
+            val callManager = koinInject<VoiceAgentCallManager>()
             VoiceAgentScreen(
-                vm = vm,
+                stateProvider = { callManager.state },
                 title = result.config.assistantName,
-                onBack = {
-                    vm.end()
+                onStart = {
+                    ContextCompat.startForegroundService(
+                        context,
+                        voiceAgentCallStartIntent(context, conversationId.toString()),
+                    )
+                },
+                onBack = { navController.popBackStack() },
+                onMuteToggle = { muted -> callManager.setMuted(!muted) },
+                onInterrupt = callManager::interrupt,
+                onReconnect = callManager::reconnect,
+                onEnd = {
+                    context.startService(voiceAgentCallEndIntent(context))
                     navController.popBackStack()
                 },
             )
@@ -101,51 +106,53 @@ fun VoiceAgentRoute(conversationId: Uuid) {
 
 @Composable
 private fun VoiceAgentScreen(
-    vm: VoiceAgentViewModel,
+    stateProvider: () -> StateFlow<VoiceAgentUiState>,
     title: String,
+    onStart: () -> Unit,
     onBack: () -> Unit,
+    onMuteToggle: (Boolean) -> Unit,
+    onInterrupt: () -> Unit,
+    onReconnect: () -> Unit,
+    onEnd: () -> Unit,
 ) {
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by stateProvider().collectAsStateWithLifecycle()
     val muted = state.audio == VoiceAudioStatus.Muted
     val microphonePermission = rememberPermissionState(PermissionRecordAudio)
+    val notificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        rememberPermissionState(PermissionNotification)
+    } else {
+        null
+    }
     val startGate = voiceAgentStartGate(
         hasMicrophonePermission = microphonePermission.allRequiredPermissionsGranted,
+        hasNotificationPermission = notificationPermission?.allRequiredPermissionsGranted ?: true,
     )
     var requestedMicrophonePermission by remember { mutableStateOf(false) }
-    val lifecycleOwner = LocalLifecycleOwner.current
+    var requestedNotificationPermission by remember { mutableStateOf(false) }
 
     PermissionManager(permissionState = microphonePermission)
+    if (notificationPermission != null) {
+        PermissionManager(permissionState = notificationPermission)
+    }
 
     KeepScreenOn()
 
     LaunchedEffect(startGate) {
-        if (startGate == VoiceAgentStartGate.NeedsMicrophonePermission && !requestedMicrophonePermission) {
-            requestedMicrophonePermission = true
-            microphonePermission.requestPermissions()
-        }
-    }
-
-    LaunchedEffect(vm, startGate) {
-        if (startGate == VoiceAgentStartGate.Ready) {
-            vm.start()
-        }
-    }
-
-    DisposableEffect(vm) {
-        onDispose {
-            vm.end()
-        }
-    }
-
-    DisposableEffect(lifecycleOwner, vm) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                vm.endBecauseBackgrounded()
+        when {
+            startGate == VoiceAgentStartGate.NeedsMicrophonePermission && !requestedMicrophonePermission -> {
+                requestedMicrophonePermission = true
+                microphonePermission.requestPermissions()
+            }
+            startGate == VoiceAgentStartGate.NeedsNotificationPermission && !requestedNotificationPermission -> {
+                requestedNotificationPermission = true
+                notificationPermission?.requestPermissions()
             }
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
+    }
+
+    LaunchedEffect(startGate) {
+        if (startGate == VoiceAgentStartGate.Ready) {
+            onStart()
         }
     }
 
@@ -153,26 +160,27 @@ private fun VoiceAgentScreen(
         title = "Voice Agent",
         subtitle = title,
         onBack = onBack,
-        primaryStatus = if (startGate == VoiceAgentStartGate.NeedsMicrophonePermission) {
-            "Microphone permission required"
-        } else {
-            state.statusText()
+        primaryStatus = when (startGate) {
+            VoiceAgentStartGate.NeedsMicrophonePermission -> "Microphone permission required"
+            VoiceAgentStartGate.NeedsNotificationPermission -> "Notification permission required"
+            VoiceAgentStartGate.Ready -> state.statusText()
         },
         error = state.error,
         actions = if (startGate == VoiceAgentStartGate.Ready) {
             {
                 VoiceAgentControls(
                     muted = muted,
-                    onMuteToggle = { vm.setMuted(!muted) },
-                    onInterrupt = vm::interrupt,
-                    onReconnect = vm::reconnect,
-                    onEnd = onBack,
+                    onMuteToggle = { onMuteToggle(muted) },
+                    onInterrupt = onInterrupt,
+                    onReconnect = onReconnect,
+                    onEnd = onEnd,
                 )
             }
         } else {
             null
         },
         content = {
+            StateCard(label = "Call", value = state.callStatusText())
             StateCard(label = "Session", value = state.session.statusLabel())
             StateCard(label = "Audio", value = state.audio.statusLabel())
             StateCard(label = "Hermes/MS-agent", value = state.tool.visibleStatusLabel())
@@ -182,6 +190,16 @@ private fun VoiceAgentScreen(
                     onRequestPermission = {
                         requestedMicrophonePermission = true
                         microphonePermission.requestPermissions()
+                    },
+                )
+                DiagnosticsCard(diagnostics = state.diagnostics)
+                return@VoiceAgentScaffold
+            }
+            if (startGate == VoiceAgentStartGate.NeedsNotificationPermission) {
+                NotificationPermissionCard(
+                    onRequestPermission = {
+                        requestedNotificationPermission = true
+                        notificationPermission?.requestPermissions()
                     },
                 )
                 DiagnosticsCard(diagnostics = state.diagnostics)
@@ -378,6 +396,30 @@ private fun MicrophonePermissionCard(
 }
 
 @Composable
+private fun NotificationPermissionCard(
+    onRequestPermission: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+        ) {
+            Text("Notification permission required", fontWeight = FontWeight.SemiBold)
+            Text("Voice Agent needs notifications so you can return to and end the background call.")
+            Button(onClick = onRequestPermission) {
+                Text("Grant notifications")
+            }
+        }
+    }
+}
+
+@Composable
 private fun StateCard(label: String, value: String) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -515,6 +557,15 @@ private fun VoiceAgentUiState.statusText(): String = when (session) {
     VoiceSessionStatus.Ending -> "Ending"
     VoiceSessionStatus.Ended -> "Ended"
     is VoiceSessionStatus.Error -> "Error"
+}
+
+private fun VoiceAgentUiState.callStatusText(): String = when (val callStatus = call) {
+    VoiceCallStatus.Idle -> "Call idle"
+    VoiceCallStatus.ForegroundStarting -> "Starting call runtime"
+    VoiceCallStatus.BackgroundCapable -> "Background ready"
+    is VoiceCallStatus.Degraded -> "Call degraded: ${callStatus.message}"
+    VoiceCallStatus.Ending -> "Ending call"
+    VoiceCallStatus.Ended -> "Call ended"
 }
 
 private fun VoiceSessionStatus.statusLabel(): String = when (this) {

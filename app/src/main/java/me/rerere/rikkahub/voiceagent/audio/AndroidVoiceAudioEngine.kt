@@ -51,7 +51,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         }
     }
 
-    override fun startCapture(onPcm16: (ByteArray) -> Unit) {
+    override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
         if (
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -175,7 +175,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
 
             if (isCurrentCapture(generation, recorder)) {
                 job.start()
-                registerDebugCapture(generation, recorder, onPcm16)
+                registerDebugCapture(generation, recorder, onPcm16, onDebugInjectionComplete)
             } else {
                 job.cancel()
                 recorder.stopSafely()
@@ -279,10 +279,25 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         generation: Long,
         recorder: AudioRecord,
         onPcm16: (ByteArray) -> Unit,
+        onInjectionComplete: () -> Unit,
     ) {
-        val registration = VoiceAudioDebugInjector.registerCapture { buffer ->
-            deliverInjectedCaptureBuffer(generation = generation, recorder = recorder, buffer = buffer, onPcm16 = onPcm16)
-        }
+        val registration = VoiceAudioDebugInjector.registerCapture(
+            onPcm16 = { buffer ->
+                deliverInjectedCaptureBuffer(
+                    generation = generation,
+                    recorder = recorder,
+                    buffer = buffer,
+                    onPcm16 = onPcm16,
+                )
+            },
+            onInjectionComplete = {
+                synchronized(captureCallbackLock) {
+                    if (isCurrentCapture(generation, recorder)) {
+                        onInjectionComplete()
+                    }
+                }
+            },
+        )
         synchronized(lock) {
             if (captureGeneration == generation && audioRecord === recorder) {
                 unregisterDebugCaptureLocked()

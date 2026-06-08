@@ -33,10 +33,11 @@ class ChatCompletionsAPIMessageTest {
     private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
-            List::class.java
+            List::class.java,
+            Boolean::class.javaPrimitiveType,
         )
         method.isAccessible = true
-        return method.invoke(api, messages) as JsonArray
+        return method.invoke(api, messages, false) as JsonArray
     }
 
     @Test

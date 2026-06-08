@@ -1,16 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
   <application>
+    <service
+      android:name=".voiceagent.VoiceAgentCallService"
+      android:exported="true"
+      android:permission="android.permission.DUMP"
+      tools:replace="android:exported" />
     <receiver
       android:name=".voiceagent.debug.VoiceAudioDebugInjectionReceiver"
-      android:exported="true">
+      android:exported="true"
+      android:permission="android.permission.DUMP">
       <intent-filter>
         <action android:name="me.rerere.rikkahub.debug.voiceagent.INJECT_PCM" />
       </intent-filter>
     </receiver>
     <receiver
       android:name=".voiceagent.debug.VoiceAgentDebugSeedReceiver"
-      android:exported="true">
+      android:exported="true"
+      android:permission="android.permission.DUMP">
       <intent-filter>
         <action android:name="me.rerere.rikkahub.debug.voiceagent.SEED_HERMES_PROVIDER" />
       </intent-filter>

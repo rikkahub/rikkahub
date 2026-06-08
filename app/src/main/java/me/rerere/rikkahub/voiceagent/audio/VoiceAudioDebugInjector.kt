@@ -24,9 +24,23 @@ object VoiceAudioDebugInjector {
     )
 
     fun registerCapture(onPcm16: (ByteArray) -> Unit): Registration {
+        return registerCapture(
+            onPcm16 = onPcm16,
+            onInjectionComplete = {},
+        )
+    }
+
+    fun registerCapture(
+        onPcm16: (ByteArray) -> Unit,
+        onInjectionComplete: () -> Unit,
+    ): Registration {
         val registration = synchronized(lock) {
             nextRegistrationId += 1
-            CaptureRegistration(id = nextRegistrationId, onPcm16 = onPcm16).also {
+            CaptureRegistration(
+                id = nextRegistrationId,
+                onPcm16 = onPcm16,
+                onInjectionComplete = onInjectionComplete,
+            ).also {
                 activeCapture = it
             }
         }
@@ -81,6 +95,9 @@ object VoiceAudioDebugInjector {
                 sleep(chunkDelayMs)
             }
         }
+        if (chunkCount > 0 && synchronized(lock) { activeCapture === capture }) {
+            capture.onInjectionComplete()
+        }
 
         return Result(
             delivered = chunkCount > 0,
@@ -104,6 +121,7 @@ object VoiceAudioDebugInjector {
     private data class CaptureRegistration(
         val id: Long,
         val onPcm16: (ByteArray) -> Unit,
+        val onInjectionComplete: () -> Unit,
     )
 
     private fun ByteArray.withPcm16Alignment(): ByteArray =

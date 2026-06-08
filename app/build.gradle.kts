@@ -44,6 +44,7 @@ android {
         buildConfigField("String", "VOICE_AGENT_BASE_URL_OVERRIDE", localStringProperty("voiceAgentBaseUrlOverride", "VOICE_AGENT_BASE_URL_OVERRIDE"))
         buildConfigField("String", "VOICE_AGENT_CF_ACCESS_CLIENT_ID", localStringProperty("voiceAgentCloudflareClientId", "CF_ACCESS_CLIENT_ID"))
         buildConfigField("String", "VOICE_AGENT_CF_ACCESS_CLIENT_SECRET", localStringProperty("voiceAgentCloudflareClientSecret", "CF_ACCESS_CLIENT_SECRET"))
+        buildConfigField("String", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH", "\"\"")
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
@@ -96,6 +97,7 @@ android {
             applicationIdSuffix = ".debug"
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
+            buildConfigField("String", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH", localStringProperty("voiceAgentHermesE2eExpectedHash", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH"))
         }
         create("baseline") {
             initWith(getByName("release"))

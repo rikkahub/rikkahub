@@ -364,6 +364,13 @@ class GeminiLiveVoiceClientTest {
 
         assertEquals(
             listOf(
+                GeminiLiveDebugEvent.Setup(
+                    hasAskHermesTool = false,
+                    toolConfigMode = null,
+                    allowedFunctionNames = emptyList(),
+                    responseModalities = listOf("AUDIO"),
+                    systemInstructionChars = "You are Hermes.".length,
+                ),
                 GeminiLiveDebugEvent.Open,
                 GeminiLiveDebugEvent.Send(kind = "setup", sent = true, dataBytes = null),
                 GeminiLiveDebugEvent.Receive(kind = "setupComplete"),

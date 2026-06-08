@@ -16,7 +16,12 @@ import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.UpdateChecker
-import me.rerere.rikkahub.voiceagent.VoiceAgentViewModelFactory
+import me.rerere.rikkahub.voiceagent.DefaultVoiceAgentCallFactory
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallFactory
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallManager
+import me.rerere.rikkahub.voiceagent.VoiceAgentNotificationFactory
+import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomAdapter
+import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomCallRegistry
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
@@ -89,13 +94,29 @@ val appModule = module {
         )
     }
 
-    single {
-        VoiceAgentViewModelFactory(
+    single<VoiceAgentCallFactory> {
+        DefaultVoiceAgentCallFactory(
             context = get(),
             chatService = get(),
             settingsStore = get(),
             okHttpClient = get(),
         )
+    }
+
+    single {
+        VoiceAgentCallManager(factory = get())
+    }
+
+    single {
+        VoiceAgentNotificationFactory(context = get())
+    }
+
+    single {
+        VoiceAgentTelecomAdapter(context = get())
+    }
+
+    single {
+        VoiceAgentTelecomCallRegistry()
     }
 
     single {
