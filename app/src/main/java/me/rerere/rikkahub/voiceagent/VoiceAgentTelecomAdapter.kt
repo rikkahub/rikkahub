@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.voiceagent
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.telecom.PhoneAccount
@@ -30,6 +32,9 @@ class VoiceAgentTelecomAdapter(
         val telecomManager = requireTelecomManager()
         val extras = Bundle().apply {
             putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
+        }
+        check(context.checkSelfPermission(Manifest.permission.MANAGE_OWN_CALLS) == PackageManager.PERMISSION_GRANTED) {
+            "MANAGE_OWN_CALLS permission is required to start a Voice Agent call"
         }
         telecomManager.placeCall(Uri.fromParts(VOICE_AGENT_CALL_URI_SCHEME, "voice-agent", null), extras)
     }

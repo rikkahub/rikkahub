@@ -159,6 +159,39 @@ class VoiceLabMobileApiTest {
     }
 
     @Test
+    fun `cloudflare access html errors are summarized`() {
+        val transport = transportFor { request ->
+            responseFor(
+                request = request,
+                code = 403,
+                message = "Forbidden",
+                body = """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error ・ Cloudflare Access</title></head>
+                <body><h1>Access denied</h1></body>
+                </html>
+                """.trimIndent(),
+            )
+        }
+        val api = VoiceLabMobileApi(
+            baseUrl = "https://voice-lab.example.test",
+            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            transport = transport,
+        )
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            runBlocking { api.createSession("gemini-flash") }
+        }
+
+        val message = error.message.orEmpty()
+        assertTrue(message.contains("Voice Lab request failed 403"))
+        assertTrue(message.contains("Cloudflare Access denied"))
+        assertFalse(message.contains("<!DOCTYPE html>"))
+        assertFalse(message.contains("<body>"))
+    }
+
+    @Test
     fun `successful response decode failures keep prompt and answer visible while redacting tokens`() {
         val transport = transportFor { request ->
             responseFor(

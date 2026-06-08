@@ -25,6 +25,7 @@ class VoiceAgentCallSession(
     private val conversationStore: VoiceConversationStore,
     private val contextProvider: VoiceAgentContextProvider,
     diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
+    private val voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
     private val scope: CoroutineScope,
 ) : ManagedVoiceCallSession {
     private val coordinator = VoiceAgentCoordinator(
@@ -33,6 +34,7 @@ class VoiceAgentCallSession(
         audio = audio,
         diagnostics = diagnostics,
         conversationStore = conversationStore,
+        writeVoiceE2EArtifact = voiceE2EArtifacts::write,
         scope = scope,
     )
     private var startJob: Job? = null
@@ -245,6 +247,7 @@ class VoiceAgentCallSession(
         coordinator.close()
         visibleReason?.let(coordinator::setVisibleError)
         coordinator.awaitPersistenceJobs()
+        voiceE2EArtifacts.drain()
         coordinator.stopPersistenceScope()
     }
 

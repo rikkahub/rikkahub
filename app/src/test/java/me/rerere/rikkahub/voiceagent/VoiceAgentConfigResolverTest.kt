@@ -55,6 +55,7 @@ class VoiceAgentConfigResolverTest {
         assertEquals("cf-secret", config.credentials.cloudflareClientSecret)
         assertEquals("gemini-flash", config.voiceModelId)
         assertEquals("Hermes", config.assistantName)
+        assertEquals(false, config.enableVoiceE2EArtifacts)
     }
 
     @Test
@@ -128,7 +129,7 @@ class VoiceAgentConfigResolverTest {
     }
 
     @Test
-    fun `uses local Cloudflare defaults when custom headers are absent`() {
+    fun `does not use local Cloudflare defaults when custom headers are absent`() {
         val assistantId = Uuid.random()
         val modelId = Uuid.random()
         val model = Model(
@@ -151,17 +152,14 @@ class VoiceAgentConfigResolverTest {
         )
         val conversation = Conversation.ofId(id = Uuid.random(), assistantId = assistantId)
 
-        val result = VoiceAgentConfigResolver(
-            baseUrlOverride = "",
-            defaultCloudflareClientId = "cf-id",
-            defaultCloudflareClientSecret = "cf-secret",
-        ).resolve(settings = settings, conversation = conversation)
+        val result = VoiceAgentConfigResolver(baseUrlOverride = "")
+            .resolve(settings = settings, conversation = conversation)
 
         assertTrue(result is VoiceAgentConfigResult.Available)
         val config = (result as VoiceAgentConfigResult.Available).config
         assertEquals("https://muly-hermes-api.example.test", config.voiceLabBaseUrl)
-        assertEquals("cf-id", config.credentials.cloudflareClientId)
-        assertEquals("cf-secret", config.credentials.cloudflareClientSecret)
+        assertEquals(null, config.credentials.cloudflareClientId)
+        assertEquals(null, config.credentials.cloudflareClientSecret)
     }
 
     @Test

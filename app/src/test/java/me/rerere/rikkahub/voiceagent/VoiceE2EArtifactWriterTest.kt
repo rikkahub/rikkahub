@@ -1,0 +1,170 @@
+package me.rerere.rikkahub.voiceagent
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+import java.nio.file.Files
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileCredentials
+
+class VoiceE2EArtifactWriterTest {
+    @Test
+    fun `disabled writer does not persist private artifacts`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-disabled").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = false,
+                rootDirectory = root,
+                scope = scope,
+            )
+
+            writer("hermes-answer.txt", "private answer")
+            delay(100)
+
+            assertFalse(File(root, "voice-e2e/hermes-answer.txt").exists())
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `enabled writer persists only allowlisted artifacts under the configured root`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-enabled").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                scope = scope,
+            )
+
+            writer("hermes-answer.txt", "private answer")
+            writer("../escape.txt", "escape")
+
+            val answerFile = File(root, "voice-e2e/hermes-answer.txt")
+            withTimeout(1000) {
+                while (!answerFile.isFile) {
+                    delay(10)
+                }
+            }
+            assertEquals("private answer", answerFile.readText())
+            assertFalse(File(root.parentFile, "escape.txt").exists())
+            assertFalse(File(root, "voice-e2e/../escape.txt").canonicalFile.exists())
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `enabled writer keeps later transcript snapshots when writes are queued quickly`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-ordered").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                scope = scope,
+            )
+            repeat(100) { index ->
+                writer("input-transcript.txt", "snapshot-$index")
+            }
+            writer.drain()
+
+            val transcriptFile = File(root, "voice-e2e/input-transcript.txt")
+            assertEquals("snapshot-99", transcriptFile.readText())
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `default factory writer boundary keeps artifacts disabled unless launch config enables them`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-factory-disabled").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val writer = createDefaultVoiceE2EArtifactWriter(
+                config = launchConfig(enableVoiceE2EArtifacts = false),
+                noBackupFilesDir = root,
+                scope = scope,
+            )
+
+            writer("hermes-answer.txt", "private answer")
+            delay(100)
+
+            assertFalse(File(root, "voice-e2e/hermes-answer.txt").exists())
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `default factory writer boundary uses no backup root when launch config enables artifacts`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-factory-enabled").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val writer = createDefaultVoiceE2EArtifactWriter(
+                config = launchConfig(enableVoiceE2EArtifacts = true),
+                noBackupFilesDir = root,
+                scope = scope,
+            )
+
+            writer("hermes-answer.txt", "private answer")
+            writer.drain()
+
+            val answerFile = File(root, "voice-e2e/hermes-answer.txt")
+            assertEquals("private answer", answerFile.readText())
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `service start config enables voice e2e artifacts from start extra`() {
+        val config = voiceAgentServiceStartConfig(
+            resolvedConfig = launchConfig(enableVoiceE2EArtifacts = false),
+            readBooleanExtra = { name, default ->
+                assertEquals(VoiceAgentCallContract.EXTRA_ENABLE_VOICE_E2E_ARTIFACTS, name)
+                assertFalse(default)
+                true
+            },
+        )
+
+        assertTrue(config.enableVoiceE2EArtifacts)
+    }
+
+    @Test
+    fun `service start config keeps voice e2e artifacts disabled by default`() {
+        val config = voiceAgentServiceStartConfig(
+            resolvedConfig = launchConfig(enableVoiceE2EArtifacts = true),
+            readBooleanExtra = { name, default ->
+                assertEquals(VoiceAgentCallContract.EXTRA_ENABLE_VOICE_E2E_ARTIFACTS, name)
+                assertFalse(default)
+                false
+            },
+        )
+
+        assertFalse(config.enableVoiceE2EArtifacts)
+    }
+
+    private fun launchConfig(enableVoiceE2EArtifacts: Boolean) = VoiceAgentLaunchConfig(
+        voiceLabBaseUrl = "https://voice.test",
+        credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
+        voiceModelId = "gemini-flash",
+        assistantName = "Hermes",
+        assistantPrompt = "system",
+        enableVoiceE2EArtifacts = enableVoiceE2EArtifacts,
+    )
+}

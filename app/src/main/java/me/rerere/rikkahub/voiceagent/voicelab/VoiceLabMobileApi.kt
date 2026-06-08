@@ -210,6 +210,9 @@ private fun Response.toErrorPreview(): String =
     )
 
 private fun String.toSanitizedPreview(wasTruncated: Boolean? = null): String {
+    if (isCloudflareAccessHtml()) {
+        return "Cloudflare Access denied. Check Voice Agent Cloudflare Access client id and secret."
+    }
     val preview = if (length > ERROR_BODY_PREVIEW_LIMIT) {
         take((ERROR_BODY_PREVIEW_LIMIT + 1).toInt())
     } else {
@@ -227,6 +230,12 @@ private fun String.toSanitizedPreview(wasTruncated: Boolean? = null): String {
     } else {
         bounded
     }
+}
+
+private fun String.isCloudflareAccessHtml(): Boolean {
+    val normalized = lowercase()
+    return "cloudflare access" in normalized &&
+        ("<!doctype html" in normalized || "<html" in normalized)
 }
 
 private fun String.redactSensitivePreview(): String {

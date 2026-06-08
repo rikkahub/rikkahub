@@ -587,18 +587,81 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `Hermes response hash diagnostic is skipped without expected hash`() = runTest {
+    fun `coordinator writes private e2e artifacts for transcript tool call and Hermes answer`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val artifacts = mutableMapOf<String, String>()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            writeVoiceE2EArtifact = { name, content -> artifacts[name] = content },
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.InputTranscript("Please ask "))
+        coordinator.onGeminiEvent(GeminiLiveEvent.InputTranscript("Hermes."))
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(
+                callId = "call-report",
+                name = "ask_hermes",
+                prompt = "Is Hermes connected to G-Brain? Answer yes or no.",
+            )
+        )
+        assertEquals(
+            "call-report" to "Is Hermes connected to G-Brain? Answer yes or no.",
+            toolApi.awaitRequest("call-report"),
+        )
+        toolApi.complete(response(callId = "call-report", answer = "Yes.", elapsedMs = 123L))
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputTranscript("Yes, Hermes is connected."))
+
+        assertEquals("Please ask Hermes.", artifacts["input-transcript.txt"])
+        assertEquals("Is Hermes connected to G-Brain? Answer yes or no.", artifacts["hermes-call.txt"])
+        assertEquals("Yes.", artifacts["hermes-answer.txt"])
+        assertEquals("Yes, Hermes is connected.", artifacts["output-transcript.txt"])
+    }
+
+    @Test
+    fun `Hermes response answer writer receives raw answer for private manual review artifact`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
         val diagnostics = VoiceDiagnostics()
-        var hashLogCalls = 0
+        val writtenArtifacts = mutableMapOf<String, String>()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            writeVoiceE2EArtifact = { name, content -> writtenArtifacts[name] = content },
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-manual-answer", name = "ask_hermes", prompt = "private prompt")
+        )
+        assertEquals("call-manual-answer" to "private prompt", toolApi.awaitRequest("call-manual-answer"))
+        toolApi.complete(response(callId = "call-manual-answer", answer = "raw private answer"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        assertEquals("raw private answer", writtenArtifacts["hermes-answer.txt"])
+        assertFalse(diagnostics.events.value.any { it.detail.contains("raw private answer") })
+    }
+
+    @Test
+    fun `Hermes response hash diagnostic emits actual hash without expected hash`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        var loggedDetail: String? = null
+        val expectedHash = HermesToolResponseHash.sha256HexNormalized("alpha beta")
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = FakeVoiceAudioEngine(),
             diagnostics = diagnostics,
             hermesResponseExpectedHash = "",
-            logHermesResponseHash = { hashLogCalls++ },
+            logHermesResponseHash = { loggedDetail = it },
             scope = this,
         )
 
@@ -606,15 +669,21 @@ class VoiceAgentRuntimeTest {
             GeminiLiveEvent.ToolCall(callId = "call-no-hash", name = "ask_hermes", prompt = "private prompt")
         )
         assertEquals("call-no-hash" to "private prompt", toolApi.awaitRequest("call-no-hash"))
-        toolApi.complete(response(callId = "call-no-hash", answer = "alpha beta"))
+        toolApi.complete(response(callId = "call-no-hash", answer = " \nalpha\t  beta\r\n"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(listOf("call-no-hash" to "alpha beta"), gemini.toolResponses)
-        assertEquals(0, hashLogCalls)
-        assertFalse(diagnostics.events.value.any { it.name == "hermes_tool_response_hash" })
+        assertEquals(listOf("call-no-hash" to " \nalpha\t  beta\r\n"), gemini.toolResponses)
+        val hashEvent = diagnostics.events.value.single { it.name == "hermes_tool_response_hash" }
+        assertTrue(hashEvent.detail.contains("callId=call-no-hash"))
+        assertTrue(hashEvent.detail.contains("actualHash=$expectedHash"))
+        assertFalse(hashEvent.detail.contains("expectedHashMatch="))
+        assertFalse(hashEvent.detail.contains("alpha"))
+        assertFalse(hashEvent.detail.contains("beta"))
+        assertEquals(hashEvent.detail, loggedDetail)
+
         val successEvent = diagnostics.events.value.single { it.name == "hermes_tool_succeeded" }
         assertTrue(successEvent.detail.contains("callId=call-no-hash"))
-        assertTrue(successEvent.detail.contains("answerChars=10"))
+        assertTrue(successEvent.detail.contains("answerChars=16"))
         assertFalse(successEvent.detail.contains("alpha beta"))
     }
 

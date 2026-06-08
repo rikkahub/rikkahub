@@ -60,7 +60,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         }
 
         stopCapture()
-        requestAudioFocusOrThrow()
+        requestAudioFocusBestEffort()
 
         val generation = synchronized(lock) {
             check(!released) { "Voice audio engine is released" }
@@ -439,7 +439,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         return track
     }
 
-    private fun requestAudioFocusOrThrow() {
+    private fun requestAudioFocusBestEffort() {
         val manager = audioManager ?: return
         synchronized(lock) {
             check(!released) { "Voice audio engine is released" }
@@ -451,8 +451,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
                 .setAudioAttributes(voiceAudioAttributes())
                 .setAcceptsDelayedFocusGain(false)
                 .setOnAudioFocusChangeListener { focusChange ->
-                    if (focusChange <= 0) {
+                    if (VoiceAudioFocusPolicy.isFocusChangeFatal(focusChange)) {
                         notifyAudioError("Audio focus lost: $focusChange")
+                    } else if (focusChange < 0) {
+                        Log.w(TAG, "Recoverable audio focus change: $focusChange")
                     }
                 }
                 .build()
@@ -468,7 +470,11 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         }
         if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             audioFocusRequest = null
-            throw IllegalStateException("Voice Agent audio focus request failed")
+            if (VoiceAudioFocusPolicy.isRequestFailureFatal(result)) {
+                throw IllegalStateException("Voice Agent audio focus request failed: $result")
+            }
+            Log.w(TAG, "Voice Agent audio focus request was not granted: $result")
+            return
         }
         synchronized(lock) {
             if (released) {
