@@ -37,6 +37,8 @@ dependencies {
     // XmlPullParserFactory.newInstance() throws "not mocked" before any XML is read,
     // so malformed-XML regression tests would pass without exercising the parse path.
     testImplementation(libs.kxml2)
+    // Property-based tests for the per-page emptiness probe (PdfEmptinessDetectionTest, P6/P7).
+    testImplementation(libs.kotest.property)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
