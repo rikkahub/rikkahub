@@ -24,10 +24,37 @@ interface AutomationBackend {
      * v2 *act* path (design §5, gate finding #7). A `stateSeq` compare alone is insufficient
      * because AccessibilityEvents are best-effort/coalesced — a dropped WINDOW_STATE_CHANGED leaves
      * stateSeq stale-but-equal. The v2 act-assert checks BOTH expectedSeq and this hash before any
-     * write lands. v1 is read-only, so this is contract-only here; the hook ships from day one so
-     * the real backend implements it before any write verb exists.
+     * write lands.
      */
     fun windowContentHash(stateSeq: Long): String
+
+    /**
+     * The backend's current monotonic sequence WITHOUT capturing the tree (#198 slice 8). The act
+     * assert reads this plus [windowContentHash] to verify the grounding is still fresh before a
+     * dispatch — a cheap metadata check, never a content capture (so it does not violate the
+     * guard-before-capture rule S2; the protected operations are [snapshotRawTree] and [perform]).
+     */
+    fun currentStateSeq(): Long
+
+    /**
+     * Dispatch a write action against the live UI (#198 slice 8, design §1 step 5 / D1). The core
+     * calls this ONLY after `resolve → assert(seq+hash) → authorize` all pass, and routes it through
+     * the capability's revocation token so a kill-switch cancels it in flight (I-act-10/P20).
+     *
+     * The boolean return is a best-effort *dispatch ack*, NOT a success signal: `performAction` can
+     * silently no-op on WebView/custom-IME nodes and still return either value (design D4). Act
+     * success is established by the core's post-act re-snapshot (the screen actually changed), never
+     * by trusting this return. Implementations marshal to their service thread like [snapshotRawTree].
+     */
+    suspend fun perform(action: PerformAction): Boolean
+
+    /**
+     * Block until the UI settles after an act, or a hard cap elapses (design §1 step 6 / D3 / P13) —
+     * a quiet-window debounce over content-change events, NEVER a fixed sleep. The pure decision
+     * contract is [me.rerere.automation.act.SettlePolicy]; the real backend implements the online
+     * form over its event stream, [FakeBackend] returns immediately (deterministic PBT).
+     */
+    suspend fun awaitSettle()
 }
 
 /**
@@ -37,11 +64,18 @@ interface AutomationBackend {
  * @param stateSeq the backend's monotonic sequence at capture time.
  * @param foregroundPkg the package owning the foreground window.
  * @param windows one [RawWindow] per visible window (app + system dialogs).
+ * @param contentHash the TOCTOU token computed from the SAME capture instant as [windows] (the
+ *   active window's structural fold). [me.rerere.automation.act.AutomationCore.observe] stamps it
+ *   onto the snapshot instead of a SECOND live [AutomationBackend.windowContentHash] read, so the
+ *   grounding's nodes and its token describe one instant (gate finding: the token must not be built
+ *   non-atomically). A bare/non-grounding capture leaves it `""`; the active-window definition must
+ *   match [AutomationBackend.windowContentHash] so the act-assert's live re-read compares like-for-like.
  */
 data class RawTree(
     val stateSeq: Long,
     val foregroundPkg: String,
     val windows: List<RawWindow>,
+    val contentHash: String = "",
 )
 
 /** One window in the forest. [secure] means FLAG_SECURE — its contents must not be projected. */

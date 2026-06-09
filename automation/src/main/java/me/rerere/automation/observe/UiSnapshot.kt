@@ -24,6 +24,15 @@ data class UiSnapshot(
     val foregroundPkg: String,
     val screenState: ScreenState,
     val targets: List<UiTarget>,
+    /**
+     * The backend content hash at capture time — the TOCTOU token for the v2 act path (design §5 /
+     * #198 §1 step 2). Populated by [me.rerere.automation.act.AutomationCore.observe]; the projector
+     * leaves it `""` (a bare projection is not grounded against a live backend). An act re-checks
+     * `windowContentHash(stateSeq)` against this value so a dropped `AccessibilityEvent` that leaves
+     * `stateSeq` stale-but-equal is still caught. NOT model-facing — :app's snapshot renderer never
+     * surfaces it; it is internal plumbing carried on the snapshot so the act can verify the grounding.
+     */
+    val windowContentHash: String = "",
 )
 
 /**
@@ -64,6 +73,14 @@ data class UiTarget(
     val semanticKey: String? = null,
     /** Form-field key for inputs (used by the v2 self-heal path; carried but unused for reads). */
     val formKey: String? = null,
+    /**
+     * True when this target belongs to a system/permission window (systemui/packageinstaller). System
+     * UI is observable but NEVER an act target (design I-act-3 / I8/P18): the act path maps this to
+     * [me.rerere.automation.cap.AuthRequest.systemUiTarget] so the guard DENYs a write on it — without
+     * this provenance the guard's system-UI branch would be dead code (a grant dialog's "Allow" button
+     * is in the snapshot, so the invariant must travel WITH the target, not be re-derived from coords).
+     */
+    val systemWindow: Boolean = false,
 )
 
 @Serializable

@@ -7,11 +7,18 @@ import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.automation.backend.AutomationBackend
+import me.rerere.automation.backend.GlobalNav
+import me.rerere.automation.backend.NodeActionKind
+import me.rerere.automation.backend.PerformAction
 import me.rerere.automation.backend.RawNode
 import me.rerere.automation.backend.RawTree
 import me.rerere.automation.backend.RawWindow
@@ -19,6 +26,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The real Android backend for the #187 v1 UI-automation runtime — the ONLY importer of the
@@ -52,6 +60,13 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     // regressing seq as a backend bug, so this only ever increases.
     private val stateSeq = AtomicLong(0L)
 
+    // Settle signal for the act path (#198 slice 8, design D3/P13). Each window state/content event
+    // completes-then-replaces this deferred; awaitSettle parks on it for the quiet window, so the
+    // ONLINE settle is an event-stream debounce, NEVER a fixed sleep. Starts already-armed (a fresh
+    // deferred) so the first awaitSettle has something to wait on. Atomic because the event callback
+    // and the act coroutine touch it from different threads.
+    private val settleSignal = AtomicReference(CompletableDeferred<Unit>())
+
     // One dedicated thread for all node-tree reads. A capture hops onto this via
     // withContext(serviceDispatcher), which preserves the caller's Job — so cancelling the caller
     // (a stopped/killed generation) cancels its own capture and no other's. Shut down on teardown.
@@ -83,7 +98,13 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         when (event?.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> stateSeq.incrementAndGet()
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                stateSeq.incrementAndGet()
+                // Pulse the settle signal: install a fresh deferred and complete the old one, so an
+                // awaitSettle parked on the previous deferred wakes and a new arrival resets its quiet
+                // window. getAndSet is atomic against the act coroutine's waiter (design D3/P13).
+                settleSignal.getAndSet(CompletableDeferred()).complete(Unit)
+            }
         }
     }
 
@@ -166,7 +187,20 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
         // the caller's Job, so cancelling the owning generation cancels exactly this capture (I9).
         withContext(serviceDispatcher) {
             val seq = stateSeq.get()
-            val foreground = foregroundPackage ?: HOST_PACKAGE
+            // Capture the active window's package AND the TOCTOU content hash from ONE read of
+            // rootInActiveWindow, inside this same locked frame as the window walk — so the grounding's
+            // nodes and its token describe one instant (gate finding: the token must not be built by a
+            // SECOND live read). The hash definition mirrors windowContentHash (active window only) so
+            // the act-assert's live re-read compares like-for-like.
+            val (foreground, contentHash) = rootInActiveWindow?.let { root ->
+                try {
+                    val acc = StringBuilder()
+                    foldStructure(root, acc)
+                    (root.packageName?.toString() ?: HOST_PACKAGE) to acc.toString().hashCode().toString(16)
+                } finally {
+                    root.recycle()
+                }
+            } ?: (HOST_PACKAGE to "empty:$seq")
             // getWindows() hands out live AccessibilityWindowInfo handles; recycle each after copying
             // its subtree into the value RawWindow (resource discipline — release on every path). On
             // API 33+ recycle() is a no-op, but minSdk is 26 where leaking windows is real.
@@ -178,16 +212,16 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                     window.recycle()
                 }
             }
-            RawTree(stateSeq = seq, foregroundPkg = foreground, windows = rawWindows)
+            RawTree(stateSeq = seq, foregroundPkg = foreground, windows = rawWindows, contentHash = contentHash)
         }
     }
 
     override fun windowContentHash(stateSeq: Long): String {
-        // Structural/content hash of the active window for the v2 TOCTOU close (design §5, gate
-        // finding #7). Contract-only in v1 (no write verb lands), but implemented from day one so the
-        // real backend ships the hook before any write verb exists. A dropped WINDOW_STATE event
-        // leaves stateSeq stale-but-equal, so the v2 act-assert must compare BOTH this hash and the
-        // expected seq.
+        // Structural/content hash of the active window for the act-path TOCTOU close (design §5, gate
+        // finding #7). Now live: AutomationCore.act's assert compares BOTH this hash AND the expected
+        // seq before any dispatch (#198 slice 8) — a dropped WINDOW_STATE event leaves stateSeq
+        // stale-but-equal, and the hash is what catches it. Pure metadata read of the live tree, no
+        // capture; safe outside the guard (S2 protects snapshotRawTree/perform, not this).
         val root = rootInActiveWindow ?: return "empty:$stateSeq"
         val acc = StringBuilder()
         try {
@@ -196,6 +230,158 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
             root.recycle()
         }
         return acc.toString().hashCode().toString(16)
+    }
+
+    override fun currentStateSeq(): Long = stateSeq.get()
+
+    /**
+     * Block until the UI settles after an act, or a hard cap elapses (design §1 step 6 / D3 / P13) —
+     * the ONLINE form of [me.rerere.automation.act.SettlePolicy]: a quiet-window debounce over the
+     * window state/content events the service already handles, NEVER a fixed sleep. Each event pulses
+     * [settleSignal]; we wait up to [SETTLE_QUIET_WINDOW_MS] for the NEXT event — if none arrives the
+     * window is quiet and we return; if one does we loop and wait again. The whole wait is bounded by
+     * [SETTLE_HARD_CAP_MS]: reaching the cap is a NORMAL terminal ("settled enough"), the one place a
+     * timeout is not a failure (design D3) — so we catch only that outer cap and return, while any
+     * other cancellation (a revoke tearing the act down via the owning Job) propagates untouched.
+     */
+    override suspend fun awaitSettle() {
+        try {
+            withTimeout(SETTLE_HARD_CAP_MS) {
+                while (true) {
+                    val pending = settleSignal.get()
+                    // No event within the quiet window ⇒ settled. withTimeoutOrNull returns null on the
+                    // quiet-window timeout (the common, expected path) and Unit when an event pulses the
+                    // signal first (reset the quiet window and loop).
+                    if (withTimeoutOrNull(SETTLE_QUIET_WINDOW_MS) { pending.await() } == null) return@withTimeout
+                }
+            }
+        } catch (_: TimeoutCancellationException) {
+            // Hard cap reached: the screen is still churning but we have waited long enough — return
+            // normally so the act path proceeds to its re-snapshot (design D3). This is NOT swallowing
+            // a real error: the cap IS the terminal. The act success is the re-snapshot, not settle.
+        }
+    }
+
+    /**
+     * Dispatch a write action against the live UI (#198 slice 8, design §1 step 5 / D1). Runs on the
+     * single service thread (like [snapshotRawTree]) via [serviceDispatcher] — which preserves the
+     * caller's Job, so a revoke/Stop cancelling the owning generation tears this down in flight (I9 /
+     * I-act-10). [captureMutex] serializes it against concurrent captures (one node-tree walk at a
+     * time). The boolean is a best-effort dispatch ack only; act success is the core's post-act
+     * re-snapshot (design D4), never this return.
+     *
+     *  - [PerformAction.Global] → [performGlobalAction] (BACK/HOME/RECENTS), no node target.
+     *  - [PerformAction.Node] → re-walk the live windows in the EXACT [SnapshotProjector] projection
+     *    order to the tid-th projected node and perform the scroll on it (coordinate-free — a resolved
+     *    node, not a screen point). Out-of-range tid ⇒ false (the core treats dispatch as a best-effort
+     *    ack; the re-snapshot is the ground truth).
+     */
+    override suspend fun perform(action: PerformAction): Boolean = captureMutex.withLock {
+        withContext(serviceDispatcher) {
+            when (action) {
+                is PerformAction.Global -> performGlobalAction(
+                    when (action.nav) {
+                        GlobalNav.BACK -> GLOBAL_ACTION_BACK
+                        GlobalNav.HOME -> GLOBAL_ACTION_HOME
+                        GlobalNav.RECENTS -> GLOBAL_ACTION_RECENTS
+                    },
+                )
+
+                is PerformAction.Node -> {
+                    // Re-verify the carried stateSeq at dispatch, atomically with the walk (under the
+                    // same captureMutex + serviceDispatcher frame). The core's pre-dispatch assert
+                    // (currentStateSeq + windowContentHash) is necessary but not load-bearing on its
+                    // own: a WINDOW_STATE/CONTENT event between that assert and this re-walk would make
+                    // performOnProjectedNode scroll the tid-th node of a NEWER tree than the one
+                    // asserted (I-act-1 / MR3). The carried action.stateSeq is the freshness token; a
+                    // mismatch means the grounding moved under us, so do NOT dispatch — return false
+                    // (the documented best-effort no-op ack; the core's re-snapshot is ground truth, D4).
+                    if (stateSeq.get() != action.stateSeq) {
+                        false
+                    } else {
+                        performOnProjectedNode(action.tid, action.kind)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-walk the live window forest in the SAME projection order the snapshot used and perform [kind]
+     * on the [tid]-th projected node. The walk MUST mirror [SnapshotProjector] exactly: visible
+     * windows (host excluded) in `windows`-order, each pre-order DFS, a node counted iff
+     * `(isVisibleToUser && !boundsInScreen.isEmpty) || hasId || hasText` — the same predicate
+     * [SnapshotProjector.isTarget] applies over the same fields [toRawNode] reads. Drift between this
+     * predicate and the projector's is exactly what slice 12's instrumented parity test guards.
+     *
+     * Resource discipline: every [AccessibilityNodeInfo] and [AccessibilityWindowInfo] is recycled on
+     * EVERY path. The action is performed INSIDE the walk (the frame that owns the node), so no live
+     * handle escapes the walk — that removes the double-recycle the "return a live node" shape invited
+     * when the match is the window root. The carried `stateSeq` is re-verified by [perform] immediately
+     * before this walk (atomically under the same lock), so the tree this walks is the one the core
+     * asserted. Out-of-range tid ⇒ false (the core treats dispatch as a best-effort ack).
+     */
+    private fun performOnProjectedNode(tid: Int, kind: NodeActionKind): Boolean {
+        val actionId = when (kind) {
+            NodeActionKind.SCROLL_FORWARD -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            NodeActionKind.SCROLL_BACKWARD -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        }
+        val cursor = intArrayOf(0) // running projected-node index, mutated across the recursive walk
+        for (window in windows.orEmpty()) {
+            try {
+                val root = window.root ?: continue // secure/inaccessible window: skip (matches toRawWindow)
+                try {
+                    if (root.packageName?.toString() == HOST_PACKAGE) continue // host excluded (projector P2)
+                    walkAndPerform(root, tid, cursor, actionId)?.let { return it }
+                } finally {
+                    root.recycle()
+                }
+            } finally {
+                @Suppress("DEPRECATION")
+                window.recycle()
+            }
+        }
+        return false // tid out of range: best-effort dispatch ack only (the re-snapshot is ground truth)
+    }
+
+    /**
+     * Pre-order DFS mirroring [SnapshotProjector.collect]: count [node] as a projected target iff
+     * [isProjectedTarget], performing [actionId] on it when its index equals [tid]; then descend into
+     * every child (incl. non-projected containers, so a projected descendant is not skipped —
+     * projector P4). Returns the [performAction] result once the target is hit (and stops), or null if
+     * the target is not in this subtree. The action runs in the frame that owns the node, and every
+     * child handle is recycled here — [node] itself is owned/recycled by the caller.
+     */
+    private fun walkAndPerform(
+        node: AccessibilityNodeInfo,
+        tid: Int,
+        cursor: IntArray,
+        actionId: Int,
+    ): Boolean? {
+        if (isProjectedTarget(node)) {
+            if (cursor[0] == tid) return node.performAction(actionId)
+            cursor[0]++
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            try {
+                walkAndPerform(child, tid, cursor, actionId)?.let { return it }
+            } finally {
+                child.recycle()
+            }
+        }
+        return null
+    }
+
+    /**
+     * The projection predicate, mirroring [SnapshotProjector.isTarget] over the live-node fields
+     * [toRawNode] reads: a node is projected iff `(visible && hasArea) || hasId || hasText`.
+     */
+    private fun isProjectedTarget(node: AccessibilityNodeInfo): Boolean {
+        val hasArea = android.graphics.Rect().also { node.getBoundsInScreen(it) }.let { !it.isEmpty }
+        val hasId = !node.viewIdResourceName.isNullOrEmpty()
+        val hasText = !node.text.isNullOrEmpty() || !node.contentDescription.isNullOrEmpty()
+        return (node.isVisibleToUser && hasArea) || hasId || hasText
     }
 
     private fun foldStructure(node: AccessibilityNodeInfo, acc: StringBuilder) {
@@ -276,6 +462,12 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
 
     companion object {
         const val HOST_PACKAGE = "me.rerere.rikkahub"
+
+        // Online settle bounds for the act path (design D3 / P13), matching the pure SettlePolicy
+        // defaults (quiet 250ms, hard cap 1500ms). awaitSettle returns once no window event has
+        // arrived for the quiet window, or the hard cap elapses — never a fixed sleep.
+        private const val SETTLE_QUIET_WINDOW_MS = 250L
+        private const val SETTLE_HARD_CAP_MS = 1500L
 
         /**
          * The live, connected service or null. Set on [onServiceConnected], cleared on teardown.

@@ -58,6 +58,7 @@ import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.automation.cap.Capability
 import me.rerere.automation.cap.CapabilityGuard
 import me.rerere.automation.cap.Lease
+import me.rerere.automation.cap.Sink
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.rikkahub.data.ai.subagent.SubagentRunner
@@ -851,8 +852,15 @@ class ChatService(
                 CapabilityGuard(
                     capability = Capability.root(
                         sessionId = conversationId.toString(),
+                        // Surface stays empty-by-default = deny-all (S1): a per-app whitelist is a
+                        // separate later UI. This grant makes the nav verbs AUTHORIZABLE (#198 slice
+                        // 8) but does NOT widen the admitted surface — authorize still DENYs on the
+                        // surface branch for any real foreground app today, exactly as OBSERVE does.
                         surface = emptySet(),
-                        verbs = setOf(Verb.OBSERVE),
+                        verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL),
+                        // GLOBAL_NAV must be in budget for ui_global's authorize to pass the
+                        // sink-in-budget branch; ui_scroll carries no sink (SCROLL verb suffices).
+                        sinkBudget = setOf(Sink.GLOBAL_NAV),
                         lease = Lease(
                             expiresAt = trustClock.now() + UI_AUTOMATION_LEASE_TTL_MS,
                             maxSteps = UI_AUTOMATION_MAX_STEPS,
@@ -918,10 +926,11 @@ class ChatService(
                         addAll(createSearchTools(settings))
                     }
                     addAll(localTools.getTools(assistant.localTools))
-                    // Read-only ui_observe (#187 v1). Empty surface unless automation is enabled AND
-                    // a guard was minted; the factory authorizes via the closed-over guard BEFORE the
-                    // backend (S2). No-op (empty) when disabled or when the a11y service is not
-                    // connected (the core() is null ⇒ no guard path is reachable anyway).
+                    // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8), all
+                    // over the same core. Empty surface unless automation is enabled AND a guard was
+                    // minted; each tool authorizes via the closed-over guard BEFORE the backend (S2).
+                    // No-op (empty) when disabled or when the a11y service is not connected (the
+                    // core() is null ⇒ no guard path is reachable anyway).
                     automationRegistry.core()?.let { automationCore ->
                         addAll(
                             getUiAutomationTools(

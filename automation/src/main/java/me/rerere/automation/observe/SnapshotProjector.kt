@@ -46,12 +46,15 @@ class SnapshotProjector {
         } else {
             // Deterministic order: windows as given, each tree pre-order. Dense tid assigned last so
             // it is unique and stable for this snapshot (P3/P5). Secure windows contribute nothing.
-            val collected = ArrayList<RawNode>()
+            // Each collected node carries its owning window's systemWindow flag so the act path can
+            // enforce "system UI is observable but non-actionable" (I-act-3) without re-deriving
+            // provenance from coordinates the model never sees.
+            val collected = ArrayList<CollectedNode>()
             for (window in visibleWindows) {
                 if (window.secure) continue
-                window.root?.let { collect(it, collected) }
+                window.root?.let { collect(it, window.systemWindow, collected) }
             }
-            collected.mapIndexed { index, node -> toTarget(index, node) }
+            collected.mapIndexed { index, it -> toTarget(index, it.node, it.systemWindow) }
         }
 
         return UiSnapshot(
@@ -62,17 +65,21 @@ class SnapshotProjector {
         )
     }
 
+    /** A projected node paired with its owning window's system-UI provenance (carried so the act
+     * path can enforce I-act-3; window identity is otherwise lost once nodes are flattened). */
+    private data class CollectedNode(val node: RawNode, val systemWindow: Boolean)
+
     /** Pre-order collection: a node is emitted iff it passes the projection rule; recursion always
      * continues into children (incl. invisible containers) so passing descendants survive (P4). */
-    private fun collect(node: RawNode, out: MutableList<RawNode>) {
-        if (isTarget(node)) out.add(node)
-        for (child in node.children) collect(child, out)
+    private fun collect(node: RawNode, systemWindow: Boolean, out: MutableList<CollectedNode>) {
+        if (isTarget(node)) out.add(CollectedNode(node, systemWindow))
+        for (child in node.children) collect(child, systemWindow, out)
     }
 
     private fun isTarget(node: RawNode): Boolean =
         (node.visible && node.hasArea) || node.hasId || node.hasText
 
-    private fun toTarget(tid: Int, node: RawNode): UiTarget {
+    private fun toTarget(tid: Int, node: RawNode, systemWindow: Boolean): UiTarget {
         val flags = buildSet {
             if (node.clickable) add(UiFlag.CLICK)
             if (node.editable) add(UiFlag.EDIT)
@@ -95,6 +102,7 @@ class SnapshotProjector {
             flags = flags,
             semanticKey = node.contentDescription?.takeIf { it.isNotEmpty() },
             formKey = node.resourceId?.takeIf { it.isNotEmpty() && node.editable },
+            systemWindow = systemWindow,
         )
     }
 
