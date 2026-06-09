@@ -327,16 +327,16 @@ class UiAutomationToolsTest {
             val guard = healthyGuard()
             val tool = observeTool(Assistant(uiAutomationEnabled = true), guard, backend)
 
-            val started = CompletableDeferred<Unit>()
+            val entered = CompletableDeferred<Unit>().also { backend.snapshotEntered = it }
             val job: Job = launch(Dispatchers.Default) {
-                started.complete(Unit)
                 tool.execute(buildJsonObject { })
             }
-            started.await()
-            // Give execute() ample scheduler turns to pass authorize() and park inside the backend
-            // gate (snapshotCount stays 0 until the gated await returns). The gate guarantees it
-            // cannot finish on its own, so this only needs to outlast the launch→authorize→park hop.
-            repeat(50) { yield() }
+            // Deterministic: snapshotRawTree() completes `snapshotEntered` the instant it is reached
+            // (after launch→authorize→guardInFlight), BEFORE it parks on the gate — so this waits for
+            // the capture to be genuinely in-flight with NO scheduler-dependent yield-count race. The
+            // old `repeat(50){yield()}` flaked here on CI (the Dispatchers.Default coroutine had not
+            // reached the park when the fixed yields elapsed). Mirrors the act path's performEntered.
+            entered.await()
             check(backend.snapshotCount == 0) { "precondition: capture must still be parked at the gate" }
 
             guard.revoke() // the kill-switch trips while the capture is in flight

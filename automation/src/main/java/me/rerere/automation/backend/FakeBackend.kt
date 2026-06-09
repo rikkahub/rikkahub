@@ -44,6 +44,15 @@ class FakeBackend(
     @Volatile
     var performEntered: CompletableDeferred<Unit>? = null
 
+    /**
+     * Completes the instant [snapshotRawTree] is ENTERED — BEFORE it parks on [gate]. The observe-path
+     * analogue of [performEntered]: lets an in-flight observe test wait deterministically until the
+     * capture is parked, then revoke, instead of racing on a fixed `yield()` count (which flaked the
+     * `ui_observe` revoke test in CI for the same scheduler-dependent reason).
+     */
+    @Volatile
+    var snapshotEntered: CompletableDeferred<Unit>? = null
+
     /** Every [perform] call, in order — lets a property assert "perform happened / never happened". */
     val performed = ArrayList<PerformAction>()
 
@@ -53,6 +62,7 @@ class FakeBackend(
         private set
 
     override suspend fun snapshotRawTree(): RawTree {
+        snapshotEntered?.complete(Unit) // signal "parked in snapshotRawTree" before the gate (deterministic in-flight tests)
         gate?.await()
         snapshotCount++
         // Stamp the TOCTOU token atomically with the tree (the real backend computes it inside its

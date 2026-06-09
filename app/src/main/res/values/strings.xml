@@ -1165,5 +1165,6 @@
   <string name="automation_confirm_prompt">Confirm action in %1$s: %2$s %3$s?</string>
   <string name="automation_confirm_allow">Confirm</string>
   <string name="automation_confirm_deny">Deny</string>
+  <string name="chat_message_diff_more_lines">… +%1$d lines</string>
 </resources>
 

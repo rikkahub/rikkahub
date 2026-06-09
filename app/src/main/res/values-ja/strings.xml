@@ -1167,5 +1167,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="automation_confirm_prompt">%1$s での操作を確認: %2$s %3$s？</string>
   <string name="automation_confirm_allow">確認</string>
   <string name="automation_confirm_deny">拒否</string>
+  <string name="chat_message_diff_more_lines">… +%1$d 行</string>
 </resources>
 

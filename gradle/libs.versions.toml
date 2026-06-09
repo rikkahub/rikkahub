@@ -65,6 +65,7 @@ ktor = "3.4.3"
 sqlite-vector = "0.9.92"
 jmdns = "3.6.3"
 slf4j = "2.0.17"
+diffutils = "4.17"
 sqlite-android = "-SNAPSHOT"
 koog = "1.0.0"
 
@@ -180,6 +181,7 @@ sqlite-vector = { module = "ai.sqlite:vector", version.ref = "sqlite-vector" }
 jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-android = { module = "uk.uuid.slf4j:slf4j-android", version = "2.0.17-0" }
+diffutils = { module = "io.github.java-diff-utils:java-diff-utils", version.ref = "diffutils" }
 sqlite-android = { module = "com.github.rikkahub:sqlite-android", version.ref = "sqlite-android" }
 koog-rag-base = { module = "ai.koog:rag-base", version.ref = "koog" }
 koog-embeddings-base = { module = "ai.koog:embeddings-base", version.ref = "koog" }

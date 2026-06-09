@@ -1165,5 +1165,6 @@
   <string name="automation_confirm_prompt">在 %1$s 中確認操作：%2$s %3$s？</string>
   <string name="automation_confirm_allow">確認</string>
   <string name="automation_confirm_deny">拒絕</string>
+  <string name="chat_message_diff_more_lines">… +%1$d 行</string>
 </resources>
 

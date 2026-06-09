@@ -1167,5 +1167,6 @@
   <string name="automation_confirm_prompt">Подтвердите действие в %1$s: %2$s %3$s?</string>
   <string name="automation_confirm_allow">Подтвердить</string>
   <string name="automation_confirm_deny">Отклонить</string>
+  <string name="chat_message_diff_more_lines">… +%1$d строк</string>
 </resources>
 
