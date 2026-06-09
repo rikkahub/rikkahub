@@ -763,7 +763,6 @@
   <string name="setting_page_built_in_tools_image_generation">圖像生成</string>
   <string name="setting_page_built_in_tools_image_generation_desc">啟用圖片生成功能</string>
   <string name="setting_page_built_in_tools_search">搜尋</string>
-  <string name="setting_page_built_in_tools_search_desc">啟用 Google 搜尋整合</string>
   <string name="setting_page_built_in_tools_url_context">URL 上下文</string>
   <string name="setting_page_built_in_tools_url_context_desc">啟用 URL 內容處理</string>
   <string name="setting_page_chat_storage">聊天記錄儲存</string>

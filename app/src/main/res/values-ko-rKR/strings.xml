@@ -763,7 +763,6 @@
   <string name="setting_page_built_in_tools_image_generation">이미지 생성</string>
   <string name="setting_page_built_in_tools_image_generation_desc">이미지 생성 기능 활성화</string>
   <string name="setting_page_built_in_tools_search">검색</string>
-  <string name="setting_page_built_in_tools_search_desc">Google 검색 통합 활성화</string>
   <string name="setting_page_built_in_tools_url_context">URL 컨텍스트</string>
   <string name="setting_page_built_in_tools_url_context_desc">URL 콘텐츠 처리 활성화</string>
   <string name="setting_page_chat_storage">채팅 저장 공간</string>

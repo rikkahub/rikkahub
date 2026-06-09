@@ -1369,10 +1369,6 @@ private fun BuiltInToolsSettings(
         )
 
         val availableTools = listOf(
-            BuiltInTools.Search to Pair(
-                stringResource(R.string.setting_page_built_in_tools_search),
-                stringResource(R.string.setting_page_built_in_tools_search_desc)
-            ),
             BuiltInTools.UrlContext to Pair(
                 stringResource(R.string.setting_page_built_in_tools_url_context),
                 stringResource(R.string.setting_page_built_in_tools_url_context_desc)

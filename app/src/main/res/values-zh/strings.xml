@@ -770,7 +770,6 @@
   <string name="setting_page_built_in_tools_image_generation">图像生成</string>
   <string name="setting_page_built_in_tools_image_generation_desc">启用图像生成功能</string>
   <string name="setting_page_built_in_tools_search">搜索</string>
-  <string name="setting_page_built_in_tools_search_desc">启用 Google 搜索集成</string>
   <string name="setting_page_built_in_tools_url_context">URL 上下文</string>
   <string name="setting_page_built_in_tools_url_context_desc">启用 URL 内容处理</string>
   <string name="setting_page_chat_storage">聊天记录存储</string>

@@ -763,7 +763,6 @@
   <string name="setting_page_built_in_tools_image_generation">Генерация изображений</string>
   <string name="setting_page_built_in_tools_image_generation_desc">Включить возможность генерации изображений</string>
   <string name="setting_page_built_in_tools_search">Поиск</string>
-  <string name="setting_page_built_in_tools_search_desc">Включить интеграцию с Google Поиском</string>
   <string name="setting_page_built_in_tools_url_context">Контекст URL</string>
   <string name="setting_page_built_in_tools_url_context_desc">Включить обработку содержимого по URL</string>
   <string name="setting_page_chat_storage">Хранилище чатов</string>
