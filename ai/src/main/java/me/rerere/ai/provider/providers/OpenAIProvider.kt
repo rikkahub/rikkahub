@@ -1,18 +1,22 @@
 package me.rerere.ai.provider.providers
 
 import android.content.Context
+import android.util.Log
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.JsonArray
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageEditParams
@@ -25,12 +29,13 @@ import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
-import me.rerere.ai.ui.ImageGenerationResult
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.getByKey
@@ -40,9 +45,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import okhttp3.sse.EventSource
+import okhttp3.sse.EventSourceListener
+import okhttp3.sse.EventSources
 import java.io.File
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
+
+private const val TAG = "OpenAIProvider"
 
 class OpenAIProvider(
     private val client: OkHttpClient,
@@ -201,7 +210,7 @@ class OpenAIProvider(
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): ImageGenerationResult = withContext(Dispatchers.IO) {
+    ): Flow<ImageGenerationItem> {
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
         }
@@ -213,6 +222,8 @@ class OpenAIProvider(
                 put("model", params.model.modelId)
                 put("prompt", params.prompt)
                 put("n", params.numOfImages)
+                put("stream", true)
+                put("partial_images", params.partialImages.coerceIn(0, 3))
                 put(
                     "size", when (params.aspectRatio) {
                         ImageAspectRatio.SQUARE -> "1024x1024"
@@ -220,8 +231,12 @@ class OpenAIProvider(
                         ImageAspectRatio.PORTRAIT -> "1024x1536"
                     }
                 )
-            }.mergeCustomBody(params.customBody)
+            }
+                .mergeCustomBody(params.customBody)
+                .forceImageStream()
         )
+
+        Log.i(TAG, "generateImage: ${json.encodeToString(requestBody)}")
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
@@ -229,26 +244,20 @@ class OpenAIProvider(
             .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
+            .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            error("Failed to generate image: ${response.code} ${response.body?.string()}")
-        }
-
-        val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-        val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
-
-        val items = parseImageGenerationItems(data)
-
-        ImageGenerationResult(items = items)
+        return streamImageRequest(
+            request = request,
+            partialEventType = "image_generation.partial_image",
+            completedEventType = "image_generation.completed",
+        )
     }
 
     override suspend fun editImage(
         providerSetting: ProviderSetting,
         params: ImageEditParams
-    ): ImageGenerationResult = withContext(Dispatchers.IO) {
+    ): Flow<ImageGenerationItem> {
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
         }
@@ -262,6 +271,7 @@ class OpenAIProvider(
             .addFormDataPart("model", params.model.modelId)
             .addFormDataPart("prompt", params.prompt)
             .addFormDataPart("n", params.numOfImages.toString())
+            .addFormDataPart("partial_images", params.partialImages.coerceIn(0, 3).toString())
             .addFormDataPart(
                 "size", when (params.aspectRatio) {
                     ImageAspectRatio.SQUARE -> "1024x1024"
@@ -293,66 +303,76 @@ class OpenAIProvider(
             }
             bodyBuilder.addFormDataPart(customBody.key, value)
         }
+        bodyBuilder.addFormDataPart("stream", "true")
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/edits")
             .headers(params.customHeaders.toHeaders())
             .addHeader("Authorization", "Bearer $key")
             .post(bodyBuilder.build())
+            .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            error("Failed to edit image: ${response.code} ${response.body?.string()}")
-        }
-
-        val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-        val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
-
-        val items = parseImageGenerationItems(data)
-
-        ImageGenerationResult(items = items)
+        return streamImageRequest(
+            request = request,
+            partialEventType = "image_edit.partial_image",
+            completedEventType = "image_edit.completed",
+        )
     }
 
-    private suspend fun parseImageGenerationItems(data: JsonArray): List<ImageGenerationItem> {
-        return data.map { imageJson ->
-            val imageObj = imageJson.jsonObject
-            val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
+    private fun streamImageRequest(
+        request: Request,
+        partialEventType: String,
+        completedEventType: String,
+    ): Flow<ImageGenerationItem> = callbackFlow {
+        val listener = object : EventSourceListener() {
+            override fun onEvent(
+                eventSource: EventSource,
+                id: String?,
+                type: String?,
+                data: String
+            ) {
+                if (data == "[DONE]") {
+                    close()
+                    return
+                }
 
-            if (b64Json != null) {
-                ImageGenerationItem(
-                    data = b64Json,
-                    mimeType = "image/png"
+                val event = json.parseToJsonElement(data).jsonObject
+                val eventType = event["type"]?.jsonPrimitive?.contentOrNull ?: type
+                Log.d(TAG, "onEvent(streamImageRequest): $eventType")
+                if (eventType != partialEventType && eventType != completedEventType) return
+
+                val b64Json = event["b64_json"]?.jsonPrimitive?.contentOrNull ?: return
+                val outputFormat = event["output_format"]?.jsonPrimitive?.contentOrNull ?: "png"
+                val partialImageIndex = event["partial_image_index"]?.jsonPrimitive?.intOrNull
+                trySend(
+                    ImageGenerationItem(
+                        data = b64Json,
+                        mimeType = outputFormat.toImageMimeType(),
+                        partial = eventType == partialEventType,
+                        partialImageIndex = partialImageIndex,
+                    )
                 )
-            } else {
-                val url = imageObj["url"]?.jsonPrimitive?.contentOrNull
-                    ?: error("No b64_json or url in response")
-                downloadImageAsBase64(url)
+            }
+
+            override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                val responseMessage = response?.let {
+                    "${it.code} ${it.body?.stringSafe() ?: ""}".trim()
+                }
+                close(t ?: Exception("Failed to stream image: $responseMessage"))
+            }
+
+            override fun onClosed(eventSource: EventSource) {
+                close()
             }
         }
-    }
 
-    @OptIn(ExperimentalEncodingApi::class)
-    private suspend fun downloadImageAsBase64(url: String): ImageGenerationItem {
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
+        val eventSource = EventSources.createFactory(client)
+            .newEventSource(request, listener)
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            error("Failed to download generated image: ${response.code} ${response.body.string()}")
+        awaitClose {
+            eventSource.cancel()
         }
-
-        val body = response.body
-        val mimeType = body.contentType()?.toString() ?: "image/png"
-        val base64 = Base64.encode(body.bytes())
-
-        return ImageGenerationItem(
-            data = base64,
-            mimeType = mimeType
-        )
     }
 
     private fun File.imageMediaType(): String = when (extension.lowercase()) {
@@ -360,6 +380,17 @@ class OpenAIProvider(
         "webp" -> "image/webp"
         else -> "image/png"
     }
+
+    private fun String.toImageMimeType(): String = when (lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        else -> "image/png"
+    }
+
+    private fun JsonObject.forceImageStream(): JsonObject =
+        JsonObject(toMutableMap().apply {
+            put("stream", JsonPrimitive(true))
+        })
 
     companion object {
         private val SUPPORTED_EDIT_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
