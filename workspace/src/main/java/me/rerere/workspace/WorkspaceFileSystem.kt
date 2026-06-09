@@ -1,6 +1,7 @@
 package me.rerere.workspace
 
 import java.io.File
+import java.io.InputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileSystems
@@ -49,6 +50,23 @@ class WorkspaceFileSystem(
         file.parentFile?.mkdirs()
         file.writeBytes(bytes)
         return file.toEntry(root)
+    }
+
+    fun importBytes(root: File, path: String, inputStream: InputStream): WorkspaceFileEntry {
+        val file = resolvePath(root, path)
+        file.parentFile?.mkdirs()
+        val target = if (!file.exists()) file else resolveConflict(file)
+        inputStream.use { input -> target.outputStream().use { input.copyTo(it) } }
+        return target.toEntry(root)
+    }
+
+    private fun resolveConflict(file: File): File {
+        val stem = file.nameWithoutExtension
+        val ext = file.extension.let { if (it.isNotEmpty()) ".$it" else "" }
+        var n = 1
+        var candidate: File
+        do { candidate = File(file.parentFile, "$stem ($n)$ext"); n++ } while (candidate.exists())
+        return candidate
     }
 
     fun delete(root: File, path: String, recursive: Boolean = false): Boolean {

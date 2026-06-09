@@ -1,6 +1,8 @@
 package me.rerere.workspace
 
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
@@ -58,6 +60,30 @@ class WorkspaceManager(
         overwrite: Boolean = true,
         charset: Charset = StandardCharsets.UTF_8,
     ): WorkspaceFileEntry = fileSystem.writeText(filesDir(root), path, text, overwrite, charset)
+
+    fun importFile(
+        root: String,
+        destinationPath: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+        fileName: String,
+        inputStream: InputStream,
+    ): WorkspaceFileEntry {
+        val areaRoot = areaDir(root, area)
+        val targetPath = if (destinationPath.isBlank()) fileName else "$destinationPath/$fileName"
+        return fileSystem.importBytes(areaRoot, targetPath, inputStream)
+    }
+
+    fun exportFile(
+        root: String,
+        path: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+        outputStream: OutputStream,
+    ) {
+        val file = fileSystem.resolve(areaDir(root, area), path)
+        require(file.exists()) { "File does not exist: $path" }
+        require(file.isFile) { "Path is not a file: $path" }
+        outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
+    }
 
     fun deleteFile(
         root: String,

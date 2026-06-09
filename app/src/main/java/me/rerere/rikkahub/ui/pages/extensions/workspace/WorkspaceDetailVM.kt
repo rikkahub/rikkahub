@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.InputStream
+import java.io.OutputStream
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.RootfsInstallProgress
@@ -102,6 +104,39 @@ class WorkspaceDetailVM(
                 refresh()
             }.onFailure { error ->
                 _state.update { it.copy(error = error.message ?: "删除失败") }
+            }
+        }
+    }
+
+    fun importFile(inputStream: InputStream, fileName: String) {
+        viewModelScope.launch {
+            runCatching {
+                repository.importFile(
+                    id = id,
+                    area = state.value.area,
+                    destinationPath = state.value.path,
+                    fileName = fileName,
+                    inputStream = inputStream,
+                )
+            }.onSuccess {
+                refresh()
+            }.onFailure { error ->
+                _state.update { it.copy(error = error.message ?: "导入文件失败") }
+            }
+        }
+    }
+
+    fun exportFile(entry: WorkspaceFileEntry, outputStream: OutputStream) {
+        viewModelScope.launch {
+            runCatching {
+                repository.exportFile(
+                    id = id,
+                    area = state.value.area,
+                    path = entry.path,
+                    outputStream = outputStream,
+                )
+            }.onFailure { error ->
+                _state.update { it.copy(error = error.message ?: "导出文件失败") }
             }
         }
     }

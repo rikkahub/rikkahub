@@ -3,6 +3,8 @@ package me.rerere.rikkahub.data.repository
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
+import java.io.InputStream
+import java.io.OutputStream
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -160,6 +162,28 @@ class WorkspaceRepository(
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
         manager.writeText(workspace.root, path, text, overwrite)
+    }
+
+    suspend fun importFile(
+        id: String,
+        area: WorkspaceStorageArea,
+        destinationPath: String,
+        fileName: String,
+        inputStream: InputStream,
+    ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
+        manager.importFile(workspace.root, destinationPath, area, fileName, inputStream)
+    }
+
+    suspend fun exportFile(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+        outputStream: OutputStream,
+    ) = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.exportFile(workspace.root, path, area, outputStream)
     }
 
     suspend fun deleteFile(

@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +23,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,6 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +59,7 @@ import me.rerere.hugeicons.stroke.Bash
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Refresh01
@@ -85,6 +91,29 @@ fun WorkspaceDetailPage(id: String) {
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     var showInstallDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0) cursor.getString(nameIndex) else null
+            } else null
+        } ?: uri.lastPathSegment ?: "imported_file"
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return@rememberLauncherForActivityResult
+        vm.importFile(inputStream, fileName)
+    }
+    var exportTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*"),
+    ) { uri ->
+        val entry = exportTarget.also { exportTarget = null } ?: return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
+        val outputStream = context.contentResolver.openOutputStream(uri) ?: return@rememberLauncherForActivityResult
+        vm.exportFile(entry, outputStream)
+    }
 
     BackHandler(enabled = pagerState.currentPage == 1 && state.path.isNotBlank()) {
         vm.goUp()
@@ -130,6 +159,13 @@ fun WorkspaceDetailPage(id: String) {
                 )
             }
         },
+        floatingActionButton = {
+            if (pagerState.currentPage == 1) {
+                FloatingActionButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
+                    Icon(HugeIcons.FileImport, contentDescription = "导入文件")
+                }
+            }
+        },
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         HorizontalPager(
@@ -154,6 +190,10 @@ fun WorkspaceDetailPage(id: String) {
                     onGoUp = vm::goUp,
                     onOpen = vm::open,
                     onDelete = { deleteTarget = it },
+                    onExport = { entry ->
+                        exportTarget = entry
+                        exportLauncher.launch(entry.name)
+                    },
                 )
             }
         }
@@ -502,6 +542,7 @@ private fun WorkspaceFilesPage(
     onGoUp: () -> Unit,
     onOpen: (WorkspaceFileEntry) -> Unit,
     onDelete: (WorkspaceFileEntry) -> Unit,
+    onExport: (WorkspaceFileEntry) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -540,6 +581,7 @@ private fun WorkspaceFilesPage(
                 entry = entry,
                 onOpen = { onOpen(entry) },
                 onDelete = { onDelete(entry) },
+                onExport = { onExport(entry) },
             )
         }
     }
@@ -600,6 +642,7 @@ private fun WorkspaceFileCard(
     entry: WorkspaceFileEntry,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    onExport: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -653,6 +696,21 @@ private fun WorkspaceFileCard(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
+                    if (!entry.isDirectory) {
+                        DropdownMenuItem(
+                            text = { Text("导出") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.FileImport,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onExport()
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("删除", color = MaterialTheme.colorScheme.error) },
                         leadingIcon = {
