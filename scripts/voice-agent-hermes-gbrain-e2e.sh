@@ -15,19 +15,25 @@ APP_HERMES_CALL_PATH="no_backup/voice-e2e/hermes-call.txt"
 DEVICE_TMP_PCM="/data/local/tmp/rikkahub-voice-agent-e2e-prompt.pcm"
 LOG_DIR="${VOICE_AGENT_E2E_LOG_DIR:-build/voice-agent-e2e}"
 LOG_FILE="$LOG_DIR/logcat.txt"
-DEFAULT_PROMPT_TEXT="Please ask Hermes if he is connected to G-Brain. Please answer with yes or no."
+DEFAULT_PROMPT_TEXT="Ask Hermes. Are you connected to G Brain? Answer yes or no."
+FLITE_VOICE="${VOICE_AGENT_E2E_FLITE_VOICE:-slt}"
 PROMPT_TEXT="${VOICE_AGENT_E2E_PROMPT_TEXT:-$DEFAULT_PROMPT_TEXT}"
 GENERATED_PCM_PATH="${VOICE_AGENT_E2E_GENERATED_PCM_PATH:-$LOG_DIR/generated-prompt.pcm}"
 MANUAL_REVIEW_ANSWER_FILE="${VOICE_AGENT_E2E_MANUAL_REVIEW_ANSWER_PATH:-$LOG_DIR/manual-hermes-answer.txt}"
 REPORT_FILE="${VOICE_AGENT_E2E_REPORT_PATH:-$LOG_DIR/report.txt}"
+MISSING_TOOL_CALL_DIAGNOSTICS_FILE="$LOG_DIR/missing-tool-call-diagnostics.txt"
 PROMPT_SOURCE_TEXT_FILE="$LOG_DIR/generated-prompt.txt"
 LOG_SEARCH_START_LINE=1
+WAIT_FOR_LOG_FAILURE=""
 ADB_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_ADB_TIMEOUT_SECONDS:-20}"
 ADB_LONG_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_ADB_LONG_TIMEOUT_SECONDS:-120}"
 ADB_READY_SCRIPT="${VOICE_AGENT_E2E_ADB_READY_SCRIPT:-scripts/adb-device-ready.sh}"
 GEMINI_TOOL_CALL_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS:-240}"
 HERMES_RESPONSE_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS:-360}"
 CALL_STARTED=0
+PIPELINE_STATUS="not_started"
+CLEANUP_STATUS="not_started"
+CLEANUP_DETAIL=""
 DEVICE_TMP_PCM_CLEANUP_NEEDED=0
 APP_PCM_CLEANUP_NEEDED=0
 FFMPEG_PROMPT_TEXT_CLEANUP_PATH=""
@@ -42,6 +48,11 @@ case "${VOICE_AGENT_E2E_MANUAL_REVIEW:-0}" in
     MANUAL_REVIEW=1
     ;;
 esac
+
+if [[ ! "$PACKAGE" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$ ]]; then
+  printf 'VOICE_AGENT_E2E_PACKAGE must be an Android package name: %s\n' "$PACKAGE" >&2
+  exit 2
+fi
 
 require_env() {
   local name="$1"
@@ -115,8 +126,12 @@ wait_for_log() {
   local timeout_seconds="${3:-90}"
   local deadline=$((SECONDS + timeout_seconds))
   local matched_line
+  WAIT_FOR_LOG_FAILURE=""
   while (( SECONDS < deadline )); do
-    fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || return 1
+    if ! fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN"; then
+      WAIT_FOR_LOG_FAILURE="forbidden"
+      return 1
+    fi
     matched_line="$(awk -v start="$LOG_SEARCH_START_LINE" -v pattern="$pattern" \
       'NR >= start && $0 ~ pattern { print NR; exit }' "$LOG_FILE" 2>/dev/null || true)"
     if [[ -n "$matched_line" ]]; then
@@ -128,6 +143,7 @@ wait_for_log() {
   done
   printf 'Missing marker after %ss: %s\n' "$timeout_seconds" "$label" >&2
   printf 'Pattern: %s\n' "$pattern" >&2
+  WAIT_FOR_LOG_FAILURE="timeout"
   return 1
 }
 
@@ -146,16 +162,47 @@ wait_for_cleanup_log() {
 
 end_voice_agent_call_and_wait() {
   if [[ "$CALL_STARTED" != "1" ]]; then
+    CLEANUP_STATUS="skipped"
+    CLEANUP_DETAIL="call was not started"
     return 0
   fi
-  adb_cmd shell am start-foreground-service \
+  if ! adb_cmd shell am start-foreground-service \
     -n "$SERVICE_COMPONENT" \
-    -a "$CALL_END_ACTION" >/dev/null
-  wait_for_log \
+    -a "$CALL_END_ACTION" >/dev/null; then
+    CLEANUP_STATUS="failed"
+    CLEANUP_DETAIL="service end command failed"
+    return 1
+  fi
+  if wait_for_log \
     "Voice Agent service ended" \
     'VoiceAgentCallService.*end completed conversationId=' \
-    "${VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS:-30}"
-  CALL_STARTED=0
+    "${VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS:-30}"; then
+    CALL_STARTED=0
+    CLEANUP_STATUS="passed"
+    CLEANUP_DETAIL="service end marker observed"
+    return 0
+  fi
+  CLEANUP_STATUS="failed"
+  CLEANUP_DETAIL="service end marker not observed"
+  return 1
+}
+
+print_result_summary() {
+  printf 'PIPELINE: %s\n' "$PIPELINE_STATUS"
+  case "$CLEANUP_STATUS" in
+    passed)
+      printf 'CLEANUP: passed\n'
+      ;;
+    failed)
+      printf 'CLEANUP: failed - %s\n' "$CLEANUP_DETAIL"
+      ;;
+    skipped)
+      printf 'CLEANUP: skipped - %s\n' "$CLEANUP_DETAIL"
+      ;;
+    *)
+      printf 'CLEANUP: %s\n' "$CLEANUP_STATUS"
+      ;;
+  esac
 }
 
 fail_if_log() {
@@ -214,6 +261,41 @@ pull_optional_app_artifact() {
   printf 'missing' > "$temp_path"
   mv -f "$temp_path" "$local_path"
   chmod 600 "$local_path"
+}
+
+append_artifact_preview_to_file() {
+  local label="$1"
+  local app_path="$2"
+  local output_file="$3"
+  local temp_path
+  temp_path="$(mktemp "$LOG_DIR/report-artifact.XXXXXX")"
+  register_report_temp_file "$temp_path"
+  chmod 600 "$temp_path"
+  if adb_exec_out_to_file "$temp_path" run-as "$PACKAGE" head -c 240 "$app_path" &&
+    [[ -s "$temp_path" ]]; then
+    printf '%s: ' "$label" >> "$output_file"
+    tr '\r\n' ' ' < "$temp_path" | cut -c 1-240 >> "$output_file"
+    printf '\n' >> "$output_file"
+  else
+    printf '%s: missing\n' "$label" >> "$output_file"
+  fi
+  rm -f "$temp_path"
+}
+
+write_missing_tool_call_diagnostics() {
+  umask 077
+  mkdir -p "$LOG_DIR" "$(dirname "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE")"
+  local temp_path
+  temp_path="$(mktemp "$LOG_DIR/missing-tool-call-diagnostics.XXXXXX")"
+  register_report_temp_file "$temp_path"
+  chmod 600 "$temp_path"
+  printf 'Voice Agent E2E diagnostic artifacts after missing tool call:\n' > "$temp_path"
+  append_artifact_preview_to_file "Gemini understood from voice" "$APP_INPUT_TRANSCRIPT_PATH" "$temp_path"
+  append_artifact_preview_to_file "Gemini response to user" "$APP_OUTPUT_TRANSCRIPT_PATH" "$temp_path"
+  append_artifact_preview_to_file "Hermes call" "$APP_HERMES_CALL_PATH" "$temp_path"
+  mv -f "$temp_path" "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE"
+  chmod 600 "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE"
+  printf 'Voice Agent E2E diagnostic artifact: %s\n' "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE" >&2
 }
 
 extract_hermes_elapsed_detail() {
@@ -277,6 +359,10 @@ write_e2e_report() {
 
 generate_pcm_prompt() {
   require_command ffmpeg
+  if [[ ! "$FLITE_VOICE" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    printf 'VOICE_AGENT_E2E_FLITE_VOICE contains unsupported characters: %s\n' "$FLITE_VOICE" >&2
+    return 2
+  fi
   umask 077
   mkdir -p "$LOG_DIR" "$(dirname "$GENERATED_PCM_PATH")"
   local prompt_text_file="$PROMPT_SOURCE_TEXT_FILE"
@@ -291,7 +377,7 @@ generate_pcm_prompt() {
   set +e
   ffmpeg -hide_banner \
     -f lavfi \
-    -i "flite=textfile=$ffmpeg_prompt_text_file:voice=kal" \
+    -i "flite=textfile=$ffmpeg_prompt_text_file:voice=$FLITE_VOICE" \
     -ar 16000 \
     -ac 1 \
     -f s16le \
@@ -456,7 +542,16 @@ adb_cmd shell am broadcast \
   --el trailing_silence_ms "${VOICE_AGENT_E2E_TRAILING_SILENCE_MS:-200}" >/dev/null
 
 wait_for_log "debug PCM delivered" 'VoiceAudioDebugInjection.*debug_audio_injection result delivered=true' 30
-wait_for_log "Gemini ask_hermes tool call received" 'VoiceAgentGemini.*receive kind=toolCall' "$GEMINI_TOOL_CALL_TIMEOUT_SECONDS"
+if ! wait_for_log "Gemini ask_hermes tool call received" \
+  'VoiceAgentGemini.*receive kind=toolCall' \
+  "$GEMINI_TOOL_CALL_TIMEOUT_SECONDS"; then
+  if [[ "$MANUAL_REVIEW" == "1" && "$WAIT_FOR_LOG_FAILURE" == "timeout" ]]; then
+    fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
+    write_missing_tool_call_diagnostics
+    fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
+  fi
+  exit 1
+fi
 if [[ "$MANUAL_REVIEW" == "1" ]]; then
   wait_for_log "Hermes response hash observed for manual review" \
     'VoiceAgentE2E.*hermes_tool_response_hash .*actualHash=[0-9a-f]+(,|$)' \
@@ -483,11 +578,21 @@ if [[ "$MANUAL_REVIEW" == "0" ]] &&
   exit 1
 fi
 
+PIPELINE_STATUS="passed"
 if [[ "$MANUAL_REVIEW" == "1" ]]; then
-  end_voice_agent_call_and_wait
   extract_manual_review_answer
   write_e2e_report
+  cleanup_status=0
+  end_voice_agent_call_and_wait || cleanup_status=$?
+  print_result_summary
+  if [[ "$cleanup_status" -ne 0 ]]; then
+    printf 'Voice Agent Hermes/Gbrain live E2E pipeline passed but cleanup failed. Safe log: %s\n' "$LOG_FILE"
+    exit "$cleanup_status"
+  fi
   printf 'Voice Agent Hermes/Gbrain live E2E reached manual review gate. Safe log: %s\n' "$LOG_FILE"
 else
+  CLEANUP_STATUS="skipped"
+  CLEANUP_DETAIL="strict mode leaves cleanup to exit trap"
+  print_result_summary
   printf 'Voice Agent Hermes/Gbrain live E2E passed. Safe log: %s\n' "$LOG_FILE"
 fi

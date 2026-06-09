@@ -48,7 +48,7 @@ class VoiceAgentCoordinator(
     private val logHermesResponseHash: (String) -> Unit = { detail ->
         Log.i(E2E_TAG, "hermes_tool_response_hash $detail")
     },
-    private val writeVoiceE2EArtifact: (String, String) -> Unit = { _, _ -> },
+    private val writeVoiceE2EArtifact: (VoiceE2EArtifact, String) -> Unit = { _, _ -> },
     private val logHermesToolFailure: (String) -> Unit = { detail ->
         Log.w(E2E_TAG, "hermes_tool_failed $detail")
     },
@@ -408,7 +408,7 @@ class VoiceAgentCoordinator(
             }
             transcript
         }
-        writeArtifactSafely(name = "input-transcript.txt", content = artifactSnapshot)
+        writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = artifactSnapshot)
     }
 
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
@@ -426,7 +426,7 @@ class VoiceAgentCoordinator(
             persistAssistantTranscript()
             outputTurnTranscript
         }
-        writeArtifactSafely(name = "output-transcript.txt", content = artifactSnapshot)
+        writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = artifactSnapshot)
     }
 
     private fun playOutputAudio(base64Pcm16: String, sessionId: Long?) {
@@ -489,9 +489,6 @@ class VoiceAgentCoordinator(
             )
             return
         }
-        writeArtifactSafely(name = "hermes-call.txt", content = call.prompt)
-        recordHermesToolRequestHash(callId = call.callId, prompt = call.prompt)
-
         val handle = ToolJobHandle(callId = call.callId, prompt = call.prompt, sessionId = sessionId)
         val job = coordinatorScope.launch(toolLaunchContext, start = CoroutineStart.LAZY) {
             runHermesToolCall(callId = call.callId, prompt = call.prompt, handle = handle)
@@ -502,6 +499,8 @@ class VoiceAgentCoordinator(
             job.cancel()
             return
         }
+        writeArtifactSafely(artifact = VoiceE2EArtifact.HermesCall, content = call.prompt)
+        recordHermesToolRequestHash(callId = call.callId, prompt = call.prompt)
         diagnostics.record("hermes_tool_started", "callId=${call.callId}")
         handle.elapsedJob = coordinatorScope.launch(toolLaunchContext) {
             refreshPendingToolElapsed(callId = call.callId, handle = handle)
@@ -886,16 +885,19 @@ class VoiceAgentCoordinator(
             val message = error.message ?: error.javaClass.simpleName
             diagnostics.record("hermes_tool_response_hash_log_failed", "callId=$callId, message=$message")
         }
-        writeArtifactSafely(name = "hermes-answer.txt", content = answer, callId = callId)
+        writeArtifactSafely(artifact = VoiceE2EArtifact.HermesAnswer, content = answer, callId = callId)
     }
 
-    private fun writeArtifactSafely(name: String, content: String, callId: String? = null) {
+    private fun writeArtifactSafely(artifact: VoiceE2EArtifact, content: String, callId: String? = null) {
         runCatching {
-            writeVoiceE2EArtifact(name, content)
+            writeVoiceE2EArtifact(artifact, content)
         }.onFailure { error ->
             val message = error.message ?: error.javaClass.simpleName
             val callDetail = callId?.let { ", callId=$it" } ?: ""
-            diagnostics.record("voice_e2e_artifact_write_failed", "name=$name$callDetail, message=$message")
+            diagnostics.record(
+                "voice_e2e_artifact_write_failed",
+                "name=${artifact.fileName}$callDetail, message=$message",
+            )
         }
     }
 

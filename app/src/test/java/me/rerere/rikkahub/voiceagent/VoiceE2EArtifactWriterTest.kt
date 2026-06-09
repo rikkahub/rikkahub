@@ -26,7 +26,7 @@ class VoiceE2EArtifactWriterTest {
                 scope = scope,
             )
 
-            writer("hermes-answer.txt", "private answer")
+            writer(VoiceE2EArtifact.HermesAnswer, "private answer")
             delay(100)
 
             assertFalse(File(root, "voice-e2e/hermes-answer.txt").exists())
@@ -37,7 +37,7 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
-    fun `enabled writer persists only allowlisted artifacts under the configured root`() = runBlocking {
+    fun `enabled writer persists typed artifacts under the configured root`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-enabled").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         try {
@@ -47,8 +47,7 @@ class VoiceE2EArtifactWriterTest {
                 scope = scope,
             )
 
-            writer("hermes-answer.txt", "private answer")
-            writer("../escape.txt", "escape")
+            writer(VoiceE2EArtifact.HermesAnswer, "private answer")
 
             val answerFile = File(root, "voice-e2e/hermes-answer.txt")
             withTimeout(1000) {
@@ -57,8 +56,6 @@ class VoiceE2EArtifactWriterTest {
                 }
             }
             assertEquals("private answer", answerFile.readText())
-            assertFalse(File(root.parentFile, "escape.txt").exists())
-            assertFalse(File(root, "voice-e2e/../escape.txt").canonicalFile.exists())
         } finally {
             scope.cancel()
             root.deleteRecursively()
@@ -76,12 +73,40 @@ class VoiceE2EArtifactWriterTest {
                 scope = scope,
             )
             repeat(100) { index ->
-                writer("input-transcript.txt", "snapshot-$index")
+                writer(VoiceE2EArtifact.InputTranscript, "snapshot-$index")
             }
             writer.drain()
 
             val transcriptFile = File(root, "voice-e2e/input-transcript.txt")
             assertEquals("snapshot-99", transcriptFile.readText())
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `enabled writer coalesces noisy transcripts without losing final answer artifact`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-coalesced").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                scope = scope,
+            )
+            repeat(1_000) { index ->
+                writer(VoiceE2EArtifact.InputTranscript, "snapshot-$index")
+            }
+            writer(VoiceE2EArtifact.HermesAnswer, "final answer")
+            repeat(1_000) { index ->
+                writer(VoiceE2EArtifact.OutputTranscript, "output-$index")
+            }
+            writer.drain()
+
+            assertEquals("snapshot-999", File(root, "voice-e2e/input-transcript.txt").readText())
+            assertEquals("final answer", File(root, "voice-e2e/hermes-answer.txt").readText())
+            assertEquals("output-999", File(root, "voice-e2e/output-transcript.txt").readText())
         } finally {
             scope.cancel()
             root.deleteRecursively()
@@ -99,7 +124,7 @@ class VoiceE2EArtifactWriterTest {
                 scope = scope,
             )
 
-            writer("hermes-answer.txt", "private answer")
+            writer(VoiceE2EArtifact.HermesAnswer, "private answer")
             delay(100)
 
             assertFalse(File(root, "voice-e2e/hermes-answer.txt").exists())
@@ -120,7 +145,7 @@ class VoiceE2EArtifactWriterTest {
                 scope = scope,
             )
 
-            writer("hermes-answer.txt", "private answer")
+            writer(VoiceE2EArtifact.HermesAnswer, "private answer")
             writer.drain()
 
             val answerFile = File(root, "voice-e2e/hermes-answer.txt")

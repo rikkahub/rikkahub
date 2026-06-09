@@ -14,6 +14,13 @@ class VoiceAudioFocusPolicyTest {
     }
 
     @Test
+    fun `delayed focus request remains fatal`() {
+        assertTrue(
+            VoiceAudioFocusPolicy.isRequestFailureFatal(AudioManager.AUDIOFOCUS_REQUEST_DELAYED)
+        )
+    }
+
+    @Test
     fun `transient focus loss is recoverable for Telecom managed voice call`() {
         assertFalse(
             VoiceAudioFocusPolicy.isFocusChangeFatal(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)

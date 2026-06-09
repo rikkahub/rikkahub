@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.voiceagent
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class VoiceAgentCallContractTest {
     @Test
@@ -16,5 +19,17 @@ class VoiceAgentCallContractTest {
     @Test
     fun `notification route extra matches RouteActivity contract`() {
         assertEquals("voiceAgentConversationId", VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_CONVERSATION_ID)
+    }
+
+    @Test
+    fun `end foreground promotion is used for active conversation`() {
+        val activeConversationId = Uuid.parse("11111111-1111-4111-8111-111111111111")
+
+        assertTrue(shouldStartForegroundForVoiceAgentEnd(activeConversationId))
+    }
+
+    @Test
+    fun `end foreground promotion is skipped when idle`() {
+        assertFalse(shouldStartForegroundForVoiceAgentEnd(null))
     }
 }

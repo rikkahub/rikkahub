@@ -30,6 +30,7 @@ Set these values in your shell or source them from a local file outside the repo
 | `VOICE_AGENT_E2E_EXPECTED_HASH` | SHA-256 hex digest of the normalized expected Hermes answer. Required outside manual review mode. |
 | `VOICE_AGENT_E2E_PCM_PATH` | Optional absolute path to a private PCM prompt file. If unset, the script generates PCM from `VOICE_AGENT_E2E_PROMPT_TEXT`. |
 | `VOICE_AGENT_E2E_PROMPT_TEXT` | Optional text used to generate PCM when `VOICE_AGENT_E2E_PCM_PATH` is unset. Defaults to asking Hermes whether he is connected to G-Brain. |
+| `VOICE_AGENT_E2E_FLITE_VOICE` | Optional Flite voice used when generating PCM. Defaults to `slt`. |
 | `VOICE_AGENT_E2E_GENERATED_PCM_PATH` | Optional generated PCM output path. Defaults to `build/voice-agent-e2e/generated-prompt.pcm`. |
 | `VOICE_AGENT_E2E_REPORT_PATH` | Optional report output path. Defaults to `build/voice-agent-e2e/report.txt`. |
 | `VOICE_AGENT_E2E_CONVERSATION_ID` | Existing app conversation id used to start the Voice Agent service. |
@@ -87,8 +88,12 @@ If `VOICE_AGENT_E2E_PCM_PATH` is unset, the script generates signed 16-bit littl
 The default generated prompt is:
 
 ```text
-Please ask Hermes if he is connected to G-Brain. Please answer with yes or no.
+Ask Hermes. Are you connected to G Brain? Answer yes or no.
 ```
+
+The generated prompt uses Flite voice `slt` by default because live testing showed the previous `kal` voice was
+transcribed unreliably by Gemini Live. Set `VOICE_AGENT_E2E_FLITE_VOICE` to another installed Flite voice when comparing
+ASR behavior.
 
 Set `VOICE_AGENT_E2E_PROMPT_TEXT` to change one string and regenerate the PCM for a different question.
 
@@ -162,6 +167,9 @@ The local answer file is created with `0600` permissions and must stay local. Th
 the raw answer. Read that file privately and decide whether the run passed. If the answer is correct, the live pipeline
 worked; if it is wrong, treat the run as failed even though the script reached the manual review gate.
 
+After the required pipeline markers pass, manual mode pulls the Hermes answer and writes the report before attempting
+service cleanup. This preserves the diagnostic artifacts even if cleanup later fails.
+
 ## E2E Report
 
 Manual review mode writes `build/voice-agent-e2e/report.txt` by default. The report includes the text used to generate
@@ -170,6 +178,32 @@ answer, and Gemini's text response to the user when output transcription is avai
 
 The script prints the report path but does not print report contents. Treat the report as local/private because it may
 contain raw prompts, transcripts, and Hermes answers.
+
+## Pipeline And Cleanup Result
+
+The script reports the live pipeline result separately from cleanup:
+
+```text
+PIPELINE: passed
+CLEANUP: passed
+```
+
+In strict mode, the script reports that cleanup is left to the best-effort exit trap:
+
+```text
+PIPELINE: passed
+CLEANUP: skipped - strict mode leaves cleanup to exit trap
+```
+
+In manual review mode, if the pipeline passes but cleanup cannot observe the service end marker, the script exits
+nonzero and prints:
+
+```text
+PIPELINE: passed
+CLEANUP: failed - service end marker not observed
+```
+
+Treat that as a successful live pipeline with a cleanup failure that still needs investigation.
 
 ## Pass Criteria
 
@@ -205,6 +239,11 @@ The script fails when any of these markers or conditions appear:
 In manual review mode, a hash mismatch is not a failure by itself. The run still fails on missing pipeline markers,
 auth errors, crashes, playback write failures, or inability to extract the completed `ask_hermes` answer.
 
+When the `ask_hermes` tool-call marker is missing in manual-review mode, the script writes bounded diagnostics from the
+app-private E2E artifacts to `build/voice-agent-e2e/missing-tool-call-diagnostics.txt` and prints only that path. The
+diagnostic artifact includes what Gemini understood from voice, Gemini's response to the user, and the Hermes call
+artifact when available. The script does not fall back to reading the app database.
+
 ## Safe Artifacts
 
 `build/voice-agent-e2e/logcat.txt` is a local artifact and must not be committed. It is scoped to app-relevant tags:
@@ -216,6 +255,9 @@ and must not be committed, pasted into shared logs, or distributed.
 
 `build/voice-agent-e2e/report.txt` is created only in manual review mode. It contains raw prompt, transcript, Hermes
 call, Hermes answer, and Gemini response text and must stay local/private.
+
+`build/voice-agent-e2e/missing-tool-call-diagnostics.txt` is created only for manual-review missing-tool-call failures.
+It contains bounded raw transcript/Hermes-call previews and must stay local/private.
 
 `build/voice-agent-e2e/generated-prompt.pcm` and `build/voice-agent-e2e/generated-prompt.txt` are created when the script
 generates PCM from text. They must not be committed, pasted into shared logs, or distributed.

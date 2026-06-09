@@ -15,6 +15,7 @@ class VoiceAgentCallManager(
     private val _state = MutableStateFlow(VoiceAgentUiState())
     private val _activeConversationId = MutableStateFlow<Uuid?>(null)
     private var activeSession: ManagedVoiceCallSession? = null
+    private var activeLaunchConfig: VoiceAgentLaunchConfig? = null
     private var stateCollectionJob: Job? = null
     private var callStatus: VoiceCallStatus = VoiceCallStatus.Idle
 
@@ -23,24 +24,24 @@ class VoiceAgentCallManager(
 
     fun start(conversationId: Uuid, config: VoiceAgentLaunchConfig, scope: CoroutineScope): Boolean {
         synchronized(lock) {
-            if (activeSession != null && _activeConversationId.value == conversationId) {
+            if (
+                activeSession != null &&
+                _activeConversationId.value == conversationId &&
+                activeLaunchConfig == config
+            ) {
                 return false
             }
         }
 
         val previousSession = synchronized(lock) {
-            stateCollectionJob?.cancel()
-            stateCollectionJob = null
-            activeSession.also {
-                activeSession = null
-                _activeConversationId.value = null
-            }
+            clearActiveSessionLocked()
         }
         previousSession?.end()
 
         val session = factory.create(conversationId = conversationId, config = config, scope = scope)
         synchronized(lock) {
             activeSession = session
+            activeLaunchConfig = config
             _activeConversationId.value = conversationId
             _state.value = session.state.value.copy(call = callStatus)
             stateCollectionJob = scope.launch {
@@ -72,42 +73,37 @@ class VoiceAgentCallManager(
 
     fun end() {
         val session = synchronized(lock) {
-            stateCollectionJob?.cancel()
-            stateCollectionJob = null
             callStatus = VoiceCallStatus.Ending
             _state.value = _state.value.copy(call = VoiceCallStatus.Ending)
-            activeSession.also {
-                activeSession = null
-                _activeConversationId.value = null
-            }
+            clearActiveSessionLocked()
         }
         session?.end()
     }
 
     fun detachForEndAndDrain(): ManagedVoiceCallSession? {
         return synchronized(lock) {
-            stateCollectionJob?.cancel()
-            stateCollectionJob = null
             callStatus = VoiceCallStatus.Ending
             _state.value = _state.value.copy(call = VoiceCallStatus.Ending)
-            activeSession.also {
-                activeSession = null
-                _activeConversationId.value = null
-            }
+            clearActiveSessionLocked()
         }
     }
 
     fun closeNow() {
         val session = synchronized(lock) {
-            stateCollectionJob?.cancel()
-            stateCollectionJob = null
             callStatus = VoiceCallStatus.Ended
             _state.value = VoiceAgentUiState(call = VoiceCallStatus.Ended)
-            activeSession.also {
-                activeSession = null
-                _activeConversationId.value = null
-            }
+            clearActiveSessionLocked()
         }
         session?.closeNow()
+    }
+
+    private fun clearActiveSessionLocked(): ManagedVoiceCallSession? {
+        stateCollectionJob?.cancel()
+        stateCollectionJob = null
+        return activeSession.also {
+            activeSession = null
+            activeLaunchConfig = null
+            _activeConversationId.value = null
+        }
     }
 }

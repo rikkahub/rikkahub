@@ -7,20 +7,27 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
 
-internal val VoiceE2EArtifactNames = setOf(
-    "input-transcript.txt",
-    "output-transcript.txt",
-    "hermes-call.txt",
-    "hermes-answer.txt",
-)
+enum class VoiceE2EArtifact(val fileName: String) {
+    InputTranscript("input-transcript.txt"),
+    OutputTranscript("output-transcript.txt"),
+    HermesCall("hermes-call.txt"),
+    HermesAnswer("hermes-answer.txt"),
+}
 
 class VoiceE2EArtifactWriter private constructor(
     enabled: Boolean,
     rootDirectory: File,
     scope: CoroutineScope?,
 ) {
-    private val commands = if (enabled) Channel<WriteCommand>(Channel.UNLIMITED) else null
+    private val commands = if (enabled) {
+        Channel<WriteCommand>(capacity = 1)
+    } else {
+        null
+    }
     private val directory = File(rootDirectory, "voice-e2e")
+    private val pendingLock = Any()
+    private val pendingWrites = LinkedHashMap<VoiceE2EArtifact, String>()
+    private var flushQueued = false
 
     init {
         val queue = commands
@@ -28,47 +35,70 @@ class VoiceE2EArtifactWriter private constructor(
             scope.launch(Dispatchers.IO) {
                 for (command in queue) {
                     when (command) {
-                        is WriteCommand.Write -> writeArtifact(command.name, command.content)
-                        is WriteCommand.Drain -> command.completed.complete(Unit)
+                        WriteCommand.Flush -> flushPendingWrites()
+                        is WriteCommand.Drain -> {
+                            flushPendingWrites()
+                            command.completed.complete(Unit)
+                        }
                     }
                 }
             }
         }
     }
 
-    operator fun invoke(name: String, content: String) = write(name, content)
+    operator fun invoke(artifact: VoiceE2EArtifact, content: String) = write(artifact, content)
 
-    fun write(name: String, content: String) {
+    fun write(artifact: VoiceE2EArtifact, content: String) {
         val queue = commands ?: return
-        if (name !in VoiceE2EArtifactNames) {
-            VoiceAgentLog.w(TAG, "ignored unexpected artifact name=$name")
-            return
+        var shouldQueueFlush = false
+        synchronized(pendingLock) {
+            pendingWrites[artifact] = content
+            if (!flushQueued) {
+                flushQueued = true
+                shouldQueueFlush = true
+            }
         }
-        if (queue.trySend(WriteCommand.Write(name = name, content = content)).isFailure) {
-            VoiceAgentLog.w(TAG, "artifact write queue rejected name=$name")
+        if (shouldQueueFlush && queue.trySend(WriteCommand.Flush).isFailure) {
+            VoiceAgentLog.w(TAG, "artifact write queue rejected")
         }
     }
 
     suspend fun drain() {
         val queue = commands ?: return
         val completed = CompletableDeferred<Unit>()
-        if (queue.trySend(WriteCommand.Drain(completed)).isSuccess) {
-            completed.await()
+        queue.send(WriteCommand.Drain(completed))
+        completed.await()
+    }
+
+    private fun writeArtifact(artifact: VoiceE2EArtifact, content: String) {
+        runCatching {
+            directory.mkdirs()
+            File(directory, artifact.fileName).writeText(content)
+        }.onFailure { error ->
+            val message = error.message ?: error.javaClass.simpleName
+            VoiceAgentLog.w(TAG, "artifact write failed name=${artifact.fileName} message=$message")
         }
     }
 
-    private fun writeArtifact(name: String, content: String) {
-        runCatching {
-            directory.mkdirs()
-            File(directory, name).writeText(content)
-        }.onFailure { error ->
-            val message = error.message ?: error.javaClass.simpleName
-            VoiceAgentLog.w(TAG, "artifact write failed name=$name message=$message")
+    private fun flushPendingWrites() {
+        while (true) {
+            val snapshot = synchronized(pendingLock) {
+                if (pendingWrites.isEmpty()) {
+                    flushQueued = false
+                    return
+                }
+                LinkedHashMap(pendingWrites).also {
+                    pendingWrites.clear()
+                }
+            }
+            snapshot.forEach { (name, content) ->
+                writeArtifact(name, content)
+            }
         }
     }
 
     private sealed interface WriteCommand {
-        data class Write(val name: String, val content: String) : WriteCommand
+        object Flush : WriteCommand
         data class Drain(val completed: CompletableDeferred<Unit>) : WriteCommand
     }
 

@@ -183,15 +183,29 @@ class VoiceAgentCallService : Service() {
     }
 
     private fun endCall() {
-        notificationJob?.cancel()
-        notificationJob = null
         if (endJob?.isActive == true) {
             return
         }
+        notificationJob?.cancel()
+        notificationJob = null
+        val endingConversationId = manager.activeConversationId.value
+        if (shouldStartForegroundForVoiceAgentEnd(endingConversationId)) {
+            startForegroundFor(
+                conversationId = endingConversationId.toString(),
+                state = manager.state.value.copy(call = VoiceCallStatus.Ending),
+            )
+        }
         callGeneration += 1
         val endGeneration = callGeneration
-        val endingConversationId = manager.activeConversationId.value
         val session = manager.detachForEndAndDrain()
+        if (session == null && endingConversationId == null) {
+            telecomConversationId = null
+            telecomCallRegistry.disconnectActive()
+            VoiceAgentLog.d(TAG, "end completed conversationId=none")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         endJob = serviceScope.launch {
             if (endGeneration != callGeneration) {
                 return@launch
@@ -288,6 +302,9 @@ internal fun voiceAgentServiceStartConfig(
         false,
     )
 )
+
+internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
+    activeConversationId != null
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
     "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}"

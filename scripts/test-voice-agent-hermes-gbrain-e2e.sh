@@ -20,6 +20,17 @@ assert_contains() {
   fi
 }
 
+assert_contains_in_order() {
+  local haystack="$1"
+  local earlier="$2"
+  local later="$3"
+  if [[ "$haystack" != *"$earlier"*"$later"* ]]; then
+    printf 'Expected output to contain "%s" before "%s"\n' "$earlier" "$later" >&2
+    printf 'Actual output:\n%s\n' "$haystack" >&2
+    exit 1
+  fi
+}
+
 assert_file_contains_exactly() {
   local path="$1"
   local expected="$2"
@@ -113,8 +124,10 @@ if [[ "$#" -ne 13 || "$1" != "-hide_banner" || "$2" != "-f" || "$3" != "lavfi" |
   exit 99
 fi
 input="$5"
-if [[ "$input" != flite=textfile=*":voice=kal" ]]; then
+expected_voice="${FAKE_FFMPEG_EXPECTED_VOICE:-slt}"
+if [[ "$input" != flite=textfile=*":voice=$expected_voice" ]]; then
   printf 'unexpected ffmpeg flite input: %s\n' "$input" >&2
+  printf 'expected voice: %s\n' "$expected_voice" >&2
   exit 98
 fi
 if [[ -n "${FAKE_FFMPEG_EXPECTED_OUTPUT:-}" && "$output" != "$FAKE_FFMPEG_EXPECTED_OUTPUT" ]]; then
@@ -122,7 +135,7 @@ if [[ -n "${FAKE_FFMPEG_EXPECTED_OUTPUT:-}" && "$output" != "$FAKE_FFMPEG_EXPECT
   exit 94
 fi
 textfile="${input#flite=textfile=}"
-textfile="${textfile%:voice=kal}"
+textfile="${textfile%:voice=$expected_voice}"
 if [[ "${FAKE_FFMPEG_REJECT_FILTER_META_PATH:-0}" == "1" && "$textfile" == *[:\']* ]]; then
   printf 'ffmpeg textfile path contains unescaped filter metacharacters: %s\n' "$textfile" >&2
   exit 93
@@ -150,6 +163,14 @@ write_fake_adb() {
 #!/usr/bin/env bash
 set -euo pipefail
 
+print_large_artifact() {
+  printf '%240sdiagnostic-tail' '' | tr ' ' A
+}
+
+print_large_artifact_preview() {
+  printf '%240s' '' | tr ' ' A
+}
+
 if [[ -n "${FAKE_ADB_ARGS_LOG:-}" ]]; then
   printf '%s\n' "$*" >> "$FAKE_ADB_ARGS_LOG"
 fi
@@ -165,18 +186,26 @@ case "$args" in
     cat <<'LOGS'
 06-08 12:00:00.000 D/VoiceAgentGemini(1): event kind=SetupComplete
 06-08 12:00:01.000 I/VoiceAudioDebugInjection(1): debug_audio_injection result delivered=true
-06-08 12:00:02.000 D/VoiceAgentGemini(1): receive kind=toolCall
 LOGS
+    if [[ "${FAKE_ADB_FORBIDDEN_AFTER_DEBUG:-0}" == "1" ]]; then
+      sleep "${FAKE_ADB_FORBIDDEN_AFTER_DEBUG_DELAY_SECONDS:-1}"
+      printf '06-08 12:00:01.500 E/VoiceAgentCallService(1): Voice Lab request failed 403\n'
+    fi
+    if [[ "${FAKE_ADB_SKIP_TOOL_CALL:-0}" != "1" ]]; then
+      printf '06-08 12:00:02.000 D/VoiceAgentGemini(1): receive kind=toolCall\n'
+    fi
     if [[ "${FAKE_ADB_FORBIDDEN_MARKER:-0}" == "1" ]]; then
       printf '06-08 12:00:02.500 E/VoiceAgentCallService(1): Voice Lab request failed 403\n'
     fi
-    cat <<'LOGS'
+    if [[ "${FAKE_ADB_SKIP_TOOL_CALL:-0}" != "1" ]]; then
+      cat <<'LOGS'
 06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
 06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 LOGS
+    fi
     deadline=$((SECONDS + 5))
     while [[ ! -f "${FAKE_ADB_END_MARKER:?}" && "$SECONDS" -lt "$deadline" ]]; do
       sleep 0.1
@@ -212,7 +241,12 @@ LOGS
     rm -f "${FAKE_ADB_END_MARKER:?}"
     ;;
   "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.END")
-    : > "${FAKE_ADB_END_MARKER:?}"
+    if [[ "${FAKE_ADB_FAIL_END_COMMAND:-0}" == "1" ]]; then
+      exit 73
+    fi
+    if [[ "${FAKE_ADB_SKIP_END_MARKER:-0}" != "1" ]]; then
+      : > "${FAKE_ADB_END_MARKER:?}"
+    fi
     ;;
   "-s RZ shell am broadcast "*)
     ;;
@@ -226,17 +260,68 @@ LOGS
     if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
       exit 1
     fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact
+      exit 0
+    fi
     printf 'Please ask Hermes if he is connected to G-Brain.'
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-call.txt")
     if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
       exit 1
     fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact
+      exit 0
+    fi
     printf 'Is Hermes connected to G-Brain? Answer yes or no.'
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/output-transcript.txt")
     if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
       exit 1
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact
+      exit 0
+    fi
+    printf 'Yes, Hermes is connected to G-Brain.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/input-transcript.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ -n "${FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS:-}" ]]; then
+      sleep "$FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS"
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact_preview
+      exit 0
+    fi
+    printf 'Please ask Hermes if he is connected to G-Brain.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/hermes-call.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ -n "${FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS:-}" ]]; then
+      sleep "$FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS"
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact_preview
+      exit 0
+    fi
+    printf 'Is Hermes connected to G-Brain? Answer yes or no.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/output-transcript.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ -n "${FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS:-}" ]]; then
+      sleep "$FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS"
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact_preview
+      exit 0
     fi
     printf 'Yes, Hermes is connected to G-Brain.'
     ;;
@@ -259,6 +344,31 @@ FAKE_ADB_END_MARKER="$TMP_DIR/adb-end-requested"
 export FAKE_ADB_ARGS_LOG
 export FAKE_FFMPEG_TEXTFILE_LOG
 export FAKE_ADB_END_MARKER
+: > "$FAKE_ADB_ARGS_LOG"
+
+before_invalid_package_adb_lines="$(wc -l < "$FAKE_ADB_ARGS_LOG" 2>/dev/null || printf '0')"
+set +e
+invalid_package_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  VOICE_AGENT_E2E_PACKAGE='me.rerere.rikkahub.debug;id' \
+  "$SCRIPT" 2>&1
+)"
+invalid_package_status=$?
+set -e
+
+if [[ "$invalid_package_status" -eq 0 ]]; then
+  printf 'Expected invalid package run to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$invalid_package_output" >&2
+  exit 1
+fi
+assert_contains "$invalid_package_output" \
+  "VOICE_AGENT_E2E_PACKAGE must be an Android package name: me.rerere.rikkahub.debug;id"
+after_invalid_package_adb_lines="$(wc -l < "$FAKE_ADB_ARGS_LOG" 2>/dev/null || printf '0')"
+if [[ "$after_invalid_package_adb_lines" != "$before_invalid_package_adb_lines" ]]; then
+  printf 'Expected invalid package validation to run before ADB commands.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
 
 expected_hash="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 manual_log_dir="$TMP_DIR/manual-log"
@@ -288,6 +398,8 @@ fi
 
 assert_contains "$manual_output" "PASS marker: Hermes response hash observed for manual review"
 assert_contains "$manual_output" "Manual review answer artifact: $manual_log_dir/manual-hermes-answer.txt"
+assert_contains "$manual_output" "PIPELINE: passed"
+assert_contains "$manual_output" "CLEANUP: passed"
 assert_contains "$manual_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
 assert_file_contains_exactly "$manual_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "--ez enableVoiceE2EArtifacts true"
@@ -296,8 +408,8 @@ assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/input-trans
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/output-transcript.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-call.txt"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-answer.txt"
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-answer.txt" \
+  "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
   "rm -f no_backup/voice-e2e/hermes-answer.txt"
@@ -334,6 +446,80 @@ if [[ "$manual_no_hash_status" -ne 0 ]]; then
   exit 1
 fi
 assert_contains "$manual_no_hash_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
+
+cleanup_failure_log_dir="$TMP_DIR/cleanup-failure-log"
+rm -f "$FAKE_ADB_END_MARKER"
+set +e
+cleanup_failure_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_SKIP_END_MARKER=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$cleanup_failure_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+cleanup_failure_status=$?
+set -e
+
+if [[ "$cleanup_failure_status" -eq 0 ]]; then
+  printf 'Expected cleanup failure run to exit nonzero.\n' >&2
+  printf 'Actual output:\n%s\n' "$cleanup_failure_output" >&2
+  exit 1
+fi
+assert_contains "$cleanup_failure_output" "PASS marker: Voice playback wrote"
+assert_contains "$cleanup_failure_output" "Manual review answer artifact: $cleanup_failure_log_dir/manual-hermes-answer.txt"
+assert_contains "$cleanup_failure_output" "Voice Agent E2E report: $cleanup_failure_log_dir/report.txt"
+assert_contains "$cleanup_failure_output" "PIPELINE: passed"
+assert_contains "$cleanup_failure_output" "CLEANUP: failed - service end marker not observed"
+assert_contains_in_order "$cleanup_failure_output" \
+  "PASS marker: Voice playback wrote" \
+  "Manual review answer artifact: $cleanup_failure_log_dir/manual-hermes-answer.txt"
+assert_contains_in_order "$cleanup_failure_output" \
+  "Manual review answer artifact: $cleanup_failure_log_dir/manual-hermes-answer.txt" \
+  "Voice Agent E2E report: $cleanup_failure_log_dir/report.txt"
+assert_contains_in_order "$cleanup_failure_output" \
+  "Voice Agent E2E report: $cleanup_failure_log_dir/report.txt" \
+  "CLEANUP: failed - service end marker not observed"
+assert_file_contains_exactly "$cleanup_failure_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
+assert_file_contains "$cleanup_failure_log_dir/report.txt" "Hermes answer:"
+
+cleanup_command_failure_log_dir="$TMP_DIR/cleanup-command-failure-log"
+rm -f "$FAKE_ADB_END_MARKER"
+set +e
+cleanup_command_failure_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_FAIL_END_COMMAND=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$cleanup_command_failure_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+cleanup_command_failure_status=$?
+set -e
+
+if [[ "$cleanup_command_failure_status" -eq 0 ]]; then
+  printf 'Expected cleanup command failure run to exit nonzero.\n' >&2
+  printf 'Actual output:\n%s\n' "$cleanup_command_failure_output" >&2
+  exit 1
+fi
+assert_contains "$cleanup_command_failure_output" "PASS marker: Voice playback wrote"
+assert_contains "$cleanup_command_failure_output" "Manual review answer artifact: $cleanup_command_failure_log_dir/manual-hermes-answer.txt"
+assert_contains "$cleanup_command_failure_output" "Voice Agent E2E report: $cleanup_command_failure_log_dir/report.txt"
+assert_contains "$cleanup_command_failure_output" "PIPELINE: passed"
+assert_contains "$cleanup_command_failure_output" "CLEANUP: failed - service end command failed"
+assert_file_contains_exactly "$cleanup_command_failure_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
+assert_file_contains "$cleanup_command_failure_log_dir/report.txt" "Hermes answer:"
 
 readiness_failure_log_dir="$TMP_DIR/readiness-failure-log"
 before_readiness_failure_adb_lines="$(wc -l < "$FAKE_ADB_ARGS_LOG")"
@@ -377,7 +563,8 @@ chmod 644 \
 set +e
 generated_output="$(
   PATH="$TMP_DIR:$PATH" \
-  FAKE_FFMPEG_EXPECTED_PROMPT="Please ask Hermes if he is connected to G-Brain. Please answer with yes or no." \
+  FAKE_FFMPEG_EXPECTED_PROMPT="Ask Hermes. Are you connected to G Brain? Answer yes or no." \
+  FAKE_FFMPEG_EXPECTED_VOICE=slt \
   FAKE_FFMPEG_EXPECTED_OUTPUT="$generated_log_dir/generated-prompt.pcm" \
   VOICE_AGENT_E2E_SERIAL=RZ \
   VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
@@ -401,7 +588,7 @@ assert_contains "$generated_output" "Generating PCM prompt from VOICE_AGENT_E2E_
 assert_contains "$generated_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
 assert_file_contains_exactly "$generated_log_dir/generated-prompt.pcm" "generated pcm"
 assert_file_contains_exactly "$generated_log_dir/generated-prompt.txt" \
-  "Please ask Hermes if he is connected to G-Brain. Please answer with yes or no."
+  "Ask Hermes. Are you connected to G Brain? Answer yes or no."
 report_path="$generated_log_dir/report.txt"
 if [[ ! -f "$report_path" ]]; then
   printf 'Expected report file to exist: %s\n' "$report_path" >&2
@@ -409,7 +596,7 @@ if [[ ! -f "$report_path" ]]; then
 fi
 report_contents="$(cat "$report_path")"
 assert_contains "$report_contents" "Text used to generate voice:"
-assert_contains "$report_contents" "Please ask Hermes if he is connected to G-Brain. Please answer with yes or no."
+assert_contains "$report_contents" "Ask Hermes. Are you connected to G Brain? Answer yes or no."
 assert_contains "$report_contents" "Gemini understood from voice:"
 assert_contains "$report_contents" "Please ask Hermes if he is connected to G-Brain."
 assert_contains "$report_contents" "Hermes call:"
@@ -422,14 +609,14 @@ assert_contains "$report_contents" "Gemini response to user:"
 assert_contains "$report_contents" "Yes, Hermes is connected to G-Brain."
 assert_contains "$generated_output" "Voice Agent E2E report: $report_path"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/input-transcript.txt"
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/input-transcript.txt" \
+  "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-call.txt"
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-call.txt" \
+  "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/output-transcript.txt"
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/output-transcript.txt" \
+  "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_no_report_temp_files "$generated_log_dir"
 report_mode="$(stat -c '%a' "$report_path")"
 if [[ "$report_mode" != "600" ]]; then
@@ -442,6 +629,68 @@ for extra_artifact in input-transcript.txt hermes-call.txt output-transcript.txt
     exit 1
   fi
 done
+
+override_voice_log_dir="$TMP_DIR/override-voice-log"
+set +e
+override_voice_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_FFMPEG_EXPECTED_PROMPT="Prompt with override voice." \
+  FAKE_FFMPEG_EXPECTED_VOICE=kal16 \
+  FAKE_FFMPEG_EXPECTED_OUTPUT="$override_voice_log_dir/generated-prompt.pcm" \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PROMPT_TEXT="Prompt with override voice." \
+  VOICE_AGENT_E2E_FLITE_VOICE=kal16 \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$override_voice_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+override_voice_status=$?
+set -e
+
+if [[ "$override_voice_status" -ne 0 ]]; then
+  printf 'Expected generated PCM mode with override voice to pass, got status %s.\n' "$override_voice_status" >&2
+  printf 'Actual output:\n%s\n' "$override_voice_output" >&2
+  exit 1
+fi
+assert_file_contains_exactly "$override_voice_log_dir/generated-prompt.pcm" "generated pcm"
+
+invalid_voice_log_dir="$TMP_DIR/invalid-voice-log"
+adb_log_lines_before_invalid_voice="$(wc -l < "$FAKE_ADB_ARGS_LOG")"
+set +e
+invalid_voice_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PROMPT_TEXT="Prompt with invalid voice." \
+  VOICE_AGENT_E2E_FLITE_VOICE='kal:bad' \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$invalid_voice_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  "$SCRIPT" 2>&1
+)"
+invalid_voice_status=$?
+set -e
+
+if [[ "$invalid_voice_status" -eq 0 ]]; then
+  printf 'Expected generated PCM mode with invalid override voice to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$invalid_voice_output" >&2
+  exit 1
+fi
+assert_contains "$invalid_voice_output" "VOICE_AGENT_E2E_FLITE_VOICE contains unsupported characters: kal:bad"
+adb_log_lines_after_invalid_voice="$(wc -l < "$FAKE_ADB_ARGS_LOG")"
+if [[ "$adb_log_lines_after_invalid_voice" != "$adb_log_lines_before_invalid_voice" ]]; then
+  printf 'Expected invalid voice failure before ADB calls.\n' >&2
+  printf 'Actual ADB log:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+if [[ -e "$invalid_voice_log_dir/generated-prompt.pcm" ]]; then
+  printf 'Expected invalid voice failure not to write PCM output.\n' >&2
+  exit 1
+fi
 
 missing_report_log_dir="$TMP_DIR/missing-report-log"
 missing_report_path="$TMP_DIR/custom-report.txt"
@@ -593,6 +842,159 @@ if grep -F -- "databases/rikka_hub" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
   exit 1
 fi
 
+missing_tool_call_log_dir="$TMP_DIR/missing-tool-call-log"
+set +e
+missing_tool_call_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_SKIP_TOOL_CALL=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$missing_tool_call_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+missing_tool_call_status=$?
+set -e
+
+if [[ "$missing_tool_call_status" -eq 0 ]]; then
+  printf 'Expected missing tool-call run to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_tool_call_output" >&2
+  exit 1
+fi
+missing_tool_call_diagnostics="$missing_tool_call_log_dir/missing-tool-call-diagnostics.txt"
+assert_contains "$missing_tool_call_output" "Missing marker after 1s: Gemini ask_hermes tool call received"
+assert_contains "$missing_tool_call_output" \
+  "Voice Agent E2E diagnostic artifact: $missing_tool_call_diagnostics"
+assert_file_contains "$missing_tool_call_diagnostics" "Gemini understood from voice:"
+assert_file_contains "$missing_tool_call_diagnostics" "Please ask Hermes if he is connected to G-Brain."
+assert_file_contains "$missing_tool_call_diagnostics" "Gemini response to user:"
+assert_file_contains "$missing_tool_call_diagnostics" "Yes, Hermes is connected to G-Brain."
+assert_file_contains "$missing_tool_call_diagnostics" "Hermes call:"
+assert_file_contains "$missing_tool_call_diagnostics" "Is Hermes connected to G-Brain? Answer yes or no."
+if [[ "$missing_tool_call_output" == *"Please ask Hermes if he is connected to G-Brain."* ||
+  "$missing_tool_call_output" == *"Yes, Hermes is connected to G-Brain."* ||
+  "$missing_tool_call_output" == *"Is Hermes connected to G-Brain? Answer yes or no."* ]]; then
+  printf 'Expected private diagnostic contents not to be printed to process output.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_tool_call_output" >&2
+  exit 1
+fi
+if grep -F -- "databases/rikka_hub" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected no database fallback for missing tool-call diagnostics.\n' >&2
+  printf 'Actual ADB log:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+
+large_diagnostic_log_dir="$TMP_DIR/large-diagnostic-log"
+set +e
+large_diagnostic_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_SKIP_TOOL_CALL=1 \
+  FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$large_diagnostic_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+large_diagnostic_status=$?
+set -e
+
+if [[ "$large_diagnostic_status" -eq 0 ]]; then
+  printf 'Expected large diagnostic artifact run to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$large_diagnostic_output" >&2
+  exit 1
+fi
+large_diagnostic_file="$large_diagnostic_log_dir/missing-tool-call-diagnostics.txt"
+assert_contains "$large_diagnostic_output" \
+  "Voice Agent E2E diagnostic artifact: $large_diagnostic_file"
+assert_file_contains "$large_diagnostic_file" "Gemini understood from voice: AAAAAAAAAAAAAAAA"
+if [[ "$large_diagnostic_output" == *"AAAAAAAAAAAAAAAA"* ||
+  "$large_diagnostic_output" == *"diagnostic-tail"* ]]; then
+  printf 'Expected diagnostic preview contents not to print to process output.\n' >&2
+  printf 'Actual output:\n%s\n' "$large_diagnostic_output" >&2
+  exit 1
+fi
+if [[ "$(cat "$large_diagnostic_file")" == *"diagnostic-tail"* ]]; then
+  printf 'Expected diagnostic artifact not to contain content past 240 bytes.\n' >&2
+  printf 'Actual diagnostic file:\n%s\n' "$(cat "$large_diagnostic_file")" >&2
+  exit 1
+fi
+assert_file_contains "$FAKE_ADB_ARGS_LOG" \
+  "exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/input-transcript.txt"
+
+tool_wait_forbidden_log_dir="$TMP_DIR/tool-wait-forbidden-log"
+set +e
+tool_wait_forbidden_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_SKIP_TOOL_CALL=1 \
+  FAKE_ADB_FORBIDDEN_AFTER_DEBUG=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$tool_wait_forbidden_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+tool_wait_forbidden_status=$?
+set -e
+
+if [[ "$tool_wait_forbidden_status" -eq 0 ]]; then
+  printf 'Expected forbidden marker during tool-call wait to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$tool_wait_forbidden_output" >&2
+  exit 1
+fi
+assert_contains "$tool_wait_forbidden_output" "PASS marker: debug PCM delivered"
+assert_contains "$tool_wait_forbidden_output" "Forbidden marker found: common forbidden marker"
+if [[ "$tool_wait_forbidden_output" == *"Voice Agent E2E diagnostic artifact:"* ]]; then
+  printf 'Expected forbidden marker during tool-call wait not to print missing tool-call diagnostics.\n' >&2
+  printf 'Actual output:\n%s\n' "$tool_wait_forbidden_output" >&2
+  exit 1
+fi
+
+diagnostic_boundary_forbidden_log_dir="$TMP_DIR/diagnostic-boundary-forbidden-log"
+set +e
+diagnostic_boundary_forbidden_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_SKIP_TOOL_CALL=1 \
+  FAKE_ADB_FORBIDDEN_AFTER_DEBUG=1 \
+  FAKE_ADB_FORBIDDEN_AFTER_DEBUG_DELAY_SECONDS=3 \
+  FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS=4 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$diagnostic_boundary_forbidden_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+diagnostic_boundary_forbidden_status=$?
+set -e
+
+if [[ "$diagnostic_boundary_forbidden_status" -eq 0 ]]; then
+  printf 'Expected forbidden marker during diagnostics to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$diagnostic_boundary_forbidden_output" >&2
+  exit 1
+fi
+assert_contains "$diagnostic_boundary_forbidden_output" "Missing marker after 1s: Gemini ask_hermes tool call received"
+diagnostic_boundary_forbidden_file="$diagnostic_boundary_forbidden_log_dir/missing-tool-call-diagnostics.txt"
+assert_contains "$diagnostic_boundary_forbidden_output" \
+  "Voice Agent E2E diagnostic artifact: $diagnostic_boundary_forbidden_file"
+assert_file_contains "$diagnostic_boundary_forbidden_file" "Gemini understood from voice:"
+assert_contains "$diagnostic_boundary_forbidden_output" "Forbidden marker found: common forbidden marker"
+
 forbidden_marker_log_dir="$TMP_DIR/forbidden-marker-log"
 set +e
 forbidden_marker_output="$(
@@ -617,6 +1019,11 @@ if [[ "$forbidden_marker_status" -eq 0 ]]; then
   exit 1
 fi
 assert_contains "$forbidden_marker_output" "Forbidden marker found: common forbidden marker"
+if [[ "$forbidden_marker_output" == *"Voice Agent E2E diagnostic artifact:"* ]]; then
+  printf 'Expected forbidden-marker failure not to print missing tool-call diagnostics.\n' >&2
+  printf 'Actual output:\n%s\n' "$forbidden_marker_output" >&2
+  exit 1
+fi
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
   "rm -f no_backup/voice-e2e/hermes-answer.txt"
@@ -653,6 +1060,7 @@ if [[ "$strict_success_status" -ne 0 ]]; then
   exit 1
 fi
 assert_contains "$strict_success_output" "Voice Agent Hermes/Gbrain live E2E passed."
+assert_contains "$strict_success_output" "CLEANUP: skipped - strict mode leaves cleanup to exit trap"
 if [[ -e "$strict_success_report_path" ]]; then
   printf 'Expected strict success mode not to write report: %s\n' "$strict_success_report_path" >&2
   exit 1

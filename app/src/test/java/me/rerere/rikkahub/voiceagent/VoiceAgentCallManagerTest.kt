@@ -92,6 +92,49 @@ class VoiceAgentCallManagerTest {
     }
 
     @Test
+    fun `starting same conversation with different launch config replaces existing session`() = runTest {
+        val first = FakeManagedVoiceCallSession()
+        val second = FakeManagedVoiceCallSession()
+        val factory = FakeVoiceAgentCallFactory(first, second)
+        val manager = VoiceAgentCallManager(factory = factory)
+        val conversationId = Uuid.parse("77777777-7777-4777-8777-777777777778")
+
+        val startedFirst = manager.start(
+            conversationId = conversationId,
+            config = fakeLaunchConfig(enableVoiceE2EArtifacts = false),
+            scope = this,
+        )
+        val startedSecond = manager.start(
+            conversationId = conversationId,
+            config = fakeLaunchConfig(enableVoiceE2EArtifacts = true),
+            scope = this,
+        )
+
+        assertEquals(true, startedFirst)
+        assertEquals(true, startedSecond)
+        assertEquals(1, first.endCalls)
+        assertEquals(1, second.startCalls)
+        assertEquals(true, factory.created.last().second.enableVoiceE2EArtifacts)
+        assertEquals(conversationId, manager.activeConversationId.value)
+    }
+
+    @Test
+    fun `starting same conversation with same e2e launch config does not replace existing session`() = runTest {
+        val session = FakeManagedVoiceCallSession()
+        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
+        val conversationId = Uuid.parse("77777777-7777-4777-8777-777777777779")
+        val config = fakeLaunchConfig(enableVoiceE2EArtifacts = true)
+
+        val startedFirst = manager.start(conversationId, config, this)
+        val startedDuplicate = manager.start(conversationId, config, this)
+
+        assertEquals(true, startedFirst)
+        assertEquals(false, startedDuplicate)
+        assertEquals(1, session.startCalls)
+        assertEquals(0, session.endCalls)
+    }
+
+    @Test
     fun `reconnect forwards to active same conversation session`() = runTest {
         val session = FakeManagedVoiceCallSession()
         val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
@@ -202,12 +245,13 @@ private class FakeVoiceAgentCallFactory(
     }
 }
 
-private fun fakeLaunchConfig() = VoiceAgentLaunchConfig(
+private fun fakeLaunchConfig(enableVoiceE2EArtifacts: Boolean = false) = VoiceAgentLaunchConfig(
     voiceLabBaseUrl = "https://voice.test",
     credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
     voiceModelId = "gemini-flash",
     assistantName = "Hermes",
     assistantPrompt = "system",
+    enableVoiceE2EArtifacts = enableVoiceE2EArtifacts,
 )
 
 private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking {
