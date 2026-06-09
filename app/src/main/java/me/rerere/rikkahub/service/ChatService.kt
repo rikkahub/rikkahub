@@ -94,7 +94,9 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.ai.memory.MEMORY_RECALL_K
+import me.rerere.rikkahub.data.ai.memory.MemoryRecaller
+import me.rerere.rikkahub.data.ai.memory.resolveMemoryRecallScope
 import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundController
 import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
 import me.rerere.rikkahub.service.mutation.ConversationMutations
@@ -338,7 +340,7 @@ class ChatService(
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
-    private val memoryRepository: MemoryRepository,
+    private val memoryRecaller: MemoryRecaller,
     private val generationHandler: GenerationHandler,
     private val subagentRunner: SubagentRunner,
     private val templateTransformer: TemplateTransformer,
@@ -881,26 +883,29 @@ class ChatService(
                     publishStreamingMessages(getOrCreateSession(conversationId).state, messages)
                 }
             )
+            val effectiveMessages = conversation.currentMessages.let {
+                if (messageRange != null) {
+                    it.subList(messageRange.start, messageRange.endInclusive + 1)
+                } else {
+                    it
+                }
+            }
+            // Relevance recall (issue #210) replaces the historic full memory dump: gated on
+            // enableMemory, scoped global-or-assistant, ranked against the last user turn. Skipped ⇒
+            // empty (no memories injected) — so memory-off behaviour is unchanged.
+            val recalledMemories = resolveMemoryRecallScope(assistant, effectiveMessages)
+                ?.let { scope -> memoryRecaller.recall(scope.query, scope.assistantId, MEMORY_RECALL_K) }
+                ?: emptyList()
             generationHandler.generateText(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
-                messages = conversation.currentMessages.let {
-                    if (messageRange != null) {
-                        it.subList(messageRange.start, messageRange.endInclusive + 1)
-                    } else {
-                        it
-                    }
-                },
+                messages = effectiveMessages,
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
-                memories = if (assistant.useGlobalMemory) {
-                    memoryRepository.getGlobalMemories()
-                } else {
-                    memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
-                },
+                memories = recalledMemories,
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)

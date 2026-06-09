@@ -3,13 +3,20 @@ package me.rerere.rikkahub.data.ai
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import me.rerere.rikkahub.data.ai.memory.RecalledMemory
+import me.rerere.rikkahub.data.ai.memory.memoryAgeLabel
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.toLocalDate
 
-internal fun buildMemoryPrompt(memories: List<AssistantMemory>) =
+// Renders the relevance-recalled subset (issue #210) — was the full memory dump. Each memory now
+// carries an `age` line (computed from updatedAt) so a stale preference reads as stale rather than
+// present-tense truth. [nowMs] is injected so the age render is deterministic in tests.
+internal fun buildMemoryPrompt(
+    memories: List<RecalledMemory>,
+    nowMs: Long = System.currentTimeMillis(),
+) =
     buildString {
         appendLine()
         append("**Memories**")
@@ -21,6 +28,7 @@ internal fun buildMemoryPrompt(memories: List<AssistantMemory>) =
                 add(buildJsonObject {
                     put("id", memory.id)
                     put("content", memory.content)
+                    put("age", memoryAgeLabel(memory.updatedAt, nowMs))
                 })
             }
         }

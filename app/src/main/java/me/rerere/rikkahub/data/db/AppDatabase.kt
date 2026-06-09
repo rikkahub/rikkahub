@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.db.dao.GenMediaDAO
 import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
 import me.rerere.rikkahub.data.db.dao.KnowledgeChunkDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
+import me.rerere.rikkahub.data.db.dao.MemoryVectorDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
@@ -19,6 +20,7 @@ import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.db.entity.KnowledgeChunkEntity
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
+import me.rerere.rikkahub.data.db.entity.MemoryVectorEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
@@ -32,9 +34,10 @@ import me.rerere.rikkahub.utils.JsonInstant
         MessageNodeEntity::class,
         ManagedFileEntity::class,
         FavoriteEntity::class,
-        KnowledgeChunkEntity::class
+        KnowledgeChunkEntity::class,
+        MemoryVectorEntity::class
     ],
-    version = 22,
+    version = 23,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -67,6 +70,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDAO
 
     abstract fun knowledgeChunkDao(): KnowledgeChunkDAO
+
+    abstract fun memoryVectorDao(): MemoryVectorDAO
 }
 
 object TokenUsageConverter {
