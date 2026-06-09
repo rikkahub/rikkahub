@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
@@ -154,6 +155,9 @@ internal fun FilesPicker(
                     )
                 }
             },
+            colors = ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            ),
             modifier = Modifier
                 .clip(MaterialTheme.shapes.large)
                 .clickable {
@@ -181,6 +185,9 @@ internal fun FilesPicker(
                     )
                 }
             },
+            colors = ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            ),
             modifier = Modifier
                 .clip(MaterialTheme.shapes.large)
                 .clickable {
@@ -344,7 +351,7 @@ private fun BigIconTextButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Surface(
-            tonalElevation = 2.dp, shape = RoundedCornerShape(8.dp)
+            color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(8.dp)
         ) {
             Box(
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
