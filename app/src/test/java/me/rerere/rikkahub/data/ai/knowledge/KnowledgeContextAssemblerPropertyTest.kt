@@ -10,10 +10,12 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.estimateTokens
+import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.floor
 
 /**
  * High-value PBT target for issue #141: the pure [KnowledgeContextAssembler]. These properties are
@@ -231,5 +233,80 @@ class KnowledgeContextAssemblerPropertyTest {
                 )
             }
         }
+    }
+
+    // ---- Combined cross-surface budget (issue #141 Phase 2) -------------------------------------
+
+    /**
+     * Phase 2 routes MEMORY through the assembler on the SYSTEM-prompt surface while Phase 1's
+     * KnowledgeContextTransformer keeps RAG/attachments on the MESSAGE surface. The design's
+     * memory-first / message-auto-remainder split must keep their COMBINED selected token total within
+     * the same `floor(0.25*window)` slice — the assembler is invoked twice, once per surface, and the
+     * message budget recomputes its systemPromptTokens as `base + renderedMemory`, so the memory it
+     * selects is subtracted from the message slice rather than added on top.
+     *
+     * This models that arithmetic purely:
+     *   memBudget = floor(0.25w) - base                      (system surface)
+     *   memTokens = sum(assemble(memoryBlocks, memBudget))   (<= memBudget, P1)
+     *   msgBudget = KnowledgeBudget.of(model, base + memTokens) = floor(0.25w) - (base + memTokens)
+     *   msgTokens = sum(assemble(messageBlocks, msgBudget))  (<= msgBudget, P1)
+     *   => memTokens + msgTokens <= floor(0.25w) - base <= floor(0.25w)
+     *
+     * It FAILS if KnowledgeBudget.of stopped subtracting systemPromptTokens, or if the message budget
+     * were modeled as floor(0.25w) - base (i.e. the auto-remainder forgot to include the rendered
+     * memory) — exactly the regressions Phase 2 must not introduce.
+     */
+    @Test
+    fun `combined memory(system) + message budgets never exceed the knowledge slice`() {
+        runBlocking {
+            checkAll(400, arbCombinedCase) { (model, base, memoryBlocks, messageBlocks) ->
+                val window = ModelRegistryWindow.of(model)
+                val slice = floor(window * KnowledgeBudget.KNOWLEDGE_FRACTION).toInt()
+
+                val memBudget = KnowledgeBudget.of(model, base)
+                val selMem = KnowledgeContextAssembler.assemble(memoryBlocks, memBudget)
+                val memTokens = selMem.sumOf { it.estimatedTokens }
+
+                // The Phase 1 transformer recomputes systemPromptTokens over the materialized SYSTEM
+                // message = base + rendered memory; model that as the message-surface budget.
+                val msgBudget = KnowledgeBudget.of(model, base + memTokens)
+                val selMsg = KnowledgeContextAssembler.assemble(messageBlocks, msgBudget)
+                val msgTokens = selMsg.sumOf { it.estimatedTokens }
+
+                // The real contract is the TIGHTER `<= slice - base` (the available knowledge budget),
+                // floored at 0 when the base alone exceeds the slice. Asserting only `<= slice` would
+                // pass even if the auto-remainder forgot to subtract the rendered memory (the exact
+                // regression Phase 2 must not introduce). (cross-model gate: codex.)
+                val availableKnowledge = (slice - base).coerceAtLeast(0)
+                assertTrue(
+                    "combined mem=$memTokens + msg=$msgTokens must be <= slice-base=$availableKnowledge (slice=$slice base=$base)",
+                    memTokens + msgTokens <= availableKnowledge,
+                )
+            }
+        }
+    }
+
+    /**
+     * (model, base, memoryBlocks, messageBlocks) where `base` is a valid system-prompt cost in
+     * `[0, floor(0.25w)]` and each block carries the shared-estimator cost. Uses an explicit
+     * contextWindow so the window is known (and `getContextWindowForModel` returns it verbatim,
+     * locked by [KnowledgeBudgetTest]).
+     */
+    private val arbCombinedCase:
+        Arb<Quad<Model, Int, List<KnowledgeContextBlock>, List<KnowledgeContextBlock>>> = arbitrary {
+        val window = Arb.int(1_000..1_000_000).bind()
+        val model = Model(contextWindow = window)
+        val slice = floor(window * KnowledgeBudget.KNOWLEDGE_FRACTION).toInt()
+        val base = Arb.int(0..slice).bind()
+        val memoryBlocks = arbBlocks.bind()
+        val messageBlocks = arbBlocks.bind()
+        Quad(model, base, memoryBlocks, messageBlocks)
+    }
+
+    private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+
+    /** Local mirror of the window resolution the budget uses, so the property can compute the slice. */
+    private object ModelRegistryWindow {
+        fun of(model: Model): Int = me.rerere.ai.registry.ModelRegistry.getContextWindowForModel(model)
     }
 }

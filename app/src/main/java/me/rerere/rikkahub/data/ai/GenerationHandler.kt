@@ -18,6 +18,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
+import me.rerere.ai.core.estimateTokens
 import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
@@ -39,6 +40,10 @@ import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
+import me.rerere.rikkahub.data.ai.knowledge.KnowledgeBudget
+import me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextAssembler
+import me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextRenderer
+import me.rerere.rikkahub.data.ai.knowledge.KnowledgeScope
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.ai.memory.RecalledMemory
@@ -383,8 +388,26 @@ class GenerationHandler(
 
                 // 记忆
                 if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories = memories))
+                    // Memory-first, message-auto-remainder (issue #141 Phase 2): spend
+                    // floor(0.25*window) - baseSystemPromptTokens on memory here, where the base is the
+                    // assistant system prompt built SO FAR (memory is appended before recent-chats/tools).
+                    // The Phase 1 KnowledgeContextTransformer then auto-shrinks the message surface
+                    // because the materialized SYSTEM message now includes the rendered memory — no
+                    // TransformerContext threading, no second fraction.
+                    val baseSystemPromptTokens =
+                        estimateTokens(listOf(UIMessagePart.Text(this.toString())))
+                    val memoryBlocks = buildMemoryPrompt(
+                        memories = memories,
+                        scope = if (assistant.useGlobalMemory) KnowledgeScope.GLOBAL else KnowledgeScope.ASSISTANT,
+                    )
+                    val selected = KnowledgeContextAssembler.assemble(
+                        memoryBlocks,
+                        KnowledgeBudget.of(model, baseSystemPromptTokens),
+                    )
+                    selected.forEach { block ->
+                        appendLine()
+                        append(KnowledgeContextRenderer.render(block))
+                    }
                 }
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
