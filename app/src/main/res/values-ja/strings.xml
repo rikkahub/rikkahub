@@ -1163,5 +1163,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_ui_automation">UI自動化（画面コントロール）</string>
   <string name="assistant_page_ui_automation_desc">このアシスタントが他のアプリの画面を観察することを許可します（読み取り専用）。システム設定でRikkaHubのアクセシビリティサービスを有効にする必要があります。読み取り専用：タップや入力はできません。</string>
   <string name="automation_kill_switch_unavailable">自動化を開始できません：「停止」キルスイッチを表示できませんでした。rikkahub のユーザー補助サービスとオーバーレイを有効にして、もう一度お試しください。</string>
+  <string name="chat_status_retrieving_knowledge">ナレッジベースを検索中…</string>
 </resources>
 

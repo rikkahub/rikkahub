@@ -22,7 +22,7 @@ data class MemoryRecallScope(val query: String, val assistantId: String)
  *
  * Otherwise the scope is the global memory set when [Assistant.useGlobalMemory] (global-only recall,
  * §13 Q3) else the assistant's own id, and the query is the last user message's text (same idiom as
- * `KnowledgeRetrievalTransformer`). Pure (no IO) so the gate is unit-testable without the full
+ * `KnowledgeContextTransformer`). Pure (no IO) so the gate is unit-testable without the full
  * ChatService.
  */
 fun resolveMemoryRecallScope(assistant: Assistant, messages: List<UIMessage>): MemoryRecallScope? {

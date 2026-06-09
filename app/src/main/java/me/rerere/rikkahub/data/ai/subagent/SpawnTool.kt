@@ -84,7 +84,7 @@ fun buildSpawnTool(
         // additionally stripped inside SubagentRunner.run (recursion guard).
         val subTools = buildSubagentTools(sub).filterNot { it.needsApproval }
 
-        // Set-then-clear discipline (mirrors OcrTransformer / KnowledgeRetrievalTransformer):
+        // Set-then-clear discipline (mirrors OcrTransformer / KnowledgeContextTransformer):
         // restore the prior status on EVERY terminal path so a stale "Running <sub>" label can't
         // leak into the parent's loading UI — including the error() throw on an unknown subagent
         // / unresolvable model bubbling out of runner.run.

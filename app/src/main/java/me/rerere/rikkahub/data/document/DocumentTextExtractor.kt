@@ -5,7 +5,7 @@ import java.io.File
 
 /**
  * The one central document text extractor used by BOTH chat attachments
- * ([me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer]) and RAG ingestion
+ * ([me.rerere.rikkahub.data.ai.transformers.KnowledgeContextTransformer]) and RAG ingestion
  * ([me.rerere.rikkahub.data.rag.IngestKnowledgeBaseUseCase]) — issue #102. It owns the MIME/extension
  * routing (via [DocumentTypeResolver]) that the two paths used to duplicate, so they can no longer
  * drift.

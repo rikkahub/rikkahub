@@ -71,8 +71,7 @@ import me.rerere.rikkahub.service.automation.AutomationKillSwitch
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
-import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
-import me.rerere.rikkahub.data.ai.transformers.KnowledgeRetrievalTransformer
+import me.rerere.rikkahub.data.ai.transformers.KnowledgeContextTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
@@ -321,9 +320,12 @@ private val inputTransformers by lazy {
         TimeReminderTransformer,
         PromptInjectionTransformer,
         PlaceholderTransformer,
-        DocumentAsPromptTransformer,
         OcrTransformer,
-        KnowledgeRetrievalTransformer,
+        // Single message-surface knowledge assembly point (issue #141): replaces both
+        // DocumentAsPromptTransformer and KnowledgeRetrievalTransformer. Placed AFTER OcrTransformer
+        // so RAG's query basis stays identical to today (post-OCR text); attachments are Document
+        // parts OcrTransformer ignores, so document injection is unaffected by the position.
+        KnowledgeContextTransformer,
     )
 }
 
