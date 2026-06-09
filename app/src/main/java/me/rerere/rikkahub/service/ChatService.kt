@@ -857,10 +857,14 @@ class ChatService(
                         // 8) but does NOT widen the admitted surface — authorize still DENYs on the
                         // surface branch for any real foreground app today, exactly as OBSERVE does.
                         surface = emptySet(),
-                        verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL),
+                        verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT),
                         // GLOBAL_NAV must be in budget for ui_global's authorize to pass the
-                        // sink-in-budget branch; ui_scroll carries no sink (SCROLL verb suffices).
-                        sinkBudget = setOf(Sink.GLOBAL_NAV),
+                        // sink-in-budget branch; TYPE_INTO for ui_set_text (#198 slice 9, the input
+                        // sink). ui_scroll carries no sink (SCROLL verb suffices). Surface stays empty
+                        // = deny-all (S1): these grants make the verbs/sinks AUTHORIZABLE but do NOT
+                        // widen the admitted surface — authorize still DENYs on surface for any real
+                        // foreground app today.
+                        sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
                         lease = Lease(
                             expiresAt = trustClock.now() + UI_AUTOMATION_LEASE_TTL_MS,
                             maxSteps = UI_AUTOMATION_MAX_STEPS,

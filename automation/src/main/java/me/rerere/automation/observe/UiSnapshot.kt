@@ -74,6 +74,19 @@ data class UiTarget(
     /** Form-field key for inputs (used by the v2 self-heal path; carried but unused for reads). */
     val formKey: String? = null,
     /**
+     * The editable field's CURRENT VALUE — the literal `node.text` for an editable node, with NO
+     * contentDescription fallback and NO password unmasking (it is `null` for a non-editable or
+     * password node). This is the ground-truth source for the act path's P9 restricted-idempotency
+     * no-op (#198 slice 9): [text] is a DISPLAY projection (`node.text ?: node.contentDescription`),
+     * so an EMPTY field (`node.text == null`) whose `contentDescription` is a label/hint (e.g.
+     * "Email") projects `text = "Email"` — comparing P9 against that would match `set_text("Email")`
+     * and skip the dispatch, leaving the field empty while the model believes the write landed. The
+     * postcondition the no-op checks must be the editable VALUE, not the masked/hinted display string
+     * (design §3: P9 applies "with clean postconditions only"). NOT model-facing — the renderer never
+     * surfaces it; like [formKey]/[windowContentHash] it is internal plumbing carried on the target.
+     */
+    val editableText: String? = null,
+    /**
      * True when this target belongs to a system/permission window (systemui/packageinstaller). System
      * UI is observable but NEVER an act target (design I-act-3 / I8/P18): the act path maps this to
      * [me.rerere.automation.cap.AuthRequest.systemUiTarget] so the guard DENYs a write on it — without
@@ -108,4 +121,15 @@ sealed class Selector {
 
     @Serializable
     data class BySemanticKey(val semanticKey: String) : Selector()
+
+    /**
+     * Address an input field by its [UiTarget.formKey] (#198 slice 9). The projector sets `formKey`
+     * ONLY for editable nodes (from the node's stable resourceId), so this is the input-field axis of
+     * the selection grammar. Like [BySemanticKey] it is a STABLE-key selector: the act path re-resolves
+     * it against the CURRENT grounded snapshot's tid (self-heal, I-act-9 / P14/MR2) — it is never a
+     * positional bypass, because the seq+hash freshness assert still runs after the resolve (so a
+     * benign reflow heals to the new tid, but a stale grounding is still rejected before any dispatch).
+     */
+    @Serializable
+    data class ByFormKey(val formKey: String) : Selector()
 }

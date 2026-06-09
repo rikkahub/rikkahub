@@ -24,6 +24,7 @@ import me.rerere.automation.cap.Sink
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.automation.observe.Selector
+import me.rerere.automation.observe.UiFlag
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -393,6 +394,435 @@ class AutomationCoreActPropertyTest {
                 ActOutcome.StaleState,
                 outcome,
             )
+        }
+    }
+
+    // ===================================================================================
+    // #198 slice 9 — ui_set_text input sink + P9 (restricted idempotency) + self-heal (P14/MR2).
+    // The new act verb is Verb.SET_TEXT over Sink.TYPE_INTO (the input sink). Each property below is
+    // written so a naive "always dispatch the set_text" core FAILS it; the fail-closed core passes.
+    // ===================================================================================
+
+    /** A guard whose authority covers SET_TEXT + the TYPE_INTO input sink for [pkg] (maximally OK). */
+    private fun setTextGuard(pkg: String = APP, now: Long = 0L, expiresAt: Long = Long.MAX_VALUE) =
+        guard(
+            pkg = pkg,
+            verbs = setOf(Verb.SET_TEXT, Verb.SCROLL, Verb.GLOBAL),
+            sinks = setOf(Sink.TYPE_INTO, Sink.GLOBAL_NAV),
+            now = now,
+            expiresAt = expiresAt,
+        )
+
+    /**
+     * A backend with a single editable text field (tid 0) carrying [text] plus a stable resourceId
+     * (→ formKey, set by the projector only for editable nodes) and contentDescription (→ semanticKey).
+     * So Selector.ByTid / ByFormKey / BySemanticKey all resolve it, and the projected [UiTarget.text]
+     * is the P9 postcondition source.
+     */
+    private fun editableBackend(
+        seq: Long = 1L,
+        pkg: String = APP,
+        text: String = "hello",
+        resourceId: String = "com.example.app:id/field",
+        contentDescription: String = "name-field",
+    ) = FakeBackend(
+        RawTree(
+            stateSeq = seq,
+            foregroundPkg = pkg,
+            windows = listOf(
+                RawWindow(
+                    pkg = pkg,
+                    root = RawNode(
+                        text = text, className = "EditText",
+                        resourceId = resourceId, contentDescription = contentDescription,
+                        visible = true, hasArea = true, editable = true,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    // ---- P9 (no-op): set_text whose target already shows the requested text does NOT dispatch ----
+    // The postcondition (field == requested text) already holds, so core.act returns Acted WITHOUT
+    // touching the backend (no perform, no settle, no re-snapshot). On a naive "always dispatch" core
+    // this FAILS — a redundant set_text is recorded and the screen is needlessly settled.
+    @Test
+    fun `P9 a set_text equal to the projected text is a no-op and never dispatches`() {
+        runBlocking {
+            val backend = editableBackend(text = "hello")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            assertEquals("fixture must project the field's text", "hello", grounded.targets.first().text)
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "hello"))
+            assertTrue("an idempotent set_text still succeeds", outcome is ActOutcome.Acted)
+            assertTrue("P9: a no-op set_text must NOT touch the backend", backend.performed.isEmpty())
+            assertEquals("P9: a no-op set_text must NOT settle", 0, backend.settleCount)
+            assertEquals(
+                "a no-op returns the unchanged grounding (no re-snapshot)",
+                grounded.stateSeq,
+                (outcome as ActOutcome.Acted).snapshot.stateSeq,
+            )
+        }
+    }
+
+    // ---- P9 (clean-postcondition): an EMPTY field whose contentDescription HINT equals the requested
+    // text MUST dispatch, never no-op. UiTarget.text is a DISPLAY projection (node.text ?:
+    // contentDescription), so a blank field (node.text == null) with contentDescription == "Email"
+    // projects text = "Email"; comparing the P9 no-op against `text` would match set_text("Email") and
+    // skip the dispatch, leaving the field EMPTY while the model believes the write landed (data loss,
+    // design §3 "clean postconditions only" violated). The no-op must compare the editable VALUE
+    // (UiTarget.editableText, null for an empty field), so this dispatches exactly one SetText. On the
+    // unfixed code (compare against `text`) this FAILS — performed is empty and the field stays blank.
+    @Test
+    fun `P9 set_text into an empty field whose hint equals the text dispatches not no-op`() {
+        runBlocking {
+            // node.text = null (empty field) but contentDescription = "Email" (a label/hint). The
+            // projector still makes it an editable target (editable + hasText via contentDescription).
+            val backend = FakeBackend(
+                RawTree(
+                    stateSeq = 1L, foregroundPkg = APP,
+                    windows = listOf(
+                        RawWindow(
+                            pkg = APP,
+                            root = RawNode(
+                                text = null, className = "EditText",
+                                resourceId = "com.example.app:id/email",
+                                contentDescription = "Email",
+                                visible = true, hasArea = true, editable = true,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val field = grounded.targets.first()
+            assertEquals("the display projection falls back to the hint", "Email", field.text)
+            assertEquals("the editable value of a blank field is null (not the hint)", null, field.editableText)
+
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "Email"))
+            assertTrue("writing the hint text into the blank field must dispatch", outcome is ActOutcome.Acted)
+            assertEquals(
+                "the blank field must receive exactly one SetText (not a silent no-op)",
+                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = "Email"),
+                backend.performed.single(),
+            )
+            assertEquals("a real write settles exactly once", 1, backend.settleCount)
+        }
+    }
+
+    // ---- P9 (dispatch): a DIFFERENT text dispatches exactly one PerformAction.SetText and settles ----
+    @Test
+    fun `P9 a set_text different from the projected text dispatches once and re-grounds`() {
+        runBlocking {
+            checkAll(200, Arb.string(1..12)) { newText ->
+                if (newText != "hello") {
+                    val backend = editableBackend(text = "hello")
+                    val core = AutomationCore(backend)
+                    val grounded = core.observe()
+                    val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), newText))
+                    assertTrue("a changing set_text dispatches", outcome is ActOutcome.Acted)
+                    assertEquals(
+                        "exactly one PerformAction.SetText on the grounded (stateSeq, tid)",
+                        PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = newText),
+                        backend.performed.single(),
+                    )
+                    assertEquals("settle runs exactly once per dispatched act", 1, backend.settleCount)
+                    assertTrue(
+                        "act success is the re-grounding postcondition",
+                        (outcome as ActOutcome.Acted).snapshot.stateSeq > grounded.stateSeq,
+                    )
+                }
+            }
+        }
+    }
+
+    // ---- P14/MR2 (self-heal, metamorphic): a stable key (formKey / semanticKey) resolves against a
+    // benignly-reflowed re-projection (same keys, DIFFERENT tid order) and still dispatches the right
+    // element. A bare positional ByTid would scroll the WRONG node after the reflow; a stable key
+    // re-resolves to the CURRENT snapshot's tid. The seq+hash assert (step 2) still runs afterward, so
+    // this is NOT a TOCTOU bypass — the metamorphic relation is "re-projection with the same key ⇒ the
+    // act lands on the element bearing that key, wherever it now sits". On a positional-only core FAILS.
+    @Test
+    fun `P14 self-heal a stable key resolves under a reflow and dispatches the keyed element`() {
+        runBlocking {
+            // Two editable fields; the TARGET field carries the stable keys. We then re-ground a tree
+            // where the field order is swapped (its tid changes 1→0): the key must still find it.
+            fun twoFieldTree(seq: Long, targetFirst: Boolean) = RawTree(
+                stateSeq = seq,
+                foregroundPkg = APP,
+                windows = listOf(
+                    RawWindow(
+                        pkg = APP,
+                        root = RawNode(
+                            visible = false, hasArea = false,
+                            children = buildList {
+                                val other = RawNode(
+                                    text = "other", className = "EditText",
+                                    resourceId = "com.example.app:id/other",
+                                    contentDescription = "other-field",
+                                    visible = true, hasArea = true, editable = true,
+                                )
+                                val targetField = RawNode(
+                                    text = "old", className = "EditText",
+                                    resourceId = "com.example.app:id/target",
+                                    contentDescription = "target-field",
+                                    visible = true, hasArea = true, editable = true,
+                                )
+                                if (targetFirst) { add(targetField); add(other) }
+                                else { add(other); add(targetField) }
+                            },
+                        ),
+                    ),
+                ),
+            )
+            // Ground with the target as tid 0, then reflow so the target is now tid 1 at a new seq.
+            val backend = FakeBackend(twoFieldTree(seq = 1L, targetFirst = true))
+            val core = AutomationCore(backend)
+            core.observe() // monotonic seq bookkeeping; grounded below is the reflowed one
+            backend.rawTree = twoFieldTree(seq = 2L, targetFirst = false)
+            val grounded = core.observe()
+            val targetTid = grounded.targets.first { it.formKey == "com.example.app:id/target" }.tid
+            assertEquals("the reflow must have moved the target off tid 0", 1, targetTid)
+
+            // ByFormKey heals to the current tid (1), dispatching there — not at positional 0.
+            val byForm = core.act(
+                setTextGuard(), grounded,
+                Act.SetText(Selector.ByFormKey("com.example.app:id/target"), "new"),
+            )
+            assertTrue(byForm is ActOutcome.Acted)
+            assertEquals(
+                "ByFormKey must dispatch the keyed element's CURRENT tid (self-heal)",
+                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = targetTid, text = "new"),
+                backend.performed.single(),
+            )
+        }
+    }
+
+    @Test
+    fun `P14 self-heal BySemanticKey resolves the keyed editable element`() {
+        runBlocking {
+            val backend = editableBackend(text = "old", contentDescription = "name-field")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val outcome = core.act(
+                setTextGuard(), grounded,
+                Act.SetText(Selector.BySemanticKey("name-field"), "new"),
+            )
+            assertTrue(outcome is ActOutcome.Acted)
+            assertEquals(
+                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = "new"),
+                backend.performed.single(),
+            )
+        }
+    }
+
+    // ---- MR2 (ambiguous key): two targets share the stable key ⇒ Denied(AMBIGUOUS), never a guess ----
+    @Test
+    fun `set_text with an ambiguous formKey is denied not guessed`() {
+        runBlocking {
+            // Two editable fields sharing the SAME resourceId ⇒ same formKey ⇒ ByFormKey is ambiguous.
+            val ambiguous = FakeBackend(
+                RawTree(
+                    stateSeq = 1L, foregroundPkg = APP,
+                    windows = listOf(
+                        RawWindow(
+                            pkg = APP,
+                            root = RawNode(
+                                visible = false, hasArea = false,
+                                children = listOf(
+                                    RawNode(
+                                        text = "a", className = "EditText",
+                                        resourceId = "com.example.app:id/dup",
+                                        visible = true, hasArea = true, editable = true,
+                                    ),
+                                    RawNode(
+                                        text = "b", className = "EditText",
+                                        resourceId = "com.example.app:id/dup",
+                                        visible = true, hasArea = true, editable = true,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            val core = AutomationCore(ambiguous)
+            val grounded = core.observe()
+            assertEquals("fixture should project two same-formKey fields", 2, grounded.targets.size)
+            val outcome = core.act(
+                setTextGuard(), grounded,
+                Act.SetText(Selector.ByFormKey("com.example.app:id/dup"), "x"),
+            )
+            assertEquals(ActOutcome.Denied(ActDenyReason.AMBIGUOUS), outcome)
+            assertTrue(ambiguous.performed.isEmpty())
+        }
+    }
+
+    // ---- S2 (guard-before): a set_text without the SET_TEXT verb is denied before any dispatch ----
+    @Test
+    fun `S2 set_text without the SET_TEXT verb is denied before dispatch`() {
+        runBlocking {
+            val backend = editableBackend(text = "old")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            // Verb omitted (only SCROLL granted), but TYPE_INTO sink IS in budget — so the ONLY thing
+            // that can refuse is the verb branch, proving the verb gate is reached before dispatch.
+            val g = guard(verbs = setOf(Verb.SCROLL), sinks = setOf(Sink.TYPE_INTO))
+            val outcome = core.act(g, grounded, Act.SetText(Selector.ByTid(0), "new"))
+            assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
+            assertTrue("S2: a denied set_text must NOT touch the backend", backend.performed.isEmpty())
+        }
+    }
+
+    // ---- S2 (sink-in-budget): a set_text whose TYPE_INTO sink is NOT in budget is denied ----
+    @Test
+    fun `S2 set_text without the TYPE_INTO sink budget is denied before dispatch`() {
+        runBlocking {
+            val backend = editableBackend(text = "old")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            // SET_TEXT verb granted, but the TYPE_INTO sink budget is empty: the sink-in-budget branch
+            // must DENY (a write verb laundering a sink that was never budgeted).
+            val g = guard(verbs = setOf(Verb.SET_TEXT), sinks = emptySet())
+            val outcome = core.act(g, grounded, Act.SetText(Selector.ByTid(0), "new"))
+            assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
+            assertTrue(backend.performed.isEmpty())
+        }
+    }
+
+    // ---- HEADLINE input-sink safety (sensitiveNode): a set_text into a PASSWORD field is DENIED,
+    // never dispatched and never a no-op short-circuit. The provenance is UiFlag.PASSWORD on the
+    // projected target; core maps it to AuthRequest.sensitiveNode and the guard DENYs (I8/P18). On a
+    // core that forgets to set sensitiveNode on the SetText path, the password field is typed into —
+    // the single worst input-sink failure (writing into a credential field). This pins it closed.
+    @Test
+    fun `set_text into a password field is denied before dispatch`() {
+        runBlocking {
+            val passwordBackend = FakeBackend(
+                RawTree(
+                    stateSeq = 1L, foregroundPkg = APP,
+                    windows = listOf(
+                        RawWindow(
+                            pkg = APP,
+                            root = RawNode(
+                                text = "secret", className = "EditText",
+                                resourceId = "com.example.app:id/pw",
+                                visible = true, hasArea = true, editable = true, password = true,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            val core = AutomationCore(passwordBackend)
+            val grounded = core.observe()
+            val pw = grounded.targets.first()
+            assertTrue("fixture must project a password field", pw.flags.contains(UiFlag.PASSWORD))
+            // Surface admits APP, SET_TEXT verb + TYPE_INTO sink are granted: the ONLY refusal source
+            // is the sensitive-node DENY branch, proving the headline safety check is reached.
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "x"))
+            assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
+            assertTrue("typing into a password field must NEVER dispatch", passwordBackend.performed.isEmpty())
+        }
+    }
+
+    // ---- systemUiTarget: a set_text into a system-window editable node is DENIED before dispatch ----
+    @Test
+    fun `set_text into a system-window node is denied before dispatch`() {
+        runBlocking {
+            val systemBackend = FakeBackend(
+                RawTree(
+                    stateSeq = 1L, foregroundPkg = APP,
+                    windows = listOf(
+                        RawWindow(
+                            pkg = "com.android.packageinstaller",
+                            systemWindow = true,
+                            root = RawNode(
+                                text = "search", className = "EditText",
+                                resourceId = "com.android.packageinstaller:id/search",
+                                visible = true, hasArea = true, editable = true,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            val core = AutomationCore(systemBackend)
+            val grounded = core.observe()
+            assertTrue(
+                "the projected target must carry its system-window provenance",
+                grounded.targets.first().systemWindow,
+            )
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "x"))
+            assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
+            assertTrue("a system-UI set_text must NOT touch the backend", systemBackend.performed.isEmpty())
+        }
+    }
+
+    // ---- MR3 (shared SM, via SetText): a stateSeq advance after grounding ⇒ set_text NEVER dispatches.
+    // The TOCTOU assert is shared with scroll/global — exercising it through the new variant proves the
+    // input sink inherits the same freshness guarantee, not a separate (possibly weaker) path.
+    @Test
+    fun `MR3 a stateSeq advance after grounding never dispatches a set_text`() {
+        runBlocking {
+            val backend = editableBackend(text = "old")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            backend.injectTransition() // the screen moved under the model
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "new"))
+            assertEquals(ActOutcome.StaleState, outcome)
+            assertTrue("MR3: a stale set_text must NOT touch the backend", backend.performed.isEmpty())
+        }
+    }
+
+    // ---- dispatch-time stale re-check (carried stateSeq mismatch ⇒ SetText not recorded). Mirrors the
+    // scroll MR3-at-dispatch test: an event lands in the assert→dispatch gap; the carried SetText
+    // stateSeq no longer matches the live seq, so FakeBackend.perform refuses (false) ⇒ StaleState. ----
+    @Test
+    fun `MR3 a stateSeq advance between assert and dispatch never lands the set_text`() {
+        runBlocking {
+            val backend = editableBackend(text = "old")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val g = setTextGuard()
+            backend.armGate()
+            val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
+            val deferred = async(Dispatchers.Default) {
+                core.act(g, grounded, Act.SetText(Selector.ByTid(0), "new"))
+            }
+            entered.await() // parked in perform, having passed resolve/assert/authorize
+            backend.injectTransition() // a content event arrives in the assert→dispatch gap
+            backend.releaseGate()
+            val outcome = deferred.await()
+            assertTrue(
+                "a set_text whose carried stateSeq is stale must NOT land (I-act-1/MR3)",
+                backend.performed.isEmpty(),
+            )
+            assertEquals(
+                "a refused (stale) dispatch must be StaleState, never Acted (F4)",
+                ActOutcome.StaleState,
+                outcome,
+            )
+        }
+    }
+
+    // ---- P20 (revoke-in-flight, via SetText): revoke during a parked set_text cancels it ----
+    @Test
+    fun `P20 revoke during an in-flight set_text cancels it`() {
+        runBlocking {
+            val backend = editableBackend(text = "old")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val g = setTextGuard()
+            backend.armGate()
+            val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
+            val job: Job = launch(Dispatchers.Default) {
+                core.act(g, grounded, Act.SetText(Selector.ByTid(0), "new"))
+            }
+            entered.await()
+            g.revoke()
+            job.join()
+            assertTrue("revoke must cancel the in-flight set_text", job.isCancelled)
+            assertFalse("the gated set_text must never have completed", backend.performed.isNotEmpty())
         }
     }
 

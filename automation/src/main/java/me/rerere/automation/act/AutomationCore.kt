@@ -95,9 +95,13 @@ class AutomationCore(
      *     so the backend is never touched (I-act-10 / P20 extended). Success is the re-snapshot
      *     postcondition (the screen actually changed), NOT the backend's dispatch boolean (D4).
      *
-     * Note: only the lowest-risk nav verbs ship here — scroll (no sink) and global nav
-     * (`Sink.GLOBAL_NAV`, not dangerous). Dangerous-sink (submit-class) confirmation is slice 11, and
-     * full system-UI-non-actionable enforcement on tap is slice 10; neither is reachable from here.
+     * Verbs reachable here: the lowest-risk nav — scroll (no sink) and global nav (`Sink.GLOBAL_NAV`,
+     * not dangerous) — plus the slice-9 input sink set_text (`Verb.SET_TEXT` + `Sink.TYPE_INTO`).
+     * set_text carries one extra rule on TOP of the shared SM: the restricted P9 no-op (step 3.5) —
+     * if the resolved field already projects the requested text, the act succeeds WITHOUT dispatching
+     * (idempotent; it still ADMITs/audits, never short-circuiting the password/system-UI guard above).
+     * Dangerous-sink (submit-class) confirmation is slice 11, and full system-UI-non-actionable
+     * enforcement on tap is slice 10; neither is reachable from here.
      */
     suspend fun act(guard: CapabilityGuard, grounded: UiSnapshot, request: Act): ActOutcome {
         // 0. GoHost (I-act-6 / P12 extended): no act dispatches while the host app is foreground.
@@ -107,10 +111,17 @@ class AutomationCore(
         // The model must re-ground, so this is a StaleState, not a Denied (re-observe, never replay).
         if (grounded.screenState == ScreenState.FOREGROUND_IS_HOST) return ActOutcome.StaleState
 
-        // 1. resolve (pure, over the grounded snapshot the tid came from).
-        val tid: Int? = when (request) {
+        // 1. resolve (pure, over the grounded snapshot the tid came from). Targeted + SetText both name
+        // a Selector; a stable-key selector (BySemanticKey / ByFormKey) self-heals to the CURRENT tid
+        // here (I-act-9 / P14/MR2) — re-resolution happens against this grounding, and step 2's seq+hash
+        // assert STILL runs afterward, so the heal can never bypass the freshness check (no TOCTOU).
+        val selector: Selector? = when (request) {
             is Act.Global -> null
-            is Act.Targeted -> when (val r = resolve(grounded, request.selector)) {
+            is Act.Targeted -> request.selector
+            is Act.SetText -> request.selector
+        }
+        val tid: Int? = selector?.let {
+            when (val r = resolve(grounded, it)) {
                 is Resolve.Found -> r.tid
                 Resolve.NotFound -> return ActOutcome.StaleState
                 Resolve.Ambiguous -> return ActOutcome.Denied(ActDenyReason.AMBIGUOUS)
@@ -129,12 +140,16 @@ class AutomationCore(
         val (verb, sink) = when (request) {
             is Act.Targeted -> Verb.SCROLL to null
             is Act.Global -> Verb.GLOBAL to Sink.GLOBAL_NAV
+            is Act.SetText -> Verb.SET_TEXT to Sink.TYPE_INTO
         }
         // Resolve once: the SAME target backs both the PASSWORD (sensitiveNode) and the system-window
         // (systemUiTarget) provenance the guard DENYs on (I-act-3 / I8/P18). A global act has no node
         // target, so neither flag applies. Without systemUiTarget the guard's system-UI branch is dead
-        // code: a scroll resolving a node inside a system/permission window would authorize as if it
-        // were app content (the provenance must travel WITH the projected target — UiTarget.systemWindow).
+        // code: a scroll/set_text resolving a node inside a system/permission window would authorize as
+        // if it were app content (the provenance must travel WITH the projected target). For set_text
+        // the sensitiveNode flag is the HEADLINE input-sink safety check: a write into a PASSWORD field
+        // is DENIED here before any dispatch (typing into a credential field is never permitted, and is
+        // never short-circuited by the P9 no-op below — the guard runs first).
         val target = tid?.let { id -> grounded.targets.first { it.tid == id } }
         val authRequest = AuthRequest(
             verb = verb,
@@ -147,10 +162,27 @@ class AutomationCore(
             return ActOutcome.Denied(ActDenyReason.GUARD)
         }
 
+        // 3.5. P9 restricted idempotency (design §3 I-act-4 — set_text only, NEVER submit/pay). The
+        // act has been ADMITted (so it consumed exactly one step / left one audit entry, mirroring
+        // how core.act always authorizes before deciding to dispatch), but the postcondition the model
+        // wants already holds: the resolved field's CURRENT VALUE already equals the requested text.
+        // Compare against `target.editableText` (the ground-truth editable value), NOT `target.text`
+        // (the DISPLAY projection): `text` is `node.text ?: node.contentDescription`, so an EMPTY field
+        // (node.text == null) whose contentDescription is a hint/label (e.g. "Email") projects
+        // `text = "Email"` — matching `set_text("Email")` against THAT would skip the dispatch and
+        // leave the field empty while the model believes the write landed (the design's "clean
+        // postconditions only" rule, violated). `editableText` is null for an empty/non-editable/
+        // password field, so the compare is exact and a null value (unknown postcondition) fails toward
+        // dispatch. The compare is case-sensitive, no trim; any difference dispatches.
+        if (request is Act.SetText && target?.editableText == request.text) {
+            return ActOutcome.Acted(grounded)
+        }
+
         // 4. perform → settle → re-snapshot under the revocation token (revoke cancels in-flight).
         val performAction = when (request) {
             is Act.Global -> PerformAction.Global(request.nav)
             is Act.Targeted -> PerformAction.Node(grounded.stateSeq, tid!!, request.kind)
+            is Act.SetText -> PerformAction.SetText(grounded.stateSeq, tid!!, request.text)
         }
         val job = currentCoroutineContext()[Job]
         return guard.guardInFlight(
@@ -201,6 +233,10 @@ class AutomationCore(
 
         is Selector.BySemanticKey -> grounded.targets
             .filter { it.semanticKey == selector.semanticKey }
+            .toResolve()
+
+        is Selector.ByFormKey -> grounded.targets
+            .filter { it.formKey == selector.formKey }
             .toResolve()
     }
 

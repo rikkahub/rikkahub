@@ -102,6 +102,11 @@ class SnapshotProjector {
             flags = flags,
             semanticKey = node.contentDescription?.takeIf { it.isNotEmpty() },
             formKey = node.resourceId?.takeIf { it.isNotEmpty() && node.editable },
+            // Ground-truth editable VALUE for the act path's P9 no-op: the literal node.text, NEVER the
+            // contentDescription fallback [text] uses (a blank field's hint is not its value) and NEVER
+            // a password (its value must not leak even to internal plumbing). Null for non-editable
+            // nodes — only an editable target can be a set_text postcondition.
+            editableText = if (node.editable && !node.password) node.text else null,
             systemWindow = systemWindow,
         )
     }

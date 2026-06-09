@@ -17,6 +17,15 @@ sealed interface Act {
 
     /** Global navigation. Maps to `Verb.GLOBAL` + `Sink.GLOBAL_NAV` (budgeted, not dangerous — Q2). */
     data class Global(val nav: GlobalNav) : Act
+
+    /**
+     * Set the text of a resolved input field (#198 slice 9, the input sink). Maps to `Verb.SET_TEXT`
+     * + `Sink.TYPE_INTO` — the model supplies neither (I2): it names a [selector] and the desired
+     * [text], the core derives the OCap from this variant. Coordinate-free (a [Selector], never a
+     * position). Subject to the restricted-idempotency no-op (P9): if the resolved target already
+     * projects [text], the core succeeds WITHOUT dispatching (design §3 I-act-4, set_text only).
+     */
+    data class SetText(val selector: Selector, val text: String) : Act
 }
 
 /**

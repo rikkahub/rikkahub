@@ -76,7 +76,15 @@ class FakeBackend(
         // assert but BEFORE this dispatch (a WINDOW_STATE/CONTENT event in the gap — the gate lets a
         // test inject exactly that race), the grounding moved under us, so do NOT dispatch — return
         // false (best-effort no-op ack; the core's re-snapshot is ground truth, D4 / I-act-1 / MR3).
-        if (action is PerformAction.Node && action.stateSeq != rawTree.stateSeq) {
+        // Both node-targeted variants (scroll Node + slice-9 SetText) carry the asserted stateSeq; an
+        // event in the assert→dispatch gap makes the carried seq stale, so refuse rather than write the
+        // wrong tree (I-act-1 / MR3 / D4). Global nav has no node target and is exempt.
+        val carriedStaleSeq = when (action) {
+            is PerformAction.Node -> action.stateSeq != rawTree.stateSeq
+            is PerformAction.SetText -> action.stateSeq != rawTree.stateSeq
+            is PerformAction.Global -> false
+        }
+        if (carriedStaleSeq) {
             return false
         }
         performed.add(action)

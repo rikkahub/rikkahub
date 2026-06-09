@@ -162,11 +162,12 @@ class UiAutomationToolsTest {
             backend = backend,
         )
         // #198 slice 8 widened the surface from read-only ui_observe to ui_observe + the nav act
-        // verbs. The factory exposes the tools whenever automation is on + a guard exists; per-verb
-        // authority is enforced at execute-time by the guard, NOT by tool presence (a guard granting
-        // only OBSERVE still surfaces ui_scroll, which then denies on the verb branch).
+        // verbs; slice 9 adds the input sink ui_set_text. The factory exposes the tools whenever
+        // automation is on + a guard exists; per-verb authority is enforced at execute-time by the
+        // guard, NOT by tool presence (a guard granting only OBSERVE still surfaces ui_scroll, which
+        // then denies on the verb branch).
         assertEquals(
-            listOf("ui_observe", "ui_scroll", "ui_global"),
+            listOf("ui_observe", "ui_scroll", "ui_global", "ui_set_text"),
             tools.map { it.name },
         )
         // needsApproval is forced false on every tool: the in-chat approval gate is unreachable while
@@ -431,12 +432,40 @@ class UiAutomationToolsTest {
         capability = Capability.root(
             sessionId = "conversation-1",
             surface = surface,
-            verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL),
-            sinkBudget = setOf(Sink.GLOBAL_NAV),
+            // slice 9 adds SET_TEXT + the TYPE_INTO input sink alongside the slice-8 nav authority,
+            // so the act guard ADMITs every act tool's authorize on the happy path.
+            verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT),
+            sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
             lease = Lease(expiresAt = expiresAt, maxSteps = maxSteps),
         ),
         clock = clock,
     )
+
+    /** A foreground tree with a single editable text field (tid 0) carrying [text] plus a stable
+     * resourceId (→ formKey, projector sets it only for editable nodes) and contentDescription
+     * (→ semanticKey), used to ground ui_set_text. */
+    private fun editableTree(stateSeq: Long = 0L, text: String = "hello"): RawTree = RawTree(
+        stateSeq = stateSeq,
+        foregroundPkg = target,
+        windows = listOf(
+            RawWindow(
+                pkg = target,
+                root = RawNode(
+                    text = text,
+                    className = "android.widget.EditText",
+                    resourceId = "com.example.target:id/field",
+                    contentDescription = "name-field",
+                    editable = true,
+                ),
+            ),
+        ),
+    )
+
+    /** ui_set_text args: { selector: { ... }, text: "..." }. */
+    private fun setTextArgs(selector: kotlinx.serialization.json.JsonObject, text: String) = buildJsonObject {
+        put("selector", selector)
+        put("text", text)
+    }
 
     /** A foreground tree with a single scrollable list target (tid 0), used to ground ui_scroll. */
     private fun scrollableTree(stateSeq: Long = 0L): RawTree = RawTree(
@@ -740,5 +769,277 @@ class UiAutomationToolsTest {
         assertEquals(DenyReason.MALFORMED, entry.reason)
         assertEquals("the ledger must record GLOBAL for a ui_global attempt", Verb.GLOBAL, entry.verb)
         assertTrue(backend.performed.isEmpty())
+    }
+
+    // --- 8. ui_set_text (#198 slice 9): the input sink (Verb.SET_TEXT + Sink.TYPE_INTO) over the
+    // proven act kernel. Mirrors the ui_scroll suite: grounding gate, happy path (one
+    // PerformAction.SetText recorded, Acted re-grounds), P9 no-op, by-formKey resolution, S2 deny
+    // (no leak), StaleState on a seq bump, and malformed (non-object + missing text) fail-closed +
+    // AUDITED. As with the nav tools, the real ACTION_SET_TEXT dispatch parity is slice 12, not here.
+
+    @Test
+    fun `ui_set_text before any observe returns a re-observe text and never performs`() {
+        val backend = FakeBackend(editableTree())
+        val setText = actTools(actGuard(), backend).byName("ui_set_text")
+
+        val parts = runBlocking {
+            setText.execute(setTextArgs(buildJsonObject { put("tid", 0) }, "x"))
+        }
+
+        assertTrue("no perform without a grounded snapshot", backend.performed.isEmpty())
+        assertTrue(
+            "must tell the model to observe first",
+            (parts.single() as UIMessagePart.Text).text.contains("observe", ignoreCase = true),
+        )
+    }
+
+    @Test
+    fun `ui_set_text after observe performs one node set-text, settles, and re-grounds`() {
+        val backend = FakeBackend(editableTree(stateSeq = 5L, text = "hello"))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val settleBefore = backend.settleCount
+
+        // The requested text DIFFERS from the field's projected text, so it dispatches (not a no-op).
+        val parts = runBlocking {
+            tools.byName("ui_set_text").execute(setTextArgs(buildJsonObject { put("tid", 0) }, "world"))
+        }
+
+        assertEquals("exactly one perform", 1, backend.performed.size)
+        assertEquals(
+            "the dispatched action must be a node set-text on the grounded (stateSeq=5, tid=0)",
+            PerformAction.SetText(stateSeq = 5L, tid = 0, text = "world"),
+            backend.performed.single(),
+        )
+        assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)
+        // Acted re-grounds: FakeBackend bumps stateSeq on perform, so the re-snapshot reads stateSeq=6.
+        assertTrue(
+            "the result must be the fresh re-rendered snapshot",
+            (parts.single() as UIMessagePart.Text).text.contains("stateSeq=6"),
+        )
+    }
+
+    @Test
+    fun `ui_set_text equal to the current field text is a no-op and never performs`() {
+        val backend = FakeBackend(editableTree(stateSeq = 3L, text = "hello"))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val settleBefore = backend.settleCount
+
+        // The requested text EQUALS the field's projected text ⇒ P9 no-op: success, but no dispatch.
+        val parts = runBlocking {
+            tools.byName("ui_set_text").execute(setTextArgs(buildJsonObject { put("tid", 0) }, "hello"))
+        }
+
+        assertTrue("a no-op set_text must never perform", backend.performed.isEmpty())
+        assertEquals("a no-op set_text must not settle", settleBefore, backend.settleCount)
+        // The no-op returns the UNCHANGED grounding re-rendered (stateSeq stays 3, not bumped).
+        assertTrue(
+            "the result must be the unchanged grounding",
+            (parts.single() as UIMessagePart.Text).text.contains("stateSeq=3"),
+        )
+    }
+
+    @Test
+    fun `ui_set_text resolves a field by its formKey`() {
+        val backend = FakeBackend(editableTree(stateSeq = 1L, text = "old"))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        runBlocking {
+            tools.byName("ui_set_text").execute(
+                setTextArgs(buildJsonObject { put("formKey", "com.example.target:id/field") }, "new"),
+            )
+        }
+
+        assertEquals(
+            "a by-formKey set_text must dispatch the keyed field (tid 0)",
+            PerformAction.SetText(stateSeq = 1L, tid = 0, text = "new"),
+            backend.performed.single(),
+        )
+    }
+
+    // The by-formKey set_text above only works if the model can LEARN a field's formKey from the
+    // observe table — otherwise the {formKey:...} selector is an advertised-but-unreachable axis. This
+    // pins the reachability half: the ui_observe render of an editable field must surface its formKey
+    // (the projector sets it only for editable nodes). On the unfixed renderer (formKey never emitted)
+    // this FAILS — the model could never produce the by-formKey selector the test above hand-feeds.
+    @Test
+    fun `ui_observe renders an editable field's formKey so the model can address it`() {
+        val backend = FakeBackend(editableTree(stateSeq = 1L, text = "old"))
+        val tools = actTools(actGuard(), backend)
+
+        val parts = runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val text = (parts.single() as UIMessagePart.Text).text
+
+        assertTrue(
+            "the observe table must surface the editable field's formKey so {formKey:...} is reachable",
+            text.contains("form=com.example.target:id/field"),
+        )
+    }
+
+    @Test
+    fun `revoked guard denies ui_set_text before the backend and never leaks the deny reason`() {
+        val backend = FakeBackend(editableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val performsAfterObserve = backend.performed.size
+
+        guard.revoke()
+        val parts = runBlocking {
+            tools.byName("ui_set_text").execute(setTextArgs(buildJsonObject { put("tid", 0) }, "x"))
+        }
+
+        assertEquals("a revoked guard must never perform", performsAfterObserve, backend.performed.size)
+        val text = (parts.single() as UIMessagePart.Text).text
+        assertTrue("denied result must explain the refusal", text.contains("denied", ignoreCase = true))
+        assertFalse("must not leak the deny reason", text.contains("GUARD"))
+        assertFalse("must not leak the deny reason", text.contains("REVOKED"))
+    }
+
+    @Test
+    fun `a stateSeq bump after grounding makes ui_set_text stale and never performs`() {
+        val backend = FakeBackend(editableTree(stateSeq = 0L, text = "old"))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        backend.injectTransition()
+        val parts = runBlocking {
+            tools.byName("ui_set_text").execute(setTextArgs(buildJsonObject { put("tid", 0) }, "new"))
+        }
+
+        assertTrue("a stale grounding must never perform", backend.performed.isEmpty())
+        val text = (parts.single() as UIMessagePart.Text).text
+        assertTrue("stale result must steer the model to re-observe", text.contains("observe", ignoreCase = true))
+    }
+
+    @Test
+    fun `ui_set_text with a non-object argument fails closed and audits one DENY with SET_TEXT`() {
+        val backend = FakeBackend(editableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val entriesAfterObserve = guard.audit.entries().size
+
+        runBlocking { tools.byName("ui_set_text").execute(JsonNull) }
+
+        assertTrue("malformed args must never perform", backend.performed.isEmpty())
+        val newEntries = guard.audit.entries().drop(entriesAfterObserve)
+        assertEquals("a malformed set_text must append exactly one ledger entry", 1, newEntries.size)
+        val entry = newEntries.single()
+        assertEquals(Decision.DENY, entry.decision)
+        assertEquals(DenyReason.MALFORMED, entry.reason)
+        assertEquals("the ledger must record SET_TEXT for a ui_set_text attempt", Verb.SET_TEXT, entry.verb)
+        assertEquals(redactAndTruncate(JsonNull.toString()), entry.redactedArgs)
+    }
+
+    @Test
+    fun `ui_set_text with a missing text arg fails closed and audits one DENY with SET_TEXT`() {
+        val backend = FakeBackend(editableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val entriesAfterObserve = guard.audit.entries().size
+
+        // A well-formed object + a resolvable selector but NO text payload is malformed: a set_text
+        // with no text is meaningless, so it must fail closed (never dispatch an empty/garbage write).
+        runBlocking {
+            tools.byName("ui_set_text").execute(buildJsonObject { put("selector", buildJsonObject { put("tid", 0) }) })
+        }
+
+        assertTrue("a set_text missing its text must never perform", backend.performed.isEmpty())
+        val newEntries = guard.audit.entries().drop(entriesAfterObserve)
+        assertEquals("a missing-text set_text must append exactly one ledger entry", 1, newEntries.size)
+        val entry = newEntries.single()
+        assertEquals(DenyReason.MALFORMED, entry.reason)
+        assertEquals(Verb.SET_TEXT, entry.verb)
+    }
+
+    // A NON-STRING text is the garbage-write case (#198 input sink fail-closed). The unfixed tool read
+    // the payload with `(args["text"] as? JsonPrimitive)?.contentOrNull`, which COERCES any primitive
+    // ({"text":123} -> "123", true -> "true") and DISPATCHED it as a write instead of routing to the
+    // malformed branch. On the unfixed code this FAILS (a SetText for "123" is performed, no DENY is
+    // audited); the isString gate makes it fail closed + audit, exactly like a missing text.
+    @Test
+    fun `ui_set_text with a non-string text fails closed and audits one DENY with SET_TEXT`() {
+        val backend = FakeBackend(editableTree(stateSeq = 5L, text = "hello"))
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val entriesAfterObserve = guard.audit.entries().size
+
+        // A resolvable selector (tid 0) but a NUMBER text: contentOrNull would coerce it to "123" and
+        // write that; the isString guard must reject it as malformed (never coerce a non-string write).
+        runBlocking {
+            tools.byName("ui_set_text").execute(
+                buildJsonObject {
+                    put("selector", buildJsonObject { put("tid", 0) })
+                    put("text", 123)
+                },
+            )
+        }
+
+        assertTrue("a non-string text must never perform (no coerced write)", backend.performed.isEmpty())
+        val newEntries = guard.audit.entries().drop(entriesAfterObserve)
+        assertEquals("a non-string-text set_text must append exactly one ledger entry", 1, newEntries.size)
+        val entry = newEntries.single()
+        assertEquals(Decision.DENY, entry.decision)
+        assertEquals(DenyReason.MALFORMED, entry.reason)
+        assertEquals("the ledger must record SET_TEXT for a coerced-text attempt", Verb.SET_TEXT, entry.verb)
+    }
+
+    // The selector's string fields (formKey/semanticKey/text) had the same coercion bug in
+    // parseSelector: `(obj["formKey"] as? JsonPrimitive)?.contentOrNull` turned {"formKey":123} into a
+    // ByFormKey("123") instead of failing closed. The fix gates each on isString. On the unfixed code
+    // this FAILS (the coerced "123" formKey resolves to nothing -> AMBIGUOUS, but it is treated as a
+    // valid selector rather than a malformed arg); the gate routes it to the malformed DENY.
+    @Test
+    fun `ui_set_text with a non-string selector field fails closed and audits one DENY with SET_TEXT`() {
+        val backend = FakeBackend(editableTree(stateSeq = 5L, text = "hello"))
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val entriesAfterObserve = guard.audit.entries().size
+
+        // A NUMBER formKey: parseSelector must NOT coerce it into a ByFormKey("123") selector — a
+        // non-string selector field is malformed and returns null, so the tool audits a malformed DENY.
+        runBlocking {
+            tools.byName("ui_set_text").execute(
+                buildJsonObject {
+                    put("selector", buildJsonObject { put("formKey", 123) })
+                    put("text", "world")
+                },
+            )
+        }
+
+        assertTrue("a non-string selector field must never perform", backend.performed.isEmpty())
+        val newEntries = guard.audit.entries().drop(entriesAfterObserve)
+        assertEquals("a non-string selector field must append exactly one ledger entry", 1, newEntries.size)
+        val entry = newEntries.single()
+        assertEquals(Decision.DENY, entry.decision)
+        assertEquals(DenyReason.MALFORMED, entry.reason)
+        assertEquals(Verb.SET_TEXT, entry.verb)
+    }
+
+    // An EMPTY-STRING text must stay VALID — clearing a field is a legitimate set_text the act path's
+    // P9 no-op handles. This pins that the isString fix did not over-tighten "" into a malformed arg
+    // (the guard is isString, not isNotEmpty). With the field currently non-empty ("hello"), setting it
+    // to "" is a real change, so it dispatches one SetText("").
+    @Test
+    fun `ui_set_text with an empty-string text is valid and clears the field`() {
+        val backend = FakeBackend(editableTree(stateSeq = 5L, text = "hello"))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        runBlocking {
+            tools.byName("ui_set_text").execute(setTextArgs(buildJsonObject { put("tid", 0) }, ""))
+        }
+
+        assertEquals(
+            "an empty-string text is a legitimate clear-the-field set_text, not a malformed arg",
+            PerformAction.SetText(stateSeq = 5L, tid = 0, text = ""),
+            backend.performed.single(),
+        )
     }
 }

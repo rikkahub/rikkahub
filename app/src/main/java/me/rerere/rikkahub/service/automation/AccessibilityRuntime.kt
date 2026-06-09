@@ -2,6 +2,7 @@ package me.rerere.rikkahub.service.automation
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -275,6 +276,10 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
      *    order to the tid-th projected node and perform the scroll on it (coordinate-free — a resolved
      *    node, not a screen point). Out-of-range tid ⇒ false (the core treats dispatch as a best-effort
      *    ack; the re-snapshot is the ground truth).
+     *  - [PerformAction.SetText] (#198 slice 9) → the SAME carried-stateSeq re-check + projection-order
+     *    walk as [PerformAction.Node], but the leaf op is [AccessibilityNodeInfo.ACTION_SET_TEXT] with
+     *    the text [Bundle] (still a resolved node, never a coordinate). The headline input-sink guard
+     *    (password/system-UI DENY) already ran in the core before this is ever dispatched.
      */
     override suspend fun perform(action: PerformAction): Boolean = captureMutex.withLock {
         withContext(serviceDispatcher) {
@@ -299,7 +304,31 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                     if (stateSeq.get() != action.stateSeq) {
                         false
                     } else {
-                        performOnProjectedNode(action.tid, action.kind)
+                        val actionId = when (action.kind) {
+                            NodeActionKind.SCROLL_FORWARD -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                            NodeActionKind.SCROLL_BACKWARD -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                        }
+                        performOnProjectedNode(action.tid) { it.performAction(actionId) }
+                    }
+                }
+
+                // Slice 9 (the input sink): same carried-stateSeq re-check and same projection-order
+                // walk as Node, but the per-node operation is ACTION_SET_TEXT with the text payload
+                // (a node operation, never a coordinate). performOnProjectedNode owns the walk + node/
+                // window recycling discipline; only the leaf operation differs.
+                is PerformAction.SetText -> {
+                    if (stateSeq.get() != action.stateSeq) {
+                        false
+                    } else {
+                        val args = Bundle().apply {
+                            putCharSequence(
+                                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                                action.text,
+                            )
+                        }
+                        performOnProjectedNode(action.tid) {
+                            it.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                        }
                     }
                 }
             }
@@ -307,32 +336,34 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     }
 
     /**
-     * Re-walk the live window forest in the SAME projection order the snapshot used and perform [kind]
+     * Re-walk the live window forest in the SAME projection order the snapshot used and run [perform]
      * on the [tid]-th projected node. The walk MUST mirror [SnapshotProjector] exactly: visible
      * windows (host excluded) in `windows`-order, each pre-order DFS, a node counted iff
      * `(isVisibleToUser && !boundsInScreen.isEmpty) || hasId || hasText` — the same predicate
      * [SnapshotProjector.isTarget] applies over the same fields [toRawNode] reads. Drift between this
      * predicate and the projector's is exactly what slice 12's instrumented parity test guards.
      *
+     * [perform] is the node operation the caller wants on the resolved node — a scroll
+     * ([AccessibilityNodeInfo.performAction] with a scroll action id) or the slice-9 set_text
+     * ([AccessibilityNodeInfo.ACTION_SET_TEXT] with a text [Bundle]). Parameterizing the leaf op keeps
+     * the projection-order walk + node/window recycling discipline SHARED across every act verb, so a
+     * new verb adds a lambda, not a second walk.
+     *
      * Resource discipline: every [AccessibilityNodeInfo] and [AccessibilityWindowInfo] is recycled on
-     * EVERY path. The action is performed INSIDE the walk (the frame that owns the node), so no live
-     * handle escapes the walk — that removes the double-recycle the "return a live node" shape invited
-     * when the match is the window root. The carried `stateSeq` is re-verified by [perform] immediately
+     * EVERY path. The op runs INSIDE the walk (the frame that owns the node), so no live handle escapes
+     * the walk — that removes the double-recycle the "return a live node" shape invited when the match
+     * is the window root. The carried `stateSeq` is re-verified by [perform]'s caller immediately
      * before this walk (atomically under the same lock), so the tree this walks is the one the core
      * asserted. Out-of-range tid ⇒ false (the core treats dispatch as a best-effort ack).
      */
-    private fun performOnProjectedNode(tid: Int, kind: NodeActionKind): Boolean {
-        val actionId = when (kind) {
-            NodeActionKind.SCROLL_FORWARD -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-            NodeActionKind.SCROLL_BACKWARD -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-        }
+    private fun performOnProjectedNode(tid: Int, perform: (AccessibilityNodeInfo) -> Boolean): Boolean {
         val cursor = intArrayOf(0) // running projected-node index, mutated across the recursive walk
         for (window in windows.orEmpty()) {
             try {
                 val root = window.root ?: continue // secure/inaccessible window: skip (matches toRawWindow)
                 try {
                     if (root.packageName?.toString() == HOST_PACKAGE) continue // host excluded (projector P2)
-                    walkAndPerform(root, tid, cursor, actionId)?.let { return it }
+                    walkAndPerform(root, tid, cursor, perform)?.let { return it }
                 } finally {
                     root.recycle()
                 }
@@ -346,26 +377,26 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
 
     /**
      * Pre-order DFS mirroring [SnapshotProjector.collect]: count [node] as a projected target iff
-     * [isProjectedTarget], performing [actionId] on it when its index equals [tid]; then descend into
+     * [isProjectedTarget], running [perform] on it when its index equals [tid]; then descend into
      * every child (incl. non-projected containers, so a projected descendant is not skipped —
-     * projector P4). Returns the [performAction] result once the target is hit (and stops), or null if
-     * the target is not in this subtree. The action runs in the frame that owns the node, and every
-     * child handle is recycled here — [node] itself is owned/recycled by the caller.
+     * projector P4). Returns the [perform] result once the target is hit (and stops), or null if the
+     * target is not in this subtree. The op runs in the frame that owns the node, and every child
+     * handle is recycled here — [node] itself is owned/recycled by the caller.
      */
     private fun walkAndPerform(
         node: AccessibilityNodeInfo,
         tid: Int,
         cursor: IntArray,
-        actionId: Int,
+        perform: (AccessibilityNodeInfo) -> Boolean,
     ): Boolean? {
         if (isProjectedTarget(node)) {
-            if (cursor[0] == tid) return node.performAction(actionId)
+            if (cursor[0] == tid) return perform(node)
             cursor[0]++
         }
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             try {
-                walkAndPerform(child, tid, cursor, actionId)?.let { return it }
+                walkAndPerform(child, tid, cursor, perform)?.let { return it }
             } finally {
                 child.recycle()
             }

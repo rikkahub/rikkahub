@@ -296,7 +296,11 @@ class GenerationHandler(
                             }.getOrElse {
                                 error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
                             }
-                            Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
+                            // AiLog policy (#96): tool name is safe metadata, but tool ARGS are a
+                            // payload — for ui_set_text they carry the literal text the model types
+                            // into another app's field (message body, OTP, possibly a credential).
+                            // Never interpolate args into the log; log only the name.
+                            Log.i(TAG, "generateText: executing tool ${toolDef.name}")
                             val result = toolDef.execute(args)
                             // A tool that legitimately succeeds with no output still
                             // MUST be recorded as executed (non-empty output), otherwise

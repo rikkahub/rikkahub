@@ -38,6 +38,13 @@ class SnapshotProjectorPropertyTest {
                         "password text leaked in tid=${t.tid}",
                         t.text?.contains(secret) == true,
                     )
+                    // editableText carries the ground-truth field VALUE for the P9 no-op (#198 slice 9);
+                    // a password value must never escape through it either (the projector nulls it for
+                    // password nodes). Pinned so a future change that drops the !node.password guard leaks.
+                    assertFalse(
+                        "password value leaked via editableText in tid=${t.tid}",
+                        t.editableText?.contains(secret) == true,
+                    )
                 }
             }
         }
