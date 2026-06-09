@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.automation.act.AlwaysConfirm
 import me.rerere.automation.act.AutomationCore
 import me.rerere.automation.backend.FakeBackend
 import me.rerere.automation.backend.GlobalNav
@@ -119,6 +120,9 @@ class UiAutomationToolsTest {
         guard = guard,
         core = AutomationCore(backend),
         foregroundPkg = { foregroundPkg },
+        // #198 slice 11: AlwaysConfirm so the slice-8/9/10 assertions are unchanged — every act here is
+        // non-dangerous (scroll/global/set_text, or a benign "OK" tap), so the confirm is never consulted.
+        confirm = AlwaysConfirm,
     )
 
     /** Just the ui_observe tool — the behavior tests below exercise observe in isolation. */
@@ -270,6 +274,7 @@ class UiAutomationToolsTest {
             guard = guard,
             core = AutomationCore(backend),
             foregroundPkg = { "me.rerere.rikkahub" },
+            confirm = AlwaysConfirm,
         ).first { it.name == UI_OBSERVE_TOOL_NAME }
 
         val text = (runBlocking { tool.execute(buildJsonObject { }) }.single() as UIMessagePart.Text).text
@@ -399,6 +404,7 @@ class UiAutomationToolsTest {
             guard = guard,
             core = AutomationCore(backend),
             foregroundPkg = { target }, // authorize-time foreground is the authorized one
+            confirm = AlwaysConfirm,
         ).first { it.name == UI_OBSERVE_TOOL_NAME }
 
         val text = (runBlocking { tool.execute(buildJsonObject { }) }.single() as UIMessagePart.Text).text
@@ -493,6 +499,7 @@ class UiAutomationToolsTest {
         guard = guard,
         core = AutomationCore(backend),
         foregroundPkg = { foregroundPkg },
+        confirm = AlwaysConfirm,
     )
 
     private fun List<me.rerere.ai.core.Tool>.byName(name: String) = first { it.name == name }
@@ -534,6 +541,7 @@ class UiAutomationToolsTest {
             guard = actGuard(),
             core = AutomationCore(backend),
             foregroundPkg = { target },
+            confirm = AlwaysConfirm,
         )
         assertTrue("disabled assistant must expose no automation tools at all", tools.isEmpty())
     }

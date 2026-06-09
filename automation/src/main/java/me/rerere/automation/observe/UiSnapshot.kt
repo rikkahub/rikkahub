@@ -94,6 +94,16 @@ data class UiTarget(
      * is in the snapshot, so the invariant must travel WITH the target, not be re-derived from coords).
      */
     val systemWindow: Boolean = false,
+    /**
+     * The node's raw view-resource id (`node.resourceId`) for ALL nodes, e.g. `com.app:id/pay_button`.
+     * Internal-only (NOT model-facing — the renderer never surfaces a raw resource id): it is the third
+     * input to the submit-class classifier (#198 slice 11) so an ICON-ONLY commit button with no
+     * visible text and no contentDescription — but an id like `…:id/pay_button` — is still classified
+     * submit-class and gated behind confirmation. Without it, a textless/CD-less pay button would derive
+     * a null sink and tap WITHOUT confirm (the codex-found false-negative). Distinct from [formKey],
+     * which is the same id but exposed (as `form=`) ONLY for editable inputs.
+     */
+    val viewId: String? = null,
 )
 
 @Serializable

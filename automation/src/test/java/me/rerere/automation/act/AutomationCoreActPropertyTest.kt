@@ -25,6 +25,7 @@ import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.automation.observe.Selector
 import me.rerere.automation.observe.UiFlag
+import me.rerere.automation.observe.UiSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -40,6 +41,21 @@ import org.junit.Test
 class AutomationCoreActPropertyTest {
 
     private val APP = "com.example.app"
+
+    /**
+     * Slice-8/9/10 tests predate the slice-11 [ConfirmChannel] parameter on [AutomationCore.act]. They
+     * exercise scroll/global/set_text (non-dangerous, so the confirm channel is never consulted) and
+     * benign/password/system taps (the classifier returns false ⇒ no SUBMIT sink ⇒ not dangerous, or
+     * the guard DENYs before the gate). So a 3-arg call that delegates to the 4-arg member with
+     * [AlwaysConfirm] keeps every pre-slice-11 assertion intact WITHOUT a confirm prompt ever firing —
+     * a single DRY shim instead of threading a confirm arg through ~35 unchanged call sites. The
+     * slice-11 tests below call the 4-arg member directly with a [FakeConfirmChannel].
+     */
+    private suspend fun AutomationCore.act(
+        guard: CapabilityGuard,
+        grounded: UiSnapshot,
+        request: Act,
+    ): ActOutcome = act(guard, grounded, request, AlwaysConfirm)
 
     /** A backend whose foreground app has a scrollable list (tid 0) over a text item (tid 1). */
     private fun backend(seq: Long = 1L, pkg: String = APP) = FakeBackend(
@@ -1083,6 +1099,272 @@ class AutomationCoreActPropertyTest {
             job.join()
             assertTrue("revoke must cancel the in-flight tap", job.isCancelled)
             assertFalse("the gated tap must never have completed", backend.performed.isNotEmpty())
+        }
+    }
+
+    // ===================================================================================
+    // #198 slice 11 — the dangerous-sink (submit-class) confirm gate. A CLICK whose RESOLVED target is
+    // submit-class ([SubmitClassifier]) derives Sink.SUBMIT (core-derived, never model-supplied, I2),
+    // which is (a) checked against the sink budget by the guard and (b) gated behind the out-of-band
+    // [ConfirmChannel] before any dispatch. Every property is written so the UNFIXED core (no classifier
+    // ⇒ a submit-class tap stays sink-less and dispatches with NO confirm) FAILS it; the wired core
+    // passes. The headline is "no prompt for a general tap, a prompt (and a deny on refusal) for a
+    // submit-class tap".
+    // ===================================================================================
+
+    /**
+     * A test [ConfirmChannel] recording how many times it was consulted and what it returns. For the
+     * revoke-during-confirm test it can be made to PARK: it completes [entered] (signalling "the confirm
+     * was reached") and then awaits [release] — a deferred the test never completes — so the act is
+     * deterministically suspended inside the confirm wait when the test revokes. This mirrors the
+     * FakeBackend.performEntered idiom used by the P20 tests (a deterministic signal, never a yield-loop).
+     */
+    private class FakeConfirmChannel(
+        @Volatile var nextResult: Boolean = true,
+        private val park: Boolean = false,
+    ) : ConfirmChannel {
+        @Volatile
+        var confirmCount: Int = 0
+            private set
+
+        /** Completed the instant [confirm] is entered (before it parks, when [park] is true). */
+        val entered = CompletableDeferred<Unit>()
+
+        /** A never-completed deferred the parked [confirm] awaits, so a revoke must cancel the wait. */
+        private val release = CompletableDeferred<Unit>()
+
+        override suspend fun confirm(app: String, verb: Verb, label: String?): Boolean {
+            confirmCount++
+            if (park) {
+                entered.complete(Unit)
+                release.await() // suspend forever — only cancellation (a revoke) unparks this
+            }
+            return nextResult
+        }
+    }
+
+    /** A guard granting TAP + the SUBMIT sink in budget for [pkg], so a submit-class tap reaches the
+     * confirm gate (the budget is NOT the thing that refuses — the gate is). */
+    private fun submitTapGuard(pkg: String = APP, now: Long = 0L, expiresAt: Long = Long.MAX_VALUE) =
+        guard(
+            pkg = pkg,
+            verbs = setOf(Verb.TAP, Verb.SCROLL, Verb.GLOBAL),
+            sinks = setOf(Sink.SUBMIT, Sink.GLOBAL_NAV),
+            now = now,
+            expiresAt = expiresAt,
+        )
+
+    /** A backend whose foreground app has a single submit-class clickable element (tid 0). The label
+     * "Pay" trips [SubmitClassifier]. */
+    private fun submitButtonBackend(seq: Long = 1L, pkg: String = APP, label: String = "Pay") = FakeBackend(
+        RawTree(
+            stateSeq = seq,
+            foregroundPkg = pkg,
+            windows = listOf(
+                RawWindow(
+                    pkg = pkg,
+                    root = RawNode(
+                        text = label, className = "Button",
+                        visible = true, hasArea = true, clickable = true,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    // ---- confirm→true: a submit-class tap (SUBMIT in budget) consults the confirm ONCE, then dispatches
+    // exactly one CLICK, settles, and re-grounds. On the unfixed core (no SUBMIT sink derived) the tap is
+    // sink-less ⇒ not dangerous ⇒ confirmCount stays 0 (the headline gate never runs) — this FAILS. ----
+    @Test
+    fun `a submit-class tap with confirm granted dispatches one click after one confirm`() {
+        runBlocking {
+            val backend = submitButtonBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val confirm = FakeConfirmChannel(nextResult = true)
+            val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
+            assertTrue("a confirmed submit-class tap succeeds", outcome is ActOutcome.Acted)
+            assertEquals("the dangerous-sink gate must consult the confirm exactly once", 1, confirm.confirmCount)
+            assertEquals(
+                "exactly one CLICK on the grounded (stateSeq, tid)",
+                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK),
+                backend.performed.single(),
+            )
+            assertEquals("settle runs exactly once per dispatched act", 1, backend.settleCount)
+        }
+    }
+
+    // ---- confirm→false (user DENIED): a submit-class tap is Denied(CONFIRM_DECLINED) with NO dispatch,
+    // having consulted the confirm exactly once. On the unfixed core (no gate) the tap dispatches and is
+    // Acted — this FAILS. This is THE catastrophe the gate prevents: an unconfirmed pay must not land. --
+    @Test
+    fun `a submit-class tap with confirm declined is denied and never dispatches`() {
+        runBlocking {
+            val backend = submitButtonBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val confirm = FakeConfirmChannel(nextResult = false)
+            val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
+            assertEquals(
+                "a declined submit-class confirm is CONFIRM_DECLINED",
+                ActOutcome.Denied(ActDenyReason.CONFIRM_DECLINED),
+                outcome,
+            )
+            assertEquals(1, confirm.confirmCount)
+            assertTrue("a declined dangerous act must NOT touch the backend", backend.performed.isEmpty())
+        }
+    }
+
+    // ---- confirm TIMEOUT (modeled as false — the channel owns the timeout and returns false on it):
+    // the core sees false and treats it identically to a deny ⇒ Denied(CONFIRM_DECLINED), no dispatch.
+    // The core never times out itself; this pins that a false-from-timeout is the same fail-closed stop.
+    @Test
+    fun `a submit-class tap whose confirm times out (false) is denied and never dispatches`() {
+        runBlocking {
+            val backend = submitButtonBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            // The channel returns false to model a fail-closed timeout (withTimeoutOrNull → false in prod).
+            val confirm = FakeConfirmChannel(nextResult = false)
+            val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
+            assertEquals(ActOutcome.Denied(ActDenyReason.CONFIRM_DECLINED), outcome)
+            assertTrue(backend.performed.isEmpty())
+        }
+    }
+
+    // ---- confirm THROWS (e.g. the overlay could not attach): a non-cancellation exception from the
+    // channel must FAIL CLOSED — normalized to Denied(CONFIRM_DECLINED), NO dispatch — never escape as
+    // an error nor (worse) fall through to a dispatch. On the unfixed core (confirm() called inline,
+    // exception propagates) this throws out of act() instead of denying. ----
+    @Test
+    fun `a submit-class tap whose confirm throws is denied and never dispatches`() {
+        runBlocking {
+            val backend = submitButtonBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val throwing = ConfirmChannel { _, _, _ -> throw RuntimeException("overlay could not attach") }
+            val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), throwing)
+            assertEquals(
+                "a confirm that threw must fail closed to CONFIRM_DECLINED, not escape or dispatch",
+                ActOutcome.Denied(ActDenyReason.CONFIRM_DECLINED),
+                outcome,
+            )
+            assertTrue("a failed-confirm dangerous act must NOT touch the backend", backend.performed.isEmpty())
+        }
+    }
+
+    // ---- NO PROMPT for a non-dangerous act: scroll / global / set_text / a BENIGN ("OK") tap with the
+    // confirm granted all succeed WITHOUT ever consulting the confirm (confirmCount==0). This is the
+    // headline "general taps never prompt" property — a non-dangerous act must never reach the gate. On a
+    // core that gated EVERY act (over-broad) this FAILS; the dangerous-only gate passes. ----
+    @Test
+    fun `a non-dangerous scroll never consults the confirm`() {
+        runBlocking {
+            val backend = backend() // scrollable list, tid 0
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val confirm = FakeConfirmChannel(nextResult = true)
+            val outcome = core.act(guard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.SCROLL_FORWARD), confirm)
+            assertTrue(outcome is ActOutcome.Acted)
+            assertEquals("a scroll is not dangerous ⇒ the confirm must NEVER fire", 0, confirm.confirmCount)
+            assertEquals(1, backend.performed.size)
+        }
+    }
+
+    @Test
+    fun `a non-dangerous global nav never consults the confirm`() {
+        runBlocking {
+            val backend = backend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val confirm = FakeConfirmChannel(nextResult = true)
+            val outcome = core.act(guard(), grounded, Act.Global(GlobalNav.BACK), confirm)
+            assertTrue(outcome is ActOutcome.Acted)
+            assertEquals("GLOBAL_NAV is budgeted but NOT dangerous ⇒ no confirm", 0, confirm.confirmCount)
+        }
+    }
+
+    @Test
+    fun `a non-dangerous set_text never consults the confirm`() {
+        runBlocking {
+            val backend = editableBackend(text = "old")
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val confirm = FakeConfirmChannel(nextResult = true)
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "new"), confirm)
+            assertTrue(outcome is ActOutcome.Acted)
+            assertEquals("TYPE_INTO is budgeted but NOT dangerous ⇒ no confirm", 0, confirm.confirmCount)
+        }
+    }
+
+    // A BENIGN tap (the slice-10 "OK"-button happy path) must STAY non-submit: confirm never fires, the
+    // click dispatches. This pins that wiring the gate did not regress the general-tap happy path. ----
+    @Test
+    fun `a benign OK tap never consults the confirm and dispatches`() {
+        runBlocking {
+            val backend = clickableBackend() // "OK" button, tid 0
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val confirm = FakeConfirmChannel(nextResult = true)
+            // submitTapGuard grants SUBMIT in budget, so if the classifier WRONGLY flagged "OK" as
+            // submit-class the gate WOULD fire — confirmCount==0 proves "OK" is correctly non-submit.
+            val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
+            assertTrue(outcome is ActOutcome.Acted)
+            assertEquals("a benign tap is not submit-class ⇒ the confirm must NEVER fire", 0, confirm.confirmCount)
+            assertEquals(
+                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK),
+                backend.performed.single(),
+            )
+        }
+    }
+
+    // ---- revoke DURING the confirm wait cancels the act before any dispatch (I-act-10 over the confirm
+    // gate). The confirm parks (completes `entered`, then awaits a never-completed deferred); the test
+    // launches the act, awaits `entered` (deterministic — parked in confirm), revokes, and asserts the
+    // job is cancelled AND nothing dispatched. The confirm runs inside guardInFlight, so revoke's
+    // job.cancel() tears down the suspended confirm. On a core that ran the confirm OUTSIDE the
+    // revoke-cancellable region this FAILS (the revoke could not reach the parked confirm). ----
+    @Test
+    fun `revoke during the confirm wait cancels the act before any dispatch`() {
+        runBlocking {
+            val backend = submitButtonBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val g = submitTapGuard()
+            val confirm = FakeConfirmChannel(nextResult = true, park = true)
+            val job: Job = launch(Dispatchers.Default) {
+                core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
+            }
+            confirm.entered.await() // deterministic: parked INSIDE confirm, after authorize/admit
+            g.revoke() // kill-switch: must cancel the parked confirm, not let the act proceed
+            job.join()
+            assertTrue("revoke must cancel the act parked in the confirm wait", job.isCancelled)
+            assertTrue("a revoked-during-confirm act must NEVER dispatch", backend.performed.isEmpty())
+        }
+    }
+
+    // ---- conservative default lease: a submit-class tap whose SUBMIT sink is NOT in budget is
+    // Denied(GUARD) at the sink-in-budget branch BEFORE the confirm gate is ever reached (confirmCount
+    // ==0). This pins the product decision: the default lease (GLOBAL_NAV + TYPE_INTO only, NO SUBMIT)
+    // makes a submit-class tap structurally un-confirmable — submit automation is a separate explicit
+    // opt-in. The guard's sink DENY must PRECEDE the gate. ----
+    @Test
+    fun `a submit-class tap without SUBMIT in budget is denied by the guard before the confirm`() {
+        runBlocking {
+            val backend = submitButtonBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            // The DEFAULT-lease shape: TAP granted, but the SUBMIT sink is NOT in budget (only GLOBAL_NAV).
+            val g = guard(verbs = setOf(Verb.TAP, Verb.SCROLL, Verb.GLOBAL), sinks = setOf(Sink.GLOBAL_NAV))
+            val confirm = FakeConfirmChannel(nextResult = true)
+            val outcome = core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
+            assertEquals(
+                "a submit-class tap whose SUBMIT sink is unbudgeted is denied at the guard",
+                ActOutcome.Denied(ActDenyReason.GUARD),
+                outcome,
+            )
+            assertEquals("the guard's sink DENY must precede the confirm gate", 0, confirm.confirmCount)
+            assertTrue("a guard-denied submit-class tap must NOT touch the backend", backend.performed.isEmpty())
         }
     }
 }

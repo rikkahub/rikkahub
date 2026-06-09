@@ -107,6 +107,10 @@ class SnapshotProjector {
             // a password (its value must not leak even to internal plumbing). Null for non-editable
             // nodes — only an editable target can be a set_text postcondition.
             editableText = if (node.editable && !node.password) node.text else null,
+            // Raw view id for ALL nodes (internal, never rendered): the submit-class classifier's third
+            // input, so an icon-only commit button (no text/contentDescription, id like …:id/pay_button)
+            // is still gated behind confirmation (#198 slice 11). formKey above stays editable-only.
+            viewId = node.resourceId?.takeIf { it.isNotEmpty() },
             systemWindow = systemWindow,
         )
     }

@@ -18,6 +18,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.automation.act.Act
 import me.rerere.automation.act.ActOutcome
 import me.rerere.automation.act.AutomationCore
+import me.rerere.automation.act.ConfirmChannel
 import me.rerere.automation.backend.GlobalNav
 import me.rerere.automation.backend.NodeActionKind
 import me.rerere.automation.cap.AuthRequest
@@ -35,12 +36,13 @@ import me.rerere.rikkahub.data.model.Assistant
  * `ui_observe` (read-only, #187 v1), the lowest-risk nav act verbs `ui_scroll` and `ui_global`
  * (#198 slice 8), the input sink `ui_set_text` (`Verb.SET_TEXT` + `Sink.TYPE_INTO`, #198 slice 9), and
  * the general tap `ui_tap` (`Verb.TAP`, no sink — `Act.Targeted` + `NodeActionKind.CLICK`, #198 slice
- * 10) over the SAME [AutomationCore]. The dangerous-sink (submit-class) confirm channel — the SUBMIT
- * sink + out-of-band confirm for send/pay-class taps — is the next slice (11). `ui_set_text` inherits
- * the act path's restricted P9 no-op: an unchanged-text set is idempotent (no dispatch), but typing
- * into a password/system-UI field is always DENIED. `ui_tap` is never no-op'd (P9 is set_text-only)
- * and a tap on a system-UI/permission dialog (Allow/Grant) or a password field is DENIED before
- * dispatch — observable, never actionable.
+ * 10) over the SAME [AutomationCore]. The dangerous-sink (submit-class) confirm channel (#198 slice 11)
+ * is now wired: a `ui_tap` whose resolved target is submit-class (send/pay/checkout-class) derives the
+ * SUBMIT sink in the core and is gated behind the injected [confirm] channel before it can dispatch.
+ * `ui_set_text` inherits the act path's restricted P9 no-op: an unchanged-text set is idempotent (no
+ * dispatch), but typing into a password/system-UI field is always DENIED. `ui_tap` is never no-op'd
+ * (P9 is set_text-only) and a tap on a system-UI/permission dialog (Allow/Grant) or a password field is
+ * DENIED before dispatch — observable, never actionable.
  *
  * Shape mirrors [me.rerere.rikkahub.data.ai.subagent.buildSpawnTool]: a top-level factory closing
  * over per-conversation context, built ONLY at `ChatService`'s per-generation tool buildList. It is
@@ -89,12 +91,17 @@ import me.rerere.rikkahub.data.model.Assistant
  * @param foregroundPkg the current foreground package, read BEFORE observing so the guard can decide
  *   on the real target (S2). A null value (a11y service not connected / no foreground) fails closed
  *   at the surface check.
+ * @param confirm the out-of-band confirmation channel for a dangerous (submit-class) sink (#198 slice
+ *   11). Passed through to [AutomationCore.act] for every act; only a submit-class `ui_tap` consults it
+ *   (a non-dangerous act never does). Production wires the overlay-backed channel; a fail-closed
+ *   [me.rerere.automation.act.AlwaysDeny] is the right default when no real confirm surface is reachable.
  */
 fun getUiAutomationTools(
     assistant: Assistant,
     guard: CapabilityGuard?,
     core: AutomationCore,
     foregroundPkg: () -> String?,
+    confirm: ConfirmChannel,
 ): List<Tool> {
     // Default-OFF, empty surface (design §2/§5/S1): no activation OR no authority ⇒ no tool at all.
     if (!assistant.uiAutomationEnabled || guard == null) return emptyList()
@@ -242,7 +249,7 @@ fun getUiAutomationTools(
                 }
                 // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer
                 // must NOT call authorize/guardInFlight here (would double-audit / break P25).
-                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, kind))) {
+                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, kind), confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot // re-ground for the next act
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))
@@ -292,7 +299,7 @@ fun getUiAutomationTools(
                     "recents" -> GlobalNav.RECENTS
                     else -> return@execute auditMalformedAct(Verb.GLOBAL, Sink.GLOBAL_NAV, rawArgs = args.toString())
                 }
-                when (val outcome = core.act(guard, snapshot, Act.Global(nav))) {
+                when (val outcome = core.act(guard, snapshot, Act.Global(nav), confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))
@@ -364,7 +371,7 @@ fun getUiAutomationTools(
                 // must NOT call authorize/guardInFlight here (would double-audit / break P25). The
                 // restricted P9 no-op (an unchanged-text set_text returns Acted without dispatching)
                 // lives inside core.act; from here it is indistinguishable from a normal Acted.
-                when (val outcome = core.act(guard, snapshot, Act.SetText(selector, text))) {
+                when (val outcome = core.act(guard, snapshot, Act.SetText(selector, text), confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot // re-ground for the next act
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))
@@ -406,9 +413,10 @@ fun getUiAutomationTools(
             execute = execute@{ args ->
                 // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
                 val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
-                // Fail closed + AUDITED (P24/P25): a general tap is a TAP verb with NO sink (it is not
-                // submit-class — the SUBMIT sink is slice 11), so a malformed attempt records Verb.TAP
-                // with no sink in the ledger exactly as ui_scroll does for SCROLL.
+                // Fail closed + AUDITED (P24/P25): a MALFORMED tap is recorded with no sink (the sink is
+                // only known once the target resolves, and a malformed tap never resolves one) — exactly
+                // as ui_scroll does for SCROLL. The submit-class SUBMIT sink (#198 slice 11) is derived
+                // in core.act from the RESOLVED target, so it never applies to a malformed (unresolved) tap.
                 if (args !is JsonObject) {
                     return@execute auditMalformedAct(Verb.TAP, sink = null, rawArgs = args.toString())
                 }
@@ -416,10 +424,11 @@ fun getUiAutomationTools(
                     ?: return@execute auditMalformedAct(Verb.TAP, sink = null, rawArgs = args.toString())
                 // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer must
                 // NOT call authorize/guardInFlight here (would double-audit / break P25). The system-UI/
-                // password DENY (a tap on an Allow/Grant button or a credential field) lives inside
-                // core.act, derived from the resolved target's provenance; from here it is an ordinary
-                // Denied.
-                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, NodeActionKind.CLICK))) {
+                // password DENY (a tap on an Allow/Grant button or a credential field) AND the submit-
+                // class confirm gate (#198 slice 11 — a send/pay-class tap derives SUBMIT and must be
+                // confirmed via `confirm`) both live inside core.act, derived from the resolved target;
+                // from here a confirm-declined tap is just an ordinary Denied → vague ACT_DENIED_MESSAGE.
+                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, NodeActionKind.CLICK), confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot // re-ground for the next act
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))

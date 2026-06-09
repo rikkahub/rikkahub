@@ -15,10 +15,13 @@ sealed interface Act {
     /**
      * A node action on a resolved element — the [kind] drives the verb (the model never supplies it,
      * I2). SCROLL_FORWARD/SCROLL_BACKWARD ⇒ `Verb.SCROLL` (viewport movement, no side effect); CLICK ⇒
-     * `Verb.TAP` (a general tap, #198 slice 10). Neither carries a sink: a general tap is NOT
-     * submit-class, so it is verb-gated only, exactly like scroll (the SUBMIT sink + submit-class
-     * confirm is slice 11). System-UI/permission-dialog and password taps DENY before dispatch via the
-     * same target-provenance plumbing as scroll/set_text — observable, never actionable (I-act-3/I8).
+     * `Verb.TAP` (a general tap, #198 slice 10). A scroll carries no sink. A CLICK carries a sink ONLY
+     * when the core classifies the RESOLVED target as submit-class (#198 slice 11): an ordinary tap is
+     * verb-gated only (no sink), but a send/pay/checkout-class tap carries `Sink.SUBMIT` — still DERIVED
+     * in the core from the resolved target's label/key ([SubmitClassifier]), never model-supplied (I2),
+     * and then gated behind an out-of-band confirmation ([ConfirmChannel]). System-UI/permission-dialog
+     * and password taps DENY before dispatch via the same target-provenance plumbing as scroll/set_text
+     * — observable, never actionable (I-act-3/I8).
      */
     data class Targeted(val selector: Selector, val kind: NodeActionKind) : Act
 
@@ -60,4 +63,12 @@ enum class ActDenyReason {
 
     /** The capability was revoked between authorize and dispatch (kill-switch — I-act-10/P20). */
     REVOKED,
+
+    /**
+     * The out-of-band confirmation for a DANGEROUS (submit-class) sink returned false — the user
+     * DENIED, or the confirm channel TIMED OUT (fail-closed; the channel owns the timeout, #198 slice
+     * 11 / I-act-5). No dispatch happens. Like every other reason this is internal and never leaked to
+     * the model — the tool layer maps it to the same vague ACT_DENIED text.
+     */
+    CONFIRM_DECLINED,
 }

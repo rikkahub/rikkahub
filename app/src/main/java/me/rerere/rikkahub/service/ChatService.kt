@@ -55,6 +55,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.automation.act.AlwaysDeny
 import me.rerere.automation.cap.Capability
 import me.rerere.automation.cap.CapabilityGuard
 import me.rerere.automation.cap.Lease
@@ -861,11 +862,18 @@ class ChatService(
                         verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT, Verb.TAP),
                         // GLOBAL_NAV must be in budget for ui_global's authorize to pass the
                         // sink-in-budget branch; TYPE_INTO for ui_set_text (#198 slice 9, the input
-                        // sink). ui_scroll and ui_tap (#198 slice 10) carry NO sink (the SCROLL/TAP verb
-                        // suffices — a general tap is not submit-class, so no SUBMIT sink is granted;
-                        // that is slice 11). Surface stays empty = deny-all (S1): these grants make the
-                        // verbs/sinks AUTHORIZABLE but do NOT widen the admitted surface — authorize
-                        // still DENYs on surface for any real foreground app today.
+                        // sink). ui_scroll and ui_tap (#198 slice 10) carry NO sink for an ordinary tap
+                        // (the SCROLL/TAP verb suffices). Sink.SUBMIT is INTENTIONALLY WITHHELD from this
+                        // default lease (#198 slice 11, the conservative default): a submit-class
+                        // (send/pay/checkout) tap derives SUBMIT in core.act, and with SUBMIT not in
+                        // budget the guard DENYs it at the sink-in-budget branch BEFORE the confirm gate
+                        // is even reached. So the confirm gate is fully wired and proven but un-reachable
+                        // through this default lease — submit-class automation is a separate, stricter,
+                        // explicit opt-in (a later grant that adds SUBMIT to the budget), exactly mirroring
+                        // how slices 8-10 made verbs AUTHORIZABLE without widening the admitted surface.
+                        // Surface stays empty = deny-all (S1): these grants make the verbs/sinks
+                        // AUTHORIZABLE but do NOT widen the admitted surface — authorize still DENYs on
+                        // surface for any real foreground app today.
                         sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
                         lease = Lease(
                             expiresAt = trustClock.now() + UI_AUTOMATION_LEASE_TTL_MS,
@@ -944,6 +952,11 @@ class ChatService(
                                 guard = automationGuard,
                                 core = automationCore,
                                 foregroundPkg = { automationRegistry.foregroundPackage() },
+                                // The out-of-band confirm for a dangerous (submit-class) tap (#198 slice
+                                // 11). Fail closed: if no overlay-backed channel is reachable (a11y
+                                // service not connected), a dangerous sink can never be confirmed, so it
+                                // is always denied — never silently auto-confirmed.
+                                confirm = automationRegistry.confirmChannel() ?: AlwaysDeny,
                             )
                         )
                     }

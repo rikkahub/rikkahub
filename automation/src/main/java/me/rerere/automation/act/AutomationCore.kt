@@ -11,6 +11,7 @@ import me.rerere.automation.cap.CapabilityGuard
 import me.rerere.automation.cap.Decision
 import me.rerere.automation.cap.Sink
 import me.rerere.automation.cap.Verb
+import me.rerere.automation.cap.isDangerous
 import me.rerere.automation.observe.ScreenState
 import me.rerere.automation.observe.Selector
 import me.rerere.automation.observe.SnapshotProjector
@@ -90,6 +91,13 @@ class AutomationCore(
      *     stale-but-equal; the hash catches it (MR3 / P8 / assert-both, the TOCTOU core).
      *  3. **authorize** via the [CapabilityGuard] BEFORE any dispatch (S2). The OCap is derived from
      *     the [Act] variant (the model never supplies it). DENY ⇒ [ActOutcome.Denied] GUARD.
+     *  3.6. **dangerous-sink confirm** (#198 slice 11, design Q2 / I-act-5): if the derived [Sink] is
+     *     dangerous ([me.rerere.automation.cap.isDangerous] — only `SUBMIT`, a submit-class tap), the
+     *     act awaits the out-of-band [confirm] channel BEFORE any dispatch. A `false` return (the user
+     *     DENIED, or the channel TIMED OUT — the channel owns the timeout, fail-closed) ⇒
+     *     [ActOutcome.Denied] CONFIRM_DECLINED, no dispatch. A non-dangerous act NEVER consults the
+     *     channel. The confirm runs INSIDE the revoke-cancellable region (step 4's `guardInFlight`),
+     *     so a kill-switch [CapabilityGuard.revoke] cancels a pending confirmation prompt.
      *  4. **perform → settle → re-snapshot**, all routed through the capability's revocation token
      *     ([CapabilityGuard.guardInFlight]) so a kill-switch [CapabilityGuard.revoke] cancels the act
      *     in flight, and a revoke that fires between authorize and perform lands in `onAlreadyRevoked`
@@ -109,10 +117,16 @@ class AutomationCore(
      * carries one extra rule on TOP of the shared SM: the restricted P9 no-op (step 3.5) — if the
      * resolved field already projects the requested text, the act succeeds WITHOUT dispatching
      * (idempotent; it still ADMITs/audits, never short-circuiting the password/system-UI guard above).
-     * Dangerous-sink (submit-class) confirmation — the SUBMIT sink + out-of-band confirm for
-     * send/pay-class taps — is slice 11; it is NOT reachable from here (a general tap is a plain click).
+     * Dangerous-sink (submit-class) confirmation (#198 slice 11) is now wired (step 3.6): a CLICK whose
+     * RESOLVED target is submit-class ([SubmitClassifier]) derives `Sink.SUBMIT` and is gated behind
+     * [confirm] before it can dispatch. The sink is still core-derived, never model-supplied (I2).
      */
-    suspend fun act(guard: CapabilityGuard, grounded: UiSnapshot, request: Act): ActOutcome {
+    suspend fun act(
+        guard: CapabilityGuard,
+        grounded: UiSnapshot,
+        request: Act,
+        confirm: ConfirmChannel,
+    ): ActOutcome {
         // 0. GoHost (I-act-6 / P12 extended): no act dispatches while the host app is foreground.
         // Enforced here, BEFORE resolve/authorize, so it covers Act.Global (which skips resolve) and
         // does NOT silently depend on the surface DENY — host-pause is an admission invariant in its
@@ -144,30 +158,39 @@ class AutomationCore(
             return ActOutcome.StaleState
         }
 
+        // Resolve once: the SAME target backs the PASSWORD (sensitiveNode) and system-window
+        // (systemUiTarget) provenance the guard DENYs on (I-act-3 / I8/P18) AND the submit-class
+        // classification below. A global act has no node target, so neither flag nor the classifier
+        // applies. Without systemUiTarget the guard's system-UI branch is dead code: a scroll/set_text
+        // resolving a node inside a system/permission window would authorize as if it were app content
+        // (the provenance must travel WITH the projected target). For set_text the sensitiveNode flag is
+        // the HEADLINE input-sink safety check: a write into a PASSWORD field is DENIED here before any
+        // dispatch (typing into a credential field is never permitted, never short-circuited by the P9
+        // no-op below — the guard runs first). Hoisted ABOVE the verb/sink derivation so the submit-class
+        // classifier can read the resolved target's label/key (#198 slice 11).
+        val target = tid?.let { id -> grounded.targets.first { it.tid == id } }
+
         // 3. authorize BEFORE the backend (S2). OCap derived from the variant; target is the screen
         // the grounding came from. sensitiveNode guards a (pathological) scroll of a password node.
         val (verb, sink) = when (request) {
             // The targeted verb is derived from the node-action kind (I2 — never model-supplied). A
-            // general tap (CLICK ⇒ Verb.TAP, #198 slice 10) carries NO sink, identical to scroll: it is
-            // not submit-class, so it is verb-gated only (the SUBMIT sink is slice 11). Both still flow
-            // through the sensitiveNode/systemUiTarget DENY below — a password or system-UI tap is
-            // denied before dispatch exactly as a scroll is.
+            // scroll (SCROLL_FORWARD/BACKWARD ⇒ Verb.SCROLL) carries NO sink. A CLICK ⇒ Verb.TAP carries
+            // a sink ONLY when the RESOLVED target is submit-class ([SubmitClassifier], #198 slice 11):
+            // an ordinary tap stays sink-less (verb-gated only, #198 slice 10), but a send/pay/checkout-
+            // class tap derives Sink.SUBMIT — STILL derived here in the core from the resolved target's
+            // label/key, never model-supplied (I2). The SUBMIT sink is then (a) checked against the
+            // sink budget by the guard below — a lease without SUBMIT in budget DENYs here, before the
+            // confirm gate is even reached — and (b) gated behind the out-of-band confirm at step 3.6.
+            // All taps still flow through the sensitiveNode/systemUiTarget DENY below — a password or
+            // system-UI tap is denied before dispatch exactly as a scroll is.
             is Act.Targeted -> when (request.kind) {
                 NodeActionKind.SCROLL_FORWARD, NodeActionKind.SCROLL_BACKWARD -> Verb.SCROLL to null
-                NodeActionKind.CLICK -> Verb.TAP to null
+                NodeActionKind.CLICK ->
+                    Verb.TAP to (if (target != null && SubmitClassifier.isSubmitClass(target)) Sink.SUBMIT else null)
             }
             is Act.Global -> Verb.GLOBAL to Sink.GLOBAL_NAV
             is Act.SetText -> Verb.SET_TEXT to Sink.TYPE_INTO
         }
-        // Resolve once: the SAME target backs both the PASSWORD (sensitiveNode) and the system-window
-        // (systemUiTarget) provenance the guard DENYs on (I-act-3 / I8/P18). A global act has no node
-        // target, so neither flag applies. Without systemUiTarget the guard's system-UI branch is dead
-        // code: a scroll/set_text resolving a node inside a system/permission window would authorize as
-        // if it were app content (the provenance must travel WITH the projected target). For set_text
-        // the sensitiveNode flag is the HEADLINE input-sink safety check: a write into a PASSWORD field
-        // is DENIED here before any dispatch (typing into a credential field is never permitted, and is
-        // never short-circuited by the P9 no-op below — the guard runs first).
-        val target = tid?.let { id -> grounded.targets.first { it.tid == id } }
         val authRequest = AuthRequest(
             verb = verb,
             targetPkg = grounded.foregroundPkg,
@@ -205,7 +228,35 @@ class AutomationCore(
         return guard.guardInFlight(
             cancel = { job?.cancel(CancellationException("automation revoked")) },
             onAlreadyRevoked = { ActOutcome.Denied(ActDenyReason.REVOKED) },
-            block = {
+            block = block@{
+                // 3.6. Dangerous-sink (submit-class) out-of-band confirm (#198 slice 11, design Q2 /
+                // I-act-5). Placed FIRST inside the revoke-cancellable block so a pending confirmation
+                // prompt is torn down by a kill-switch revoke (the block's `cancel` cancels the owning
+                // Job, unparking a suspended confirm), and so onAlreadyRevoked still wins a pre-revoke.
+                // Runs ONLY after the guard ADMITted (the budget/sensitive/lease checks already passed)
+                // and ONLY for a dangerous sink — a non-dangerous act never consults the channel. A
+                // false return is the user's DENY *or* the channel's fail-closed timeout (the channel
+                // owns the timeout); the core treats both identically as CONFIRM_DECLINED with NO
+                // dispatch. A submit-class tap is always a TAP, so this never collides with the P9
+                // set_text no-op (step 3.5), which already returned above for an unchanged-text set.
+                if (sink?.isDangerous == true) {
+                    // Fail-closed on EVERY non-confirm outcome: a `false` (the user's DENY or the
+                    // channel's fail-closed timeout) AND any thrown exception (e.g. the overlay could
+                    // not attach) both deny — a confirm that did not return `true` is not a confirm, so
+                    // it must never fall through to dispatch. CancellationException is rethrown so a
+                    // kill-switch revoke during the prompt still tears the act down (the suspend is
+                    // cancellable); only a non-cancellation throwable is normalized to a deny.
+                    val confirmed = try {
+                        confirm.confirm(grounded.foregroundPkg, verb, target?.text)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        false
+                    }
+                    if (!confirmed) {
+                        return@block ActOutcome.Denied(ActDenyReason.CONFIRM_DECLINED)
+                    }
+                }
                 // The backend returns false WITHOUT dispatching when the grounding moved in the
                 // assert→dispatch gap (a node action whose carried stateSeq no longer matches the live
                 // tree — I-act-1/MR3 — re-checked atomically with the walk). That false is the safety

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service.automation
 
 import me.rerere.automation.act.AutomationCore
+import me.rerere.automation.act.ConfirmChannel
 import me.rerere.automation.backend.AutomationBackend
 
 /**
@@ -26,6 +27,15 @@ class AutomationRuntimeRegistry {
 
     /** Foreground package of the device, read before observing (design S2). Null when disconnected. */
     fun foregroundPackage(): String? = AccessibilityRuntime.instance?.foregroundPackage
+
+    /**
+     * The live, overlay-backed out-of-band confirmation channel for a dangerous (submit-class) act
+     * (#198 slice 11), or null when the accessibility service is not connected — same fail-closed
+     * pattern as [core] / [foregroundPackage]. `ChatService` threads this into the tool factory; a null
+     * (disconnected) channel means a dangerous sink can never be confirmed (the caller substitutes a
+     * fail-closed AlwaysDeny).
+     */
+    fun confirmChannel(): ConfirmChannel? = AccessibilityRuntime.instance?.confirmChannel()
 
     /**
      * Show the floating STOP overlay on the live service (design §7) and report whether it is

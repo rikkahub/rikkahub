@@ -1164,5 +1164,8 @@
   <string name="assistant_page_ui_automation_desc">Разрешите этому ассистенту наблюдать за экраном других приложений (только для чтения). Требуется включение службы доступности RikkaHub в системных настройках. Только для чтения: без нажатий или ввода текста.</string>
   <string name="automation_kill_switch_unavailable">Не удалось запустить автоматизацию: не удалось показать аварийный выключатель «СТОП». Включите службу специальных возможностей rikkahub и наложение, затем повторите попытку.</string>
   <string name="chat_status_retrieving_knowledge">Поиск в базе знаний…</string>
+  <string name="automation_confirm_prompt">Подтвердите действие в %1$s: %2$s %3$s?</string>
+  <string name="automation_confirm_allow">Подтвердить</string>
+  <string name="automation_confirm_deny">Отклонить</string>
 </resources>
 

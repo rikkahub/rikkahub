@@ -122,6 +122,17 @@ enum class Sink {
 }
 
 /**
+ * Which sinks are DANGEROUS — i.e. trigger the out-of-band confirmation gate before a write lands
+ * (#198 slice 11, design Q2 / I-act-5). Only [Sink.SUBMIT] (submit-class: send/pay/checkout/…) is
+ * dangerous: it is the irreversible, side-effect-committing outcome a model must NOT reach without an
+ * explicit user confirm. [Sink.TYPE_INTO] (typing does not commit) and [Sink.GLOBAL_NAV] (nav is
+ * reversible) are NOT dangerous — they are budgeted but never gated. A pure predicate on the existing
+ * enum (no enum member changes): the core consults it to decide whether to await the confirm channel.
+ */
+val Sink.isDangerous: Boolean
+    get() = this == Sink.SUBMIT
+
+/**
  * Time-boxed grant. The clock is a [TrustClock], never `System.now` (design §6/§7) — lease/TTL
  * properties (P21) must be reproducible. [maxSteps] caps total ADMITs over the lease (P22).
  */

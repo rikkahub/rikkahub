@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import me.rerere.automation.act.ConfirmChannel
 import me.rerere.automation.backend.AutomationBackend
 import me.rerere.automation.backend.GlobalNav
 import me.rerere.automation.backend.NodeActionKind
@@ -161,6 +162,27 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
             overlay = null
         }
     }
+
+    /**
+     * Out-of-band confirmation for a DANGEROUS (submit-class) act (#198 slice 11) — the live, overlay-
+     * backed [me.rerere.automation.act.ConfirmChannel]. Suspends on the floating Confirm/Deny affordance
+     * ([KillSwitchOverlay.requestConfirm]) until the user decides, returning `true` on Confirm and
+     * `false` on Deny OR timeout (fail-closed; the overlay owns the timeout). Fails closed to `false`
+     * when no overlay exists (a dangerous act with no reachable confirm surface must never auto-confirm)
+     * — the STOP overlay is always up while a lease is live, so this is the safety net, not the path.
+     *
+     * The overlay's WindowManager add/remove marshals to the service main thread internally (the
+     * suspend [KillSwitchOverlay.requestConfirm] hops via Dispatchers.Main), and the call is cancellable:
+     * a kill-switch `revoke()` cancels the act's owning Job, which tears down the pending prompt (the
+     * overlay removes its view in a NonCancellable `finally`).
+     */
+    suspend fun confirm(app: String, verb: String, label: String?): Boolean {
+        val current = overlay ?: return false // no confirm surface ⇒ fail closed (deny)
+        return current.requestConfirm(app, verb, label)
+    }
+
+    /** A [me.rerere.automation.act.ConfirmChannel] bound to this live runtime's overlay (#198 slice 11). */
+    fun confirmChannel(): ConfirmChannel = ConfirmChannel { app, verb, label -> confirm(app, verb.name, label) }
 
     /**
      * Run [block] on the service main thread, reusing the current thread when it already IS the main
