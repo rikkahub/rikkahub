@@ -273,9 +273,11 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
      *
      *  - [PerformAction.Global] → [performGlobalAction] (BACK/HOME/RECENTS), no node target.
      *  - [PerformAction.Node] → re-walk the live windows in the EXACT [SnapshotProjector] projection
-     *    order to the tid-th projected node and perform the scroll on it (coordinate-free — a resolved
-     *    node, not a screen point). Out-of-range tid ⇒ false (the core treats dispatch as a best-effort
-     *    ack; the re-snapshot is the ground truth).
+     *    order to the tid-th projected node and perform its [NodeActionKind] on it — ACTION_SCROLL_*
+     *    for a scroll or ACTION_CLICK for the slice-10 general tap (coordinate-free — a resolved node,
+     *    never a screen point or dispatchGesture, design D1). Out-of-range tid ⇒ false (the core treats
+     *    dispatch as a best-effort ack; the re-snapshot is the ground truth). The headline tap guard
+     *    (system-UI/password DENY) already ran in the core before a CLICK is ever dispatched here.
      *  - [PerformAction.SetText] (#198 slice 9) → the SAME carried-stateSeq re-check + projection-order
      *    walk as [PerformAction.Node], but the leaf op is [AccessibilityNodeInfo.ACTION_SET_TEXT] with
      *    the text [Bundle] (still a resolved node, never a coordinate). The headline input-sink guard
@@ -307,6 +309,10 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                         val actionId = when (action.kind) {
                             NodeActionKind.SCROLL_FORWARD -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
                             NodeActionKind.SCROLL_BACKWARD -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                            // Slice 10 (the general tap): ACTION_CLICK on the resolved node, never a
+                            // dispatchGesture screen point (design D1). The headline tap guard
+                            // (system-UI/password DENY) already ran in the core before this dispatches.
+                            NodeActionKind.CLICK -> AccessibilityNodeInfo.ACTION_CLICK
                         }
                         performOnProjectedNode(action.tid) { it.performAction(actionId) }
                     }

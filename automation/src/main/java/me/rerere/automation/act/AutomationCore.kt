@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import me.rerere.automation.backend.AutomationBackend
+import me.rerere.automation.backend.NodeActionKind
 import me.rerere.automation.backend.PerformAction
 import me.rerere.automation.cap.AuthRequest
 import me.rerere.automation.cap.CapabilityGuard
@@ -96,12 +97,20 @@ class AutomationCore(
      *     postcondition (the screen actually changed), NOT the backend's dispatch boolean (D4).
      *
      * Verbs reachable here: the lowest-risk nav — scroll (no sink) and global nav (`Sink.GLOBAL_NAV`,
-     * not dangerous) — plus the slice-9 input sink set_text (`Verb.SET_TEXT` + `Sink.TYPE_INTO`).
-     * set_text carries one extra rule on TOP of the shared SM: the restricted P9 no-op (step 3.5) —
-     * if the resolved field already projects the requested text, the act succeeds WITHOUT dispatching
+     * not dangerous) — plus the slice-9 input sink set_text (`Verb.SET_TEXT` + `Sink.TYPE_INTO`) and
+     * the slice-10 general tap (`Verb.TAP`, derived from [NodeActionKind.CLICK] on [Act.Targeted], no
+     * sink — a general tap is verb-gated only, not submit-class). A tap rides the SAME shared SM as
+     * scroll: it is NEVER no-op'd (P9 is set_text-only — step 3.5 is gated `request is Act.SetText`),
+     * so it always dispatches subject to the shared assert/guard. System-UI/permission-dialog and
+     * password taps are DENIED here BEFORE any dispatch — the system-window/PASSWORD provenance travels
+     * on the resolved target (the variant-independent `sensitiveNode`/`systemUiTarget` plumbing below),
+     * so a tap on an "Allow"/"Grant" button inside a permission window authorizes as the system-UI
+     * target it is and the guard refuses it (I-act-3/I8/P18 — observable, never actionable). set_text
+     * carries one extra rule on TOP of the shared SM: the restricted P9 no-op (step 3.5) — if the
+     * resolved field already projects the requested text, the act succeeds WITHOUT dispatching
      * (idempotent; it still ADMITs/audits, never short-circuiting the password/system-UI guard above).
-     * Dangerous-sink (submit-class) confirmation is slice 11, and full system-UI-non-actionable
-     * enforcement on tap is slice 10; neither is reachable from here.
+     * Dangerous-sink (submit-class) confirmation — the SUBMIT sink + out-of-band confirm for
+     * send/pay-class taps — is slice 11; it is NOT reachable from here (a general tap is a plain click).
      */
     suspend fun act(guard: CapabilityGuard, grounded: UiSnapshot, request: Act): ActOutcome {
         // 0. GoHost (I-act-6 / P12 extended): no act dispatches while the host app is foreground.
@@ -138,7 +147,15 @@ class AutomationCore(
         // 3. authorize BEFORE the backend (S2). OCap derived from the variant; target is the screen
         // the grounding came from. sensitiveNode guards a (pathological) scroll of a password node.
         val (verb, sink) = when (request) {
-            is Act.Targeted -> Verb.SCROLL to null
+            // The targeted verb is derived from the node-action kind (I2 — never model-supplied). A
+            // general tap (CLICK ⇒ Verb.TAP, #198 slice 10) carries NO sink, identical to scroll: it is
+            // not submit-class, so it is verb-gated only (the SUBMIT sink is slice 11). Both still flow
+            // through the sensitiveNode/systemUiTarget DENY below — a password or system-UI tap is
+            // denied before dispatch exactly as a scroll is.
+            is Act.Targeted -> when (request.kind) {
+                NodeActionKind.SCROLL_FORWARD, NodeActionKind.SCROLL_BACKWARD -> Verb.SCROLL to null
+                NodeActionKind.CLICK -> Verb.TAP to null
+            }
             is Act.Global -> Verb.GLOBAL to Sink.GLOBAL_NAV
             is Act.SetText -> Verb.SET_TEXT to Sink.TYPE_INTO
         }

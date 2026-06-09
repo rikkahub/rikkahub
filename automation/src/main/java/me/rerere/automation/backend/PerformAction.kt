@@ -28,13 +28,17 @@ sealed interface PerformAction {
 }
 
 /**
- * Node action kinds wired in slice 8 (lowest-risk nav). Slice 9's set_text travels on the dedicated
- * [PerformAction.SetText] variant (it needs a String payload), not here; slice 10 adds `CLICK` — the
- * vocabulary grows additively, no kernel change (the verb/sink mapping lives in the core).
+ * Node action kinds. Slice 8 wired the lowest-risk nav (the two scrolls); slice 10 lands `CLICK` as a
+ * payload-less node action on the existing [PerformAction.Node] variant — UNLIKE set_text, a general
+ * tap carries no String payload, so it rides [Node] exactly like a scroll (no separate variant, no
+ * second dispatch path). Slice 9's set_text still travels on the dedicated [PerformAction.SetText]
+ * variant (it needs a String payload). The vocabulary grows additively, no kernel change (the
+ * verb/sink mapping lives in the core: CLICK ⇒ Verb.TAP with no sink, derived from this kind).
  */
 enum class NodeActionKind {
     SCROLL_FORWARD,
     SCROLL_BACKWARD,
+    CLICK,
 }
 
 /**

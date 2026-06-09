@@ -12,7 +12,14 @@ import me.rerere.automation.observe.UiSnapshot
  * supplies authority, so a mismatched verb/sink is structurally impossible (design I2).
  */
 sealed interface Act {
-    /** Scroll a resolved element. Maps to `Verb.SCROLL` with no sink (viewport movement, no side effect). */
+    /**
+     * A node action on a resolved element — the [kind] drives the verb (the model never supplies it,
+     * I2). SCROLL_FORWARD/SCROLL_BACKWARD ⇒ `Verb.SCROLL` (viewport movement, no side effect); CLICK ⇒
+     * `Verb.TAP` (a general tap, #198 slice 10). Neither carries a sink: a general tap is NOT
+     * submit-class, so it is verb-gated only, exactly like scroll (the SUBMIT sink + submit-class
+     * confirm is slice 11). System-UI/permission-dialog and password taps DENY before dispatch via the
+     * same target-provenance plumbing as scroll/set_text — observable, never actionable (I-act-3/I8).
+     */
     data class Targeted(val selector: Selector, val kind: NodeActionKind) : Act
 
     /** Global navigation. Maps to `Verb.GLOBAL` + `Sink.GLOBAL_NAV` (budgeted, not dangerous — Q2). */

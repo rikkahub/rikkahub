@@ -853,17 +853,19 @@ class ChatService(
                     capability = Capability.root(
                         sessionId = conversationId.toString(),
                         // Surface stays empty-by-default = deny-all (S1): a per-app whitelist is a
-                        // separate later UI. This grant makes the nav verbs AUTHORIZABLE (#198 slice
-                        // 8) but does NOT widen the admitted surface — authorize still DENYs on the
-                        // surface branch for any real foreground app today, exactly as OBSERVE does.
+                        // separate later UI. This grant makes the nav verbs, the input sink, and the
+                        // general tap (Verb.TAP, #198 slice 10) AUTHORIZABLE but does NOT widen the
+                        // admitted surface — authorize still DENYs on the surface branch for any real
+                        // foreground app today, exactly as OBSERVE does.
                         surface = emptySet(),
-                        verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT),
+                        verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT, Verb.TAP),
                         // GLOBAL_NAV must be in budget for ui_global's authorize to pass the
                         // sink-in-budget branch; TYPE_INTO for ui_set_text (#198 slice 9, the input
-                        // sink). ui_scroll carries no sink (SCROLL verb suffices). Surface stays empty
-                        // = deny-all (S1): these grants make the verbs/sinks AUTHORIZABLE but do NOT
-                        // widen the admitted surface — authorize still DENYs on surface for any real
-                        // foreground app today.
+                        // sink). ui_scroll and ui_tap (#198 slice 10) carry NO sink (the SCROLL/TAP verb
+                        // suffices — a general tap is not submit-class, so no SUBMIT sink is granted;
+                        // that is slice 11). Surface stays empty = deny-all (S1): these grants make the
+                        // verbs/sinks AUTHORIZABLE but do NOT widen the admitted surface — authorize
+                        // still DENYs on surface for any real foreground app today.
                         sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
                         lease = Lease(
                             expiresAt = trustClock.now() + UI_AUTOMATION_LEASE_TTL_MS,
@@ -930,11 +932,11 @@ class ChatService(
                         addAll(createSearchTools(settings))
                     }
                     addAll(localTools.getTools(assistant.localTools))
-                    // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8), all
-                    // over the same core. Empty surface unless automation is enabled AND a guard was
-                    // minted; each tool authorizes via the closed-over guard BEFORE the backend (S2).
-                    // No-op (empty) when disabled or when the a11y service is not connected (the
-                    // core() is null ⇒ no guard path is reachable anyway).
+                    // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
+                    // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
+                    // unless automation is enabled AND a guard was minted; each tool authorizes via the
+                    // closed-over guard BEFORE the backend (S2). No-op (empty) when disabled or when the
+                    // a11y service is not connected (the core() is null ⇒ no guard path is reachable).
                     automationRegistry.core()?.let { automationCore ->
                         addAll(
                             getUiAutomationTools(

@@ -167,7 +167,7 @@ class UiAutomationToolsTest {
         // guard, NOT by tool presence (a guard granting only OBSERVE still surfaces ui_scroll, which
         // then denies on the verb branch).
         assertEquals(
-            listOf("ui_observe", "ui_scroll", "ui_global", "ui_set_text"),
+            listOf("ui_observe", "ui_scroll", "ui_global", "ui_set_text", "ui_tap"),
             tools.map { it.name },
         )
         // needsApproval is forced false on every tool: the in-chat approval gate is unreachable while
@@ -432,9 +432,10 @@ class UiAutomationToolsTest {
         capability = Capability.root(
             sessionId = "conversation-1",
             surface = surface,
-            // slice 9 adds SET_TEXT + the TYPE_INTO input sink alongside the slice-8 nav authority,
-            // so the act guard ADMITs every act tool's authorize on the happy path.
-            verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT),
+            // slice 9 adds SET_TEXT + the TYPE_INTO input sink; slice 10 adds TAP (no sink — a general
+            // tap is verb-gated only) alongside the slice-8 nav authority, so the act guard ADMITs
+            // every act tool's authorize on the happy path.
+            verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT, Verb.TAP),
             sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
             lease = Lease(expiresAt = expiresAt, maxSteps = maxSteps),
         ),
@@ -500,6 +501,27 @@ class UiAutomationToolsTest {
     private fun scrollArgs(tid: Int, direction: String) = buildJsonObject {
         put("selector", buildJsonObject { put("tid", tid) })
         put("direction", direction)
+    }
+
+    /** A foreground tree with a single clickable element (tid 0), used to ground ui_tap. */
+    private fun clickableTree(stateSeq: Long = 0L): RawTree = RawTree(
+        stateSeq = stateSeq,
+        foregroundPkg = target,
+        windows = listOf(
+            RawWindow(
+                pkg = target,
+                root = RawNode(
+                    text = "OK",
+                    className = "android.widget.Button",
+                    clickable = true,
+                ),
+            ),
+        ),
+    )
+
+    /** ui_tap args: { selector: { ... } } (selector-only — a general tap takes no direction/text). */
+    private fun tapArgs(selector: kotlinx.serialization.json.JsonObject) = buildJsonObject {
+        put("selector", selector)
     }
 
     // --- 7a. FACTORY GATING — the act tools obey the same default-OFF gate as ui_observe ---
@@ -1041,5 +1063,129 @@ class UiAutomationToolsTest {
             PerformAction.SetText(stateSeq = 5L, tid = 0, text = ""),
             backend.performed.single(),
         )
+    }
+
+    // --- 9. ui_tap (#198 slice 10): the general tap (Verb.TAP, no sink — Act.Targeted + CLICK) over
+    // the proven act kernel. Mirrors the ui_scroll suite but selector-only: grounding gate, happy path
+    // (one PerformAction.Node CLICK recorded, Acted re-grounds), S2 deny (no leak), StaleState on a seq
+    // bump, and malformed (non-object + unparseable selector) fail-closed + AUDITED with Verb.TAP. The
+    // system-UI-non-actionable HEADLINE lives in the :automation PBT over FakeBackend (the tool test
+    // cannot inject a system window through the foregroundPkg supplier cleanly). As with the nav tools,
+    // the real ACTION_CLICK dispatch parity is slice 12, not here.
+
+    @Test
+    fun `ui_tap before any observe returns a re-observe text and never performs`() {
+        val backend = FakeBackend(clickableTree())
+        val tap = actTools(actGuard(), backend).byName("ui_tap")
+
+        val parts = runBlocking { tap.execute(tapArgs(buildJsonObject { put("tid", 0) })) }
+
+        assertTrue("no perform without a grounded snapshot", backend.performed.isEmpty())
+        assertTrue(
+            "must tell the model to observe first",
+            (parts.single() as UIMessagePart.Text).text.contains("observe", ignoreCase = true),
+        )
+    }
+
+    @Test
+    fun `ui_tap after observe performs one node click, settles, and re-grounds`() {
+        val backend = FakeBackend(clickableTree(stateSeq = 5L))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val settleBefore = backend.settleCount
+
+        val parts = runBlocking {
+            tools.byName("ui_tap").execute(tapArgs(buildJsonObject { put("tid", 0) }))
+        }
+
+        assertEquals("exactly one perform", 1, backend.performed.size)
+        assertEquals(
+            "the dispatched action must be a node CLICK on the grounded (stateSeq=5, tid=0)",
+            PerformAction.Node(stateSeq = 5L, tid = 0, kind = NodeActionKind.CLICK),
+            backend.performed.single(),
+        )
+        assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)
+        // Acted re-grounds: FakeBackend bumps stateSeq on perform, so the re-snapshot reads stateSeq=6.
+        assertTrue(
+            "the result must be the fresh re-rendered snapshot",
+            (parts.single() as UIMessagePart.Text).text.contains("stateSeq=6"),
+        )
+    }
+
+    @Test
+    fun `revoked guard denies ui_tap before the backend and never leaks the deny reason`() {
+        val backend = FakeBackend(clickableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val performsAfterObserve = backend.performed.size
+
+        guard.revoke()
+        val parts = runBlocking {
+            tools.byName("ui_tap").execute(tapArgs(buildJsonObject { put("tid", 0) }))
+        }
+
+        assertEquals("a revoked guard must never perform", performsAfterObserve, backend.performed.size)
+        val text = (parts.single() as UIMessagePart.Text).text
+        assertTrue("denied result must explain the refusal", text.contains("denied", ignoreCase = true))
+        assertFalse("must not leak the deny reason", text.contains("GUARD"))
+        assertFalse("must not leak the deny reason", text.contains("REVOKED"))
+    }
+
+    @Test
+    fun `a stateSeq bump after grounding makes ui_tap stale and never performs`() {
+        val backend = FakeBackend(clickableTree(stateSeq = 0L))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        backend.injectTransition()
+        val parts = runBlocking {
+            tools.byName("ui_tap").execute(tapArgs(buildJsonObject { put("tid", 0) }))
+        }
+
+        assertTrue("a stale grounding must never perform", backend.performed.isEmpty())
+        val text = (parts.single() as UIMessagePart.Text).text
+        assertTrue("stale result must steer the model to re-observe", text.contains("observe", ignoreCase = true))
+    }
+
+    @Test
+    fun `ui_tap with a non-object argument fails closed and audits one DENY with TAP`() {
+        val backend = FakeBackend(clickableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val entriesAfterObserve = guard.audit.entries().size
+
+        runBlocking { tools.byName("ui_tap").execute(JsonNull) }
+
+        assertTrue("malformed args must never perform", backend.performed.isEmpty())
+        val newEntries = guard.audit.entries().drop(entriesAfterObserve)
+        assertEquals("a malformed tap must append exactly one ledger entry", 1, newEntries.size)
+        val entry = newEntries.single()
+        assertEquals(Decision.DENY, entry.decision)
+        assertEquals(DenyReason.MALFORMED, entry.reason)
+        assertEquals("the ledger must record TAP for a ui_tap attempt", Verb.TAP, entry.verb)
+        assertEquals(redactAndTruncate(JsonNull.toString()), entry.redactedArgs)
+    }
+
+    @Test
+    fun `a malformed ui_tap selector writes one DENY audit entry with TAP`() {
+        val backend = FakeBackend(clickableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+        val entriesAfterObserve = guard.audit.entries().size
+
+        // A well-formed object but an unparseable selector (empty selector object) is still malformed.
+        runBlocking {
+            tools.byName("ui_tap").execute(tapArgs(buildJsonObject { }))
+        }
+
+        val newEntries = guard.audit.entries().drop(entriesAfterObserve)
+        assertEquals("an unparseable selector must append one ledger entry", 1, newEntries.size)
+        val entry = newEntries.single()
+        assertEquals(DenyReason.MALFORMED, entry.reason)
+        assertEquals(Verb.TAP, entry.verb)
+        assertTrue(backend.performed.isEmpty())
     }
 }

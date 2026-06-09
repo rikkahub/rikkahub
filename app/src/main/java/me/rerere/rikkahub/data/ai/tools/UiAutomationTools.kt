@@ -33,10 +33,14 @@ import me.rerere.rikkahub.data.model.Assistant
  * The per-generation UI-automation [Tool] factory — the `:app` surface of #187/#198, built on the
  * already-merged `:automation` capability + observation + act kernel (#205, #211). Exposes
  * `ui_observe` (read-only, #187 v1), the lowest-risk nav act verbs `ui_scroll` and `ui_global`
- * (#198 slice 8), and the input sink `ui_set_text` (`Verb.SET_TEXT` + `Sink.TYPE_INTO`, #198 slice 9)
- * over the SAME [AutomationCore]. `ui_tap` and the dangerous-sink (submit-class) confirm channel are
- * later slices (10–11). `ui_set_text` inherits the act path's restricted P9 no-op: an unchanged-text
- * set is idempotent (no dispatch), but typing into a password/system-UI field is always DENIED.
+ * (#198 slice 8), the input sink `ui_set_text` (`Verb.SET_TEXT` + `Sink.TYPE_INTO`, #198 slice 9), and
+ * the general tap `ui_tap` (`Verb.TAP`, no sink — `Act.Targeted` + `NodeActionKind.CLICK`, #198 slice
+ * 10) over the SAME [AutomationCore]. The dangerous-sink (submit-class) confirm channel — the SUBMIT
+ * sink + out-of-band confirm for send/pay-class taps — is the next slice (11). `ui_set_text` inherits
+ * the act path's restricted P9 no-op: an unchanged-text set is idempotent (no dispatch), but typing
+ * into a password/system-UI field is always DENIED. `ui_tap` is never no-op'd (P9 is set_text-only)
+ * and a tap on a system-UI/permission dialog (Allow/Grant) or a password field is DENIED before
+ * dispatch — observable, never actionable.
  *
  * Shape mirrors [me.rerere.rikkahub.data.ai.subagent.buildSpawnTool]: a top-level factory closing
  * over per-conversation context, built ONLY at `ChatService`'s per-generation tool buildList. It is
@@ -370,6 +374,61 @@ fun getUiAutomationTools(
                 }
             },
         ),
+        Tool(
+            name = UI_TAP_TOOL_NAME,
+            description = "Tap (click) an actionable element of the foreground app (other apps). You " +
+                "MUST call ui_observe first this turn — a target id is only valid for the snapshot it " +
+                "appears in. Select the element by its tid (from the latest ui_observe table), by its " +
+                "visible text, or by its semantic key. Returns a fresh ui_observe-style snapshot after " +
+                "the tap; re-read it before the next step.",
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put(
+                            "selector",
+                            buildJsonObject {
+                                put("type", JsonPrimitive("object"))
+                                put(
+                                    "description",
+                                    JsonPrimitive(
+                                        "One of: {\"tid\": <int from the latest ui_observe>}, " +
+                                            "{\"text\": <visible label>, \"role\"?: <class>}, or " +
+                                            "{\"semanticKey\": <key>}.",
+                                    ),
+                                )
+                            },
+                        )
+                    },
+                    required = listOf("selector"),
+                )
+            },
+            needsApproval = false,
+            execute = execute@{ args ->
+                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
+                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
+                // Fail closed + AUDITED (P24/P25): a general tap is a TAP verb with NO sink (it is not
+                // submit-class — the SUBMIT sink is slice 11), so a malformed attempt records Verb.TAP
+                // with no sink in the ledger exactly as ui_scroll does for SCROLL.
+                if (args !is JsonObject) {
+                    return@execute auditMalformedAct(Verb.TAP, sink = null, rawArgs = args.toString())
+                }
+                val selector = parseSelector(args["selector"])
+                    ?: return@execute auditMalformedAct(Verb.TAP, sink = null, rawArgs = args.toString())
+                // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer must
+                // NOT call authorize/guardInFlight here (would double-audit / break P25). The system-UI/
+                // password DENY (a tap on an Allow/Grant button or a credential field) lives inside
+                // core.act, derived from the resolved target's provenance; from here it is an ordinary
+                // Denied.
+                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, NodeActionKind.CLICK))) {
+                    is ActOutcome.Acted -> {
+                        grounded = outcome.snapshot // re-ground for the next act
+                        listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))
+                    }
+                    is ActOutcome.Denied -> listOf(UIMessagePart.Text(ACT_DENIED_MESSAGE))
+                    ActOutcome.StaleState -> listOf(UIMessagePart.Text(ACT_STALE_MESSAGE))
+                }
+            },
+        ),
     )
 }
 
@@ -405,6 +464,7 @@ const val UI_OBSERVE_TOOL_NAME = "ui_observe"
 const val UI_SCROLL_TOOL_NAME = "ui_scroll"
 const val UI_GLOBAL_TOOL_NAME = "ui_global"
 const val UI_SET_TEXT_TOOL_NAME = "ui_set_text"
+const val UI_TAP_TOOL_NAME = "ui_tap"
 
 /**
  * The act tools refuse until [getUiAutomationTools]'s turn-scoped `grounded` snapshot exists: a tid

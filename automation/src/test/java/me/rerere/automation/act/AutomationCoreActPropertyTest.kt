@@ -866,4 +866,223 @@ class AutomationCoreActPropertyTest {
             assertTrue("a system-UI scroll must NOT touch the backend", systemBackend.performed.isEmpty())
         }
     }
+
+    // ===================================================================================
+    // #198 slice 10 — the general tap (Verb.TAP, derived from NodeActionKind.CLICK on Act.Targeted; no
+    // sink — a general tap is verb-gated only, not submit-class). Every property below is written so a
+    // naive "just dispatch the tap" core FAILS it; the fail-closed core passes. The HEADLINE is
+    // system-UI-non-actionable: a tap resolving a CLICKABLE node inside a system/permission window is
+    // DENIED before dispatch while remaining OBSERVABLE — no self-escalation via tapping Allow/Grant.
+    // ===================================================================================
+
+    /** A guard whose authority covers TAP (+ SCROLL/GLOBAL, no sink needed for a tap) for [pkg]. */
+    private fun tapGuard(pkg: String = APP, now: Long = 0L, expiresAt: Long = Long.MAX_VALUE) =
+        guard(
+            pkg = pkg,
+            verbs = setOf(Verb.TAP, Verb.SCROLL, Verb.GLOBAL),
+            sinks = setOf(Sink.GLOBAL_NAV),
+            now = now,
+            expiresAt = expiresAt,
+        )
+
+    /** A backend whose foreground app has a single clickable element (tid 0). */
+    private fun clickableBackend(seq: Long = 1L, pkg: String = APP) = FakeBackend(
+        RawTree(
+            stateSeq = seq,
+            foregroundPkg = pkg,
+            windows = listOf(
+                RawWindow(
+                    pkg = pkg,
+                    root = RawNode(
+                        text = "OK", className = "Button",
+                        visible = true, hasArea = true, clickable = true,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    // ---- HEADLINE (system UI observable but non-actionable): a tap resolving a CLICKABLE node inside
+    // a system/permission window must be DENIED before dispatch, AND the node must STILL be observable
+    // (the model still sees the dialog). The provenance travels on UiTarget.systemWindow (set by the
+    // projector from RawWindow.systemWindow) and the core maps it to AuthRequest.systemUiTarget for
+    // EVERY Act.Targeted (slice-8 F3), so the guard's system-UI DENY branch is reachable for a tap. On
+    // a core that authorizes a system-window tap as plain app content this FAILS — the tap lands on the
+    // "Allow" button and the agent self-escalates a permission (the single worst tap failure). This
+    // pins #198's "grant UI non-actionable" gate closed for the general tap.
+    @Test
+    fun `a tap on a clickable system-window node is denied before dispatch but stays observable`() {
+        runBlocking {
+            // A runtime-permission grant dialog with a clickable "Allow" button.
+            val systemBackend = FakeBackend(
+                RawTree(
+                    stateSeq = 1L,
+                    foregroundPkg = APP,
+                    windows = listOf(
+                        RawWindow(
+                            pkg = "com.android.packageinstaller",
+                            systemWindow = true,
+                            root = RawNode(
+                                text = "Allow", className = "Button",
+                                visible = true, hasArea = true, clickable = true,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            val core = AutomationCore(systemBackend)
+            val grounded = core.observe()
+            // STILL observable: the system-window target IS projected (the model must see the dialog to
+            // reason about it — observation is never blocked, only the action is).
+            assertTrue("a system-window target must remain observable", grounded.targets.isNotEmpty())
+            assertTrue(
+                "the projected target must carry its system-window provenance",
+                grounded.targets.first().systemWindow,
+            )
+            // The surface admits APP and the TAP verb is granted, so the ONLY thing that can refuse this
+            // is the system-UI DENY branch — proving the tap's non-actionable enforcement is reached.
+            val outcome = core.act(tapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
+            assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
+            assertTrue("a system-UI tap must NOT touch the backend", systemBackend.performed.isEmpty())
+        }
+    }
+
+    // ---- S2 (guard-before): a tap without the TAP verb is denied before any dispatch ----
+    @Test
+    fun `S2 tap without the TAP verb is denied before dispatch`() {
+        runBlocking {
+            val backend = clickableBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            // SCROLL granted but NOT TAP — the ONLY refusal source is the verb branch.
+            val g = guard(verbs = setOf(Verb.SCROLL))
+            val outcome = core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
+            assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
+            assertTrue("S2: a denied tap must NOT touch the backend", backend.performed.isEmpty())
+        }
+    }
+
+    // ---- HEADLINE input-sink safety (sensitiveNode): a tap on a PASSWORD node is DENIED, never
+    // dispatched. The provenance is UiFlag.PASSWORD on the projected target; core maps it to
+    // AuthRequest.sensitiveNode for EVERY Act.Targeted and the guard DENYs (I8/P18). On a core that
+    // forgets the sensitiveNode provenance on the tap path, a credential field is tapped. ----
+    @Test
+    fun `a tap on a password node is denied before dispatch`() {
+        runBlocking {
+            val passwordBackend = FakeBackend(
+                RawTree(
+                    stateSeq = 1L, foregroundPkg = APP,
+                    windows = listOf(
+                        RawWindow(
+                            pkg = APP,
+                            root = RawNode(
+                                text = "secret", className = "EditText",
+                                resourceId = "com.example.app:id/pw",
+                                visible = true, hasArea = true, editable = true,
+                                clickable = true, password = true,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            val core = AutomationCore(passwordBackend)
+            val grounded = core.observe()
+            assertTrue("fixture must project a password field", grounded.targets.first().flags.contains(UiFlag.PASSWORD))
+            // Surface admits APP, TAP verb granted: the ONLY refusal source is the sensitive-node DENY.
+            val outcome = core.act(tapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
+            assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
+            assertTrue("tapping a password field must NEVER dispatch", passwordBackend.performed.isEmpty())
+        }
+    }
+
+    // ---- happy path (tap): a fresh, authorized tap dispatches exactly one node CLICK, settles, re-grounds ----
+    @Test
+    fun `a fresh authorized tap dispatches one click and re-grounds`() {
+        runBlocking {
+            val backend = clickableBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val outcome = core.act(tapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
+            assertTrue(outcome is ActOutcome.Acted)
+            val snap = (outcome as ActOutcome.Acted).snapshot
+            assertTrue("act success is the re-grounding postcondition", snap.stateSeq > grounded.stateSeq)
+            assertEquals(
+                "exactly one PerformAction.Node CLICK on the grounded (stateSeq, tid)",
+                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK),
+                backend.performed.single(),
+            )
+            assertEquals("settle runs exactly once per tap", 1, backend.settleCount)
+        }
+    }
+
+    // ---- MR3 (shared SM, via tap): a stateSeq advance after grounding ⇒ tap NEVER dispatches.
+    // The TOCTOU assert is shared with scroll/set_text — exercising it through the tap proves the new
+    // verb inherits the same freshness guarantee, not a separate (possibly weaker) path. ----
+    @Test
+    fun `MR3 a stateSeq advance after grounding never dispatches a tap`() {
+        runBlocking {
+            checkAll(200, Arb.int(1..1000)) { advance ->
+                val backend = clickableBackend()
+                val core = AutomationCore(backend)
+                val grounded = core.observe()
+                repeat(advance) { backend.injectTransition() } // the screen moved under the model
+                val outcome = core.act(tapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
+                assertEquals(ActOutcome.StaleState, outcome)
+                assertTrue("MR3: a stale tap must NOT touch the backend", backend.performed.isEmpty())
+            }
+        }
+    }
+
+    // ---- dispatch-time stale re-check (carried stateSeq mismatch ⇒ CLICK not recorded). Mirrors the
+    // scroll/set_text MR3-at-dispatch test: an event lands in the assert→dispatch gap; the carried Node
+    // stateSeq no longer matches the live seq, so FakeBackend.perform refuses (false) ⇒ StaleState. On
+    // the unfixed code (carried stateSeq ignored at dispatch) this FAILS — the tap lands on a newer tree. ----
+    @Test
+    fun `MR3 a stateSeq advance between assert and dispatch never lands the tap`() {
+        runBlocking {
+            val backend = clickableBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val g = tapGuard()
+            backend.armGate() // the next perform() parks until released
+            val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
+            val deferred = async(Dispatchers.Default) {
+                core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
+            }
+            entered.await() // deterministic: parked in perform, having passed resolve/assert/authorize
+            backend.injectTransition() // a content event arrives in the assert→dispatch gap (seq 1→2)
+            backend.releaseGate()
+            val outcome = deferred.await()
+            assertTrue(
+                "a tap whose carried stateSeq is stale must NOT land (I-act-1/MR3)",
+                backend.performed.isEmpty(),
+            )
+            assertEquals(
+                "a refused (stale) dispatch must be StaleState, never Acted (F4)",
+                ActOutcome.StaleState,
+                outcome,
+            )
+        }
+    }
+
+    // ---- P20 (revoke-in-flight, via tap): revoke during a parked tap cancels it ----
+    @Test
+    fun `P20 revoke during an in-flight tap cancels it`() {
+        runBlocking {
+            val backend = clickableBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe()
+            val g = tapGuard()
+            backend.armGate()
+            val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
+            val job: Job = launch(Dispatchers.Default) {
+                core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
+            }
+            entered.await()
+            g.revoke()
+            job.join()
+            assertTrue("revoke must cancel the in-flight tap", job.isCancelled)
+            assertFalse("the gated tap must never have completed", backend.performed.isNotEmpty())
+        }
+    }
 }
