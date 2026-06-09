@@ -33,9 +33,12 @@ import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.OpenAIReasoningMetadata
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.openAIReasoningMetadata
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.STREAM_MAX_RETRIES
@@ -54,7 +57,6 @@ import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -349,14 +351,13 @@ class ResponseAPI(
                     group.parts.forEach { part ->
                         when (part) {
                             is UIMessagePart.Reasoning -> {
-                                val reasoningId = part.metadata?.get("reasoning_id")
-                                    ?.jsonPrimitiveOrNull?.contentOrNull
+                                val reasoningMetadata = part.openAIReasoningMetadata()
                                 // Transient live-timer placeholder: emitted on
                                 // response.created/in_progress with blank text and no provider
                                 // reasoning_id. It must never round-trip into provider history —
                                 // a reasoning item with no id is a fabricated, identity-less item
                                 // that the Responses API rejects on the next request.
-                                if (part.reasoning.isBlank() && reasoningId == null) {
+                                if (part.reasoning.isBlank() && reasoningMetadata?.reasoningId == null) {
                                     return@forEach
                                 }
                                 // 先输出累积的文本/图片内容
@@ -367,7 +368,7 @@ class ResponseAPI(
                                 // 输出 reasoning item
                                 add(buildJsonObject {
                                     put("type", "reasoning")
-                                    part.metadata?.get("reasoning_id")?.jsonPrimitiveOrNull?.contentOrNull?.let {
+                                    reasoningMetadata?.reasoningId?.let {
                                         put("id", it)
                                     }
                                     put("summary", buildJsonArray {
@@ -376,11 +377,8 @@ class ResponseAPI(
                                             put("text", part.reasoning)
                                         })
                                     })
-                                    part.metadata?.get("encrypted_content")?.jsonPrimitiveOrNull?.contentOrNull?.let {
-                                        put(
-                                            "encrypted_content",
-                                            part.metadata?.get("encrypted_content")?.jsonPrimitive?.contentOrNull ?: ""
-                                        )
+                                    reasoningMetadata?.encryptedContent?.let {
+                                        put("encrypted_content", it)
                                     }
                                 })
                             }
@@ -626,10 +624,10 @@ class ResponseAPI(
                                             reasoning = "",
                                             createdAt = Clock.System.now(),
                                             finishedAt = null,
-                                            metadata = buildJsonObject {
-                                                put("encrypted_content", encryptedContent)
-                                                put("reasoning_id", id)
-                                            }
+                                            metadata = OpenAIReasoningMetadata(
+                                                reasoningId = id,
+                                                encryptedContent = encryptedContent,
+                                            ).toMetadata()
                                         )
                                     )
                                 ),
@@ -660,10 +658,10 @@ class ResponseAPI(
                                             reasoning = "",
                                             createdAt = Clock.System.now(),
                                             finishedAt = null,
-                                            metadata = buildJsonObject {
-                                                put("encrypted_content", encryptedContent)
-                                                put("reasoning_id", id)
-                                            }
+                                            metadata = OpenAIReasoningMetadata(
+                                                reasoningId = id,
+                                                encryptedContent = encryptedContent,
+                                            ).toMetadata()
                                         )
                                     )
                                 ),

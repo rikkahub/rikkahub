@@ -37,6 +37,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
+import me.rerere.ai.ui.GoogleThoughtMetadata
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.ImageGenerationResult
@@ -45,6 +46,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
@@ -587,9 +590,9 @@ class GoogleProvider(
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
                     input = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
                     output = emptyList(),
-                    metadata = buildJsonObject {
-                        put("thoughtSignature", jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
-                    }
+                    metadata = GoogleThoughtMetadata(
+                        thoughtSignature = jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull
+                    ).toMetadata()
                 )
             }
 
@@ -612,9 +615,7 @@ class GoogleProvider(
                 }
                 UIMessagePart.Image(
                     url = data,
-                    metadata = buildJsonObject {
-                        put("thoughtSignature", thoughtSignature)
-                    }
+                    metadata = GoogleThoughtMetadata(thoughtSignature = thoughtSignature).toMetadata()
                 )
             }
 
@@ -698,7 +699,7 @@ class GoogleProvider(
                         put("mimeType", encoded.mimeType)
                         put("data", encoded.base64)
                     })
-                    metadata?.get("thoughtSignature")?.jsonPrimitive?.contentOrNull?.let {
+                    metadataAs<GoogleThoughtMetadata>()?.thoughtSignature?.let {
                         put("thoughtSignature", it)
                     }
                 }
@@ -735,7 +736,7 @@ class GoogleProvider(
             put("name", toolName)
             put("args", inputAsJson())
         })
-        metadata?.get("thoughtSignature")?.let {
+        metadataAs<GoogleThoughtMetadata>()?.thoughtSignature?.let {
             put("thoughtSignature", it)
         }
     }

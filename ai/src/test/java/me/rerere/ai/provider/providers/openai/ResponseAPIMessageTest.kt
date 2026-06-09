@@ -2,9 +2,11 @@ package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
@@ -467,6 +469,49 @@ class ResponseAPIMessageTest {
             "the reasoning item must carry its provider id",
             "rs_42",
             reasoningItems.first().jsonObject["id"]?.jsonPrimitive?.content
+        )
+    }
+
+    @Test
+    fun `malformed encrypted_content must not drop the reasoning id on the wire`() {
+        // Regression for the per-field metadata reader (ResponseAPI.buildMessages -> openAIReasoningMetadata).
+        // Legacy persisted reasoning parts can carry encrypted_content as an OBJECT (not a string).
+        // Atomic decode (metadataAs<OpenAIReasoningMetadata>) fails on that sibling field and returns
+        // null for the WHOLE object, dropping the valid reasoning_id with it — so buildMessages emits a
+        // reasoning item that has lost its provider "id", severing the reasoning chain on the next
+        // request. The per-field reader must keep reasoning_id and forward it as "id".
+        // (Text is non-blank so isValidToUpload() admits the message and the part reaches buildMessages;
+        // the blank-text path is filtered earlier by isValidToUpload and is out of this fix's scope.)
+        val reasoning = UIMessagePart.Reasoning(
+            reasoning = "thinking",
+            metadata = buildJsonObject {
+                put("reasoning_id", "rs_x")
+                put("encrypted_content", buildJsonObject { put("nested", "v") })
+            },
+        )
+        val history = listOf(
+            UIMessage.user("question"),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(reasoning)),
+        )
+
+        val result = invokeBuildMessages(history)
+
+        val reasoningItems = result.filter {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning"
+        }
+        assertEquals(
+            "exactly one reasoning item must be emitted",
+            1,
+            reasoningItems.size
+        )
+        assertEquals(
+            "the reasoning item must still carry its provider id despite the malformed sibling",
+            "rs_x",
+            reasoningItems.first().jsonObject["id"]?.jsonPrimitive?.content
+        )
+        assertFalse(
+            "the malformed encrypted_content must be dropped, not forwarded",
+            reasoningItems.first().jsonObject.containsKey("encrypted_content")
         )
     }
 

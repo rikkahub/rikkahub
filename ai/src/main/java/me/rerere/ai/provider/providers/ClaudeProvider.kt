@@ -13,10 +13,10 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -35,11 +35,13 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.ui.ClaudeReasoningMetadata
 import me.rerere.ai.ui.ImageGenerationResult
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
@@ -744,9 +746,7 @@ class ClaudeProvider(
                             finishedAt = null
                         )
                         if (signature != null) {
-                            reasoning.metadata = buildJsonObject {
-                                put("signature", signature)
-                            }
+                            reasoning.metadata = ClaudeReasoningMetadata(signature = signature).toMetadata()
                         }
                         parts.add(reasoning)
                     }
@@ -827,11 +827,18 @@ internal fun reasoningContentBlock(reasoning: String, metadata: JsonObject?): Js
     // The signature must be a non-blank STRING. A missing key, JsonNull, an empty/blank
     // string, or a non-string (array/object) is not a usable Anthropic signature — keeping
     // any of those would only move the 400 from "field required" to "invalid signature".
-    val signature = metadata["signature"] as? JsonPrimitive ?: return null
-    if (!signature.isString || signature.content.isBlank()) return null
+    // runCatching: a non-string `signature` (array/object) fails to decode into the typed
+    // schema; treat that decode failure as "no signature" rather than letting it throw.
+    val signature = runCatching {
+        json.decodeFromJsonElement<ClaudeReasoningMetadata>(metadata).signature
+    }.getOrNull()
+    if (signature.isNullOrBlank()) return null
+    // Emit ONLY the canonical `signature` key: replaying unrelated cross-provider keys
+    // (e.g. an OpenAI reasoning_id) into an Anthropic thinking block is not part of the wire
+    // contract and would push arbitrary persisted keys to the API.
     return buildJsonObject {
         put("type", "thinking")
         put("thinking", reasoning)
-        metadata.forEach { (key, value) -> put(key, value) }
+        put("signature", signature)
     }
 }
