@@ -1143,8 +1143,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             withStyle(
                 SpanStyle(
                     fontFamily = JetbrainsMono,
-                    fontSize = 0.95.em,
-                    background = colorScheme.surfaceVariant,
+                    fontSize = 0.9.em,
                     color = colorScheme.primary,
                 )
             ) {
