@@ -1,6 +1,5 @@
 package me.rerere.workspace
 
-import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 
 class ProotShellRunner(
@@ -12,7 +11,7 @@ class ProotShellRunner(
             return WorkspaceCommandResult(
                 exitCode = 127,
                 stdout = "",
-                stderr = "请先安装 Rootfs",
+                stderr = "Rootfs is not installed",
             )
         }
 
@@ -83,9 +82,11 @@ class ProotShellRunner(
             "/bin/bash",
             "-l",
             "-c",
-            "cd -- \"\$1\" && eval ${JsonPrimitive(context.command)}",
+            // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
+            "cd -- \"\$1\" && eval \"\$2\"",
             "rikkahub",
             context.prootCwd(),
+            context.command,
         )
         return command
     }

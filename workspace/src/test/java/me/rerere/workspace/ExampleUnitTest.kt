@@ -96,7 +96,24 @@ class ExampleUnitTest {
         val result = manager.executeCommand(root, "cat /etc/os-release")
 
         assertEquals(127, result.exitCode)
-        assertEquals("请先安装 Rootfs", result.stderr)
+        assertEquals("Rootfs is not installed", result.stderr)
+    }
+
+    @Test
+    fun commandOutputIsTruncatedAtLimit() {
+        val baseDir = Files.createTempDirectory("workspace-truncate-test").toFile()
+        val manager = WorkspaceManager(baseDir)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        val result = manager.executeCommand(
+            root,
+            "awk 'BEGIN { for (i = 0; i < 300000; i++) printf \"a\" }'",
+        )
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.truncated)
+        assertEquals(MAX_OUTPUT_CHARS, result.stdout.length)
     }
 
     @Test

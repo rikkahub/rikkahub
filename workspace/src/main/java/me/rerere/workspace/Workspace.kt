@@ -63,4 +63,5 @@ data class WorkspaceCommandResult(
     val stdout: String,
     val stderr: String,
     val timedOut: Boolean = false,
+    val truncated: Boolean = false,
 )

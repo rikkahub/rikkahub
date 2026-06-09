@@ -360,6 +360,7 @@ private fun createShellTool(
                     put("stdout", result.stdout)
                     put("stderr", result.stderr)
                     put("timedOut", result.timedOut)
+                    if (result.truncated) put("truncated", true)
                 }.toString()
             )
         )

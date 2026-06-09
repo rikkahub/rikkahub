@@ -33,23 +33,25 @@ class HostShellRunner : WorkspaceShellRunner {
         if (File("/system/bin/sh").exists()) "/system/bin/sh" else "/bin/sh"
 }
 
+// 单个流保留的最大字符数, 防止命令疯狂输出导致 OOM 或撑爆 LLM 上下文
+const val MAX_OUTPUT_CHARS = 128 * 1024
+
 fun Process.readResult(timeoutMillis: Long): WorkspaceCommandResult {
-    val stdout = StringBuilder()
-    val stderr = StringBuilder()
-    val stdoutThread = inputStream.readTextAsync(stdout)
-    val stderrThread = errorStream.readTextAsync(stderr)
+    val stdout = StreamCollector(inputStream)
+    val stderr = StreamCollector(errorStream)
     try {
         val finished = waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
         if (!finished) {
             destroyForcibly()
         }
-        stdoutThread.join(1_000)
-        stderrThread.join(1_000)
+        stdout.join(1_000)
+        stderr.join(1_000)
         return WorkspaceCommandResult(
             exitCode = if (finished) exitValue() else -1,
-            stdout = stdout.toString(),
-            stderr = stderr.toString(),
+            stdout = stdout.text(),
+            stderr = stderr.text(),
             timedOut = !finished,
+            truncated = stdout.truncated || stderr.truncated,
         )
     } catch (e: InterruptedException) {
         // 调用方线程被中断（如协程取消时的 runInterruptible），杀掉进程避免命令继续执行
@@ -58,18 +60,42 @@ fun Process.readResult(timeoutMillis: Long): WorkspaceCommandResult {
     }
 }
 
-private fun InputStream.readTextAsync(target: StringBuilder): Thread = Thread {
-    try {
-        bufferedReader().use { reader ->
-            val buffer = CharArray(4096)
-            while (true) {
-                val read = reader.read(buffer)
-                if (read < 0) break
-                target.append(buffer, 0, read)
+private class StreamCollector(
+    stream: InputStream,
+    private val maxChars: Int = MAX_OUTPUT_CHARS,
+) {
+    private val builder = StringBuilder()
+
+    @Volatile
+    var truncated = false
+        private set
+
+    private val thread = Thread {
+        try {
+            stream.bufferedReader().use { reader ->
+                val buffer = CharArray(4096)
+                while (true) {
+                    val read = reader.read(buffer)
+                    if (read < 0) break
+                    // 超出上限后继续读到 EOF 并丢弃，否则管道写满会阻塞子进程导致其无法退出
+                    synchronized(builder) {
+                        val remaining = maxChars - builder.length
+                        if (remaining > 0) {
+                            builder.append(buffer, 0, minOf(read, remaining))
+                        }
+                        if (read > remaining) {
+                            truncated = true
+                        }
+                    }
+                }
             }
+        } catch (_: IOException) {
+            // 进程被强杀（超时/取消）时流会被关闭，阻塞中的 read 会抛 InterruptedIOException 等，
+            // 保留已读取的内容即可；不能让异常逃逸，否则会触发线程默认异常处理导致应用崩溃
         }
-    } catch (_: IOException) {
-        // 进程被强杀（超时/取消）时流会被关闭，阻塞中的 read 会抛 InterruptedIOException 等，
-        // 保留已读取的内容即可；不能让异常逃逸，否则会触发线程默认异常处理导致应用崩溃
-    }
-}.apply { start() }
+    }.apply { start() }
+
+    fun join(millis: Long) = thread.join(millis)
+
+    fun text(): String = synchronized(builder) { builder.toString() }
+}
