@@ -1160,6 +1160,8 @@
   <string name="automation_kill_switch_stop">停止</string>
   <string name="assistant_page_ui_automation">UI 自動化（螢幕控制）</string>
   <string name="assistant_page_ui_automation_desc">允許此助手觀察其他應用的螢幕（只讀）。需要在系統設定中啟用 RikkaHub 的輔助功能服務。只讀：無法點擊或輸入。</string>
+  <string name="assistant_page_gradient_background">漸層背景</string>
+  <string name="assistant_page_gradient_background_desc">在聊天頁面上使用動態漸變背景</string>
   <string name="automation_kill_switch_unavailable">無法啟動自動化：無法顯示「停止」緊急開關。請啟用 rikkahub 的無障礙服務和懸浮視窗權限後重試。</string>
   <string name="chat_status_retrieving_knowledge">正在搜尋知識庫…</string>
   <string name="automation_confirm_prompt">在 %1$s 中確認操作：%2$s %3$s？</string>

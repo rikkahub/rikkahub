@@ -1162,6 +1162,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="automation_kill_switch_stop">停止</string>
   <string name="assistant_page_ui_automation">UI自動化（画面コントロール）</string>
   <string name="assistant_page_ui_automation_desc">このアシスタントが他のアプリの画面を観察することを許可します（読み取り専用）。システム設定でRikkaHubのアクセシビリティサービスを有効にする必要があります。読み取り専用：タップや入力はできません。</string>
+  <string name="assistant_page_gradient_background">グラデーション背景</string>
+  <string name="assistant_page_gradient_background_desc">チャットページで動的なグラデーション背景を使用します</string>
   <string name="automation_kill_switch_unavailable">自動化を開始できません：「停止」キルスイッチを表示できませんでした。rikkahub のユーザー補助サービスとオーバーレイを有効にして、もう一度お試しください。</string>
   <string name="chat_status_retrieving_knowledge">ナレッジベースを検索中…</string>
   <string name="automation_confirm_prompt">%1$s での操作を確認: %2$s %3$s？</string>

@@ -641,20 +641,45 @@ internal fun AssistantBasicContent(
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
-            BackgroundPicker(
+            FormItem(
                 modifier = Modifier.padding(8.dp),
-                background = assistant.background,
-                backgroundOpacity = assistant.backgroundOpacity,
-                onUpdate = { background ->
-                    onUpdate(
-                        assistant.copy(
-                            background = background
-                        )
+                label = {
+                    Text(stringResource(R.string.assistant_page_gradient_background))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_gradient_background_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.useGradientBackground,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    useGradientBackground = it
+                                )
+                            )
+                        }
                     )
                 }
             )
 
-            if (assistant.background != null) {
+            if (!assistant.useGradientBackground) {
+                HorizontalDivider()
+                BackgroundPicker(
+                    modifier = Modifier.padding(8.dp),
+                    background = assistant.background,
+                    backgroundOpacity = assistant.backgroundOpacity,
+                    onUpdate = { background ->
+                        onUpdate(
+                            assistant.copy(
+                                background = background
+                            )
+                        )
+                    }
+                )
+            }
+
+            if (!assistant.useGradientBackground && assistant.background != null) {
                 val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
                 HorizontalDivider()
                 FormItem(
