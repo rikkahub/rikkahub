@@ -11,6 +11,11 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
@@ -392,6 +397,72 @@ class ChatCompletionsAPIMessageTest {
         val message = invokeParseMessage(imageMessage("data:image/png;base64,QUJD"))
         val image = message.parts.filterIsInstance<UIMessagePart.Image>().single()
         assertEquals("QUJD", image.url)
+    }
+
+    // ==================== reasoning_effort host routing ====================
+
+    // Helper to invoke private buildChatCompletionRequest method via reflection
+    private fun invokeBuildChatCompletionRequest(
+        providerSetting: ProviderSetting.OpenAI,
+        params: TextGenerationParams,
+        messages: List<UIMessage> = listOf(UIMessage.user("hi")),
+        stream: Boolean = false,
+    ): JsonObject {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildChatCompletionRequest",
+            List::class.java,
+            TextGenerationParams::class.java,
+            ProviderSetting.OpenAI::class.java,
+            Boolean::class.javaPrimitiveType,
+        )
+        method.isAccessible = true
+        return method.invoke(api, messages, params, providerSetting, stream) as JsonObject
+    }
+
+    private fun opencodeProvider() = ProviderSetting.OpenAI(
+        name = "opencode",
+        baseUrl = "https://opencode.ai/zen/v1",
+        apiKey = "test",
+    )
+
+    private fun reasoningParams(level: ReasoningLevel) = TextGenerationParams(
+        model = Model(
+            modelId = "opencode-model",
+            displayName = "opencode-model",
+            abilities = listOf(ModelAbility.REASONING),
+        ),
+        reasoningLevel = level,
+    )
+
+    @Test
+    fun `opencode host emits reasoning_effort for non-auto levels`() {
+        val body = invokeBuildChatCompletionRequest(opencodeProvider(), reasoningParams(ReasoningLevel.HIGH))
+        assertEquals("high", body["reasoning_effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `opencode host emits reasoning_effort none for OFF`() {
+        // Discriminating regression: without the opencode.ai branch, the OpenAI `else`
+        // branch runs and remaps level.effort "none" -> "low". The opencode gateway expects
+        // the verbatim effort, so the branch must emit "none" unchanged.
+        val body = invokeBuildChatCompletionRequest(opencodeProvider(), reasoningParams(ReasoningLevel.OFF))
+        assertEquals("none", body["reasoning_effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `opencode host omits reasoning_effort for AUTO`() {
+        val body = invokeBuildChatCompletionRequest(opencodeProvider(), reasoningParams(ReasoningLevel.AUTO))
+        assertTrue(
+            "AUTO should not emit reasoning_effort",
+            !body.containsKey("reasoning_effort")
+        )
+    }
+
+    @Test
+    fun `opencode host emits xhigh verbatim`() {
+        // Guards the no-remap contract: XHIGH.effort == "xhigh" must pass through unchanged.
+        val body = invokeBuildChatCompletionRequest(opencodeProvider(), reasoningParams(ReasoningLevel.XHIGH))
+        assertEquals("xhigh", body["reasoning_effort"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================
