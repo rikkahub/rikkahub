@@ -1110,5 +1110,7 @@
   <string name="setting_model_page_fast_model">Быстрая модель</string>
   <string name="setting_model_page_fast_model_desc">Модель для быстрых или фоновых задач, также используется как резервная для моделей заголовков и предложений, если не задана</string>
   <string name="setting_model_page_enable_suggestion">Включить подсказки чата</string>
+  <string name="assistant_page_gradient_background">Градиентный фон</string>
+  <string name="assistant_page_gradient_background_desc">Использовать динамический градиентный фон на странице чата</string>
 </resources>
 

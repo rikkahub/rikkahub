@@ -1110,5 +1110,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_fast_model">高速モデル</string>
   <string name="setting_model_page_fast_model_desc">高速タスクまたはバックグラウンドタスク用のモデル。タイトルモデルとサジェストモデルが設定されていない場合のフォールバックとしても使用されます。</string>
   <string name="setting_model_page_enable_suggestion">チャット提案を有効にする</string>
+  <string name="assistant_page_gradient_background">グラデーション背景</string>
+  <string name="assistant_page_gradient_background_desc">チャットページで動的なグラデーション背景を使用します</string>
 </resources>
 
