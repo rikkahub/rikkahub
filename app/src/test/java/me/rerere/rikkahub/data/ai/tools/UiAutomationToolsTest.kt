@@ -33,6 +33,7 @@ import me.rerere.common.android.redactAndTruncate
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -566,11 +567,13 @@ class UiAutomationToolsTest {
     @Test
     fun `ui_global before any observe returns a re-observe text and never performs`() {
         val backend = FakeBackend(scrollableTree())
-        val global = actTools(actGuard(), backend).byName(UI_GLOBAL_TOOL_NAME)
+        val guard = actGuard()
+        val global = actTools(guard, backend).byName(UI_GLOBAL_TOOL_NAME)
 
         val parts = runBlocking { global.execute(buildJsonObject { put("direction", "back") }) }
 
         assertTrue("no perform without a grounded snapshot", backend.performed.isEmpty())
+        assertTrue("a well-formed ungrounded act is not an admission decision", guard.audit.entries().isEmpty())
         assertTrue(
             "must tell the model to observe first",
             (parts.single() as UIMessagePart.Text).text.contains("observe", ignoreCase = true),
@@ -801,6 +804,90 @@ class UiAutomationToolsTest {
         assertTrue(backend.performed.isEmpty())
     }
 
+    // --- 7h. UNGROUNDED + MALFORMED is still AUDITED (#221): the unfixed act tools gated on
+    // `grounded ?: return ACT_REOBSERVE_MESSAGE` BEFORE the malformed check, so a malformed act issued
+    // before any ui_observe left NO ledger entry — a P24/P25 "every malformed act audited" gap (inert,
+    // since an ungrounded act cannot dispatch, but inconsistent with ui_observe's malformed branch).
+    // The fix runs the malformed checks before the grounding gate in ALL act tools; these pin that an
+    // ungrounded+malformed act writes exactly one DENY entry with a null targetPkg (no grounded target)
+    // — one test per act tool to keep the four symmetric.
+
+    private fun assertUngroundedMalformedAudited(guard: CapabilityGuard, backend: FakeBackend, verb: Verb) {
+        val entries = guard.audit.entries()
+        assertEquals("an ungrounded malformed act must append exactly one ledger entry", 1, entries.size)
+        val entry = entries.single()
+        assertEquals(Decision.DENY, entry.decision)
+        assertEquals(DenyReason.MALFORMED, entry.reason)
+        assertEquals("the ledger must record the attempted verb", verb, entry.verb)
+        assertNull("with no grounding there is no truthful act target", entry.targetPkg)
+        assertTrue("an ungrounded malformed act must never perform", backend.performed.isEmpty())
+    }
+
+    @Test
+    fun `a malformed ui_scroll before any observe still audits one DENY`() {
+        val backend = FakeBackend(scrollableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+
+        // NO grounding observe first: the unfixed tool returned ACT_REOBSERVE_MESSAGE before the
+        // malformed branch, leaving the ledger empty.
+        runBlocking { tools.byName(UI_SCROLL_TOOL_NAME).execute(JsonNull) }
+
+        assertUngroundedMalformedAudited(guard, backend, Verb.SCROLL)
+    }
+
+    @Test
+    fun `a malformed ui_global before any observe still audits one DENY`() {
+        val backend = FakeBackend(scrollableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+
+        runBlocking { tools.byName(UI_GLOBAL_TOOL_NAME).execute(buildJsonObject { put("direction", "sideways") }) }
+
+        assertUngroundedMalformedAudited(guard, backend, Verb.GLOBAL)
+    }
+
+    @Test
+    fun `a malformed ui_set_text before any observe still audits one DENY`() {
+        val backend = FakeBackend(editableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+
+        runBlocking { tools.byName(UI_SET_TEXT_TOOL_NAME).execute(JsonNull) }
+
+        assertUngroundedMalformedAudited(guard, backend, Verb.SET_TEXT)
+    }
+
+    @Test
+    fun `a malformed ui_tap before any observe still audits one DENY`() {
+        val backend = FakeBackend(clickableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+
+        runBlocking { tools.byName(UI_TAP_TOOL_NAME).execute(tapArgs(buildJsonObject { })) }
+
+        assertUngroundedMalformedAudited(guard, backend, Verb.TAP)
+    }
+
+    // A WELL-FORMED act before any observe must KEEP the re-observe steer un-audited: it is not a
+    // malformed admission attempt, just a sequencing error the model can self-correct. Pins that the
+    // #221 reorder did not over-widen the audit to the plain ungrounded path.
+    @Test
+    fun `a well-formed ui_scroll before any observe steers to re-observe without an audit entry`() {
+        val backend = FakeBackend(scrollableTree())
+        val guard = actGuard()
+        val tools = actTools(guard, backend)
+
+        val parts = runBlocking { tools.byName(UI_SCROLL_TOOL_NAME).execute(scrollArgs(0, "forward")) }
+
+        assertTrue("a well-formed ungrounded act is not an admission decision", guard.audit.entries().isEmpty())
+        assertTrue(backend.performed.isEmpty())
+        assertTrue(
+            "must tell the model to observe first",
+            (parts.single() as UIMessagePart.Text).text.contains("observe", ignoreCase = true),
+        )
+    }
+
     // --- 8. ui_set_text (#198 slice 9): the input sink (Verb.SET_TEXT + Sink.TYPE_INTO) over the
     // proven act kernel. Mirrors the ui_scroll suite: grounding gate, happy path (one
     // PerformAction.SetText recorded, Acted re-grounds), P9 no-op, by-formKey resolution, S2 deny
@@ -810,13 +897,15 @@ class UiAutomationToolsTest {
     @Test
     fun `ui_set_text before any observe returns a re-observe text and never performs`() {
         val backend = FakeBackend(editableTree())
-        val setText = actTools(actGuard(), backend).byName("ui_set_text")
+        val guard = actGuard()
+        val setText = actTools(guard, backend).byName("ui_set_text")
 
         val parts = runBlocking {
             setText.execute(setTextArgs(buildJsonObject { put("tid", 0) }, "x"))
         }
 
         assertTrue("no perform without a grounded snapshot", backend.performed.isEmpty())
+        assertTrue("a well-formed ungrounded act is not an admission decision", guard.audit.entries().isEmpty())
         assertTrue(
             "must tell the model to observe first",
             (parts.single() as UIMessagePart.Text).text.contains("observe", ignoreCase = true),
@@ -1084,11 +1173,13 @@ class UiAutomationToolsTest {
     @Test
     fun `ui_tap before any observe returns a re-observe text and never performs`() {
         val backend = FakeBackend(clickableTree())
-        val tap = actTools(actGuard(), backend).byName("ui_tap")
+        val guard = actGuard()
+        val tap = actTools(guard, backend).byName("ui_tap")
 
         val parts = runBlocking { tap.execute(tapArgs(buildJsonObject { put("tid", 0) })) }
 
         assertTrue("no perform without a grounded snapshot", backend.performed.isEmpty())
+        assertTrue("a well-formed ungrounded act is not an admission decision", guard.audit.entries().isEmpty())
         assertTrue(
             "must tell the model to observe first",
             (parts.single() as UIMessagePart.Text).text.contains("observe", ignoreCase = true),

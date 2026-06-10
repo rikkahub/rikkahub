@@ -119,8 +119,10 @@ fun getUiAutomationTools(
     // direct authorize: the well-formed path's single decision is inside core.act, so routing the
     // malformed short-circuit through guard.authorize here adds no double-audit (core.act is never
     // reached on a malformed arg). The guard DENYs on `malformed` before it even reads targetPkg/verb,
-    // so the returned text is always the vague ACT_DENIED_MESSAGE. `grounded` is non-null at every call
-    // site (it follows the `grounded ?: return` guard), so its package is the truthful act target.
+    // so the returned text is always the vague ACT_DENIED_MESSAGE. The malformed checks run BEFORE the
+    // `grounded ?: return` gate (#221): an ungrounded+malformed act is inert (no snapshot to dispatch
+    // against) but it is still a malformed admission attempt and must leave its ledger entry — so
+    // `grounded` may be null here, and a null targetPkg is the truthful "no grounded target" record.
     fun auditMalformedAct(verb: Verb, sink: Sink?, rawArgs: String): List<UIMessagePart> {
         guard.authorize(
             AuthRequest(
@@ -231,12 +233,12 @@ fun getUiAutomationTools(
             },
             needsApproval = false,
             execute = execute@{ args ->
-                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
-                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // Fail closed on anything we cannot parse into an Act (P24): never build an Act, never
                 // touch the backend. Authority is the closed-over guard, never anything in `args` (I2).
                 // The refusal is AUDITED (P25) — auditMalformedAct authorizes a malformed SCROLL request
-                // so the fail-closed DENY writes a ledger entry, exactly as ui_observe does.
+                // so the fail-closed DENY writes a ledger entry, exactly as ui_observe does. Audited
+                // BEFORE the grounding gate (#221): an ungrounded+malformed act must still leave its
+                // one ledger entry, not slip out unaudited via the re-observe steer.
                 if (args !is JsonObject) {
                     return@execute auditMalformedAct(Verb.SCROLL, sink = null, rawArgs = args.toString())
                 }
@@ -247,6 +249,8 @@ fun getUiAutomationTools(
                     "backward" -> NodeActionKind.SCROLL_BACKWARD
                     else -> return@execute auditMalformedAct(Verb.SCROLL, sink = null, rawArgs = args.toString())
                 }
+                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
+                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer
                 // must NOT call authorize/guardInFlight here (would double-audit / break P25).
                 when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, kind), confirm)) {
@@ -287,9 +291,9 @@ fun getUiAutomationTools(
             },
             needsApproval = false,
             execute = execute@{ args ->
-                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // Fail closed + AUDITED (P24/P25): a malformed ui_global is a GLOBAL act over the
-                // GLOBAL_NAV sink, so the ledger entry records that verb/sink as ui_observe does for OBSERVE.
+                // GLOBAL_NAV sink, so the ledger entry records that verb/sink as ui_observe does for
+                // OBSERVE. Audited BEFORE the grounding gate (#221), like every act tool.
                 if (args !is JsonObject) {
                     return@execute auditMalformedAct(Verb.GLOBAL, Sink.GLOBAL_NAV, rawArgs = args.toString())
                 }
@@ -299,6 +303,8 @@ fun getUiAutomationTools(
                     "recents" -> GlobalNav.RECENTS
                     else -> return@execute auditMalformedAct(Verb.GLOBAL, Sink.GLOBAL_NAV, rawArgs = args.toString())
                 }
+                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
+                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 when (val outcome = core.act(guard, snapshot, Act.Global(nav), confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot
@@ -348,13 +354,12 @@ fun getUiAutomationTools(
             },
             needsApproval = false,
             execute = execute@{ args ->
-                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
-                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // Fail closed + AUDITED (P24/P25): a set_text is a SET_TEXT verb over the TYPE_INTO
                 // input sink, so a malformed attempt records that verb/sink in the ledger exactly as
                 // ui_observe does for OBSERVE. A non-object arg, an unparseable selector, OR a missing
                 // text payload are all malformed — a set_text with no text is meaningless, so it must
-                // fail closed rather than dispatch an empty/garbage write.
+                // fail closed rather than dispatch an empty/garbage write. Audited BEFORE the grounding
+                // gate (#221), like every act tool.
                 if (args !is JsonObject) {
                     return@execute auditMalformedAct(Verb.SET_TEXT, Sink.TYPE_INTO, rawArgs = args.toString())
                 }
@@ -367,6 +372,8 @@ fun getUiAutomationTools(
                 // set_text the act path's P9 no-op already handles.
                 val text = (args["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content
                     ?: return@execute auditMalformedAct(Verb.SET_TEXT, Sink.TYPE_INTO, rawArgs = args.toString())
+                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
+                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer
                 // must NOT call authorize/guardInFlight here (would double-audit / break P25). The
                 // restricted P9 no-op (an unchanged-text set_text returns Acted without dispatching)
@@ -411,17 +418,18 @@ fun getUiAutomationTools(
             },
             needsApproval = false,
             execute = execute@{ args ->
-                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
-                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // Fail closed + AUDITED (P24/P25): a MALFORMED tap is recorded with no sink (the sink is
                 // only known once the target resolves, and a malformed tap never resolves one) — exactly
                 // as ui_scroll does for SCROLL. The submit-class SUBMIT sink (#198 slice 11) is derived
-                // in core.act from the RESOLVED target, so it never applies to a malformed (unresolved) tap.
+                // in core.act from the RESOLVED target, so it never applies to a malformed (unresolved)
+                // tap. Audited BEFORE the grounding gate (#221), like every act tool.
                 if (args !is JsonObject) {
                     return@execute auditMalformedAct(Verb.TAP, sink = null, rawArgs = args.toString())
                 }
                 val selector = parseSelector(args["selector"])
                     ?: return@execute auditMalformedAct(Verb.TAP, sink = null, rawArgs = args.toString())
+                // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
+                val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer must
                 // NOT call authorize/guardInFlight here (would double-audit / break P25). The system-UI/
                 // password DENY (a tap on an Allow/Grant button or a credential field) AND the submit-
