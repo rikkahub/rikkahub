@@ -15,7 +15,7 @@ APP_HERMES_CALL_PATH="no_backup/voice-e2e/hermes-call.txt"
 DEVICE_TMP_PCM="/data/local/tmp/rikkahub-voice-agent-e2e-prompt.pcm"
 LOG_DIR="${VOICE_AGENT_E2E_LOG_DIR:-build/voice-agent-e2e}"
 LOG_FILE="$LOG_DIR/logcat.txt"
-DEFAULT_PROMPT_TEXT="Ask Hermes. Are you connected to G Brain? Answer yes or no."
+DEFAULT_PROMPT_TEXT="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no."
 FLITE_VOICE="${VOICE_AGENT_E2E_FLITE_VOICE:-slt}"
 PROMPT_TEXT="${VOICE_AGENT_E2E_PROMPT_TEXT:-$DEFAULT_PROMPT_TEXT}"
 GENERATED_PCM_PATH="${VOICE_AGENT_E2E_GENERATED_PCM_PATH:-$LOG_DIR/generated-prompt.pcm}"
@@ -110,6 +110,43 @@ adb_cmd() {
 
 adb_long_cmd() {
   adb_cmd_with_timeout "$ADB_LONG_TIMEOUT_SECONDS" "$@"
+}
+
+selected_adb_serial() {
+  if [[ -n "${VOICE_AGENT_E2E_SERIAL:-}" ]]; then
+    printf '%s' "$VOICE_AGENT_E2E_SERIAL"
+    return 0
+  fi
+
+  local devices_output
+  local device_count
+
+  devices_output="$(adb_cmd devices -l)"
+  device_count="$(printf '%s\n' "$devices_output" | awk '$2 == "device" { count++ } END { print count + 0 }')"
+  if [[ "$device_count" != "1" ]]; then
+    printf 'Expected exactly one authorized ADB device, found %s. Set VOICE_AGENT_E2E_SERIAL.\n' \
+      "$device_count" >&2
+    printf '%s\n' "$devices_output" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$devices_output" |
+    awk '$2 == "device" { print $1; exit }'
+}
+
+print_preflight_summary() {
+  local serial="$1"
+  local model
+  local android
+
+  model="$(adb_cmd shell getprop ro.product.model | tr -d '\r' || true)"
+  android="$(adb_cmd shell getprop ro.build.version.release | tr -d '\r' || true)"
+
+  printf 'E2E preflight:\n'
+  printf '  adb server: %s\n' "${ADB_SERVER_SOCKET:-default local adb server}"
+  printf '  selected serial: %s\n' "${serial:-unknown}"
+  printf '  device: model=%s android=%s\n' "${model:-unknown}" "${android:-unknown}"
+  printf '  package: %s installed\n' "$PACKAGE"
 }
 
 adb_logcat() {
@@ -481,8 +518,13 @@ else
   printf 'ADB readiness helper is not executable: %s\n' "$ADB_READY_SCRIPT" >&2
   exit 2
 fi
-ADB_APP_CLEANUP_ENABLED=1
-clear_app_text_artifacts
+
+SELECTED_SERIAL="$(selected_adb_serial)"
+if [[ -z "$SELECTED_SERIAL" ]]; then
+  printf 'Could not determine selected ADB serial after readiness check.\n' >&2
+  exit 6
+fi
+VOICE_AGENT_E2E_SERIAL="$SELECTED_SERIAL"
 
 printf 'Checking installed app package...\n'
 if ! adb_cmd shell pm path "$PACKAGE" >/dev/null; then
@@ -490,6 +532,11 @@ if ! adb_cmd shell pm path "$PACKAGE" >/dev/null; then
   printf 'Install and configure the app on the phone before running this E2E.\n' >&2
   exit 2
 fi
+print_preflight_summary "$SELECTED_SERIAL"
+
+ADB_APP_CLEANUP_ENABLED=1
+printf 'Clearing previous app-private E2E artifacts...\n'
+clear_app_text_artifacts
 
 printf 'Starting scoped log capture...\n'
 adb_cmd logcat -c

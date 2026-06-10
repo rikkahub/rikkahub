@@ -75,6 +75,21 @@ assert_last_line_after() {
   fi
 }
 
+assert_first_line_after() {
+  local path="$1"
+  local earlier="$2"
+  local later="$3"
+  local earlier_line
+  local later_line
+  earlier_line="$(grep -n -F -- "$earlier" "$path" | head -n 1 | cut -d: -f1)"
+  later_line="$(grep -n -F -- "$later" "$path" | head -n 1 | cut -d: -f1)"
+  if [[ -z "$earlier_line" || -z "$later_line" || "$later_line" -le "$earlier_line" ]]; then
+    printf 'Expected first "%s" to appear after first "%s" in %s\n' "$later" "$earlier" "$path" >&2
+    printf 'Actual contents:\n%s\n' "$(cat "$path")" >&2
+    exit 1
+  fi
+}
+
 assert_no_report_temp_files() {
   local directory="$1"
   local leaked
@@ -177,8 +192,28 @@ fi
 
 args="$*"
 case "$args" in
+  "devices -l")
+    printf 'List of devices attached\n'
+    case "${FAKE_ADB_DEVICES_MODE:-single}" in
+      none)
+        ;;
+      multiple)
+        printf 'RZ device product:r11q model:SM-S711B device:r11q transport_id:1\n'
+        printf 'R2 device product:r11q model:SM-S711B device:r11q transport_id:2\n'
+        ;;
+      *)
+        printf 'RZ device product:r11q model:SM-S711B device:r11q transport_id:1\n'
+        ;;
+    esac
+    ;;
   "-s RZ shell pm path me.rerere.rikkahub.debug")
     printf 'package:/data/app/test/base.apk\n'
+    ;;
+  "-s RZ shell getprop ro.product.model")
+    printf 'SM-S711B\r\n'
+    ;;
+  "-s RZ shell getprop ro.build.version.release")
+    printf '16\r\n'
     ;;
   "-s RZ logcat -c")
     ;;
@@ -446,6 +481,149 @@ if [[ "$manual_no_hash_status" -ne 0 ]]; then
   exit 1
 fi
 assert_contains "$manual_no_hash_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
+assert_contains "$manual_no_hash_output" "E2E preflight:"
+assert_contains "$manual_no_hash_output" "  adb server: ${ADB_SERVER_SOCKET:-default local adb server}"
+assert_contains "$manual_no_hash_output" "  selected serial: RZ"
+assert_contains "$manual_no_hash_output" "  device: model=SM-S711B android=16"
+assert_contains "$manual_no_hash_output" "  package: me.rerere.rikkahub.debug installed"
+
+explicit_serial_multiple_devices_log_dir="$TMP_DIR/explicit-serial-multiple-devices-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+explicit_serial_multiple_devices_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_DEVICES_MODE=multiple \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$explicit_serial_multiple_devices_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+explicit_serial_multiple_devices_status=$?
+set -e
+
+if [[ "$explicit_serial_multiple_devices_status" -ne 0 ]]; then
+  printf 'Expected explicit serial run with multiple authorized devices to pass.\n' >&2
+  printf 'Actual output:\n%s\n' "$explicit_serial_multiple_devices_output" >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+if grep -F -- "devices -l" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected explicit serial run to skip ADB device discovery.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+
+unset_serial_log_dir="$TMP_DIR/unset-serial-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+unset_serial_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$unset_serial_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+unset_serial_status=$?
+set -e
+
+if [[ "$unset_serial_status" -ne 0 ]]; then
+  printf 'Expected unset serial manual mode to pass, got status %s.\n' "$unset_serial_status" >&2
+  printf 'Actual output:\n%s\n' "$unset_serial_output" >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+assert_contains "$unset_serial_output" "E2E preflight:"
+assert_contains "$unset_serial_output" "  selected serial: RZ"
+assert_contains "$unset_serial_output" "  package: me.rerere.rikkahub.debug installed"
+assert_contains_in_order "$unset_serial_output" \
+  "  package: me.rerere.rikkahub.debug installed" \
+  "Clearing previous app-private E2E artifacts..."
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "devices -l"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "-s RZ shell getprop ro.product.model"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "-s RZ shell pm path me.rerere.rikkahub.debug"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "-s RZ logcat -c"
+assert_first_line_after "$FAKE_ADB_ARGS_LOG" \
+  "-s RZ shell getprop ro.build.version.release" \
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/hermes-answer.txt"
+
+multiple_serials_log_dir="$TMP_DIR/multiple-serials-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+multiple_serials_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_DEVICES_MODE=multiple \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$multiple_serials_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  "$SCRIPT" 2>&1
+)"
+multiple_serials_status=$?
+set -e
+
+if [[ "$multiple_serials_status" -eq 0 ]]; then
+  printf 'Expected unset serial run with multiple authorized devices to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$multiple_serials_output" >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+assert_contains "$multiple_serials_output" \
+  "Expected exactly one authorized ADB device, found 2. Set VOICE_AGENT_E2E_SERIAL."
+if grep -F -- "shell pm path" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected multiple-device serial failure before package checks.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+if grep -F -- "logcat" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected multiple-device serial failure before logcat.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+
+missing_serial_log_dir="$TMP_DIR/missing-serial-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+missing_serial_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_DEVICES_MODE=none \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$missing_serial_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  "$SCRIPT" 2>&1
+)"
+missing_serial_status=$?
+set -e
+
+if [[ "$missing_serial_status" -eq 0 ]]; then
+  printf 'Expected unset serial run without authorized devices to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_serial_output" >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+assert_contains "$missing_serial_output" \
+  "Expected exactly one authorized ADB device, found 0. Set VOICE_AGENT_E2E_SERIAL."
+if grep -F -- "shell pm path" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected missing-device serial failure before package checks.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+if grep -F -- "logcat" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected missing-device serial failure before logcat.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
 
 cleanup_failure_log_dir="$TMP_DIR/cleanup-failure-log"
 rm -f "$FAKE_ADB_END_MARKER"
@@ -563,7 +741,7 @@ chmod 644 \
 set +e
 generated_output="$(
   PATH="$TMP_DIR:$PATH" \
-  FAKE_FFMPEG_EXPECTED_PROMPT="Ask Hermes. Are you connected to G Brain? Answer yes or no." \
+  FAKE_FFMPEG_EXPECTED_PROMPT="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no." \
   FAKE_FFMPEG_EXPECTED_VOICE=slt \
   FAKE_FFMPEG_EXPECTED_OUTPUT="$generated_log_dir/generated-prompt.pcm" \
   VOICE_AGENT_E2E_SERIAL=RZ \
@@ -588,7 +766,7 @@ assert_contains "$generated_output" "Generating PCM prompt from VOICE_AGENT_E2E_
 assert_contains "$generated_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
 assert_file_contains_exactly "$generated_log_dir/generated-prompt.pcm" "generated pcm"
 assert_file_contains_exactly "$generated_log_dir/generated-prompt.txt" \
-  "Ask Hermes. Are you connected to G Brain? Answer yes or no."
+  "Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no."
 report_path="$generated_log_dir/report.txt"
 if [[ ! -f "$report_path" ]]; then
   printf 'Expected report file to exist: %s\n' "$report_path" >&2
@@ -596,7 +774,7 @@ if [[ ! -f "$report_path" ]]; then
 fi
 report_contents="$(cat "$report_path")"
 assert_contains "$report_contents" "Text used to generate voice:"
-assert_contains "$report_contents" "Ask Hermes. Are you connected to G Brain? Answer yes or no."
+assert_contains "$report_contents" "Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no."
 assert_contains "$report_contents" "Gemini understood from voice:"
 assert_contains "$report_contents" "Please ask Hermes if he is connected to G-Brain."
 assert_contains "$report_contents" "Hermes call:"

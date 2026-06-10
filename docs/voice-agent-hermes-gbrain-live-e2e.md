@@ -88,12 +88,13 @@ If `VOICE_AGENT_E2E_PCM_PATH` is unset, the script generates signed 16-bit littl
 The default generated prompt is:
 
 ```text
-Ask Hermes. Are you connected to G Brain? Answer yes or no.
+Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no.
 ```
 
-The generated prompt uses Flite voice `slt` by default because live testing showed the previous `kal` voice was
-transcribed unreliably by Gemini Live. Set `VOICE_AGENT_E2E_FLITE_VOICE` to another installed Flite voice when comparing
-ASR behavior.
+The generated prompt repeats the Ask Hermes instruction because live testing showed the shorter prompt could be
+misrecognized as a greeting-like fragment and fail to trigger a tool call. The generated prompt uses Flite voice `slt`
+by default because live testing showed the previous `kal` voice was transcribed unreliably by Gemini Live.
+Set `VOICE_AGENT_E2E_FLITE_VOICE` to another installed Flite voice when comparing ASR behavior.
 
 Set `VOICE_AGENT_E2E_PROMPT_TEXT` to change one string and regenerate the PCM for a different question.
 
@@ -116,6 +117,19 @@ can generate PCM from `VOICE_AGENT_E2E_PROMPT_TEXT`. The script verifies the exp
 verifies the PCM file exists after generation or explicit selection, lowercases the expected hash for marker matching,
 checks ADB readiness, checks that the target package is already installed, and writes a local scoped log to
 `build/voice-agent-e2e/logcat.txt`.
+
+Before starting log capture, the script prints a preflight summary:
+
+```text
+E2E preflight:
+  adb server: tcp:100.69.79.32:5037
+  selected serial: RZCX71NXRPB
+  device: model=SM-S711B android=16
+  package: me.rerere.rikkahub.debug installed
+```
+
+If the selected serial, model, or package line is not the device/app you intended to test, stop the run and correct
+`ADB_SERVER_SOCKET`, `VOICE_AGENT_E2E_SERIAL`, or `VOICE_AGENT_E2E_PACKAGE`.
 
 Before running, verify that the selected ADB socket and serial still refer to the intended operator device. After a run,
 do not distribute device state or logs because this run exercises configured provider credentials and writes private E2E
