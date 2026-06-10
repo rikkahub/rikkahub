@@ -42,7 +42,9 @@ import kotlin.uuid.Uuid
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
+import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -104,6 +106,7 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -172,6 +175,34 @@ internal fun AssistantBasicContent(
                     onValueChange = { tagIds, tagList ->
                         vm.updateTags(tagIds, tagList)
                     },
+                )
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.assistant_page_workspace))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_workspace_desc))
+                },
+                modifier = Modifier.padding(8.dp),
+            ) {
+                val noneLabel = stringResource(R.string.assistant_page_workspace_none)
+                val selectedWorkspace = workspaces.find { it.id == assistant.workspaceId?.toString() }
+                Select(
+                    options = listOf<WorkspaceEntity?>(null) + workspaces,
+                    selectedOption = selectedWorkspace,
+                    onOptionSelected = { workspace ->
+                        onUpdate(
+                            assistant.copy(
+                                workspaceId = workspace?.id?.let { Uuid.parse(it) }
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    optionToString = { workspace -> workspace?.name ?: noneLabel },
                 )
             }
 

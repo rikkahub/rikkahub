@@ -1,11 +1,14 @@
 package me.rerere.rikkahub.data.repository
 
 import android.util.Log
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.utils.JsonInstant
@@ -23,10 +26,13 @@ class WorkspaceRepository(
     private val manager: WorkspaceManager,
     private val rootfsInstaller: RootfsInstaller,
     private val settingsStore: SettingsStore,
+    private val db: AppDatabase,
 ) {
     fun listFlow(): Flow<List<WorkspaceEntity>> = dao.listFlow()
 
     suspend fun getById(id: String): WorkspaceEntity? = dao.getById(id)
+
+    fun getByIdFlow(id: String): Flow<WorkspaceEntity?> = dao.getByIdFlow(id)
 
     suspend fun create(name: String): WorkspaceEntity {
         val id = Uuid.random().toString()
@@ -46,93 +52,102 @@ class WorkspaceRepository(
         return workspace
     }
 
-    suspend fun rename(id: String, name: String): Boolean {
-        val workspace = dao.getById(id) ?: return false
+    // I-ATOMIC (issue #197 slice 6a, finding #5): the read-modify-write mutators below read the row
+    // then upsert a `.copy(...)` that depends on the read. With the per-tool approval toggles and
+    // rename now multi-writer in the management UI, two concurrent writers could interleave the
+    // read of one and the write of the other and lose an update. Each mutator wraps its read AND its
+    // dependent write in a single `db.withTransaction { ... }` so concurrent writers serialize on
+    // the SQLite transaction instead of clobbering each other.
+    suspend fun rename(id: String, name: String): Boolean = db.withTransaction {
+        val workspace = dao.getById(id) ?: return@withTransaction false
         dao.upsert(
             workspace.copy(
                 name = name.ifBlank { workspace.name },
                 updatedAt = System.currentTimeMillis(),
             )
         )
-        return true
+        true
     }
 
     suspend fun setShellEnabled(id: String, enabled: Boolean): Boolean {
-        val workspace = dao.getById(id) ?: return false
-        manager.ensureWorkspace(workspace.root)
-        dao.upsert(
-            workspace.copy(
-                shellEnabled = enabled,
-                shellStatus = if (enabled) {
-                    if (manager.hasRootfs(workspace.root)) {
-                        WorkspaceShellStatus.READY.name
-                    } else {
-                        WorkspaceShellStatus.BROKEN.name
-                    }
-                } else {
-                    WorkspaceShellStatus.DISABLED.name
-                },
-                updatedAt = System.currentTimeMillis(),
+        // hasRootfs / ensureWorkspace touch the PRoot manager (filesystem IO), kept OUTSIDE the
+        // transaction; only the row read + status write are atomic.
+        val root = (dao.getById(id) ?: return false).root
+        manager.ensureWorkspace(root)
+        val status = if (enabled) {
+            if (manager.hasRootfs(root)) WorkspaceShellStatus.READY.name else WorkspaceShellStatus.BROKEN.name
+        } else {
+            WorkspaceShellStatus.DISABLED.name
+        }
+        return db.withTransaction {
+            val workspace = dao.getById(id) ?: return@withTransaction false
+            dao.upsert(
+                workspace.copy(
+                    shellEnabled = enabled,
+                    shellStatus = status,
+                    updatedAt = System.currentTimeMillis(),
+                )
             )
-        )
-        return true
+            true
+        }
     }
 
-    suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean {
-        val workspace = dao.getById(id) ?: return false
-        // A corrupt existing blob (null) is discarded here: the user is explicitly setting one
-        // tool's policy, so we start from {} and repair the column rather than merge onto a
-        // fail-closed all-true map (which would silently flip every other tool to approval-required).
-        val overrides = workspace.toolApprovalOverrides().orEmpty() + (toolName to needsApproval)
-        dao.upsert(
-            workspace.copy(
-                toolApprovals = JsonInstant.encodeToString(overrides),
-                updatedAt = System.currentTimeMillis(),
+    suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean =
+        db.withTransaction {
+            val workspace = dao.getById(id) ?: return@withTransaction false
+            dao.upsert(
+                workspace.copy(
+                    toolApprovals = mergeToolApprovalOverride(workspace.toolApprovals, toolName, needsApproval),
+                    updatedAt = System.currentTimeMillis(),
+                )
             )
-        )
-        return true
-    }
+            true
+        }
 
     suspend fun installRootfs(
         id: String,
         url: String,
         onProgress: (RootfsInstallProgress) -> Unit = {},
     ): Boolean {
-        val workspace = dao.getById(id) ?: return false
-        dao.upsert(
-            workspace.copy(
-                shellEnabled = true,
-                shellStatus = WorkspaceShellStatus.INSTALLING.name,
-                updatedAt = System.currentTimeMillis(),
+        val flipped = db.withTransaction {
+            val workspace = dao.getById(id) ?: return@withTransaction false
+            dao.upsert(
+                workspace.copy(
+                    shellEnabled = true,
+                    shellStatus = WorkspaceShellStatus.INSTALLING.name,
+                    updatedAt = System.currentTimeMillis(),
+                )
             )
-        )
+            true
+        }
+        if (!flipped) return false
         return runCatching {
             withContext(Dispatchers.IO) {
-                rootfsInstaller.install(workspace.root, url, onProgress)
+                rootfsInstaller.install(dao.getById(id)?.root ?: error("Workspace not found: $id"), url, onProgress)
             }
         }.fold(
             onSuccess = {
-                dao.upsert(
-                    workspace.copy(
-                        shellEnabled = true,
-                        shellStatus = WorkspaceShellStatus.READY.name,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                )
+                applyShellStatus(id, WorkspaceShellStatus.READY.name)
                 true
             },
             onFailure = {
-                Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}, url=$url", it)
-                dao.upsert(
-                    workspace.copy(
-                        shellEnabled = true,
-                        shellStatus = WorkspaceShellStatus.BROKEN.name,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                )
+                Log.e(TAG, "installRootfs failed: workspace=$id, url=$url", it)
+                applyShellStatus(id, WorkspaceShellStatus.BROKEN.name)
                 throw it
             },
         )
+    }
+
+    private suspend fun applyShellStatus(id: String, status: String): Boolean = db.withTransaction {
+        val workspace = dao.getById(id) ?: return@withTransaction false
+        dao.upsert(
+            workspace.copy(
+                shellEnabled = true,
+                shellStatus = status,
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+        true
     }
 
     suspend fun listFiles(
@@ -246,3 +261,32 @@ class WorkspaceRepository(
  */
 internal fun isShellRunnable(shellEnabled: Boolean, shellStatus: String): Boolean =
     shellEnabled && shellStatus == WorkspaceShellStatus.READY.name
+
+/**
+ * Merge one tool's approval policy onto the row's existing `tool_approvals` blob, returning the
+ * re-encoded JSON. Pure so the lost-update invariant the [WorkspaceRepository.setToolApproval]
+ * transaction protects is unit-testable in the :app JVM source set (see WorkspaceToolApprovalMergeTest).
+ *
+ * I-FAILCLOSED (#197 slice 6a review): a corrupt existing blob (un-decodable) is the SAME
+ * security-relevant state the tool consumer ([resolveWorkspaceToolApproval]) treats as fail-CLOSED —
+ * `toolApprovalOverrides()` returns null there, forcing approval for every tool. The write path must
+ * agree: starting from {} would relax every UNSET tool to its (possibly no-approval) default, silently
+ * downgrading the consumer's fail-closed state the moment the user toggles a single switch. So a
+ * corrupt blob is repaired to a FAIL-CLOSED baseline — every known tool set to approval-required — and
+ * the user's selected override is then applied on top. A well-formed blob (including an explicit {})
+ * is merged as-is, preserving every already-set key (the property a stale, non-transactional read
+ * would break).
+ */
+internal fun mergeToolApprovalOverride(
+    existingJson: String,
+    toolName: String,
+    needsApproval: Boolean,
+): String {
+    val decoded = runCatching {
+        JsonInstant.decodeFromString<Map<String, Boolean>>(existingJson)
+    }.getOrNull()
+    // decoded == null distinguishes a corrupt blob from an explicitly-empty {} map: corrupt repairs to
+    // the fail-closed baseline (never {}), so unset tools stay approval-required after the merge.
+    val base = decoded ?: WorkspaceToolDefaultApprovals.mapValues { true }
+    return JsonInstant.encodeToString(base + (toolName to needsApproval))
+}

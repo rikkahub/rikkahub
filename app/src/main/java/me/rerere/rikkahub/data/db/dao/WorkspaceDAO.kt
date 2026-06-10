@@ -15,6 +15,9 @@ interface WorkspaceDAO {
     @Query("SELECT * FROM workspaces WHERE id = :id")
     suspend fun getById(id: String): WorkspaceEntity?
 
+    @Query("SELECT * FROM workspaces WHERE id = :id")
+    fun getByIdFlow(id: String): Flow<WorkspaceEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(workspace: WorkspaceEntity)
 
