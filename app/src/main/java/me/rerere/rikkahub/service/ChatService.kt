@@ -67,6 +67,7 @@ import me.rerere.rikkahub.data.ai.subagent.buildSpawnTool
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.getUiAutomationTools
 import me.rerere.rikkahub.service.automation.AutomationActivationTracker
 import me.rerere.rikkahub.service.automation.AutomationKillSwitch
@@ -95,6 +96,7 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.ai.memory.MEMORY_RECALL_K
 import me.rerere.rikkahub.data.ai.memory.MemoryRecaller
 import me.rerere.rikkahub.data.ai.memory.resolveMemoryRecallScope
@@ -344,6 +346,7 @@ class ChatService(
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
+    private val workspaceRepository: WorkspaceRepository,
     private val memoryRecaller: MemoryRecaller,
     private val generationHandler: GenerationHandler,
     private val subagentRunner: SubagentRunner,
@@ -940,6 +943,7 @@ class ChatService(
                         addAll(createSearchTools(settings))
                     }
                     addAll(localTools.getTools(assistant.localTools))
+                    addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository))
                     // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
                     // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
                     // unless automation is enabled AND a guard was minted; each tool authorizes via the

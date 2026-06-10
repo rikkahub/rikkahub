@@ -80,7 +80,10 @@ class WorkspaceRepository(
 
     suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean {
         val workspace = dao.getById(id) ?: return false
-        val overrides = workspace.toolApprovalOverrides() + (toolName to needsApproval)
+        // A corrupt existing blob (null) is discarded here: the user is explicitly setting one
+        // tool's policy, so we start from {} and repair the column rather than merge onto a
+        // fail-closed all-true map (which would silently flip every other tool to approval-required).
+        val overrides = workspace.toolApprovalOverrides().orEmpty() + (toolName to needsApproval)
         dao.upsert(
             workspace.copy(
                 toolApprovals = JsonInstant.encodeToString(overrides),

@@ -92,6 +92,7 @@ val appModule = module {
             appScope = get(),
             settingsStore = get(),
             conversationRepo = get(),
+            workspaceRepository = get(),
             memoryRecaller = get(),
             generationHandler = get(),
             subagentRunner = get(),

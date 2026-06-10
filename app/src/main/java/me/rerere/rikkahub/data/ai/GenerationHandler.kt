@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -310,6 +311,8 @@ class GenerationHandler(
                             val output = result.ifEmpty { emptyToolResultPlaceholder(json) }
                             executedTools += tool.copy(output = output)
                         }.onFailure {
+                            // cancellation must propagate; otherwise stop-generation is misreported as a tool execution error
+                            if (it is CancellationException) throw it
                             Log.w(TAG, "generateText: tool execution failed for ${tool.toolName}", it)
                             executedTools += tool.copy(
                                 output = listOf(

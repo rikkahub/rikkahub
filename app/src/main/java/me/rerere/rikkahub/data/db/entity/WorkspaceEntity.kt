@@ -36,9 +36,13 @@ data class WorkspaceEntity(
     @ColumnInfo("tool_approvals", defaultValue = "{}")
     val toolApprovals: String = "{}",
 ) {
-    fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
+    // Returns null when the stored blob cannot be parsed, so callers can distinguish an explicitly
+    // empty policy ({}) from a corrupt one. A corrupt approval policy is a security-relevant case:
+    // the tool-surface consumer must fail CLOSED (require approval for everything) rather than fall
+    // back to the relaxed defaults. Decoding stays resilient (never throws) but does not lie.
+    fun toolApprovalOverrides(): Map<String, Boolean>? = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)
-    }.getOrDefault(emptyMap())
+    }.getOrNull()
 
     fun toWorkspace(): Workspace = Workspace(
         id = id,
