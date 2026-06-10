@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.launchVm
+import me.rerere.workspace.RootfsInstallProgress
+import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceStorageArea
 
@@ -25,6 +27,18 @@ class WorkspaceDetailVM(
 ) : ViewModel() {
     private val _state = MutableStateFlow(WorkspaceDetailState())
     val state = _state.asStateFlow()
+
+    // Live rootfs-install progress for the sideload shell-controls UI (slice 6b). null = no install
+    // in flight; the install button reads this together with the persisted shellStatus.
+    private val _installProgress = MutableStateFlow<RootfsInstallProgress?>(null)
+    val installProgress = _installProgress.asStateFlow()
+
+    private val _installError = MutableStateFlow<String?>(null)
+    val installError = _installError.asStateFlow()
+
+    // The in-flight rootfs install, if any. Held so installRootfs() can refuse re-entry while one is
+    // running (a second install races the shared tmp archive/staging dir).
+    private var installJob: Job? = null
 
     // Single in-flight directory listing. selectArea/open/goUp each retarget the browse location and
     // re-refresh; without cancelling the prior job two listings could complete out of order and the
@@ -109,6 +123,47 @@ class WorkspaceDetailVM(
             // committed row, so _state.workspace updates from the single Flow writer.
             repository.setToolApproval(workspace.id, toolName, needsApproval)
         }
+    }
+
+    fun setShellEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val workspace = state.value.workspace ?: return@launch
+            // No reload: the getByIdFlow collector re-emits the committed row (single Flow writer).
+            repository.setShellEnabled(workspace.id, enabled)
+        }
+    }
+
+    fun installRootfs(url: String) {
+        val workspace = state.value.workspace ?: return
+        // Re-entry guard: a second install for the same workspace would race the first over the shared
+        // tmp/rootfs.tar.gz + staging dir (corrupting the download) and double-flip the row to
+        // INSTALLING. VM methods run on the main thread, so this check-then-assign is atomic — the
+        // UI-disabled button is only advisory; this Job guard is the real one.
+        if (installJob?.isActive == true) return
+        // launchVm (CoroutineUtils, pinned by VmSafeLaunchTest) rethrows CancellationException so a
+        // cancelled install is NEVER captured into _installError, and routes only recoverable
+        // throwables to onError — replacing upstream's runCatching{}.onFailure which swallowed
+        // cancellation. The repository.installRootfs failure path already rethrows after flipping the
+        // row to BROKEN, so the error surfaces here.
+        installJob = launchVm(
+            onError = { error -> _installError.value = error.message ?: "Rootfs install failed" },
+        ) {
+            _installError.value = null
+            _installProgress.value = RootfsInstallProgress(stage = RootfsInstallStage.DOWNLOADING)
+            try {
+                repository.installRootfs(workspace.id, url) { progress ->
+                    _installProgress.value = progress
+                }
+            } finally {
+                // Clear progress on EVERY terminal path (success, recoverable failure, OR cancellation
+                // unwinding through this finally) so the button never sticks in the installing state.
+                _installProgress.value = null
+            }
+        }
+    }
+
+    fun dismissInstallError() {
+        _installError.value = null
     }
 }
 

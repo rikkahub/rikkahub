@@ -1206,5 +1206,25 @@
   <string name="assistant_page_workspace">Workspace</string>
   <string name="assistant_page_workspace_desc">After binding, the agent can use the workspace files and sandbox capabilities</string>
   <string name="assistant_page_workspace_none">Not bound</string>
+  <string name="workspace_terminal_title">Terminal</string>
+  <string name="workspace_terminal_title_with_name">%1$s · Terminal</string>
+  <string name="workspace_terminal_loading">Loading workspace...</string>
+  <string name="workspace_terminal_rootfs_required">Please install Rootfs first</string>
+  <string name="workspace_terminal_exited">Terminal exited</string>
+  <string name="workspace_terminal_open">Open terminal</string>
+  <string name="workspace_shell_enable_title">Enable Shell</string>
+  <string name="workspace_shell_enable_desc">Allow this workspace to run a terminal environment using the local Rootfs</string>
+  <string name="workspace_rootfs_install">Install Rootfs</string>
+  <string name="workspace_rootfs_installing">Installing</string>
+  <string name="workspace_rootfs_reinstall">Reinstall Rootfs</string>
+  <string name="workspace_rootfs_install_dialog_title">Install Rootfs</string>
+  <string name="workspace_rootfs_install_dialog_desc">Downloads a tar.gz and extracts it into the linux directory of %1$s.</string>
+  <string name="workspace_rootfs_install_dialog_url_label">tar.gz download link</string>
+  <string name="workspace_rootfs_install_dialog_confirm">Install</string>
+  <string name="workspace_rootfs_install_dialog_cancel">Cancel</string>
+  <string name="workspace_rootfs_progress_downloading">Downloading %1$s</string>
+  <string name="workspace_rootfs_progress_extracting">Extracting %1$d items</string>
+  <string name="workspace_rootfs_progress_installed">Installation complete</string>
+  <string name="workspace_rootfs_install_failed">Rootfs install failed</string>
 </resources>
 

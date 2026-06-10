@@ -25,6 +25,22 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun isValidRootRejectsTraversalAndSeparators() {
+        // Valid: UUID-style and the safe charset [A-Za-z0-9._-].
+        assertTrue(WorkspaceManager.isValidRoot("a1b2c3d4-0000-1111-2222-333344445555"))
+        assertTrue(WorkspaceManager.isValidRoot("workspace.1_test-2"))
+        // Invalid: anything that could escape the workspaces dir when used in raw File() construction
+        // (the sideload terminal path, #197 6b review finding #3).
+        assertFalse(WorkspaceManager.isValidRoot(".."))
+        assertFalse(WorkspaceManager.isValidRoot("../etc"))
+        assertFalse(WorkspaceManager.isValidRoot("a/b"))
+        assertFalse(WorkspaceManager.isValidRoot("a\\b"))
+        assertFalse(WorkspaceManager.isValidRoot(""))
+        assertFalse(WorkspaceManager.isValidRoot("with space"))
+        assertFalse(WorkspaceManager.isValidRoot("/abs"))
+    }
+
+    @Test
     fun pathEscapeIsRejected() {
         val root = Files.createTempDirectory("workspace-test").toFile()
         val fileSystem = WorkspaceFileSystem()

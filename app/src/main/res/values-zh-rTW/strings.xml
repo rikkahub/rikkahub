@@ -1206,5 +1206,25 @@
   <string name="assistant_page_workspace">工作區</string>
   <string name="assistant_page_workspace_desc">綁定後 Agent 可以使用該工作區的檔案與沙盒能力</string>
   <string name="assistant_page_workspace_none">不綁定</string>
+  <string name="workspace_terminal_title">終端機</string>
+  <string name="workspace_terminal_title_with_name">%1$s · 終端機</string>
+  <string name="workspace_terminal_loading">工作區載入中...</string>
+  <string name="workspace_terminal_rootfs_required">請先安裝 Rootfs</string>
+  <string name="workspace_terminal_exited">終端機已結束</string>
+  <string name="workspace_terminal_open">開啟終端機</string>
+  <string name="workspace_shell_enable_title">啟用 Shell</string>
+  <string name="workspace_shell_enable_desc">允許此工作區使用本機 Rootfs 執行終端機環境</string>
+  <string name="workspace_rootfs_install">安裝 Rootfs</string>
+  <string name="workspace_rootfs_installing">安裝中</string>
+  <string name="workspace_rootfs_reinstall">重新安裝 Rootfs</string>
+  <string name="workspace_rootfs_install_dialog_title">安裝 Rootfs</string>
+  <string name="workspace_rootfs_install_dialog_desc">會下載 tar.gz 並解壓縮到 %1$s 的 linux 目錄。</string>
+  <string name="workspace_rootfs_install_dialog_url_label">tar.gz 下載連結</string>
+  <string name="workspace_rootfs_install_dialog_confirm">安裝</string>
+  <string name="workspace_rootfs_install_dialog_cancel">取消</string>
+  <string name="workspace_rootfs_progress_downloading">下載中 %1$s</string>
+  <string name="workspace_rootfs_progress_extracting">解壓縮中 %1$d 項</string>
+  <string name="workspace_rootfs_progress_installed">安裝完成</string>
+  <string name="workspace_rootfs_install_failed">Rootfs 安裝失敗</string>
 </resources>
 

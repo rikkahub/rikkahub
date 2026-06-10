@@ -89,11 +89,14 @@ jobs:
             echo "::error::P-FLAVOR guard found no playDebug WorkspaceToolsGateKt.class — class output layout changed; refusing to pass vacuously." >&2
             exit 1
           fi
+          # Slice 6b extends the alternation to the PTY terminal/session symbols: the terminal page,
+          # the PRoot session factory, and the session/view clients live in app/src/sideload only, so
+          # they must never appear in the Play classpath either (I-FLAVOR for the interactive shell UI).
           hits=$(find app/build -path '*playDebug*' -name '*.class' -print0 \
             | xargs -0 javap -p 2>/dev/null \
-            | grep -E 'create(Write|Edit|Delete|Move|Shell)Tool' || true)
+            | grep -E 'create(Write|Edit|Delete|Move|Shell)Tool|WorkspaceTerminalPage|WorkspaceTerminalSession|createWorkspaceTerminalSession|WorkspaceTerminalSessionClient|WorkspaceTerminalViewClient' || true)
           if [ -n "$hits" ]; then
-            echo "::error::P-FLAVOR VIOLATION — a shell/write factory leaked into the Play classpath (issue #197 §3 I-FLAVOR). These verbs must stay in app/src/sideload only:" >&2
+            echo "::error::P-FLAVOR VIOLATION — a shell/write factory or terminal UI symbol leaked into the Play classpath (issue #197 §3 I-FLAVOR). These must stay in app/src/sideload only:" >&2
             echo "$hits" >&2
             exit 1
           fi

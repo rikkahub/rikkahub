@@ -128,6 +128,10 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // terminal-view ships libtermux.so under multiple ABI paths; pickFirst resolves the
+            // packaging collision (issue #197 slice 6b, mirrors upstream). Only relevant to the
+            // sideload flavor, which is the only one that depends on the termux lib.
+            pickFirsts += "lib/*/libtermux.so"
         }
     }
     testOptions {
@@ -280,6 +284,13 @@ dependencies {
     // lucide icons
     implementation(libs.lucide.icons)
     implementation(libs.huge.icons)
+
+    // Termux terminal view for the workspace PTY (issue #197 slice 6b). SIDELOAD ONLY: wiring it via
+    // `sideloadImplementation` (not `implementation`) keeps the termux lib + its native libtermux.so
+    // physically out of the Play APK (I-FLAVOR, design note security-model-design:197 §4.1 Option A),
+    // matching the empty play WorkspaceTerminal seam. terminal-view transitively brings
+    // terminal-emulator + libtermux.so.
+    "sideloadImplementation"(libs.termux.terminal.view)
 
     // image viewer
     implementation(libs.image.viewer)

@@ -95,6 +95,7 @@ import me.rerere.rikkahub.ui.pages.extensions.SkillDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.SkillsPage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
+import me.rerere.rikkahub.ui.pages.extensions.workspace.workspaceTerminalDestination
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
@@ -500,6 +501,12 @@ class RouteActivity : ComponentActivity() {
                                 WorkspaceDetailPage(id = key.id)
                             }
 
+                            // Flavor-gated PTY terminal route (I-FLAVOR): registers
+                            // entry<Screen.WorkspaceTerminal>{ WorkspaceTerminalPage() } in the sideload
+                            // build only; the play seam is empty, so the Play build never references the
+                            // terminal page. Mirrors the WorkspaceToolsGate per-flavor seam.
+                            workspaceTerminalDestination()
+
                             entry<Screen.SkillDetail> { key ->
                                 SkillDetailPage(skillName = key.skillName)
                             }
@@ -701,6 +708,13 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class WorkspaceDetail(val id: String) : Screen
+
+    // Route KEY only — pure data, so it may live in main. The PTY page it resolves to is sideload-only
+    // (I-FLAVOR): the entry<>{ WorkspaceTerminalPage() } binding lives behind the per-flavor
+    // workspaceTerminalDestination() seam (real in sideload, empty in play), so the Play build never
+    // references WorkspaceTerminalPage. See app/src/{sideload,play}/.../WorkspaceTerminalDestination.kt.
+    @Serializable
+    data class WorkspaceTerminal(val id: String) : Screen
 
     @Serializable
     data class SkillDetail(val skillName: String) : Screen

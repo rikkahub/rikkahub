@@ -113,7 +113,7 @@ class WorkspaceManager(
     }
 
     private fun requireValidRoot(root: String) {
-        require(root.matches(ROOT_NAME_REGEX)) {
+        require(isValidRoot(root)) {
             "Invalid workspace root name: $root"
         }
     }
@@ -129,5 +129,16 @@ class WorkspaceManager(
         private const val TEMP_DIR = "tmp"
         const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
         private val ROOT_NAME_REGEX = Regex("[A-Za-z0-9._-]+")
+
+        /**
+         * Whether [root] is a safe workspace directory name (no path separators, no `..` traversal).
+         * The single source of truth callers must use before building a path under the workspaces
+         * base dir — e.g. the sideload terminal, which resolves directories directly instead of
+         * through an instance. A stored [WorkspaceEntity.root] is just text; a corrupt/imported row
+         * must not be able to escape the workspaces dir. Rejects the bare `.`/`..` traversal segments
+         * too — they pass the char-class regex (dot is allowed) but `File(baseDir, "..")` escapes.
+         */
+        fun isValidRoot(root: String): Boolean =
+            root.matches(ROOT_NAME_REGEX) && root != "." && root != ".."
     }
 }

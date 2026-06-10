@@ -1208,5 +1208,25 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_workspace">ワークスペース</string>
   <string name="assistant_page_workspace_desc">バインドすると、エージェントはこのワークスペースのファイルとサンドボックス機能を使用できます</string>
   <string name="assistant_page_workspace_none">バインドしない</string>
+  <string name="workspace_terminal_title">ターミナル</string>
+  <string name="workspace_terminal_title_with_name">%1$s · ターミナル</string>
+  <string name="workspace_terminal_loading">ワークスペースを読み込み中...</string>
+  <string name="workspace_terminal_rootfs_required">先に Rootfs をインストールしてください</string>
+  <string name="workspace_terminal_exited">ターミナルが終了しました</string>
+  <string name="workspace_terminal_open">ターミナルを開く</string>
+  <string name="workspace_shell_enable_title">シェルを有効化</string>
+  <string name="workspace_shell_enable_desc">このワークスペースでローカルの Rootfs を使ってターミナル環境を実行できるようにします</string>
+  <string name="workspace_rootfs_install">Rootfs をインストール</string>
+  <string name="workspace_rootfs_installing">インストール中</string>
+  <string name="workspace_rootfs_reinstall">Rootfs を再インストール</string>
+  <string name="workspace_rootfs_install_dialog_title">Rootfs をインストール</string>
+  <string name="workspace_rootfs_install_dialog_desc">tar.gz をダウンロードして %1$s の linux ディレクトリに展開します。</string>
+  <string name="workspace_rootfs_install_dialog_url_label">tar.gz ダウンロードリンク</string>
+  <string name="workspace_rootfs_install_dialog_confirm">インストール</string>
+  <string name="workspace_rootfs_install_dialog_cancel">キャンセル</string>
+  <string name="workspace_rootfs_progress_downloading">ダウンロード中 %1$s</string>
+  <string name="workspace_rootfs_progress_extracting">展開中 %1$d 項目</string>
+  <string name="workspace_rootfs_progress_installed">インストール完了</string>
+  <string name="workspace_rootfs_install_failed">Rootfs のインストールに失敗しました</string>
 </resources>
 

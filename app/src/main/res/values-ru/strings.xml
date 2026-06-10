@@ -1208,5 +1208,25 @@
   <string name="assistant_page_workspace">Рабочая область</string>
   <string name="assistant_page_workspace_desc">После привязки агент сможет использовать файлы и возможности песочницы этой рабочей области</string>
   <string name="assistant_page_workspace_none">Не привязывать</string>
+  <string name="workspace_terminal_title">Терминал</string>
+  <string name="workspace_terminal_title_with_name">%1$s · Терминал</string>
+  <string name="workspace_terminal_loading">Загрузка рабочей области...</string>
+  <string name="workspace_terminal_rootfs_required">Сначала установите Rootfs</string>
+  <string name="workspace_terminal_exited">Терминал завершён</string>
+  <string name="workspace_terminal_open">Открыть терминал</string>
+  <string name="workspace_shell_enable_title">Включить оболочку</string>
+  <string name="workspace_shell_enable_desc">Разрешить этой рабочей области запускать терминальное окружение через локальный Rootfs</string>
+  <string name="workspace_rootfs_install">Установить Rootfs</string>
+  <string name="workspace_rootfs_installing">Установка</string>
+  <string name="workspace_rootfs_reinstall">Переустановить Rootfs</string>
+  <string name="workspace_rootfs_install_dialog_title">Установить Rootfs</string>
+  <string name="workspace_rootfs_install_dialog_desc">Загрузит tar.gz и распакует его в каталог linux рабочей области %1$s.</string>
+  <string name="workspace_rootfs_install_dialog_url_label">Ссылка для загрузки tar.gz</string>
+  <string name="workspace_rootfs_install_dialog_confirm">Установить</string>
+  <string name="workspace_rootfs_install_dialog_cancel">Отмена</string>
+  <string name="workspace_rootfs_progress_downloading">Загрузка %1$s</string>
+  <string name="workspace_rootfs_progress_extracting">Распаковка %1$d элементов</string>
+  <string name="workspace_rootfs_progress_installed">Установка завершена</string>
+  <string name="workspace_rootfs_install_failed">Не удалось установить Rootfs</string>
 </resources>
 
