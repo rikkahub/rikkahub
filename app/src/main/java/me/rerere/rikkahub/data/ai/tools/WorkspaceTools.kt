@@ -10,21 +10,17 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
-import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.rikkahub.utils.generateUnifiedDiff
-import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
-
-private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 
 val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_list_files" to false,
     "workspace_read_file" to false,
-    "workspace_write_file" to false,
-    "workspace_edit_file" to false,
+    // I-APPROVE (#197 HP-1, design note §4.2): arbitrary write/edit must break the auto-loop like
+    // shell/delete/move — an LLM-driven write is a write-capable sink, not a read.
+    "workspace_write_file" to true,
+    "workspace_edit_file" to true,
     "workspace_delete_file" to true,
     "workspace_move_file" to true,
     "workspace_shell" to true,
@@ -52,16 +48,18 @@ suspend fun createWorkspaceTools(
     val approvalOverrides = workspace.toolApprovalOverrides()
     fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
 
-    // SECURITY GATE (issue #197 design-gate, section C / ranked risk #1): the write-capable and
-    // shell verbs (workspace_write_file/edit_file/delete_file/move_file/shell) are an LLM-driven
-    // arbitrary-write / code-execution sink and are "gated on the security design, sideload-flavored
-    // until reviewed". Until that flavor/feature-gate + shell-enablement enforcement lands (workspace
-    // hardening pass), slice 5 exposes ONLY the read-only verbs. The factory functions below remain
-    // so the hardening pass can re-enable them behind the gate without re-porting.
+    // SECURITY GATE (issue #197 design-gate §C / design note security-model-design:197 §4.1 Option A,
+    // §3 I-FLAVOR): the write-capable and shell verbs (workspace_write_file/edit_file/delete_file/
+    // move_file/shell) are an LLM-driven arbitrary-write / code-execution sink, "sideload-flavored
+    // until reviewed". Their factory bodies live ONLY in app/src/sideload/.../WorkspaceToolsGate.kt —
+    // physically ABSENT from the Play APK, not merely runtime-suppressed. HP-1 establishes the
+    // per-flavor seam [sideloadWorkspaceTools]: it returns emptyList() in BOTH the play and sideload
+    // source sets, so the surface stays read-only in every flavor this slice. HP-2 fills ONLY the
+    // sideload copy (behind I-ENABLE + I-APPROVE + I-SURFACE) by calling the now-co-located factories.
     return listOf(
         createListFilesTool(workspaceId, ::needsApproval, workspaceRepository),
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
-    )
+    ) + sideloadWorkspaceTools(workspaceId, workspaceRepository, ::needsApproval)
 }
 
 private fun createListFilesTool(
@@ -142,263 +140,6 @@ private fun createReadFileTool(
     },
 )
 
-// Gated (issue #197 design-gate, section C): re-enabled by the workspace hardening pass behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
-private fun createWriteFileTool(
-    workspaceId: String,
-    needsApproval: (String) -> Boolean,
-    workspaceRepository: WorkspaceRepository,
-) = Tool(
-    name = "workspace_write_file",
-    description = """
-        Write a UTF-8 text file to the assistant's bound workspace files area. Paths are relative to the workspace files root.
-    """.trimIndent().replace("\n", " "),
-    parameters = {
-        InputSchema.Obj(
-            properties = buildJsonObject {
-                putPathProperty(required = true)
-                put("text", buildJsonObject {
-                    put("type", "string")
-                    put("description", "UTF-8 text content to write")
-                })
-                put("overwrite", buildJsonObject {
-                    put("type", "boolean")
-                    put("description", "Whether to overwrite an existing file. Defaults to true.")
-                })
-            },
-            required = listOf("path", "text"),
-        )
-    },
-    needsApproval = needsApproval("workspace_write_file"),
-    execute = {
-        val params = it.jsonObject
-        val path = params.string("path") ?: error("path is required")
-        val text = params.string("text") ?: error("text is required")
-        val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
-        val entry = workspaceRepository.writeText(workspaceId, path, text, overwrite)
-        listOf(UIMessagePart.Text(entry.toJson().toString()))
-    },
-)
-
-// Gated (issue #197 design-gate, section C): re-enabled by the workspace hardening pass behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
-private fun createEditFileTool(
-    workspaceId: String,
-    needsApproval: (String) -> Boolean,
-    workspaceRepository: WorkspaceRepository,
-) = Tool(
-    name = "workspace_edit_file",
-    description = """
-        Edit a UTF-8 text file in the assistant's bound workspace files area by replacing exact text.
-        Provide old_text and new_text. By default old_text must occur exactly once; set replace_all=true to replace every occurrence.
-    """.trimIndent().replace("\n", " "),
-    parameters = {
-        InputSchema.Obj(
-            properties = buildJsonObject {
-                putPathProperty(required = true)
-                put("old_text", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Exact text to replace")
-                })
-                put("new_text", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Replacement text")
-                })
-                put("replace_all", buildJsonObject {
-                    put("type", "boolean")
-                    put("description", "Whether to replace every occurrence. Defaults to false.")
-                })
-            },
-            required = listOf("path", "old_text", "new_text"),
-        )
-    },
-    needsApproval = needsApproval("workspace_edit_file"),
-    execute = {
-        val params = it.jsonObject
-        val path = params.string("path") ?: error("path is required")
-        val oldText = params.string("old_text") ?: error("old_text is required")
-        val newText = params.string("new_text") ?: error("new_text is required")
-        val replaceAll = params["replace_all"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        require(oldText.isNotEmpty()) { "old_text must not be empty" }
-
-        val original = workspaceRepository.readText(workspaceId, path)
-        // Count NON-overlapping occurrences: replace/replaceFirst match non-overlapping, so an
-        // overlapping window scan (e.g. "aa" in "aaa" -> 2) would mis-reject single edits and
-        // over-report replacements. See countNonOverlappingOccurrences.
-        val occurrences = countNonOverlappingOccurrences(original, oldText)
-        require(occurrences > 0) { "old_text was not found in $path" }
-        if (!replaceAll) {
-            require(occurrences == 1) {
-                "old_text occurs $occurrences times in $path; set replace_all=true to replace all occurrences"
-            }
-        }
-
-        val updated = if (replaceAll) original.replace(oldText, newText) else original.replaceFirst(oldText, newText)
-        val entry = workspaceRepository.writeText(workspaceId, path, updated, overwrite = true)
-        val diff = generateUnifiedDiff(original, updated, entry.path)
-        listOf(
-            UIMessagePart.Text(
-                text = buildJsonObject {
-                    put("path", entry.path)
-                    put("replacements", if (replaceAll) occurrences else 1)
-                    put("sizeBytes", entry.sizeBytes)
-                    put("updatedAt", entry.updatedAt)
-                }.toString(),
-                // the diff goes into metadata for the UI diff view; it is NOT sent to the API with the tool result
-                metadata = diff?.let { d -> DiffMetadata(diff = d).toMetadata() },
-            )
-        )
-    },
-)
-
-// Gated (issue #197 design-gate, section C): re-enabled by the workspace hardening pass behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
-private fun createDeleteFileTool(
-    workspaceId: String,
-    needsApproval: (String) -> Boolean,
-    workspaceRepository: WorkspaceRepository,
-) = Tool(
-    name = "workspace_delete_file",
-    description = """
-        Delete a file or directory in the assistant's bound workspace. Use recursive=true for directories.
-    """.trimIndent().replace("\n", " "),
-    parameters = {
-        InputSchema.Obj(
-            properties = buildJsonObject {
-                putPathProperty(required = true)
-                putAreaProperty()
-                put("recursive", buildJsonObject {
-                    put("type", "boolean")
-                    put("description", "Required when deleting a directory. Defaults to false.")
-                })
-            },
-            required = listOf("path"),
-        )
-    },
-    needsApproval = needsApproval("workspace_delete_file"),
-    execute = {
-        val params = it.jsonObject
-        val path = params.string("path") ?: error("path is required")
-        val area = params.area()
-        val recursive = params["recursive"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        val deleted = workspaceRepository.deleteFile(workspaceId, area, path, recursive)
-        listOf(
-            UIMessagePart.Text(
-                buildJsonObject {
-                    put("success", deleted)
-                    put("path", path)
-                }.toString()
-            )
-        )
-    },
-)
-
-// Gated (issue #197 design-gate, section C): re-enabled by the workspace hardening pass behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
-private fun createMoveFileTool(
-    workspaceId: String,
-    needsApproval: (String) -> Boolean,
-    workspaceRepository: WorkspaceRepository,
-) = Tool(
-    name = "workspace_move_file",
-    description = """
-        Move or rename a file or directory in the assistant's bound workspace files area.
-    """.trimIndent().replace("\n", " "),
-    parameters = {
-        InputSchema.Obj(
-            properties = buildJsonObject {
-                put("source", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Source path relative to the workspace files root")
-                })
-                put("target", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Target path relative to the workspace files root")
-                })
-                put("overwrite", buildJsonObject {
-                    put("type", "boolean")
-                    put("description", "Whether to overwrite the target if it exists. Defaults to false.")
-                })
-            },
-            required = listOf("source", "target"),
-        )
-    },
-    needsApproval = needsApproval("workspace_move_file"),
-    execute = {
-        val params = it.jsonObject
-        val source = params.string("source") ?: error("source is required")
-        val target = params.string("target") ?: error("target is required")
-        val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        val entry = workspaceRepository.moveFile(workspaceId, source, target, overwrite)
-        listOf(UIMessagePart.Text(entry.toJson().toString()))
-    },
-)
-
-// Gated (issue #197 design-gate, section C / ranked risk #1): the LLM-driven PRoot shell sink.
-// Re-enabled ONLY by the workspace hardening pass behind the sideload/security flavor, AND that
-// re-enablement MUST also enforce the shell-enablement invariant at the WorkspaceRepository.executeCommand
-// sink (require workspace.shellEnabled && shellStatus == READY) — currently unenforced. Kept
-// built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
-private fun createShellTool(
-    workspaceId: String,
-    needsApproval: (String) -> Boolean,
-    workspaceRepository: WorkspaceRepository,
-) = Tool(
-    name = "workspace_shell",
-    description = """
-        Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace.
-        Use cwd for a path relative to the workspace files root. Requires Rootfs to be installed and ready.
-    """.trimIndent().replace("\n", " "),
-    parameters = {
-        InputSchema.Obj(
-            properties = buildJsonObject {
-                put("command", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Shell command to run")
-                })
-                put("cwd", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Working directory relative to the workspace files root. Defaults to root.")
-                })
-                put("timeout", buildJsonObject {
-                    put("type", "integer")
-                    put(
-                        "description",
-                        "Command timeout in seconds. Defaults to 30, max $SHELL_TIMEOUT_MAX_SECONDS."
-                    )
-                })
-            },
-            required = listOf("command"),
-        )
-    },
-    needsApproval = needsApproval("workspace_shell"),
-    execute = {
-        val params = it.jsonObject
-        val command = params.string("command") ?: error("command is required")
-        val cwd = params.string("cwd").orEmpty()
-        val timeoutMillis = params.string("timeout")?.toLongOrNull()
-            ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
-            ?.times(1_000L)
-            ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
-        val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
-        listOf(
-            UIMessagePart.Text(
-                buildJsonObject {
-                    put("exitCode", result.exitCode)
-                    put("stdout", result.stdout)
-                    put("stderr", result.stderr)
-                    put("timedOut", result.timedOut)
-                }.toString()
-            )
-        )
-    },
-)
-
 /**
  * Counts how many times [needle] occurs in [haystack] using NON-overlapping matching, the same
  * semantics as [String.replace] / [String.replaceFirst]. This must match the replacement engine so
@@ -416,17 +157,19 @@ internal fun countNonOverlappingOccurrences(haystack: String, needle: String): I
     return count
 }
 
-private fun kotlinx.serialization.json.JsonObject.string(name: String): String? =
+// internal (not private): the gated write/shell factories live in app/src/sideload/ (I-FLAVOR,
+// design note §4.1 Option A) and call these shared param helpers across the flavor source set.
+internal fun kotlinx.serialization.json.JsonObject.string(name: String): String? =
     this[name]?.jsonPrimitive?.contentOrNull
 
-private fun kotlinx.serialization.json.JsonObject.area(): WorkspaceStorageArea =
+internal fun kotlinx.serialization.json.JsonObject.area(): WorkspaceStorageArea =
     when (string("area")?.lowercase()) {
         null, "", "files" -> WorkspaceStorageArea.FILES
         "linux", "rootfs" -> WorkspaceStorageArea.LINUX
         else -> error("area must be one of: files, linux")
     }
 
-private fun JsonObjectBuilder.putPathProperty(required: Boolean) {
+internal fun JsonObjectBuilder.putPathProperty(required: Boolean) {
     put("path", buildJsonObject {
         put("type", "string")
         put(
@@ -437,7 +180,7 @@ private fun JsonObjectBuilder.putPathProperty(required: Boolean) {
     })
 }
 
-private fun JsonObjectBuilder.putAreaProperty() {
+internal fun JsonObjectBuilder.putAreaProperty() {
     put("area", buildJsonObject {
         put("type", "string")
         put("enum", buildJsonArray {
@@ -446,12 +189,4 @@ private fun JsonObjectBuilder.putAreaProperty() {
         })
         put("description", "Storage area to access. Defaults to files.")
     })
-}
-
-private fun me.rerere.workspace.WorkspaceFileEntry.toJson() = buildJsonObject {
-    put("path", path)
-    put("name", name)
-    put("isDirectory", isDirectory)
-    put("sizeBytes", sizeBytes)
-    put("updatedAt", updatedAt)
 }

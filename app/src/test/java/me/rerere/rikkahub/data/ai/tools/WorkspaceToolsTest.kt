@@ -9,11 +9,13 @@ import org.junit.Test
  * Regression test for the workspace-tools approval gate (issue #197 slice 5, ws-tools).
  *
  * The load-bearing security control is [resolveWorkspaceToolApproval]: it decides whether a given
- * workspace tool must be confirmed by the user before it runs. The destructive tools
- * (shell, delete, move) MUST default to approval-required; the read/inspect tools
- * (list, read, write, edit) default to no-approval. A per-workspace override always wins over the
- * default — in either direction. When the stored policy blob is corrupt the map is null and the
- * resolver fails CLOSED (approval required for everything) — (C).
+ * workspace tool must be confirmed by the user before it runs. The write-capable and destructive
+ * tools (shell, delete, move, write, edit) MUST default to approval-required; only the pure
+ * read/inspect tools (list, read) default to no-approval. Arbitrary write/edit was flipped to
+ * approval-required by issue #197 HP-1 (I-APPROVE, design note security-model-design:197 §4.2): an
+ * LLM-driven arbitrary write must break the auto-loop exactly like shell/delete/move. A per-workspace
+ * override always wins over the default — in either direction. When the stored policy blob is corrupt
+ * the map is null and the resolver fails CLOSED (approval required for everything) — (C).
  *
  * NOTE on the live surface: per the issue #197 design-gate (section C), this slice exposes only the
  * read-only verbs (list/read). The write/edit/delete/move/shell factories are kept built-but-unwired
@@ -33,26 +35,27 @@ import org.junit.Test
  * verified by compile + the integration path; it is not exercised here because it cannot be without
  * either an unchecked null cast (forbidden) or a real WorkspaceRepository (unconstructible in CI).
  *
- * FAIL-BEFORE rationale: each assertion pins a specific invariant. If the default map were ever
- * weakened (e.g. shell flipped to false, the regression this slice's scope guard forbids), (A)
- * fails. If override precedence were inverted, (B) fails. These are the controls that keep a
- * dormant-but-dangerous tool surface gated.
+ * FAIL-BEFORE rationale: each assertion pins a specific invariant. If write/edit were ever relaxed
+ * back to no-approval (the auto-write hole I-APPROVE closes), or if shell/delete/move were flipped
+ * to false, (A) fails. If override precedence were inverted, (B) fails. These are the controls that
+ * keep an LLM-driven write/exec surface gated behind a human confirmation.
  */
 class WorkspaceToolsTest {
 
-    // (A) Defaults: destructive tools require approval; read/inspect tools do not.
+    // (A) Defaults: write-capable / destructive tools require approval; pure read/inspect tools do not.
     @Test
     fun `default approval requires confirmation for destructive tools only`() {
-        // Destructive — must default to approval-required.
+        // Write-capable / destructive — must default to approval-required. write/edit join this group
+        // per I-APPROVE (#197 HP-1): arbitrary write must break the auto-loop like shell/delete/move.
         assertTrue(resolveWorkspaceToolApproval("workspace_shell", emptyMap()))
         assertTrue(resolveWorkspaceToolApproval("workspace_delete_file", emptyMap()))
         assertTrue(resolveWorkspaceToolApproval("workspace_move_file", emptyMap()))
+        assertTrue(resolveWorkspaceToolApproval("workspace_write_file", emptyMap()))
+        assertTrue(resolveWorkspaceToolApproval("workspace_edit_file", emptyMap()))
 
-        // Read / inspect — default to no approval.
+        // Pure read / inspect — default to no approval.
         assertFalse(resolveWorkspaceToolApproval("workspace_list_files", emptyMap()))
         assertFalse(resolveWorkspaceToolApproval("workspace_read_file", emptyMap()))
-        assertFalse(resolveWorkspaceToolApproval("workspace_write_file", emptyMap()))
-        assertFalse(resolveWorkspaceToolApproval("workspace_edit_file", emptyMap()))
     }
 
     // (A) Unknown tools fall through to the final `?: false` (no approval, no crash).

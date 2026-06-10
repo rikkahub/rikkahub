@@ -196,6 +196,17 @@ class WorkspaceRepository(
         timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
     ): WorkspaceCommandResult {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        // I-ENABLE: enforce the user's shell toggle + rootfs readiness BEFORE dispatching to
+        // Dispatchers.IO or touching the manager, so a disabled/not-ready workspace can never run a
+        // command. Without this the shellEnabled/shellStatus pair was display-only at this sink.
+        if (!isShellRunnable(workspace.shellEnabled, workspace.shellStatus)) {
+            return WorkspaceCommandResult(
+                exitCode = -1,
+                stdout = "",
+                stderr = "Shell is not enabled for this workspace",
+                timedOut = false,
+            )
+        }
         // runInterruptible turns coroutine cancellation into a thread interrupt, which unblocks the blocking Process.waitFor and kills the process
         return runInterruptible(Dispatchers.IO) {
             manager.ensureWorkspace(workspace.root)
@@ -225,3 +236,13 @@ class WorkspaceRepository(
         private const val TAG = "WorkspaceRepository"
     }
 }
+
+/**
+ * I-ENABLE (design note security-model-design:197 §4.3): a shell command may run only when the owning
+ * workspace is explicitly enabled AND its rootfs is READY. Enforced at the [WorkspaceRepository.executeCommand]
+ * sink — the lowest layer that still holds the [WorkspaceEntity] — independent of the tool layer, so a
+ * disabled or not-ready shell can never reach the PRoot manager. Pure (no Context/SettingsStore coupling)
+ * so it is unit-testable in the :app JVM unit source set.
+ */
+internal fun isShellRunnable(shellEnabled: Boolean, shellStatus: String): Boolean =
+    shellEnabled && shellStatus == WorkspaceShellStatus.READY.name

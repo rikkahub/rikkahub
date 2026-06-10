@@ -67,14 +67,49 @@ jobs:
 
       # :web:buildWebUi shells out to pnpm to build the React frontend — orthogonal
       # to the Kotlin/Android gate and absent on the runner, so it is excluded.
+      # The :app module carries a play/sideload product flavor (issue #197 §4.1 Option A), so the
+      # unflavored variant tasks no longer exist. Compile BOTH flavors to prove both source sets +
+      # the per-flavor sideloadWorkspaceTools seam resolve.
       - name: Compile (all modules, debug)
-        run: ./gradlew compileDebugKotlin -x :web:buildWebUi --stacktrace
+        run: ./gradlew compilePlayDebugKotlin compileSideloadDebugKotlin -x :web:buildWebUi --stacktrace
 
+      # P-FLAVOR guard (issue #197 §3 I-FLAVOR / design note security-model-design:197 §4.1 Option A):
+      # the LLM-driven shell/write factories (create{Write,Edit,Delete,Move,Shell}Tool) must be
+      # PHYSICALLY ABSENT from the Play classpath, not merely runtime-suppressed — their bodies live in
+      # app/src/sideload only. Compiling playDebug proves it BUILDS but not that the dangerous symbols
+      # are gone; this step asserts absence by javap-scanning every compiled playDebug class for those
+      # factory names. It fails CI if a later edit moves a factory into app/src/main (compiled into the
+      # Play APK) or wires the empty `play` seam — which would ship arbitrary-write/code-exec into the
+      # Play APK with an otherwise-green build. Fail-loud if the playDebug output layout moves (anchor
+      # WorkspaceToolsGateKt.class missing) so the guard can never silently pass against nothing.
+      - name: Assert Play flavor carries no shell/write factory (P-FLAVOR)
+        run: |
+          anchor=$(find app/build -path '*playDebug*' -name 'WorkspaceToolsGateKt.class' | head -1)
+          if [ -z "$anchor" ]; then
+            echo "::error::P-FLAVOR guard found no playDebug WorkspaceToolsGateKt.class — class output layout changed; refusing to pass vacuously." >&2
+            exit 1
+          fi
+          hits=$(find app/build -path '*playDebug*' -name '*.class' -print0 \
+            | xargs -0 javap -p 2>/dev/null \
+            | grep -E 'create(Write|Edit|Delete|Move|Shell)Tool' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::P-FLAVOR VIOLATION — a shell/write factory leaked into the Play classpath (issue #197 §3 I-FLAVOR). These verbs must stay in app/src/sideload only:" >&2
+            echo "$hits" >&2
+            exit 1
+          fi
+          echo "P-FLAVOR OK: no shell/write factory symbol in the Play classpath."
+
+      # :app is flavored, so testDebugUnitTest no longer resolves to an :app variant — run the
+      # sideload variant explicitly (feature-superset; covers WorkspaceToolsTest +
+      # WorkspaceRepositoryShellEnableTest + the gated factories in app/src/sideload). The unflavored
+      # testDebugUnitTest aggregate still schedules every library module's JVM tests (:ai, :automation,
+      # :common, :document, :search, :speech, :web, :workspace) — it must stay or that coverage silently
+      # stops running. Combining both is unambiguous (no :app flavor task matches testDebugUnitTest).
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest -x :web:buildWebUi --stacktrace
+        run: ./gradlew testSideloadDebugUnitTest testDebugUnitTest -x :web:buildWebUi --stacktrace
 
       - name: Android Lint
-        run: ./gradlew lintDebug -x :web:buildWebUi --stacktrace
+        run: ./gradlew lintSideloadDebug -x :web:buildWebUi --stacktrace
 
       - name: Upload reports
         if: failure()

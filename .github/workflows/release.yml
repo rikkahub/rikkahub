@@ -40,11 +40,13 @@ jobs:
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          # The :app module carries a play/sideload product flavor (issue #197 §4.1 Option A);
+          # assembleRelease is now flavor-ambiguous. The fork ships the full-feature sideload APK.
+          ./gradlew assembleSideloadRelease
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: artifacts
-          path: app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/sideload/release/*.apk

@@ -102,6 +102,15 @@ android {
             isProfileable = true
         }
     }
+    // Distribution channel (issue #197 design note §4.1 Option A): `play` physically omits the
+    // LLM-driven shell/write workspace verbs; `sideload` is the full-feature non-Play channel. Same
+    // applicationId for both (alternative distribution, no applicationIdSuffix). Orthogonal to the
+    // debug/release/baseline buildTypes and to signingConfigs.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("play") { dimension = "distribution" }
+        create("sideload") { dimension = "distribution" }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
