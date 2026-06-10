@@ -1,11 +1,9 @@
 package me.rerere.workspace
 
-import com.sun.net.httpserver.HttpServer
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 
@@ -41,38 +39,75 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun rootfsInstallerDownloadsAndExtractsTarGz() {
+    fun rootfsInstallerExtractsTarGz() {
         val baseDir = Files.createTempDirectory("workspace-manager-test").toFile()
-        val manager = WorkspaceManager(baseDir)
+        val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
         val installer = RootfsInstaller(manager)
-        val archive = tarGz(
+        val archiveBytes = tarGz(
             TarTestEntry("bin/", type = '5'),
             TarTestEntry("bin/hello", content = "echo hello\n".toByteArray(), mode = 493),
             TarTestEntry("usr/bin/hello-link", type = '2', linkName = "../../bin/hello"),
         )
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/rootfs.tar.gz") { exchange ->
-            exchange.sendResponseHeaders(200, archive.size.toLong())
-            exchange.responseBody.use { it.write(archive) }
-        }
-        server.start()
-        try {
-            val root = "test-workspace"
-            installer.install(root, "http://127.0.0.1:${server.address.port}/rootfs.tar.gz")
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+        // The extract/symlink path is tested directly (stageArchive) because the download channel is
+        // HTTPS-gated and a loopback HTTPS server's self-signed cert is not injectable into the
+        // installer's internal HttpURLConnection. The HTTPS gate itself is covered by
+        // installRejectsNonHttpsUrl below.
+        val archive = File(manager.tempDir(root), "rootfs.tar.gz").apply { writeBytes(archiveBytes) }
+        installer.stageArchive(root, archive)
 
-            val linuxDir = manager.linuxDir(root)
-            assertEquals("echo hello\n", File(linuxDir, "bin/hello").readText())
-            assertTrue(File(linuxDir, "bin/hello").canExecute())
-            assertTrue(Files.isSymbolicLink(File(linuxDir, "usr/bin/hello-link").toPath()))
-        } finally {
-            server.stop(0)
+        val linuxDir = manager.linuxDir(root)
+        assertEquals("echo hello\n", File(linuxDir, "bin/hello").readText())
+        assertTrue(File(linuxDir, "bin/hello").canExecute())
+        assertTrue(Files.isSymbolicLink(File(linuxDir, "usr/bin/hello-link").toPath()))
+    }
+
+    @Test
+    fun installRejectsNonHttpsUrl() {
+        val baseDir = Files.createTempDirectory("workspace-https-test").toFile()
+        val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
+        val installer = RootfsInstaller(manager)
+
+        // I-ENABLE/hardening #2: a plaintext rootfs URL is MITM-swappable and must be refused before
+        // any download — the rootfs becomes the filesystem an LLM-driven shell runs inside.
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            installer.install("test-workspace", "http://example.com/rootfs.tar.gz")
         }
+        assertTrue(error.message!!.contains("HTTPS"))
+    }
+
+    @Test
+    fun extractionRejectsADecompressionBomb() {
+        val baseDir = Files.createTempDirectory("workspace-bomb-test").toFile()
+        val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
+        val installer = RootfsInstaller(manager)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        // Two entries whose declared sizes SUM past MAX_EXTRACTED_BYTES (the aggregate cap is the real
+        // property): a small real file, then a bomb header declaring ~8 GB (the max a 12-byte octal
+        // tar size field can hold — a single entry can't exceed the cap, only the running total can).
+        // gzip makes the archive tiny (under MAX_ROOTFS_BYTES) but extraction must refuse before
+        // writing the bomb. The cap is checked on header.size before any copy, so the bomb's empty
+        // body is never read.
+        val nearMaxOctal = 8_589_934_591L // 8^11 - 1, the largest 11-octal-digit tar size
+        val archiveBytes = tarGz(
+            TarTestEntry("small", content = ByteArray(16) { 'a'.code.toByte() }),
+            TarTestEntry("bomb", declaredSize = nearMaxOctal),
+        )
+        val archive = File(manager.tempDir(root), "rootfs.tar.gz").apply { writeBytes(archiveBytes) }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            installer.stageArchive(root, archive)
+        }
+        assertTrue(error.message!!.contains("extracted size"))
     }
 
     @Test
     fun commandRunsInsideWorkspaceFilesDirectory() {
         val baseDir = Files.createTempDirectory("workspace-command-test").toFile()
-        val manager = WorkspaceManager(baseDir)
+        val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
         val root = "test-workspace"
         manager.ensureWorkspace(root)
 
@@ -81,6 +116,25 @@ class ExampleUnitTest {
         assertEquals(0, result.exitCode)
         assertEquals("hello", result.stdout)
         assertEquals("hello", File(manager.filesDir(root), "command.txt").readText())
+    }
+
+    @Test
+    fun commandOutputIsTruncatedAtLimit() {
+        val baseDir = Files.createTempDirectory("workspace-truncate-test").toFile()
+        val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        // Emit more than MAX_OUTPUT_CHARS so the StreamCollector caps it and flags truncation rather
+        // than buffering unbounded output into the LLM context / OOMing.
+        val result = manager.executeCommand(
+            root,
+            "awk 'BEGIN { for (i = 0; i < 300000; i++) printf \"a\" }'",
+        )
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.truncated)
+        assertEquals(MAX_OUTPUT_CHARS, result.stdout.length)
     }
 
     @Test
@@ -96,7 +150,7 @@ class ExampleUnitTest {
         val result = manager.executeCommand(root, "cat /etc/os-release")
 
         assertEquals(127, result.exitCode)
-        assertEquals("请先安装 Rootfs", result.stderr)
+        assertEquals("Rootfs is not installed", result.stderr)
     }
 
     @Test
@@ -156,7 +210,7 @@ class ExampleUnitTest {
         header.writeOctal(100, 8, entry.mode.toLong())
         header.writeOctal(108, 8, 0)
         header.writeOctal(116, 8, 0)
-        header.writeOctal(124, 12, entry.content.size.toLong())
+        header.writeOctal(124, 12, entry.declaredSize ?: entry.content.size.toLong())
         header.writeOctal(136, 12, 0)
         header.fill(' '.code.toByte(), 148, 156)
         header[156] = entry.type.code.toByte()
@@ -189,5 +243,8 @@ class ExampleUnitTest {
         val mode: Int = 420,
         val type: Char = '0',
         val linkName: String = "",
+        // When set, the header declares this size instead of content.size — lets a test simulate a
+        // decompression bomb (a tiny archive whose header claims an enormous extracted size).
+        val declaredSize: Long? = null,
     )
 }

@@ -1,6 +1,5 @@
 package me.rerere.workspace
 
-import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 
 class ProotShellRunner(
@@ -12,7 +11,7 @@ class ProotShellRunner(
             return WorkspaceCommandResult(
                 exitCode = 127,
                 stdout = "",
-                stderr = "请先安装 Rootfs",
+                stderr = "Rootfs is not installed",
             )
         }
 
@@ -48,7 +47,8 @@ class ProotShellRunner(
         return process.readResult(context.timeoutMillis)
     }
 
-    private fun buildCommand(
+    // internal (not private) so the positional-arg escaping form is unit-testable without a rootfs.
+    internal fun buildCommand(
         context: WorkspaceShellContext,
         proot: File,
     ): List<String> {
@@ -83,9 +83,14 @@ class ProotShellRunner(
             "/bin/bash",
             "-l",
             "-c",
-            "cd -- \"\$1\" && eval ${JsonPrimitive(context.command)}",
+            // The command is passed as a positional arg ($2) to avoid any escaping; `eval "$2"`
+            // evaluates the command text exactly once, equivalent to `bash -c "$cmd"`. Inlining the
+            // command into this -c script (the old form) let bash expand $ and backticks at parse
+            // time, before eval — corrupting commands with shell metacharacters.
+            "cd -- \"\$1\" && eval \"\$2\"",
             "rikkahub",
             context.prootCwd(),
+            context.command,
         )
         return command
     }

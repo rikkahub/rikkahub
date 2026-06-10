@@ -21,15 +21,33 @@ class RootfsInstaller(
         onProgress: (RootfsInstallProgress) -> Unit = {},
     ) {
         require(url.isNotBlank()) { "Rootfs download url is required" }
+        // The rootfs becomes the executable filesystem an LLM-driven shell runs inside, so the
+        // download channel must be authenticated: HTTPS only (no plaintext-MITM-swappable rootfs).
+        require(URL(url).protocol.equals("https", ignoreCase = true)) {
+            "Rootfs url must use HTTPS"
+        }
         manager.ensureWorkspace(root)
-        val tempDir = manager.tempDir(root)
-        val archive = File(tempDir, "rootfs.tar.gz")
-        val stagingDir = File(tempDir, "rootfs-staging")
-        val linuxDir = manager.linuxDir(root)
+        val archive = File(manager.tempDir(root), "rootfs.tar.gz")
+        download(url, archive, onProgress)
+        stageArchive(root, archive, onProgress)
+    }
 
+    /**
+     * Extract a downloaded rootfs archive into the workspace's linux dir, patch it, and clean up.
+     * Split from [install] so the extract/symlink path is unit-testable without a network download
+     * (the download channel is HTTPS-gated and not loopback-testable through HttpURLConnection).
+     * Deletes [archive] when done.
+     */
+    internal fun stageArchive(
+        root: String,
+        archive: File,
+        onProgress: (RootfsInstallProgress) -> Unit = {},
+    ) {
+        manager.ensureWorkspace(root)
+        val stagingDir = File(manager.tempDir(root), "rootfs-staging")
+        val linuxDir = manager.linuxDir(root)
         stagingDir.deleteRecursively()
         stagingDir.mkdirs()
-        download(url, archive, onProgress)
         try {
             extractTarGz(archive, stagingDir, onProgress)
             linuxDir.deleteRecursively()
@@ -56,7 +74,19 @@ class RootfsInstaller(
         try {
             val code = connection.responseCode
             require(code in 200..299) { "Rootfs download failed: HTTP $code" }
+            // Redirects are followed (instanceFollowRedirects), so re-assert HTTPS on the FINAL URL:
+            // an https->http redirect would otherwise downgrade the rootfs fetch to a MITM-swappable
+            // channel after the initial scheme check passed.
+            require(connection.url.protocol.equals("https", ignoreCase = true)) {
+                "Rootfs download was redirected to a non-HTTPS URL"
+            }
             val totalBytes = connection.contentLengthLong.takeIf { it > 0 }
+            // Reject an oversized declared length up front, and enforce the same cap on the actual
+            // byte stream below — a server that lies about (or omits) Content-Length cannot fill the
+            // device disk.
+            require(totalBytes == null || totalBytes <= MAX_ROOTFS_BYTES) {
+                "Rootfs archive too large: $totalBytes bytes (max $MAX_ROOTFS_BYTES)"
+            }
             target.parentFile?.mkdirs()
             connection.inputStream.use { input ->
                 target.outputStream().use { output ->
@@ -66,8 +96,11 @@ class RootfsInstaller(
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
-                        output.write(buffer, 0, read)
                         bytesRead += read
+                        require(bytesRead <= MAX_ROOTFS_BYTES) {
+                            "Rootfs archive exceeds the maximum size of $MAX_ROOTFS_BYTES bytes"
+                        }
+                        output.write(buffer, 0, read)
                         if (bytesRead - lastReportBytes >= PROGRESS_STEP_BYTES || bytesRead == totalBytes) {
                             lastReportBytes = bytesRead
                             onProgress(
@@ -102,6 +135,10 @@ class RootfsInstaller(
     ) {
         GZIPInputStream(BufferedInputStream(archive.inputStream())).use { input ->
             var entries = 0
+            // The download cap bounds the COMPRESSED archive; gzip can expand ~100x, so a small
+            // archive could still fill the disk on extraction. Cap the aggregate EXTRACTED file bytes
+            // too (a decompression-bomb guard the download cap alone does not provide).
+            var extractedBytes = 0L
             var pendingName: String? = null
             var pendingLinkName: String? = null
             while (true) {
@@ -140,16 +177,23 @@ class RootfsInstaller(
                     TarEntryType.SYMLINK -> createSymlink(targetDir, target, header.linkName)
                     TarEntryType.HARDLINK -> createHardLink(targetDir, target, header.linkName)
                     TarEntryType.FILE -> {
+                        extractedBytes += header.size
+                        require(extractedBytes <= MAX_EXTRACTED_BYTES) {
+                            "Rootfs expands beyond the maximum extracted size of $MAX_EXTRACTED_BYTES bytes"
+                        }
                         target.outputStream().use { output ->
                             input.copyExactly(output, header.size)
                         }
                         target.applyMode(header.mode)
                     }
 
+                    // LONG_NAME/LONG_LINK/PAX are consumed and `continue`d above; OTHER carries data
+                    // skipped by the single trailing skip below. Consuming header.size here too would
+                    // skip it twice and desync the stream for the next header.
                     TarEntryType.LONG_NAME,
                     TarEntryType.LONG_LINK,
                     TarEntryType.PAX,
-                    TarEntryType.OTHER -> input.skipFully(header.size)
+                    TarEntryType.OTHER -> Unit
                 }
                 if (header.type != TarEntryType.FILE) {
                     input.skipFully(header.size)
@@ -374,5 +418,13 @@ class RootfsInstaller(
         private const val PROGRESS_STEP_BYTES = 512 * 1024
         private const val CONNECT_TIMEOUT_MS = 30_000
         private const val READ_TIMEOUT_MS = 60_000
+
+        // Generous ceiling for a rootfs tar.gz (real ones: Alpine ~3 MB, Debian/Ubuntu ~30 MB);
+        // bounds disk use against a malicious/runaway download.
+        internal const val MAX_ROOTFS_BYTES = 2L * 1024 * 1024 * 1024
+
+        // Aggregate cap on EXTRACTED file bytes (a full desktop rootfs is a few GB); guards against a
+        // gzip decompression bomb whose compressed size slips under MAX_ROOTFS_BYTES.
+        internal const val MAX_EXTRACTED_BYTES = 8L * 1024 * 1024 * 1024
     }
 }

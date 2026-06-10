@@ -13,29 +13,43 @@ import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.generateUnifiedDiff
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.WorkspaceStorageArea
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 
-// Sideload (non-Play) flavor: HP-2 wires the 5 gated factory functions here (behind I-ENABLE +
-// I-APPROVE + I-SURFACE). HP-1 ships the seam EMPTY so both source sets compile and the per-flavor
-// resolution is proven with ZERO behavior change — the tool surface is read-only in BOTH flavors
-// this slice. The signature must stay identical to the play copy (the stable seam contract).
+// Sideload (non-Play) flavor: the 5 gated factory functions are wired here (behind I-ENABLE +
+// I-APPROVE + I-SURFACE). The signature stays identical to the play copy (the stable seam contract);
+// the play copy returns emptyList() so these verbs are unreachable in the Play APK.
 //
 // I-FLAVOR (design note security-model-design:197 §3, §4.1 Option A): the write-capable / shell
 // factory BODIES below live in this sideload source set only, so they are PHYSICALLY ABSENT from the
-// Play APK — not merely runtime-suppressed. HP-2 fills this body by calling the co-located factories;
-// it does not re-port them. The shared param helpers (string/area/putPathProperty/putAreaProperty/
-// countNonOverlappingOccurrences) stay in app/src/main/.../WorkspaceTools.kt as `internal`, reused by
-// the read-only verbs; only the dangerous sinks are flavor-gated.
+// Play APK — not merely runtime-suppressed. The shared param helpers (string/area/putPathProperty/
+// putAreaProperty/countNonOverlappingOccurrences) stay in app/src/main/.../WorkspaceTools.kt as
+// `internal`, reused by the read-only verbs; only the dangerous sinks are flavor-gated.
+//
+// I-ENABLE is enforced one layer down at WorkspaceRepository.executeCommand (shellEnabled &&
+// shellStatus==READY); I-APPROVE is the needsApproval predicate (write/edit/delete/move/shell all
+// default true and fail closed). I-SURFACE applies to the FILE-MANAGEMENT verbs
+// (write/edit/delete/move): they are pinned to the workspace `files` area and expose no
+// model-facing `area=linux` option, so the model cannot redirect a file write/delete at the
+// installed rootfs (only the read-only workspace_list_files exposes `area`). workspace_shell is
+// deliberately exempt: a shell's purpose is to run inside the PRoot linux rootfs, which is the
+// sandbox's own ephemeral, reinstallable filesystem (mutating it is expected and contained, not a
+// surface escape) — the real workspace data lives in `files`, bind-mounted at /workspace.
 internal fun sideloadWorkspaceTools(
     workspaceId: String,
     workspaceRepository: WorkspaceRepository,
     needsApproval: (String) -> Boolean,
-): List<Tool> = emptyList()
+): List<Tool> = listOf(
+    createWriteFileTool(workspaceId, needsApproval, workspaceRepository),
+    createEditFileTool(workspaceId, needsApproval, workspaceRepository),
+    createDeleteFileTool(workspaceId, needsApproval, workspaceRepository),
+    createMoveFileTool(workspaceId, needsApproval, workspaceRepository),
+    createShellTool(workspaceId, needsApproval, workspaceRepository),
+)
 
-// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] by HP-2 behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
+// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] behind the
+// sideload/security flavor; physically absent from the Play APK (I-FLAVOR).
 private fun createWriteFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
@@ -72,9 +86,8 @@ private fun createWriteFileTool(
     },
 )
 
-// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] by HP-2 behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
+// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] behind the
+// sideload/security flavor; physically absent from the Play APK (I-FLAVOR).
 private fun createEditFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
@@ -144,9 +157,8 @@ private fun createEditFileTool(
     },
 )
 
-// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] by HP-2 behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
+// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] behind the
+// sideload/security flavor; physically absent from the Play APK (I-FLAVOR).
 private fun createDeleteFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
@@ -154,13 +166,15 @@ private fun createDeleteFileTool(
 ) = Tool(
     name = "workspace_delete_file",
     description = """
-        Delete a file or directory in the assistant's bound workspace. Use recursive=true for directories.
+        Delete a file or directory in the assistant's bound workspace files area. Use recursive=true for directories.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 putPathProperty(required = true)
-                putAreaProperty()
+                // I-SURFACE: no `area` parameter — a write-capable verb is pinned to the workspace
+                // `files` area and must never target the installed `linux` rootfs, so the model
+                // cannot widen its own surface. Only the read-only workspace_list_files exposes area.
                 put("recursive", buildJsonObject {
                     put("type", "boolean")
                     put("description", "Required when deleting a directory. Defaults to false.")
@@ -173,9 +187,8 @@ private fun createDeleteFileTool(
     execute = {
         val params = it.jsonObject
         val path = params.string("path") ?: error("path is required")
-        val area = params.area()
         val recursive = params["recursive"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        val deleted = workspaceRepository.deleteFile(workspaceId, area, path, recursive)
+        val deleted = workspaceRepository.deleteFile(workspaceId, WorkspaceStorageArea.FILES, path, recursive)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
@@ -187,9 +200,8 @@ private fun createDeleteFileTool(
     },
 )
 
-// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] by HP-2 behind the
-// sideload/security flavor. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
+// Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] behind the
+// sideload/security flavor; physically absent from the Play APK (I-FLAVOR).
 private fun createMoveFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
@@ -231,10 +243,9 @@ private fun createMoveFileTool(
 
 // Gated (issue #197 design-gate, section C / ranked risk #1): the LLM-driven PRoot shell sink.
 // Re-enabled ONLY by HP-2, by filling the sideload sideloadWorkspaceTools seam. The
-// shell-enablement invariant (require workspace.shellEnabled && shellStatus == READY) is ALREADY
-// enforced at the WorkspaceRepository.executeCommand sink (I-ENABLE, isShellRunnable) as of HP-1, so
-// HP-2 only wires the tool. Kept built-but-unwired so the gated pass need not re-port it.
-@Suppress("unused")
+// shell-enablement invariant (require workspace.shellEnabled && shellStatus == READY) is enforced at
+// the WorkspaceRepository.executeCommand sink (I-ENABLE, isShellRunnable); this factory only wires
+// the tool. Physically absent from the Play APK (I-FLAVOR).
 private fun createShellTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
@@ -284,6 +295,7 @@ private fun createShellTool(
                     put("stdout", result.stdout)
                     put("stderr", result.stderr)
                     put("timedOut", result.timedOut)
+                    if (result.truncated) put("truncated", true)
                 }.toString()
             )
         )

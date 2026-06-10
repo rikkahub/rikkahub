@@ -7,7 +7,11 @@ import java.nio.charset.StandardCharsets
 class WorkspaceManager(
     private val baseDir: File,
     private val config: WorkspaceConfig = WorkspaceConfig(),
-    private val shellRunner: WorkspaceShellRunner = HostShellRunner(),
+    // No default: the runner must be chosen explicitly at every construction site. Defaulting to
+    // HostShellRunner silently routes commands to the device host shell (bypassing the PRoot
+    // sandbox entirely) — a sandbox-escape if a future caller forgets to inject ProotShellRunner.
+    // Production DI wires ProotShellRunner (RepositoryModule); tests pass HostShellRunner explicitly.
+    private val shellRunner: WorkspaceShellRunner,
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
 
