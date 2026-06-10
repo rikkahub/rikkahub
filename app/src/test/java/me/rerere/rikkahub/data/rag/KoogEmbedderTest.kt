@@ -11,7 +11,7 @@ import me.rerere.ai.provider.ProviderInstances
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.ImageGenerationResult
+import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.rag.embedding.KoogEmbedder
@@ -52,7 +52,7 @@ class KoogEmbedderTest {
         override suspend fun generateImage(
             providerSetting: ProviderSetting,
             params: ImageGenerationParams,
-        ): ImageGenerationResult = error("unused")
+        ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
     private inner class FakeGoogleProvider : Provider<ProviderSetting.Google> {
@@ -70,7 +70,7 @@ class KoogEmbedderTest {
         override suspend fun generateImage(
             providerSetting: ProviderSetting,
             params: ImageGenerationParams,
-        ): ImageGenerationResult = error("unused")
+        ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
     private inner class FakeClaudeProvider : Provider<ProviderSetting.Claude> {
@@ -88,7 +88,7 @@ class KoogEmbedderTest {
         override suspend fun generateImage(
             providerSetting: ProviderSetting,
             params: ImageGenerationParams,
-        ): ImageGenerationResult = error("unused")
+        ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
     @Test

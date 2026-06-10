@@ -3,7 +3,7 @@ package me.rerere.ai.provider
 import android.content.ContextWrapper
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import me.rerere.ai.ui.ImageGenerationResult
+import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import okhttp3.OkHttpClient
@@ -38,7 +38,7 @@ class ProviderManagerTest {
         override suspend fun generateImage(
             providerSetting: ProviderSetting,
             params: ImageGenerationParams,
-        ): ImageGenerationResult = error("unused")
+        ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
     private class FakeGoogleProvider : Provider<ProviderSetting.Google> {
@@ -56,7 +56,7 @@ class ProviderManagerTest {
         override suspend fun generateImage(
             providerSetting: ProviderSetting,
             params: ImageGenerationParams,
-        ): ImageGenerationResult = error("unused")
+        ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
     private class FakeClaudeProvider : Provider<ProviderSetting.Claude> {
@@ -74,7 +74,7 @@ class ProviderManagerTest {
         override suspend fun generateImage(
             providerSetting: ProviderSetting,
             params: ImageGenerationParams,
-        ): ImageGenerationResult = error("unused")
+        ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
     private val fakeOpenAI = FakeOpenAIProvider()
