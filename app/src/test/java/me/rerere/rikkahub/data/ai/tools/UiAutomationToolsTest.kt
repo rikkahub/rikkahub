@@ -812,7 +812,12 @@ class UiAutomationToolsTest {
     // ungrounded+malformed act writes exactly one DENY entry with a null targetPkg (no grounded target)
     // — one test per act tool to keep the four symmetric.
 
-    private fun assertUngroundedMalformedAudited(guard: CapabilityGuard, backend: FakeBackend, verb: Verb) {
+    private fun assertUngroundedMalformedAudited(
+        guard: CapabilityGuard,
+        backend: FakeBackend,
+        verb: Verb,
+        rawArgs: String,
+    ) {
         val entries = guard.audit.entries()
         assertEquals("an ungrounded malformed act must append exactly one ledger entry", 1, entries.size)
         val entry = entries.single()
@@ -820,6 +825,10 @@ class UiAutomationToolsTest {
         assertEquals(DenyReason.MALFORMED, entry.reason)
         assertEquals("the ledger must record the attempted verb", verb, entry.verb)
         assertNull("with no grounding there is no truthful act target", entry.targetPkg)
+        // P25 (#221): the ungrounded path must store the redacted form, NEVER the raw args — pin it
+        // directly here, not just on the grounded malformed tests, so a regression that wrote raw args
+        // into the ledger on the ungrounded path would fail this test.
+        assertEquals("the ledger must store the redacted form, never raw args", redactAndTruncate(rawArgs), entry.redactedArgs)
         assertTrue("an ungrounded malformed act must never perform", backend.performed.isEmpty())
     }
 
@@ -833,7 +842,7 @@ class UiAutomationToolsTest {
         // malformed branch, leaving the ledger empty.
         runBlocking { tools.byName(UI_SCROLL_TOOL_NAME).execute(JsonNull) }
 
-        assertUngroundedMalformedAudited(guard, backend, Verb.SCROLL)
+        assertUngroundedMalformedAudited(guard, backend, Verb.SCROLL, JsonNull.toString())
     }
 
     @Test
@@ -842,9 +851,10 @@ class UiAutomationToolsTest {
         val guard = actGuard()
         val tools = actTools(guard, backend)
 
-        runBlocking { tools.byName(UI_GLOBAL_TOOL_NAME).execute(buildJsonObject { put("direction", "sideways") }) }
+        val args = buildJsonObject { put("direction", "sideways") }
+        runBlocking { tools.byName(UI_GLOBAL_TOOL_NAME).execute(args) }
 
-        assertUngroundedMalformedAudited(guard, backend, Verb.GLOBAL)
+        assertUngroundedMalformedAudited(guard, backend, Verb.GLOBAL, args.toString())
     }
 
     @Test
@@ -855,7 +865,7 @@ class UiAutomationToolsTest {
 
         runBlocking { tools.byName(UI_SET_TEXT_TOOL_NAME).execute(JsonNull) }
 
-        assertUngroundedMalformedAudited(guard, backend, Verb.SET_TEXT)
+        assertUngroundedMalformedAudited(guard, backend, Verb.SET_TEXT, JsonNull.toString())
     }
 
     @Test
@@ -864,9 +874,10 @@ class UiAutomationToolsTest {
         val guard = actGuard()
         val tools = actTools(guard, backend)
 
-        runBlocking { tools.byName(UI_TAP_TOOL_NAME).execute(tapArgs(buildJsonObject { })) }
+        val args = tapArgs(buildJsonObject { })
+        runBlocking { tools.byName(UI_TAP_TOOL_NAME).execute(args) }
 
-        assertUngroundedMalformedAudited(guard, backend, Verb.TAP)
+        assertUngroundedMalformedAudited(guard, backend, Verb.TAP, args.toString())
     }
 
     // A WELL-FORMED act before any observe must KEEP the re-observe steer un-audited: it is not a
