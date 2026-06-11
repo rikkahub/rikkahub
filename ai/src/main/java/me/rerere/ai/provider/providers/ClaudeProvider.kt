@@ -336,20 +336,26 @@ class ClaudeProvider(
                     usage = tokenUsage
                 )
 
-                when (type) {
-                    "message_stop" -> {
+                // trySend is reachable ONLY through the non-terminal branch's binding —
+                // a terminal frame returns before producing the chunk to send, so the emit
+                // is structurally unreachable after close(), not merely guarded by a return.
+                val chunkToSend = when (claudeStreamFrameTerminal(type)) {
+                    ClaudeStreamTerminal.MessageStop -> {
                         Log.d(TAG, "Stream ended")
                         close()
+                        return
                     }
 
-                    "error" -> {
+                    ClaudeStreamTerminal.Error -> {
                         val eventData = json.parseToJsonElement(data).jsonObject
                         close(resolveStreamError(eventData))
                         return
                     }
+
+                    null -> messageChunk
                 }
 
-                trySend(messageChunk)
+                trySend(chunkToSend)
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
@@ -809,6 +815,22 @@ class ClaudeProvider(
             cachedTokens = cachedInputTokens,
         )
     }
+}
+
+/**
+ * Whether an Anthropic SSE frame `type` terminates the stream, and how.
+ *
+ * Terminal frames go through `close(error?); return` in onEvent; once classified terminal, the
+ * trySend path is skipped — so no chunk is constructed/sent after close() (issue #240). Pure (no
+ * network, no android.util.Log) so the no-emit-after-close invariant is unit-testable in isolation.
+ */
+internal enum class ClaudeStreamTerminal { MessageStop, Error }
+
+/** Classify an Anthropic stream frame `type` into its terminal outcome, or `null` if non-terminal. */
+internal fun claudeStreamFrameTerminal(type: String?): ClaudeStreamTerminal? = when (type) {
+    "message_stop" -> ClaudeStreamTerminal.MessageStop
+    "error" -> ClaudeStreamTerminal.Error
+    else -> null
 }
 
 // Serialize a UIMessagePart.Reasoning into an Anthropic `thinking` content block — or

@@ -278,13 +278,18 @@ class GoogleProvider(
 
                 try {
                     val jsonData = json.parseToJsonElement(data).jsonObject
-                    val reason =
-                        jsonData["promptFeedback"]?.jsonObject?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
-                    if (reason != null) {
-                        close(RuntimeException("Prompt feedback: $reason"))
+                    val emit = when (val outcome = googleStreamFrameOutcome(jsonData)) {
+                        is GoogleStreamFrame.Terminate -> {
+                            close(RuntimeException("Prompt feedback: ${outcome.reason}"))
+                            return
+                        }
+
+                        GoogleStreamFrame.Skip -> return
+                        is GoogleStreamFrame.Emit -> outcome
                     }
-                    val candidates = jsonData["candidates"]?.jsonArray ?: return
-                    if (candidates.isEmpty()) return
+                    // The candidates are carried on the Emit outcome itself, so trySend is reachable
+                    // ONLY through the Emit branch — a terminating frame has no candidates to send.
+                    val candidates = emit.candidates
                     val usage = parseUsageMeta(jsonData["usageMetadata"] as? JsonObject)
                     val messageChunk = MessageChunk(
                         id = Uuid.random().toString(),
@@ -844,4 +849,44 @@ class GoogleProvider(
 
         items.forEach { emit(it) }
     }
+}
+
+/**
+ * The teardown decision for a single Gemini streaming SSE frame.
+ *
+ * Exactly one outcome per frame, so the stream-termination path and the content-emit path are
+ * mutually exclusive by construction — a frame that terminates can never also emit (issue #240).
+ */
+internal sealed interface GoogleStreamFrame {
+    /** A prompt-feedback block terminated the stream; [reason] is `promptFeedback.blockReason`. */
+    data class Terminate(val reason: String) : GoogleStreamFrame
+
+    /**
+     * The frame carries usable candidate content and should be emitted. The non-empty [candidates]
+     * array is carried HERE so the emit path is reachable only through this branch — a terminating
+     * frame, which has no [candidates], cannot reach `trySend` by construction (issue #240).
+     */
+    data class Emit(val candidates: JsonArray) : GoogleStreamFrame
+
+    /** The frame carries no content (no/empty candidates, no block) and should be ignored. */
+    object Skip : GoogleStreamFrame
+}
+
+/**
+ * Classify a Gemini stream frame into a single teardown outcome.
+ *
+ * A `promptFeedback.blockReason` is checked FIRST and short-circuits to [GoogleStreamFrame.Terminate]
+ * even when the same frame also carries partial `candidates` — that mid-stream SAFETY/RECITATION
+ * shape is exactly what let the old code close-then-fall-through-and-emit. Pure (no network, no
+ * android.util.Log) so the invariant is unit-testable in isolation.
+ */
+internal fun googleStreamFrameOutcome(frame: JsonObject): GoogleStreamFrame {
+    val reason = frame["promptFeedback"]?.jsonObject?.get("blockReason")
+        ?.jsonPrimitiveOrNull?.contentOrNull
+    if (reason != null) return GoogleStreamFrame.Terminate(reason)
+
+    val candidates = frame["candidates"]?.jsonArray
+    if (candidates.isNullOrEmpty()) return GoogleStreamFrame.Skip
+
+    return GoogleStreamFrame.Emit(candidates)
 }
