@@ -3,6 +3,7 @@ package me.rerere.rikkahub.browser
 import android.content.Context
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
@@ -101,6 +102,17 @@ class HeadlessBrowserSession(private val context: Context) {
             // fires before page JS runs, which is the only window where overriding the
             // descriptor changes future reads.
             webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                ): Boolean {
+                    // Same file:// navigation gate as the foreground BrowserView: headless
+                    // sessions are model-driven (Telegram/cron), so a page- or JS-initiated
+                    // hop into file:// would expose app-private files to browser_get_text.
+                    val toFile = request?.url?.scheme.equals("file", ignoreCase = true)
+                    return toFile && view?.url?.startsWith("file:", ignoreCase = true) != true
+                }
+
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     view.evaluateJavascript(VISIBILITY_SHIM_JS, null)

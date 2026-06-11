@@ -153,6 +153,20 @@ private fun WebViewHost(
             File(ctx.filesDir, "browser-profile").apply { if (!exists()) mkdirs() }
 
             webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                ): Boolean {
+                    // Block page/JS-initiated navigation into file:// unless the current
+                    // document is already file:// (skill webview cards moving between
+                    // their own sub-pages). App-initiated loadUrl() bypasses this
+                    // callback, so opening a skill card stays unaffected. Without this,
+                    // a browsed page (or eval'd JS) could steer the WebView into
+                    // app-private files and exfiltrate them via browser_get_text.
+                    val toFile = request?.url?.scheme.equals("file", ignoreCase = true)
+                    return toFile && view?.url?.startsWith("file:", ignoreCase = true) != true
+                }
+
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     if (url != null) onUrlChange(url)
