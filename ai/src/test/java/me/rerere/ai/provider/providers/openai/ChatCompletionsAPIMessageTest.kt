@@ -30,7 +30,10 @@ class ChatCompletionsAPIMessageTest {
     }
 
     // Helper to invoke private buildMessages method via reflection
-    private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
+    private fun invokeBuildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean = true,
+    ): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
             List::class.java,
@@ -38,7 +41,7 @@ class ChatCompletionsAPIMessageTest {
             Boolean::class.javaPrimitiveType,
         )
         method.isAccessible = true
-        return method.invoke(api, messages, true, false) as JsonArray
+        return method.invoke(api, messages, includeHistoryReasoning, false) as JsonArray
     }
 
     @Test
@@ -165,8 +168,7 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `reasoning should only be included for messages after last user message`() {
-        // First assistant message (before user's last message) - reasoning should NOT be included
+    fun `reasoning is included for all assistant messages when includeHistoryReasoning is true`() {
         val assistant1 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -174,8 +176,6 @@ class ChatCompletionsAPIMessageTest {
                 UIMessagePart.Text("Initial response")
             )
         )
-
-        // Second assistant message (after user's last message) - reasoning SHOULD be included
         val assistant2 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -191,28 +191,58 @@ class ChatCompletionsAPIMessageTest {
             assistant2
         )
 
-        val result = invokeBuildMessages(messages)
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = true)
 
-        // Find assistant messages
         val assistantMessages = result.filter {
             it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
         }
-
         assertEquals(2, assistantMessages.size)
+        assertEquals(
+            "Initial thinking",
+            assistantMessages[0].jsonObject["reasoning_content"]?.jsonPrimitive?.content
+        )
+        assertEquals(
+            "Final thinking",
+            assistantMessages[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content
+        )
+    }
 
-        // First assistant should NOT have reasoning_content
-        val first = assistantMessages[0].jsonObject
-        assertTrue("First assistant should not have reasoning_content",
-            !first.containsKey("reasoning_content") ||
-            first["reasoning_content"]?.jsonPrimitive?.content.isNullOrEmpty()
+    @Test
+    fun `reasoning is excluded from all assistant messages when includeHistoryReasoning is false`() {
+        val assistant1 = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(reasoning = "Initial thinking"),
+                UIMessagePart.Text("Initial response")
+            )
+        )
+        val assistant2 = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(reasoning = "Final thinking"),
+                UIMessagePart.Text("Final response")
+            )
         )
 
-        // Second assistant SHOULD have reasoning_content
-        val second = assistantMessages[1].jsonObject
-        assertTrue("Second assistant should have reasoning_content",
-            second.containsKey("reasoning_content") &&
-            second["reasoning_content"]?.jsonPrimitive?.content?.isNotEmpty() == true
+        val messages = listOf(
+            UIMessage.user("First question"),
+            assistant1,
+            UIMessage.user("Second question"),
+            assistant2
         )
+
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = false)
+
+        val assistantMessages = result.filter {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }
+        assertEquals(2, assistantMessages.size)
+        assistantMessages.forEach { message ->
+            assertTrue(
+                "No assistant message should carry reasoning_content",
+                !message.jsonObject.containsKey("reasoning_content")
+            )
+        }
     }
 
     @Test
@@ -304,7 +334,7 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `assistant with only reasoning and empty text should be filtered out`() {
+    fun `assistant with only reasoning and empty text is uploaded with reasoning content`() {
         val messages = listOf(
             UIMessage.user("Question 1"),
             UIMessage(
@@ -319,11 +349,32 @@ class ChatCompletionsAPIMessageTest {
 
         val result = invokeBuildMessages(messages)
 
+        assertEquals(3, result.size)
+        val assistant = result[1].jsonObject
+        assertEquals("assistant", assistant["role"]?.jsonPrimitive?.content)
+        assertEquals("thinking", assistant["reasoning_content"]?.jsonPrimitive?.content)
+        assertEquals("", assistant["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `assistant with only reasoning and empty text is dropped when includeHistoryReasoning is false`() {
+        val messages = listOf(
+            UIMessage.user("Question 1"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "thinking"),
+                    UIMessagePart.Text("")
+                )
+            ),
+            UIMessage.user("Question 2")
+        )
+
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = false)
+
         assertEquals(2, result.size)
         assertEquals("user", result[0].jsonObject["role"]?.jsonPrimitive?.content)
-        assertEquals("Question 1", result[0].jsonObject["content"]?.jsonPrimitive?.content)
         assertEquals("user", result[1].jsonObject["role"]?.jsonPrimitive?.content)
-        assertEquals("Question 2", result[1].jsonObject["content"]?.jsonPrimitive?.content)
     }
 
     @Test
