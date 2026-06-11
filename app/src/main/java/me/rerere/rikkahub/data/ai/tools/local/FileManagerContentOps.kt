@@ -74,13 +74,16 @@ internal fun readFileContent(context: Context, raw: String, obj: JsonObject): Li
     guardOrNull(raw)?.let { return it }
     val maxBytes = (obj["max_bytes"]?.jsonPrimitive?.intOrNull ?: CONTENT_DEFAULT_READ)
         .coerceIn(1, CONTENT_MAX_READ)
+    var overflow = false
     val bytes = try {
         val stream = ContentUriResolver.openInput(context, raw)
             ?: return fmTextPart(ContentUriResolver.notGrantedEnvelope(raw))
         stream.use { s ->
-            val buf = ByteArray(maxBytes)
-            val read = s.read(buf)
-            if (read <= 0) ByteArray(0) else buf.copyOf(read)
+            val b = readUpTo(s, maxBytes)
+            // Probe one byte past the budget so `truncated` is honest even when the
+            // provider reports no SIZE column (totalSize falls back to bytes.size).
+            if (b.size == maxBytes) overflow = s.read() >= 0
+            b
         }
     } catch (_: SecurityException) {
         return fmTextPart(ContentUriResolver.notGrantedEnvelope(raw))
@@ -89,9 +92,9 @@ internal fun readFileContent(context: Context, raw: String, obj: JsonObject): Li
     }
     // total size for the truncation flag
     val totalSize = ContentUriResolver.resolve(context, raw)?.length() ?: bytes.size.toLong()
-    val truncated = totalSize > maxBytes
+    val truncated = totalSize > maxBytes || overflow
     val sample = bytes.take(minOf(512, bytes.size))
-    val nonPrintable = sample.count { b -> b < 0x09 || (b in 0x0E..0x1F && b != 0x1B.toByte()) }
+    val nonPrintable = countNonPrintable(sample)
     val isBinary = sample.isNotEmpty() && (nonPrintable.toDouble() / sample.size) > 0.15
     return if (isBinary) {
         fmTextPart(buildJsonObject {
