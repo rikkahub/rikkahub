@@ -73,6 +73,72 @@ jobs:
       - name: Compile (all modules, debug)
         run: ./gradlew compilePlayDebugKotlin compileSideloadDebugKotlin -x :web:buildWebUi --stacktrace
 
+      # P1-P3 boundary gates for the neutral :ai-runtime contract module (issue #243 §E).
+      # :ai-runtime hosts the Android-/app-neutral chat-turn runtime contract; it must stay neutral so
+      # the runtime logic can be unit-tested without a device and reused without dragging in app types.
+      #   P1  no app types / Android imports / Compose in ai-runtime/src.
+      #         (Scoped to ai-runtime/src — :ai legitimately imports android.* (Context/Log/Bitmap),
+      #          so the §E one-liner's `ai/src ai-runtime/src` scope cannot hold for :ai; the invariant
+      #          this issue protects is that the NEW module stays neutral. :ai's Compose-freeness was
+      #          secured separately by slice 1 / #248.)
+      #   P2  ai-runtime depends ONLY on :ai and :common — never :app/:search/:document/:automation/:workspace.
+      #   P3  no Room/Dao/Entity/AppDatabase/DataStore/SettingsStore/Context/R. persistence or platform refs.
+      # rg is preinstalled on ubuntu-latest. Each gate fails the build with ::error:: on violation, and
+      # P2 is fail-loud (errors if :ai stops appearing on the classpath) so it can never pass vacuously.
+      - name: Assert :ai-runtime boundary (P1-P3)
+        run: |
+          set -euo pipefail
+
+          # P1 — no app types, Android refs, or Compose in the neutral module.
+          # The `android.` alternation is anchored to a token boundary ((^|[^A-Za-z0-9_.])) so it
+          # catches BOTH `import android.…` AND bare fully-qualified refs (android.os.Build.VERSION,
+          # android.util.Log.d) that carry no import statement — :ai-runtime is an Android library with
+          # a compileSdk, so those FQ refs resolve on the classpath and would leak the platform in
+          # without an import. The boundary excludes me.rerere…android-suffixed identifiers and the
+          # com.android.* build namespace (preceded by `.`), which are not platform-API leaks.
+          if rg -n 'me\.rerere\.rikkahub|(^|[^A-Za-z0-9_.])android\.|androidx\.compose|@Composable' ai-runtime/src; then
+            echo "::error::P1 VIOLATION — app type / Android ref / Compose leaked into :ai-runtime (issue #243 §E). The runtime contract must stay neutral." >&2
+            exit 1
+          fi
+
+          # P3 — no persistence or platform references.
+          # Import/package-oriented to match the design's literal P3 invariant
+          # (androidx.room / androidx.datastore / io.objectbox) without false-failing on neutral
+          # identifiers. Bare `Context`/`Entity`/`Room`/`Dao` are dropped: they substring-match the
+          # design's OWN next-slice runtime types — ToolAssemblyContext (contract block B, slice 6),
+          # the neutral GenerationContext / RuntimeTransformerContext (slice 7) — and any class merely
+          # containing those substrings (ChatMessageEntity, RoomCoordinator). The literal targets are
+          # the persistence packages, which carry no identifier ambiguity. AppDatabase/SettingsStore are
+          # kept but word-bounded; R. is anchored to a token boundary (mirrors P1 above) so a bare
+          # `…R.` substring (e.g. `foR.bar`) cannot match, while real `R.string` resource refs do.
+          # `androidx.datastore` is the lowercase package the old capital `DataStore` token never caught.
+          if rg -n 'androidx\.room|androidx\.datastore|io\.objectbox|\bAppDatabase\b|\bSettingsStore\b|(^|[^A-Za-z0-9_.])R\.' ai-runtime/src; then
+            echo "::error::P3 VIOLATION — persistence package / AppDatabase / SettingsStore / R resource reference leaked into :ai-runtime (issue #243 §E)." >&2
+            exit 1
+          fi
+
+          # P2 — module-dependency ALLOW-list. ai-runtime may depend ONLY on :ai and :common.
+          # This is an allow-list, not a ban-list: extract EVERY 'project :X' edge from the report and
+          # fail if the set differs from exactly {:ai,:common}. A ban-list of named modules would
+          # silently permit a new edge to :speech/:web/:material3/:highlight (several Compose-bearing) —
+          # the invariant is closed only by enumerating what is allowed.
+          deps=$(./gradlew :ai-runtime:dependencies --configuration releaseRuntimeClasspath -x :web:buildWebUi --stacktrace)
+          # Distinct ':X' module tokens on the classpath (dedup the gradle `(*)` repeat markers).
+          projects=$(echo "$deps" | grep -oE 'project :[A-Za-z0-9_-]+' | sed 's/^project //' | sort -u)
+          # Fail loud if the expected :ai project dep is gone — layout drift would make the check below
+          # pass against nothing.
+          if ! echo "$projects" | grep -qxE ':ai'; then
+            echo "::error::P2 guard found no 'project :ai' on :ai-runtime releaseRuntimeClasspath — module layout changed; refusing to pass vacuously." >&2
+            exit 1
+          fi
+          unexpected=$(echo "$projects" | grep -vxE ':ai|:common' || true)
+          if [ -n "$unexpected" ]; then
+            echo "::error::P2 VIOLATION — :ai-runtime depends on a module outside the allow-list (issue #243 §E). Allowed deps are :ai and :common only; found:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+          echo ":ai-runtime boundary OK: neutral (P1/P3) and deps within {:ai,:common} (P2)."
+
       # P-FLAVOR guard (issue #197 §3 I-FLAVOR / design note security-model-design:197 §4.1 Option A):
       # the LLM-driven shell/write factories (create{Write,Edit,Delete,Move,Shell}Tool) must be
       # PHYSICALLY ABSENT from the Play classpath, not merely runtime-suppressed — their bodies live in
