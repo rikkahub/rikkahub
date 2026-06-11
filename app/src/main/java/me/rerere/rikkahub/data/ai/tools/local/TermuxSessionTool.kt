@@ -267,9 +267,14 @@ fun termuxSessionStartTool(context: Context): Tool = Tool(
             tmux(context, TmuxOps.sendTextArgv(name, initial))
             tmux(context, TmuxOps.enterArgv(name))
         }
-        val read = readUntilDone(context, name, DEFAULT_READ_LINES, null, DEFAULT_TIMEOUT_S * 1000L) as CaptureResult.Success
+        // The session is already created at this point, so a failed screen read (Timeout/
+        // Denied/OtherError from readUntilDone) must not crash or report start failure —
+        // the model would retry the start and hit too_many_sessions.
+        val read = readUntilDone(context, name, DEFAULT_READ_LINES, null, DEFAULT_TIMEOUT_S * 1000L) as? CaptureResult.Success
         listOf(UIMessagePart.Text(buildJsonObject {
-            put("success", true); put("session_id", name); put("screen", truncateOut(read.stdout))
+            put("success", true); put("session_id", name)
+            put("screen", read?.let { truncateOut(it.stdout) } ?: "")
+            if (read == null) put("note", "Session created, but the initial screen read failed. Use termux_session_read to see the screen.")
         }.toString()))
     }
 )
@@ -311,7 +316,8 @@ fun termuxSessionSendTool(context: Context): Tool = Tool(
         if (read is CaptureResult.OtherError && isSessionNotFound(read.message)) {
             return@Tool sessionNotFoundEnvelope(context, session)
         }
-        val r = read as CaptureResult.Success
+        val r = read as? CaptureResult.Success
+            ?: return@Tool sessionErrorEnvelope("read_failed", "Input was sent, but the screen read failed. Use termux_session_read to see the result.")
         listOf(UIMessagePart.Text(buildJsonObject {
             put("success", true)
             put("screen", truncateOut(r.stdout))
