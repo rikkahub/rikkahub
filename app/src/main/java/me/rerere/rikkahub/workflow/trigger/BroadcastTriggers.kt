@@ -99,11 +99,19 @@ internal class WifiTriggerFamily(context: Context, scope: CoroutineScope)
     override fun handles(spec: TriggerSpec): Boolean =
         spec is TriggerSpec.WifiConnected || spec is TriggerSpec.WifiDisconnected
 
+    /**
+     * SSID remembered from the last connect event. By the time the disconnect broadcast
+     * arrives the WifiManager no longer reports an SSID, so an ssid-filtered
+     * wifi_disconnected trigger can only be matched against this remembered value.
+     */
+    @Volatile private var lastConnectedSsid: String? = null
+
     @Suppress("DEPRECATION") // NetworkInfo + connectionInfo are the only path that gives SSID here.
     override fun matchEvent(intent: Intent, workflows: List<WorkflowDefinition>): List<Pair<String, TriggerSpec>> {
         val networkInfo = intent.getParcelableExtra<android.net.NetworkInfo>(WifiManager.EXTRA_NETWORK_INFO)
         val isConnected = networkInfo?.isConnected == true
         val ssid = if (isConnected) currentSsid() else null
+        if (isConnected && ssid != null) lastConnectedSsid = ssid
         val matches = mutableListOf<Pair<String, TriggerSpec>>()
         for (wf in workflows) {
             val t = wf.trigger
@@ -113,11 +121,16 @@ internal class WifiTriggerFamily(context: Context, scope: CoroutineScope)
                         matches += wf.id to t
                     }
                 !isConnected && t is TriggerSpec.WifiDisconnected ->
-                    if (t.ssid.isNullOrBlank() || (ssid != null && ssid.equals(t.ssid, ignoreCase = true))) {
+                    if (t.ssid.isNullOrBlank()
+                        || lastConnectedSsid?.equals(t.ssid, ignoreCase = true) == true
+                    ) {
                         matches += wf.id to t
                     }
             }
         }
+        // One disconnect per connection: clear the remembered SSID so a spurious repeat
+        // of the disconnect broadcast doesn't re-fire ssid-filtered workflows.
+        if (!isConnected) lastConnectedSsid = null
         return matches
     }
 
