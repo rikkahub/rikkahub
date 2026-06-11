@@ -95,7 +95,7 @@ class RootfsInstaller(
         }
     }
 
-    private fun extractTarGz(
+    internal fun extractTarGz(
         archive: File,
         targetDir: File,
         onProgress: (RootfsInstallProgress) -> Unit,
@@ -146,10 +146,12 @@ class RootfsInstaller(
                         target.applyMode(header.mode)
                     }
 
+                    // LONG_NAME/LONG_LINK/PAX 已在上方 continue, 这里只有 OTHER 可达;
+                    // 数据区统一由下方的非 FILE skip 跳过, 这里再 skip 会双重跳过导致后续 header 错位
                     TarEntryType.LONG_NAME,
                     TarEntryType.LONG_LINK,
                     TarEntryType.PAX,
-                    TarEntryType.OTHER -> input.skipFully(header.size)
+                    TarEntryType.OTHER -> Unit
                 }
                 if (header.type != TarEntryType.FILE) {
                     input.skipFully(header.size)
