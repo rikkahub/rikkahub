@@ -9,14 +9,16 @@ import me.rerere.ai.runtime.contract.TurnMode
 import me.rerere.ai.runtime.mcp.McpTool
 import me.rerere.ai.runtime.subagent.filterToolsForSubagent
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
 import me.rerere.rikkahub.service.mapMcpTool
 import kotlin.uuid.Uuid
 
 /**
  * App-side [ToolCatalog] reproducing the security-relevant tool-assembly policy of
  * `ChatService.buildGenerationTools` (issue #243 slice 3, ChatService.kt §buildGenerationTools), so
- * the runtime can depend on the neutral [ToolCatalog] abstraction. Behavior-preserving: this slice
- * only ADDS the adapter + its tests; ChatService is NOT rewired onto it (that is slice 10).
+ * the runtime can depend on the neutral [ToolCatalog] abstraction. ChatService is now wired onto
+ * this catalog (issue #243 slice 10): the main-turn tool pool is assembled here, not in a private
+ * ChatService.buildGenerationTools.
  *
  * The catalog reproduces the THREE invariants the policy tests pin, delegating to the already-shared
  * seams so no policy is duplicated:
@@ -66,7 +68,7 @@ class AppToolCatalog(
         // turn that merely omits the spawn tool (includeSpawnTool=false) must NOT strip a base tool
         // that happens to be named `task`.
         val recursionGuarded = if (ctx.mode == TurnMode.Subagent) {
-            filterToolsForSubagent(pool)
+            filterToolsForSubagent(pool, SPAWN_TOOL_NAME)
         } else {
             pool
         }

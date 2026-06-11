@@ -139,6 +139,19 @@ jobs:
           fi
           echo ":ai-runtime boundary OK: neutral (P1/P3) and deps within {:ai,:common} (P2)."
 
+      # P6 token gate (issue #243 §E P6, final acceptance): the neutral runtime must know only the
+      # ToolCatalog abstraction — no concrete tool SOURCE, the spawn-tool NAME, or the MCP namespace
+      # prefix may appear in :ai-runtime/src/main. Scoped to src/main (not src) because the runtime's
+      # own unit tests legitimately reference these tokens as fixtures (e.g. `mcp__search` tool names).
+      - name: Assert :ai-runtime tool-source neutrality (P6)
+        run: |
+          set -euo pipefail
+          if rg -n 'SearchTools|UiAutomation|WorkspaceTools|SkillManager|LocalTools|McpManager|mcp__|SPAWN_TOOL_NAME' ai-runtime/src/main; then
+            echo "::error::P6 VIOLATION — a concrete tool source / spawn-name / mcp prefix leaked into :ai-runtime/src/main (issue #243 §E P6). The runtime must know only ToolCatalog." >&2
+            exit 1
+          fi
+          echo ":ai-runtime tool-source neutrality OK (P6): no concrete tool source / spawn name / mcp prefix."
+
       # P-FLAVOR guard (issue #197 §3 I-FLAVOR / design note security-model-design:197 §4.1 Option A):
       # the LLM-driven shell/write factories (create{Write,Edit,Delete,Move,Shell}Tool) must be
       # PHYSICALLY ABSENT from the Play classpath, not merely runtime-suppressed — their bodies live in

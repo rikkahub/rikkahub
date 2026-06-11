@@ -110,8 +110,9 @@ class SubagentRunner(
         val messages = listOf(UIMessage.user(prompt))
 
         // Strip the spawn tool from the sub's pool (recursion guard, depth bounded at 1). Enforced
-        // here so the guard holds no matter how the caller built `tools`.
-        val subagentTools = filterToolsForSubagent(tools)
+        // here so the guard holds no matter how the caller built `tools`. The reserved spawn-tool
+        // name is supplied app-side (SPAWN_TOOL_NAME) — the neutral primitive names no concrete tool.
+        val subagentTools = filterToolsForSubagent(tools, SPAWN_TOOL_NAME)
 
         var finalMessages: List<UIMessage> = messages
         generate(settings, model, messages, ephemeralSub, subagentTools, maxSteps, processingStatus).collect { chunk ->

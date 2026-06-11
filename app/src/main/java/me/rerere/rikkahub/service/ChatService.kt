@@ -64,6 +64,10 @@ import me.rerere.automation.cap.Lease
 import me.rerere.automation.cap.Sink
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
+import me.rerere.ai.runtime.contract.ToolAssemblyContext
+import me.rerere.ai.runtime.contract.TurnMode
+import me.rerere.rikkahub.data.ai.runtime.AppToolCatalog
+import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.ai.subagent.SubagentRunner
 import me.rerere.rikkahub.data.ai.subagent.buildSpawnTool
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -805,102 +809,6 @@ class ChatService(
         session.setJob(job)
     }
 
-    // Appends the resolved MCP [mcpTools] to a tool-pool builder via the shared [mapMcpTool] adapter
-    // (issue #244, DRY #1) — used by BOTH the main-agent pool and the subagent pool so the "mcp__"
-    // prefix + callTool wiring can no longer drift between them.
-    private fun MutableList<Tool>.addMcpTools(mcpTools: List<Pair<Uuid, McpTool>>) {
-        mcpTools.forEach { (serverId, tool) ->
-            add(mapMcpTool(serverId, tool) { sid, name, args -> mcpManager.callTool(sid, name, args) })
-        }
-    }
-
-    // Assembles the per-generation tool pool (issue #244, god-function split #2a): web search, local
-    // tools, workspace tools, the UI-automation verbs (authorized via [automationGuard]), skill tools,
-    // the MCP adapter tools, and the subagent spawn tool. Built ONLY here (the main-agent pool) so a
-    // subagent's own pool — assembled inline via buildSubagentTools off the TARGET (sub) assistant —
-    // never contains the spawn tool, which is the structural recursion guard. [suspend] because
-    // skillManager.listSkills() suspends.
-    private suspend fun buildGenerationTools(
-        settings: Settings,
-        assistant: Assistant,
-        automationGuard: CapabilityGuard?,
-        session: ConversationSession,
-    ): List<Tool> = buildList {
-        if (settings.enableWebSearch) {
-            addAll(createSearchTools(settings))
-        }
-        addAll(localTools.getTools(assistant.localTools))
-        addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository))
-        // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
-        // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
-        // unless automation is enabled AND a guard was minted; each tool authorizes via the
-        // closed-over guard BEFORE the backend (S2). No-op (empty) when disabled or when the
-        // a11y service is not connected (the core() is null ⇒ no guard path is reachable).
-        automationRegistry.core()?.let { automationCore ->
-            addAll(
-                getUiAutomationTools(
-                    assistant = assistant,
-                    guard = automationGuard,
-                    core = automationCore,
-                    foregroundPkg = { automationRegistry.foregroundPackage() },
-                    // The out-of-band confirm for a dangerous (submit-class) tap (#198 slice
-                    // 11). Fail closed: if no overlay-backed channel is reachable (a11y
-                    // service not connected), a dangerous sink can never be confirmed, so it
-                    // is always denied — never silently auto-confirmed.
-                    confirm = automationRegistry.confirmChannel() ?: AlwaysDeny,
-                )
-            )
-        }
-        if (assistant.enabledSkills.isNotEmpty()) {
-            addAll(
-                createSkillTools(
-                    enabledSkills = assistant.enabledSkills,
-                    allSkills = skillManager.listSkills(),
-                    skillManager = skillManager,
-                )
-            )
-        }
-        addMcpTools(mcpManager.getAllAvailableTools(assistant))
-        // Subagent spawn tool (issue #201). Built ONLY here so a subagent's own pool
-        // (via SubagentRunner -> generateText, which bypasses this buildList) never
-        // contains it — the structural recursion guard. No-op when nothing is spawnable.
-        val spawnableAssistants = settings.assistants.filter { it.spawnable }
-        if (spawnableAssistants.isNotEmpty()) {
-            add(
-                buildSpawnTool(
-                    spawnableAssistants = spawnableAssistants,
-                    runner = subagentRunner,
-                    parentModelId = assistant.chatModelId,
-                    settings = settings,
-                    // The subagent's pool is built from the TARGET (sub) assistant's own
-                    // allowlist — local tools + skills + MCP keyed off `sub` (the C3
-                    // MCP-by-target-assistant fix). The spawn tool is never built here
-                    // for the sub, so it can't recurse; SubagentRunner additionally
-                    // filters it, and needsApproval tools are dropped at the spawn site.
-                    buildSubagentTools = { sub ->
-                        buildList {
-                            addAll(localTools.getTools(sub.localTools))
-                            if (sub.enabledSkills.isNotEmpty()) {
-                                addAll(
-                                    createSkillTools(
-                                        enabledSkills = sub.enabledSkills,
-                                        allSkills = skillManager.listSkills(),
-                                        skillManager = skillManager,
-                                    )
-                                )
-                            }
-                            addMcpTools(mcpManager.getAllAvailableTools(sub))
-                        }
-                    },
-                    processingStatus = session.processingStatus,
-                    progressLabel = { subName ->
-                        context.getString(R.string.chat_subagent_running, subName)
-                    },
-                )
-            )
-        }
-    }
-
     // UI automation (#187 v1) per-conversation capability lease (issue #244, god-function split #2b).
     // Unifies the three coupled lifecycle obligations that were scattered across the generation:
     //   1. mint ONE CapabilityGuard for this generation when the assistant has automation enabled
@@ -912,8 +820,8 @@ class ChatService(
     //   3. release the lease + overlay on EVERY terminal path in the finally — normal finish, error,
     //      cancellation, OR a throw while assembling generateText's eager arguments (memory/skill/MCP
     //      lookups are eager, BEFORE the flow's onCompletion is attached). So [block] MUST wrap the
-    //      eager-arg assembly (buildGenerationTools + memory recall) too, which onCompletion alone
-    //      would miss — leaking the STOP overlay forever.
+    //      eager-arg assembly (the AppToolCatalog tool pool + memory recall) too, which onCompletion
+    //      alone would miss — leaking the STOP overlay forever.
     //
     // BOTH the guard-clear AND the overlay deactivate are identity-guarded on
     // `activeAutomationGuard === guard`. The activation tracker is keyed by conversationId, so for a
@@ -1030,9 +938,105 @@ class ChatService(
             // overlay lifecycle (mint guard → fail-closed activate → identity-guarded release on
             // EVERY terminal path, incl. a throw while assembling generateText's eager arguments) is
             // unified in withAutomationLease. block() must cover the eager-arg assembly
-            // (buildGenerationTools + memory recall) too, because those run BEFORE the flow's
+            // (the AppToolCatalog tool pool + memory recall) too, because those run BEFORE the flow's
             // onCompletion is attached — onCompletion alone would miss them and leak the overlay.
             withAutomationLease(conversationId, assistant, session) { automationGuard ->
+
+            // Tool assembly is delegated to the neutral [ToolCatalog] port (issue #243 slice 10): the
+            // per-generation [AppToolCatalog] reproduces the former buildGenerationTools body via its
+            // four seams, wired here off the in-scope app `assistant`/`settings` + this generation's
+            // `automationGuard` and the session's processingStatus (the spawn-status carrier). The main
+            // turn invokes it as TurnMode.Main with the spawn tool included only when some assistant is
+            // spawnable — exactly the pre-slice main-pool semantics.
+            val appToolCatalog = AppToolCatalog(
+                // Non-MCP/non-spawn base pool: search/local/workspace/ui-automation/skills. The seam's
+                // (target, mode) args are unused on the main turn — production only ever invokes this
+                // catalog with targetAssistant == assistant.toAssistantConfig(), so the in-scope app
+                // `assistant` is the faithful source (no lossy AssistantConfig round-trip).
+                baseTools = { _, _ ->
+                    buildList {
+                        if (settings.enableWebSearch) {
+                            addAll(createSearchTools(settings))
+                        }
+                        addAll(localTools.getTools(assistant.localTools))
+                        addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository))
+                        // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
+                        // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
+                        // unless automation is enabled AND a guard was minted; each tool authorizes via the
+                        // closed-over guard BEFORE the backend (S2). No-op (empty) when disabled or when the
+                        // a11y service is not connected (the core() is null ⇒ no guard path is reachable).
+                        automationRegistry.core()?.let { automationCore ->
+                            addAll(
+                                getUiAutomationTools(
+                                    assistant = assistant,
+                                    guard = automationGuard,
+                                    core = automationCore,
+                                    foregroundPkg = { automationRegistry.foregroundPackage() },
+                                    // The out-of-band confirm for a dangerous (submit-class) tap (#198 slice
+                                    // 11). Fail closed: if no overlay-backed channel is reachable (a11y
+                                    // service not connected), a dangerous sink can never be confirmed, so it
+                                    // is always denied — never silently auto-confirmed.
+                                    confirm = automationRegistry.confirmChannel() ?: AlwaysDeny,
+                                )
+                            )
+                        }
+                        if (assistant.enabledSkills.isNotEmpty()) {
+                            addAll(
+                                createSkillTools(
+                                    enabledSkills = assistant.enabledSkills,
+                                    allSkills = skillManager.listSkills(),
+                                    skillManager = skillManager,
+                                )
+                            )
+                        }
+                    }
+                },
+                // MCP tools are selected off the TARGET assistant; on the main turn that is the in-scope
+                // app `assistant` (the §C3 by-target invariant), named `mcp__…` by the catalog's mapMcpTool.
+                mcpToolsForAssistant = { _ -> mcpManager.getAllAvailableTools(assistant) },
+                mcpCall = { sid, name, args -> mcpManager.callTool(sid, name, args) },
+                // Subagent spawn tool (issue #201). The catalog adds it only on a Main turn with
+                // includeSpawnTool true; the sub's own pool is built off the TARGET (sub) assistant's
+                // allowlist (local + skills + MCP keyed off `sub`), never containing the spawn tool —
+                // the structural recursion guard. parentModelId is the parent (main) assistant's model,
+                // passed by the catalog so an unpinned subagent inherits it via resolveSubagentModel.
+                spawnTool = { parentModelId ->
+                    val spawnableAssistants = settings.assistants.filter { it.spawnable }
+                    if (spawnableAssistants.isEmpty()) {
+                        null
+                    } else {
+                        buildSpawnTool(
+                            spawnableAssistants = spawnableAssistants,
+                            runner = subagentRunner,
+                            parentModelId = parentModelId,
+                            settings = settings,
+                            buildSubagentTools = { sub ->
+                                buildList {
+                                    addAll(localTools.getTools(sub.localTools))
+                                    if (sub.enabledSkills.isNotEmpty()) {
+                                        addAll(
+                                            createSkillTools(
+                                                enabledSkills = sub.enabledSkills,
+                                                allSkills = skillManager.listSkills(),
+                                                skillManager = skillManager,
+                                            )
+                                        )
+                                    }
+                                    mcpManager.getAllAvailableTools(sub).forEach { (serverId, tool) ->
+                                        add(mapMcpTool(serverId, tool) { sid, name, args ->
+                                            mcpManager.callTool(sid, name, args)
+                                        })
+                                    }
+                                }
+                            },
+                            processingStatus = session.processingStatus,
+                            progressLabel = { subName ->
+                                context.getString(R.string.chat_subagent_running, subName)
+                            },
+                        )
+                    }
+                },
+            )
 
             // 流式 UI 合并状态：每个 chunk 携带累计全量 messages（节点按 INDEX 合并、节点内消息按 id 匹配，
             // 见 Conversation.updateCurrentMessages）。把"何时把合并状态写给 UI"的窗口节流 + 终止刷新决策收拢进
@@ -1073,7 +1077,18 @@ class ChatService(
                     add(templateTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildGenerationTools(settings, assistant, automationGuard, session),
+                tools = appToolCatalog.tools(
+                    ToolAssemblyContext(
+                        mode = TurnMode.Main,
+                        targetAssistant = assistant.toAssistantConfig(),
+                        // The subagent-turn carrier is null on a main turn; the spawn tool's parent
+                        // model is the main assistant's own chatModelId, supplied by the catalog.
+                        parentModelId = null,
+                        // Main turn keeps approval-gated tools (the approval UI is reachable here).
+                        allowApprovalTools = true,
+                        includeSpawnTool = settings.assistants.any { it.spawnable },
+                    )
+                ),
             ).let { chunkFlow ->
                 // UI 发布生命周期统一交给合并器：把累计全量 chunk.messages 流过 uiCoalescer.coalesce，逐 chunk
                 // 节流写 UI，并在任何终止路径强制刷新末帧（finish）。这是 #108 的接线点——节流 + 终止刷新都封在

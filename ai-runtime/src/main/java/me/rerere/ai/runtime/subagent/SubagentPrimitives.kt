@@ -18,17 +18,6 @@ import kotlin.uuid.Uuid
  */
 
 /**
- * The reserved tool NAME the spawn ("task") tool occupies. A subagent must never be able to
- * spawn further subagents (recursion guard, depth bounded at 1), so this name is filtered out
- * of any tool pool handed to a subagent — see [filterToolsForSubagent].
- *
- * Raw MCP tools are prefixed `mcp__` at the ChatService build site, so a malicious MCP tool
- * literally named `task` becomes `mcp__task` and cannot collide with this reserved name. Filtering
- * by the exact name is therefore a sound structural guard.
- */
-const val SPAWN_TOOL_NAME: String = "task"
-
-/**
  * Resolve the model a subagent should run under.
  *
  * Resolution order (the load-bearing invariant):
@@ -50,12 +39,22 @@ fun resolveSubagentModel(
 /**
  * Strip the spawn tool from a subagent's tool pool across ALL sources (MCP / skills / local).
  *
- * Invariant: the spawn tool (name == [SPAWN_TOOL_NAME]) is NEVER present in the output, for any
- * input pool — this is the structural recursion guard. The output is always a subset of the
- * input (Conservation) and the function is idempotent.
+ * The reserved spawn-tool name is supplied by the caller ([spawnToolName]) rather than baked in,
+ * so this neutral recursion-guard primitive names no concrete tool identity — the spawn tool's
+ * name is an app-side concern (it is built only at the app spawn-tool site). A subagent must never
+ * be able to spawn further subagents (recursion guard, depth bounded at 1), so this name is
+ * filtered out of any tool pool handed to a subagent.
+ *
+ * Raw MCP tools are prefixed with the app-side MCP namespace prefix at the ChatService build site,
+ * so a malicious MCP tool literally named like the spawn tool cannot collide with this reserved
+ * name. Filtering by the exact caller-supplied name is therefore a sound structural guard.
+ *
+ * Invariant: a tool whose name == [spawnToolName] is NEVER present in the output, for any input
+ * pool — this is the structural recursion guard. The output is always a subset of the input
+ * (Conservation) and the function is idempotent.
  */
-fun filterToolsForSubagent(tools: List<Tool>): List<Tool> =
-    tools.filterNot { it.name == SPAWN_TOOL_NAME }
+fun filterToolsForSubagent(tools: List<Tool>, spawnToolName: String): List<Tool> =
+    tools.filterNot { it.name == spawnToolName }
 
 /**
  * Extract the subagent's final answer text from its terminal message list.

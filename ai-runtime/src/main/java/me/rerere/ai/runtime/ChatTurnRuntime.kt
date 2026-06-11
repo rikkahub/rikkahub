@@ -575,7 +575,7 @@ internal suspend fun executeTool(
  * Lenient parser for LLM-emitted tool-call arguments. Models routinely produce
  * relaxed JSON — most commonly unquoted object keys (`{action:"create"}`) — that
  * strict [Json] rejects, aborting an otherwise-valid tool call. Mirrors the in-repo
- * `isLenient = true` precedent (McpManager, PropertyEditor).
+ * lenient-parse precedent for relaxed tool-call JSON.
  */
 private val ToolArgsJson = Json {
     isLenient = true

@@ -12,7 +12,6 @@ import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.runtime.contract.TurnConfig
-import me.rerere.ai.runtime.subagent.SPAWN_TOOL_NAME
 import me.rerere.ai.runtime.subagent.extractFinalAssistantText
 import me.rerere.ai.runtime.subagent.filterToolsForSubagent
 import me.rerere.ai.runtime.subagent.resolveSubagentModel
@@ -110,14 +109,14 @@ class SubagentPrimitivesPropertyTest {
     fun `invariant - the spawn tool is never present in a subagent pool`() {
         runBlocking {
             checkAll(300, arbToolPool) { pool ->
-                val filtered = filterToolsForSubagent(pool)
+                val filtered = filterToolsForSubagent(pool, SPAWN_TOOL_NAME)
                 // INVARIANT (recursion guard): no `task` tool survives, for any input pool.
                 assertFalse(filtered.any { it.name == SPAWN_TOOL_NAME })
                 // CONSERVATION: output is a subset of input.
                 assertTrue(filtered.all { it in pool })
                 assertTrue(filtered.size <= pool.size)
                 // IDEMPOTENCE.
-                assertEquals(filtered, filterToolsForSubagent(filtered))
+                assertEquals(filtered, filterToolsForSubagent(filtered, SPAWN_TOOL_NAME))
             }
         }
     }
@@ -126,7 +125,7 @@ class SubagentPrimitivesPropertyTest {
     fun `a non-spawn tool whose name merely contains task survives the filter`() {
         runBlocking {
             checkAll(200, arbToolPool) { pool ->
-                val filtered = filterToolsForSubagent(pool)
+                val filtered = filterToolsForSubagent(pool, SPAWN_TOOL_NAME)
                 // The guard keys off the EXACT reserved name, not a substring: `mcp__task`
                 // and `task_runner` are distinct tools and must NOT be filtered.
                 assertTrue(filtered.any { it.name == "mcp__$SPAWN_TOOL_NAME" })

@@ -92,20 +92,45 @@ class SubagentPrimitivesTest {
 
     @Test
     fun `the spawn tool is never present in a subagent pool, but look-alikes survive`() {
+        // The reserved spawn-tool name is the CALLER's concern (app-side const, slice 10); the neutral
+        // primitive filters by whatever name it is handed. Use a representative name here.
+        val spawnName = "task"
         val pool = listOf(
             tool("search"),
-            tool(SPAWN_TOOL_NAME),
-            tool("mcp__$SPAWN_TOOL_NAME"),
-            tool("${SPAWN_TOOL_NAME}_runner"),
+            tool(spawnName),
+            tool("mcp__$spawnName"),
+            tool("${spawnName}_runner"),
         )
-        val filtered = filterToolsForSubagent(pool)
+        val filtered = filterToolsForSubagent(pool, spawnName)
 
-        assertFalse(filtered.any { it.name == SPAWN_TOOL_NAME })
+        assertFalse(filtered.any { it.name == spawnName })
         assertTrue(filtered.all { it in pool }) // conservation
-        assertEquals(filtered, filterToolsForSubagent(filtered)) // idempotence
+        assertEquals(filtered, filterToolsForSubagent(filtered, spawnName)) // idempotence
         // exact-name guard: substring matches are NOT stripped
-        assertTrue(filtered.any { it.name == "mcp__$SPAWN_TOOL_NAME" })
-        assertTrue(filtered.any { it.name == "${SPAWN_TOOL_NAME}_runner" })
+        assertTrue(filtered.any { it.name == "mcp__$spawnName" })
+        assertTrue(filtered.any { it.name == "${spawnName}_runner" })
+    }
+
+    /**
+     * The recursion guard filters by the CALLER-supplied reserved name, not a hardcoded constant
+     * (issue #243 slice 10: the spawn-tool identity moved app-side and the primitive was
+     * parametrized). This fails against the old single-arg hardcoded body — the parametrization is
+     * load-bearing: a pool's tool is stripped only when its name matches the name the caller passes.
+     */
+    @Test
+    fun `filters by the caller-supplied reserved name, not a hardcoded constant`() {
+        val pool = listOf(tool("alpha"), tool("beta"))
+
+        // Supplying "alpha" strips the alpha tool...
+        assertFalse(filterToolsForSubagent(pool, "alpha").any { it.name == "alpha" })
+        assertTrue(filterToolsForSubagent(pool, "alpha").any { it.name == "beta" })
+
+        // ...while supplying a DIFFERENT name leaves alpha intact and strips that one instead.
+        assertTrue(filterToolsForSubagent(pool, "beta").any { it.name == "alpha" })
+        assertFalse(filterToolsForSubagent(pool, "beta").any { it.name == "beta" })
+
+        // A name present in no tool strips nothing (the pool round-trips unchanged).
+        assertEquals(pool, filterToolsForSubagent(pool, "task"))
     }
 
     // --- extractFinalAssistantText --------------------------------------------------------

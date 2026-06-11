@@ -9,11 +9,23 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
-import me.rerere.ai.runtime.subagent.SPAWN_TOOL_NAME
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import kotlin.uuid.Uuid
+
+/**
+ * The reserved tool NAME the spawn ("task") tool occupies. A subagent must never be able to
+ * spawn further subagents (recursion guard, depth bounded at 1), so this name is filtered out
+ * of any tool pool handed to a subagent — see [filterToolsForSubagent], which takes this name as
+ * its caller-supplied reserved name. This identity is app-side because the spawn [Tool] itself is
+ * built only here; the neutral `:ai-runtime` recursion-guard names no concrete tool.
+ *
+ * Raw MCP tools are prefixed `mcp__` at the ChatService build site, so a malicious MCP tool
+ * literally named `task` becomes `mcp__task` and cannot collide with this reserved name. Filtering
+ * by the exact name is therefore a sound structural guard.
+ */
+const val SPAWN_TOOL_NAME: String = "task"
 
 /**
  * The spawn ("task") [Tool] that lets the parent assistant delegate a self-contained sub-task to a
