@@ -4,6 +4,10 @@ import ai.koog.embeddings.base.Embedder
 import ai.koog.embeddings.base.Vector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.rerere.ai.runtime.contract.RecalledMemory
+import me.rerere.ai.runtime.memory.MEMORY_MIN_SCORE
+import me.rerere.ai.runtime.memory.memoryContentHash
+import me.rerere.ai.runtime.memory.rankByRecency
 
 /**
  * Default recaller (issue #210 §5 D1, recommendation C): embeds the current turn ONCE and ranks an
@@ -129,7 +133,7 @@ class EmbeddingMemoryRecaller(
 
             if (ranked.size >= k) return ranked.take(k)
 
-            val recencyTail = RecencyMemoryRecaller.rankByRecency(unembedded, k - ranked.size)
+            val recencyTail = rankByRecency(unembedded, k - ranked.size)
             return ranked + recencyTail
         }
     }

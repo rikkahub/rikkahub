@@ -11,6 +11,12 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.runtime.contract.RecalledMemory
+import me.rerere.ai.runtime.memory.MEMORY_MIN_SCORE
+import me.rerere.ai.runtime.memory.MEMORY_RECALL_K
+import me.rerere.ai.runtime.memory.memoryAgeDays
+import me.rerere.ai.runtime.memory.memoryAgeLabel
+import me.rerere.ai.runtime.memory.memoryContentHash
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.memory.EmbeddingMemoryRecaller.MemoryCandidate
@@ -24,7 +30,7 @@ import org.junit.Test
 /**
  * Property-based suite for Memory v2 relevance recall (issue #210 §8 — P1..P12).
  *
- * Drives the PURE cores ([EmbeddingMemoryRecaller.rankRecall], [RecencyMemoryRecaller.rankByRecency],
+ * Drives the PURE cores ([EmbeddingMemoryRecaller.rankRecall], [me.rerere.ai.runtime.memory.rankByRecency],
  * [memoryAgeLabel], [memoryContentHash], [KnowledgeStoreFactory.embeddingSpaceLabel],
  * [resolveMemoryRecallScope]) and the [EmbeddingMemoryRecaller]/[RecencyMemoryRecaller] orchestration
  * with a MOCKED embedder — never standing up Room/Provider/network, so this runs under the

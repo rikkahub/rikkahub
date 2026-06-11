@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.memory
 import ai.koog.embeddings.base.Embedder
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import me.rerere.ai.runtime.memory.memoryContentHash
 import me.rerere.rikkahub.data.db.entity.MemoryVectorEntity
 import me.rerere.rikkahub.data.rag.store.RoomVectorStore
 

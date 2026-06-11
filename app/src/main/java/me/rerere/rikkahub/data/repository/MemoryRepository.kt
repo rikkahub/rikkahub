@@ -3,8 +3,8 @@ package me.rerere.rikkahub.data.repository
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import me.rerere.ai.runtime.contract.RecalledMemory
 import me.rerere.rikkahub.data.ai.memory.MemoryEmbedderResolver
-import me.rerere.rikkahub.data.ai.memory.RecalledMemory
 import me.rerere.rikkahub.data.ai.memory.buildMemoryVectorRow
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.MemoryDAO

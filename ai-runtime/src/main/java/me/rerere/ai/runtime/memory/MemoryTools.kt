@@ -1,7 +1,6 @@
-package me.rerere.rikkahub.data.ai.tools
+package me.rerere.ai.runtime.memory
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -12,11 +11,22 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.runtime.contract.AssistantMemory
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.common.time.toLocalString
 import java.time.LocalDate
 
+/**
+ * Callback-based `memory_tool` builder (issue #243 slice 8/10), moved to `:ai-runtime` so the
+ * tool-assembly path no longer reaches into the app for it. The store is injected as suspend
+ * callbacks returning the neutral [AssistantMemory] (the composition root binds them over
+ * `MemoryRepository`), so no Room/app type leaks across the boundary.
+ *
+ * The tool result carries `{id, content}` built explicitly via [buildJsonObject] rather than
+ * `AssistantMemory.serializer()` — the contract [AssistantMemory] is deliberately NON-`@Serializable`
+ * (issue #243 §B), and a hand-built object keeps the wire shape the model sees identical to the old
+ * app tool without forcing the contract type to become serializable.
+ */
 fun buildMemoryTools(
     json: Json,
     onCreation: suspend (String) -> AssistantMemory,
@@ -76,13 +86,13 @@ fun buildMemoryTools(
             val payload = when (action) {
                 "create" -> {
                     val content = params["content"]?.jsonPrimitive?.contentOrNull ?: error("content is required")
-                    json.encodeToJsonElement(AssistantMemory.serializer(), onCreation(content))
+                    onCreation(content).toResultJson()
                 }
 
                 "edit" -> {
                     val id = params["id"]?.jsonPrimitive?.intOrNull ?: error("id is required")
                     val content = params["content"]?.jsonPrimitive?.contentOrNull ?: error("content is required")
-                    json.encodeToJsonElement(AssistantMemory.serializer(), onUpdate(id, content))
+                    onUpdate(id, content).toResultJson()
                 }
 
                 "delete" -> {
@@ -100,3 +110,8 @@ fun buildMemoryTools(
         }
     )
 )
+
+private fun AssistantMemory.toResultJson() = buildJsonObject {
+    put("id", id)
+    put("content", content)
+}

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.memory
 
+import me.rerere.ai.runtime.contract.RecalledMemory
+
 /**
  * DIP seam for memory relevance recall (issue #210). Replaces the historic "dump every memory into
  * every prompt" path: instead of returning all of an assistant's memories, an implementation returns
@@ -22,13 +24,3 @@ interface MemoryRecaller {
      */
     suspend fun recall(query: String, assistantId: String, k: Int): List<RecalledMemory>
 }
-
-/** Default candidate count fed into the prompt (§13 Q1). */
-const val MEMORY_RECALL_K = 5
-
-/**
- * Relevance floor for cosine-selected memories (§13 Q2). Same value as
- * [me.rerere.rikkahub.data.rag.KnowledgeBase.DEFAULT_MIN_SCORE] today, but a SEPARATE constant so the
- * two can diverge later (memories are shorter than RAG chunks ⇒ a different similarity distribution).
- */
-const val MEMORY_MIN_SCORE = 0.5

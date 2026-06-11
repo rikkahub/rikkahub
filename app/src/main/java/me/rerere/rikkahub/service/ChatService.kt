@@ -100,7 +100,7 @@ import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.rikkahub.data.ai.memory.MEMORY_RECALL_K
+import me.rerere.ai.runtime.memory.MEMORY_RECALL_K
 import me.rerere.rikkahub.data.ai.memory.MemoryRecaller
 import me.rerere.rikkahub.data.ai.memory.resolveMemoryRecallScope
 import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundController

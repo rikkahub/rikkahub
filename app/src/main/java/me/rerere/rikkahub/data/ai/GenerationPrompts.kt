@@ -9,8 +9,8 @@ import me.rerere.ai.runtime.knowledge.KnowledgeContextBlock
 import me.rerere.ai.runtime.knowledge.KnowledgeContextRenderer
 import me.rerere.ai.runtime.knowledge.KnowledgeScope
 import me.rerere.ai.runtime.knowledge.KnowledgeSource
-import me.rerere.rikkahub.data.ai.memory.RecalledMemory
-import me.rerere.rikkahub.data.ai.memory.memoryAgeLabel
+import me.rerere.ai.runtime.contract.RecalledMemory
+import me.rerere.ai.runtime.memory.memoryAgeLabel
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.common.json.JsonInstantPretty

@@ -45,14 +45,15 @@ import me.rerere.ai.runtime.knowledge.KnowledgeBudget
 import me.rerere.ai.runtime.knowledge.KnowledgeContextAssembler
 import me.rerere.ai.runtime.knowledge.KnowledgeContextRenderer
 import me.rerere.ai.runtime.knowledge.KnowledgeScope
-import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
+import me.rerere.ai.runtime.contract.MemoryScope
+import me.rerere.ai.runtime.contract.MemoryWriter
+import me.rerere.ai.runtime.contract.RecalledMemory
+import me.rerere.ai.runtime.memory.buildMemoryTools
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.ai.memory.RecalledMemory
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.common.text.applyPlaceholders
 import java.util.Locale
 import kotlin.time.Clock
@@ -88,7 +89,7 @@ class GenerationHandler(
     private val context: Context,
     private val providerManager: ProviderManager,
     private val json: Json,
-    private val memoryRepo: MemoryRepository,
+    private val memoryWriter: MemoryWriter,
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
 ) {
@@ -118,21 +119,21 @@ class GenerationHandler(
             val toolsInternal = buildList {
                 Log.i(TAG, "generateInternal: build tools($assistant)")
                 if (assistant?.enableMemory == true) {
-                    val memoryAssistantId = if (assistant.useGlobalMemory) {
-                        MemoryRepository.GLOBAL_MEMORY_ID
+                    val memoryScope: MemoryScope = if (assistant.useGlobalMemory) {
+                        MemoryScope.Global
                     } else {
-                        assistant.id.toString()
+                        MemoryScope.AssistantScoped(assistant.id)
                     }
                     buildMemoryTools(
                         json = json,
                         onCreation = { content ->
-                            memoryRepo.addMemory(memoryAssistantId, content)
+                            memoryWriter.add(memoryScope, content)
                         },
                         onUpdate = { id, content ->
-                            memoryRepo.updateContent(id, content)
+                            memoryWriter.update(id, content)
                         },
                         onDelete = { id ->
-                            memoryRepo.deleteMemory(id)
+                            memoryWriter.delete(id)
                         }
                     ).let(this::addAll)
                 }

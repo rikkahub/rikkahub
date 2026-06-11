@@ -5,8 +5,8 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.runtime.knowledge.KnowledgeContextRenderer
 import me.rerere.ai.runtime.knowledge.KnowledgeScope
 import me.rerere.ai.runtime.knowledge.KnowledgeSource
-import me.rerere.rikkahub.data.ai.memory.RecalledMemory
-import me.rerere.rikkahub.data.ai.memory.memoryAgeLabel
+import me.rerere.ai.runtime.contract.RecalledMemory
+import me.rerere.ai.runtime.memory.memoryAgeLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
