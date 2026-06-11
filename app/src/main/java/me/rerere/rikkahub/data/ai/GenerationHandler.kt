@@ -41,10 +41,10 @@ import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeBudget
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextAssembler
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextRenderer
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeScope
+import me.rerere.ai.runtime.knowledge.KnowledgeBudget
+import me.rerere.ai.runtime.knowledge.KnowledgeContextAssembler
+import me.rerere.ai.runtime.knowledge.KnowledgeContextRenderer
+import me.rerere.ai.runtime.knowledge.KnowledgeScope
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.ai.memory.RecalledMemory

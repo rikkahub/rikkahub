@@ -44,4 +44,6 @@ dependencies {
 
     // tests
     testImplementation(libs.junit)
+    testImplementation(libs.kotest.property)
+    testImplementation(libs.kotlinx.coroutines.core)
 }

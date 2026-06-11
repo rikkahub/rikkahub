@@ -2,9 +2,9 @@ package me.rerere.rikkahub.data.ai
 
 import me.rerere.ai.core.estimateTokens
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextRenderer
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeScope
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeSource
+import me.rerere.ai.runtime.knowledge.KnowledgeContextRenderer
+import me.rerere.ai.runtime.knowledge.KnowledgeScope
+import me.rerere.ai.runtime.knowledge.KnowledgeSource
 import me.rerere.rikkahub.data.ai.memory.RecalledMemory
 import me.rerere.rikkahub.data.ai.memory.memoryAgeLabel
 import org.junit.Assert.assertEquals
@@ -17,7 +17,7 @@ import org.junit.Test
  * Android Context / Koin / disk, just the pure function over [RecalledMemory].
  *
  * Phase 2 converts `buildMemoryPrompt` from a single `**Memories**` JSON-array String dump of ALL
- * rows into a MEMORY emitter that returns ONE [me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextBlock]
+ * rows into a MEMORY emitter that returns ONE [me.rerere.ai.runtime.knowledge.KnowledgeContextBlock]
  * per recalled memory, so the assembler can budget memory against the system-prompt surface and the
  * renderer can source-label each block (`<memory>`). These tests lock the emitter contract:
  *  - one block per recalled memory (not one combined blob),
@@ -46,7 +46,7 @@ class MemoryPromptEmitterTest {
             listOf(
                 UIMessagePart.Text(
                     KnowledgeContextRenderer.render(
-                        me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextBlock(
+                        me.rerere.ai.runtime.knowledge.KnowledgeContextBlock(
                             source = KnowledgeSource.MEMORY,
                             scope = KnowledgeScope.ASSISTANT,
                             title = null,

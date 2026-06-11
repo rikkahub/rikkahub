@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.knowledge
+package me.rerere.ai.runtime.knowledge
 
 /**
  * The origin of a knowledge context block — the single fact that lets the assembled prompt label

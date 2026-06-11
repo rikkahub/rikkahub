@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.knowledge
+package me.rerere.ai.runtime.knowledge
 
 /**
  * Materializes a selected [KnowledgeContextBlock] into the source-labeled text injected into the

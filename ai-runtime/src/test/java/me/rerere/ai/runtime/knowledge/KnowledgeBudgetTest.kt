@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.knowledge
+package me.rerere.ai.runtime.knowledge
 
 import me.rerere.ai.provider.Model
 import me.rerere.ai.registry.ModelRegistry

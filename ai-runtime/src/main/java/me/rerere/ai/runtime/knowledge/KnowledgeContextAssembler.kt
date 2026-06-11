@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.knowledge
+package me.rerere.ai.runtime.knowledge
 
 /**
  * The single authority for *selection + ordering + budget* of knowledge context blocks (issue #141).
@@ -6,7 +6,7 @@ package me.rerere.rikkahub.data.ai.knowledge
  * randomness. Rendering *placement* (system-prompt vs near-last-user-message) is a separate,
  * scope-driven step ([KnowledgeContextRenderer] + the transformer); this object never touches text.
  *
- * Invariants (the design's PBT P1-P7, [me.rerere.rikkahub.data.ai.knowledge] tests):
+ * Invariants (the design's PBT P1-P7, [me.rerere.ai.runtime.knowledge] tests):
  *  - **Budget (P1):** `Sum(estimatedTokens(out)) <= budgetTokens`, always — over each block's
  *    DECLARED [KnowledgeContextBlock.estimatedTokens]. A block whose own estimate exceeds the budget
  *    is simply never selected; it is not truncated here. Truncation-with-elision is a render-time

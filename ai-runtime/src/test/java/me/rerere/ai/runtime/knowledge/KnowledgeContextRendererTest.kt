@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.knowledge
+package me.rerere.ai.runtime.knowledge
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

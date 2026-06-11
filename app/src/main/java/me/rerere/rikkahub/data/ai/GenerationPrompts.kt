@@ -5,10 +5,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.estimateTokens
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextBlock
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeContextRenderer
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeScope
-import me.rerere.rikkahub.data.ai.knowledge.KnowledgeSource
+import me.rerere.ai.runtime.knowledge.KnowledgeContextBlock
+import me.rerere.ai.runtime.knowledge.KnowledgeContextRenderer
+import me.rerere.ai.runtime.knowledge.KnowledgeScope
+import me.rerere.ai.runtime.knowledge.KnowledgeSource
 import me.rerere.rikkahub.data.ai.memory.RecalledMemory
 import me.rerere.rikkahub.data.ai.memory.memoryAgeLabel
 import me.rerere.rikkahub.data.model.Assistant

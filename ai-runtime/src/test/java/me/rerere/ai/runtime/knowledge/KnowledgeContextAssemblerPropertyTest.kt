@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.knowledge
+package me.rerere.ai.runtime.knowledge
 
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.arbitrary
