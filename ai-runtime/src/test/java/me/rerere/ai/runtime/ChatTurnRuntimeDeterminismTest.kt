@@ -126,6 +126,25 @@ class ChatTurnRuntimeDeterminismTest {
         override suspend fun onGenerationFinish(messages: List<UIMessage>): List<UIMessage> = messages
     }
 
+    /** Records the order in which the four transform hooks are invoked; otherwise identity. */
+    private class RecordingTransforms(val calls: MutableList<String> = mutableListOf()) : TurnMessageTransforms {
+        override suspend fun transformInput(messages: List<UIMessage>): List<UIMessage> {
+            calls += "transformInput"; return messages
+        }
+
+        override suspend fun transformOutput(messages: List<UIMessage>): List<UIMessage> {
+            calls += "transformOutput"; return messages
+        }
+
+        override suspend fun visualTransform(messages: List<UIMessage>): List<UIMessage> {
+            calls += "visualTransform"; return messages
+        }
+
+        override suspend fun onGenerationFinish(messages: List<UIMessage>): List<UIMessage> {
+            calls += "onGenerationFinish"; return messages
+        }
+    }
+
     private val noopGenerationLog = RuntimeGenerationLog { _, _, _, _ -> }
 
     private fun emptyConversationReader() = object : ConversationReader {
@@ -265,5 +284,41 @@ class ChatTurnRuntimeDeterminismTest {
         val systemWithTools = withToolProvider.sentMessages!!.first { it.role == MessageRole.SYSTEM }.toText()
         assertTrue("untrusted-tool clause present with tools", systemWithTools.contains("untrusted DATA"))
         assertTrue(systemWithTools.indexOf("SYSTEM_MARKER") < systemWithTools.indexOf("untrusted DATA"))
+    }
+
+    /**
+     * Pins the EXACT transformer invocation ORDER of the turn loop — the one behavior the post-hoc
+     * review (#260) could only verify by inspection because [identityTransforms] above can't observe
+     * reordering. For a single streamed chunk with no tools the loop runs once and must call, in this
+     * order: [TurnMessageTransforms.transformInput] (over the assembled internal messages, before the
+     * provider call) → [TurnMessageTransforms.transformOutput] then [TurnMessageTransforms.visualTransform]
+     * (the streaming update, once per emitted chunk) → a final [TurnMessageTransforms.visualTransform]
+     * then [TurnMessageTransforms.onGenerationFinish]. Reordering any of these (e.g. swapping the final
+     * visual/finish pair, or running onGenerationFinish before the last output) reddens this test.
+     */
+    @Test
+    fun `transformer hooks fire in input - (output, visual)* - visual - finish order`() = runBlocking {
+        val recording = RecordingTransforms()
+        // Exactly one streamed chunk => exactly one streaming update (one output/visual pair).
+        val fake = FakeProvider(listOf(chunk(UIMessagePart.Text("ok"))))
+
+        runtime(fake, emptyConversationReader()).run(
+            turn = TurnConfig(defaultModelId = model.id, providers = listOf(provider), assistants = emptyList()),
+            model = model,
+            messages = seed(),
+            assistant = assistant(),
+            transforms = recording,
+        ).toList()
+
+        assertEquals(
+            listOf(
+                "transformInput",      // assembled internal messages, before the provider call
+                "transformOutput",     // streaming update (1 chunk => 1 pair)
+                "visualTransform",
+                "visualTransform",     // finalization: visual then finish
+                "onGenerationFinish",
+            ),
+            recording.calls,
+        )
     }
 }
