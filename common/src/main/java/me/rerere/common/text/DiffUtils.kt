@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.common.text
 
 import com.github.difflib.DiffUtils
 import com.github.difflib.UnifiedDiffUtils

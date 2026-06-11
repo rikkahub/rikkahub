@@ -79,7 +79,7 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderShortDescription
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.ImageUtils
+import me.rerere.rikkahub.ui.components.ImageUtils
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState

@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.rikkahub.utils.lifecycle
 
 import android.content.Context
 import android.util.Log

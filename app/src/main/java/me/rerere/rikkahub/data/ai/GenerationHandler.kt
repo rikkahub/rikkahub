@@ -53,7 +53,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
-import me.rerere.rikkahub.utils.applyPlaceholders
+import me.rerere.common.text.applyPlaceholders
 import java.util.Locale
 import kotlin.time.Clock
 import kotlin.uuid.Uuid

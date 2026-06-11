@@ -40,8 +40,8 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
-import me.rerere.rikkahub.utils.UiState
-import me.rerere.rikkahub.utils.UpdateChecker
+import me.rerere.common.state.UiState
+import me.rerere.rikkahub.utils.lifecycle.UpdateChecker
 import me.rerere.rikkahub.utils.launchVm
 import java.util.Locale
 import kotlin.uuid.Uuid

@@ -13,8 +13,8 @@ import me.rerere.rikkahub.data.ai.memory.RecalledMemory
 import me.rerere.rikkahub.data.ai.memory.memoryAgeLabel
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.utils.JsonInstantPretty
-import me.rerere.rikkahub.utils.toLocalDate
+import me.rerere.common.json.JsonInstantPretty
+import me.rerere.common.time.toLocalDate
 
 // MEMORY is the only source on the system-prompt surface (recent-chats is not routed and there is no
 // 4th source), so a single priority is sufficient; the assembler still orders by (priority desc,

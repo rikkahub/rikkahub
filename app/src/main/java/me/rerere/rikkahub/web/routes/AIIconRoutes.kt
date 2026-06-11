@@ -9,7 +9,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import me.rerere.rikkahub.utils.computeAIIconByName
+import me.rerere.rikkahub.ui.components.computeAIIconByName
 import me.rerere.rikkahub.web.BadRequestException
 
 fun Route.aiIconRoutes(context: Context) {

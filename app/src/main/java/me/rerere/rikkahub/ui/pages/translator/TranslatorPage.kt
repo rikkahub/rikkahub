@@ -58,7 +58,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.utils.getText
+import me.rerere.rikkahub.ui.ext.getText
 import org.koin.androidx.compose.koinViewModel
 import java.util.Locale
 

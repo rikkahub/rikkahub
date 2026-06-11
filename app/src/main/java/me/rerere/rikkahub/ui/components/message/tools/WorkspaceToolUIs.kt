@@ -25,7 +25,7 @@ import me.rerere.rikkahub.ui.components.richtext.DiffAddedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffRemovedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffView
 import me.rerere.rikkahub.ui.components.richtext.parseDiffStats
-import me.rerere.rikkahub.utils.generateUnifiedDiff
+import me.rerere.common.text.generateUnifiedDiff
 
 /**
  * Workspace edit-file renderer: the summary shows add/remove counts and a condensed diff; the

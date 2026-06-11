@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.rikkahub.ui.components.ai.chatinput
 
 import android.content.Context
 import android.media.AudioAttributes

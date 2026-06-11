@@ -34,10 +34,10 @@ import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
-import me.rerere.rikkahub.utils.base64Encode
-import me.rerere.rikkahub.utils.escapeHtml
+import me.rerere.common.text.base64Encode
+import me.rerere.common.text.escapeHtml
 import me.rerere.rikkahub.utils.exportImage
-import me.rerere.rikkahub.utils.toCssHex
+import me.rerere.rikkahub.ui.ext.toCssHex
 
 private const val TAG = "Mermaid"
 

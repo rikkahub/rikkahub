@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.common.state
 
 sealed class UiState<out T> {
     object Idle : UiState<Nothing>()

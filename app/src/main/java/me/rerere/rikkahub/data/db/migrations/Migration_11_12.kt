@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.common.json.JsonInstant
 import kotlin.uuid.Uuid
 
 private const val TAG = "Migration_11_12"

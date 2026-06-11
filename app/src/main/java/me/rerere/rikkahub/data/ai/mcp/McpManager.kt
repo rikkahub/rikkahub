@@ -38,8 +38,8 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.checkDifferent
+import me.rerere.common.json.JsonInstant
+import me.rerere.common.collections.checkDifferent
 import okhttp3.OkHttpClient
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit

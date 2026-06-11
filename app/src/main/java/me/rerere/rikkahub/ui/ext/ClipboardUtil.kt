@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.rikkahub.ui.ext
 
 import android.content.ClipData
 

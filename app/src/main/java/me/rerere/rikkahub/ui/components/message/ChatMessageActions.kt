@@ -59,10 +59,10 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
-import me.rerere.rikkahub.utils.copyMessageToClipboard
-import me.rerere.rikkahub.utils.extractQuotedContentAsText
-import me.rerere.rikkahub.utils.toLocalString
-import me.rerere.rikkahub.utils.toMessageTimeString
+import me.rerere.rikkahub.ui.pages.chat.copyMessageToClipboard
+import me.rerere.common.text.extractQuotedContentAsText
+import me.rerere.common.time.toLocalString
+import me.rerere.common.time.toMessageTimeString
 import java.util.Locale
 
 @Composable

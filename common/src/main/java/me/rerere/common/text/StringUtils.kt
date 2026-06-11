@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.common.text
 
 import org.apache.commons.text.StringEscapeUtils
 import java.net.URLDecoder

@@ -55,7 +55,7 @@ import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
-import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.ui.ext.plus
 import org.koin.androidx.compose.koinViewModel
 import java.io.File
 

@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.rikkahub.ui.components
 
 /**
  * 移除字符串中的Markdown格式

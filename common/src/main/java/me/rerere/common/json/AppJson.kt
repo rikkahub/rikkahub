@@ -1,8 +1,6 @@
-package me.rerere.rikkahub.utils
+package me.rerere.common.json
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
 
 val JsonInstant by lazy {
     Json {
@@ -18,6 +16,3 @@ val JsonInstantPretty by lazy {
         prettyPrint = true
     }
 }
-
-val JsonElement.jsonPrimitiveOrNull: JsonPrimitive?
-    get() = this as? JsonPrimitive

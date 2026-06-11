@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package me.rerere.rikkahub.utils
+package me.rerere.rikkahub.ui.components
 
 import android.content.Context
 import android.graphics.Bitmap

@@ -2,8 +2,8 @@ package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.Context
 import androidx.compose.material3.ColorScheme
-import me.rerere.rikkahub.utils.base64Encode
-import me.rerere.rikkahub.utils.toCssHex
+import me.rerere.common.text.base64Encode
+import me.rerere.rikkahub.ui.ext.toCssHex
 
 /**
  * Build HTML page for markdown preview with support for:

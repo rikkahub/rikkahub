@@ -8,7 +8,7 @@ import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.s3.S3Config
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.common.json.JsonInstant
 import me.rerere.search.SearchServiceOptions
 import me.rerere.tts.provider.TTSProviderSetting
 import org.junit.Assert.assertFalse

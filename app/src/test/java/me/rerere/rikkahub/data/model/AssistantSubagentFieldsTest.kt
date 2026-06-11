@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.data.model
 
 import kotlinx.serialization.json.jsonPrimitive
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.common.json.JsonInstant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.rikkahub.ui.pages.chat
 
 import android.content.Context
 import android.net.Uri
@@ -6,6 +6,7 @@ import android.util.Log
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.utils.writeClipboardText
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatUtil"

@@ -49,7 +49,7 @@ import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.ui.ext.plus
 import org.koin.androidx.compose.koinViewModel
 
 @Composable

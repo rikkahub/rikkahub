@@ -29,9 +29,9 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.context.LocalNavController
-import me.rerere.rikkahub.utils.base64Encode
-import me.rerere.rikkahub.utils.navigateToChatPage
-import me.rerere.rikkahub.utils.plus
+import me.rerere.common.text.base64Encode
+import me.rerere.rikkahub.ui.pages.chat.navigateToChatPage
+import me.rerere.rikkahub.ui.ext.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 

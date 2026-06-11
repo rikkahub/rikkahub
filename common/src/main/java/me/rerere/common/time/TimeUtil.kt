@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.common.time
 
 import java.time.Instant
 import java.time.LocalDate

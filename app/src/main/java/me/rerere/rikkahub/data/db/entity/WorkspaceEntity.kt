@@ -4,7 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.common.json.JsonInstant
 import me.rerere.workspace.Workspace
 import me.rerere.workspace.WorkspaceShellStatus
 

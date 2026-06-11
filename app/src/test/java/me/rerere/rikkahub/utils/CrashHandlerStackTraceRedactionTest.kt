@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.utils
 
+import me.rerere.rikkahub.utils.lifecycle.CrashHandler
+
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

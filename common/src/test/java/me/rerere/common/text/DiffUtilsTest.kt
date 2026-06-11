@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.common.text
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull

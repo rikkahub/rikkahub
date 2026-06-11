@@ -79,8 +79,8 @@ import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
-import me.rerere.rikkahub.utils.navigateToChatPage
-import me.rerere.rikkahub.utils.toDp
+import me.rerere.rikkahub.ui.pages.chat.navigateToChatPage
+import me.rerere.rikkahub.ui.ext.toDp
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid

@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.data.datastore
 
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.common.json.JsonInstant
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertFalse
 import org.junit.Test

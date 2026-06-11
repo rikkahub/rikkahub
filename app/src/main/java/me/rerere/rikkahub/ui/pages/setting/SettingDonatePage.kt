@@ -37,10 +37,10 @@ import me.rerere.rikkahub.data.model.Sponsor
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.UiState
-import me.rerere.rikkahub.utils.onError
-import me.rerere.rikkahub.utils.onLoading
-import me.rerere.rikkahub.utils.onSuccess
+import me.rerere.common.state.UiState
+import me.rerere.common.state.onError
+import me.rerere.common.state.onLoading
+import me.rerere.common.state.onSuccess
 import me.rerere.rikkahub.utils.openUrl
 import org.koin.compose.koinInject
 

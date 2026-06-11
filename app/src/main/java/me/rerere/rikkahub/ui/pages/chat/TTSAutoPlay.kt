@@ -8,7 +8,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.context.LocalTTSState
-import me.rerere.rikkahub.utils.extractQuotedContentAsText
+import me.rerere.common.text.extractQuotedContentAsText
 
 @Composable
 fun TTSAutoPlay(vm: ChatVM, setting: Settings, conversation: Conversation) {

@@ -41,11 +41,11 @@ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useThrottle
 import me.rerere.rikkahub.ui.pages.chat.ChatVM
-import me.rerere.rikkahub.utils.UpdateDownload
-import me.rerere.rikkahub.utils.Version
-import me.rerere.rikkahub.utils.onError
-import me.rerere.rikkahub.utils.onSuccess
-import me.rerere.rikkahub.utils.toLocalDateTime
+import me.rerere.rikkahub.utils.lifecycle.UpdateDownload
+import me.rerere.rikkahub.utils.lifecycle.Version
+import me.rerere.common.state.onError
+import me.rerere.common.state.onSuccess
+import me.rerere.common.time.toLocalDateTime
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlin.time.toJavaInstant

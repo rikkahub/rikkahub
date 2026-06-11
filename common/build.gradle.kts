@@ -50,6 +50,9 @@ dependencies {
     // apache commons
     api(libs.commons.text)
 
+    // java-diff-utils — backs common/text/DiffUtils.kt (generateUnifiedDiff)
+    implementation(libs.diffutils)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)

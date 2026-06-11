@@ -5,8 +5,8 @@ import io.pebbletemplates.pebble.loader.Loader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.utils.toLocalDate
-import me.rerere.rikkahub.utils.toLocalTime
+import me.rerere.common.time.toLocalDate
+import me.rerere.common.time.toLocalTime
 import java.io.Reader
 import java.io.StringReader
 import java.io.StringWriter

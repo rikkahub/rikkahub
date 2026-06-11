@@ -40,7 +40,7 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.modifier.shimmer
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.common.http.jsonPrimitiveOrNull
 import org.koin.compose.koinInject
 
 /**

@@ -81,8 +81,8 @@ import me.rerere.rikkahub.ui.theme.AtomOneDarkPalette
 import me.rerere.rikkahub.ui.theme.AtomOneLightPalette
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
-import me.rerere.rikkahub.utils.base64Encode
-import me.rerere.rikkahub.utils.toDp
+import me.rerere.common.text.base64Encode
+import me.rerere.rikkahub.ui.ext.toDp
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 

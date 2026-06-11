@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.ui.pages.backup
 
 import kotlinx.coroutines.CancellationException
-import me.rerere.rikkahub.utils.UiState
+import me.rerere.common.state.UiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

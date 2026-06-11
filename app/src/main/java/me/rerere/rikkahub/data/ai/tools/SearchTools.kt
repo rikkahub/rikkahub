@@ -9,8 +9,8 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.utils.JsonInstantPretty
-import me.rerere.rikkahub.utils.toLocalString
+import me.rerere.common.json.JsonInstantPretty
+import me.rerere.common.time.toLocalString
 import me.rerere.search.SearchService
 import me.rerere.search.SearchServiceOptions
 import java.time.LocalDate

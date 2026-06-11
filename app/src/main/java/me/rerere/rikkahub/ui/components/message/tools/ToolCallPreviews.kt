@@ -30,7 +30,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FormItem
-import me.rerere.rikkahub.utils.JsonInstantPretty
+import me.rerere.common.json.JsonInstantPretty
 import me.rerere.rikkahub.utils.openUrl
 
 @Composable

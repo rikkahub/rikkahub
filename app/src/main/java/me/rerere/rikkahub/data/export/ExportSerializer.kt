@@ -11,7 +11,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.utils.toLocalString
+import me.rerere.common.time.toLocalString
 import java.time.LocalDateTime
 import kotlin.uuid.Uuid
 

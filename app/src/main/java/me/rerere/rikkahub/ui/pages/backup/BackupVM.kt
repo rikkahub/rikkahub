@@ -18,7 +18,7 @@ import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.S3Sync
-import me.rerere.rikkahub.utils.UiState
+import me.rerere.common.state.UiState
 import me.rerere.rikkahub.utils.shouldRethrowVmError
 import java.io.File
 

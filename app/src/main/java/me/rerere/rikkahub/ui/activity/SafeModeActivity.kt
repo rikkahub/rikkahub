@@ -54,7 +54,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
-import me.rerere.rikkahub.utils.CrashHandler
+import me.rerere.rikkahub.utils.lifecycle.CrashHandler
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
 

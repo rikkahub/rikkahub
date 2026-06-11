@@ -3,8 +3,8 @@ package me.rerere.rikkahub.data.ai
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.common.json.JsonInstant
+import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response

@@ -5,8 +5,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.common.json.JsonInstant
+import me.rerere.common.http.jsonPrimitiveOrNull
 
 internal val partTypeMapping = mapOf(
     "Text" to "text",

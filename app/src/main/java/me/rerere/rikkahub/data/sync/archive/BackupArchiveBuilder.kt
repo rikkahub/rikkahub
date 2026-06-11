@@ -4,7 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.files.FileFolders
-import me.rerere.rikkahub.utils.fileSizeToString
+import me.rerere.common.text.fileSizeToString
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream

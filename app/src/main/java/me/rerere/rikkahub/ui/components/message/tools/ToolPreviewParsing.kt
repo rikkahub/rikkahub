@@ -10,8 +10,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.common.json.JsonInstant
+import me.rerere.common.http.jsonPrimitiveOrNull
 
 /**
  * Pure, JVM-testable parsing / JSON-argument helpers extracted out of ChatMessageTools.kt

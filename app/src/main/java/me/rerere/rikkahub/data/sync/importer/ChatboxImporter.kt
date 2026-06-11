@@ -23,8 +23,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.JsonInstantPretty
+import me.rerere.common.json.JsonInstant
+import me.rerere.common.json.JsonInstantPretty
 import java.io.File
 import java.io.Reader
 import java.nio.charset.StandardCharsets

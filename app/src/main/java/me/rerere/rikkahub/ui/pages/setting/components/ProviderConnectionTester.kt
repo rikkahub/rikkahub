@@ -45,7 +45,7 @@ import me.rerere.hugeicons.stroke.Connect
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.theme.extendColors
-import me.rerere.rikkahub.utils.UiState
+import me.rerere.common.state.UiState
 import org.koin.compose.koinInject
 
 @Composable

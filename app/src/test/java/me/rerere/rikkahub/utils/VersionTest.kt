@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.utils
 
+import me.rerere.rikkahub.utils.lifecycle.Version
+import me.rerere.rikkahub.utils.lifecycle.compareTo
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

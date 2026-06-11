@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.utils
+package me.rerere.rikkahub.ui.components
 
 private val iconCache = mutableMapOf<String, String>()
 

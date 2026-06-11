@@ -39,7 +39,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
-import me.rerere.rikkahub.utils.ImageUtils
+import me.rerere.rikkahub.ui.components.ImageUtils
 import java.io.File
 import kotlin.uuid.Uuid
 

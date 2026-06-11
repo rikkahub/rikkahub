@@ -34,7 +34,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.utils.copyMessageToClipboard
+import me.rerere.rikkahub.ui.pages.chat.copyMessageToClipboard
 
 @Composable
 fun ChatMessageCopySheet(

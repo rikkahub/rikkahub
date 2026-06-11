@@ -89,8 +89,8 @@ import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
-import me.rerere.rikkahub.utils.SoundEffectPlayer
-import me.rerere.rikkahub.utils.isAllowedFileType
+import me.rerere.rikkahub.ui.components.ai.chatinput.SoundEffectPlayer
+import me.rerere.rikkahub.ui.pages.chat.isAllowedFileType
 import org.koin.compose.koinInject
 import java.io.File
 import kotlin.time.Duration.Companion.seconds

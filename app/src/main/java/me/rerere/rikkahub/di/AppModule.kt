@@ -14,11 +14,11 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.automation.AutomationKillSwitch
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
-import me.rerere.rikkahub.utils.EmojiData
-import me.rerere.rikkahub.utils.EmojiUtils
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.SoundEffectPlayer
-import me.rerere.rikkahub.utils.UpdateChecker
+import me.rerere.rikkahub.ui.components.EmojiData
+import me.rerere.rikkahub.ui.components.EmojiUtils
+import me.rerere.common.json.JsonInstant
+import me.rerere.rikkahub.ui.components.ai.chatinput.SoundEffectPlayer
+import me.rerere.rikkahub.utils.lifecycle.UpdateChecker
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module

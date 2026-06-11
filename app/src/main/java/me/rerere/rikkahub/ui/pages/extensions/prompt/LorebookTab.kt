@@ -42,7 +42,7 @@ import me.rerere.rikkahub.data.export.rememberImporter
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.ui.ext.plus
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 

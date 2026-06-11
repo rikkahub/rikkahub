@@ -19,8 +19,8 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.MoneyBag02
-import me.rerere.rikkahub.utils.SimpleCache
-import me.rerere.rikkahub.utils.toDp
+import me.rerere.common.cache.SimpleCache
+import me.rerere.rikkahub.ui.ext.toDp
 import org.koin.compose.koinInject
 import java.util.concurrent.TimeUnit
 

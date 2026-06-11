@@ -4,7 +4,7 @@ import android.util.Log
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import me.rerere.ai.ui.UIMessage
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.common.json.JsonInstant
 import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 
 private const val TAG = "Migration_15_16"

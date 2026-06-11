@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import me.rerere.tts.model.PlaybackState
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
-import me.rerere.rikkahub.utils.stripMarkdown
+import me.rerere.rikkahub.ui.components.stripMarkdown
 import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSManager
 import me.rerere.tts.provider.TTSProviderSetting

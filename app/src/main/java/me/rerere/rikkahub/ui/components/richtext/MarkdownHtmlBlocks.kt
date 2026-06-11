@@ -39,7 +39,7 @@ import androidx.compose.ui.util.fastForEach
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.ui.context.LocalSettings
-import me.rerere.rikkahub.utils.toDp
+import me.rerere.rikkahub.ui.ext.toDp
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 

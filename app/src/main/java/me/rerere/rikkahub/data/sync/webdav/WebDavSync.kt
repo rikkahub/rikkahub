@@ -12,7 +12,7 @@ import me.rerere.rikkahub.data.sync.archive.AndroidBackupArchiveEnvironment
 import me.rerere.rikkahub.data.sync.archive.BackupArchiveBuilder
 import me.rerere.rikkahub.data.sync.archive.BackupArchiveRestorer
 import me.rerere.rikkahub.data.sync.archive.BackupArchiveSelection
-import me.rerere.rikkahub.utils.fileSizeToString
+import me.rerere.common.text.fileSizeToString
 import java.io.File
 import java.time.Instant
 

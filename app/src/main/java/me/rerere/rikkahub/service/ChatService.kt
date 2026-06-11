@@ -108,7 +108,7 @@ import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
 import me.rerere.rikkahub.service.mutation.ConversationMutations
 import me.rerere.rikkahub.service.notification.ChatNotificationSender
 import me.rerere.rikkahub.web.NotFoundException
-import me.rerere.rikkahub.utils.applyPlaceholders
+import me.rerere.common.text.applyPlaceholders
 import me.rerere.rikkahub.utils.shouldRethrowVmError
 import java.time.Instant
 import java.util.Locale

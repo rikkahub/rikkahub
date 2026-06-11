@@ -6,7 +6,7 @@ import me.rerere.rikkahub.data.model.FavoriteType
 import me.rerere.rikkahub.data.model.NodeFavoriteRef
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.model.buildFavoritePreview
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.common.json.JsonInstant
 
 object NodeFavoriteAdapter : FavoriteAdapter<NodeFavoriteTarget> {
     override val type: FavoriteType = FavoriteType.NODE

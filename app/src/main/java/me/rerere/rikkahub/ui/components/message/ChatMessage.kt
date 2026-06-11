@@ -91,10 +91,10 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.ui.theme.extendColors
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.base64Encode
+import me.rerere.common.json.JsonInstant
+import me.rerere.common.text.base64Encode
 import me.rerere.rikkahub.utils.openUrl
-import me.rerere.rikkahub.utils.urlDecode
+import me.rerere.common.text.urlDecode
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 

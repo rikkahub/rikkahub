@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.map
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.utils.toLocalString
+import me.rerere.common.time.toLocalString
 import java.time.LocalDate
 import java.time.ZoneId
 

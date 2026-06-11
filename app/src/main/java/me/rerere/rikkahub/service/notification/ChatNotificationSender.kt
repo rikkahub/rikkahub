@@ -10,7 +10,7 @@ import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.service.GenerationForegroundService
-import me.rerere.rikkahub.utils.sendNotification
+import me.rerere.rikkahub.utils.lifecycle.sendNotification
 import kotlin.uuid.Uuid
 
 /**
