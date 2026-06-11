@@ -175,6 +175,7 @@ private fun createEditFileTool(
     description = """
         Edit a UTF-8 text file in the assistant's bound workspace files area by replacing exact text.
         Provide old_text and new_text. By default old_text must occur exactly once; set replace_all=true to replace every occurrence.
+        If no exact match is found, whitespace-tolerant line matching is attempted automatically.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -206,22 +207,20 @@ private fun createEditFileTool(
         require(oldText.isNotEmpty()) { "old_text must not be empty" }
 
         val original = workspaceRepository.readText(workspaceId, path)
-        val occurrences = original.windowed(oldText.length).count { window -> window == oldText }
-        require(occurrences > 0) { "old_text was not found in $path" }
-        if (!replaceAll) {
-            require(occurrences == 1) {
-                "old_text occurs $occurrences times in $path; set replace_all=true to replace all occurrences"
-            }
+        // 逐级尝试 exact -> line_trimmed -> block_anchor 替换器, 见 TextReplacers.kt
+        val result = try {
+            replaceText(original, oldText, newText, replaceAll)
+        } catch (e: IllegalArgumentException) {
+            error("${e.message} (path: $path)")
         }
-
-        val updated = if (replaceAll) original.replace(oldText, newText) else original.replaceFirst(oldText, newText)
-        val entry = workspaceRepository.writeText(workspaceId, path, updated, overwrite = true)
-        val diff = generateUnifiedDiff(original, updated, entry.path)
+        val entry = workspaceRepository.writeText(workspaceId, path, result.updated, overwrite = true)
+        val diff = generateUnifiedDiff(original, result.updated, entry.path)
         listOf(
             UIMessagePart.Text(
                 text = buildJsonObject {
                     put("path", entry.path)
-                    put("replacements", if (replaceAll) occurrences else 1)
+                    put("replacements", result.replacements)
+                    if (result.strategy != ExactReplacer.name) put("matchStrategy", result.strategy)
                     put("sizeBytes", entry.sizeBytes)
                     put("updatedAt", entry.updatedAt)
                 }.toString(),
