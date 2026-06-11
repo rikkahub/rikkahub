@@ -6,9 +6,9 @@ import me.rerere.ai.runtime.contract.AssistantConfig
 import me.rerere.ai.runtime.contract.ToolAssemblyContext
 import me.rerere.ai.runtime.contract.ToolCatalog
 import me.rerere.ai.runtime.contract.TurnMode
+import me.rerere.ai.runtime.mcp.McpTool
+import me.rerere.ai.runtime.subagent.filterToolsForSubagent
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.mcp.McpTool
-import me.rerere.rikkahub.data.ai.subagent.filterToolsForSubagent
 import me.rerere.rikkahub.service.mapMcpTool
 import kotlin.uuid.Uuid
 

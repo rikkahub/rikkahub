@@ -3,8 +3,8 @@ package me.rerere.rikkahub.web.routes
 import me.rerere.ai.provider.ClaudeAuthType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.asr.ASRProviderSetting
-import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
-import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.ai.runtime.mcp.McpCommonOptions
+import me.rerere.ai.runtime.mcp.McpServerConfig
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.s3.S3Config

@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.mcp
+package me.rerere.ai.runtime.mcp
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

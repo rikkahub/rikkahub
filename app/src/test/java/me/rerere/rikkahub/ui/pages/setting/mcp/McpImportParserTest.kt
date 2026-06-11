@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting.mcp
 
-import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.ai.runtime.mcp.McpServerConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

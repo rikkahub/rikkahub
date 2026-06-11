@@ -7,9 +7,13 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.runtime.contract.TurnConfig
+import me.rerere.ai.runtime.subagent.SPAWN_TOOL_NAME
+import me.rerere.ai.runtime.subagent.resolveSubagentModel
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.GenerationChunk
+import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
@@ -104,7 +108,8 @@ class SubagentRunnerTest {
             runner.run(sub = sub, prompt = "go", parentModelId = parentModel.id, settings = settings)
         }
 
-        assertEquals(resolveSubagentModel(sub, parentModel.id, settings), captured.model.id)
+        val turn = TurnConfig(defaultModelId = settings.chatModelId, providers = emptyList(), assistants = emptyList())
+        assertEquals(resolveSubagentModel(sub.toAssistantConfig(), parentModel.id, turn), captured.model.id)
         assertEquals(parentModel.id, captured.model.id)
     }
 

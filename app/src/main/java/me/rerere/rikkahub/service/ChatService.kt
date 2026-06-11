@@ -56,7 +56,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
-import me.rerere.rikkahub.data.ai.mcp.McpTool
+import me.rerere.ai.runtime.mcp.McpTool
 import me.rerere.automation.act.AlwaysDeny
 import me.rerere.automation.cap.Capability
 import me.rerere.automation.cap.CapabilityGuard

@@ -4,8 +4,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
-import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.ai.runtime.mcp.McpCommonOptions
+import me.rerere.ai.runtime.mcp.McpServerConfig
 
 /**
  * Pure, JVM-testable MCP import JSON parser extracted out of SettingMcpPage.kt (issue #106).

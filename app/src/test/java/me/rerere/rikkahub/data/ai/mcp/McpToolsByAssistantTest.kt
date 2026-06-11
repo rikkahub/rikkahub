@@ -1,6 +1,11 @@
 package me.rerere.rikkahub.data.ai.mcp
 
 import me.rerere.ai.core.InputSchema
+import me.rerere.ai.runtime.mcp.McpCommonOptions
+import me.rerere.ai.runtime.mcp.McpServerConfig
+import me.rerere.ai.runtime.mcp.McpTool
+import me.rerere.ai.runtime.mcp.selectMcpToolsForAssistant
+import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -53,8 +58,8 @@ class McpToolsByAssistantTest {
         val assistantA = Assistant(name = "A", mcpServers = setOf(serverA))
         val assistantB = Assistant(name = "B", mcpServers = setOf(serverB))
 
-        val forA = selectMcpToolsForAssistant(allServers, assistantA)
-        val forB = selectMcpToolsForAssistant(allServers, assistantB)
+        val forA = selectMcpToolsForAssistant(allServers, assistantA.toAssistantConfig())
+        val forB = selectMcpToolsForAssistant(allServers, assistantB.toAssistantConfig())
 
         // A gets only A's server's tools.
         assertEquals(listOf(serverA), forA.map { it.first })
@@ -69,7 +74,7 @@ class McpToolsByAssistantTest {
     @Test
     fun `a disabled server contributes nothing even when allowlisted`() {
         val assistant = Assistant(name = "X", mcpServers = setOf(serverA, serverDisabled))
-        val tools = selectMcpToolsForAssistant(allServers, assistant)
+        val tools = selectMcpToolsForAssistant(allServers, assistant.toAssistantConfig())
 
         assertEquals(listOf(serverA), tools.map { it.first })
         assertTrue(tools.none { it.first == serverDisabled })
@@ -81,13 +86,13 @@ class McpToolsByAssistantTest {
         val servers = listOf(server(srv, enable = true, tool("on", enable = true), tool("off", enable = false)))
         val assistant = Assistant(name = "X", mcpServers = setOf(srv))
 
-        val tools = selectMcpToolsForAssistant(servers, assistant)
+        val tools = selectMcpToolsForAssistant(servers, assistant.toAssistantConfig())
         assertEquals(listOf("on"), tools.map { it.second.name })
     }
 
     @Test
     fun `an empty allowlist selects nothing`() {
         val assistant = Assistant(name = "empty", mcpServers = emptySet())
-        assertTrue(selectMcpToolsForAssistant(allServers, assistant).isEmpty())
+        assertTrue(selectMcpToolsForAssistant(allServers, assistant.toAssistantConfig()).isEmpty())
     }
 }

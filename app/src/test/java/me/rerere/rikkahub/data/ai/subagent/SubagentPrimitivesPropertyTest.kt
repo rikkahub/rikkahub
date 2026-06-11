@@ -11,9 +11,14 @@ import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
+import me.rerere.ai.runtime.contract.TurnConfig
+import me.rerere.ai.runtime.subagent.SPAWN_TOOL_NAME
+import me.rerere.ai.runtime.subagent.extractFinalAssistantText
+import me.rerere.ai.runtime.subagent.filterToolsForSubagent
+import me.rerere.ai.runtime.subagent.resolveSubagentModel
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,6 +57,10 @@ class SubagentPrimitivesPropertyTest {
     private fun assistant(chatModelId: Uuid?): Assistant =
         Assistant(chatModelId = chatModelId, name = "sub")
 
+    /** Minimal neutral turn snapshot — only [TurnConfig.defaultModelId] is read by the resolver. */
+    private fun turn(defaultModelId: Uuid): TurnConfig =
+        TurnConfig(defaultModelId = defaultModelId, providers = emptyList(), assistants = emptyList())
+
     private fun assistantText(text: String): UIMessage =
         UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text(text)))
 
@@ -74,8 +83,7 @@ class SubagentPrimitivesPropertyTest {
     fun `resolveSubagentModel honours sub then parent then global default`() {
         runBlocking {
             checkAll(300, arbUuid.orNull(0.4), arbUuid.orNull(0.4), arbUuid) { subPin, parent, globalDefault ->
-                val settings = Settings(chatModelId = globalDefault)
-                val resolved = resolveSubagentModel(assistant(subPin), parent, settings)
+                val resolved = resolveSubagentModel(assistant(subPin).toAssistantConfig(), parent, turn(globalDefault))
 
                 val expected = subPin ?: parent ?: globalDefault
                 assertEquals(expected, resolved)
@@ -87,11 +95,11 @@ class SubagentPrimitivesPropertyTest {
     fun `metamorphic - clearing the sub pin falls back to the parent model`() {
         runBlocking {
             checkAll(200, arbUuid, arbUuid, arbUuid) { subPin, parent, globalDefault ->
-                val settings = Settings(chatModelId = globalDefault)
+                val turn = turn(globalDefault)
                 // With a pin, the sub's own model wins.
-                assertEquals(subPin, resolveSubagentModel(assistant(subPin), parent, settings))
+                assertEquals(subPin, resolveSubagentModel(assistant(subPin).toAssistantConfig(), parent, turn))
                 // Clearing the pin (chatModelId = null) -> the parent's model.
-                assertEquals(parent, resolveSubagentModel(assistant(null), parent, settings))
+                assertEquals(parent, resolveSubagentModel(assistant(null).toAssistantConfig(), parent, turn))
             }
         }
     }

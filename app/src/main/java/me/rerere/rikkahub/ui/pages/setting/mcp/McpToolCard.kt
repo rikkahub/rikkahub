@@ -29,7 +29,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.mcp.McpTool
+import me.rerere.ai.runtime.mcp.McpTool
 import me.rerere.rikkahub.ui.components.ui.Switch
 import me.rerere.rikkahub.ui.components.ui.SwitchSize
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -113,9 +113,10 @@ internal fun McpToolCard(
             // 展开后显示描述和参数
             if (expanded) {
                 // 描述
-                if (!tool.description.isNullOrBlank()) {
+                val description = tool.description
+                if (!description.isNullOrBlank()) {
                     Text(
-                        text = tool.description,
+                        text = description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                     )

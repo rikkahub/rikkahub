@@ -4,9 +4,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
+import me.rerere.ai.runtime.contract.TurnConfig
+import me.rerere.ai.runtime.subagent.extractFinalAssistantText
+import me.rerere.ai.runtime.subagent.filterToolsForSubagent
+import me.rerere.ai.runtime.subagent.resolveSubagentModel
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
@@ -72,7 +77,18 @@ class SubagentRunner(
         tools: List<Tool> = emptyList(),
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     ): String {
-        val modelId = resolveSubagentModel(sub, parentModelId, settings)
+        // Only `defaultModelId` is read by resolveSubagentModel; map the app Settings onto a minimal
+        // neutral TurnConfig (defaultModelId = settings.chatModelId, both non-null Uuid) so the
+        // sub-pin > parent > global-default resolution order is preserved across the module boundary.
+        val modelId = resolveSubagentModel(
+            sub = sub.toAssistantConfig(),
+            parentModelId = parentModelId,
+            turn = TurnConfig(
+                defaultModelId = settings.chatModelId,
+                providers = emptyList(),
+                assistants = emptyList(),
+            ),
+        )
         val model = settings.findModelById(modelId)
             ?: error("Subagent model not found for id $modelId")
 

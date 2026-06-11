@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
+import me.rerere.ai.runtime.mcp.McpTool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.service.mapMcpTool
 import org.junit.Assert.assertEquals

@@ -3,6 +3,8 @@ package me.rerere.rikkahub.data.ai.mcp
 import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.TransportSendOptions
 import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCMessage
+import me.rerere.ai.runtime.mcp.McpCommonOptions
+import me.rerere.ai.runtime.mcp.McpServerConfig
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import kotlin.uuid.Uuid

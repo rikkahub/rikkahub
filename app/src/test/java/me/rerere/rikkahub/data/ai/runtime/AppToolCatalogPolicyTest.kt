@@ -7,8 +7,8 @@ import me.rerere.ai.runtime.contract.AssistantConfig
 import me.rerere.ai.runtime.contract.ToolAssemblyContext
 import me.rerere.ai.runtime.contract.TurnMode
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.mcp.McpTool
-import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
+import me.rerere.ai.runtime.mcp.McpTool
+import me.rerere.ai.runtime.subagent.SPAWN_TOOL_NAME
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -75,7 +75,7 @@ internal fun S3Config.redactSecrets(): S3Config = copy(accessKeyId = "", secretA
 
 // MCP custom headers routinely carry bearer/authorization tokens; the URL and
 // header names are not secret, but every header value is treated as one.
-internal fun me.rerere.rikkahub.data.ai.mcp.McpServerConfig.redactSecrets(): me.rerere.rikkahub.data.ai.mcp.McpServerConfig =
+internal fun me.rerere.ai.runtime.mcp.McpServerConfig.redactSecrets(): me.rerere.ai.runtime.mcp.McpServerConfig =
     clone(
         commonOptions = commonOptions.copy(
             headers = commonOptions.headers.map { (name, _) -> name to "" }
