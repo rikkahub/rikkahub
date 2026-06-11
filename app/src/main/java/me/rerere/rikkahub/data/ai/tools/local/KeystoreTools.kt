@@ -122,6 +122,19 @@ fun keystoreGenerateKeyTool(): Tool = Tool(
         if (purposes.isEmpty()) return@Tool ksErr("purposes is required")
         validateKeystoreType(type, purposes)?.let { return@Tool ksErr(it) }
 
+        // AndroidKeyStore silently replaces an existing key under the same alias, which
+        // permanently destroys decryptability of everything encrypted with the old key.
+        // An LLM retry on an alias it already used is a plausible pattern, so this must
+        // fail loudly instead.
+        if (runCatching { loadKeyStore().containsAlias(alias) }.getOrDefault(false)) {
+            return@Tool ksErr(
+                "alias_exists: a key named '$alias' already exists; generating over it would " +
+                    "permanently destroy the old key and make all data encrypted with it " +
+                    "undecryptable. Pick a new alias, or call keystore_delete_key first if " +
+                    "you really mean to replace it."
+            )
+        }
+
         return@Tool try {
             when (type) {
                 "rsa_2048" -> {
