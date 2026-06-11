@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +45,9 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.theme.ColorMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -99,23 +103,42 @@ private fun WorkspaceTerminalContent(
     viewClient.controlDown = controlDown
     viewClient.altDown = altDown
 
-    if (root == null) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
-                .padding(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "工作区加载中...",
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            )
+    val sessionState by produceState<TerminalSessionUiState>(
+        initialValue = TerminalSessionUiState.Loading,
+        root,
+        sessionClient,
+    ) {
+        val current = root
+        value = if (current == null) {
+            TerminalSessionUiState.Loading
+        } else {
+            // rootfs stat 与 RootfsPatcher().patch()/DNS 查询都是阻塞 I/O, 放到 IO 线程执行;
+            // TerminalSession 构造内部会创建 Handler, 必须回到主线程执行
+            val prepared = withContext(Dispatchers.IO) {
+                if (!workspaceRootfsReady(context, current)) {
+                    false
+                } else {
+                    prepareWorkspaceTerminalSession(context, current)
+                    true
+                }
+            }
+            if (!prepared) {
+                TerminalSessionUiState.NotInstalled
+            } else {
+                if (!isActive) return@produceState
+                val created = createWorkspaceTerminalSession(context, current, sessionClient)
+                // 创建后若组合已离开, 主动回收以免泄漏 proot 进程, 且不再把已 finish 的 session 暴露为 Ready
+                if (!isActive) {
+                    created.finishIfRunning()
+                    return@produceState
+                }
+                TerminalSessionUiState.Ready(created)
+            }
         }
-        return
     }
 
-    if (!workspaceRootfsReady(context, root)) {
+    val currentState = sessionState
+    if (currentState !is TerminalSessionUiState.Ready) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -124,17 +147,18 @@ private fun WorkspaceTerminalContent(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "请先安装 Rootfs",
+                text = if (currentState is TerminalSessionUiState.NotInstalled) {
+                    "请先安装 Rootfs"
+                } else {
+                    "工作区加载中..."
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             )
         }
         return
     }
-
-    val session = remember(root) {
-        createWorkspaceTerminalSession(context, root, sessionClient)
-    }
+    val session = currentState.session
 
     DisposableEffect(session) {
         onDispose {
@@ -284,4 +308,10 @@ private fun TerminalExtraKey(
 private fun TerminalSession.writeText(text: String) {
     val bytes = text.toByteArray()
     write(bytes, 0, bytes.size)
+}
+
+private sealed interface TerminalSessionUiState {
+    data object Loading : TerminalSessionUiState
+    data object NotInstalled : TerminalSessionUiState
+    data class Ready(val session: TerminalSession) : TerminalSessionUiState
 }

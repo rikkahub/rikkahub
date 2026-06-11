@@ -1,10 +1,10 @@
 package me.rerere.rikkahub.data.repository
 
 import android.util.Log
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import java.io.InputStream
-import java.io.OutputStream
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -18,6 +18,8 @@ import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
+import java.io.InputStream
+import java.io.OutputStream
 import kotlin.uuid.Uuid
 
 class WorkspaceRepository(
@@ -105,33 +107,28 @@ class WorkspaceRepository(
                 updatedAt = System.currentTimeMillis(),
             )
         )
-        return runCatching {
-            withContext(Dispatchers.IO) {
+        try {
+            // runInterruptible 让协程取消转成线程中断, 打断 install 内阻塞的下载/解压循环
+            runInterruptible(Dispatchers.IO) {
                 rootfsInstaller.install(workspace.root, url, onProgress)
             }
-        }.fold(
-            onSuccess = {
-                dao.upsert(
-                    workspace.copy(
-                        shellEnabled = true,
-                        shellStatus = WorkspaceShellStatus.READY.name,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                )
-                true
-            },
-            onFailure = {
-                Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}, url=$url", it)
-                dao.upsert(
-                    workspace.copy(
-                        shellEnabled = true,
-                        shellStatus = WorkspaceShellStatus.BROKEN.name,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                )
-                throw it
-            },
-        )
+            updateShellState(workspace, shellEnabled = true, shellStatus = WorkspaceShellStatus.READY.name)
+            return true
+        } catch (e: CancellationException) {
+            withContext(NonCancellable) {
+                restoreShellState(workspace)
+            }
+            throw e
+        } catch (e: InterruptedException) {
+            withContext(NonCancellable) {
+                restoreShellState(workspace)
+            }
+            throw CancellationException("Rootfs install cancelled").also { it.initCause(e) }
+        } catch (e: Throwable) {
+            Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}, url=$url", e)
+            updateShellState(workspace, shellEnabled = true, shellStatus = WorkspaceShellStatus.BROKEN.name)
+            throw e
+        }
     }
 
     suspend fun listFiles(
@@ -240,6 +237,29 @@ class WorkspaceRepository(
             )
         }
         return true
+    }
+
+    private suspend fun restoreShellState(workspace: WorkspaceEntity) {
+        updateShellState(
+            workspace = workspace,
+            shellEnabled = workspace.shellEnabled,
+            shellStatus = workspace.shellStatus,
+        )
+    }
+
+    private suspend fun updateShellState(
+        workspace: WorkspaceEntity,
+        shellEnabled: Boolean,
+        shellStatus: String,
+    ) {
+        val current = dao.getById(workspace.id) ?: workspace
+        dao.upsert(
+            current.copy(
+                shellEnabled = shellEnabled,
+                shellStatus = shellStatus,
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
     }
 
     companion object {

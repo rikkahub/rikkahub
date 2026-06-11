@@ -27,10 +27,10 @@ class RootfsInstaller(
         val stagingDir = File(tempDir, "rootfs-staging")
         val linuxDir = manager.linuxDir(root)
 
-        stagingDir.deleteRecursively()
-        stagingDir.mkdirs()
-        download(url, archive, onProgress)
         try {
+            stagingDir.deleteRecursively()
+            stagingDir.mkdirs()
+            download(url, archive, onProgress)
             extractTarGz(archive, stagingDir, onProgress)
             linuxDir.deleteRecursively()
             require(stagingDir.renameTo(linuxDir)) {
@@ -64,6 +64,7 @@ class RootfsInstaller(
                     var bytesRead = 0L
                     var lastReportBytes = 0L
                     while (true) {
+                        checkInterrupted()
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
@@ -105,6 +106,7 @@ class RootfsInstaller(
             var pendingName: String? = null
             var pendingLinkName: String? = null
             while (true) {
+                checkInterrupted()
                 val rawHeader = input.readTarHeader() ?: break
                 val header = rawHeader.copy(
                     name = pendingName ?: rawHeader.name,
@@ -258,10 +260,19 @@ class RootfsInstaller(
         return result
     }
 
+    // 协程取消时调用方通过 runInterruptible 将取消转成线程中断, 这里在阻塞循环中检测并尽早退出,
+    // 避免离开页面后仍继续下载/解压并向已清空的 StateFlow 推送进度
+    private fun checkInterrupted() {
+        if (Thread.currentThread().isInterrupted) {
+            throw InterruptedException("Rootfs install cancelled")
+        }
+    }
+
     private fun InputStream.copyExactly(output: java.io.OutputStream, bytes: Long) {
         val buffer = ByteArray(BUFFER_SIZE)
         var remaining = bytes
         while (remaining > 0) {
+            checkInterrupted()
             val read = read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
             if (read < 0) throw EOFException("Unexpected EOF while extracting tar entry")
             output.write(buffer, 0, read)
@@ -280,6 +291,7 @@ class RootfsInstaller(
     private fun InputStream.skipFully(bytes: Long) {
         var remaining = bytes
         while (remaining > 0) {
+            checkInterrupted()
             val skipped = skip(remaining)
             if (skipped > 0) {
                 remaining -= skipped

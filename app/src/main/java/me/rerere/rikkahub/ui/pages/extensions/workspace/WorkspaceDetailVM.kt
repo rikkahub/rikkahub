@@ -2,8 +2,10 @@ package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.InputStream
@@ -162,16 +164,19 @@ class WorkspaceDetailVM(
             _installError.value = null
             val workspace = state.value.workspace ?: return@launch
             _installProgress.value = RootfsInstallProgress(stage = RootfsInstallStage.DOWNLOADING)
-            runCatching {
+            try {
                 repository.installRootfs(workspace.id, url) { progress ->
                     _installProgress.value = progress
                 }
-            }.onFailure { error ->
+                loadWorkspace()
+                refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (error: Throwable) {
                 _installError.value = error.message ?: "Rootfs 安装失败"
+            } finally {
+                _installProgress.value = null
             }
-            _installProgress.value = null
-            loadWorkspace()
-            refresh()
         }
     }
 
@@ -181,15 +186,21 @@ class WorkspaceDetailVM(
 
     fun executeTerminalCommand(command: String) {
         val trimmed = command.trim()
-        if (trimmed.isBlank() || terminalState.value.running) return
-        viewModelScope.launch {
-            _terminalState.update {
-                it.copy(
+        if (trimmed.isBlank()) return
+        // 原子地完成「检查 running」与「置 running=true」, 避免两次快速提交并发启动两条命令
+        val previous = _terminalState.getAndUpdate { state ->
+            if (state.running) {
+                state
+            } else {
+                state.copy(
                     running = true,
                     input = "",
-                    history = it.history + WorkspaceTerminalEntry.Command(trimmed),
+                    history = state.history + WorkspaceTerminalEntry.Command(trimmed),
                 )
             }
+        }
+        if (previous.running) return
+        viewModelScope.launch {
             runCatching {
                 repository.executeCommand(id, trimmed)
             }.onSuccess { result ->

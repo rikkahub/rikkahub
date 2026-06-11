@@ -24,16 +24,12 @@ internal fun createWorkspaceTerminalSession(
 ): TerminalSession {
     val appContext = context.applicationContext
     val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
-    val filesDir = File(workspaceDir, "files").apply { mkdirs() }
+    val filesDir = File(workspaceDir, "files")
     val linuxDir = File(workspaceDir, "linux")
-    val tempDir = File(workspaceDir, "tmp").apply { mkdirs() }
+    val tempDir = File(workspaceDir, "tmp")
     val nativeLibraryDir = File(appContext.applicationInfo.nativeLibraryDir)
     val proot = File(nativeLibraryDir, "libproot_exec.so")
     val loader = File(nativeLibraryDir, "libproot_loader.so")
-    RootfsPatcher().patch(
-        linuxDir,
-        RootfsPatchOptions(nameservers = appContext.activeDnsServers())
-    )
 
     val args = mutableListOf(
         "--root-id",
@@ -81,6 +77,18 @@ internal fun createWorkspaceTerminalSession(
     ).apply {
         mSessionName = root
     }
+}
+
+internal fun prepareWorkspaceTerminalSession(context: Context, root: String) {
+    val appContext = context.applicationContext
+    val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
+    val linuxDir = File(workspaceDir, "linux")
+    File(workspaceDir, "files").mkdirs()
+    File(workspaceDir, "tmp").mkdirs()
+    RootfsPatcher().patch(
+        linuxDir,
+        RootfsPatchOptions(nameservers = appContext.activeDnsServers())
+    )
 }
 
 internal fun workspaceRootfsReady(context: Context, root: String): Boolean {

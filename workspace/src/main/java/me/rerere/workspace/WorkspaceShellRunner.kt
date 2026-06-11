@@ -56,6 +56,9 @@ fun Process.readResult(timeoutMillis: Long): WorkspaceCommandResult {
     } catch (e: InterruptedException) {
         // 调用方线程被中断（如协程取消时的 runInterruptible），杀掉进程避免命令继续执行
         destroyForcibly()
+        // 进程被杀后 stdout/stderr 会关闭, 这里 join 回收两个采集线程, 避免每次取消泄漏一对线程
+        stdout.join(1_000)
+        stderr.join(1_000)
         throw e
     }
 }
@@ -93,7 +96,11 @@ private class StreamCollector(
             // 进程被强杀（超时/取消）时流会被关闭，阻塞中的 read 会抛 InterruptedIOException 等，
             // 保留已读取的内容即可；不能让异常逃逸，否则会触发线程默认异常处理导致应用崩溃
         }
-    }.apply { start() }
+    }.apply {
+        // 设为 daemon: 即使 proot grandchild 残留 fd 导致 read() 永久阻塞, 也不会阻止 JVM 退出
+        isDaemon = true
+        start()
+    }
 
     fun join(millis: Long) = thread.join(millis)
 

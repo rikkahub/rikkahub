@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,12 +18,6 @@ class WorkspaceVM(
 ) : ViewModel() {
     val workspaces = repository.listFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    private val _installProgress = MutableStateFlow<Map<String, RootfsInstallProgress>>(emptyMap())
-    val installProgress = _installProgress.asStateFlow()
-
-    private val _installErrors = MutableStateFlow<Map<String, String>>(emptyMap())
-    val installErrors = _installErrors.asStateFlow()
 
     fun create(name: String) {
         viewModelScope.launch {
@@ -40,29 +35,5 @@ class WorkspaceVM(
         viewModelScope.launch {
             repository.delete(workspace.id)
         }
-    }
-
-    fun setShellEnabled(workspace: WorkspaceEntity, enabled: Boolean) {
-        viewModelScope.launch {
-            repository.setShellEnabled(workspace.id, enabled)
-        }
-    }
-
-    fun installRootfs(workspace: WorkspaceEntity, url: String) {
-        viewModelScope.launch {
-            _installErrors.update { it - workspace.id }
-            runCatching {
-                repository.installRootfs(workspace.id, url) { progress ->
-                    _installProgress.update { it + (workspace.id to progress) }
-                }
-            }.onFailure { error ->
-                _installErrors.update { it + (workspace.id to (error.message ?: "Rootfs 安装失败")) }
-            }
-            _installProgress.update { it - workspace.id }
-        }
-    }
-
-    fun dismissInstallError(workspaceId: String) {
-        _installErrors.update { it - workspaceId }
     }
 }
