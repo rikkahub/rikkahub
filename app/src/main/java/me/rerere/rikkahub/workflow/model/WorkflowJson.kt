@@ -343,6 +343,15 @@ object WorkflowJson {
                 ParseResult.Err("invalid_trigger", "time_cron.time_of_day must be HH:mm 24h")
             t.daysOfWeek.any { it !in 1..7 } ->
                 ParseResult.Err("invalid_trigger", "time_cron.days_of_week values must be 1..7 (ISO, 1=Mon)")
+            // Reject unparseable cron up front so the LLM gets a repair signal at create
+            // time instead of a workflow that silently fires hourly. Valid means either
+            // the trigger family's own subset (@hourly/@daily/@weekly/@every Nx) or a
+            // 5-field expression the shared scheduled-jobs parser accepts.
+            !t.cron.isNullOrBlank()
+                && me.rerere.rikkahub.workflow.trigger.TimeCronTriggerFamily.derivePeriodMs(t) == null
+                && me.rerere.rikkahub.service.CronExpressionParser.parse(t.cron.trim()).isFailure ->
+                ParseResult.Err("invalid_trigger",
+                    "time_cron.cron is not a valid cron expression (5-field UNIX dialect, @hourly/@daily/@weekly, or @every Ns/Nm/Nh)")
             else -> null
         }
         is TriggerSpec.BatteryBelow -> if (t.thresholdPercent !in 1..100)

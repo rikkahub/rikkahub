@@ -32,11 +32,10 @@ import java.util.concurrent.TimeUnit
  * exactly the disabled workflow's worker without touching anything else.
  *
  * v1 supports the time_of_day + days_of_week subset. The `cron` field is also accepted
- * (per spec — same dialect as scheduled jobs), parsed by computing the next ms-after-now
- * for the most common patterns: `@every Ns`, `@hourly`, `@daily`, plus straight HH:mm. For
- * arbitrary 5-field cron, we fall back to one-shot scheduling at a roughly-correct time and
- * rely on the next fire to reschedule. Full-syntax cron is explicitly out of scope (see spec
- * "Decisions you must make"). The validator already rejected anything we couldn't translate.
+ * (per spec — same dialect as scheduled jobs): `@every Ns`, `@hourly`, `@daily`, `@weekly`
+ * map to fixed periods, and arbitrary 5-field cron runs on the one-shot chain with the next
+ * fire computed exactly via [me.rerere.rikkahub.service.CronExpressionParser] (shared with
+ * scheduled jobs). The validator rejects anything neither path can handle.
  *
  * We use [WorkflowTimeCronWorker] (separate file) which receives the workflow id and
  * dispatches into the engine.
@@ -140,6 +139,19 @@ internal class TimeCronTriggerFamily(
                 if (!loaded.entity.enabled) return
                 loaded.definition
             }
+        // days_of_week gate. The time_of_day path runs as a fixed 24h PeriodicWorkRequest
+        // which fires every day; the day restriction is only honoured here. Without this
+        // gate a "Mondays 09:00" workflow fires daily after its first Monday.
+        val spec = wf.trigger as? TriggerSpec.TimeCron
+        if (spec != null && !spec.timeOfDay.isNullOrBlank() && spec.daysOfWeek.isNotEmpty()) {
+            val zone = spec.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                ?: ZoneId.systemDefault()
+            val today = ZonedDateTime.now(zone).dayOfWeek
+            if (today !in spec.daysOfWeek.map { isoDow(it) }) {
+                Log.d(TAG, "time_cron: $workflowId skipped, $today not in days_of_week")
+                return
+            }
+        }
         scope.launch(Dispatchers.IO) {
             runCatching { cb.onFire(wf.id, wf.trigger) }
                 .onFailure { Log.w(TAG, "time_cron: fire callback failed for $workflowId", it) }
@@ -205,6 +217,15 @@ internal class TimeCronTriggerFamily(
             }
             // @every Ns
             derivePeriodMs(spec)?.let { return nowMs + it }
+            // 5-field cron: compute the exact next execution via the shared parser
+            // (same dialect as scheduled jobs). Without this, "0 9 * * 1" style
+            // expressions silently degraded to hourly fires.
+            spec.cron?.trim()?.takeIf { it.isNotBlank() }?.let { cron ->
+                me.rerere.rikkahub.service.CronExpressionParser.parse(cron).getOrNull()?.let { parsed ->
+                    me.rerere.rikkahub.service.CronExpressionParser.nextExecution(parsed, now)
+                        ?.let { return it.toInstant().toEpochMilli() }
+                }
+            }
             // Fallback for unsupported cron — fire roughly hourly so the user gets
             // something useful even with an exotic schedule. Worker will re-evaluate.
             return nowMs + 60L * 60 * 1000
