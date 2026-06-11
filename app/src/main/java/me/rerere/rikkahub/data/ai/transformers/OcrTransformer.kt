@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import me.rerere.ai.core.MessageRole
@@ -25,6 +26,12 @@ import java.io.File
 import kotlin.time.Duration.Companion.days
 
 private const val TAG = "OcrTransformer"
+
+// Hard ceiling on a single OCR/vision describe call. Without it, an OCR model that is
+// misconfigured, dead, or itself not vision-capable blocks the whole generation forever.
+// On Telegram that wedges the per-chat mutex, so every later message queues until the user
+// sends /new — the symptom this bound exists to prevent.
+private const val OCR_TIMEOUT_MS = 60_000L
 
 object OcrTransformer : InputMessageTransformer, KoinComponent {
     private val cache by lazy {
@@ -91,19 +98,27 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
         val model = settings.findModelById(settings.ocrModelId) ?: return "[Image]"
         val providerSetting = model.findProvider(settings.providers) ?: return "[Image]"
         val provider = get<ProviderManager>().getProviderByType(providerSetting)
-        val result = provider.generateText(
-            providerSetting = providerSetting,
-            messages = listOf(
-                UIMessage.system(settings.ocrPrompt),
-                UIMessage(
-                    role = MessageRole.USER,
-                    parts = listOf(UIMessagePart.Image(part.url))
-                )
-            ),
-            params = TextGenerationParams(
-                model = model,
-            ),
-        )
+        val result = withTimeoutOrNull(OCR_TIMEOUT_MS) {
+            provider.generateText(
+                providerSetting = providerSetting,
+                messages = listOf(
+                    UIMessage.system(settings.ocrPrompt),
+                    UIMessage(
+                        role = MessageRole.USER,
+                        parts = listOf(UIMessagePart.Image(part.url))
+                    )
+                ),
+                params = TextGenerationParams(
+                    model = model,
+                ),
+            )
+        }
+        if (result == null) {
+            Log.w(TAG, "performOcr: timed out after ${OCR_TIMEOUT_MS}ms for ${part.url}")
+            // Not cached: a timeout is usually transient/config-related, so a later retry
+            // should be allowed to reach the model again.
+            return "[Image: could not be read — the OCR model did not respond in time]"
+        }
         val content = result.choices[0].message?.toText() ?: "[ERROR, OCR failed]"
         Log.i(TAG, "performOcr: $content")
         val ocrResult = """
@@ -117,6 +132,9 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
         cache.put(part.url, ocrResult)
         return ocrResult
     }.getOrElse {
+        // Let a real cancellation (e.g. the user's /stop) propagate instead of swallowing
+        // it into a fake OCR-failure string, which would defeat cooperative cancellation.
+        if (it is kotlinx.coroutines.CancellationException) throw it
         "[ERROR, OCR failed: $it]"
     }
 }
