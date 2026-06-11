@@ -1,10 +1,16 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
+import me.rerere.ai.runtime.contract.ConversationReader
+import me.rerere.ai.runtime.contract.MemoryReader
+import me.rerere.ai.runtime.contract.MemoryWriter
 import me.rerere.rikkahub.data.ai.memory.EmbeddingMemoryRecaller
 import me.rerere.rikkahub.data.ai.memory.MemoryEmbedderResolver
 import me.rerere.rikkahub.data.ai.memory.MemoryRecaller
 import me.rerere.rikkahub.data.ai.memory.RecencyMemoryRecaller
+import me.rerere.rikkahub.data.ai.runtime.AppConversationReader
+import me.rerere.rikkahub.data.ai.runtime.AppMemoryReader
+import me.rerere.rikkahub.data.ai.runtime.AppMemoryWriter
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
@@ -25,6 +31,12 @@ val repositoryModule = module {
     single {
         ConversationRepository(get(), get(), get(), get(), get(), get())
     }
+
+    // Neutral :ai-runtime contract adapters over the repos they wrap (issue #243 slice 3). Bound in
+    // the :app composition root — :ai-runtime has no Koin dependency and never sees these concretes.
+    single<ConversationReader> { AppConversationReader(get()) }
+    single<MemoryReader> { AppMemoryReader(get()) }
+    single<MemoryWriter> { AppMemoryWriter(get()) }
 
     single {
         MemoryEmbedderResolver(

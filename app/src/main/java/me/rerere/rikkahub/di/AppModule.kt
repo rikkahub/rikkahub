@@ -5,9 +5,19 @@ import com.google.firebase.analytics.analytics
 import com.google.firebase.crashlytics.crashlytics
 import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.serialization.json.Json
+import me.rerere.ai.runtime.contract.ModelProviderResolver
+import me.rerere.ai.runtime.contract.RuntimeClock
+import me.rerere.ai.runtime.contract.RuntimeFileStore
+import me.rerere.ai.runtime.contract.RuntimeLogSink
+import me.rerere.ai.runtime.contract.TurnConfigSource
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
+import me.rerere.rikkahub.data.ai.runtime.AndroidLogSink
+import me.rerere.rikkahub.data.ai.runtime.AppModelProviderResolver
+import me.rerere.rikkahub.data.ai.runtime.FilesManagerRuntimeFileStore
+import me.rerere.rikkahub.data.ai.runtime.SettingsStoreRuntimeAdapter
+import me.rerere.rikkahub.data.ai.runtime.SystemRuntimeClock
 import me.rerere.rikkahub.data.ai.subagent.SubagentRunner
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -85,6 +95,17 @@ val appModule = module {
     // dispatch shared by the overlay and the in-app Stop.
     single { AutomationRuntimeRegistry() }
     single { AutomationKillSwitch() }
+
+    // Neutral :ai-runtime contract adapters (issue #243 slice 3). Bound ONLY here in the :app
+    // composition root — :ai-runtime has no Koin dependency, so binding there would violate the
+    // module boundary. These carry no per-generation state and are fully functional standalone; the
+    // per-generation tool catalog (AppToolCatalog) is constructed by ChatService at generation time
+    // (slice 10) because its seams require the conversation's automation guard + processingStatus.
+    single<TurnConfigSource> { SettingsStoreRuntimeAdapter(settingsStore = get(), scope = get<AppScope>()) }
+    single<ModelProviderResolver> { AppModelProviderResolver(providerManager = get()) }
+    single<RuntimeFileStore> { FilesManagerRuntimeFileStore(get()) }
+    single<RuntimeLogSink> { AndroidLogSink() }
+    single<RuntimeClock> { SystemRuntimeClock() }
 
     single {
         ChatService(
