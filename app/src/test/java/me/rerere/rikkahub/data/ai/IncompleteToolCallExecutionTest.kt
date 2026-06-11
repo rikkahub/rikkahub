@@ -1,11 +1,16 @@
 package me.rerere.rikkahub.data.ai
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import me.rerere.ai.core.Tool
+import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.ToolCallExecutionState
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toolCallExecutionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -87,6 +92,95 @@ class IncompleteToolCallExecutionTest {
         // truncation, so it must still flow to the existing JSON parse-error path.
         val malformed = tool(input = "{not valid json}", finished = true)
         assertEquals(ToolCallExecutionState.Complete, malformed.toolCallExecutionState())
+    }
+
+    // --- executeTool branch coverage (issue #244, god-function split #3) ---
+    //
+    // executeTool was extracted from generateText's per-tool `when (tool.approvalState)` block. These
+    // pin one byte-identical-output case per branch, so an extraction that drops/reorders a branch or
+    // swallows the CancellationException re-throw reddens here.
+
+    private fun toolPart(
+        input: String,
+        finished: Boolean,
+        approvalState: ToolApprovalState,
+        toolName: String = "search",
+    ): UIMessagePart.Tool =
+        UIMessagePart.Tool(
+            toolCallId = "call_1",
+            toolName = toolName,
+            input = input,
+            output = emptyList(),
+            approvalState = approvalState,
+        ).also { it.finished = finished }
+
+    private fun toolDef(name: String, execute: suspend () -> List<UIMessagePart>): Tool =
+        Tool(name = name, description = "", execute = { execute() })
+
+    @Test
+    fun `executeTool Denied with blank reason yields the no-reason-provided denied JSON`() = runBlocking {
+        val denied = toolPart(input = "{}", finished = true, approvalState = ToolApprovalState.Denied(reason = ""))
+        val result = executeTool(denied, emptyList(), json)
+        val text = (result.output.single() as UIMessagePart.Text).text
+        assertTrue(text.contains("denied by user"))
+        assertTrue(text.contains("No reason provided"))
+    }
+
+    @Test
+    fun `executeTool Denied with a reason carries that reason into the denied JSON`() = runBlocking {
+        val denied = toolPart(input = "{}", finished = true, approvalState = ToolApprovalState.Denied(reason = "too risky"))
+        val result = executeTool(denied, emptyList(), json)
+        val text = (result.output.single() as UIMessagePart.Text).text
+        assertTrue(text.contains("too risky"))
+        assertFalse(text.contains("No reason provided"))
+    }
+
+    @Test
+    fun `executeTool Answered yields a single Text part with the answer verbatim`() = runBlocking {
+        val answered = toolPart(input = "{}", finished = true, approvalState = ToolApprovalState.Answered(answer = "the answer"))
+        val result = executeTool(answered, emptyList(), json)
+        assertEquals("the answer", (result.output.single() as UIMessagePart.Text).text)
+    }
+
+    @Test
+    fun `executeTool happy path records the tool definition's output`() = runBlocking {
+        val executed = toolPart(input = "{\"city\":\"SF\"}", finished = true, approvalState = ToolApprovalState.Approved)
+        val out = listOf<UIMessagePart>(UIMessagePart.Text("done"))
+        val result = executeTool(executed, listOf(toolDef("search") { out }), json)
+        assertEquals("done", (result.output.single() as UIMessagePart.Text).text)
+    }
+
+    @Test
+    fun `executeTool IncompleteTruncated routes to the clean retry message`() = runBlocking {
+        val truncated = toolPart(input = "{\"city\":\"S", finished = false, approvalState = ToolApprovalState.Auto)
+        // Sanity: this input IS classified truncated, so the branch under test is the one exercised.
+        assertEquals(ToolCallExecutionState.IncompleteTruncated, truncated.toolCallExecutionState())
+        val result = executeTool(truncated, emptyList(), json)
+        val text = (result.output.single() as UIMessagePart.Text).text
+        assertTrue(text.contains("re-issue"))
+        assertFalse(text.contains("Unexpected EOF"))
+    }
+
+    @Test
+    fun `executeTool re-throws CancellationException from the tool body - not swallowed into error JSON`() {
+        val executed = toolPart(input = "{}", finished = true, approvalState = ToolApprovalState.Approved)
+        val tools = listOf<Tool>(toolDef("search") { throw CancellationException("stopped") })
+        // Stop-generation must surface as cancellation, NEVER be reported as a tool execution error.
+        assertThrows(CancellationException::class.java) {
+            runBlocking { executeTool(executed, tools, json) }
+        }
+    }
+
+    @Test
+    fun `executeTool turns a plain exception into an error JSON naming the throwable class`() = runBlocking {
+        val executed = toolPart(input = "{}", finished = true, approvalState = ToolApprovalState.Approved)
+        val boom = IllegalStateException("boom")
+        val tools = listOf<Tool>(toolDef("search") { throw boom })
+        val result = executeTool(executed, tools, json)
+        val text = (result.output.single() as UIMessagePart.Text).text
+        assertTrue(text.contains("error"))
+        assertTrue(text.contains(IllegalStateException::class.java.name))
+        assertTrue(text.contains("boom"))
     }
 
     @Test

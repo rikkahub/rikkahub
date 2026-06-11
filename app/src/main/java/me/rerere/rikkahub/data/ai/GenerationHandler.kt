@@ -260,97 +260,10 @@ class GenerationHandler(
             // Handle tools (execute approved tools, handle denied tools)
             val executedTools = arrayListOf<UIMessagePart.Tool>()
             toolsToProcess.forEach { tool ->
-                when (tool.approvalState) {
-                    is ToolApprovalState.Denied -> {
-                        // Tool was denied by user
-                        val reason = (tool.approvalState as ToolApprovalState.Denied).reason
-                        executedTools += tool.copy(
-                            output = listOf(
-                                UIMessagePart.Text(
-                                    json.encodeToString(
-                                        buildJsonObject {
-                                            put(
-                                                "error",
-                                                JsonPrimitive("Tool execution denied by user. Reason: ${reason.ifBlank { "No reason provided" }}")
-                                            )
-                                        }
-                                    )
-                                )
-                            )
-                        )
-                    }
-
-                    is ToolApprovalState.Answered -> {
-                        // Tool was answered by user (e.g., ask_user tool)
-                        val answer = (tool.approvalState as ToolApprovalState.Answered).answer
-                        executedTools += tool.copy(
-                            output = listOf(
-                                UIMessagePart.Text(answer)
-                            )
-                        )
-                    }
-
-                    is ToolApprovalState.Pending -> {
-                        // Should not reach here, but just in case
-                    }
-
-                    else -> {
-                        // Auto or Approved - execute the tool.
-                        // A tool call whose terminating stream event never arrived
-                        // (stream interrupted) has a truncated, un-parseable input.
-                        // Feeding that to json.parseToJsonElement surfaces a raw
-                        // "Unexpected EOF" the model cannot act on. Instead emit a
-                        // balanced, actionable tool_result asking it to re-issue —
-                        // an unbalanced tool_use would be rejected on the next turn.
-                        if (tool.toolCallExecutionState() is ToolCallExecutionState.IncompleteTruncated) {
-                            executedTools += tool.copy(output = truncatedToolResult(json))
-                            return@forEach
-                        }
-                        runCatching {
-                            val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
-                                ?: error("Tool ${tool.toolName} not found")
-                            val args = runCatching {
-                                parseToolArguments(tool.input)
-                            }.getOrElse {
-                                error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
-                            }
-                            // AiLog policy (#96): tool name is safe metadata, but tool ARGS are a
-                            // payload — for ui_set_text they carry the literal text the model types
-                            // into another app's field (message body, OTP, possibly a credential).
-                            // Never interpolate args into the log; log only the name.
-                            Log.i(TAG, "generateText: executing tool ${toolDef.name}")
-                            val result = toolDef.execute(args)
-                            // A tool that legitimately succeeds with no output still
-                            // MUST be recorded as executed (non-empty output), otherwise
-                            // isExecuted stays false: the agentic loop re-runs it
-                            // (line 184 filter) and sanitizeForUpload misclassifies it as
-                            // an orphan tool_use and drops the branch (data loss).
-                            val output = result.ifEmpty { emptyToolResultPlaceholder(json) }
-                            executedTools += tool.copy(output = output)
-                        }.onFailure {
-                            // cancellation must propagate; otherwise stop-generation is misreported as a tool execution error
-                            if (it is CancellationException) throw it
-                            Log.w(TAG, "generateText: tool execution failed for ${tool.toolName}", it)
-                            executedTools += tool.copy(
-                                output = listOf(
-                                    UIMessagePart.Text(
-                                        json.encodeToString(
-                                            buildJsonObject {
-                                                put(
-                                                    "error",
-                                                    JsonPrimitive(buildString {
-                                                        append("[${it.javaClass.name}] ${it.message}")
-                                                        append("\n${it.stackTraceToString()}")
-                                                    })
-                                                )
-                                            }
-                                        )
-                                    )
-                                )
-                            )
-                        }
-                    }
-                }
+                // Pending is a no-op today (nothing appended): skip at the call site so executeTool
+                // only ever sees a terminal approval state.
+                if (tool.approvalState is ToolApprovalState.Pending) return@forEach
+                executedTools += executeTool(tool, toolsInternal, json)
             }
 
             if (executedTools.isEmpty()) {
@@ -616,10 +529,108 @@ class GenerationHandler(
 }
 
 /**
- * The model-actionable tool_result emitted when a tool call's arguments were
- * truncated by a stream interruption. Extracted as a pure function so the
- * truncation decision can be unit-tested without a Context/Provider.
+ * Resolves ONE tool call to its result part (issue #244, god-function split #3), flattening the
+ * 5-level `when (tool.approvalState)` nesting out of generateText's tool loop. The Pending no-op is
+ * handled at the call site (skipped), so this only ever sees a terminal approval state.
+ *
+ * suspend, and a CancellationException from the tool body PROPAGATES out unchanged (not turned into
+ * an error result) — otherwise stop-generation would be misreported as a tool execution error.
+ *
+ * Top-level internal (taking [json]) — mirroring [parseToolArguments]/[truncatedToolResult] — so the
+ * per-branch decision is JVM-unit-testable without the Context/Provider-coupled GenerationHandler.
  */
+internal suspend fun executeTool(
+    tool: UIMessagePart.Tool,
+    toolsInternal: List<Tool>,
+    json: Json,
+): UIMessagePart.Tool = when (tool.approvalState) {
+    is ToolApprovalState.Denied -> {
+        // Tool was denied by user
+        val reason = (tool.approvalState as ToolApprovalState.Denied).reason
+        tool.copy(
+            output = listOf(
+                UIMessagePart.Text(
+                    json.encodeToString(
+                        buildJsonObject {
+                            put(
+                                "error",
+                                JsonPrimitive("Tool execution denied by user. Reason: ${reason.ifBlank { "No reason provided" }}")
+                            )
+                        }
+                    )
+                )
+            )
+        )
+    }
+
+    is ToolApprovalState.Answered -> {
+        // Tool was answered by user (e.g., ask_user tool)
+        val answer = (tool.approvalState as ToolApprovalState.Answered).answer
+        tool.copy(
+            output = listOf(
+                UIMessagePart.Text(answer)
+            )
+        )
+    }
+
+    else -> {
+        // Auto or Approved - execute the tool.
+        // A tool call whose terminating stream event never arrived
+        // (stream interrupted) has a truncated, un-parseable input.
+        // Feeding that to json.parseToJsonElement surfaces a raw
+        // "Unexpected EOF" the model cannot act on. Instead emit a
+        // balanced, actionable tool_result asking it to re-issue —
+        // an unbalanced tool_use would be rejected on the next turn.
+        if (tool.toolCallExecutionState() is ToolCallExecutionState.IncompleteTruncated) {
+            tool.copy(output = truncatedToolResult(json))
+        } else {
+            runCatching {
+                val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
+                    ?: error("Tool ${tool.toolName} not found")
+                val args = runCatching {
+                    parseToolArguments(tool.input)
+                }.getOrElse {
+                    error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
+                }
+                // AiLog policy (#96): tool name is safe metadata, but tool ARGS are a
+                // payload — for ui_set_text they carry the literal text the model types
+                // into another app's field (message body, OTP, possibly a credential).
+                // Never interpolate args into the log; log only the name.
+                Log.i(TAG, "generateText: executing tool ${toolDef.name}")
+                val result = toolDef.execute(args)
+                // A tool that legitimately succeeds with no output still
+                // MUST be recorded as executed (non-empty output), otherwise
+                // isExecuted stays false: the agentic loop re-runs it
+                // (line 184 filter) and sanitizeForUpload misclassifies it as
+                // an orphan tool_use and drops the branch (data loss).
+                val output = result.ifEmpty { emptyToolResultPlaceholder(json) }
+                tool.copy(output = output)
+            }.getOrElse {
+                // cancellation must propagate; otherwise stop-generation is misreported as a tool execution error
+                if (it is CancellationException) throw it
+                Log.w(TAG, "generateText: tool execution failed for ${tool.toolName}", it)
+                tool.copy(
+                    output = listOf(
+                        UIMessagePart.Text(
+                            json.encodeToString(
+                                buildJsonObject {
+                                    put(
+                                        "error",
+                                        JsonPrimitive(buildString {
+                                            append("[${it.javaClass.name}] ${it.message}")
+                                            append("\n${it.stackTraceToString()}")
+                                        })
+                                    )
+                                }
+                            )
+                        )
+                    )
+                )
+            }
+        }
+    }
+}
+
 /**
  * Lenient parser for LLM-emitted tool-call arguments. Models routinely produce
  * relaxed JSON — most commonly unquoted object keys (`{action:"create"}`) — that
@@ -660,6 +671,11 @@ internal fun emptyToolResultPlaceholder(json: Json): List<UIMessagePart> = listO
     )
 )
 
+/**
+ * The model-actionable tool_result emitted when a tool call's arguments were
+ * truncated by a stream interruption. Extracted as a pure function so the
+ * truncation decision can be unit-tested without a Context/Provider.
+ */
 internal fun truncatedToolResult(json: Json): List<UIMessagePart> = listOf(
     UIMessagePart.Text(
         json.encodeToString(

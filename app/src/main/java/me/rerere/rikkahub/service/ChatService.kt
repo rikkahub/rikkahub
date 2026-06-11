@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
@@ -55,6 +56,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.automation.act.AlwaysDeny
 import me.rerere.automation.cap.Capability
 import me.rerere.automation.cap.CapabilityGuard
@@ -82,6 +84,7 @@ import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -802,6 +805,186 @@ class ChatService(
         session.setJob(job)
     }
 
+    // Appends the resolved MCP [mcpTools] to a tool-pool builder via the shared [mapMcpTool] adapter
+    // (issue #244, DRY #1) — used by BOTH the main-agent pool and the subagent pool so the "mcp__"
+    // prefix + callTool wiring can no longer drift between them.
+    private fun MutableList<Tool>.addMcpTools(mcpTools: List<Pair<Uuid, McpTool>>) {
+        mcpTools.forEach { (serverId, tool) ->
+            add(mapMcpTool(serverId, tool) { sid, name, args -> mcpManager.callTool(sid, name, args) })
+        }
+    }
+
+    // Assembles the per-generation tool pool (issue #244, god-function split #2a): web search, local
+    // tools, workspace tools, the UI-automation verbs (authorized via [automationGuard]), skill tools,
+    // the MCP adapter tools, and the subagent spawn tool. Built ONLY here (the main-agent pool) so a
+    // subagent's own pool — assembled inline via buildSubagentTools off the TARGET (sub) assistant —
+    // never contains the spawn tool, which is the structural recursion guard. [suspend] because
+    // skillManager.listSkills() suspends.
+    private suspend fun buildGenerationTools(
+        settings: Settings,
+        assistant: Assistant,
+        automationGuard: CapabilityGuard?,
+        session: ConversationSession,
+    ): List<Tool> = buildList {
+        if (settings.enableWebSearch) {
+            addAll(createSearchTools(settings))
+        }
+        addAll(localTools.getTools(assistant.localTools))
+        addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository))
+        // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
+        // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
+        // unless automation is enabled AND a guard was minted; each tool authorizes via the
+        // closed-over guard BEFORE the backend (S2). No-op (empty) when disabled or when the
+        // a11y service is not connected (the core() is null ⇒ no guard path is reachable).
+        automationRegistry.core()?.let { automationCore ->
+            addAll(
+                getUiAutomationTools(
+                    assistant = assistant,
+                    guard = automationGuard,
+                    core = automationCore,
+                    foregroundPkg = { automationRegistry.foregroundPackage() },
+                    // The out-of-band confirm for a dangerous (submit-class) tap (#198 slice
+                    // 11). Fail closed: if no overlay-backed channel is reachable (a11y
+                    // service not connected), a dangerous sink can never be confirmed, so it
+                    // is always denied — never silently auto-confirmed.
+                    confirm = automationRegistry.confirmChannel() ?: AlwaysDeny,
+                )
+            )
+        }
+        if (assistant.enabledSkills.isNotEmpty()) {
+            addAll(
+                createSkillTools(
+                    enabledSkills = assistant.enabledSkills,
+                    allSkills = skillManager.listSkills(),
+                    skillManager = skillManager,
+                )
+            )
+        }
+        addMcpTools(mcpManager.getAllAvailableTools(assistant))
+        // Subagent spawn tool (issue #201). Built ONLY here so a subagent's own pool
+        // (via SubagentRunner -> generateText, which bypasses this buildList) never
+        // contains it — the structural recursion guard. No-op when nothing is spawnable.
+        val spawnableAssistants = settings.assistants.filter { it.spawnable }
+        if (spawnableAssistants.isNotEmpty()) {
+            add(
+                buildSpawnTool(
+                    spawnableAssistants = spawnableAssistants,
+                    runner = subagentRunner,
+                    parentModelId = assistant.chatModelId,
+                    settings = settings,
+                    // The subagent's pool is built from the TARGET (sub) assistant's own
+                    // allowlist — local tools + skills + MCP keyed off `sub` (the C3
+                    // MCP-by-target-assistant fix). The spawn tool is never built here
+                    // for the sub, so it can't recurse; SubagentRunner additionally
+                    // filters it, and needsApproval tools are dropped at the spawn site.
+                    buildSubagentTools = { sub ->
+                        buildList {
+                            addAll(localTools.getTools(sub.localTools))
+                            if (sub.enabledSkills.isNotEmpty()) {
+                                addAll(
+                                    createSkillTools(
+                                        enabledSkills = sub.enabledSkills,
+                                        allSkills = skillManager.listSkills(),
+                                        skillManager = skillManager,
+                                    )
+                                )
+                            }
+                            addMcpTools(mcpManager.getAllAvailableTools(sub))
+                        }
+                    },
+                    processingStatus = session.processingStatus,
+                    progressLabel = { subName ->
+                        context.getString(R.string.chat_subagent_running, subName)
+                    },
+                )
+            )
+        }
+    }
+
+    // UI automation (#187 v1) per-conversation capability lease (issue #244, god-function split #2b).
+    // Unifies the three coupled lifecycle obligations that were scattered across the generation:
+    //   1. mint ONE CapabilityGuard for this generation when the assistant has automation enabled
+    //      (gate finding 11 / S1 — bound to THIS conversation, not a standing per-assistant grant),
+    //      and register it on the session;
+    //   2. fail closed (design I9/§7): activate the refcounted STOP overlay; if no kill-switch is
+    //      reachable (a11y service not connected, or addView failed), revoke the just-minted guard and
+    //      throw so generation aborts with a surfaced error — never expose ui_observe without a STOP;
+    //   3. release the lease + overlay on EVERY terminal path in the finally — normal finish, error,
+    //      cancellation, OR a throw while assembling generateText's eager arguments (memory/skill/MCP
+    //      lookups are eager, BEFORE the flow's onCompletion is attached). So [block] MUST wrap the
+    //      eager-arg assembly (buildGenerationTools + memory recall) too, which onCompletion alone
+    //      would miss — leaking the STOP overlay forever.
+    //
+    // BOTH the guard-clear AND the overlay deactivate are identity-guarded on
+    // `activeAutomationGuard === guard`. The activation tracker is keyed by conversationId, so for a
+    // cancel-relaunch on the SAME conversation (regenerate / tool-approval cancel an in-flight gen,
+    // then re-enter handleMessageComplete WITHOUT sendMessage's previousJob.join() barrier) the old
+    // gen's late finally would otherwise deactivate(conversationId) — emptying the refcount and hiding
+    // the floating STOP — while the new gen's guard is already live and observing a foreign app.
+    // Gating the deactivate on identity means the superseded generation (whose guard is no longer the
+    // session's active one) touches neither the guard slot nor the overlay; the live generation owns
+    // the 1→0 deactivate when IT terminates. (sendMessage's join() makes the old finally run before
+    // the new activate, so identity holds there too.)
+    //
+    // [inline] so a non-local return/throw out of [block] (incl. CancellationException and the
+    // automation_kill_switch_unavailable throw) propagates exactly as it did inline.
+    private inline fun <R> withAutomationLease(
+        conversationId: Uuid,
+        assistant: Assistant,
+        session: ConversationSession,
+        block: (CapabilityGuard?) -> R,
+    ): R {
+        val automationGuard: CapabilityGuard? = if (assistant.uiAutomationEnabled) {
+            CapabilityGuard(
+                capability = Capability.root(
+                    sessionId = conversationId.toString(),
+                    // Surface stays empty-by-default = deny-all (S1): a per-app whitelist is a
+                    // separate later UI. This grant makes the nav verbs, the input sink, and the
+                    // general tap (Verb.TAP, #198 slice 10) AUTHORIZABLE but does NOT widen the
+                    // admitted surface — authorize still DENYs on the surface branch for any real
+                    // foreground app today, exactly as OBSERVE does.
+                    surface = emptySet(),
+                    verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT, Verb.TAP),
+                    // GLOBAL_NAV must be in budget for ui_global's authorize to pass the
+                    // sink-in-budget branch; TYPE_INTO for ui_set_text (#198 slice 9, the input
+                    // sink). ui_scroll and ui_tap (#198 slice 10) carry NO sink for an ordinary tap
+                    // (the SCROLL/TAP verb suffices). Sink.SUBMIT is INTENTIONALLY WITHHELD from this
+                    // default lease (#198 slice 11, the conservative default): a submit-class
+                    // (send/pay/checkout) tap derives SUBMIT in core.act, and with SUBMIT not in
+                    // budget the guard DENYs it at the sink-in-budget branch BEFORE the confirm gate
+                    // is even reached. So the confirm gate is fully wired and proven but un-reachable
+                    // through this default lease — submit-class automation is a separate, stricter,
+                    // explicit opt-in (a later grant that adds SUBMIT to the budget), exactly mirroring
+                    // how slices 8-10 made verbs AUTHORIZABLE without widening the admitted surface.
+                    // Surface stays empty = deny-all (S1): these grants make the verbs/sinks
+                    // AUTHORIZABLE but do NOT widen the admitted surface — authorize still DENYs on
+                    // surface for any real foreground app today.
+                    sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
+                    lease = Lease(
+                        expiresAt = trustClock.now() + UI_AUTOMATION_LEASE_TTL_MS,
+                        maxSteps = UI_AUTOMATION_MAX_STEPS,
+                    ),
+                ),
+                clock = trustClock,
+            ).also { guard -> session.activeAutomationGuard = guard }
+        } else {
+            null
+        }
+        if (automationGuard != null && !automationActivation.activate(conversationId)) {
+            if (session.activeAutomationGuard === automationGuard) session.activeAutomationGuard = null
+            automationGuard.revoke()
+            throw IllegalStateException(context.getString(R.string.automation_kill_switch_unavailable))
+        }
+        try {
+            return block(automationGuard)
+        } finally {
+            if (automationGuard != null && session.activeAutomationGuard === automationGuard) {
+                session.activeAutomationGuard = null
+                automationActivation.deactivate(conversationId)
+            }
+        }
+    }
+
     // ---- 处理消息补全 ----
 
     private suspend fun handleMessageComplete(
@@ -843,61 +1026,13 @@ class ChatService(
             // start generating
             val session = getOrCreateSession(conversationId)
 
-            // UI automation (#187 v1): mint ONE per-conversation capability guard for this generation
-            // when the assistant has automation enabled (gate finding 11 / S1 — bound to THIS
-            // conversation, not a standing per-assistant grant). Default-empty surface = deny-all
-            // until a per-app whitelist is granted (a later UI); the read-only OBSERVE verb is the
-            // only authority. Registered on the session; the floating STOP overlay is then activated
-            // (refcounted across sessions) so a kill-switch can revoke it. Released in the finally
-            // below on EVERY terminal path — including a throw while assembling generateText's
-            // arguments (memory/skill/MCP lookups are eager, BEFORE the flow's onCompletion is
-            // attached), which onCompletion alone would miss, leaking the STOP overlay forever.
-            val automationGuard: CapabilityGuard? = if (assistant.uiAutomationEnabled) {
-                CapabilityGuard(
-                    capability = Capability.root(
-                        sessionId = conversationId.toString(),
-                        // Surface stays empty-by-default = deny-all (S1): a per-app whitelist is a
-                        // separate later UI. This grant makes the nav verbs, the input sink, and the
-                        // general tap (Verb.TAP, #198 slice 10) AUTHORIZABLE but does NOT widen the
-                        // admitted surface — authorize still DENYs on the surface branch for any real
-                        // foreground app today, exactly as OBSERVE does.
-                        surface = emptySet(),
-                        verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT, Verb.TAP),
-                        // GLOBAL_NAV must be in budget for ui_global's authorize to pass the
-                        // sink-in-budget branch; TYPE_INTO for ui_set_text (#198 slice 9, the input
-                        // sink). ui_scroll and ui_tap (#198 slice 10) carry NO sink for an ordinary tap
-                        // (the SCROLL/TAP verb suffices). Sink.SUBMIT is INTENTIONALLY WITHHELD from this
-                        // default lease (#198 slice 11, the conservative default): a submit-class
-                        // (send/pay/checkout) tap derives SUBMIT in core.act, and with SUBMIT not in
-                        // budget the guard DENYs it at the sink-in-budget branch BEFORE the confirm gate
-                        // is even reached. So the confirm gate is fully wired and proven but un-reachable
-                        // through this default lease — submit-class automation is a separate, stricter,
-                        // explicit opt-in (a later grant that adds SUBMIT to the budget), exactly mirroring
-                        // how slices 8-10 made verbs AUTHORIZABLE without widening the admitted surface.
-                        // Surface stays empty = deny-all (S1): these grants make the verbs/sinks
-                        // AUTHORIZABLE but do NOT widen the admitted surface — authorize still DENYs on
-                        // surface for any real foreground app today.
-                        sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
-                        lease = Lease(
-                            expiresAt = trustClock.now() + UI_AUTOMATION_LEASE_TTL_MS,
-                            maxSteps = UI_AUTOMATION_MAX_STEPS,
-                        ),
-                    ),
-                    clock = trustClock,
-                ).also { guard -> session.activeAutomationGuard = guard }
-            } else {
-                null
-            }
-            // Fail closed (design I9/§7): activate the refcounted STOP overlay; if no kill-switch is
-            // reachable (a11y service not connected, or addView failed), do NOT expose ui_observe —
-            // revoke the just-minted guard and abort generation with a surfaced error.
-            if (automationGuard != null && !automationActivation.activate(conversationId)) {
-                if (session.activeAutomationGuard === automationGuard) session.activeAutomationGuard = null
-                automationGuard.revoke()
-                throw IllegalStateException(context.getString(R.string.automation_kill_switch_unavailable))
-            }
-
-            try {
+            // UI automation (#187 v1): the per-conversation capability lease + refcounted STOP
+            // overlay lifecycle (mint guard → fail-closed activate → identity-guarded release on
+            // EVERY terminal path, incl. a throw while assembling generateText's eager arguments) is
+            // unified in withAutomationLease. block() must cover the eager-arg assembly
+            // (buildGenerationTools + memory recall) too, because those run BEFORE the flow's
+            // onCompletion is attached — onCompletion alone would miss them and leak the overlay.
+            withAutomationLease(conversationId, assistant, session) { automationGuard ->
 
             // 流式 UI 合并状态：每个 chunk 携带累计全量 messages（节点按 INDEX 合并、节点内消息按 id 匹配，
             // 见 Conversation.updateCurrentMessages）。把"何时把合并状态写给 UI"的窗口节流 + 终止刷新决策收拢进
@@ -938,105 +1073,7 @@ class ChatService(
                     add(templateTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
-                    }
-                    addAll(localTools.getTools(assistant.localTools))
-                    addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository))
-                    // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
-                    // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
-                    // unless automation is enabled AND a guard was minted; each tool authorizes via the
-                    // closed-over guard BEFORE the backend (S2). No-op (empty) when disabled or when the
-                    // a11y service is not connected (the core() is null ⇒ no guard path is reachable).
-                    automationRegistry.core()?.let { automationCore ->
-                        addAll(
-                            getUiAutomationTools(
-                                assistant = assistant,
-                                guard = automationGuard,
-                                core = automationCore,
-                                foregroundPkg = { automationRegistry.foregroundPackage() },
-                                // The out-of-band confirm for a dangerous (submit-class) tap (#198 slice
-                                // 11). Fail closed: if no overlay-backed channel is reachable (a11y
-                                // service not connected), a dangerous sink can never be confirmed, so it
-                                // is always denied — never silently auto-confirmed.
-                                confirm = automationRegistry.confirmChannel() ?: AlwaysDeny,
-                            )
-                        )
-                    }
-                    if (assistant.enabledSkills.isNotEmpty()) {
-                        addAll(
-                            createSkillTools(
-                                enabledSkills = assistant.enabledSkills,
-                                allSkills = skillManager.listSkills(),
-                                skillManager = skillManager,
-                            )
-                        )
-                    }
-                    mcpManager.getAllAvailableTools(assistant).forEach { (serverId, tool) ->
-                        add(
-                            Tool(
-                                name = "mcp__" + tool.name,
-                                description = tool.description ?: "",
-                                parameters = { tool.inputSchema },
-                                needsApproval = tool.needsApproval,
-                                execute = {
-                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                },
-                            )
-                        )
-                    }
-                    // Subagent spawn tool (issue #201). Built ONLY here so a subagent's own pool
-                    // (via SubagentRunner -> generateText, which bypasses this buildList) never
-                    // contains it — the structural recursion guard. No-op when nothing is spawnable.
-                    val spawnableAssistants = settings.assistants.filter { it.spawnable }
-                    if (spawnableAssistants.isNotEmpty()) {
-                        add(
-                            buildSpawnTool(
-                                spawnableAssistants = spawnableAssistants,
-                                runner = subagentRunner,
-                                parentModelId = assistant.chatModelId,
-                                settings = settings,
-                                // The subagent's pool is built from the TARGET (sub) assistant's own
-                                // allowlist — local tools + skills + MCP keyed off `sub` (the C3
-                                // MCP-by-target-assistant fix). The spawn tool is never built here
-                                // for the sub, so it can't recurse; SubagentRunner additionally
-                                // filters it, and needsApproval tools are dropped at the spawn site.
-                                buildSubagentTools = { sub ->
-                                    buildList {
-                                        addAll(localTools.getTools(sub.localTools))
-                                        if (sub.enabledSkills.isNotEmpty()) {
-                                            addAll(
-                                                createSkillTools(
-                                                    enabledSkills = sub.enabledSkills,
-                                                    allSkills = skillManager.listSkills(),
-                                                    skillManager = skillManager,
-                                                )
-                                            )
-                                        }
-                                        mcpManager.getAllAvailableTools(sub).forEach { (serverId, tool) ->
-                                            add(
-                                                Tool(
-                                                    name = "mcp__" + tool.name,
-                                                    description = tool.description ?: "",
-                                                    parameters = { tool.inputSchema },
-                                                    needsApproval = tool.needsApproval,
-                                                    execute = {
-                                                        mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                                    },
-                                                )
-                                            )
-                                        }
-                                    }
-                                },
-                                processingStatus = session.processingStatus,
-                                progressLabel = { subName ->
-                                    context.getString(R.string.chat_subagent_running, subName)
-                                },
-                            )
-                        )
-                    }
-                },
+                tools = buildGenerationTools(settings, assistant, automationGuard, session),
             ).let { chunkFlow ->
                 // UI 发布生命周期统一交给合并器：把累计全量 chunk.messages 流过 uiCoalescer.coalesce，逐 chunk
                 // 节流写 UI，并在任何终止路径强制刷新末帧（finish）。这是 #108 的接线点——节流 + 终止刷新都封在
@@ -1098,26 +1135,6 @@ class ChatService(
                 }
             }.collect { /* 终端消费：所有 chunk 副作用已在 coalesce 内完成 */ }
 
-            } finally {
-                // UI automation (#187): release the per-conversation lease + STOP overlay on EVERY
-                // terminal path — normal finish, error, cancellation, OR a throw while assembling
-                // generateText's eager arguments (which runs before the flow's onCompletion exists).
-                //
-                // BOTH the guard-clear AND the overlay deactivate are identity-guarded on
-                // `activeAutomationGuard === automationGuard`. The activation tracker is keyed by
-                // conversationId, so for a cancel-relaunch on the SAME conversation (regenerate /
-                // tool-approval cancel an in-flight gen, then re-enter handleMessageComplete WITHOUT
-                // sendMessage's previousJob.join() barrier) the old gen's late finally would otherwise
-                // deactivate(conversationId) — emptying the refcount and hiding the floating STOP —
-                // while the new gen's guard is already live and observing a foreign app. Gating the
-                // deactivate on identity means the superseded generation (whose guard is no longer the
-                // session's active one) touches neither the guard slot nor the overlay; the live
-                // generation owns the 1→0 deactivate when IT terminates. (sendMessage's join() makes
-                // the old finally run before the new activate, so identity holds there too.)
-                if (automationGuard != null && session.activeAutomationGuard === automationGuard) {
-                    session.activeAutomationGuard = null
-                    automationActivation.deactivate(conversationId)
-                }
             }
         }.onFailure {
             // Live Update 通知的移除由 GenerationForegroundService 在 1->0 边负责（见 onCompletion 注释）。
@@ -1628,6 +1645,26 @@ internal fun removedFileUris(oldFiles: List<String>, newFiles: List<String>): Li
     val newSet = newFiles.toHashSet()
     return oldFiles.filter { it !in newSet }
 }
+
+/**
+ * Adapts a single MCP [tool] (selected for some server [serverId]) into the AI-SDK [Tool] shape
+ * (issue #244, DRY #1). This owns the one invariant the two pools (main-agent + subagent) must not
+ * let drift: the `"mcp__"` name prefix and the `callTool(serverId, tool.name, args)` wiring.
+ *
+ * [callTool] is injected (not the Android/Koin-coupled [McpManager]) so the mapping is a pure,
+ * JVM-unit-testable function — mirroring [selectMcpToolsForAssistant]/[callToolWithHeal] in McpManager.kt.
+ */
+internal fun mapMcpTool(
+    serverId: Uuid,
+    tool: McpTool,
+    callTool: suspend (Uuid, String, JsonObject) -> List<UIMessagePart>,
+): Tool = Tool(
+    name = "mcp__" + tool.name,
+    description = tool.description ?: "",
+    parameters = { tool.inputSchema },
+    needsApproval = tool.needsApproval,
+    execute = { callTool(serverId, tool.name, it.jsonObject) },
+)
 
 /**
  * Atomic streaming-UI publish seam (issue #108). Merges the accumulated [messages] into the LIVE
