@@ -62,6 +62,7 @@ import me.rerere.ai.util.rethrowIfMediaTooLarge
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -145,17 +146,25 @@ class GoogleProvider(
                 models.mapNotNull {
                     val modelObject = it.jsonObject
 
-                    // 忽略非chat/embedding模型
+                    // 忽略非chat/embedding模型。第三方 Gemini 兼容代理可能省略字段 —
+                    // 跳过缺字段的条目而非用 !! 让整个 listModels NPE（对齐 ClaudeProvider.listModels）。
                     val supportedGenerationMethods =
-                        modelObject["supportedGenerationMethods"]!!.jsonArray
-                            .map { method -> method.jsonPrimitive.content }
+                        modelObject["supportedGenerationMethods"]?.jsonArrayOrNull
+                            ?.mapNotNull { method -> method.jsonPrimitiveOrNull?.contentOrNull }
+                            ?: return@mapNotNull null
                     if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
                         return@mapNotNull null
                     }
 
+                    val name = modelObject["name"]?.jsonPrimitiveOrNull?.contentOrNull
+                        ?: return@mapNotNull null
+                    val modelId = name.substringAfter("/")
+
                     Model(
-                        modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/"),
-                        displayName = modelObject["displayName"]!!.jsonPrimitive.content,
+                        modelId = modelId,
+                        // displayName 缺失时回退到 id（有效 id 的模型仍然可用），对齐 Claude。
+                        displayName = modelObject["displayName"]?.jsonPrimitiveOrNull?.contentOrNull
+                            ?: modelId,
                         type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
                     )
                 }
@@ -539,7 +548,8 @@ class GoogleProvider(
             "user" -> MessageRole.USER
             "system" -> MessageRole.SYSTEM
             "model" -> MessageRole.ASSISTANT
-            else -> error("Unknown role $role")
+            // A proxy/future kind must degrade, not crash the parse.
+            else -> MessageRole.ASSISTANT
         }
     }
 
@@ -548,7 +558,9 @@ class GoogleProvider(
             message["role"]?.jsonPrimitive?.contentOrNull ?: "model"
         )
         val content = message["content"]?.jsonObject ?: error("No content")
-        val parts = content["parts"]?.jsonArray?.map { part ->
+        // mapNotNull: an unknown part kind is dropped so valid sibling text parts in the same frame
+        // survive (one unknown part previously threw and aborted the whole content.parts mapping).
+        val parts = content["parts"]?.jsonArray?.mapNotNull { part ->
             parseMessagePart(part.jsonObject)
         } ?: emptyList()
 
@@ -577,7 +589,7 @@ class GoogleProvider(
         return chunks
     }
 
-    private fun parseMessagePart(jsonObject: JsonObject): UIMessagePart {
+    private fun parseMessagePart(jsonObject: JsonObject): UIMessagePart? {
         return when {
             jsonObject.containsKey("text") -> {
                 val thought = jsonObject["thought"]?.jsonPrimitive?.booleanOrNull ?: false
@@ -624,7 +636,9 @@ class GoogleProvider(
                 )
             }
 
-            else -> error("unknown message part type: $jsonObject")
+            // Unknown part kind (executableCode, codeExecutionResult, future kinds): skip it so
+            // known sibling parts in the same frame are preserved.
+            else -> null
         }
     }
 

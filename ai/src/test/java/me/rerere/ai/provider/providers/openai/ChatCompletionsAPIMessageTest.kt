@@ -399,6 +399,42 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("QUJD", image.url)
     }
 
+    // ==================== role tolerance (issue #241) ====================
+
+    private fun roleMessage(role: String?): JsonObject = buildJsonObject {
+        if (role != null) put("role", role)
+        put("content", "hi")
+    }
+
+    @Test
+    fun `unmapped role degrades to ASSISTANT instead of throwing`() {
+        // Regression for issue #241: MessageRole.valueOf("DEVELOPER") threw
+        // IllegalArgumentException, crashing out of the streaming onEvent. An
+        // OpenAI-compatible proxy can emit any role string; it must degrade.
+        val message = invokeParseMessage(roleMessage("developer"))
+        assertEquals(MessageRole.ASSISTANT, message.role)
+    }
+
+    @Test
+    fun `function role degrades to ASSISTANT`() {
+        val message = invokeParseMessage(roleMessage("function"))
+        assertEquals(MessageRole.ASSISTANT, message.role)
+    }
+
+    @Test
+    fun `absent role defaults to ASSISTANT (fallback preserved)`() {
+        val message = invokeParseMessage(roleMessage(null))
+        assertEquals(MessageRole.ASSISTANT, message.role)
+    }
+
+    @Test
+    fun `mapped roles are honored case-insensitively`() {
+        assertEquals(MessageRole.USER, invokeParseMessage(roleMessage("USER")).role)
+        assertEquals(MessageRole.SYSTEM, invokeParseMessage(roleMessage("system")).role)
+        assertEquals(MessageRole.TOOL, invokeParseMessage(roleMessage("Tool")).role)
+        assertEquals(MessageRole.ASSISTANT, invokeParseMessage(roleMessage("assistant")).role)
+    }
+
     // ==================== reasoning_effort host routing ====================
 
     // Helper to invoke private buildChatCompletionRequest method via reflection

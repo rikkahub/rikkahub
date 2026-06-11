@@ -39,6 +39,7 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.AiLog
+import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.bufferStreamChunks
 import me.rerere.ai.util.configureReferHeaders
@@ -171,9 +172,11 @@ class ChatCompletionsAPI(
                     .filter { it.isNotBlank() }
                     .map { json.parseToJsonElement(it).jsonObject }
                     .forEach {
-                        if (it["error"] != null) {
-                            val error = it["error"]!!.parseErrorDetail()
-                            throw error
+                        // Throwing out of onEvent is mishandled by OkHttp's SSE loop; close(error)
+                        // is the correct termination channel (parity with GoogleProvider/ResponseAPI).
+                        resolveStreamError(it)?.let { error ->
+                            close(error)
+                            return
                         }
                         val id = it["id"]?.jsonPrimitive?.contentOrNull ?: ""
                         val model = it["model"]?.jsonPrimitive?.contentOrNull ?: ""
@@ -627,9 +630,7 @@ class ChatCompletionsAPI(
     }
 
     private fun parseMessage(jsonObject: JsonObject): UIMessage {
-        val role = MessageRole.valueOf(
-            jsonObject["role"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "ASSISTANT"
-        )
+        val role = parseOpenAiRole(jsonObject["role"]?.jsonPrimitive?.contentOrNull)
 
         // 也许支持其他模态的输出content?
         val content = jsonObject["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
@@ -659,7 +660,8 @@ class ChatCompletionsAPI(
                 }
                 toolCalls.forEach { toolCalls ->
                     val type = toolCalls.jsonObject["type"]?.jsonPrimitive?.contentOrNull
-                    if (!type.isNullOrEmpty() && type != "function") error("tool call type not supported: $type")
+                    // Skip a tool call of an unknown type rather than crash the whole frame.
+                    if (!type.isNullOrEmpty() && type != "function") return@forEach
                     val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
                     val toolName =
                         toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
@@ -694,9 +696,11 @@ class ChatCompletionsAPI(
     }
 
     private fun parseAnnotations(jsonArray: JsonArray): List<UIMessageAnnotation> {
-        return jsonArray.map { element ->
+        // Annotations are pure presentation metadata; an unknown/absent type is skipped so it
+        // cannot crash the streaming parse and lose the rest of the frame.
+        return jsonArray.mapNotNull { element ->
             val type =
-                element.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: error("type is null")
+                element.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             when (type) {
                 "url_citation" -> {
                     UIMessageAnnotation.UrlCitation(
@@ -707,7 +711,7 @@ class ChatCompletionsAPI(
                     )
                 }
 
-                else -> error("unknown annotation type: $type")
+                else -> null
             }
         }
     }
@@ -727,5 +731,22 @@ class ChatCompletionsAPI(
         val gonnaSend = filter { it is UIMessagePart.Text || it is UIMessagePart.Image }.size
         val texts = filter { it is UIMessagePart.Text }.size
         return gonnaSend == texts && texts == 1
+    }
+
+    // Tolerant role mapper: OpenAI-compatible proxies can emit any role string (developer,
+    // function, custom). An unmapped/absent role degrades to ASSISTANT instead of throwing
+    // (MessageRole.valueOf threw IllegalArgumentException, crashing out of the streaming onEvent).
+    // Pure (no Log/network) so it is JVM-unit-testable via reflection.
+    private fun parseOpenAiRole(role: String?): MessageRole = when (role?.lowercase()) {
+        "system" -> MessageRole.SYSTEM
+        "user" -> MessageRole.USER
+        "tool" -> MessageRole.TOOL
+        else -> MessageRole.ASSISTANT
+    }
+
+    // Returns a terminating exception for an SSE error frame, or null for a normal data frame.
+    // The call site closes the flow with close(error) rather than throwing out of onEvent.
+    private fun resolveStreamError(frame: JsonObject): HttpException? {
+        return frame["error"]?.parseErrorDetail()
     }
 }

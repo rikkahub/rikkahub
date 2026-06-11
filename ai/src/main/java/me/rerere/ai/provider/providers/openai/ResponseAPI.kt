@@ -173,7 +173,19 @@ class ResponseAPI(
                 }
                 AiLog.event(TAG, type, id)
                 val json = json.parseToJsonElement(data).jsonObject
-                val chunk = parseResponseDelta(json)
+                val chunk = try {
+                    parseResponseDelta(json)
+                } catch (e: Exception) {
+                    // An unknown/absent event TYPE already returns null from parseResponseDelta (a
+                    // skipped forward-compat frame — that is the intended tolerance). Reaching this
+                    // catch means a RECOGNIZED event was MALFORMED (e.g. a required field is missing).
+                    // Surface it as a stream failure rather than log-and-skip: silently dropping a
+                    // recognized frame hands the user a quietly-incomplete response with no error.
+                    // close(e) ends the flow gracefully (no app crash; the UI shows the failure).
+                    AiLog.parseFailure(TAG, e)
+                    close(e)
+                    return
+                }
                 if (chunk != null) {
                     trySend(chunk)
                 }
@@ -483,7 +495,9 @@ class ResponseAPI(
     }
 
     internal fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
-        val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
+        // An absent/unknown chunk type degrades to null (skip the frame) rather than crashing the
+        // stream: the Responses API adds event types over time and onEvent has no other guard.
+        val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: return null
 
         when (chunkType) {
             // The Responses API emits these before any reasoning/text item exists. Emitting an
@@ -823,7 +837,8 @@ class ResponseAPI(
                                 )
                             }
 
-                            else -> error("unknown part type $partType")
+                            // Skip an unknown nested part kind; known siblings survive.
+                            else -> {}
                         }
                     }
                 }
