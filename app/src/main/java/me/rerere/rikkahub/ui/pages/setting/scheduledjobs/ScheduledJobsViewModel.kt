@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobRunEntity
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
@@ -45,7 +46,8 @@ class ScheduledJobsViewModel(
             scheduler.cancel(id)
             runRepository.deleteAllForJob(id)
             repository.deleteById(id)
-            onDone()
+            // Callers pass UI work (nav.popBackStack) — must not run on the IO dispatcher.
+            withContext(Dispatchers.Main) { onDone() }
         }
     }
 
