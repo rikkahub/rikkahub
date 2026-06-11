@@ -6,6 +6,7 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import me.rerere.rikkahub.data.db.ImportedDatabaseReconciler
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.SkillPaths
 import me.rerere.rikkahub.data.datastore.Settings
@@ -330,6 +331,12 @@ class WebDavSync(
                     zipIn.closeEntry()
                 }
             }
+        }
+
+        // A backup exported from upstream RikkaHub lacks the fork-only tables; reconcile the
+        // restored file before Room opens it so the import doesn't crash on first launch.
+        if (config.items.contains(WebDavConfig.BackupItem.DATABASE)) {
+            ImportedDatabaseReconciler.reconcile(context)
         }
 
         Log.i(TAG, "restoreFromBackupFile: Restore completed successfully")
