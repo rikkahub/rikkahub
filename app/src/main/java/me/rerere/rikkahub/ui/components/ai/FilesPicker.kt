@@ -138,23 +138,25 @@ internal fun FilesPicker(
             modifier = Modifier.fillMaxWidth()
         )
 
-        WorkspacePickerListItem(
-            assistant = assistant,
-            workspaces = workspaces,
-            onUpdateAssistant = onUpdateAssistant,
-            onNavigateToDetail = { id ->
-                onDismiss()
-                navController.navigate(Screen.WorkspaceDetail(id))
-            },
-            onNavigateToTerminal = { id ->
-                onDismiss()
-                navController.navigate(Screen.WorkspaceTerminal(id))
-            },
-            onNavigateToManage = {
-                onDismiss()
-                navController.navigate(Screen.Workspaces)
-            },
-        )
+        if (workspaces.isNotEmpty()) {
+            WorkspacePickerListItem(
+                assistant = assistant,
+                workspaces = workspaces,
+                onUpdateAssistant = onUpdateAssistant,
+                onNavigateToDetail = { id ->
+                    onDismiss()
+                    navController.navigate(Screen.WorkspaceDetail(id))
+                },
+                onNavigateToTerminal = { id ->
+                    onDismiss()
+                    navController.navigate(Screen.WorkspaceTerminal(id))
+                },
+                onNavigateToManage = {
+                    onDismiss()
+                    navController.navigate(Screen.Workspaces)
+                },
+            )
+        }
 
         if (settings.mcpServers.isNotEmpty()) {
             McpPickerListItem(
