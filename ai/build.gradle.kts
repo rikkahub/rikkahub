@@ -55,7 +55,6 @@ dependencies {
     // okhttp
     api(libs.okhttp)
     api(libs.okhttp.sse)
-    api(libs.okhttp.logging)
 
     // kotlinx
     api(libs.kotlinx.serialization.json)

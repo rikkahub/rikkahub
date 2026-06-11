@@ -226,6 +226,7 @@ dependencies {
     // okhttp
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
+    implementation(libs.okhttp.logging)
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization.json)
 
@@ -294,6 +295,13 @@ dependencies {
 
     // image viewer
     implementation(libs.image.viewer)
+
+    // floating window (https://github.com/Petterpx/FloatingX)
+    implementation(libs.floatingx)
+    implementation(libs.floatingx.compose)
+
+    // quickjs (JS engine for the fetch sandbox / local tools)
+    implementation(libs.quickjs)
 
     // JLatexMath
     // https://github.com/rikkahub/jlatexmath-android

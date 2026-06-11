@@ -40,7 +40,7 @@ dependencies {
     // okhttp
     api(libs.okhttp)
     api(libs.okhttp.sse)
-    api(libs.okhttp.logging)
+    implementation(libs.okhttp.logging)
 
     // kotlinx
     api(libs.kotlinx.serialization.json)
@@ -50,16 +50,14 @@ dependencies {
     // apache commons
     api(libs.commons.text)
 
-    // floating
-    // https://github.com/Petterpx/FloatingX
-    api(libs.floatingx)
-    api(libs.floatingx.compose)
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
 
-    // quickjs
+    // quickjs — stays `api`: QuickJSContext is part of :common's PUBLIC ABI via the top-level
+    // `fun QuickJSContext.injectFetch(...)` extension (consumed by :search), so a consumer of that
+    // function needs QuickJS on its classpath transitively. Only okhttp-logging / floatingx (not in
+    // any public signature) were safe to demote to implementation.
     api(libs.quickjs)
 
     testImplementation(libs.junit)
