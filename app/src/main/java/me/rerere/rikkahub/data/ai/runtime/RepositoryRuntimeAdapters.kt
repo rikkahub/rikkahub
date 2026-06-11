@@ -10,6 +10,7 @@ import me.rerere.ai.runtime.contract.MemoryWriter
 import me.rerere.ai.runtime.contract.RecalledMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.common.time.toLocalDate
 import kotlin.uuid.Uuid
 
 /**
@@ -21,7 +22,12 @@ class AppConversationReader(
 ) : ConversationReader {
     override suspend fun recentConversations(assistantId: Uuid, limit: Int): List<ConversationSummary> =
         repository.getRecentConversations(assistantId, limit).map {
-            ConversationSummary(id = it.id, assistantId = it.assistantId, title = it.title)
+            ConversationSummary(
+                id = it.id,
+                assistantId = it.assistantId,
+                title = it.title,
+                lastChatDate = it.updateAt.toLocalDate(),
+            )
         }
 }
 

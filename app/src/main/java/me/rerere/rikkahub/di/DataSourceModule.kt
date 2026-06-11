@@ -195,7 +195,10 @@ val dataSourceModule = module {
             providerManager = get(),
             json = get(),
             memoryWriter = get(),
-            conversationRepo = get(),
+            conversationReader = get(),
+            modelProviderResolver = get(),
+            clock = get(),
+            logSink = get(),
             aiLoggingManager = get()
         )
     }

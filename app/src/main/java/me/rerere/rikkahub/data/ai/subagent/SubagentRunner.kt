@@ -9,7 +9,7 @@ import me.rerere.ai.runtime.subagent.extractFinalAssistantText
 import me.rerere.ai.runtime.subagent.filterToolsForSubagent
 import me.rerere.ai.runtime.subagent.resolveSubagentModel
 import me.rerere.ai.ui.UIMessage
-import me.rerere.rikkahub.data.ai.GenerationChunk
+import me.rerere.ai.runtime.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.datastore.Settings

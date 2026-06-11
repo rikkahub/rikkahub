@@ -37,6 +37,12 @@ data class AssistantConfig(
     val messageTemplate: String,
     val regexes: List<AssistantRegexRule>,
     val reasoningLevel: ReasoningLevel,
+    // 1:1 mirror of the app `Assistant` turn-shaping fields the chat-turn loop reads (issue #243 §C
+    // step 9). Plain primitives, no app/Android type, so the §E P1 boundary stays clean.
+    val allowConversationSystemPrompt: Boolean,
+    val temperature: Float?,
+    val topP: Float?,
+    val contextMessageSize: Int,
     val maxTokens: Int?,
     val customHeaders: List<CustomHeader>,
     val customBodies: List<CustomBody>,

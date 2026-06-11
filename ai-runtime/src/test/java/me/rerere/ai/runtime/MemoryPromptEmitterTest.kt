@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai
+package me.rerere.ai.runtime
 
 import me.rerere.ai.core.estimateTokens
 import me.rerere.ai.ui.UIMessagePart
@@ -13,7 +13,7 @@ import org.junit.Test
 
 /**
  * Unit coverage for the MEMORY emitter [buildMemoryPrompt] (issue #141 Phase 2). Mirrors the Phase 1
- * pure-seam style ([me.rerere.rikkahub.data.ai.transformers.KnowledgeContextTransformerTest]): no
+ * pure-seam style (the app KnowledgeContextTransformerTest): no
  * Android Context / Koin / disk, just the pure function over [RecalledMemory].
  *
  * Phase 2 converts `buildMemoryPrompt` from a single `**Memories**` JSON-array String dump of ALL

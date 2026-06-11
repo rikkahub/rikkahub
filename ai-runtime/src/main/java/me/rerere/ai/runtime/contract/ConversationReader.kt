@@ -10,6 +10,11 @@ data class ConversationSummary(
     val id: Uuid,
     val assistantId: Uuid,
     val title: String,
+    // The recent-chats prompt renders `updateAt.toLocalDate()` — a locale/timezone-dependent display
+    // string. The app adapter renders it (its `Conversation.updateAt` is a `java.time.Instant`) so the
+    // runtime stays free of app date formatting and the emitted JSON is byte-identical to the old
+    // app-side `buildRecentChatsPrompt`.
+    val lastChatDate: String,
 )
 
 /**

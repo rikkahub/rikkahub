@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai
+package me.rerere.ai.runtime
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
