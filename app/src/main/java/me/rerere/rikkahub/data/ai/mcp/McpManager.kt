@@ -34,6 +34,7 @@ import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.runtime.mcp.McpServerConfig
 import me.rerere.ai.runtime.mcp.McpTool
+import me.rerere.ai.runtime.contract.AssistantConfig
 import me.rerere.ai.runtime.mcp.selectMcpToolsForAssistant
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
@@ -143,10 +144,13 @@ class McpManager(
     // the PARENT's MCP servers. The target assistant is passed in so the caller (ChatService /
     // SubagentRunner) controls whose allowlist applies. Pure selection lives in
     // selectMcpToolsForAssistant so it is JVM-unit-testable without SettingsStore.
-    fun getAllAvailableTools(assistant: Assistant): List<Pair<Uuid, McpTool>> {
+    fun getAllAvailableTools(assistant: Assistant): List<Pair<Uuid, McpTool>> =
+        getAllAvailableTools(assistant.toAssistantConfig())
+
+    fun getAllAvailableTools(target: AssistantConfig): List<Pair<Uuid, McpTool>> {
         return selectMcpToolsForAssistant(
             settingsStore.settingsFlow.value.mcpServers,
-            assistant.toAssistantConfig(),
+            target,
         )
     }
 

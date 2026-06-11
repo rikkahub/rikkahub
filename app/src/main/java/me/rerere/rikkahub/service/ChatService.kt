@@ -991,9 +991,11 @@ class ChatService(
                         }
                     }
                 },
-                // MCP tools are selected off the TARGET assistant; on the main turn that is the in-scope
-                // app `assistant` (the §C3 by-target invariant), named `mcp__…` by the catalog's mapMcpTool.
-                mcpToolsForAssistant = { _ -> mcpManager.getAllAvailableTools(assistant) },
+                // MCP tools are selected off the TARGET assistant the catalog passes (the §C3 by-target
+                // invariant), named `mcp__…` by the catalog's mapMcpTool. Honoring `target` keeps this
+                // correct by construction if the catalog is ever reused for a subagent pool, not just the
+                // current main turn (where target == this assistant's config).
+                mcpToolsForAssistant = { target -> mcpManager.getAllAvailableTools(target) },
                 mcpCall = { sid, name, args -> mcpManager.callTool(sid, name, args) },
                 // Subagent spawn tool (issue #201). The catalog adds it only on a Main turn with
                 // includeSpawnTool true; the sub's own pool is built off the TARGET (sub) assistant's
