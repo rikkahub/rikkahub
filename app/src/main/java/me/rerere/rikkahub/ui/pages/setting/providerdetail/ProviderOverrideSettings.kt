@@ -110,7 +110,6 @@ internal fun ProviderOverrideSettings(
                         id = Uuid.random(),
                         builtIn = false,
                         models = emptyList(), // 这里必须设置为空，不然会导致循环依赖JSON
-                        description = {},
                     )
                     showProviderConfig = true
                 },

@@ -105,19 +105,16 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
-            description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
-            description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
-            description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         else -> error("Unsupported provider type: $type")
@@ -206,7 +203,7 @@ private fun ProviderConfigureOpenAI(
 ) {
     val toaster = LocalToaster.current
 
-    provider.description()
+    ProviderDescription(provider)
 
     OutlinedTextField(
         value = provider.name,
@@ -296,7 +293,7 @@ private fun ProviderConfigureClaude(
     provider: ProviderSetting.Claude,
     onEdit: (provider: ProviderSetting.Claude) -> Unit
 ) {
-    provider.description()
+    ProviderDescription(provider)
 
     OutlinedTextField(
         value = provider.name,
@@ -456,7 +453,7 @@ private fun ProviderConfigureGoogle(
         }
     }
 
-    provider.description()
+    ProviderDescription(provider)
 
     OutlinedTextField(
         value = provider.name,

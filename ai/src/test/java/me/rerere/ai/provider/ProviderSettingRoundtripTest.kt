@@ -1,6 +1,5 @@
 package me.rerere.ai.provider
 
-import androidx.compose.runtime.Composable
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.util.json
@@ -15,20 +14,13 @@ import org.junit.Test
  * oauthContext1M) and Vertex (vertexAI/privateKey/serviceAccountEmail/location/projectId) fields
  * plus a non-empty models list.
  *
- * NOTE on the @Composable description/shortDescription fields: contrary to a common assumption,
- * they are NOT excluded from data-class equals — they are constructor `val`s, only marked
- * @Transient for serialization. Their default value `{}` constructs a fresh ComposableLambdaImpl
- * each time, so original and decoded never compare equal on those two identity-based fields. They
- * carry no persisted state (not serialized), so the meaningful roundtrip is over everything else.
- * We normalize both sides to a single shared lambda before comparing, exactly as the persisted
- * contract intends. (The existing ShareSheetTest sidesteps this by asserting fields individually.)
+ * Regression for the Compose-leak fix (#242): ProviderSetting carries no presentation glue any
+ * more, so its data-class equals compares only persisted state. The roundtrip therefore holds
+ * directly with NO lambda normalization. This assertion cannot compile on the pre-fix model
+ * (copyProvider no longer takes description/shortDescription) and would not hold either, since the
+ * removed presentation lambda fields produced a fresh identity-based value on every construction.
  */
 class ProviderSettingRoundtripTest {
-
-    private val sharedLambda: @Composable () -> Unit = {}
-
-    private fun ProviderSetting.normalizeLambdas(): ProviderSetting =
-        copyProvider(description = sharedLambda, shortDescription = sharedLambda)
 
     @Test
     fun `ProviderSetting survives kotlinx encode-decode roundtrip`() {
@@ -36,7 +28,7 @@ class ProviderSettingRoundtripTest {
             checkAll(200, ProviderSettingArbs.arbProviderSetting) { x ->
                 val encoded = json.encodeToString<ProviderSetting>(x)
                 val decoded = json.decodeFromString<ProviderSetting>(encoded)
-                assertEquals(x.normalizeLambdas(), decoded.normalizeLambdas())
+                assertEquals(x, decoded)
             }
         }
     }
