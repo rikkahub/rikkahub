@@ -37,7 +37,7 @@ class ExternalAutomationActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val intent = intent ?: run { finish(); return }
-        val callerPkg = callingPackage ?: referrer?.host
+        val callerPkg = verifiedCallerPackage()
         val action = intent.action
         val requestId = intent.getStringExtra(ExternalAutomationDispatcher.EXTRA_REQUEST_ID)
         val returnAction = intent.getStringExtra(ExternalAutomationDispatcher.EXTRA_RETURN_ACTION)
@@ -56,6 +56,19 @@ class ExternalAutomationActivity : Activity() {
             }
         }
     }
+
+    /**
+     * Binder-verified caller identity only. `callingPackage` is non-null solely for
+     * startActivityForResult callers; `getLaunchedFromPackage()` (API 34+) also covers the
+     * plain startActivity path. `Activity.getReferrer()` must never feed the trust gate:
+     * it is caller-supplied via Intent.EXTRA_REFERRER and trivially spoofable, which would
+     * let any installed app impersonate a trusted package. Below API 34, plain-startActivity
+     * callers therefore classify as unverified and are rejected; they must use
+     * startActivityForResult to be identified.
+     */
+    private fun verifiedCallerPackage(): String? =
+        callingPackage
+            ?: if (android.os.Build.VERSION.SDK_INT >= 34) launchedFromPackage else null
 
     private suspend fun handleAction(
         action: String?,
