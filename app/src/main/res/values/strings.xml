@@ -1155,6 +1155,7 @@
   <string name="assistant_page_subagent_max_steps">Subagent Max Steps</string>
   <string name="assistant_page_subagent_max_steps_desc">Maximum tool-use steps when this assistant runs as a subagent. Leave empty to use the default</string>
   <string name="chat_subagent_running">Running %1$s</string>
+  <string name="chat_board_open">Task board</string>
   <string name="automation_a11y_service_label">RikkaHub UI Automation</string>
   <string name="automation_a11y_service_description">Lets an enabled assistant observe (read-only) the screen of other apps to help you. It cannot tap, type, or scroll. You can stop it any time from the floating STOP button.</string>
   <string name="automation_kill_switch_stop">STOP</string>

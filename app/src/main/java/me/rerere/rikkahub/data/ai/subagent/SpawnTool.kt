@@ -10,6 +10,8 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.task.TaskCoordinator
+import me.rerere.rikkahub.data.ai.task.buildTaskEnvelope
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import kotlin.uuid.Uuid
@@ -29,12 +31,19 @@ const val SPAWN_TOOL_NAME: String = "task"
 
 /**
  * The spawn ("task") [Tool] that lets the parent assistant delegate a self-contained sub-task to a
- * named, `spawnable` [Assistant] and get back just its final text (issue #201, slice 4).
+ * named, `spawnable` [Assistant] (issue #201; rewired onto [TaskCoordinator] in SPEC.md M4).
+ *
+ * The tool's wire surface is UNCHANGED — same reserved name [SPAWN_TOOL_NAME], same `subagent` /
+ * `prompt` args, same `UIMessagePart` output — so existing callers and transcripts keep working.
+ * What changed under it: the child now runs through [TaskCoordinator] instead of `SubagentRunner`,
+ * so the run is a persisted, lifecycle-tracked, budget/concurrency-gated [me.rerere.ai.runtime.task.TaskState]
+ * machine. The final answer still lands in the same `UIMessagePart.Tool` output (the parent's
+ * tool result), while the coordinator emits live lifecycle events for the task renderer (M5).
  *
  * Built ONLY at the parent's per-generation tool buildList (`ChatService`). A subagent reaches the
- * engine via [SubagentRunner] -> `generateText` directly, so its tool pool never goes through that
+ * engine via [TaskCoordinator] -> `generateText` directly, so its tool pool never goes through that
  * buildList and therefore never contains this tool — the recursion guard is structural (depth
- * bounded at 1), not a runtime flag. [SPAWN_TOOL_NAME] is additionally filtered by
+ * bounded at 1, TASK_DEPTH_ONE), not a runtime flag. [SPAWN_TOOL_NAME] is additionally filtered by
  * [filterToolsForSubagent] as a belt-and-suspenders guard against any other source impersonating
  * the name.
  *
@@ -45,19 +54,26 @@ const val SPAWN_TOOL_NAME: String = "task"
  * @param buildSubagentTools builds the TARGET (sub) assistant's own tool pool from its allowlist
  *   (local + skills + MCP). Supplied by the caller (`ChatService`) so this factory stays free of
  *   Android `Context` / managers. The pool is filtered before it reaches the engine: the spawn tool
- *   is stripped by [SubagentRunner.run] ([filterToolsForSubagent]) and `needsApproval=true` tools
+ *   is stripped by [TaskCoordinator.run] ([filterToolsForSubagent]) and `needsApproval=true` tools
  *   are dropped here, because the approval UI is unreachable mid-subagent (v1 security note).
  * @param progressLabel produces the parent-facing processingStatus string for a running subagent
  *   (kept as a lambda so this factory stays free of Android `Context`).
+ * @param parentConversationId the conversation whose generation owns this spawn. It is threaded
+ *   into [TaskCoordinator.run] so the persisted task row is associated with the REAL conversation
+ *   instead of [TaskCoordinator.run]'s `Uuid.random()` default — per-conversation lookup (the board
+ *   panel, retention's keep-newest-per-conversation, conversation-delete cleanup) all key on this
+ *   column (review finding #2). It is REQUIRED, not defaulted: a default here would silently
+ *   re-introduce the random-conversation orphan the fix removes.
  */
 fun buildSpawnTool(
     spawnableAssistants: List<Assistant>,
-    runner: SubagentRunner,
+    coordinator: TaskCoordinator,
     parentModelId: Uuid?,
     settings: Settings,
     buildSubagentTools: (sub: Assistant) -> List<Tool>,
     processingStatus: MutableStateFlow<String?>,
     progressLabel: (subName: String) -> String,
+    parentConversationId: Uuid,
 ): Tool = Tool(
     name = SPAWN_TOOL_NAME,
     description = "Delegate a self-contained sub-task to a specialized subagent and return its result.",
@@ -94,7 +110,7 @@ fun buildSpawnTool(
 
         // The sub's own tool pool, minus tools whose approval UI is unreachable mid-subagent
         // (v1 security note: a subagent runs only needsApproval=false tools). The spawn tool is
-        // additionally stripped inside SubagentRunner.run (recursion guard).
+        // additionally stripped inside TaskCoordinator.run (recursion guard, TASK_DEPTH_ONE).
         val subTools = buildSubagentTools(sub).filterNot { it.needsApproval }
 
         // Set-then-clear discipline (mirrors OcrTransformer / KnowledgeContextTransformer):
@@ -104,18 +120,29 @@ fun buildSpawnTool(
         val prevStatus = processingStatus.value
         processingStatus.value = progressLabel(sub.name)
         val result = try {
-            runner.run(
+            coordinator.run(
                 sub = sub,
                 prompt = prompt,
                 parentModelId = parentModelId,
                 settings = settings,
                 tools = subTools,
                 processingStatus = processingStatus,
+                parentConversationId = parentConversationId,
+                // parentToolCallId is intentionally NOT passed: the spawn tool call id is not
+                // reachable inside Tool.execute (its signature is `suspend (JsonElement) -> …`,
+                // engine-wide). Plumbing it would require an ABI change to the shared Tool type and
+                // the spawn-path tool assembly this spec marks Ask-first — tracked as a follow-up
+                // gap (review finding #2, parentToolCallId half). Until then per-parent concurrency
+                // grouping falls back to the global cap, which is still enforced.
             )
         } finally {
             processingStatus.value = prevStatus
         }
-        listOf(UIMessagePart.Text(result))
+        // Emit the structured {task:{...}} envelope (review finding #1) so the live renderer shows
+        // the TERMINAL status, budget counters, and interrupted/budget-exhausted identity instead
+        // of always falling back to a bare-text "Done". The envelope is JSON in a Text part — the
+        // existing `UIMessagePart.Tool` output shape, no new part subtype (v1 prohibition).
+        listOf(UIMessagePart.Text(buildTaskEnvelope(result).toString()))
     },
 )
 

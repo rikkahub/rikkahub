@@ -75,8 +75,9 @@ import me.rerere.ai.runtime.contract.ToolAssemblyContext
 import me.rerere.ai.runtime.contract.TurnMode
 import me.rerere.rikkahub.data.ai.runtime.AppToolCatalog
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
-import me.rerere.rikkahub.data.ai.subagent.SubagentRunner
+import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.ai.subagent.buildSpawnTool
+import me.rerere.rikkahub.data.ai.subagent.subagentBoardTools
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
@@ -109,7 +110,11 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
+import me.rerere.ai.runtime.board.buildBoardTools
+import me.rerere.rikkahub.data.ai.task.BoardPortAdapter
+import me.rerere.rikkahub.data.repository.BoardActor
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.TaskBoardRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.ai.runtime.memory.MEMORY_RECALL_K
 import me.rerere.rikkahub.data.ai.memory.MemoryRecaller
@@ -442,13 +447,16 @@ class ChatService(
     private val workspaceRepository: WorkspaceRepository,
     private val memoryRecaller: MemoryRecaller,
     private val generationHandler: GenerationHandler,
-    private val subagentRunner: SubagentRunner,
+    private val taskCoordinator: TaskCoordinator,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
+    // Per-conversation work-item board (SPEC.md M3/T7). Board tools delegate through this single
+    // repository — the same path the board UI uses (decision #4) — so legality is enforced once.
+    private val taskBoardRepository: TaskBoardRepository,
     // On-device UI automation (#187 v1, read-only). Registry hands out the live, system-instantiated
     // AccessibilityRuntime as a pure backend; the kill-switch dispatches STOP to the active guard(s).
     private val automationRegistry: AutomationRuntimeRegistry,
@@ -1150,7 +1158,7 @@ class ChatService(
                     } else {
                         buildSpawnTool(
                             spawnableAssistants = spawnableAssistants,
-                            runner = subagentRunner,
+                            coordinator = taskCoordinator,
                             parentModelId = parentModelId,
                             settings = settings,
                             buildSubagentTools = { sub ->
@@ -1170,14 +1178,50 @@ class ChatService(
                                             mcpManager.callTool(sid, name, args)
                                         })
                                     }
+                                    // The shared per-conversation board tools (finding #1). The
+                                    // production spawn path feeds THIS list straight to
+                                    // TaskCoordinator.run, never the catalog's TurnMode.Subagent arm,
+                                    // so without this a spawned subagent cannot task_list/task_update
+                                    // the board the parent and UI share (spec assumption 5 / decision
+                                    // #5). Bound to THIS conversation and owned by a per-subagent
+                                    // actor so its claims are attributable; the repository remains the
+                                    // single enforcement point (decision #4).
+                                    addAll(
+                                        subagentBoardTools(
+                                            repository = taskBoardRepository,
+                                            conversationId = conversationId,
+                                            sub = sub,
+                                        )
+                                    )
                                 }
                             },
                             processingStatus = session.processingStatus,
                             progressLabel = { subName ->
                                 context.getString(R.string.chat_subagent_running, subName)
                             },
+                            // Associate the persisted task row with THIS conversation so the board
+                            // panel / retention / cleanup find it (review finding #2). Same id the
+                            // board port binds below.
+                            parentConversationId = conversationId,
                         )
                     }
+                },
+                // Per-conversation board tools (SPEC.md M3/T7), added to the base pool for BOTH the
+                // main turn and any spawned subagent (decision #5: subagents coordinate over the one
+                // shared board). The port binds THIS conversation's id + the parent actor, so the
+                // tool never sees a conversation id; the repository is the single enforcement point
+                // shared with the board UI (decision #4). The parent turn acts as the user/owner.
+                boardTools = {
+                    buildBoardTools(
+                        BoardPortAdapter(
+                            repository = taskBoardRepository,
+                            conversationId = conversationId,
+                            actor = BoardActor(
+                                handleId = "conversation:$conversationId",
+                                displayName = senderName,
+                            ),
+                        )
+                    )
                 },
             )
 

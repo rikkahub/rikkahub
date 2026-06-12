@@ -13,9 +13,12 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -54,6 +57,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
+import me.rerere.hugeicons.stroke.Task01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -70,6 +74,8 @@ import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.common.text.base64Decode
+import me.rerere.rikkahub.ui.pages.chat.board.BoardPanel
+import me.rerere.rikkahub.ui.pages.chat.board.BoardViewModel
 import me.rerere.rikkahub.ui.pages.chat.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -257,6 +263,7 @@ private fun ChatPageContent(
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
+    var showBoard by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     val selectModelFirstMessage = stringResource(R.string.chat_page_select_model_first)
 
@@ -300,6 +307,9 @@ private fun ChatPageContent(
                     },
                     onClickMenu = {
                         previewMode = !previewMode
+                    },
+                    onOpenBoard = {
+                        showBoard = true
                     },
                     onUpdateTitle = {
                         vm.updateTitle(it)
@@ -437,6 +447,37 @@ private fun ChatPageContent(
                 },
             )
         }
+
+        // The read-write work-item board (SPEC.md M5, decision #4 / Success Criterion #5). The
+        // panel is keyed to THIS conversation's id, so user edits and tool calls both flow through
+        // the one TaskBoardRepository path — no UI-only validation. Mounted as a bottom sheet so it
+        // is reachable from the chat top bar without leaving the conversation.
+        if (showBoard) {
+            ChatBoardSheet(
+                conversationId = conversation.id,
+                onDismiss = { showBoard = false },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatBoardSheet(
+    conversationId: Uuid,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // The conversation id is the BoardViewModel's only runtime parameter (it scopes the board to
+    // this conversation); resolved per-conversation so two open chats never share one board VM.
+    val boardVm: BoardViewModel = koinViewModel(key = conversationId.toString()) {
+        parametersOf(conversationId.toString())
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        BoardPanel(vm = boardVm)
     }
 }
 
@@ -448,6 +489,7 @@ private fun TopBar(
     bigScreen: Boolean,
     previewMode: Boolean,
     onClickMenu: () -> Unit,
+    onOpenBoard: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -507,6 +549,14 @@ private fun TopBar(
             }
         },
         actions = {
+            IconButton(
+                onClick = {
+                    onOpenBoard()
+                }
+            ) {
+                Icon(HugeIcons.Task01, stringResource(R.string.chat_board_open))
+            }
+
             IconButton(
                 onClick = {
                     onClickMenu()

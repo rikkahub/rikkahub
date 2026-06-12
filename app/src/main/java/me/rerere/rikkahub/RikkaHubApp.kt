@@ -29,6 +29,7 @@ import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.hooksModule
 import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
+import me.rerere.rikkahub.data.ai.task.TaskRecoveryRunner
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
@@ -71,6 +72,9 @@ class RikkaHubApp : Application() {
 
         // sync upload files to DB
         syncManagedFiles()
+
+        // recover tasks interrupted by process death + sweep retention (SPEC M6 / SC#4)
+        recoverTasks()
 
         // Init remote config
         get<FirebaseRemoteConfig>().apply {
@@ -118,6 +122,22 @@ class RikkaHubApp : Application() {
                 get<FilesManager>().syncFolder()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
+            }
+        }
+    }
+
+    /**
+     * Startup task recovery (SPEC.md M6, Success Criterion #4): on a cold start, mark task rows
+     * left in flight by a process kill as `Interrupted` (resumable, no side-effect replay) and run
+     * the retention sweep. Off the main thread; the runner swallows and logs its own failures so a
+     * recovery hiccup can never block the UI from coming up.
+     */
+    private fun recoverTasks() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<TaskRecoveryRunner>().runStartupRecovery()
+            }.onFailure {
+                Log.e(TAG, "recoverTasks failed", it)
             }
         }
     }

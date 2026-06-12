@@ -8,9 +8,12 @@ import me.rerere.ai.runtime.contract.RuntimeClock
 import me.rerere.ai.runtime.contract.RuntimeFileRef
 import me.rerere.ai.runtime.contract.RuntimeFileStore
 import me.rerere.ai.runtime.contract.RuntimeLogSink
+import me.rerere.ai.runtime.contract.TaskBudgetClock
 import me.rerere.rikkahub.data.files.FilesManager
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Instant
+import kotlin.time.TimeSource
 
 /**
  * Binds the neutral [RuntimeFileStore] over [FilesManager] (issue #243 slice 3). Maps the app
@@ -59,4 +62,16 @@ class AndroidLogSink : RuntimeLogSink {
 class SystemRuntimeClock : RuntimeClock {
     override fun now(): Instant = Clock.System.now()
     override fun timeZone(): TimeZone = TimeZone.currentSystemDefault()
+}
+
+/**
+ * Binds the neutral [TaskBudgetClock] over a monotonic time source for wall-time budget accounting
+ * (SPEC.md M1 / TaskBudgetClock port). Distinct from [SystemRuntimeClock]: budget elapsed time must
+ * be immune to wall-clock jumps, so it reads [TimeSource.Monotonic] deltas from a fixed origin
+ * captured at construction. Using a real source (not a constant) is what makes the wall-time cap
+ * enforceable in the shipped build.
+ */
+class MonotonicTaskBudgetClock : TaskBudgetClock {
+    private val origin = TimeSource.Monotonic.markNow()
+    override fun monotonicNow(): Duration = origin.elapsedNow()
 }

@@ -14,6 +14,8 @@ import me.rerere.rikkahub.data.db.dao.KnowledgeChunkDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MemoryVectorDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
+import me.rerere.rikkahub.data.db.dao.TaskRunDAO
+import me.rerere.rikkahub.data.db.dao.WorkItemDAO
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
@@ -23,6 +25,9 @@ import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.db.entity.MemoryVectorEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import me.rerere.rikkahub.data.db.entity.TaskRunEntity
+import me.rerere.rikkahub.data.db.entity.WorkItemDependencyEntity
+import me.rerere.rikkahub.data.db.entity.WorkItemEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
@@ -38,9 +43,12 @@ import me.rerere.common.json.JsonInstant
         FavoriteEntity::class,
         KnowledgeChunkEntity::class,
         MemoryVectorEntity::class,
-        WorkspaceEntity::class
+        WorkspaceEntity::class,
+        TaskRunEntity::class,
+        WorkItemEntity::class,
+        WorkItemDependencyEntity::class
     ],
-    version = 24,
+    version = 25,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -56,6 +64,10 @@ import me.rerere.common.json.JsonInstant
         AutoMigration(from = 17, to = 18),
         AutoMigration(from = 18, to = 19),
         AutoMigration(from = 19, to = 20),
+        // 24 -> 25 is purely additive (three new tables: task_runs, work_items,
+        // work_item_dependencies); no existing table is altered, so Room derives the migration
+        // from the exported schemas without a spec.
+        AutoMigration(from = 24, to = 25),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -77,6 +89,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryVectorDao(): MemoryVectorDAO
 
     abstract fun workspaceDao(): WorkspaceDAO
+
+    abstract fun taskRunDao(): TaskRunDAO
+
+    abstract fun workItemDao(): WorkItemDAO
 }
 
 object TokenUsageConverter {

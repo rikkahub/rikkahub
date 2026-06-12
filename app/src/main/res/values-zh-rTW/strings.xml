@@ -1227,5 +1227,6 @@
   <string name="workspace_rootfs_progress_extracting">解壓縮中 %1$d 項</string>
   <string name="workspace_rootfs_progress_installed">安裝完成</string>
   <string name="workspace_rootfs_install_failed">Rootfs 安裝失敗</string>
+  <string name="chat_board_open">任務看板</string>
 </resources>
 

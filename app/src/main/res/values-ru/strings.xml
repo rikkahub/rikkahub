@@ -1229,5 +1229,6 @@
   <string name="workspace_rootfs_progress_extracting">Распаковка %1$d элементов</string>
   <string name="workspace_rootfs_progress_installed">Установка завершена</string>
   <string name="workspace_rootfs_install_failed">Не удалось установить Rootfs</string>
+  <string name="chat_board_open">Доска задач</string>
 </resources>
 

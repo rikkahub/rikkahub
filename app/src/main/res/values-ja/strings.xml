@@ -1229,5 +1229,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_rootfs_progress_extracting">展開中 %1$d 項目</string>
   <string name="workspace_rootfs_progress_installed">インストール完了</string>
   <string name="workspace_rootfs_install_failed">Rootfs のインストールに失敗しました</string>
+  <string name="chat_board_open">タスクボード</string>
 </resources>
 

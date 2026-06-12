@@ -9,6 +9,7 @@ import me.rerere.ai.runtime.contract.ModelProviderResolver
 import me.rerere.ai.runtime.contract.RuntimeClock
 import me.rerere.ai.runtime.contract.RuntimeFileStore
 import me.rerere.ai.runtime.contract.RuntimeLogSink
+import me.rerere.ai.runtime.contract.TaskBudgetClock
 import me.rerere.ai.runtime.contract.TurnConfigSource
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
@@ -16,9 +17,10 @@ import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.runtime.AndroidLogSink
 import me.rerere.rikkahub.data.ai.runtime.AppModelProviderResolver
 import me.rerere.rikkahub.data.ai.runtime.FilesManagerRuntimeFileStore
+import me.rerere.rikkahub.data.ai.runtime.MonotonicTaskBudgetClock
 import me.rerere.rikkahub.data.ai.runtime.SettingsStoreRuntimeAdapter
 import me.rerere.rikkahub.data.ai.runtime.SystemRuntimeClock
-import me.rerere.rikkahub.data.ai.subagent.SubagentRunner
+import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatService
@@ -28,9 +30,11 @@ import me.rerere.rikkahub.ui.components.EmojiData
 import me.rerere.rikkahub.ui.components.EmojiUtils
 import me.rerere.common.json.JsonInstant
 import me.rerere.rikkahub.ui.components.ai.chatinput.SoundEffectPlayer
+import me.rerere.rikkahub.ui.pages.chat.board.BoardViewModel
 import me.rerere.rikkahub.utils.lifecycle.UpdateChecker
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
+import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
@@ -84,8 +88,30 @@ val appModule = module {
         AILoggingManager()
     }
 
+    // The lifecycle-aware subagent orchestrator (SPEC.md M4), the product replacement for the
+    // retired SubagentRunner. It drives the child through GenerationHandler.generateText (PreToolUse
+    // hook dispatch preserved) and persists the run through the TaskRunStore (TaskRunRepository).
+    // The TaskBudgetClock is REQUIRED here: it is what makes the wall-time budget cap enforceable in
+    // the shipped build (a missing/zero clock silently disables it — review finding #1).
+    single<TaskBudgetClock> { MonotonicTaskBudgetClock() }
     single {
-        SubagentRunner(generationHandler = get())
+        TaskCoordinator(
+            generationHandler = get(),
+            store = get(),
+            clock = get(),
+        )
+    }
+
+    // The chat-side board panel's view model (SPEC.md M5, decision #4). The conversation id is a
+    // runtime parameter (the panel lives inside one conversation); it WRITES through the same
+    // TaskBoardRepository the board tools use, so a UI edit is validated identically to a tool
+    // edit — no UI-only validation path exists.
+    viewModel { params ->
+        BoardViewModel(
+            id = params.get(),
+            dao = get(),
+            repository = get(),
+        )
     }
 
     // UI automation (#187 v1). The AccessibilityService is instantiated by the Android system, NOT by
@@ -116,13 +142,14 @@ val appModule = module {
             workspaceRepository = get(),
             memoryRecaller = get(),
             generationHandler = get(),
-            subagentRunner = get(),
+            taskCoordinator = get(),
             templateTransformer = get(),
             providerManager = get(),
             localTools = get(),
             mcpManager = get(),
             filesManager = get(),
             skillManager = get(),
+            taskBoardRepository = get(),
             automationRegistry = get(),
             automationKillSwitch = get(),
             hookDispatcher = get()

@@ -24,6 +24,9 @@ import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.repository.RoomBoardTransactionRunner
+import me.rerere.rikkahub.data.repository.TaskBoardRepository
+import me.rerere.rikkahub.data.repository.TaskRunRepository
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.SimpleDictManager
 import me.rerere.rikkahub.data.db.migrations.Migration_6_7
@@ -167,6 +170,47 @@ val dataSourceModule = module {
 
     single {
         get<AppDatabase>().workspaceDao()
+    }
+
+    single {
+        get<AppDatabase>().workItemDao()
+    }
+
+    // Per-conversation work-item board (SPEC.md M2/M3). The repository is the SINGLE invariant
+    // enforcement point shared by board tools and the board UI (decision #4); a Room transaction
+    // wraps every operation so claims are atomic.
+    single {
+        TaskBoardRepository(
+            dao = get(),
+            transactions = RoomBoardTransactionRunner(get<AppDatabase>()),
+        )
+    }
+
+    single {
+        get<AppDatabase>().taskRunDao()
+    }
+
+    // Summary-only task-run persistence (SPEC.md M2/M4, decision #1). The repository folds every
+    // event through the pure TaskStateReducer so the stored state can never disagree with
+    // TASK_STATE_LEGAL. Bound as its CONCRETE type so startup recovery + retention (lifecycle
+    // operations the coordinator never drives, hence NOT on the narrow TaskRunStore seam) are
+    // resolvable; the TaskRunStore binding the coordinator depends on points at the SAME instance.
+    single {
+        TaskRunRepository(
+            dao = get(),
+            transactions = RoomBoardTransactionRunner(get<AppDatabase>()),
+        )
+    }
+    single<me.rerere.rikkahub.data.ai.task.TaskRunStore> { get<TaskRunRepository>() }
+
+    // Cold-start recovery + retention composition root (SPEC.md M6, Success Criterion #4). Invoked
+    // once from RikkaHubApp.onCreate: marks active task rows Interrupted (no replay) and sweeps
+    // expired terminal runs / completed-deleted board items.
+    single {
+        me.rerere.rikkahub.data.ai.task.TaskRecoveryRunner(
+            taskRuns = get(),
+            board = get(),
+        )
     }
 
     single {
