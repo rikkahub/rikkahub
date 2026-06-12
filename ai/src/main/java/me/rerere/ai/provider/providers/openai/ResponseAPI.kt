@@ -51,6 +51,7 @@ import me.rerere.ai.util.jitteredBackoffMillis
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
+import me.rerere.ai.util.parseHttpErrorBody
 import me.rerere.ai.util.retryAfterMillisFromHeaders
 import me.rerere.ai.util.rethrowIfMediaTooLarge
 import me.rerere.ai.util.stringSafe
@@ -104,7 +105,7 @@ class ResponseAPI(
 
         val response = client.newCall(request).await(params.callTimeoutMillis?.milliseconds)
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            throw parseHttpErrorBody(response.code, response.body.string())
         }
 
         val bodyStr = response.body.string()

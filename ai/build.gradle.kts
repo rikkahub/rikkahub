@@ -35,6 +35,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    testOptions {
+        // Same convention as :app -- android.util.Log becomes a no-op in JVM unit tests so code
+        // paths containing metadata-only AiLog calls stay unit-testable.
+        unitTests.isReturnDefaultValues = true
+    }
 //    externalNativeBuild {
 //        cmake {
 //            path = file("src/main/cpp/CMakeLists.txt")
