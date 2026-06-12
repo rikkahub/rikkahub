@@ -440,6 +440,22 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                         put("role", "user")
                         putJsonArray("content") {
                             group.tools.forEach { add(it.toToolResultBlock()) }
+                            // 图片不放入 tool_result content, 而是作为同一条 user 消息的
+                            // 普通 image block 跟随 (API 允许 tool_result 后跟其他内容块)。
+                            // 部分网关/中转会丢弃 tool_result 内嵌的 image, 导致模型看不到图片
+                            group.tools.forEach { tool ->
+                                val images = tool.output.filterIsInstance<UIMessagePart.Image>()
+                                    .filter { it.isVisibleToAssistant() }
+                                if (images.isNotEmpty()) {
+                                    add(buildJsonObject {
+                                        put("type", "text")
+                                        put("text", "[Image(s) returned by tool call ${tool.toolName} (${tool.toolCallId})]")
+                                    })
+                                    images.forEach { image ->
+                                        image.toContentBlock()?.let { add(it) }
+                                    }
+                                }
+                            }
                         }
                     })
                 }
@@ -481,7 +497,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }.onFailure {
                 Log.w(TAG, "encode image failed: $url", it)
                 put("type", "text")
-                put("text", "")
+                put("text", "[Failed to encode image: ${it.message}]")
             }
         }
 
@@ -505,9 +521,19 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         put("type", "tool_result")
         put("tool_use_id", toolCallId)
         putJsonArray("content") {
-            output.filter { it.isVisibleToAssistant() }
-                .mapNotNull { it.toContentBlock() }
-                .forEach { add(it) }
+            // 图片以 user 消息内容块跟随在 tool_result 之后, 这里只保留非图片内容
+            val parts = output.filter { it.isVisibleToAssistant() && it !is UIMessagePart.Image }
+            parts.mapNotNull { it.toContentBlock() }.forEach { add(it) }
+            if (parts.isEmpty()) {
+                val hasImages = output.any { it is UIMessagePart.Image && it.isVisibleToAssistant() }
+                add(buildJsonObject {
+                    put("type", "text")
+                    put(
+                        "text",
+                        if (hasImages) "Tool returned image(s), attached below." else "(empty result)"
+                    )
+                })
+            }
         }
     }
 
