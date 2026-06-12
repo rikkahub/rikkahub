@@ -34,6 +34,7 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.isVisibleToAssistant
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -359,8 +360,23 @@ class ResponseAPI(
                             put("call_id", tool.toolCallId)
                             put(
                                 "output",
-                                tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                                tool.output.filterIsInstance<UIMessagePart.Text>()
+                                    .filter { it.isVisibleToAssistant() }
+                                    .joinToString("\n") { it.text })
                         })
+                        // function_call_output 只支持文本, 图片结果以 user 消息形式跟随, 否则模型无法读取
+                        val images = tool.output.filterIsInstance<UIMessagePart.Image>()
+                            .filter { it.isVisibleToAssistant() }
+                        if (images.isNotEmpty()) {
+                            addContentItem(
+                                MessageRole.USER,
+                                listOf(
+                                    UIMessagePart.Text(
+                                        "[Image(s) returned by tool call ${tool.toolName} (${tool.toolCallId})]"
+                                    )
+                                ) + images
+                            )
+                        }
                     }
                 }
             }

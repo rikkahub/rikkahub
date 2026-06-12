@@ -5,8 +5,11 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
@@ -790,3 +793,12 @@ data class UIMessageChoice(
     val message: UIMessage?,
     val finishReason: String?
 )
+
+/**
+ * MCP 工具结果的 audience 注解 (存于 part.metadata["audience"], 如 ["user", "assistant"])。
+ * 未标注 audience 时默认对模型可见; 标注了 audience 但不含 "assistant" 的内容仅展示给用户, 不发送给模型。
+ */
+fun UIMessagePart.isVisibleToAssistant(): Boolean {
+    val audience = (metadata?.get("audience") as? JsonArray) ?: return true
+    return audience.any { (it as? JsonPrimitive)?.contentOrNull.equals("assistant", ignoreCase = true) }
+}

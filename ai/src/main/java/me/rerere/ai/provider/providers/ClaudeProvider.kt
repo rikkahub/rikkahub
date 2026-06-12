@@ -37,6 +37,7 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.isVisibleToAssistant
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -504,7 +505,9 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         put("type", "tool_result")
         put("tool_use_id", toolCallId)
         putJsonArray("content") {
-            output.mapNotNull { it.toContentBlock() }.forEach { add(it) }
+            output.filter { it.isVisibleToAssistant() }
+                .mapNotNull { it.toContentBlock() }
+                .forEach { add(it) }
         }
     }
 

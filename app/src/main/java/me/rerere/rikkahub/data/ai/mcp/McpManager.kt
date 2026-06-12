@@ -15,6 +15,7 @@ import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.RequestOptions
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
+import io.modelcontextprotocol.kotlin.sdk.types.Annotations
 import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
@@ -31,6 +32,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.ClassDiscriminatorMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
@@ -150,8 +154,8 @@ class McpManager(
         )
         return result.content.map {
             when(it) {
-                is TextContent -> UIMessagePart.Text(it.text)
-                is ImageContent -> convertImageContentToFilePart(it)
+                is TextContent -> UIMessagePart.Text(it.text).withMcpAudience(it.annotations)
+                is ImageContent -> convertImageContentToFilePart(it).withMcpAudience(it.annotations)
                 else -> UIMessagePart.Text(JsonInstant.encodeToString(it))
             }
         }
@@ -169,6 +173,26 @@ class McpManager(
         val uri = filesManager.getFile(entity).toUri()
         Log.i(TAG, "convertImageContentToFilePart: saved mcp image to $uri")
         return UIMessagePart.Image(url = uri.toString())
+    }
+
+    /**
+     * 按 MCP 规范将内容的 audience 注解写入 part metadata,
+     * provider 序列化工具结果时据此决定是否发送给模型 (见 UIMessagePart.isVisibleToAssistant)
+     */
+    private fun UIMessagePart.withMcpAudience(annotations: Annotations?): UIMessagePart {
+        val audience = annotations?.audience ?: return this
+        val newMetadata = buildJsonObject {
+            metadata?.forEach { (key, value) -> put(key, value) }
+            putJsonArray("audience") {
+                audience.forEach { role -> add(role.name.lowercase()) }
+            }
+        }
+        when (this) {
+            is UIMessagePart.Text -> metadata = newMetadata
+            is UIMessagePart.Image -> metadata = newMetadata
+            else -> {}
+        }
+        return this
     }
 
     private fun getTransport(config: McpServerConfig): AbstractTransport = when (config) {
