@@ -487,6 +487,33 @@ class ChatCompletionsAPI(
                                 "content",
                                 tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
                         })
+                        // tool 消息只支持文本, 图片结果以 user 消息形式跟随, 否则模型无法读取
+                        val images = tool.output.filterIsInstance<UIMessagePart.Image>()
+                        if (images.isNotEmpty()) {
+                            add(buildJsonObject {
+                                put("role", "user")
+                                putJsonArray("content") {
+                                    add(buildJsonObject {
+                                        put("type", "text")
+                                        put("text", "[Image(s) returned by tool call ${tool.toolName} (${tool.toolCallId})]")
+                                    })
+                                    images.forEach { image ->
+                                        add(buildJsonObject {
+                                            image.encodeBase64().onSuccess { encodedImage ->
+                                                put("type", "image_url")
+                                                put("image_url", buildJsonObject {
+                                                    put("url", encodedImage.base64)
+                                                })
+                                            }.onFailure {
+                                                it.printStackTrace()
+                                                put("type", "text")
+                                                put("text", "")
+                                            }
+                                        })
+                                    }
+                                }
+                            })
+                        }
                     }
                 }
             }

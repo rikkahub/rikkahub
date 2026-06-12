@@ -638,7 +638,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("parts") {
-                            group.tools.forEach { add(it.toFunctionResponsePart()) }
+                            group.tools.forEach { tool ->
+                                add(tool.toFunctionResponsePart())
+                                // functionResponse 只支持 JSON 文本, 图片结果以 inlineData parts 跟随, 否则模型无法读取
+                                tool.output.filterIsInstance<UIMessagePart.Image>().forEach { image ->
+                                    image.toGooglePart()?.let { add(it) }
+                                }
+                            }
                         }
                     })
                 }
