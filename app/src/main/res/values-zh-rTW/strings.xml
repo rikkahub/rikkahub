@@ -664,6 +664,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">貼上文字超過上限時，自動儲存為檔案附件</string>
   <string name="setting_display_page_paste_long_text_as_file_title">貼上長文字為檔案</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文字長度閾值</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_desc">發送訊息時自動跳轉到最新訊息，關閉後保持當前閱讀位置，閱讀體驗更連貫</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_title">發送時跳轉到最新訊息</string>
   <string name="setting_display_page_send_on_enter_desc">按 Enter 鍵即可傳送訊息，而非換行</string>
   <string name="setting_display_page_send_on_enter_title">按 Enter 鍵傳送</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否顯示助理訊息的泡泡背景</string>

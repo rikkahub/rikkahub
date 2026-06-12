@@ -664,6 +664,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">복사한 텍스트가 임계값을 초과하면 자동으로 파일 첨부로 저장</string>
   <string name="setting_display_page_paste_long_text_as_file_title">긴 텍스트를 파일로 붙여넣기</string>
   <string name="setting_display_page_paste_long_text_threshold_title">텍스트 길이 임계값</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_desc">메시지 전송 시 최신 메시지로 자동 이동합니다. 끄면 현재 읽던 위치를 유지합니다</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_title">전송 시 최신 메시지로 이동</string>
   <string name="setting_display_page_send_on_enter_desc">Enter 키를 누르면 줄 바꿈 대신 메시지를 전송합니다</string>
   <string name="setting_display_page_send_on_enter_title">Enter 키로 전송</string>
   <string name="setting_display_page_show_assistant_bubble_desc">어시스턴트 메시지에 말풍선 배경 표시 여부</string>
