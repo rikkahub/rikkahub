@@ -669,6 +669,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">当粘贴的文本超过阈值时，自动将其保存为文件附件</string>
   <string name="setting_display_page_paste_long_text_as_file_title">粘贴长文本为文件</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文本长度阈值</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_desc">发送消息时自动跳转到最新消息，关闭后保持当前阅读位置，阅读体验更连贯</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_title">发送时跳转到最新消息</string>
   <string name="setting_display_page_send_on_enter_desc">按 Enter 发送消息而非换行</string>
   <string name="setting_display_page_send_on_enter_title">按Enter发送</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否为助手消息显示气泡背景</string>

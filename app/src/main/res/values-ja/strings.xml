@@ -662,6 +662,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">テキストを貼り付けた際にしきい値を超える場合、自動的にファイル添付として保存します</string>
   <string name="setting_display_page_paste_long_text_as_file_title">長いテキストをファイルとして貼り付け</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文字数しきい値</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_desc">メッセージ送信時に最新メッセージへ自動的に移動します。オフにすると現在の閲覧位置を保持します</string>
+  <string name="setting_display_page_scroll_to_bottom_on_send_title">送信時に最新メッセージへ移動</string>
   <string name="setting_display_page_send_on_enter_desc">Enterキーでメッセージを送信し、改行しない</string>
   <string name="setting_display_page_send_on_enter_title">Enterキーで送信</string>
   <string name="setting_display_page_show_assistant_bubble_desc">アシスタントメッセージのバブル背景を表示するかどうか</string>
