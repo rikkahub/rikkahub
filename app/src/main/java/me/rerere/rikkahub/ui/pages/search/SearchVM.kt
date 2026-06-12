@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.search
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,15 +13,26 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.ui.hooks.readStringPreference
+import me.rerere.rikkahub.ui.hooks.writeStringPreference
+
+private const val SORT_ORDER_PREF_KEY = "search_page_sort_order"
 
 class SearchVM(
+    private val context: Application,
     private val conversationRepo: ConversationRepository,
 ) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
 
     var searchQuery by mutableStateOf("")
         private set
-    var sortOrder by mutableStateOf(MessageSearchSort.RELEVANCE)
+    var sortOrder by mutableStateOf(
+        runCatching {
+            MessageSearchSort.valueOf(
+                context.readStringPreference(SORT_ORDER_PREF_KEY, MessageSearchSort.RELEVANCE.name)!!
+            )
+        }.getOrDefault(MessageSearchSort.RELEVANCE)
+    )
         private set
     var results by mutableStateOf<List<MessageSearchResult>>(emptyList())
         private set
@@ -47,6 +59,7 @@ class SearchVM(
     fun onSortChange(sort: MessageSearchSort) {
         if (sortOrder == sort) return
         sortOrder = sort
+        context.writeStringPreference(SORT_ORDER_PREF_KEY, sort.name)
         viewModelScope.launch {
             performSearch(searchQuery)
         }
