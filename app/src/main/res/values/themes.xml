@@ -2,4 +2,14 @@
 <resources>
 
 <style name="Theme.Rikkahub" parent="Theme.Material3.DayNight.NoActionBar" />
+
+<!-- 沉浸模式动态叠加: windowFullscreen 是主题属性, 会被之后创建的对话框窗口
+     (AlertDialog/ModalBottomSheet 等) 继承, 避免弹窗夺焦时状态栏复现 -->
+<style name="ThemeOverlay.Rikkahub.Immersive" parent="">
+    <item name="android:windowFullscreen">true</item>
+</style>
+
+<style name="ThemeOverlay.Rikkahub.NonImmersive" parent="">
+    <item name="android:windowFullscreen">false</item>
+</style>
 </resources>

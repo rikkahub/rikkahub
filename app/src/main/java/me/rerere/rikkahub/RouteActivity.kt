@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -199,8 +200,16 @@ class RouteActivity : ComponentActivity() {
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         if (enabled) {
+            // 通过主题属性使之后创建的对话框窗口继承全屏 (窗口 flag 不会被对话框继承),
+            // 避免 AlertDialog/BottomSheet 等弹窗夺焦时状态栏复现
+            theme.applyStyle(R.style.ThemeOverlay_Rikkahub_Immersive, true)
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             controller.hide(WindowInsetsCompat.Type.statusBars())
         } else {
+            theme.applyStyle(R.style.ThemeOverlay_Rikkahub_NonImmersive, true)
+            @Suppress("DEPRECATION")
+            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             controller.show(WindowInsetsCompat.Type.statusBars())
         }
     }
