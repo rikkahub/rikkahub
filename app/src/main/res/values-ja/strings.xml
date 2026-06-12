@@ -653,6 +653,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">メッセージ生成時の触覚効果</string>
   <string name="setting_display_page_font_size_preview">午前4時、海棠の花がまだ眠っていないのを見た。私はよくこうして、誰もいない夜にひとり目を覚まし、思う——もし今この瞬間、誰かが私のことを思っていてくれたなら、それだけでいい。</string>
   <string name="setting_display_page_font_size_title">チャットフォントサイズ</string>
+  <string name="setting_display_page_immersive_mode_desc">ステータスバーを非表示にして全画面表示にします。画面上端からスワイプすると一時的に表示されます</string>
+  <string name="setting_display_page_immersive_mode_title">没入モード</string>
   <string name="setting_display_page_live_update_notification">ライブアップデート通知</string>
   <string name="setting_display_page_live_update_notification_desc">メッセージ生成中のリアルタイム通知アップデートを表示（Android 15以降）</string>
   <string name="setting_display_page_message_jumper_position_desc">メッセージジャンパーを左側に移動</string>

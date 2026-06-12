@@ -161,6 +161,18 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_immersive_mode_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_immersive_mode_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enableImmersiveMode,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(enableImmersiveMode = it))
+                                }
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_enable_message_generation_haptic_effect_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_enable_message_generation_haptic_effect_desc)) },
                         trailingContent = {

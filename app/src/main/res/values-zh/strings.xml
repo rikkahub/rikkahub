@@ -660,6 +660,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">消息生成触觉反馈</string>
   <string name="setting_display_page_font_size_preview">凌晨四点钟，看到海棠花未眠。我常常这样，在无人的夜里独自醒着，想，若有人此刻也在想我，那就好了。</string>
   <string name="setting_display_page_font_size_title">聊天字体大小</string>
+  <string name="setting_display_page_immersive_mode_desc">隐藏状态栏获得全屏体验，从屏幕顶部下滑可临时呼出</string>
+  <string name="setting_display_page_immersive_mode_title">沉浸模式</string>
   <string name="setting_display_page_live_update_notification">实时更新通知</string>
   <string name="setting_display_page_live_update_notification_desc">在生成消息时显示实时通知更新（Android 15+）</string>
   <string name="setting_display_page_message_jumper_position_desc">将消息导航移到左侧</string>

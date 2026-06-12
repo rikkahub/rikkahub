@@ -653,6 +653,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Тактильный эффект при генерации сообщения</string>
   <string name="setting_display_page_font_size_preview">Это **пример** текста чата</string>
   <string name="setting_display_page_font_size_title">Размер шрифта чата</string>
+  <string name="setting_display_page_immersive_mode_desc">Скрывает строку состояния для полноэкранного режима; проведите от верхнего края, чтобы временно показать её</string>
+  <string name="setting_display_page_immersive_mode_title">Режим погружения</string>
   <string name="setting_display_page_live_update_notification">Уведомление об обновлении в реальном времени</string>
   <string name="setting_display_page_live_update_notification_desc">Показывать уведомления об обновлениях в реальном времени во время генерации сообщений (Android 15+)</string>
   <string name="setting_display_page_message_jumper_position_desc">Переместить переходчик сообщений влево</string>

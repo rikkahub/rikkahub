@@ -37,6 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -191,6 +194,25 @@ class RouteActivity : ComponentActivity() {
         }
     }
 
+    internal fun applyImmersiveMode(enabled: Boolean) {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (enabled) {
+            controller.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 重新获得焦点时, 系统可能恢复状态栏, 需要重新应用沉浸模式
+        if (hasFocus) {
+            applyImmersiveMode(settingsStore.settingsFlow.value.displaySetting.enableImmersiveMode)
+        }
+    }
+
     @Composable
     private fun ShareHandler(backStack: MutableList<NavKey>) {
         val shareIntent = remember {
@@ -229,6 +251,9 @@ class RouteActivity : ComponentActivity() {
     fun AppRoutes() {
         val toastState = rememberToasterState()
         val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+        LaunchedEffect(settings.displaySetting.enableImmersiveMode) {
+            applyImmersiveMode(settings.displaySetting.enableImmersiveMode)
+        }
         val tts = rememberCustomTtsState()
         val asr = rememberCustomAsrState()
         val eventBus = koinInject<AppEventBus>()

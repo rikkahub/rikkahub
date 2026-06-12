@@ -653,6 +653,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">메시지 생성 진동 효과 활성화</string>
   <string name="setting_display_page_font_size_preview">새벽 네 시, 해당화가 잠들지 않은 것을 보았다. 나는 자주 이렇게, 아무도 없는 밤에 홀로 깨어, 생각한다 — 지금 이 순간 누군가도 나를 생각하고 있다면, 그것으로 충분하다.</string>
   <string name="setting_display_page_font_size_title">채팅 글꼴 크기</string>
+  <string name="setting_display_page_immersive_mode_desc">상태 표시줄을 숨겨 전체 화면으로 표시합니다. 화면 상단에서 아래로 스와이프하면 일시적으로 표시됩니다</string>
+  <string name="setting_display_page_immersive_mode_title">몰입 모드</string>
   <string name="setting_display_page_live_update_notification">실시간 업데이트 알림</string>
   <string name="setting_display_page_live_update_notification_desc">메시지 생성 중 실시간 알림 업데이트 표시 (Android 15+)</string>
   <string name="setting_display_page_message_jumper_position_desc">메시지 점퍼를 왼쪽으로 이동</string>

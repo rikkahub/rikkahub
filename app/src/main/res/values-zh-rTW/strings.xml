@@ -653,6 +653,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">訊息生成觸覺回饋</string>
   <string name="setting_display_page_font_size_preview">凌晨四點鐘，看到海棠花未眠。我常常這樣，在無人的夜裡獨自醒著，想，若有人此刻也在想我，那就好了。</string>
   <string name="setting_display_page_font_size_title">聊天字體大小</string>
+  <string name="setting_display_page_immersive_mode_desc">隱藏狀態列獲得全螢幕體驗，從螢幕頂部下滑可暫時呼出</string>
+  <string name="setting_display_page_immersive_mode_title">沉浸模式</string>
   <string name="setting_display_page_live_update_notification">即時更新通知</string>
   <string name="setting_display_page_live_update_notification_desc">在訊息產生期間顯示即時通知更新（Android 15+）</string>
   <string name="setting_display_page_message_jumper_position_desc">將訊息跳轉按鈕移至左側</string>

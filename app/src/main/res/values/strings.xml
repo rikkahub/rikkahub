@@ -660,6 +660,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Message Generation Haptic Effect</string>
   <string name="setting_display_page_font_size_preview">At four in the morning, I saw the begonia flowers still awake. I am often like this — lying awake alone in the quiet night, thinking: if someone is thinking of me at this moment, that would be wonderful.</string>
   <string name="setting_display_page_font_size_title">Chat Font Size</string>
+  <string name="setting_display_page_immersive_mode_desc">Hide the status bar for a fullscreen experience, swipe from the top edge to reveal it temporarily</string>
+  <string name="setting_display_page_immersive_mode_title">Immersive Mode</string>
   <string name="setting_display_page_live_update_notification">Live Update Notification</string>
   <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
   <string name="setting_display_page_message_jumper_position_desc">Move  Message Jumper to left side</string>
