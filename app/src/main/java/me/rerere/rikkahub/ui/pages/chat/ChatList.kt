@@ -215,14 +215,19 @@ private fun ChatListNormal(
     val density = LocalDensity.current
     val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity
 
+    // 用 rememberUpdatedState 保证监听器读取最新值: DisposableEffect(Unit) 的 lambda
+    // 只捕获首次组合时的对象, 冷启动恢复会话时设置尚未加载完成(翻页开关为默认关闭),
+    // 否则监听器会永远返回 false, 导致音量键翻页失效, 必须切换对话才能恢复
+    val settingsUpdated by rememberUpdatedState(settings)
+    val innerPaddingUpdated by rememberUpdatedState(innerPadding)
     DisposableEffect(Unit) {
         val listener: (Boolean) -> Boolean = { isVolumeUp ->
-            if (settings.displaySetting.enableVolumeKeyScroll) {
+            if (settingsUpdated.displaySetting.enableVolumeKeyScroll) {
                 val bottomPaddingPx = with(density) {
-                    (32.dp + innerPadding.calculateBottomPadding()).toPx()
+                    (32.dp + innerPaddingUpdated.calculateBottomPadding()).toPx()
                 }
                 val scrollAmount = (state.layoutInfo.viewportSize.height - bottomPaddingPx) *
-                    settings.displaySetting.volumeKeyScrollRatio
+                    settingsUpdated.displaySetting.volumeKeyScrollRatio
                 scope.launch { state.scrollBy(if (isVolumeUp) -scrollAmount else scrollAmount) }
                 true
             } else false
