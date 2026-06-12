@@ -74,7 +74,7 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
 
             httpClient.newCall(request).await().use { response ->
                 if (response.isSuccessful) {
-                    val bodyRaw = response.body?.string() ?: error("Failed to get response body")
+                    val bodyRaw = response.body.string()
                     val searchResponse = runCatching {
                         json.decodeFromString<MetasoSearchResponse>(bodyRaw)
                     }.onFailure {

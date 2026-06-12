@@ -33,7 +33,7 @@ import org.junit.Test
  */
 class ToolArgumentsLenientParseTest {
 
-    private val strict = Json {}
+    private val strict = Json.Default
 
     @Test
     fun `unquoted key is salvaged - mirrors memory_tool failure`() {

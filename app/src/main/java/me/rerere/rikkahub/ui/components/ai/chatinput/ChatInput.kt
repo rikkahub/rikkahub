@@ -184,6 +184,11 @@ fun ChatInput(
     // Camera launcher
     var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
     var cameraOutputFile by remember { mutableStateOf<File?>(null) }
+    fun cleanupCameraCapture() {
+        cameraOutputFile?.delete()
+        cameraOutputFile = null
+        cameraOutputUri = null
+    }
     val (_, launchCameraCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
             scope.launch {
@@ -192,9 +197,7 @@ fun ChatInput(
             }
         },
         onCleanup = {
-            cameraOutputFile?.delete()
-            cameraOutputFile = null
-            cameraOutputUri = null
+            cleanupCameraCapture()
         }
     )
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captureSuccessful ->
@@ -203,18 +206,14 @@ fun ChatInput(
                 val capturedUri = cameraOutputUri!!
                 scope.launch {
                     state.addImages(filesManager.createChatFilesByContents(listOf(capturedUri)))
-                    cameraOutputFile?.delete()
-                    cameraOutputFile = null
-                    cameraOutputUri = null
+                    cleanupCameraCapture()
                     dismissExpand()
                 }
             } else {
                 launchCameraCrop(cameraOutputUri!!)
             }
         } else {
-            cameraOutputFile?.delete()
-            cameraOutputFile = null
-            cameraOutputUri = null
+            cleanupCameraCapture()
         }
     }
     val onLaunchCamera: () -> Unit = {

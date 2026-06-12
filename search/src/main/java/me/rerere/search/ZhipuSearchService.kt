@@ -73,7 +73,7 @@ object ZhipuSearchService : SearchService<SearchServiceOptions.ZhipuOptions> {
 
             httpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val bodyRaw = response.body?.string() ?: error("Failed to get response body")
+                    val bodyRaw = response.body.string()
                     val zhipuResponse = runCatching {
                         json.decodeFromString<ZhipuDto>(bodyRaw)
                     }.onFailure {

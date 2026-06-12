@@ -10,6 +10,9 @@ import org.junit.Test
 
 class Migration_15_16DecisionTest {
 
+    // The test intentionally builds legacy ToolCall payloads: the 15->16 migration's whole
+    // job is to rewrite that deprecated wire format, so its inputs must use it.
+    @Suppress("DEPRECATION")
     private fun assistantNodeWithToolCall(): MigrationNodeRow = MigrationNodeRow(
         id = "assistant-node",
         messages = listOf(
@@ -21,6 +24,8 @@ class Migration_15_16DecisionTest {
         selectIndex = 0
     )
 
+    // Same as above: deprecated ToolResult is the legacy wire format under migration.
+    @Suppress("DEPRECATION")
     private fun toolNode(): MigrationNodeRow = MigrationNodeRow(
         id = "tool-node",
         messages = listOf(

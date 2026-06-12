@@ -1,10 +1,13 @@
 package me.rerere.rikkahub.web
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.net.Inet4Address
 import java.net.InetAddress
 import javax.jmdns.JmDNS
 import javax.jmdns.ServiceInfo
@@ -113,23 +116,60 @@ class NsdServiceRegistrar(
 
     private fun getLocalIpAddress(): InetAddress? {
         return try {
-            val wifiManager = context.applicationContext
-                .getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            val wifiInfo = wifiManager?.connectionInfo
-            val ipInt = wifiInfo?.ipAddress ?: return null
-
-            if (ipInt == 0) return null
-
-            val ipBytes = byteArrayOf(
-                (ipInt and 0xff).toByte(),
-                (ipInt shr 8 and 0xff).toByte(),
-                (ipInt shr 16 and 0xff).toByte(),
-                (ipInt shr 24 and 0xff).toByte()
-            )
-            InetAddress.getByAddress(ipBytes)
+            val connectivityManager = context.applicationContext
+                .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return null
+            // The active network must not be trusted blindly: with a VPN up it is the tun
+            // network, whose address LAN peers cannot reach, while the underlying Wi-Fi
+            // network is still connected and listed. Prefer the active network only when it
+            // is a non-VPN Wi-Fi/Ethernet network; otherwise scan the others. Cellular-only
+            // yields null so register() aborts, matching the old WifiManager-based behavior.
+            @Suppress("DEPRECATION") // allNetworks: the NetworkCallback replacement is async; this synchronous one-shot lookup needs a snapshot
+            val candidates = (listOfNotNull(connectivityManager.activeNetwork) +
+                connectivityManager.allNetworks).distinct()
+            val lanNetwork = selectLanNetwork(candidates) { network ->
+                connectivityManager.getNetworkCapabilities(network)?.let { capabilities ->
+                    LanTransports(
+                        wifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                        ethernet = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET),
+                        vpn = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                    )
+                }
+            } ?: return null
+            val linkProperties = connectivityManager.getLinkProperties(lanNetwork) ?: return null
+            selectIpv4Address(linkProperties.linkAddresses.map { it.address })
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get local IP address", e)
             null
         }
     }
 }
+
+internal data class LanTransports(
+    val wifi: Boolean,
+    val ethernet: Boolean,
+    val vpn: Boolean
+)
+
+/**
+ * Picks the first candidate network reachable by LAN peers: Wi-Fi or Ethernet transport,
+ * and never a VPN — a VPN network's capabilities include the underlying transport, so a
+ * VPN-over-Wi-Fi network matches WIFI yet its tun address is useless for mDNS.
+ */
+internal fun <T : Any> selectLanNetwork(
+    candidates: List<T>,
+    transportsOf: (T) -> LanTransports?
+): T? = candidates.firstOrNull { candidate ->
+    val transports = transportsOf(candidate) ?: return@firstOrNull false
+    (transports.wifi || transports.ethernet) && !transports.vpn
+}
+
+/**
+ * Picks the first IPv4 address peers on the LAN can actually reach: loopback and
+ * link-local (169.254/16) addresses are excluded because JmDNS binds a single address
+ * that must be routable from other devices on the network.
+ */
+internal fun selectIpv4Address(candidates: List<InetAddress>): Inet4Address? =
+    candidates
+        .filterIsInstance<Inet4Address>()
+        .firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }

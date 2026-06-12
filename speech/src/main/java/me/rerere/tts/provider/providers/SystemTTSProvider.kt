@@ -76,14 +76,19 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                         }
                     }
 
-                    override fun onError(utteranceId: String?) {
-                        Log.e(TAG, "onError: TTS synthesis failed!")
+                    fun handleError(errorCode: Int?) {
+                        Log.e(TAG, "onError: TTS synthesis failed! (errorCode=$errorCode)")
                         audioFile.delete()
                         if (continuation.isActive) continuation.resumeWithException(
                             Exception("TTS synthesis failed")
                         )
                         ttsInstance.shutdown()
                     }
+
+                    @Deprecated("Kept because the platform base class declares it abstract; engines on the modern path call onError(String, Int)")
+                    override fun onError(utteranceId: String?) = handleError(errorCode = null)
+
+                    override fun onError(utteranceId: String?, errorCode: Int) = handleError(errorCode)
                 })
 
                 val result = ttsInstance.synthesizeToFile(
@@ -109,7 +114,7 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
         tts = TextToSpeech(context, listener)
 
         continuation.invokeOnCancellation {
-            tts?.shutdown()
+            tts.shutdown()
         }
     }
 

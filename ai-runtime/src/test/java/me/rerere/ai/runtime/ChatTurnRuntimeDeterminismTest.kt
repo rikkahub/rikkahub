@@ -297,7 +297,7 @@ class ChatTurnRuntimeDeterminismTest {
      * visual/finish pair, or running onGenerationFinish before the last output) reddens this test.
      */
     @Test
-    fun `transformer hooks fire in input - (output, visual)* - visual - finish order`() = runBlocking {
+    fun `transformer hooks fire in input - repeated (output, visual) - visual - finish order`() = runBlocking {
         val recording = RecordingTransforms()
         // Exactly one streamed chunk => exactly one streaming update (one output/visual pair).
         val fake = FakeProvider(listOf(chunk(UIMessagePart.Text("ok"))))

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.ClipData
 import android.content.Intent
 import android.os.Build
 
@@ -40,9 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -76,7 +77,7 @@ fun SettingWebPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val toaster = LocalToaster.current
     val copiedText = stringResource(R.string.copied)
     var portText by remember(settings.webServerPort) {
@@ -123,8 +124,10 @@ fun SettingWebPage() {
     }
 
     fun copyUrl(url: String) {
-        clipboardManager.setText(AnnotatedString(url))
-        toaster.show(copiedText)
+        scope.launch {
+            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("url", url)))
+            toaster.show(copiedText)
+        }
     }
 
     Scaffold(

@@ -79,10 +79,10 @@ class OpenAIProvider(
 
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body?.string()}")
+                error("Failed to get models: ${response.code} ${response.body.string()}")
             }
 
-            val bodyStr = response.body?.string() ?: ""
+            val bodyStr = response.body.string()
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
             val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
 
@@ -112,7 +112,7 @@ class OpenAIProvider(
             .build()
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to get balance: ${response.code} ${response.body?.string()}")
+            error("Failed to get balance: ${response.code} ${response.body.string()}")
         }
 
         val bodyStr = response.body.string()
@@ -196,10 +196,10 @@ class OpenAIProvider(
             // An HTTP error from the embedding endpoint (429/401/5xx) is an external-service / I/O
             // failure, not a programming-state error. It must be an IOException so the sole caller
             // (KnowledgeRetrievalTransformer) degrades RAG to best-effort instead of aborting the chat.
-            throw IOException("Failed to generate embedding: ${response.code} ${response.body?.string()}")
+            throw IOException("Failed to generate embedding: ${response.code} ${response.body.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
+        val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
         val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: params.model.modelId
@@ -379,7 +379,7 @@ class OpenAIProvider(
                 // 不得吞掉失败：close(null) 会把 callbackFlow 当成正常完成，
                 // 静默丢掉上游错误。失败必须以非空 Throwable 终止。
                 val responseMessage = response?.let {
-                    "${it.code} ${it.body?.stringSafe() ?: ""}".trim()
+                    "${it.code} ${it.body.stringSafe() ?: ""}".trim()
                 }
                 close(t ?: IllegalStateException("Failed to stream image: $responseMessage"))
             }

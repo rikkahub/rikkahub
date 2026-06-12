@@ -24,8 +24,9 @@ fun interface HookSettingsReader {
 
 /**
  * Runs an [HookHandler.Llm] hook as a single-shot background call against the handler's model
- * (falling back to the settings fast model) and returns the raw response text for
- * `parseHookOutput` (#200 v1, spec §LlmHookExecutor).
+ * (`model = null` means the settings fast model; a pinned model that is missing FAILS rather
+ * than falling back) and returns the raw response text for `parseHookOutput` (#200 v1,
+ * spec §LlmHookExecutor).
  *
  * Timeout contract (H1): [callTimeout] bounds every hook call independently of the shared
  * OkHttp client's 10-minute read-timeout ceiling, via TWO complementary mechanisms.
@@ -49,8 +50,17 @@ class LlmHookExecutor(
             "LlmHookExecutor cannot run ${handler::class.simpleName} handlers"
         }
         val current = settings.current()
-        val model = current.findModelById(handler.model, fallback = current.fastModelId)
-            ?: error("hook model not found (handler model=${handler.model}, fast model=${current.fastModelId})")
+        // HookConfig documents `model = null` as the ONLY fast-model case. A pinned model that
+        // is missing (deleted/unavailable) must surface as a plain failure — the dispatcher
+        // maps it through the handler's failClosed policy — never a silent swap onto the fast
+        // model, which would change the enforcement model of failClosed security hooks.
+        val model = if (handler.model == null) {
+            current.findModelById(current.fastModelId)
+                ?: error("hook fast model not found (fast model=${current.fastModelId})")
+        } else {
+            current.findModelById(handler.model)
+                ?: error("pinned hook model not found (handler model=${handler.model}); refusing fast-model fallback")
+        }
         val provider = model.findProvider(current.providers)
             ?: error("no provider configured for hook model ${model.modelId}")
         val providerHandler = providerManager.getProviderByType(provider)

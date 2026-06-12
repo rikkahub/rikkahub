@@ -41,6 +41,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.AiLog
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.parseHttpErrorBody
 import me.rerere.ai.util.bufferStreamChunks
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -98,10 +99,10 @@ class ChatCompletionsAPI(
 
         val response = client.newCall(request).await(params.callTimeoutMillis?.milliseconds)
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            throw parseHttpErrorBody(response.code, response.body.string())
         }
 
-        val bodyStr = response.body?.string() ?: ""
+        val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         // 从 JsonObject 中提取必要的信息
@@ -188,7 +189,12 @@ class ChatCompletionsAPI(
                                 val choice = choices[0].jsonObject
                                 val message =
                                     choice["delta"]?.jsonObject ?: choice["message"]?.jsonObject
-                                    ?: throw Exception("delta/message is null")
+                                if (message == null) {
+                                    // Same termination channel as resolveStreamError above:
+                                    // throwing here would escape onEvent (see #241 comment).
+                                    close(HttpException("Stream choice carries neither delta nor message: $it"))
+                                    return
+                                }
                                 val finishReason =
                                     choice["finish_reason"]?.jsonPrimitive?.contentOrNull
                                         ?: "unknown"
@@ -684,7 +690,12 @@ class ChatCompletionsAPI(
                     val type = imageObject["type"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                     if (type != "image_url") return@forEach
                     val url = imageObject["image_url"]?.jsonObjectOrNull?.get("url")?.jsonPrimitive?.contentOrNull ?: return@forEach
-                    require(url.startsWith("data:image")) { "Only data uri is supported" }
+                    // Only data URIs are supported. Skip anything else (http/content URLs are
+                    // legal wire values) rather than throw: parseMessage runs inside the SSE
+                    // onEvent path, where a throw kills the stream through the broken channel
+                    // the #241 comment documents — same skip policy as unknown tool/annotation
+                    // types above.
+                    if (!url.startsWith("data:image")) return@forEach
                     add(UIMessagePart.Image(url.substringAfter("base64,")))
                 }
             },

@@ -188,6 +188,9 @@ internal class WorkspaceTerminalViewClient(
         val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         view.post {
             view.requestFocus()
+            // The WindowInsetsController replacement needs API 30 / a Window handle; this client
+            // only holds the view and minSdk is 26, so the implicit-show flag must stay.
+            @Suppress("DEPRECATION")
             inputMethodManager.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
         }
     }

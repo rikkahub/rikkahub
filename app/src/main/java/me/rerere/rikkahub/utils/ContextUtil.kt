@@ -9,7 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 
-import android.net.Uri
+import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -152,9 +152,7 @@ fun Context.exportImage(
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
 
             // 通知图库更新
-            val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
-            mediaScanIntent.data = Uri.fromFile(image)
-            sendBroadcast(mediaScanIntent)
+            MediaScannerConnection.scanFile(this, arrayOf(image.absolutePath), null, null)
         }
         Log.i(TAG, "Image saved successfully: $fileName")
     } catch (e: Exception) {
@@ -205,9 +203,7 @@ fun Context.exportImageFile(
             file.copyTo(image, overwrite = true)
 
             // 通知图库更新
-            val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
-            mediaScanIntent.data = Uri.fromFile(image)
-            sendBroadcast(mediaScanIntent)
+            MediaScannerConnection.scanFile(this, arrayOf(image.absolutePath), null, null)
         }
         Log.i(TAG, "Image file saved successfully: $fileName")
     } catch (e: Exception) {

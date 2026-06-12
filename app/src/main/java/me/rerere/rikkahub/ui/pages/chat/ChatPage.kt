@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,11 +33,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
@@ -110,7 +112,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
-    val windowAdaptiveInfo = currentWindowDpSize()
+    val windowAdaptiveInfo = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.toSize().toDpSize()
+    }
     val isBigScreen =
         windowAdaptiveInfo.width > windowAdaptiveInfo.height && windowAdaptiveInfo.width >= 1100.dp
 
@@ -221,12 +225,16 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     onClearAllErrors = { vm.clearAllErrors() },
                 )
             }
-            BackHandler(drawerState.isOpen) {
-                scope.launch { drawerState.close() }
-            }
         }
     }
 }
+
+// Submit-guard policy, top-level for JVM unit tests (ChatPageSubmitGuardTest). The
+// no-model toast applies only when the submit requests a model answer: ChatService.sendMessage
+// starts generation solely when answer is true, so the long-press "send without answer" path
+// must keep working with no chat model configured.
+internal fun shouldBlockSubmitForMissingModel(answer: Boolean, hasChatModel: Boolean): Boolean =
+    answer && !hasChatModel
 
 @Composable
 private fun ChatPageContent(
@@ -253,6 +261,26 @@ private fun ChatPageContent(
     val selectModelFirstMessage = stringResource(R.string.chat_page_select_model_first)
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+
+    // Single submit path for tap and long-press send; only the answer flag differs.
+    fun submitInput(answer: Boolean) {
+        if (shouldBlockSubmitForMissingModel(answer = answer, hasChatModel = currentChatModel != null)) {
+            toaster.show(selectModelFirstMessage, type = ToastType.Error)
+            return
+        }
+        if (inputState.isEditing()) {
+            vm.handleMessageEdit(
+                parts = inputState.getContents(),
+                messageId = inputState.editingMessage!!,
+            )
+        } else {
+            vm.handleMessageSend(content = inputState.getContents(), answer = answer)
+            scope.launch {
+                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+            }
+        }
+        inputState.clearInput()
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -294,36 +322,10 @@ private fun ChatPageContent(
                         vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
                     },
                     onSendClick = {
-                        if (currentChatModel == null) {
-                            toaster.show(selectModelFirstMessage, type = ToastType.Error)
-                            return@ChatInput
-                        }
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(inputState.getContents())
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
-                        }
-                        inputState.clearInput()
+                        submitInput(answer = true)
                     },
                     onLongSendClick = {
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
-                        }
-                        inputState.clearInput()
+                        submitInput(answer = false)
                     },
                     onUpdateChatModel = {
                         vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)

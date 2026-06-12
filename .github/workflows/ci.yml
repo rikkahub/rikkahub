@@ -17,18 +17,18 @@ jobs:
     name: Compile · Test · Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # material3 vendors material-color-utilities (provides the dynamiccolor package) as a submodule.
           submodules: recursive
 
       # Daemon JVM criteria pins JetBrains Runtime 21 (gradle/gradle-daemon-jvm.properties).
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: jetbrains
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       # google-services.json is gitignored and required by the firebase/gms plugin.
       # CI uses a mock with the release + .debug applicationIds; values are non-functional.

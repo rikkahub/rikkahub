@@ -218,7 +218,6 @@
   <string name="backup_page_s3_secret_access_key">秘密访问密钥</string>
   <string name="backup_page_test_connection">测试连接</string>
   <string name="backup_page_title">备份与恢复</string>
-  <string name="backup_page_unknown_error">未知错误</string>
   <string name="backup_page_username">用户名</string>
   <string name="backup_page_webdav_backup">WebDAV备份</string>
   <string name="backup_page_webdav_backup_files">WebDav备份文件列表</string>
@@ -1125,7 +1124,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="translator_page_paste">粘贴文本</string>
   <string name="translator_page_copy_result">复制翻译结果</string>
   <string name="translator_page_error">错误</string>
-  <string name="setting_provider_page_discount">10% 优惠</string>
+  <string name="setting_provider_page_discount" formatted="false">10% 优惠</string>
   <string name="donate_page_afdian_name">爱发电</string>
   <string name="setting_provider_page_test_non_streaming">非流式</string>
   <string name="setting_provider_page_test_streaming">流式</string>

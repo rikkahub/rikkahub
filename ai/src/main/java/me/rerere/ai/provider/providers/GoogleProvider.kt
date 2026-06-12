@@ -140,7 +140,7 @@ class GoogleProvider(
             )
             val response = client.newCall(request).await()
             if (response.isSuccessful) {
-                val body = response.body?.string() ?: error("empty body")
+                val body = response.body.string()
                 val bodyObject = json.parseToJsonElement(body).jsonObject
                 val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
 
@@ -204,10 +204,10 @@ class GoogleProvider(
 
         val response = client.newCall(request).await(params.callTimeoutMillis?.milliseconds)
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
+        val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         parseGenerateContentResponse(bodyJson, params.model.modelId)

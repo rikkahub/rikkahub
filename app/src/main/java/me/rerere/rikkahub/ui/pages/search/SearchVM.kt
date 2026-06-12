@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
@@ -43,6 +44,7 @@ class SearchVM(
 
     init {
         viewModelScope.launch {
+            @OptIn(FlowPreview::class) // debounce: deliberate reliance on the preview operator for search throttling
             _searchQuery
                 .debounce(300L)
                 .collectLatest { query -> performSearch(query) }

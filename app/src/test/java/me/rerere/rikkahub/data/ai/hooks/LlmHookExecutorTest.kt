@@ -36,6 +36,7 @@ import okhttp3.Request
 import okio.IOException
 import okio.Timeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -44,6 +45,7 @@ import org.koin.dsl.module
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.uuid.Uuid
 
 class LlmHookExecutorTest {
 
@@ -125,6 +127,55 @@ class LlmHookExecutorTest {
         assertEquals(200L, seen?.callTimeoutMillis)
     }
 
+    // HookConfig documents `model = null` as the ONLY fast-model case. A pinned model that is
+    // missing (deleted/unavailable) must fail through the dispatcher, never silently swap the
+    // call onto the fast model — for failClosed security hooks that swap would change the
+    // enforcement model.
+    @Test
+    fun `pinned hook model that is missing fails instead of falling back to the fast model`() = runBlocking {
+        var providerCalled = false
+        val executor = LlmHookExecutor(
+            settings = { settings },
+            providerManager = providerManager(FakeOpenAIProvider {
+                providerCalled = true
+                denyChunk("should never run")
+            }),
+        )
+        val pinnedMissing = Model(modelId = "deleted-model", displayName = "Deleted")
+
+        try {
+            executor.execute(HookEvent.PreToolUse, llmHandler(model = pinnedMissing.id), input = "{}")
+            fail("expected the missing pinned model to fail the hook call")
+        } catch (e: IllegalStateException) {
+            assertTrue(
+                "failure should name the pinned model, got: ${e.message}",
+                e.message.orEmpty().contains(pinnedMissing.id.toString()),
+            )
+        }
+        assertFalse("the fast model must NOT be called in place of the pinned model", providerCalled)
+    }
+
+    @Test
+    fun `failClosed hook pinned to a missing model denies instead of running under the fast model`() = runBlocking {
+        val pinnedMissing = Model(modelId = "deleted-model", displayName = "Deleted")
+        // The fast model exists and would answer "allow" — exactly the silent-downgrade hazard.
+        val dispatcher = dispatcherWith(FakeOpenAIProvider { allowChunk() })
+
+        val result = dispatcher.dispatch(
+            event = HookEvent.PreToolUse,
+            input = "{}",
+            ctx = HookDispatchContext(
+                config = trustedLlmConfig(failClosed = true, model = pinnedMissing.id),
+                toolName = "search",
+            ),
+        )
+
+        assertTrue(
+            "missing pinned model on a failClosed hook must deny, got ${result.decision}",
+            result.decision is HookDecision.Deny,
+        )
+    }
+
     @Test
     fun `failClosed executor error aggregates as Deny`() = runBlocking {
         val dispatcher = dispatcherWith(FakeOpenAIProvider { throw IOException("provider down") })
@@ -186,13 +237,13 @@ class LlmHookExecutorTest {
 
     // ---- fixtures ----
 
-    private fun llmHandler(failClosed: Boolean = false) =
-        HookHandler.Llm(prompt = "gate this tool", failClosed = failClosed)
+    private fun llmHandler(failClosed: Boolean = false, model: Uuid? = null) =
+        HookHandler.Llm(prompt = "gate this tool", model = model, failClosed = failClosed)
 
-    private fun trustedLlmConfig(failClosed: Boolean) = HookConfig(
+    private fun trustedLlmConfig(failClosed: Boolean, model: Uuid? = null) = HookConfig(
         hooks = mapOf(
             HookEvent.PreToolUse to listOf(
-                HookMatcher(matcher = null, handlers = listOf(llmHandler(failClosed))),
+                HookMatcher(matcher = null, handlers = listOf(llmHandler(failClosed, model))),
             ),
         ),
         trusted = true,
@@ -218,6 +269,21 @@ class LlmHookExecutorTest {
             openAI = openAI,
             google = UnusedProvider(),
             claude = UnusedProvider(),
+        ),
+    )
+
+    private fun allowChunk() = MessageChunk(
+        id = "hook-1",
+        model = "fast-model",
+        choices = listOf(
+            UIMessageChoice(
+                index = 0,
+                delta = null,
+                message = UIMessage.assistant(
+                    """{"hookEventName":"PreToolUse","decision":"allow"}""",
+                ),
+                finishReason = "stop",
+            ),
         ),
     )
 

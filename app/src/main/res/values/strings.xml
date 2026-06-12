@@ -221,7 +221,6 @@
   <string name="backup_page_s3_secret_access_key">Secret Access Key</string>
   <string name="backup_page_test_connection">Test Connection</string>
   <string name="backup_page_title">Backup and Restore</string>
-  <string name="backup_page_unknown_error">Unknown error</string>
   <string name="backup_page_username">Username</string>
   <string name="backup_page_webdav_backup">WebDAV Backup</string>
   <string name="backup_page_webdav_backup_files">WebDAV Backup Files</string>
@@ -1124,7 +1123,7 @@
   <string name="translator_page_paste">Paste text</string>
   <string name="translator_page_copy_result">Copy translation result</string>
   <string name="translator_page_error">Error</string>
-  <string name="setting_provider_page_discount">10% off</string>
+  <string name="setting_provider_page_discount" formatted="false">10% off</string>
   <string name="donate_page_afdian_name">Afdian</string>
   <string name="setting_provider_page_test_non_streaming">Non-streaming</string>
   <string name="setting_provider_page_test_streaming">Streaming</string>

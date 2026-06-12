@@ -143,8 +143,16 @@ class GenerationForegroundService : Service() {
 
         val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         if (wifiLock == null) {
+            val wifiLockMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            } else {
+                // WIFI_MODE_FULL_LOW_LATENCY requires API 29; below it (minSdk 26) the
+                // deprecated HIGH_PERF constant is the only full-power wifi lock mode.
+                @Suppress("DEPRECATION")
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            }
             wifiLock = wifiManager.createWifiLock(
-                WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                wifiLockMode,
                 "rikkahub:generation"
             ).apply { setReferenceCounted(false) }
         }

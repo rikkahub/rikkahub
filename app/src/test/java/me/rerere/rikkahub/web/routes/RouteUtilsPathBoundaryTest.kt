@@ -79,7 +79,9 @@ class RouteUtilsPathBoundaryTest {
     @Test
     fun parentDirectoryIsRejected() {
         val r = setUpRoot()
-        assertFalse(isPathWithin(r, r.parentFile))
+        // newFolder() always nests under the TemporaryFolder root, so a parent must exist.
+        val parent = checkNotNull(r.parentFile) { "temp root '$r' unexpectedly has no parent" }
+        assertFalse(isPathWithin(r, parent))
     }
 
     @Test

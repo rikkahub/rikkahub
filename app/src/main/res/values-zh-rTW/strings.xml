@@ -218,7 +218,6 @@
   <string name="backup_page_s3_secret_access_key">私密存取金鑰</string>
   <string name="backup_page_test_connection">測試連線</string>
   <string name="backup_page_title">備份與恢復</string>
-  <string name="backup_page_unknown_error">未知錯誤</string>
   <string name="backup_page_username">使用者名稱</string>
   <string name="backup_page_webdav_backup">WebDAV備份</string>
   <string name="backup_page_webdav_backup_files">WebDav備份檔案列表</string>
@@ -1123,7 +1122,7 @@
   <string name="translator_page_paste">貼上文字</string>
   <string name="translator_page_copy_result">複製翻譯結果</string>
   <string name="translator_page_error">錯誤</string>
-  <string name="setting_provider_page_discount">10% 優惠</string>
+  <string name="setting_provider_page_discount" formatted="false">10% 優惠</string>
   <string name="donate_page_afdian_name">Afdian</string>
   <string name="setting_provider_page_test_non_streaming">非串流</string>
   <string name="setting_provider_page_test_streaming">串流</string>

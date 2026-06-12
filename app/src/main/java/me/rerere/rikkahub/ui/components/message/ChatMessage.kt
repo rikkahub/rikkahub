@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.message
 
+import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -276,6 +277,7 @@ private fun MessagePartsBlock(
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
     val partsState by rememberUpdatedState(parts)
+    val loadingState by rememberUpdatedState(loading)
 
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
@@ -301,7 +303,7 @@ private fun MessagePartsBlock(
         snapshotFlow { partsState }
             .debounce(50.milliseconds)
             .collect { parts ->
-                if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
+                if (parts.isNotEmpty() && loadingState && settings.displaySetting.enableMessageGenerationHapticEffect) {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
                 }
             }
@@ -409,15 +411,7 @@ private fun MessagePartsBlock(
                         Surface(
                             tonalElevation = 2.dp,
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW)
-                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                intent.data = FileProvider.getUriForFile(
-                                    context,
-                                    "${context.packageName}.fileprovider",
-                                    part.url.toUri().toFile()
-                                )
-                                val chooserIndent = Intent.createChooser(intent, null)
-                                context.startActivity(chooserIndent)
+                                openPartFile(context, part.url)
                             },
                             modifier = Modifier,
                             shape = RoundedCornerShape(8.dp),
@@ -432,15 +426,7 @@ private fun MessagePartsBlock(
                         Surface(
                             tonalElevation = 2.dp,
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW)
-                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                intent.data = FileProvider.getUriForFile(
-                                    context,
-                                    "${context.packageName}.fileprovider",
-                                    part.url.toUri().toFile()
-                                )
-                                val chooserIndent = Intent.createChooser(intent, null)
-                                context.startActivity(chooserIndent)
+                                openPartFile(context, part.url)
                             },
                             modifier = Modifier,
                             shape = RoundedCornerShape(50),
@@ -488,15 +474,7 @@ private fun MessagePartsBlock(
                         Surface(
                             tonalElevation = 2.dp,
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW)
-                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                intent.data = FileProvider.getUriForFile(
-                                    context,
-                                    "${context.packageName}.fileprovider",
-                                    part.url.toUri().toFile()
-                                )
-                                val chooserIndent = Intent.createChooser(intent, null)
-                                context.startActivity(chooserIndent)
+                                openPartFile(context, part.url)
                             },
                             modifier = Modifier,
                             shape = RoundedCornerShape(50),
@@ -609,4 +587,25 @@ private fun MessagePartsBlock(
             }
         }
     }
+}
+
+// part.url is a file:// uri for FilesManager-created chat files, but remote (http/https)
+// and content:// urls are also legal part values; Uri.toFile() throws on anything but
+// file://, so only file uris may take the FileProvider/ACTION_VIEW path.
+internal fun isFileSchemeUrl(url: String): Boolean =
+    url.startsWith("file://", ignoreCase = true)
+
+private fun openPartFile(context: Context, url: String) {
+    if (!isFileSchemeUrl(url)) {
+        context.openUrl(url)
+        return
+    }
+    val intent = Intent(Intent.ACTION_VIEW)
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    intent.data = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        url.toUri().toFile()
+    )
+    context.startActivity(Intent.createChooser(intent, null))
 }

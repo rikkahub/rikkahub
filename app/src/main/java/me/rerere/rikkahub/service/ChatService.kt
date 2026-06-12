@@ -7,6 +7,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -655,73 +656,85 @@ class ChatService(
 
     // ---- 发送消息 ----
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
-        if (content.isEmptyInputMessage()) return
-
+    // The ONE generation entry-point lifecycle (audit Q3, PR #266): sendMessage,
+    // regenerateAtMessage and handleToolApproval used to re-implement cancel-previous →
+    // launch → try/catch → addError → done-emit → setJob, and drifted twice (the
+    // cancellation-rethrow guard and the supersede join barrier each landed in only one
+    // copy). The lifecycle now lives here once; the JVM-testable policy core is the
+    // top-level [launchGenerationEntryJob] below.
+    private fun launchGenerationEntry(
+        conversationId: Uuid,
+        errorTitle: String,
+        block: suspend (ConversationSession) -> Unit,
+    ) {
         val session = getOrCreateSession(conversationId)
         val previousJob = session.getJob()
         previousJob?.cancel()
 
-        val job = appScope.launch {
-            try {
-                runCatching { previousJob?.join() }
-                finishInterruptedPendingTools(conversationId)
-
-                val currentConversation = session.state.value
-                val settings = settingsStore.settingsFlow.first()
-                val assistant = settings.getAssistantById(currentConversation.assistantId)
-                    ?: settings.getCurrentAssistant()
-                val processedContent = preprocessUserInputParts(content, assistant)
-
-                // UserPromptSubmit hooks (#200 T8): the send seam. Injected additionalContext is
-                // appended to the outgoing turn as its own visible Text part BEFORE the message is
-                // persisted, so what the model sees is exactly what the user can see. No hooks
-                // configured (or dispatcher absent) -> processedContent passes through untouched.
-                val finalContent = hookFirePoints.onUserPromptSubmit(assistant.hooks, processedContent)
-
-                // 添加消息到列表
-                val newConversation = currentConversation.copy(
-                    messageNodes = currentConversation.messageNodes + UIMessage(
-                        role = MessageRole.USER,
-                        parts = finalContent,
-                    ).toMessageNode(),
-                )
-                saveConversation(conversationId, newConversation)
-
-                // 在生成下一次回复前，若达到阈值则自动压缩历史（仅限本 sendMessage 路径；
-                // regenerate / 工具审批续跑路径不在本次范围内）。判定抽成纯函数 [shouldAutoCompact]
-                // 以便 JVM 单测。压缩失败时降级——把错误上报后仍按未压缩的历史继续发送，绝不因压缩失败
-                // 阻断用户消息，也绝不静默吞掉异常。
-                maybeAutoCompact(conversationId, assistant)
-
-                // 开始补全
-                if (answer) {
-                    // Stop hooks (#200 T8): turn end. Injected context (unless vetoed by
-                    // preventContinuation) triggers exactly ONE more completion — the continuation's
-                    // own turn end does NOT re-dispatch Stop, so a hook that always injects cannot
-                    // loop the agent unboundedly. Title/suggestion jobs are deferred until after the
-                    // continuation so they reflect the final transcript (review mustFix #2).
-                    sequenceTurnEnd(
-                        complete = { handleMessageComplete(conversationId, runTurnEndJobs = false) },
-                        continueAfterStopHook = { continueAfterStopHookIfRequested(conversationId, assistant) },
-                        launchTurnEndJobs = { launchTurnEndJobs(conversationId) },
-                    )
-                }
-
-                _generationDoneFlow.emit(conversationId)
-            } catch (e: Exception) {
-                // 用户主动停止（stopGeneration 取消本 job）是协作式取消，不是“发送失败”：CancellationException
-                // 必须重新抛出让取消沿结构化并发向上传播，绝不被当作普通异常吞掉。旧代码 catch(Exception) 捕获了
-                // 它却不重抛、落到 addError（addError 虽对取消早退、不上报，但本 job 会“正常完成”而非传播取消，破坏
-                // 结构化并发）。maybeAutoCompact 在取消路径重新抛出的 CancellationException 同样经此重抛传播。
-                // 复用全局分类器 shouldRethrowVmError（与 launchVm/runEmitting 同一约定）；仅捕获 Exception，保留
-                // 原 Error 不被本块捕获的语义。
-                if (shouldRethrowVmError(e)) throw e
-                Log.e(TAG, "sendMessage: generation pipeline failed", e)
-                addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
-            }
+        val job = launchGenerationEntryJob(
+            scope = appScope,
+            previousJob = previousJob,
+            onError = { e ->
+                Log.e(TAG, "generation entry failed: $errorTitle", e)
+                addError(e, conversationId, title = errorTitle)
+            },
+        ) {
+            block(session)
+            _generationDoneFlow.emit(conversationId)
         }
         session.setJob(job)
+    }
+
+    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+        if (content.isEmptyInputMessage()) return
+
+        launchGenerationEntry(
+            conversationId = conversationId,
+            errorTitle = context.getString(R.string.error_title_send_message),
+        ) { session ->
+            finishInterruptedPendingTools(conversationId)
+
+            val currentConversation = session.state.value
+            val settings = settingsStore.settingsFlow.first()
+            val assistant = settings.getAssistantById(currentConversation.assistantId)
+                ?: settings.getCurrentAssistant()
+            val processedContent = preprocessUserInputParts(content, assistant)
+
+            // UserPromptSubmit hooks (#200 T8): the send seam. Injected additionalContext is
+            // appended to the outgoing turn as its own visible Text part BEFORE the message is
+            // persisted, so what the model sees is exactly what the user can see. No hooks
+            // configured (or dispatcher absent) -> processedContent passes through untouched.
+            val finalContent = hookFirePoints.onUserPromptSubmit(assistant.hooks, processedContent)
+
+            // 添加消息到列表
+            val newConversation = currentConversation.copy(
+                messageNodes = currentConversation.messageNodes + UIMessage(
+                    role = MessageRole.USER,
+                    parts = finalContent,
+                ).toMessageNode(),
+            )
+            saveConversation(conversationId, newConversation)
+
+            // 在生成下一次回复前，若达到阈值则自动压缩历史（仅限本 sendMessage 路径；
+            // regenerate / 工具审批续跑路径不在本次范围内）。判定抽成纯函数 [shouldAutoCompact]
+            // 以便 JVM 单测。压缩失败时降级——把错误上报后仍按未压缩的历史继续发送，绝不因压缩失败
+            // 阻断用户消息，也绝不静默吞掉异常。
+            maybeAutoCompact(conversationId, assistant)
+
+            // 开始补全
+            if (answer) {
+                // Stop hooks (#200 T8): turn end. Injected context (unless vetoed by
+                // preventContinuation) triggers exactly ONE more completion — the continuation's
+                // own turn end does NOT re-dispatch Stop, so a hook that always injects cannot
+                // loop the agent unboundedly. Title/suggestion jobs are deferred until after the
+                // continuation so they reflect the final transcript (review mustFix #2).
+                sequenceTurnEnd(
+                    complete = { handleMessageComplete(conversationId, runTurnEndJobs = false) },
+                    continueAfterStopHook = { continueAfterStopHookIfRequested(conversationId, assistant) },
+                    launchTurnEndJobs = { launchTurnEndJobs(conversationId) },
+                )
+            }
+        }
     }
 
     // Stop fire-point (#200 T8). Runs after the agentic turn handleMessageComplete owns has
@@ -852,39 +865,31 @@ class ChatService(
         message: UIMessage,
         regenerateAssistantMsg: Boolean = true
     ) {
-        val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        launchGenerationEntry(
+            conversationId = conversationId,
+            errorTitle = context.getString(R.string.error_title_regenerate_message),
+        ) { session ->
+            val conversation = session.state.value
 
-        val job = appScope.launch {
-            try {
-                val conversation = session.state.value
-
-                if (message.role == MessageRole.USER) {
-                    // 如果是用户消息，则截止到当前消息
+            if (message.role == MessageRole.USER) {
+                // 如果是用户消息，则截止到当前消息
+                val node = conversation.getMessageNodeByMessage(message)
+                val indexAt = conversation.messageNodes.indexOf(node)
+                val newConversation = conversation.copy(
+                    messageNodes = conversation.messageNodes.subList(0, indexAt + 1)
+                )
+                saveConversation(conversationId, newConversation)
+                handleMessageComplete(conversationId)
+            } else {
+                if (regenerateAssistantMsg) {
                     val node = conversation.getMessageNodeByMessage(message)
-                    val indexAt = conversation.messageNodes.indexOf(node)
-                    val newConversation = conversation.copy(
-                        messageNodes = conversation.messageNodes.subList(0, indexAt + 1)
-                    )
-                    saveConversation(conversationId, newConversation)
-                    handleMessageComplete(conversationId)
+                    val nodeIndex = conversation.messageNodes.indexOf(node)
+                    handleMessageComplete(conversationId, messageRange = 0..<nodeIndex)
                 } else {
-                    if (regenerateAssistantMsg) {
-                        val node = conversation.getMessageNodeByMessage(message)
-                        val nodeIndex = conversation.messageNodes.indexOf(node)
-                        handleMessageComplete(conversationId, messageRange = 0..<nodeIndex)
-                    } else {
-                        saveConversation(conversationId, conversation)
-                    }
+                    saveConversation(conversationId, conversation)
                 }
-
-                _generationDoneFlow.emit(conversationId)
-            } catch (e: Exception) {
-                addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
             }
         }
-
-        session.setJob(job)
     }
 
     // ---- 处理工具调用审批 ----
@@ -896,58 +901,50 @@ class ChatService(
         reason: String = "",
         answer: String? = null,
     ) {
-        val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        launchGenerationEntry(
+            conversationId = conversationId,
+            errorTitle = context.getString(R.string.error_title_tool_approval),
+        ) { session ->
+            val conversation = session.state.value
+            val newApprovalState = when {
+                answer != null -> ToolApprovalState.Answered(answer)
+                approved -> ToolApprovalState.Approved
+                else -> ToolApprovalState.Denied(reason)
+            }
 
-        val job = appScope.launch {
-            try {
-                val conversation = session.state.value
-                val newApprovalState = when {
-                    answer != null -> ToolApprovalState.Answered(answer)
-                    approved -> ToolApprovalState.Approved
-                    else -> ToolApprovalState.Denied(reason)
-                }
-
-                // Update the tool approval state
-                val updatedNodes = conversation.messageNodes.map { node ->
-                    node.copy(
-                        messages = node.messages.map { msg ->
-                            msg.copy(
-                                parts = msg.parts.map { part ->
-                                    when {
-                                        part is UIMessagePart.Tool && part.toolCallId == toolCallId -> {
-                                            part.copy(approvalState = newApprovalState)
-                                        }
-
-                                        else -> part
+            // Update the tool approval state
+            val updatedNodes = conversation.messageNodes.map { node ->
+                node.copy(
+                    messages = node.messages.map { msg ->
+                        msg.copy(
+                            parts = msg.parts.map { part ->
+                                when {
+                                    part is UIMessagePart.Tool && part.toolCallId == toolCallId -> {
+                                        part.copy(approvalState = newApprovalState)
                                     }
+
+                                    else -> part
                                 }
-                            )
-                        }
-                    )
-                }
-                val updatedConversation = conversation.copy(messageNodes = updatedNodes)
-                saveConversation(conversationId, updatedConversation)
-
-                // Check if there are still pending tools
-                val hasPendingTools = updatedNodes.any { node ->
-                    node.currentMessage.parts.any { part ->
-                        part is UIMessagePart.Tool && part.isPending
+                            }
+                        )
                     }
-                }
+                )
+            }
+            val updatedConversation = conversation.copy(messageNodes = updatedNodes)
+            saveConversation(conversationId, updatedConversation)
 
-                // Only continue generation when all pending tools are handled
-                if (!hasPendingTools) {
-                    handleMessageComplete(conversationId)
+            // Check if there are still pending tools
+            val hasPendingTools = updatedNodes.any { node ->
+                node.currentMessage.parts.any { part ->
+                    part is UIMessagePart.Tool && part.isPending
                 }
+            }
 
-                _generationDoneFlow.emit(conversationId)
-            } catch (e: Exception) {
-                addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
+            // Only continue generation when all pending tools are handled
+            if (!hasPendingTools) {
+                handleMessageComplete(conversationId)
             }
         }
-
-        session.setJob(job)
     }
 
     // UI automation (#187 v1) per-conversation capability lease (issue #244, god-function split #2b).
@@ -1630,13 +1627,12 @@ class ChatService(
             return // 新会话且为空时不保存
         }
 
-        val updatedConversation = conversation.copy()
-        updateConversationWithFileCleanup(conversationId, updatedConversation)
+        updateConversationWithFileCleanup(conversationId, conversation)
 
         if (!exists) {
-            conversationRepo.insertConversation(updatedConversation)
+            conversationRepo.insertConversation(conversation)
         } else {
-            conversationRepo.updateConversation(updatedConversation)
+            conversationRepo.updateConversation(conversation)
         }
     }
 
@@ -1673,8 +1669,10 @@ class ChatService(
                 // Save the conversation after translation is complete
                 saveConversation(conversationId, getConversationFlow(conversationId).value)
             } catch (e: Exception) {
-                // Clear translation field on error
+                // Clear the translation field on error AND on cancellation (the loading placeholder
+                // must never stick), but cancellation itself must propagate, not report.
                 clearTranslationField(conversationId, message.id)
+                if (shouldRethrowVmError(e)) throw e
                 addError(e, conversationId, title = context.getString(R.string.error_title_translate_message))
             }
         }
@@ -1917,3 +1915,37 @@ internal fun assembleConversationJobsFlow(
             }
         }
     }
+
+/**
+ * The generation entry-point job lifecycle policy shared by [ChatService.sendMessage],
+ * [ChatService.regenerateAtMessage] and [ChatService.handleToolApproval] (via
+ * `launchGenerationEntry`). Extracted as a top-level function over plain coroutine primitives so
+ * the two invariants that previously drifted across the three hand-rolled copies are JVM
+ * unit-tested against production wiring rather than a mirror:
+ *
+ *  - SUPERSEDE BARRIER: [block] must not run until [previousJob] (the cancelled generation this
+ *    one replaces, including its NonCancellable persistence finalizer) has finished — otherwise
+ *    the old job's writes race the new job's and can resurrect state the user just removed.
+ *    The join is deliberately unguarded: [Job.join] never rethrows the joined job's failure, it
+ *    only throws this job's own [CancellationException] — which must reach the catch below and
+ *    be rethrown via [shouldRethrowVmError] so [block] never runs after cancellation.
+ *  - CANCELLATION RETHROW: cancellation (stopGeneration / a newer entry superseding this job)
+ *    must propagate per [shouldRethrowVmError], never be reported through [onError] — a cancelled
+ *    job that "completes normally" breaks the structured-concurrency contract CoroutineUtils pins.
+ *
+ * Every other [Exception] is reported through [onError] instead of crashing [scope].
+ */
+internal fun launchGenerationEntryJob(
+    scope: CoroutineScope,
+    previousJob: Job?,
+    onError: (Exception) -> Unit,
+    block: suspend () -> Unit,
+): Job = scope.launch {
+    try {
+        previousJob?.join()
+        block()
+    } catch (e: Exception) {
+        if (shouldRethrowVmError(e)) throw e
+        onError(e)
+    }
+}

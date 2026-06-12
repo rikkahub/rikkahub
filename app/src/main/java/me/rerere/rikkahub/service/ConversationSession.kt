@@ -103,7 +103,11 @@ class ConversationSession(
         if (job != null) {
             onGenerationStart()
             job.invokeOnCompletion {
-                _generationJob.value = null
+                // Identity-guarded: a superseded job can finish completing AFTER the replacement
+                // is registered (cancel only starts the wind-down), and its late handler must not
+                // clear the replacement — stopGeneration would read null and the new generation
+                // would be unstoppable. compareAndSet clears only this job's own registration.
+                _generationJob.compareAndSet(job, null)
                 onGenerationStop()
                 if (refCount.get() <= 0) {
                     scheduleIdleCheck()

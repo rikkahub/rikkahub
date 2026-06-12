@@ -508,7 +508,9 @@ private fun buildCodePreviewHtml(code: String, language: String): String {
     }
 }
 
-class HighlightCodeVisualTransformation(
+// Data class so instances built inline per recomposition compare equal and
+// CoreTextField's remember(value, visualTransformation) cache of filter() holds.
+data class HighlightCodeVisualTransformation(
     val language: String,
     val highlighter: Highlighter,
     val darkMode: Boolean

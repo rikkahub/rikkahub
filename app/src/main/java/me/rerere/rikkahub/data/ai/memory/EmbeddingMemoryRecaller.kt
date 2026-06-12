@@ -103,11 +103,14 @@ class EmbeddingMemoryRecaller(
 
             candidates.forEach { candidate ->
                 val vector = candidate.storedVector
-                val usable = vector != null &&
-                    candidate.storedContentHash == currentContentHash(candidate.memory.id) &&
+                if (vector == null) {
+                    unembedded.add(candidate.memory)
+                    return@forEach
+                }
+                val usable = candidate.storedContentHash == currentContentHash(candidate.memory.id) &&
                     candidate.storedEmbeddingSpace == currentSpace &&
                     vector.values.size == query.values.size
-                if (!usable || vector == null) {
+                if (!usable) {
                     unembedded.add(candidate.memory)
                     return@forEach
                 }

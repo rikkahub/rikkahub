@@ -51,7 +51,7 @@
         errorLine1="            Manifest.permission.POST_NOTIFICATIONS"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/me/rerere/rikkahub/utils/NotificationUtil.kt"
+            file="src/main/java/me/rerere/rikkahub/utils/lifecycle/NotificationUtil.kt"
             line="47"
             column="13"/>
     </issue>
@@ -63,7 +63,7 @@
         errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageTranslation.kt"
-            line="90"
+            line="92"
             column="47"/>
     </issue>
 
@@ -74,7 +74,7 @@
         errorLine2="                       ~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderPage.kt"
-            line="124"
+            line="125"
             column="24"/>
     </issue>
 
@@ -85,7 +85,7 @@
         errorLine2="                                                                                    ~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/stats/StatsPage.kt"
-            line="222"
+            line="244"
             column="85"/>
     </issue>
 
@@ -96,7 +96,7 @@
         errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/translator/TranslatorPage.kt"
-            line="240"
+            line="242"
             column="47"/>
     </issue>
 
@@ -106,20 +106,152 @@
         errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.4.1-bin.zip"
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/wrapper/gradle-wrapper.properties"
+            file="../gradle/wrapper/gradle-wrapper.properties"
             line="4"
             column="17"/>
     </issue>
 
     <issue
         id="GradleDependency"
-        message="A newer version of com.google.firebase:firebase-bom than 34.13.0 is available: 34.14.0"
+        message="A newer version of androidx.core:core-ktx than 1.18.0 is available: 1.19.0"
+        errorLine1="coreKtx = &quot;1.18.0&quot;"
+        errorLine2="          ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="9"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.compose.material3:material3 than 1.5.0-alpha20 is available: 1.5.0-alpha21"
+        errorLine1="material3 = &quot;1.5.0-alpha20&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="18"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of com.google.firebase:firebase-bom than 34.13.0 is available: 34.14.1"
         errorLine1="firebase-bom = &quot;34.13.0&quot;"
         errorLine2="               ~~~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="41"
+            file="../gradle/libs.versions.toml"
+            line="44"
             column="16"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlin.plugin.compose than 2.3.21 is available: 2.4.0"
+        errorLine1="kotlin = &quot;2.3.21&quot;"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="7"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlin.plugin.serialization than 2.3.21 is available: 2.4.0"
+        errorLine1="kotlin = &quot;2.3.21&quot;"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="7"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.okhttp3:logging-interceptor than 5.3.2 is available: 5.4.0"
+        errorLine1="okhttp = &quot;5.3.2&quot;"
+        errorLine2="         ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="27"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.okhttp3:okhttp than 5.3.2 is available: 5.4.0"
+        errorLine1="okhttp = &quot;5.3.2&quot;"
+        errorLine2="         ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="27"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.okhttp3:okhttp-sse than 5.3.2 is available: 5.4.0"
+        errorLine1="okhttp = &quot;5.3.2&quot;"
+        errorLine2="         ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="27"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.coil-kt.coil3:coil-compose than 3.4.0 is available: 3.5.0"
+        errorLine1="coil = &quot;3.4.0&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="29"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.coil-kt.coil3:coil-gif than 3.4.0 is available: 3.5.0"
+        errorLine1="coil = &quot;3.4.0&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="29"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.coil-kt.coil3:coil-network-cache-control than 3.4.0 is available: 3.5.0"
+        errorLine1="coil = &quot;3.4.0&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="29"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.coil-kt.coil3:coil-network-okhttp than 3.4.0 is available: 3.5.0"
+        errorLine1="coil = &quot;3.4.0&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="29"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.coil-kt.coil3:coil-svg than 3.4.0 is available: 3.5.0"
+        errorLine1="coil = &quot;3.4.0&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="29"
+            column="8"/>
     </issue>
 
     <issue
@@ -128,8 +260,8 @@
         errorLine1="quickie-bundled = &quot;1.11.0&quot;"
         errorLine2="                  ~~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="45"
+            file="../gradle/libs.versions.toml"
+            line="48"
             column="19"/>
     </issue>
 
@@ -139,8 +271,8 @@
         errorLine1="mcp = &quot;0.12.0&quot;"
         errorLine2="      ~~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="50"
+            file="../gradle/libs.versions.toml"
+            line="53"
             column="7"/>
     </issue>
 
@@ -150,9 +282,42 @@
         errorLine1="pebble = &quot;4.1.1&quot;"
         errorLine2="         ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="51"
+            file="../gradle/libs.versions.toml"
+            line="54"
             column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.chrisbanes.haze:haze than 2.0.0-alpha02 is available: 2.0.0-alpha03"
+        errorLine1="haze = &quot;2.0.0-alpha02&quot;"
+        errorLine2="       ~~~~~~~~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="60"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.chrisbanes.haze:haze-blur than 2.0.0-alpha02 is available: 2.0.0-alpha03"
+        errorLine1="haze = &quot;2.0.0-alpha02&quot;"
+        errorLine2="       ~~~~~~~~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="60"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.chrisbanes.haze:haze-blur-materials than 2.0.0-alpha02 is available: 2.0.0-alpha03"
+        errorLine1="haze = &quot;2.0.0-alpha02&quot;"
+        errorLine2="       ~~~~~~~~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="60"
+            column="8"/>
     </issue>
 
     <issue
@@ -161,8 +326,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -172,8 +337,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -183,8 +348,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -194,8 +359,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -205,8 +370,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -216,8 +381,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -227,8 +392,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -238,8 +403,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -249,8 +414,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -260,8 +425,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -271,8 +436,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -282,8 +447,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -293,8 +458,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -304,8 +469,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -315,8 +480,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -326,8 +491,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -337,8 +502,8 @@
         errorLine1="ktor = &quot;3.4.3&quot;"
         errorLine2="       ~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="62"
+            file="../gradle/libs.versions.toml"
+            line="65"
             column="8"/>
     </issue>
 
@@ -348,8 +513,8 @@
         errorLine1="sqlite-vector = &quot;0.9.92&quot;"
         errorLine2="                ~~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="63"
+            file="../gradle/libs.versions.toml"
+            line="66"
             column="17"/>
     </issue>
 
@@ -359,8 +524,8 @@
         errorLine1="slf4j = &quot;2.0.17&quot;"
         errorLine2="        ~~~~~~~~">
         <location
-            file="$HOME/playground/rikkahub-ci/gradle/libs.versions.toml"
-            line="65"
+            file="../gradle/libs.versions.toml"
+            line="68"
             column="9"/>
     </issue>
 
@@ -382,7 +547,7 @@
         errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantImporter.kt"
-            line="89"
+            line="100"
             column="59"/>
     </issue>
 
@@ -393,30 +558,30 @@
         errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantImporter.kt"
-            line="115"
+            line="126"
             column="59"/>
     </issue>
 
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
-        errorLine1="                                    context.getString(R.string.chat_input_file_read_failed, fileName),"
-        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                                        context.getString(R.string.chat_input_file_read_failed, fileName),"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/ai/chatinput/ChatInput.kt"
-            line="295"
-            column="37"/>
+            line="314"
+            column="41"/>
     </issue>
 
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
-        errorLine1="                            context.getString(R.string.chat_input_unsupported_file_type, fileName),"
-        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                                context.getString(R.string.chat_input_unsupported_file_type, fileName),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/ai/chatinput/ChatInput.kt"
-            line="303"
-            column="29"/>
+            line="322"
+            column="33"/>
     </issue>
 
     <issue
@@ -426,7 +591,7 @@
         errorLine2="                                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImageGalleryScreen.kt"
-            line="174"
+            line="179"
             column="71"/>
     </issue>
 
@@ -437,7 +602,7 @@
         errorLine2="                                                                      ^">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImageGalleryScreen.kt"
-            line="179"
+            line="184"
             column="71"/>
     </issue>
 
@@ -448,18 +613,7 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
-            line="75"
-            column="25"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                        context.getString(R.string.backup_page_restore_failed, e.message ?: &quot;&quot;),"
-        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
-            line="81"
+            line="82"
             column="25"/>
     </issue>
 
@@ -470,18 +624,18 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
-            line="155"
+            line="90"
             column="25"/>
     </issue>
 
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
-        errorLine1="                        context.getString(R.string.backup_page_restore_failed, e.message ?: &quot;&quot;),"
-        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                        context.getString(R.string.backup_page_restore_failed, state.message),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt"
-            line="162"
+            line="104"
             column="25"/>
     </issue>
 
@@ -492,7 +646,7 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/richtext/Mermaid.kt"
-            line="72"
+            line="75"
             column="25"/>
     </issue>
 
@@ -503,7 +657,7 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/richtext/Mermaid.kt"
-            line="78"
+            line="81"
             column="25"/>
     </issue>
 
@@ -521,11 +675,33 @@
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
+        errorLine1="                            context.getString(R.string.backup_page_backup_success),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="106"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                            context.getString(R.string.backup_page_restore_success),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
+            line="114"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
         errorLine1="                                context.getString(R.string.backup_page_connection_success),"
         errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="246"
+            line="300"
             column="33"/>
     </issue>
 
@@ -536,30 +712,8 @@
         errorLine2="                                ^">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="252"
+            line="306"
             column="33"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                context.getString(R.string.backup_page_backup_success),"
-        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="281"
-            column="33"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                it.message ?: context.getString(R.string.backup_page_unknown_error),"
-        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="287"
-            column="47"/>
     </issue>
 
     <issue
@@ -569,7 +723,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="349"
+            line="384"
             column="49"/>
     </issue>
 
@@ -580,29 +734,7 @@
         errorLine2="                                                ^">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="356"
-            column="49"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                                context.getString(R.string.backup_page_restore_success),"
-        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="371"
-            column="49"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                                context.getString("
-        errorLine2="                                                ^">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt"
-            line="379"
+            line="391"
             column="49"/>
     </issue>
 
@@ -613,63 +745,41 @@
         errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/setting/providerdetail/SettingProviderDetailPage.kt"
-            line="237"
+            line="172"
             column="33"/>
     </issue>
 
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
-        errorLine1="                toaster.show(context.getString(R.string.skills_page_import_success, message))"
-        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                    toaster.show(context.getString(R.string.skills_page_import_success, event.name))"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
-            line="90"
-            column="30"/>
+            line="104"
+            column="34"/>
     </issue>
 
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
-        errorLine1="                toaster.show(context.getString(R.string.skills_page_import_failed, message))"
-        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                    toaster.show(context.getString(R.string.skills_page_import_failed, event.message))"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
-            line="92"
-            column="30"/>
+            line="109"
+            column="34"/>
     </issue>
 
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
-        errorLine1="                        toaster.show(context.getString(R.string.skills_page_save_failed))"
-        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                    toaster.show(context.getString(R.string.skills_page_save_failed))"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
-            line="190"
-            column="38"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                        toaster.show(context.getString(R.string.skills_page_import_success, message))"
-        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
-            line="204"
-            column="38"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                        toaster.show(context.getString(R.string.skills_page_import_failed, message))"
-        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt"
-            line="206"
-            column="38"/>
+            line="116"
+            column="34"/>
     </issue>
 
     <issue
@@ -679,7 +789,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/ui/TextArea.kt"
-            line="99"
+            line="103"
             column="34"/>
     </issue>
 
@@ -690,7 +800,7 @@
         errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/ui/TextArea.kt"
-            line="102"
+            line="108"
             column="53"/>
     </issue>
 
@@ -708,11 +818,33 @@
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
+        errorLine1="                            context.getString(R.string.backup_page_backup_success),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="107"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                            context.getString(R.string.backup_page_restore_success),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
+            line="115"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
         errorLine1="                                context.getString(R.string.backup_page_connection_success),"
         errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="239"
+            line="294"
             column="33"/>
     </issue>
 
@@ -723,30 +855,8 @@
         errorLine2="                                ^">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="245"
+            line="300"
             column="33"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                context.getString(R.string.backup_page_backup_success),"
-        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="273"
-            column="33"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                it.message ?: context.getString(R.string.backup_page_unknown_error),"
-        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="279"
-            column="47"/>
     </issue>
 
     <issue
@@ -756,7 +866,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="341"
+            line="377"
             column="49"/>
     </issue>
 
@@ -767,30 +877,29 @@
         errorLine2="                                                ^">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="348"
+            line="384"
             column="49"/>
     </issue>
 
     <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                                context.getString(R.string.backup_page_restore_success),"
-        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        id="Aligned16KB"
+        message="The native library `arm64-v8a/libtermux.so` (from `com.termux.termux-app:terminal-emulator:0.118.0`) is not 16 KB aligned">
         <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="363"
-            column="49"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/65e8da12e3a916b121fb095c1ba2086d/transformed/terminal-emulator-0.118.0/jni/arm64-v8a/libtermux.so"/>
     </issue>
 
     <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
-        errorLine1="                                                context.getString("
-        errorLine2="                                                ^">
+        id="Aligned16KB"
+        message="The native library `arm64-v8a/libtermux.so` (from `com.termux.termux-app:terminal-emulator:0.118.0`) is not 16 KB aligned">
         <location
-            file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt"
-            line="371"
-            column="49"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/65e8da12e3a916b121fb095c1ba2086d/transformed/terminal-emulator-0.118.0/jni/arm64-v8a/libtermux.so"/>
+    </issue>
+
+    <issue
+        id="Aligned16KB"
+        message="The native library `arm64-v8a/libtermux.so` (from `com.termux.termux-app:terminal-emulator:0.118.0`) is not 16 KB aligned">
+        <location
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/65e8da12e3a916b121fb095c1ba2086d/transformed/terminal-emulator-0.118.0/jni/arm64-v8a/libtermux.so"/>
     </issue>
 
     <issue
@@ -800,7 +909,7 @@
         errorLine2="                                                        ~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="893"
+            line="898"
             column="57"/>
     </issue>
 
@@ -811,7 +920,7 @@
         errorLine2="                                                                  ~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="922"
+            line="927"
             column="67"/>
     </issue>
 
@@ -822,7 +931,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="99"
+            line="102"
             column="3"/>
     </issue>
 
@@ -833,7 +942,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="199"
+            line="202"
             column="3"/>
     </issue>
 
@@ -844,7 +953,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="200"
+            line="203"
             column="3"/>
     </issue>
 
@@ -855,7 +964,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="232"
+            line="234"
             column="3"/>
     </issue>
 
@@ -866,7 +975,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="239"
+            line="241"
             column="3"/>
     </issue>
 
@@ -877,7 +986,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="257"
+            line="259"
             column="3"/>
     </issue>
 
@@ -888,7 +997,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="293"
+            line="295"
             column="3"/>
     </issue>
 
@@ -899,7 +1008,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="307"
+            line="310"
             column="3"/>
     </issue>
 
@@ -910,7 +1019,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="497"
+            line="502"
             column="3"/>
     </issue>
 
@@ -921,7 +1030,7 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="780"
+            line="785"
             column="3"/>
     </issue>
 
@@ -932,7 +1041,29 @@
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="923"
+            line="928"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;lines&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;chat_message_diff_more_lines&quot;>… +%1$d lines&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1169"
+            column="3"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;items&quot;): This should probably be a plural rather than a string"
+        errorLine1="  &lt;string name=&quot;workspace_rootfs_progress_extracting&quot;>Extracting %1$d items&lt;/string>"
+        errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1227"
             column="3"/>
     </issue>
 
@@ -950,7 +1081,7 @@
         errorLine2="                                                  ~~~~~">
         <location
             file="src/main/java/me/rerere/rikkahub/ui/components/table/DataTable.kt"
-            line="68"
+            line="74"
             column="51"/>
     </issue>
 
@@ -1071,7 +1202,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="70"
+            line="73"
             column="11"/>
     </issue>
 
@@ -1082,7 +1213,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="131"
+            line="134"
             column="11"/>
     </issue>
 
@@ -1093,7 +1224,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="154"
+            line="157"
             column="11"/>
     </issue>
 
@@ -1104,7 +1235,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="535"
+            line="540"
             column="11"/>
     </issue>
 
@@ -1115,7 +1246,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="536"
+            line="541"
             column="11"/>
     </issue>
 
@@ -1126,7 +1257,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="538"
+            line="543"
             column="11"/>
     </issue>
 
@@ -1137,7 +1268,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="540"
+            line="545"
             column="11"/>
     </issue>
 
@@ -1148,7 +1279,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="542"
+            line="547"
             column="11"/>
     </issue>
 
@@ -1159,7 +1290,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="544"
+            line="549"
             column="11"/>
     </issue>
 
@@ -1170,7 +1301,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="694"
+            line="699"
             column="11"/>
     </issue>
 
@@ -1181,7 +1312,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="794"
+            line="799"
             column="11"/>
     </issue>
 
@@ -1192,7 +1323,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="795"
+            line="800"
             column="11"/>
     </issue>
 
@@ -1203,7 +1334,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="815"
+            line="820"
             column="11"/>
     </issue>
 
@@ -1214,7 +1345,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="828"
+            line="833"
             column="11"/>
     </issue>
 
@@ -1225,7 +1356,7 @@
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="994"
+            line="999"
             column="11"/>
     </issue>
 
@@ -1291,7 +1422,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="620"
+            line="625"
             column="49"/>
     </issue>
 
@@ -1357,7 +1488,7 @@
         errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="879"
+            line="884"
             column="52"/>
     </issue>
 
@@ -1500,7 +1631,7 @@
         errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="982"
+            line="987"
             column="53"/>
     </issue>
 
@@ -1511,7 +1642,7 @@
         errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="990"
+            line="995"
             column="59"/>
     </issue>
 
@@ -1522,7 +1653,7 @@
         errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="992"
+            line="997"
             column="53"/>
     </issue>
 
@@ -1632,7 +1763,7 @@
         errorLine2="                                        ~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="169"
+            line="172"
             column="41"/>
     </issue>
 
@@ -1687,7 +1818,7 @@
         errorLine2="                                       ~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="180"
+            line="183"
             column="40"/>
     </issue>
 
@@ -1742,7 +1873,7 @@
         errorLine2="                                       ~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="189"
+            line="192"
             column="40"/>
     </issue>
 
@@ -1808,7 +1939,7 @@
         errorLine2="                                       ~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="211"
+            line="214"
             column="40"/>
     </issue>
 
@@ -1819,7 +1950,7 @@
         errorLine2="                             ~~~~~~">
         <location
             file="src/main/res/values-ja/strings.xml"
-            line="228"
+            line="227"
             column="30"/>
     </issue>
 
@@ -1830,7 +1961,7 @@
         errorLine2="                             ~~~~~~~">
         <location
             file="src/main/res/values-ko-rKR/strings.xml"
-            line="228"
+            line="227"
             column="30"/>
     </issue>
 
@@ -1841,7 +1972,7 @@
         errorLine2="                             ~~~~~~~~~~~~~">
         <location
             file="src/main/res/values-ru/strings.xml"
-            line="228"
+            line="227"
             column="30"/>
     </issue>
 
@@ -1852,7 +1983,7 @@
         errorLine2="                             ~~~~~~">
         <location
             file="src/main/res/values-zh-rTW/strings.xml"
-            line="228"
+            line="227"
             column="30"/>
     </issue>
 
@@ -1863,7 +1994,7 @@
         errorLine2="                             ~~~~~~">
         <location
             file="src/main/res/values-zh/strings.xml"
-            line="228"
+            line="227"
             column="30"/>
     </issue>
 
@@ -1874,7 +2005,7 @@
         errorLine2="                             ~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="228"
+            line="230"
             column="30"/>
     </issue>
 
@@ -1885,7 +2016,7 @@
         errorLine2="                                       ~~~~~~~">
         <location
             file="src/main/res/values-ko-rKR/strings.xml"
-            line="272"
+            line="271"
             column="40"/>
     </issue>
 
@@ -1896,7 +2027,7 @@
         errorLine2="                                       ~~~~~~~~~">
         <location
             file="src/main/res/values-ru/strings.xml"
-            line="272"
+            line="271"
             column="40"/>
     </issue>
 
@@ -1907,7 +2038,7 @@
         errorLine2="                                       ~~~~~~~">
         <location
             file="src/main/res/values-zh-rTW/strings.xml"
-            line="272"
+            line="271"
             column="40"/>
     </issue>
 
@@ -1918,7 +2049,7 @@
         errorLine2="                                       ~~~~~~~">
         <location
             file="src/main/res/values-zh/strings.xml"
-            line="272"
+            line="271"
             column="40"/>
     </issue>
 
@@ -1929,7 +2060,7 @@
         errorLine2="                                       ~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="272"
+            line="274"
             column="40"/>
     </issue>
 
@@ -1940,7 +2071,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values-ko-rKR/strings.xml"
-            line="319"
+            line="318"
             column="31"/>
     </issue>
 
@@ -1951,7 +2082,7 @@
         errorLine2="                              ~~~~~~~~~~">
         <location
             file="src/main/res/values-zh-rTW/strings.xml"
-            line="319"
+            line="318"
             column="31"/>
     </issue>
 
@@ -1962,7 +2093,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="319"
+            line="322"
             column="31"/>
     </issue>
 
@@ -1973,7 +2104,7 @@
         errorLine2="                                                 ~~~~~~~~~">
         <location
             file="src/main/res/values-ja/strings.xml"
-            line="330"
+            line="329"
             column="50"/>
     </issue>
 
@@ -1984,7 +2115,7 @@
         errorLine2="                                                 ~~~~~~~~~">
         <location
             file="src/main/res/values-ko-rKR/strings.xml"
-            line="330"
+            line="329"
             column="50"/>
     </issue>
 
@@ -1995,7 +2126,7 @@
         errorLine2="                                                 ~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values-ru/strings.xml"
-            line="330"
+            line="329"
             column="50"/>
     </issue>
 
@@ -2006,7 +2137,7 @@
         errorLine2="                                                 ~~~~~~~~~">
         <location
             file="src/main/res/values-zh-rTW/strings.xml"
-            line="330"
+            line="329"
             column="50"/>
     </issue>
 
@@ -2017,7 +2148,7 @@
         errorLine2="                                                 ~~~~~~~~~">
         <location
             file="src/main/res/values-zh/strings.xml"
-            line="330"
+            line="329"
             column="50"/>
     </issue>
 
@@ -2028,7 +2159,7 @@
         errorLine2="                                                 ~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="330"
+            line="333"
             column="50"/>
     </issue>
 
@@ -2039,7 +2170,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values-ja/strings.xml"
-            line="406"
+            line="405"
             column="49"/>
     </issue>
 
@@ -2050,7 +2181,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values-ko-rKR/strings.xml"
-            line="406"
+            line="405"
             column="49"/>
     </issue>
 
@@ -2061,7 +2192,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~">
         <location
             file="src/main/res/values-zh-rTW/strings.xml"
-            line="406"
+            line="405"
             column="49"/>
     </issue>
 
@@ -2072,7 +2203,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~">
         <location
             file="src/main/res/values-zh/strings.xml"
-            line="406"
+            line="405"
             column="49"/>
     </issue>
 
@@ -2083,7 +2214,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="406"
+            line="410"
             column="49"/>
     </issue>
 
@@ -2138,7 +2269,7 @@
         errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="420"
+            line="425"
             column="37"/>
     </issue>
 
@@ -2167,43 +2298,10 @@
     <issue
         id="TypographyEllipsis"
         message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
-        errorLine1="  &lt;string name=&quot;notification_live_update_thinking&quot;>Thinking...&lt;/string>"
-        errorLine2="                                                   ~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
-            line="442"
-            column="52"/>
-    </issue>
-
-    <issue
-        id="TypographyEllipsis"
-        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
-        errorLine1="  &lt;string name=&quot;notification_live_update_title&quot;>Generating response...&lt;/string>"
-        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
-            line="443"
-            column="49"/>
-    </issue>
-
-    <issue
-        id="TypographyEllipsis"
-        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
         errorLine1="  &lt;string name=&quot;notification_live_update_writing&quot;>응답 작성 중...&lt;/string>"
         errorLine2="                                                  ~~~~~~~~~~">
         <location
             file="src/main/res/values-ko-rKR/strings.xml"
-            line="445"
-            column="51"/>
-    </issue>
-
-    <issue
-        id="TypographyEllipsis"
-        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
-        errorLine1="  &lt;string name=&quot;notification_live_update_writing&quot;>Writing response...&lt;/string>"
-        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
             line="445"
             column="51"/>
     </issue>
@@ -2233,11 +2331,44 @@
     <issue
         id="TypographyEllipsis"
         message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_thinking&quot;>Thinking...&lt;/string>"
+        errorLine2="                                                   ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="447"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_title&quot;>Generating response...&lt;/string>"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="448"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;notification_live_update_writing&quot;>Writing response...&lt;/string>"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="450"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
         errorLine1="  &lt;string name=&quot;notification_web_server_starting&quot;>Starting...&lt;/string>"
         errorLine2="                                                  ~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="447"
+            line="452"
             column="51"/>
     </issue>
 
@@ -2248,17 +2379,6 @@
         errorLine2="                                         ~~~~~~~~~~~~">
         <location
             file="src/main/res/values-ko-rKR/strings.xml"
-            line="586"
-            column="42"/>
-    </issue>
-
-    <issue
-        id="TypographyEllipsis"
-        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
-        errorLine1="  &lt;string name=&quot;search_page_placeholder&quot;>Search message content...&lt;/string>"
-        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
             line="586"
             column="42"/>
     </issue>
@@ -2277,17 +2397,6 @@
     <issue
         id="TypographyEllipsis"
         message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
-        errorLine1="  &lt;string name=&quot;search_page_rebuilding&quot;>Rebuilding index (%1$d / %2$d)...&lt;/string>"
-        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
-            line="590"
-            column="41"/>
-    </issue>
-
-    <issue
-        id="TypographyEllipsis"
-        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
         errorLine1="  &lt;string name=&quot;search_page_rebuilding_simple&quot;>색인 재구성 중...&lt;/string>"
         errorLine2="                                               ~~~~~~~~~~~">
         <location
@@ -2299,11 +2408,33 @@
     <issue
         id="TypographyEllipsis"
         message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_placeholder&quot;>Search message content...&lt;/string>"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="591"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;search_page_rebuilding&quot;>Rebuilding index (%1$d / %2$d)...&lt;/string>"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="595"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
         errorLine1="  &lt;string name=&quot;search_page_rebuilding_simple&quot;>Rebuilding index...&lt;/string>"
         errorLine2="                                               ~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="591"
+            line="596"
             column="48"/>
     </issue>
 
@@ -2424,7 +2555,7 @@
         errorLine2="                                                             ~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="964"
+            line="969"
             column="62"/>
     </issue>
 
@@ -2435,7 +2566,7 @@
         errorLine2="                                                             ~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="965"
+            line="970"
             column="62"/>
     </issue>
 
@@ -2479,7 +2610,7 @@
         errorLine2="                                         ~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1020"
+            line="1025"
             column="42"/>
     </issue>
 
@@ -2596,17 +2727,6 @@
     <issue
         id="TypographyEllipsis"
         message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
-        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>Enter tag name...&lt;/string>"
-        errorLine2="                                              ~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
-            line="1058"
-            column="47"/>
-    </issue>
-
-    <issue
-        id="TypographyEllipsis"
-        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
         errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>翻訳するテキストを入力してください...&lt;/string>"
         errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~">
         <location
@@ -2651,6 +2771,17 @@
     <issue
         id="TypographyEllipsis"
         message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;tag_input_dialog_placeholder&quot;>Enter tag name...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1063"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
         errorLine1="  &lt;string name=&quot;translator_page_input_placeholder&quot;>请输入要翻译的文本...&lt;/string>"
         errorLine2="                                                   ~~~~~~~~~~~~">
         <location
@@ -2666,7 +2797,7 @@
         errorLine2="                             ~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1076"
+            line="1081"
             column="30"/>
     </issue>
 
@@ -2677,8 +2808,206 @@
         errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1081"
+            line="1086"
             column="52"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;image_preview_saving&quot;>儲存中...&lt;/string>"
+        errorLine2="                                      ~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="1119"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;image_preview_saving&quot;>Saving...&lt;/string>"
+        errorLine2="                                      ~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1120"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;image_preview_saving&quot;>保存中...&lt;/string>"
+        errorLine2="                                      ~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="1121"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;image_preview_saving&quot;>저장 중...&lt;/string>"
+        errorLine2="                                      ~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="1121"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;image_preview_saving&quot;>Сохранение...&lt;/string>"
+        errorLine2="                                      ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1121"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;image_preview_saving&quot;>正在保存...&lt;/string>"
+        errorLine2="                                      ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="1121"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_skill_content_placeholder&quot;>指令內容...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="1149"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_skill_content_placeholder&quot;>instruction content...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1150"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_skill_content_placeholder&quot;>指示内容...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="1151"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_skill_content_placeholder&quot;>지시 내용...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="1151"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_skill_content_placeholder&quot;>содержимое инструкции...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1151"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;skills_page_skill_content_placeholder&quot;>指令内容...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="1151"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;workspace_terminal_loading&quot;>工作區載入中...&lt;/string>"
+        errorLine2="                                            ~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh-rTW/strings.xml"
+            line="1212"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;workspace_terminal_loading&quot;>Loading workspace...&lt;/string>"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1212"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;workspace_terminal_loading&quot;>ワークスペースを読み込み中...&lt;/string>"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="1214"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;workspace_terminal_loading&quot;>워크스페이스 불러오는 중...&lt;/string>"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ko-rKR/strings.xml"
+            line="1214"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;workspace_terminal_loading&quot;>Загрузка рабочей области...&lt;/string>"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1214"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="  &lt;string name=&quot;workspace_terminal_loading&quot;>工作区加载中...&lt;/string>"
+        errorLine2="                                            ~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="1214"
+            column="45"/>
     </issue>
 
     <issue
@@ -2759,6 +3088,83 @@
             file="src/main/res/mipmap-xxxhdpi/ic_launcher_monochrome.png"/>
         <location
             file="src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#B00020&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/service/automation/KillSwitchOverlay.kt"
+            line="56"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#1F1F1F&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/service/automation/KillSwitchOverlay.kt"
+            line="135"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="                            setBackgroundColor(Color.parseColor(&quot;#B00020&quot;))"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/me/rerere/rikkahub/service/automation/KillSwitchOverlay.kt"
+            line="155"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="ClickableViewAccessibility"
+        message="Custom view ``TerminalView`` has `setOnTouchListener` called on it but does not override `performClick`"
+        errorLine1="                            setOnTouchListener { _, event ->"
+        errorLine2="                            ^">
+        <location
+            file="src/sideload/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceTerminalPage.kt"
+            line="189"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="ClickableViewAccessibility"
+        message="`onTouch` lambda should call `View#performClick` when a click is detected"
+        errorLine1="                            setOnTouchListener { _, event ->"
+        errorLine2="                                               ^">
+        <location
+            file="src/sideload/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceTerminalPage.kt"
+            line="189"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="ClickableViewAccessibility"
+        message="Custom view ``TerminalView`` has `setOnTouchListener` called on it but does not override `performClick`"
+        errorLine1="                        terminalView.setOnTouchListener { _, event ->"
+        errorLine2="                        ^">
+        <location
+            file="src/sideload/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceTerminalPage.kt"
+            line="208"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="ClickableViewAccessibility"
+        message="`onTouch` lambda should call `View#performClick` when a click is detected"
+        errorLine1="                        terminalView.setOnTouchListener { _, event ->"
+        errorLine2="                                                        ^">
+        <location
+            file="src/sideload/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceTerminalPage.kt"
+            line="208"
+            column="57"/>
     </issue>
 
     <issue

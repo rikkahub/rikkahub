@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.ClassDiscriminatorMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -577,6 +578,8 @@ internal suspend fun callToolWithHeal(
     }
 }
 
+// classDiscriminatorMode: deliberate use, the MCP wire format has no class discriminator
+@OptIn(ExperimentalSerializationApi::class)
 internal val McpJson: Json by lazy {
     Json {
         ignoreUnknownKeys = true
