@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
+import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.repository.ConversationRepository
 
 class SearchVM(
@@ -18,6 +19,8 @@ class SearchVM(
     private val _searchQuery = MutableStateFlow("")
 
     var searchQuery by mutableStateOf("")
+        private set
+    var sortOrder by mutableStateOf(MessageSearchSort.RELEVANCE)
         private set
     var results by mutableStateOf<List<MessageSearchResult>>(emptyList())
         private set
@@ -39,6 +42,14 @@ class SearchVM(
     fun onQueryChange(query: String) {
         searchQuery = query
         _searchQuery.value = query
+    }
+
+    fun onSortChange(sort: MessageSearchSort) {
+        if (sortOrder == sort) return
+        sortOrder = sort
+        viewModelScope.launch {
+            performSearch(searchQuery)
+        }
     }
 
     fun search() {
@@ -68,7 +79,7 @@ class SearchVM(
         }
         isLoading = true
         try {
-            results = conversationRepo.searchMessages(query)
+            results = conversationRepo.searchMessages(query, sortOrder)
         } finally {
             isLoading = false
         }

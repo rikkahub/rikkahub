@@ -589,6 +589,10 @@
   <string name="search_page_rebuild_index_desc">기존 색인을 삭제하고 모든 채팅 기록을 다시 검색합니다. 메시지가 많을수록 시간이 오래 걸립니다. 계속하시겠습니까?</string>
   <string name="search_page_rebuilding">색인 재구성 중 (%1$d / %2$d)...</string>
   <string name="search_page_rebuilding_simple">색인 재구성 중...</string>
+  <string name="search_page_sort">정렬</string>
+  <string name="search_page_sort_newest">최신순</string>
+  <string name="search_page_sort_oldest">오래된순</string>
+  <string name="search_page_sort_relevance">관련성</string>
   <string name="search_page_title">메시지 검색</string>
   <string name="search_page_untitled">제목 없음</string>
   <string name="search_picker_title">검색 설정</string>
