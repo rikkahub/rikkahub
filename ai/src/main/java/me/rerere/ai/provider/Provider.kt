@@ -61,6 +61,10 @@ data class TextGenerationParams(
     val reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
+    // Per-call HTTP bound (OkHttp call timeout) for non-streaming generateText; null keeps the
+    // shared client's ceiling. Needed by short-lived background calls (hooks) because coroutine
+    // timeouts cannot interrupt the blocking body read once headers arrived.
+    val callTimeoutMillis: Long? = null,
 )
 
 @Serializable

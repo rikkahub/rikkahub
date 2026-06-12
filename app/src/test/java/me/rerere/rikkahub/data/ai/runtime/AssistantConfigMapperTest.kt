@@ -5,6 +5,10 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.runtime.contract.AssistantRegexScope
+import me.rerere.ai.runtime.hooks.HookConfig
+import me.rerere.ai.runtime.hooks.HookEvent
+import me.rerere.ai.runtime.hooks.HookHandler
+import me.rerere.ai.runtime.hooks.HookMatcher
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
@@ -33,6 +37,20 @@ class AssistantConfigMapperTest {
         val lorebookId = Uuid.random()
         val knowledgeBaseId = Uuid.random()
         val regexId = Uuid.random()
+
+        // Non-default on BOTH axes (a configured matcher AND trusted=true) so a mapper that drops
+        // the field — falling back to AssistantConfig's empty/untrusted default — fails this test.
+        val hooks = HookConfig(
+            hooks = mapOf(
+                HookEvent.PreToolUse to listOf(
+                    HookMatcher(
+                        matcher = "search",
+                        handlers = listOf(HookHandler.Llm(prompt = "gate", failClosed = true)),
+                    ),
+                ),
+            ),
+            trusted = true,
+        )
 
         val regex = AssistantRegex(
             id = regexId,
@@ -74,6 +92,7 @@ class AssistantConfigMapperTest {
             description = "call me when X",
             spawnable = true,
             maxSteps = 17,
+            hooks = hooks,
         )
 
         val config = assistant.toAssistantConfig()
@@ -99,6 +118,9 @@ class AssistantConfigMapperTest {
         assertEquals(assistant.spawnable, config.spawnable)
         // Field-rename pin: the neutral field subagentMaxSteps is sourced from Assistant.maxSteps.
         assertEquals(assistant.maxSteps, config.subagentMaxSteps)
+        // Hooks must survive the mapping (#200): a dropped field decays to the empty untrusted
+        // default and silently disables every hook fire-point in the turn loop.
+        assertEquals(assistant.hooks, config.hooks)
 
         // localTools allowlist projected to stable ids, order preserved.
         assertEquals(

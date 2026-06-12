@@ -4,6 +4,7 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.runtime.hooks.HookConfig
 import kotlin.uuid.Uuid
 
 /**
@@ -55,6 +56,9 @@ data class AssistantConfig(
     val description: String,
     val spawnable: Boolean,
     val subagentMaxSteps: Int?,
+    // Additive + defaulted (#200 v1): assistants mapped before hooks existed carry the empty,
+    // untrusted config, which dispatch treats as passthrough.
+    val hooks: HookConfig = HookConfig(),
 )
 
 /**

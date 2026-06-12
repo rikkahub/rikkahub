@@ -31,7 +31,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -54,6 +56,10 @@ import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.ai.runtime.GenerationChunk
+import me.rerere.ai.runtime.hooks.HookConfig
+import me.rerere.ai.runtime.hooks.HookDispatchContext
+import me.rerere.ai.runtime.hooks.HookDispatcher
+import me.rerere.ai.runtime.hooks.HookEvent
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.ai.runtime.mcp.McpTool
@@ -120,6 +126,21 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+
+// Turn-end sequencing for the sendMessage path (review mustFix #2). The invariant it pins: the
+// Stop-hook continuation strictly precedes ONE turn-end job launch, so title/suggestion jobs are
+// always built from the final transcript and never race a continued turn; a failed completion
+// launches no jobs (the continuation still runs, matching the previous unconditional behavior).
+// Top-level so the ordering contract is JVM-testable without constructing ChatService.
+internal suspend fun sequenceTurnEnd(
+    complete: suspend () -> Boolean,
+    continueAfterStopHook: suspend () -> Unit,
+    launchTurnEndJobs: () -> Unit,
+) {
+    val completed = complete()
+    continueAfterStopHook()
+    if (completed) launchTurnEndJobs()
+}
 
 internal fun backgroundTextGenerationParams(
     model: Model,
@@ -313,6 +334,70 @@ internal fun nextAutoCompactFailureCount(
 internal fun invalidateStalePressureAnchor(usage: TokenUsage?): TokenUsage? =
     usage?.copy(totalTokens = 0)
 
+/**
+ * A Stop hook asked the turn to continue: [additionalContext] is injected as a new user-role
+ * message and one more completion runs. Produced by [ChatHookFirePoints.onStop] only when context
+ * was actually injected AND no handler set `preventContinuation` — so the value's existence IS the
+ * continuation decision (no separate boolean to keep in sync).
+ */
+internal data class StopHookContinuation(val additionalContext: String)
+
+/**
+ * ChatService-side hook fire-points (#200 T8): UserPromptSubmit at the send seam ([onUserPromptSubmit])
+ * and Stop at turn end ([onStop]). Extracted to file level so production and JVM tests drive the
+ * SAME logic against a real [HookDispatcher] (the [StreamingUiCoalescer] precedent — not a
+ * hand-copied loop). A null dispatcher or an event with no configured matchers is the no-hooks
+ * path: passthrough with zero dispatch work, exactly the pre-hooks behavior.
+ *
+ * UserPromptSubmit is inject-only by spec (v1): the decision field is a PreToolUse gating concern
+ * and has no seam on send, so only `additionalContext` is consumed here.
+ */
+internal class ChatHookFirePoints(
+    private val dispatcher: HookDispatcher?,
+) {
+    /**
+     * Returns [parts] with the aggregated `additionalContext` appended as its own [UIMessagePart.Text]
+     * — a visible part of the outgoing user turn (never silent), persisted with the message.
+     */
+    suspend fun onUserPromptSubmit(config: HookConfig, parts: List<UIMessagePart>): List<UIMessagePart> {
+        val dispatcher = this.dispatcher ?: return parts
+        if (config.hooks[HookEvent.UserPromptSubmit].isNullOrEmpty()) return parts
+        val prompt = parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+        val result = dispatcher.dispatch(
+            event = HookEvent.UserPromptSubmit,
+            input = buildJsonObject {
+                put("hookEventName", HookEvent.UserPromptSubmit.name)
+                put("prompt", prompt)
+            }.toString(),
+            ctx = HookDispatchContext(config = config),
+        )
+        // Blank context would append an empty bubble to the user's message — treat it as no injection.
+        val context = result.additionalContext?.takeIf { it.isNotBlank() } ?: return parts
+        return parts + UIMessagePart.Text(context)
+    }
+
+    /**
+     * Stop fire-point: a hook may inject context to keep the agent going for one more completion;
+     * `preventContinuation` (from ANY matched handler — aggregate ORs it) suppresses exactly that.
+     * No context, or context vetoed, means the turn ends as it always did.
+     */
+    suspend fun onStop(config: HookConfig, lastAssistantText: String?): StopHookContinuation? {
+        val dispatcher = this.dispatcher ?: return null
+        if (config.hooks[HookEvent.Stop].isNullOrEmpty()) return null
+        val result = dispatcher.dispatch(
+            event = HookEvent.Stop,
+            input = buildJsonObject {
+                put("hookEventName", HookEvent.Stop.name)
+                put("lastAssistantMessage", lastAssistantText.orEmpty())
+            }.toString(),
+            ctx = HookDispatchContext(config = config),
+        )
+        if (result.preventContinuation) return null
+        val context = result.additionalContext?.takeIf { it.isNotBlank() } ?: return null
+        return StopHookContinuation(context)
+    }
+}
+
 data class ChatError(
     val id: Uuid = Uuid.random(),
     val title: String? = null,
@@ -367,7 +452,14 @@ class ChatService(
     // AccessibilityRuntime as a pure backend; the kill-switch dispatches STOP to the active guard(s).
     private val automationRegistry: AutomationRuntimeRegistry,
     private val automationKillSwitch: AutomationKillSwitch,
+    // Event hooks (#200 v1) are opt-in at the composition root: null preserves the pre-hooks
+    // send/stop paths exactly (mirrors ChatTurnRuntime's optional dispatcher port).
+    hookDispatcher: HookDispatcher? = null,
 ) {
+    // UserPromptSubmit + Stop fire-points (#200 T8); the logic lives at file level so the JVM
+    // suite drives the same code (ChatHookFirePointsTest).
+    private val hookFirePoints = ChatHookFirePoints(hookDispatcher)
+
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
@@ -581,11 +673,17 @@ class ChatService(
                     ?: settings.getCurrentAssistant()
                 val processedContent = preprocessUserInputParts(content, assistant)
 
+                // UserPromptSubmit hooks (#200 T8): the send seam. Injected additionalContext is
+                // appended to the outgoing turn as its own visible Text part BEFORE the message is
+                // persisted, so what the model sees is exactly what the user can see. No hooks
+                // configured (or dispatcher absent) -> processedContent passes through untouched.
+                val finalContent = hookFirePoints.onUserPromptSubmit(assistant.hooks, processedContent)
+
                 // 添加消息到列表
                 val newConversation = currentConversation.copy(
                     messageNodes = currentConversation.messageNodes + UIMessage(
                         role = MessageRole.USER,
-                        parts = processedContent,
+                        parts = finalContent,
                     ).toMessageNode(),
                 )
                 saveConversation(conversationId, newConversation)
@@ -598,7 +696,16 @@ class ChatService(
 
                 // 开始补全
                 if (answer) {
-                    handleMessageComplete(conversationId)
+                    // Stop hooks (#200 T8): turn end. Injected context (unless vetoed by
+                    // preventContinuation) triggers exactly ONE more completion — the continuation's
+                    // own turn end does NOT re-dispatch Stop, so a hook that always injects cannot
+                    // loop the agent unboundedly. Title/suggestion jobs are deferred until after the
+                    // continuation so they reflect the final transcript (review mustFix #2).
+                    sequenceTurnEnd(
+                        complete = { handleMessageComplete(conversationId, runTurnEndJobs = false) },
+                        continueAfterStopHook = { continueAfterStopHookIfRequested(conversationId, assistant) },
+                        launchTurnEndJobs = { launchTurnEndJobs(conversationId) },
+                    )
                 }
 
                 _generationDoneFlow.emit(conversationId)
@@ -615,6 +722,40 @@ class ChatService(
             }
         }
         session.setJob(job)
+    }
+
+    // Stop fire-point (#200 T8). Runs after the agentic turn handleMessageComplete owns has
+    // finished. Two deliberate guards:
+    //  - A HITL approval break is NOT a turn end — the user owns the next step, and the
+    //    approval-resume path re-enters handleMessageComplete on its own. Firing Stop there would
+    //    let a hook continue past a gate the user hasn't decided yet.
+    //  - The continuation is single-shot per send: this method calls handleMessageComplete
+    //    directly and never re-enters itself, bounding a context-always hook to one extra
+    //    completion instead of an unbounded loop.
+    // The injected context becomes a visible user-role message (never silent) so the transcript
+    // shows exactly why the agent kept going.
+    private suspend fun continueAfterStopHookIfRequested(conversationId: Uuid, assistant: Assistant) {
+        val conversation = getConversationFlow(conversationId).value
+        val lastMessage = conversation.currentMessages.lastOrNull()
+        if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return
+
+        val continuation = hookFirePoints.onStop(
+            config = assistant.hooks,
+            lastAssistantText = lastMessage?.takeIf { it.role == MessageRole.ASSISTANT }?.toText(),
+        ) ?: return
+
+        saveConversation(
+            conversationId,
+            conversation.copy(
+                messageNodes = conversation.messageNodes + UIMessage(
+                    role = MessageRole.USER,
+                    parts = listOf(UIMessagePart.Text(continuation.additionalContext)),
+                ).toMessageNode(),
+            ),
+        )
+        // runTurnEndJobs = false: the sendMessage path owns the single turn-end job launch via
+        // sequenceTurnEnd, after this continuation finished (review mustFix #2).
+        handleMessageComplete(conversationId, runTurnEndJobs = false)
     }
 
     // 自动压缩历史的触发与执行（design #193 Stage 1：token 触发器 + 熔断器）。
@@ -895,15 +1036,18 @@ class ChatService(
 
     // ---- 处理消息补全 ----
 
+    // Returns whether the completion ran to success — the sendMessage path needs it to decide
+    // whether the deferred turn-end jobs may launch (see [sequenceTurnEnd]).
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
-        messageRange: ClosedRange<Int>? = null
-    ) {
+        messageRange: ClosedRange<Int>? = null,
+        runTurnEndJobs: Boolean = true,
+    ): Boolean {
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
         val assistant = settings.getAssistantById(initialConversation.assistantId)
             ?: settings.getCurrentAssistant()
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return false
 
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
@@ -911,7 +1055,7 @@ class ChatService(
             model.displayName
         }
 
-        runCatching {
+        return runCatching {
 
             // reset suggestions
             updateConversationStateOnly(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
@@ -1160,15 +1304,25 @@ class ChatService(
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {
-            val finalConversation = getConversationFlow(conversationId).value
-            saveConversation(conversationId, finalConversation)
+            saveConversation(conversationId, getConversationFlow(conversationId).value)
 
-            launchWithConversationReference(conversationId) {
-                generateTitle(conversationId, finalConversation)
-            }
-            launchWithConversationReference(conversationId) {
-                generateSuggestion(conversationId, finalConversation)
-            }
+            // Review mustFix #2: the sendMessage path defers these to AFTER the Stop-hook
+            // continuation (runTurnEndJobs = false + sequenceTurnEnd) — launching here would
+            // build title/suggestions from the pre-continuation transcript and race the final
+            // metadata. Other entry points (regenerate, approval-resume) end the turn here.
+            if (runTurnEndJobs) launchTurnEndJobs(conversationId)
+        }.isSuccess
+    }
+
+    // Post-turn side jobs (title + suggestions), built from the conversation as it is NOW —
+    // callers must only invoke this once the turn is final.
+    private fun launchTurnEndJobs(conversationId: Uuid) {
+        val finalConversation = getConversationFlow(conversationId).value
+        launchWithConversationReference(conversationId) {
+            generateTitle(conversationId, finalConversation)
+        }
+        launchWithConversationReference(conversationId) {
+            generateSuggestion(conversationId, finalConversation)
         }
     }
 

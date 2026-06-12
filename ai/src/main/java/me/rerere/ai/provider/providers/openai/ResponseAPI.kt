@@ -67,6 +67,7 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val TAG = "ResponseAPI"
 
@@ -101,7 +102,7 @@ class ResponseAPI(
 
         AiLog.request(TAG, "openai-responses", params.model.modelId, false)
 
-        val response = client.newCall(request).await()
+        val response = client.newCall(request).await(params.callTimeoutMillis?.milliseconds)
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
         }

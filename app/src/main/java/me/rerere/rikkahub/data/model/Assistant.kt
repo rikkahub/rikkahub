@@ -8,6 +8,7 @@ import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.runtime.hooks.HookConfig
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import kotlin.uuid.Uuid
 
@@ -61,6 +62,9 @@ data class Assistant(
     // foreground, the conservative fail-closed posture is the only safe default. Additive with a
     // default, so no DataStore migration is required (assistants persist as JSON via JsonInstant).
     val uiAutomationEnabled: Boolean = false,
+    // Event hooks (#200 v1, llm handlers only). Additive with a default so legacy JSON decodes
+    // without migration; HookConfig.trusted defaults false (import-trust gate).
+    val hooks: HookConfig = HookConfig(),
 )
 
 @Serializable

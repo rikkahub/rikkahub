@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import me.rerere.ai.runtime.hooks.isDeniedByHook
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
@@ -162,9 +163,15 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                     }
                     if (isDenied) {
                         val reason = (tool.approvalState as ToolApprovalState.Denied).reason
+                        // A hook denial must be visibly attributed to the hook — never silent,
+                        // never mistakable for a manual user denial (#200 T10).
+                        val label = if (isDeniedByHook(tool.metadata)) {
+                            "Blocked by hook"
+                        } else {
+                            stringResource(R.string.chat_message_tool_denied)
+                        }
                         Text(
-                            text = stringResource(R.string.chat_message_tool_denied) +
-                                if (reason.isNotBlank()) ": $reason" else "",
+                            text = label + if (reason.isNotBlank()) ": $reason" else "",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )

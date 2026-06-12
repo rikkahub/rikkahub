@@ -31,6 +31,11 @@ import me.rerere.ai.runtime.contract.RuntimeGenerationLog
 import me.rerere.ai.runtime.contract.RuntimeLogSink
 import me.rerere.ai.runtime.contract.TurnConfig
 import me.rerere.ai.runtime.contract.TurnMessageTransforms
+import me.rerere.ai.runtime.hooks.HookDecision
+import me.rerere.ai.runtime.hooks.HookDispatchContext
+import me.rerere.ai.runtime.hooks.HookDispatcher
+import me.rerere.ai.runtime.hooks.HookEvent
+import me.rerere.ai.runtime.hooks.markDeniedByHook
 import me.rerere.ai.runtime.knowledge.KnowledgeBudget
 import me.rerere.ai.runtime.knowledge.KnowledgeContextAssembler
 import me.rerere.ai.runtime.knowledge.KnowledgeContextBlock
@@ -96,6 +101,8 @@ class ChatTurnRuntime(
     private val clock: RuntimeClock,
     private val logSink: RuntimeLogSink,
     private val generationLog: RuntimeGenerationLog,
+    // Hooks (#200 v1) are opt-in at the composition root: null preserves the pre-hooks loop exactly.
+    private val hookDispatcher: HookDispatcher? = null,
 ) {
     fun run(
         turn: TurnConfig,
@@ -181,9 +188,15 @@ class ChatTurnRuntime(
                     break
                 }
 
+                // PreToolUse hooks (#200 H2): dispatch and apply any `updatedInput` rewrite BEFORE
+                // the needsApproval gate below. Approval resolves by toolCallId, not input, so a
+                // post-gate rewrite would let the user approve stale input. Decisions map onto the
+                // EXISTING approval states — no new execution path.
+                val hookedTools = applyPreToolUseHooks(tools, assistant)
+
                 // Check for tools that need approval
                 var hasPendingApproval = false
-                val updatedTools = tools.map { tool ->
+                val updatedTools = hookedTools.map { tool ->
                     val toolDef = toolsInternal.find { it.name == tool.toolName }
                     when {
                         // Tool needs approval and state is Auto -> set to Pending
@@ -254,6 +267,54 @@ class ChatTurnRuntime(
         }
 
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * PreToolUse fire-point (#200 T7). For each FRESH tool call (state still [ToolApprovalState.Auto]
+     * — a hook must never override a decision the user already made), dispatches the event and:
+     *  1. applies `updatedInput` via `tool.copy(input = …)` — an explicit step of its own (round-1
+     *     correction #1), deliberately NOT folded into the approval-state mapping;
+     *  2. maps the aggregated decision onto the EXISTING states: Deny → Denied(reason) (the denied
+     *     path in [executeTool] surfaces the reason), Ask → Pending (the HITL break-and-wait),
+     *     Allow → untouched so the regular execute branch runs.
+     * The caller runs the needsApproval gate AFTER this, on the possibly-rewritten tools.
+     */
+    private suspend fun applyPreToolUseHooks(
+        tools: List<UIMessagePart.Tool>,
+        assistant: AssistantConfig,
+    ): List<UIMessagePart.Tool> {
+        val dispatcher = hookDispatcher ?: return tools
+        // No PreToolUse hooks configured: skip the per-tool payload encode + dispatch entirely.
+        if (assistant.hooks.hooks[HookEvent.PreToolUse].isNullOrEmpty()) return tools
+        return tools.map { tool ->
+            if (tool.approvalState !is ToolApprovalState.Auto) return@map tool
+            val result = dispatcher.dispatch(
+                event = HookEvent.PreToolUse,
+                input = json.encodeToString(
+                    buildJsonObject {
+                        put("hookEventName", HookEvent.PreToolUse.name)
+                        put("toolName", tool.toolName)
+                        put("toolInput", tool.input)
+                    }
+                ),
+                ctx = HookDispatchContext(config = assistant.hooks, toolName = tool.toolName),
+            )
+            val rewritten = result.updatedInput?.let { tool.copy(input = it) } ?: tool
+            when (val decision = result.decision) {
+                is HookDecision.Deny -> {
+                    logSink.info(TAG, "applyPreToolUseHooks: hook denied tool ${tool.toolName}")
+                    rewritten.copy(
+                        approvalState = ToolApprovalState.Denied(decision.reason),
+                        // T10: provenance marker so the UI can badge "blocked by hook" — a user
+                        // denial and a hook denial share the Denied state but not the metadata.
+                        metadata = markDeniedByHook(rewritten.metadata),
+                    )
+                }
+
+                HookDecision.Ask -> rewritten.copy(approvalState = ToolApprovalState.Pending)
+                HookDecision.Allow -> rewritten
+            }
+        }
+    }
 
     private suspend fun generateInternal(
         assistant: AssistantConfig,

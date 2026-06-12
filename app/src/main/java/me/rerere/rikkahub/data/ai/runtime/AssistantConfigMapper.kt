@@ -44,6 +44,7 @@ fun Assistant.toAssistantConfig(): AssistantConfig = AssistantConfig(
     description = description,
     spawnable = spawnable,
     subagentMaxSteps = maxSteps,
+    hooks = hooks,
 )
 
 private fun AssistantRegex.toRule(): AssistantRegexRule = AssistantRegexRule(

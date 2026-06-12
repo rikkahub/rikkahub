@@ -29,6 +29,7 @@ import me.rerere.ai.runtime.contract.RuntimeGenerationLog
 import me.rerere.ai.runtime.contract.RuntimeLogSink
 import me.rerere.ai.runtime.contract.TurnConfig
 import me.rerere.ai.runtime.contract.TurnMessageTransforms
+import me.rerere.ai.runtime.hooks.HookDispatcher
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
@@ -64,6 +65,9 @@ class GenerationHandler(
     private val clock: RuntimeClock,
     private val logSink: RuntimeLogSink,
     private val aiLoggingManager: AILoggingManager,
+    // Required, not defaulted: a default of null is how the PreToolUse fire-point silently became
+    // dead code in production (#200 review finding 1) — the composition root must decide.
+    private val hookDispatcher: HookDispatcher,
 ) {
     private val chatTurnRuntime = ChatTurnRuntime(
         json = json,
@@ -82,6 +86,7 @@ class GenerationHandler(
                 )
             )
         },
+        hookDispatcher = hookDispatcher,
     )
 
     fun generateText(

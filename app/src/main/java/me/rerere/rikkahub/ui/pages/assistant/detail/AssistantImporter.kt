@@ -48,6 +48,14 @@ import org.koin.compose.koinInject
 
 private const val TAG = "AssistantImporter"
 
+/**
+ * Import-trust gate (H4): an assistant arriving from outside the app must never start with
+ * trusted hooks, no matter what the imported payload claims — the user reviews and grants trust
+ * in-app. The hook definitions themselves are kept so there is something to review.
+ */
+internal fun Assistant.withUntrustedHooks(): Assistant =
+    if (hooks.trusted) copy(hooks = hooks.copy(trusted = false)) else this
+
 @Composable
 fun AssistantImporter(
     modifier: Modifier = Modifier,
@@ -283,7 +291,7 @@ private suspend fun importAssistantFromUri(
         }
         val json = Json.parseToJsonElement(jsonString).jsonObject
         val assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
-        onImport(assistant)
+        onImport(assistant.withUntrustedHooks())
     } catch (exception: Exception) {
         Log.e(TAG, "Assistant import failed", exception)
         toaster.show(

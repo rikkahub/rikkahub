@@ -199,7 +199,10 @@ val dataSourceModule = module {
             modelProviderResolver = get(),
             clock = get(),
             logSink = get(),
-            aiLoggingManager = get()
+            aiLoggingManager = get(),
+            // Bound by hooksModule; required by the constructor so this wiring cannot silently
+            // regress to a null dispatcher again (#200 review finding 1).
+            hookDispatcher = get()
         )
     }
 

@@ -76,6 +76,7 @@ import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import org.apache.commons.text.StringEscapeUtils
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
@@ -201,7 +202,7 @@ class GoogleProvider(
                 .build()
         )
 
-        val response = client.newCall(request).await()
+        val response = client.newCall(request).await(params.callTimeoutMillis?.milliseconds)
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
         }

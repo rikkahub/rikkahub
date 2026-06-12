@@ -124,7 +124,8 @@ val appModule = module {
             filesManager = get(),
             skillManager = get(),
             automationRegistry = get(),
-            automationKillSwitch = get()
+            automationKillSwitch = get(),
+            hookDispatcher = get()
         )
     }
 

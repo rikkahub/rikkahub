@@ -3,6 +3,10 @@ package me.rerere.rikkahub.data.sync.archive
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import me.rerere.common.json.JsonInstant
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.SkillPaths
 import java.io.File
@@ -12,6 +16,32 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
 private const val TAG = "BackupArchiveRestorer"
+
+/**
+ * Import-trust gate (H4): backup restore is an ingestion vector just like the assistant importer,
+ * so every restored assistant's hooks are forced untrusted at the JSON level — before the
+ * environment ever decodes a [me.rerere.ai.runtime.hooks.HookConfig] that claims `trusted: true`.
+ *
+ * Payloads that don't match the current shape (legacy backups, malformed JSON) pass through
+ * unchanged: they predate the hooks field, so there is nothing to untrust, and the environment's
+ * migrator + decode error path must see them byte-identical.
+ */
+internal fun untrustAssistantHooks(settingsJson: String): String {
+    val root = runCatching { JsonInstant.parseToJsonElement(settingsJson) }.getOrNull() as? JsonObject
+        ?: return settingsJson
+    val assistants = root["assistants"] as? JsonArray ?: return settingsJson
+    val untrusted = JsonArray(
+        assistants.map { assistant ->
+            val obj = assistant as? JsonObject ?: return@map assistant
+            val hooks = obj["hooks"] as? JsonObject ?: return@map assistant
+            JsonObject(obj + ("hooks" to JsonObject(hooks + ("trusted" to JsonPrimitive(false)))))
+        }
+    )
+    return JsonInstant.encodeToString(
+        JsonObject.serializer(),
+        JsonObject(root + ("assistants" to untrusted)),
+    )
+}
 
 /**
  * Restores a backup ZIP. Owns the single path-traversal invariant that was
@@ -40,7 +70,7 @@ class BackupArchiveRestorer(
                     when (name) {
                         BackupArchiveLayout.SETTINGS -> {
                             val settingsJson = zipIn.readBytes().toString(Charsets.UTF_8)
-                            env.restoreSettingsJson(settingsJson)
+                            env.restoreSettingsJson(untrustAssistantHooks(settingsJson))
                             report.restored(name)
                         }
 
