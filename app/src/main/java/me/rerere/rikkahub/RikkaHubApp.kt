@@ -33,6 +33,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
+import me.rerere.workspace.WorkspaceManager
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -68,6 +69,9 @@ class RikkaHubApp : Application() {
         // delete temp files
         deleteTempFiles()
 
+        // cleanup workspace temp dirs (proot + rootfs /tmp)
+        cleanupWorkspaceTempDirs()
+
         // sync upload files to DB
         syncManagedFiles()
 
@@ -98,6 +102,16 @@ class RikkaHubApp : Application() {
                 Log.i(TAG, "incrementLaunchCount: ${store.settingsFlowRaw.first().launchCount}")
             }.onFailure {
                 Log.e(TAG, "incrementLaunchCount failed", it)
+            }
+        }
+    }
+
+    private fun cleanupWorkspaceTempDirs() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<WorkspaceManager>().cleanupAllTempDirs()
+            }.onFailure {
+                Log.e(TAG, "cleanupWorkspaceTempDirs failed", it)
             }
         }
     }

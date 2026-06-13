@@ -147,6 +147,19 @@ class WorkspaceManager(
         WorkspaceStorageArea.LINUX -> linuxDir(root)
     }
 
+    fun cleanupAllTempDirs() {
+        val roots = baseDir.listFiles()?.filter { it.isDirectory } ?: return
+        for (dir in roots) {
+            val root = dir.name
+            if (!root.matches(ROOT_NAME_REGEX)) continue
+            // PRoot temp files
+            tempDir(root).let { if (it.exists()) it.deleteRecursively() }
+            // Rootfs /tmp and /var/tmp
+            File(linuxDir(root), "tmp").let { if (it.exists()) it.deleteRecursively() }
+            File(linuxDir(root), "var/tmp").let { if (it.exists()) it.deleteRecursively() }
+        }
+    }
+
     companion object {
         private const val FILES_DIR = "files"
         private const val LINUX_DIR = "linux"
