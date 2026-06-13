@@ -2,8 +2,18 @@ package me.rerere.workspace
 
 import java.io.File
 
+data class WorkspaceBindMount(
+    val source: File,
+    val target: String,
+) {
+    init {
+        require(target.startsWith("/")) { "Bind mount target must be absolute: $target" }
+    }
+}
+
 class ProotShellRunner(
     private val nativeLibraryDir: File,
+    private val extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
@@ -63,6 +73,13 @@ class ProotShellRunner(
             "-b",
             "${context.filesDir.absolutePath}:$WORKSPACE_DIR",
         )
+
+        extraBindMounts.forEach { mount ->
+            if (mount.source.exists()) {
+                command += "-b"
+                command += "${mount.source.absolutePath}:${mount.target.trimEnd('/')}"
+            }
+        }
 
         listOf("/dev", "/proc", "/sys").forEach { path ->
             if (File(path).exists()) {
