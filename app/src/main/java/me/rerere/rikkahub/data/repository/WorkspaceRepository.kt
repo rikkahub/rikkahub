@@ -224,7 +224,9 @@ class WorkspaceRepository(
     suspend fun delete(id: String): Boolean {
         val workspace = dao.getById(id) ?: return false
         dao.deleteById(id)
-        manager.deleteWorkspace(workspace.root)
+        withContext(Dispatchers.IO) {
+            manager.deleteWorkspace(workspace.root)
+        }
         settingsStore.update { settings ->
             settings.copy(
                 assistants = settings.assistants.map { assistant ->
