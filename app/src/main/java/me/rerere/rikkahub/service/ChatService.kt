@@ -89,6 +89,7 @@ import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
+import me.rerere.workspace.WorkspaceShellStatus
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -550,7 +551,7 @@ class ChatService(
                         addAll(createSearchTools(settings))
                     }
                     addAll(localTools.getTools(assistant.localTools))
-                    addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository))
+                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString()))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
@@ -624,6 +625,19 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
         }
+    }
+
+    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?): List<Tool> {
+        if (workspaceId.isNullOrBlank()) return emptyList()
+        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
+            Log.d(
+                TAG,
+                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
+            )
+            return emptyList()
+        }
+        return createWorkspaceTools(workspaceId, workspaceRepository)
     }
 
     // ---- 检查无效消息 ----

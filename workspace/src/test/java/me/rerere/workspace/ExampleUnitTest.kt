@@ -41,6 +41,23 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun rootfsRequiresShellEntryPoint() {
+        val baseDir = Files.createTempDirectory("workspace-manager-test").toFile()
+        val manager = WorkspaceManager(baseDir)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        assertFalse(manager.hasRootfs(root))
+
+        File(manager.linuxDir(root), "etc").mkdirs()
+        assertFalse(manager.hasRootfs(root))
+
+        File(manager.linuxDir(root), "bin").mkdirs()
+        File(manager.linuxDir(root), "bin/sh").writeText("#!/bin/sh\n")
+        assertTrue(manager.hasRootfs(root))
+    }
+
+    @Test
     fun rootfsInstallerDownloadsAndExtractsTarGz() {
         val baseDir = Files.createTempDirectory("workspace-manager-test").toFile()
         val manager = WorkspaceManager(baseDir)

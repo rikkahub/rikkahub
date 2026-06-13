@@ -36,7 +36,7 @@ class WorkspaceManager(
 
     fun tempDir(root: String): File = File(workspaceDir(root), TEMP_DIR)
 
-    fun hasRootfs(root: String): Boolean = linuxDir(root).listFiles()?.isNotEmpty() == true
+    fun hasRootfs(root: String): Boolean = File(linuxDir(root), "bin/sh").isFile
 
     fun deleteWorkspace(root: String): Boolean = workspaceDir(root).deleteRecursively()
 
