@@ -16,6 +16,27 @@ import me.rerere.rikkahub.data.repository.TaskScheduleRepository
 import kotlin.uuid.Uuid
 
 /**
+ * The schedule screen's four distinct states (SPEC.md M6 / task T12 / SC6). Modeled as a sealed type so
+ * "loading" can never be mistaken for "empty": each state is its own case, not a flag-and-nullable-list
+ * combination the screen would have to disambiguate. [Error] is reserved for an UNEXPECTED exception while
+ * loading — every domain failure (over-length prompt, cap breach, bad zone) comes back from the repository
+ * as a [ScheduleMutationResult.Rejected], not a throw, so [Error] never carries a domain rejection.
+ */
+sealed interface ScheduleUiState {
+    /** The list has not resolved yet — the screen shows a spinner, not the empty-state CTA. */
+    data object Loading : ScheduleUiState
+
+    /** The bound conversation has no schedules — the screen shows the empty-state CTA. */
+    data object Empty : ScheduleUiState
+
+    /** An unexpected fault while listing — the screen shows [message], never a misleading empty state. */
+    data class Error(val message: String) : ScheduleUiState
+
+    /** The bound conversation's schedules, in presentation order (next-fire ascending). */
+    data class Content(val schedules: List<ScheduleSnapshot>) : ScheduleUiState
+}
+
+/**
  * The schedule screen's view model (SPEC.md M5 / task T10). It lists, creates, and deletes a
  * conversation's schedules by WRITING through the SAME [TaskScheduleRepository] the schedule tools
  * use — every legality gate (target spawnable, caps, minimum interval, prompt bound, conversation
@@ -47,10 +68,15 @@ class ScheduleVM(
     /** The bound parent conversation, or null until the first create materializes one. */
     val conversationId: StateFlow<Uuid?> = _conversationId.asStateFlow()
 
-    private val _schedules = MutableStateFlow<List<ScheduleSnapshot>>(emptyList())
+    // The screen's four-state view (SPEC.md M6 / task T12). A sealed UiState — not a nullable list or a
+    // separate isLoading boolean — makes "is it loading or genuinely empty?" structurally unanswerable
+    // ambiguity impossible: the type carries the answer. Init is Loading (the screen shows a spinner, not
+    // the empty-state CTA) until load() resolves to Empty/Content; Error is reserved for an UNEXPECTED
+    // throw, since every domain failure comes back as a ScheduleMutationResult.Rejected, never an exception.
+    private val _uiState = MutableStateFlow<ScheduleUiState>(ScheduleUiState.Loading)
 
-    /** The bound conversation's schedules, in presentation order (next-fire ascending). */
-    val schedules: StateFlow<List<ScheduleSnapshot>> = _schedules.asStateFlow()
+    /** The screen's load/empty/error/populated view, in presentation order (next-fire ascending). */
+    val uiState: StateFlow<ScheduleUiState> = _uiState.asStateFlow()
 
     // Serializes createSchedule so the "is the screen unbound? then materialize ONE parent" decision and
     // its commit are one critical section. Without it, two fire-and-forget creates from an unbound screen
@@ -94,10 +120,24 @@ class ScheduleVM(
         result
     }
 
-    /** List the bound conversation's schedules; an unbound screen has nothing to list yet. */
+    /**
+     * List the bound conversation's schedules and publish the result as a [ScheduleUiState] (SPEC.md M6).
+     * An unbound screen has nothing to list yet, so it resolves to [ScheduleUiState.Empty]. An UNEXPECTED
+     * exception from the repository (a fault, not a domain rejection — those never throw) resolves to
+     * [ScheduleUiState.Error] so the screen shows an error instead of a misleading empty state or a crash.
+     */
     suspend fun listSchedules(): List<ScheduleSnapshot> {
-        val conversationId = _conversationId.value ?: return emptyList()
-        return repository.list(conversationId).also { _schedules.value = it }
+        _uiState.value = ScheduleUiState.Loading
+        val conversationId = _conversationId.value ?: run {
+            _uiState.value = ScheduleUiState.Empty
+            return emptyList()
+        }
+        return try {
+            repository.list(conversationId).also { publish(it) }
+        } catch (e: Exception) {
+            _uiState.value = ScheduleUiState.Error(e.message ?: "Failed to load schedules")
+            emptyList()
+        }
     }
 
     /** Delete a schedule through the shared repository path (scoped to the bound conversation). */
@@ -109,8 +149,29 @@ class ScheduleVM(
         return result
     }
 
+    /**
+     * Pause ([enabled] = false) or resume ([enabled] = true) a schedule through the shared repository
+     * path (SPEC.md M5 / task T11), scoped to the bound conversation. The repository is the SINGLE
+     * legality path — it re-checks the caps on resume and arms/cancels the WorkManager fire — so the VM
+     * never flips `enabled` directly. On acceptance the list is re-published so the card observes the new
+     * run-state; a [ScheduleMutationResult.Rejected] (e.g. a cap-breach resume) is returned for the card
+     * to surface (it has no dialog, so the screen reverts the switch and toasts the reason).
+     */
+    suspend fun setScheduleEnabled(id: Uuid, enabled: Boolean): ScheduleMutationResult {
+        val conversationId = _conversationId.value
+            ?: return ScheduleMutationResult.Rejected("no conversation bound")
+        val result = repository.setEnabled(conversationId, id, enabled)
+        if (result is ScheduleMutationResult.Accepted) refresh(conversationId)
+        return result
+    }
+
     private suspend fun refresh(conversationId: Uuid) {
-        _schedules.value = repository.list(conversationId)
+        publish(repository.list(conversationId))
+    }
+
+    /** Map a freshly listed snapshot set onto the screen's content/empty states (one mapping, no drift). */
+    private fun publish(list: List<ScheduleSnapshot>) {
+        _uiState.value = if (list.isEmpty()) ScheduleUiState.Empty else ScheduleUiState.Content(list)
     }
 
     // --- fire-and-forget UI entry points --------------------------------------------------------
@@ -121,6 +182,10 @@ class ScheduleVM(
 
     fun delete(id: Uuid, onResult: (ScheduleMutationResult) -> Unit = {}) {
         viewModelScope.launch { onResult(deleteSchedule(id)) }
+    }
+
+    fun setEnabled(id: Uuid, enabled: Boolean, onResult: (ScheduleMutationResult) -> Unit = {}) {
+        viewModelScope.launch { onResult(setScheduleEnabled(id, enabled)) }
     }
 
     fun load() {

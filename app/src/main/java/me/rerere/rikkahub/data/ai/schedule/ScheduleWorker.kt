@@ -38,6 +38,11 @@ private const val TAG = "ScheduleWorker"
  * @param run fires a winning claim against its target and returns the terminal run id (or null if the
  *   target assistant no longer exists). Bound to [ScheduledTaskRunner.run] at the root.
  * @param finishRun clears the in-flight marker and records the terminal run id. Abort-safe in the repo.
+ * @param nextFireIfStillArmed re-reads the CURRENT row and returns its `nextFireAt` iff the schedule is
+ *   still enabled, else null. The re-enqueue decision MUST read fresh state, never the stale post-claim
+ *   snapshot: a user can pause the schedule (enabled=false + cancel) WHILE this fire is in flight, and
+ *   re-arming off the stale `claim.snapshot.enabled` would silently undo that pause. Bound to the
+ *   repository at the root (DIP — the runner names no Room).
  * @param enqueue re-enqueues the next unique fire for a recurring schedule. Bound to
  *   [ScheduleEnqueuer.enqueue] at the root.
  * @param now wall-clock source for the claim's due check; injected for testability.
@@ -47,6 +52,7 @@ class ScheduleFireRunner(
     private val resolveParentConversation: suspend (Uuid) -> Uuid?,
     private val run: suspend (ScheduleClaim, Uuid) -> Uuid?,
     private val finishRun: suspend (Uuid, Uuid, Uuid) -> Unit,
+    private val nextFireIfStillArmed: suspend (Uuid) -> Long?,
     private val enqueue: (Uuid, Long) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -77,12 +83,14 @@ class ScheduleFireRunner(
             }
         } finally {
             finishRun(scheduleId, claim.runId, terminalRunId)
-            // A recurring schedule that advanced is still enabled in its post-claim snapshot; re-enqueue
-            // the next fire so a thrown run never loses the recurrence. A one-shot (disabled after its
-            // claim) is NOT re-enqueued. The unique name ("schedule_$id") dedups, so exactly one pending
-            // fire ever exists per schedule.
-            if (claim.snapshot.enabled) {
-                enqueue(scheduleId, claim.snapshot.nextFireAt)
+            // Re-enqueue the next fire ONLY if the row is STILL armed, read fresh — never off the stale
+            // post-claim snapshot. A recurring schedule that advanced is re-armed at its CURRENT
+            // nextFireAt so a thrown run never loses the recurrence; a one-shot (disabled after its
+            // claim) and a schedule the user PAUSED while this fire was in flight both report null and
+            // are not re-armed, so a concurrent pause is never silently undone. The unique name
+            // ("schedule_$id") dedups, so exactly one pending fire ever exists per schedule.
+            nextFireIfStillArmed(scheduleId)?.let { fireAt ->
+                enqueue(scheduleId, fireAt)
             }
         }
         return true

@@ -362,7 +362,12 @@ fun ChatDrawerContent(
                         Text("Scheduled tasks")
                     },
                     onClick = {
-                        navController.navigate(Screen.Schedule(assistantId = settings.assistantId.toString()))
+                        navController.navigate(
+                            Screen.Schedule(
+                                assistantId = settings.assistantId.toString(),
+                                conversationId = current.id.toString(),
+                            )
+                        )
                     },
                 )
 

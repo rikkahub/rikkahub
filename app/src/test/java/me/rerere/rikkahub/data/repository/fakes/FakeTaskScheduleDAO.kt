@@ -14,7 +14,7 @@ import me.rerere.rikkahub.data.db.entity.TaskScheduleEntity
  * [me.rerere.rikkahub.data.repository.BoardTransactionRunner], so cross-call atomicity is the
  * runner's job (as it is Room's), not this fake's. Mirrors [FakeTaskRunDAO].
  */
-class FakeTaskScheduleDAO : TaskScheduleDAO {
+open class FakeTaskScheduleDAO : TaskScheduleDAO {
     private val lock = Any()
     private val schedules = LinkedHashMap<String, TaskScheduleEntity>()
 
@@ -42,6 +42,7 @@ class FakeTaskScheduleDAO : TaskScheduleDAO {
     }
 
     override suspend fun listByConversation(conversationId: String): List<TaskScheduleEntity> =
+        // synchronized() wraps the body so a subclass can override this method to simulate a fault.
         synchronized(lock) {
             schedules.values
                 .filter { it.conversationId == conversationId }

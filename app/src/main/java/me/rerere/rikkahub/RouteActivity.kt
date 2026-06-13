@@ -531,7 +531,10 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.Schedule> { key ->
-                                SchedulePage(targetAssistantId = Uuid.parse(key.assistantId))
+                                SchedulePage(
+                                    targetAssistantId = Uuid.parse(key.assistantId),
+                                    conversationId = key.conversationId?.let { Uuid.parse(it) },
+                                )
                             }
                         }
                     )
@@ -744,10 +747,13 @@ sealed interface Screen : NavKey {
     data object Stats : Screen
 
     /**
-     * The scheduled-tasks page for one assistant (SPEC.md M5). Carries the target assistant id (the
-     * page binds/creates the schedule conversation from it); the bound conversation is resolved
-     * lazily by the page's view model, so it is not part of the route key.
+     * The scheduled-tasks page for one assistant (SPEC.md M1/M5). Carries the target assistant id (the
+     * page binds/creates the schedule conversation from it). [conversationId] is the conversation the
+     * manager was opened from, when any: it binds the view model up front so schedules created from that
+     * conversation (by a tool or a prior session) are visible — without it the screen starts unbound and
+     * the list short-circuits to empty. It is null when the manager is opened without a conversation
+     * context, in which case the first create materializes the parent lazily.
      */
     @Serializable
-    data class Schedule(val assistantId: String) : Screen
+    data class Schedule(val assistantId: String, val conversationId: String? = null) : Screen
 }

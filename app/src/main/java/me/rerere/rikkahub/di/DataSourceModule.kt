@@ -272,6 +272,7 @@ val dataSourceModule = module {
             },
             run = { claim, parent -> runner.run(claim, parent) },
             finishRun = { id, runId, terminal -> repository.finishRun(id, runId, terminal) },
+            nextFireIfStillArmed = { id -> repository.nextFireIfStillArmed(id) },
             enqueue = { id, fireAt -> enqueuer.enqueue(id, fireAt) },
         )
     }

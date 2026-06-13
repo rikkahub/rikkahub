@@ -201,6 +201,108 @@ class TaskScheduleRepository(
     }
 
     /**
+     * Pause ([enabled] = false) or resume ([enabled] = true) the schedule [id] iff it belongs to
+     * [conversationId] (SPEC.md M5 / task T10). Like [delete], a row owned by a different conversation
+     * (or absent) REJECTS — the scope check is the single guard against a UI/agent bound to one
+     * conversation toggling another's schedule. This is the ONLY enable-toggle path: the VM and DAO
+     * never flip `enabled` directly, so the caps and firing seam below always run.
+     *
+     * `enabled` is BOTH a quota key (the caps in [createInTransaction] count only enabled rows) and a
+     * firing key (the enqueue seam arms pending WorkManager work). So a resume cannot be a naive flag
+     * flip: it re-checks the same per-conversation/per-owner caps [create] enforces (an enable can
+     * breach a cap that a fired one-shot freed since the pause) and a rejected resume leaves the row
+     * disabled, enqueuing nothing. After the transaction commits, a resume RE-ARMS the next fire via
+     * [onScheduleCreated] (the seam [create] uses) and a pause CANCELS it via [onScheduleDeleted] (the
+     * seam [delete] uses) — fired after commit so a rolled-back toggle never moves the transport.
+     *
+     * A toggle to the state the row already holds is an accepted no-op: no cap re-check, no seam fired
+     * (re-arming an already-armed fire would duplicate it; cancelling an already-cancelled one is moot).
+     *
+     * Resuming a one-shot that ALREADY FIRED (`kind == ONE_SHOT && lastFiredAt != null`) is REJECTED:
+     * such a row is terminal — its `nextFireAt` is frozen at the original (past) due time, so re-enabling
+     * it would let [claimDue] re-fire a completed action. A never-fired paused one-shot stays resumable.
+     */
+    suspend fun setEnabled(
+        conversationId: Uuid,
+        id: Uuid,
+        enabled: Boolean,
+    ): ScheduleMutationResult {
+        val outcome = transactions.inTransaction {
+            val row = dao.getById(id.toString())
+                ?.takeIf { it.conversationId == conversationId.toString() }
+                ?: return@inTransaction SetEnabledOutcome.Rejected("schedule not found: $id")
+
+            if (row.enabled == enabled) {
+                // Already in the requested state: accept without touching the row or the transport.
+                return@inTransaction SetEnabledOutcome.Unchanged(row.toSnapshot())
+            }
+
+            if (enabled) {
+                // A fired one-shot is TERMINAL: claimDue flips it disabled and leaves nextFireAt at its
+                // original (now-past) due time, so re-enabling it would let claimDue (next_fire_at <= now)
+                // re-fire the very action that already ran. Reject the resume at this single legality path
+                // rather than re-arming a stale fire. A never-fired paused one-shot (lastFiredAt == null)
+                // is still legitimately resumable — the distinguishing field is lastFiredAt, not kind alone.
+                if (ScheduleKind.valueOf(row.kind) == ScheduleKind.ONE_SHOT && row.lastFiredAt != null) {
+                    return@inTransaction SetEnabledOutcome.Rejected(
+                        "a one-shot that already fired cannot be resumed"
+                    )
+                }
+                // Resume re-checks the SAME caps create enforces — an enable can breach a cap a fired
+                // one-shot freed. The toggled row is still disabled here, so it is not yet in either
+                // enabled count and the `>=` cap comparison admits exactly up to the limit.
+                val enabledHere = dao.listByConversation(conversationId.toString()).count { it.enabled }
+                if (enabledHere >= MAX_ACTIVE_PER_CONVERSATION) {
+                    return@inTransaction SetEnabledOutcome.Rejected(
+                        "per-conversation active schedule cap reached ($MAX_ACTIVE_PER_CONVERSATION)"
+                    )
+                }
+                if (dao.countEnabledByOwner(row.owner) >= MAX_ACTIVE_PER_USER) {
+                    return@inTransaction SetEnabledOutcome.Rejected(
+                        "per-${row.owner.lowercase()} active schedule cap reached ($MAX_ACTIVE_PER_USER)"
+                    )
+                }
+            }
+
+            val updated = row.copy(enabled = enabled, updatedAt = now())
+            dao.update(updated)
+            SetEnabledOutcome.Changed(updated.toSnapshot())
+        }
+
+        // Move the transport ONLY for a toggle that actually changed the firing state, AFTER the row is
+        // committed — a rolled-back/rejected/no-op toggle must never arm or cancel a fire.
+        if (outcome is SetEnabledOutcome.Changed) {
+            if (enabled) {
+                onScheduleCreated(outcome.snapshot.id, outcome.snapshot.nextFireAt)
+            } else {
+                onScheduleDeleted(outcome.snapshot.id)
+            }
+        }
+        return outcome.toMutationResult()
+    }
+
+    /**
+     * Internal classification of a [setEnabled] transaction so the post-commit seam fires for a real
+     * state change ONLY ([Changed]), never a no-op ([Unchanged]) — re-arming an already-armed fire
+     * would duplicate it. Collapses to the public [ScheduleMutationResult] at the boundary.
+     */
+    private sealed interface SetEnabledOutcome {
+        fun toMutationResult(): ScheduleMutationResult
+
+        data class Changed(val snapshot: ScheduleSnapshot) : SetEnabledOutcome {
+            override fun toMutationResult() = ScheduleMutationResult.Accepted(snapshot)
+        }
+
+        data class Unchanged(val snapshot: ScheduleSnapshot) : SetEnabledOutcome {
+            override fun toMutationResult() = ScheduleMutationResult.Accepted(snapshot)
+        }
+
+        data class Rejected(val reason: String) : SetEnabledOutcome {
+            override fun toMutationResult() = ScheduleMutationResult.Rejected(reason)
+        }
+    }
+
+    /**
      * Atomically claim schedule [scheduleId]'s due window at [now]. ONE transaction, validate before
      * write: returns null unless the row exists AND is `enabled` AND has no in-flight run AND is due
      * (`nextFireAt <= now`). On a win it mints a fresh `runningTaskRunId`, stamps `lastFiredAt`, and
@@ -281,6 +383,19 @@ class TaskScheduleRepository(
             if (row.runningTaskRunId == null) return@inTransaction
             dao.update(row.copy(runningTaskRunId = null, updatedAt = now()))
         }
+    }
+
+    /**
+     * The CURRENT row's `nextFireAt` iff schedule [scheduleId] is still enabled, else null. The worker's
+     * post-fire re-enqueue (SPEC.md M5 / task T9) consults this instead of its stale post-claim snapshot:
+     * a user can pause the schedule (`enabled = false` + cancel) WHILE a fire is in flight, and re-arming
+     * off the snapshot would silently undo that pause. Reading fresh state here makes the re-enqueue
+     * decision ground-truth — a disabled (paused or one-shot-consumed) row reports null and is not
+     * re-armed; a still-enabled recurring row reports its advanced fire time. One transaction.
+     */
+    suspend fun nextFireIfStillArmed(scheduleId: Uuid): Long? = transactions.inTransaction {
+        val row = dao.getById(scheduleId.toString()) ?: return@inTransaction null
+        if (row.enabled) row.nextFireAt else null
     }
 
     /** Overdue enabled schedules (`enabled AND next_fire_at <= ` [now]) for the startup rescheduler. */

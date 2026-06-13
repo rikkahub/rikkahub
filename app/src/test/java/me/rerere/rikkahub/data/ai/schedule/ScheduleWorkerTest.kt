@@ -55,7 +55,11 @@ class ScheduleWorkerTest {
         runningTaskRunId = Uuid.random(),
     )
 
-    /** Build a runner whose seams record into [trace]; [claim] is what `claimDue` returns. */
+    /**
+     * Build a runner whose seams record into [trace]; [claim] is what `claimDue` returns. By default
+     * [nextFireIfStillArmed] mirrors the post-claim snapshot (enabled => its advanced nextFireAt), the
+     * common case; a test simulating a concurrent pause overrides it to return null.
+     */
     private fun runner(
         trace: Trace,
         scheduleId: Uuid,
@@ -63,6 +67,8 @@ class ScheduleWorkerTest {
         claim: ScheduleClaim?,
         terminalRunId: Uuid? = claim?.runId,
         enqueued: MutableList<Pair<Uuid, Long>> = mutableListOf(),
+        nextFireIfStillArmed: Long? =
+            claim?.snapshot?.takeIf { it.enabled }?.nextFireAt,
     ): ScheduleFireRunner = ScheduleFireRunner(
         claimDue = { id, _ ->
             trace.steps += "claim"
@@ -84,6 +90,10 @@ class ScheduleWorkerTest {
             assertEquals(scheduleId, id)
             assertEquals(claim?.runId, runId)
             assertEquals(terminalRunId, terminal)
+        },
+        nextFireIfStillArmed = { id ->
+            assertEquals(scheduleId, id)
+            nextFireIfStillArmed
         },
         enqueue = { id, fireAt ->
             trace.steps += "enqueue"
@@ -145,6 +155,55 @@ class ScheduleWorkerTest {
     }
 
     @Test
+    fun `a recurring schedule paused mid-fire is NOT re-enqueued`() = runBlocking {
+        val trace = Trace()
+        val scheduleId = Uuid.random()
+        val parent = Uuid.random()
+        // The post-claim snapshot still says enabled (it was captured before the pause), but the user
+        // paused the schedule while the worker was running. The fresh read reports the row is no longer
+        // armed (null), so the worker must NOT re-arm a future fire for a now-disabled schedule.
+        val claim = ScheduleClaim(
+            runId = Uuid.random(),
+            snapshot = snapshot(ScheduleKind.RECURRING, enabled = true, nextFireAt = 9_000L),
+        )
+        val enqueued = mutableListOf<Pair<Uuid, Long>>()
+        val runner = runner(
+            trace, scheduleId, parent, claim, enqueued = enqueued,
+            nextFireIfStillArmed = null,
+        )
+
+        runner.fire(scheduleId)
+
+        // claim -> run -> finish, but NO enqueue: the pause's cancellation is not undone by a stale
+        // post-claim snapshot.
+        assertEquals(listOf("claim", "run", "finish"), trace.steps)
+        assertTrue("a paused schedule must not be re-armed by the worker", enqueued.isEmpty())
+    }
+
+    @Test
+    fun `the re-enqueue uses the fresh fire time, not the stale post-claim snapshot`() = runBlocking {
+        val trace = Trace()
+        val scheduleId = Uuid.random()
+        val parent = Uuid.random()
+        // The post-claim snapshot carried nextFireAt=9_000L, but the current row's fire time is
+        // 12_000L (e.g. it was re-armed/advanced again). The worker must enqueue the FRESH time.
+        val claim = ScheduleClaim(
+            runId = Uuid.random(),
+            snapshot = snapshot(ScheduleKind.RECURRING, enabled = true, nextFireAt = 9_000L),
+        )
+        val enqueued = mutableListOf<Pair<Uuid, Long>>()
+        val runner = runner(
+            trace, scheduleId, parent, claim, enqueued = enqueued,
+            nextFireIfStillArmed = 12_000L,
+        )
+
+        runner.fire(scheduleId)
+
+        assertEquals(listOf("claim", "run", "finish", "enqueue"), trace.steps)
+        assertEquals(scheduleId to 12_000L, enqueued.single())
+    }
+
+    @Test
     fun `a throwing run still finishes the claim and re-enqueues a recurring schedule, then rethrows`() = runBlocking {
         val trace = Trace()
         val scheduleId = Uuid.random()
@@ -167,6 +226,8 @@ class ScheduleWorkerTest {
                 // No real terminal run id was produced; the claim run id stands in.
                 assertEquals(claim.runId, terminal)
             },
+            // The schedule is still armed; the throwing run must not lose its recurrence.
+            nextFireIfStillArmed = { 9_000L },
             enqueue = { id, fireAt -> trace.steps += "enqueue"; enqueued += id to fireAt },
             now = { 5_000L },
         )
