@@ -37,13 +37,13 @@ import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.FileAdd
 import me.rerere.hugeicons.stroke.FileEdit
 import me.rerere.hugeicons.stroke.FileExport
 import me.rerere.hugeicons.stroke.FileView
 import me.rerere.hugeicons.stroke.Folder01
-import me.rerere.hugeicons.stroke.SourceCode
 import me.rerere.rikkahub.ui.components.richtext.DiffAddedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffRemovedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffView
@@ -469,7 +469,7 @@ object ShellToolUI : ToolUIRenderer {
 
     override val toolName: String = "workspace_shell"
 
-    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SourceCode
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.ComputerTerminal01
 
     @Composable
     override fun title(context: ToolUIContext): String {
