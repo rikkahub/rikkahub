@@ -29,7 +29,7 @@ import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.hooksModule
 import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
-import me.rerere.rikkahub.data.ai.task.TaskRecoveryRunner
+import me.rerere.rikkahub.data.ai.task.StartupRecoveryRunner
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
@@ -73,8 +73,9 @@ class RikkaHubApp : Application() {
         // sync upload files to DB
         syncManagedFiles()
 
-        // recover tasks interrupted by process death + sweep retention (SPEC M6 / SC#4)
-        recoverTasks()
+        // recover interrupted tasks, THEN re-enqueue overdue schedules + clear orphan running
+        // markers — strictly ordered in one coroutine (SPEC M6 / SC#4 + task T11)
+        recoverThenRescheduleSchedules()
 
         // Init remote config
         get<FirebaseRemoteConfig>().apply {
@@ -127,17 +128,23 @@ class RikkaHubApp : Application() {
     }
 
     /**
-     * Startup task recovery (SPEC.md M6, Success Criterion #4): on a cold start, mark task rows
-     * left in flight by a process kill as `Interrupted` (resumable, no side-effect replay) and run
-     * the retention sweep. Off the main thread; the runner swallows and logs its own failures so a
-     * recovery hiccup can never block the UI from coming up.
+     * Startup lifecycle recovery (SPEC.md M6, Success Criterion #4 + task T11): in ONE coroutine,
+     * first mark task rows left in flight by a process kill as `Interrupted` (resumable, no
+     * side-effect replay) and run the retention sweep, THEN re-enqueue overdue schedules and clear
+     * orphan running markers. The ordering is load-bearing, not cosmetic: the rescheduler decides a
+     * `running_task_run_id` is orphaned by reading whether its run is `Interrupted`/missing, a tag
+     * the recovery pass writes — so recovery MUST happen-before rescheduling. Splitting these into
+     * two unordered `AppScope.launch` coroutines let the rescheduler race ahead, miss a
+     * not-yet-`Interrupted` killed run, leave the stale marker, and pin the recurring schedule
+     * "running" forever. Off the main thread; [StartupRecoveryRunner]'s passes swallow and log their
+     * own failures so a recovery hiccup can never block the UI from coming up.
      */
-    private fun recoverTasks() {
+    private fun recoverThenRescheduleSchedules() {
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
-                get<TaskRecoveryRunner>().runStartupRecovery()
+                get<StartupRecoveryRunner>().run()
             }.onFailure {
-                Log.e(TAG, "recoverTasks failed", it)
+                Log.e(TAG, "recoverThenRescheduleSchedules failed", it)
             }
         }
     }

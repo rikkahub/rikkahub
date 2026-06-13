@@ -121,10 +121,14 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.ai.runtime.board.buildBoardTools
+import me.rerere.ai.runtime.contract.ScheduleOwner
+import me.rerere.ai.runtime.schedule.buildScheduleTools
 import me.rerere.rikkahub.data.ai.task.BoardPortAdapter
+import me.rerere.rikkahub.data.ai.schedule.SchedulePortAdapter
 import me.rerere.rikkahub.data.repository.BoardActor
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.TaskBoardRepository
+import me.rerere.rikkahub.data.repository.TaskScheduleRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.ai.runtime.memory.MEMORY_RECALL_K
 import me.rerere.rikkahub.data.ai.memory.MemoryRecaller
@@ -467,6 +471,9 @@ class ChatService(
     // Per-conversation work-item board (SPEC.md M3/T7). Board tools delegate through this single
     // repository — the same path the board UI uses (decision #4) — so legality is enforced once.
     private val taskBoardRepository: TaskBoardRepository,
+    // Per-conversation task schedules (SPEC.md M4/T7). The schedule tools delegate through this
+    // single repository — the same path the schedule UI uses — so legality is enforced once.
+    private val taskScheduleRepository: TaskScheduleRepository,
     // Live subagent execution handles (SPEC.md M4/M6). The spawn path registers one handle per
     // child; its id is the owner of every board claim the child takes, and the same id is what
     // orphan release frees when the handle dies.
@@ -1352,6 +1359,20 @@ class ChatService(
                                 handleId = "conversation:$conversationId",
                                 displayName = senderName,
                             ),
+                        )
+                    )
+                },
+                // Per-conversation schedule tools (SPEC.md M4/T7), built on a port bound to THIS
+                // conversation's id with owner=AGENT — the agent path uses the current conversation
+                // id, never TaskCoordinator.run's Uuid.random() default. The port (SchedulePortAdapter)
+                // is the only place that knows scope/owner; the tool never sees either, and the
+                // repository remains the single legality path shared with the schedule UI.
+                scheduleTools = {
+                    buildScheduleTools(
+                        SchedulePortAdapter(
+                            repository = taskScheduleRepository,
+                            conversationId = conversationId,
+                            owner = ScheduleOwner.AGENT,
                         )
                     )
                 },

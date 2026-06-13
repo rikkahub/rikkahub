@@ -3,6 +3,7 @@ package me.rerere.rikkahub.di
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.work.WorkManager
 import android.content.Context
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -20,12 +21,19 @@ import me.rerere.rikkahub.data.ai.SECRET_HEADER_NAMES
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
+import me.rerere.rikkahub.data.ai.schedule.ScheduleEnqueuer
+import me.rerere.rikkahub.data.ai.schedule.ScheduleFireRunner
+import me.rerere.rikkahub.data.ai.schedule.ScheduleWorker
+import me.rerere.rikkahub.data.ai.schedule.ScheduledTaskRunner
+import me.rerere.rikkahub.service.mapMcpTool
+import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.repository.RoomBoardTransactionRunner
 import me.rerere.rikkahub.data.repository.TaskBoardRepository
+import me.rerere.rikkahub.data.repository.TaskScheduleRepository
 import me.rerere.rikkahub.data.repository.TaskRunRepository
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.SimpleDictManager
@@ -48,6 +56,7 @@ import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import retrofit2.Retrofit
@@ -187,6 +196,92 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().taskScheduleDao()
+    }
+
+    // The WorkManager firing transport for schedules (SPEC.md M5). ONE unique work chain per
+    // schedule id ("schedule_$id"), so a create/re-enqueue REPLACES the pending fire rather than
+    // stacking. The worker class is injected (not hard-referenced) so the seam stays a pure
+    // transport. WorkManager is Koin-wired (workManagerFactory() in RikkaHubApp.onCreate); the
+    // manifest already removes the AndroidX default initializer so this factory owns construction.
+    single {
+        ScheduleEnqueuer(
+            workManager = WorkManager.getInstance(get<Context>()),
+            workerClass = ScheduleWorker::class.java,
+        )
+    }
+
+    // Per-conversation task schedules (SPEC.md M3/M4/M5). The repository is the SINGLE legality path
+    // shared by the schedule tools and the schedule UI, so every gate (target spawnable, caps,
+    // minimum interval, prompt bound, conversation scoping) is enforced once. The spawnable-target
+    // lookup reads the CURRENT settings at resolve time (DIP: the repository never imports the
+    // settings store directly, mirroring TaskCoordinator's injected lookups). A create enqueues the
+    // first fire and a delete cancels the unique chain (M5) — bound to the ScheduleEnqueuer here, so
+    // the repository keeps no compile-time edge to WorkManager.
+    single {
+        val settingsStore = get<SettingsStore>()
+        val enqueuer = get<ScheduleEnqueuer>()
+        TaskScheduleRepository(
+            dao = get(),
+            transactions = RoomBoardTransactionRunner(get<AppDatabase>()),
+            resolveAssistant = { id -> settingsStore.settingsFlow.value.assistants.find { it.id == id } },
+            onScheduleCreated = { id, fireAt -> enqueuer.enqueue(id, fireAt) },
+            onScheduleDeleted = { id -> enqueuer.cancel(id) },
+        )
+    }
+
+    // Turns a winning ScheduleClaim into a real task run by REUSING TaskCoordinator.run (SPEC.md M5):
+    // a scheduled fire is exactly "spawn a sub-task against the target assistant". The child tool pool
+    // is the target's own local + MCP tools; approval-gated tools auto-deny inside the runner (a
+    // scheduled run has no live approval surface). Skills/per-handle board tools are omitted: they
+    // need a live ExecutionHandle a scheduled run does not have.
+    single {
+        val settingsStore = get<SettingsStore>()
+        val localTools = get<LocalTools>()
+        val mcpManager = get<McpManager>()
+        ScheduledTaskRunner(
+            coordinator = get(),
+            resolveAssistant = { id -> settingsStore.settingsFlow.value.assistants.find { it.id == id } },
+            currentSettings = { settingsStore.settingsFlow.value },
+            buildChildTools = { sub ->
+                buildList {
+                    addAll(localTools.getTools(sub.localTools))
+                    mcpManager.getAllAvailableTools(sub).forEach { (serverId, tool) ->
+                        add(mapMcpTool(serverId, tool) { sid, name, args ->
+                            mcpManager.callTool(sid, name, args)
+                        })
+                    }
+                }
+            },
+        )
+    }
+
+    // The fire policy the ScheduleWorker delegates to (SPEC.md M5): claim -> run -> finish ->
+    // re-enqueue. Extracted from the worker so the ordering is JVM-unit-testable; every step is a
+    // narrow injected seam bound here at the composition root. The parent conversation is resolved
+    // from the schedule row at fire time (the snapshot is conversation-neutral by design).
+    single {
+        val repository = get<TaskScheduleRepository>()
+        val runner = get<ScheduledTaskRunner>()
+        val enqueuer = get<ScheduleEnqueuer>()
+        val scheduleDao = get<AppDatabase>().taskScheduleDao()
+        ScheduleFireRunner(
+            claimDue = { id, now -> repository.claimDue(id, now) },
+            resolveParentConversation = { id ->
+                scheduleDao.getById(id.toString())?.conversationId?.let { kotlin.uuid.Uuid.parse(it) }
+            },
+            run = { claim, parent -> runner.run(claim, parent) },
+            finishRun = { id, runId, terminal -> repository.finishRun(id, runId, terminal) },
+            enqueue = { id, fireAt -> enqueuer.enqueue(id, fireAt) },
+        )
+    }
+
+    // Koin WorkManager binding (SPEC.md M5): the worker factory supplies Context + WorkerParameters,
+    // and the ScheduleFireRunner is injected. The default AndroidX initializer is removed in the
+    // manifest so this Koin-built worker is the one WorkManager instantiates.
+    worker { ScheduleWorker(appContext = get(), params = get(), fireRunner = get()) }
+
+    single {
         get<AppDatabase>().taskRunDao()
     }
 
@@ -210,6 +305,43 @@ val dataSourceModule = module {
         me.rerere.rikkahub.data.ai.task.TaskRecoveryRunner(
             taskRuns = get(),
             board = get(),
+        )
+    }
+
+    // Cold-start rescheduler (SPEC.md M6 / task T11). Runs after recoverTasks() in RikkaHubApp: it
+    // re-enqueues every overdue enabled schedule via the ScheduleEnqueuer transport and clears any
+    // ORPHAN running_task_run_id — a marker pointing at a run the recovery pass just folded to
+    // Interrupted (or a run that no longer exists), i.e. a killed fire. The orphan predicate reads
+    // the run state through TaskRunRepository (DIP: injected seam, no compile-time edge here), so a
+    // dead fire never pins its schedule "running" forever and blocks every future claim.
+    single {
+        val repository = get<TaskScheduleRepository>()
+        val taskRuns = get<TaskRunRepository>()
+        val enqueuer = get<ScheduleEnqueuer>()
+        me.rerere.rikkahub.data.ai.schedule.ScheduleRescheduler(
+            listOverdueEnabled = { repository.listOverdueEnabled(System.currentTimeMillis()) },
+            listEnabledRunning = { repository.listEnabledRunning() },
+            isRunOrphan = { runId ->
+                // Not-running ⇔ the run is gone (missing) or was marked Interrupted by recovery.
+                when (taskRuns.get(runId)) {
+                    null -> true
+                    is me.rerere.ai.runtime.task.TaskState.Interrupted -> true
+                    else -> false
+                }
+            },
+            clearOrphanRunning = { id -> repository.clearOrphanRunning(id) },
+            enqueue = { id, fireAt -> enqueuer.enqueue(id, fireAt) },
+        )
+    }
+
+    // Cold-start lifecycle orchestrator (SPEC.md M6 / SC#4 + T11). RikkaHubApp runs this in ONE
+    // coroutine so the interrupt-scan completes BEFORE the rescheduler reads run state to decide which
+    // running markers are orphans — without that ordering the rescheduler can race ahead, miss a
+    // not-yet-Interrupted killed run, and leave a recurring schedule pinned "running" forever.
+    single {
+        me.rerere.rikkahub.data.ai.task.StartupRecoveryRunner(
+            recover = { get<me.rerere.rikkahub.data.ai.task.TaskRecoveryRunner>().runStartupRecovery() },
+            reschedule = { get<me.rerere.rikkahub.data.ai.schedule.ScheduleRescheduler>().rescheduleOverdue() },
         )
     }
 

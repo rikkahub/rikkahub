@@ -3,9 +3,11 @@ package me.rerere.rikkahub.data.repository
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.entity.TaskRunEntity
 import me.rerere.rikkahub.data.db.entity.TaskRunStateTag
+import me.rerere.rikkahub.data.db.entity.TaskScheduleEntity
 import me.rerere.rikkahub.data.db.entity.WorkItemDependencyEntity
 import me.rerere.rikkahub.data.db.entity.WorkItemEntity
 import me.rerere.rikkahub.data.repository.fakes.FakeTaskRunDAO
+import me.rerere.rikkahub.data.repository.fakes.FakeTaskScheduleDAO
 import me.rerere.rikkahub.data.repository.fakes.FakeWorkItemDAO
 import me.rerere.ai.runtime.board.WorkItemStatus
 import org.junit.Assert.assertEquals
@@ -43,10 +45,26 @@ class ConversationTaskArtifactCascadeTest {
         updatedAt = 0,
     )
 
+    private fun schedule(id: String, conversationId: Uuid): TaskScheduleEntity = TaskScheduleEntity(
+        id = id,
+        conversationId = conversationId.toString(),
+        targetAssistantId = Uuid.random().toString(),
+        prompt = "ping",
+        owner = "USER",
+        kind = "ONE_SHOT",
+        timeZoneId = "UTC",
+        firstFireAt = 0,
+        nextFireAt = 0,
+        enabled = true,
+        createdAt = 0,
+        updatedAt = 0,
+    )
+
     @Test
     fun `cascade deletes task runs, work items, and dependency edges of the conversation`() = runBlocking {
         val taskRunDAO = FakeTaskRunDAO()
         val workItemDAO = FakeWorkItemDAO()
+        val taskScheduleDAO = FakeTaskScheduleDAO()
         val convo = Uuid.random()
 
         taskRunDAO.upsert(taskRun("run-1", convo))
@@ -56,7 +74,7 @@ class ConversationTaskArtifactCascadeTest {
             WorkItemDependencyEntity(conversationId = convo.toString(), blockerId = "item-a", blockedId = "item-b")
         )
 
-        deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, convo)
+        deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, taskScheduleDAO, convo)
 
         assertNull("the conversation's task run must be deleted", taskRunDAO.getById("run-1"))
         assertTrue("the conversation's work items must be deleted", workItemDAO.listByConversation(convo.toString()).isEmpty())
@@ -67,9 +85,30 @@ class ConversationTaskArtifactCascadeTest {
     }
 
     @Test
+    fun `cascade deletes the conversation's schedules, leaving no orphan rows`() = runBlocking {
+        val taskRunDAO = FakeTaskRunDAO()
+        val workItemDAO = FakeWorkItemDAO()
+        val taskScheduleDAO = FakeTaskScheduleDAO()
+        val convo = Uuid.random()
+
+        taskScheduleDAO.insert(schedule("sched-1", convo))
+        taskScheduleDAO.insert(schedule("sched-2", convo))
+
+        deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, taskScheduleDAO, convo)
+
+        assertTrue(
+            "the conversation's schedules must be deleted (no FK cascade reaches them)",
+            taskScheduleDAO.listByConversation(convo.toString()).isEmpty(),
+        )
+        assertNull("schedule sched-1 must leave no orphan row", taskScheduleDAO.getById("sched-1"))
+        assertNull("schedule sched-2 must leave no orphan row", taskScheduleDAO.getById("sched-2"))
+    }
+
+    @Test
     fun `cascade leaves another conversation's artifacts untouched`() = runBlocking {
         val taskRunDAO = FakeTaskRunDAO()
         val workItemDAO = FakeWorkItemDAO()
+        val taskScheduleDAO = FakeTaskScheduleDAO()
         val deleted = Uuid.random()
         val kept = Uuid.random()
 
@@ -77,12 +116,16 @@ class ConversationTaskArtifactCascadeTest {
         taskRunDAO.upsert(taskRun("run-keep", kept))
         workItemDAO.insert(workItem("item-del", deleted))
         workItemDAO.insert(workItem("item-keep", kept))
+        taskScheduleDAO.insert(schedule("sched-del", deleted))
+        taskScheduleDAO.insert(schedule("sched-keep", kept))
 
-        deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, deleted)
+        deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, taskScheduleDAO, deleted)
 
         assertNull(taskRunDAO.getById("run-del"))
         assertEquals("run-keep", taskRunDAO.getById("run-keep")?.id)
         assertTrue(workItemDAO.listByConversation(deleted.toString()).isEmpty())
         assertEquals(listOf("item-keep"), workItemDAO.listByConversation(kept.toString()).map { it.id })
+        assertTrue(taskScheduleDAO.listByConversation(deleted.toString()).isEmpty())
+        assertEquals(listOf("sched-keep"), taskScheduleDAO.listByConversation(kept.toString()).map { it.id })
     }
 }

@@ -19,6 +19,7 @@ import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.TaskRunDAO
+import me.rerere.rikkahub.data.db.dao.TaskScheduleDAO
 import me.rerere.rikkahub.data.db.dao.WorkItemDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
@@ -38,6 +39,7 @@ class ConversationRepository(
     private val messageFtsManager: MessageFtsManager,
     private val taskRunDAO: TaskRunDAO,
     private val workItemDAO: WorkItemDAO,
+    private val taskScheduleDAO: TaskScheduleDAO,
 ) {
     companion object {
         private const val TAG = "ConversationRepository"
@@ -244,12 +246,12 @@ class ConversationRepository(
             conversationDAO.delete(
                 conversationToConversationEntity(conversation)
             )
-            // task_runs / work_items / work_item_dependencies have NO foreign key to the
-            // conversation (see their @Entity declarations — no foreignKeys block), so Room's
-            // CASCADE does not reach them; without this they outlive the conversation forever
-            // (review finding #4). Delete them explicitly in the SAME transaction as the
+            // task_runs / work_items / work_item_dependencies / task_schedules have NO foreign
+            // key to the conversation (see their @Entity declarations — no foreignKeys block), so
+            // Room's CASCADE does not reach them; without this they outlive the conversation
+            // forever (review finding #4). Delete them explicitly in the SAME transaction as the
             // conversation so the conversation and all its task artifacts vanish atomically.
-            deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, conversation.id)
+            deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, taskScheduleDAO, conversation.id)
         }
         filesManager.deleteChatFiles(fullConversation.files)
     }
@@ -444,14 +446,20 @@ data class FtsConsistencyResult(
  * The dependency edges are deleted FIRST and separately: [WorkItemDAO.deleteByConversationId]
  * removes only the item rows, so without [WorkItemDAO.deleteDependenciesByConversationId] the
  * normalized `work_item_dependencies` edges would orphan even though the items are gone.
+ *
+ * task_schedules likewise carries no `foreignKeys` block (SPEC.md M6), so a conversation delete
+ * does not cascade to its schedule rows either; they are removed here by conversation id so a
+ * deleted conversation never leaves orphan schedules armed to fire against a gone parent.
  */
 internal suspend fun deleteConversationTaskArtifacts(
     taskRunDAO: TaskRunDAO,
     workItemDAO: WorkItemDAO,
+    taskScheduleDAO: TaskScheduleDAO,
     conversationId: Uuid,
 ) {
     val id = conversationId.toString()
     taskRunDAO.deleteByConversationId(id)
     workItemDAO.deleteDependenciesByConversationId(id)
     workItemDAO.deleteByConversationId(id)
+    taskScheduleDAO.deleteByConversationId(id)
 }

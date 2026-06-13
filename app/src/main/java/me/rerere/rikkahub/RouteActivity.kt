@@ -102,6 +102,7 @@ import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
+import me.rerere.rikkahub.ui.pages.schedule.SchedulePage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
@@ -528,6 +529,10 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Stats> {
                                 StatsPage()
                             }
+
+                            entry<Screen.Schedule> { key ->
+                                SchedulePage(targetAssistantId = Uuid.parse(key.assistantId))
+                            }
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -737,4 +742,12 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Stats : Screen
+
+    /**
+     * The scheduled-tasks page for one assistant (SPEC.md M5). Carries the target assistant id (the
+     * page binds/creates the schedule conversation from it); the bound conversation is resolved
+     * lazily by the page's view model, so it is not part of the route key.
+     */
+    @Serializable
+    data class Schedule(val assistantId: String) : Screen
 }

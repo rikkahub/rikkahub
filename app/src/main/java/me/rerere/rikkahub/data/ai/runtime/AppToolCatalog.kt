@@ -51,6 +51,7 @@ class AppToolCatalog(
     private val mcpCall: suspend (serverId: Uuid, toolName: String, args: JsonObject) -> List<UIMessagePart>,
     private val spawnTool: (parentModelId: Uuid?) -> Tool?,
     private val boardTools: suspend () -> List<Tool> = { emptyList() },
+    private val scheduleTools: suspend () -> List<Tool> = { emptyList() },
 ) : ToolCatalog {
 
     override suspend fun tools(ctx: ToolAssemblyContext): List<Tool> {
@@ -60,6 +61,11 @@ class AppToolCatalog(
             // they can coordinate over one shared board (decision #5). Conversation scope and owner
             // are bound inside the port (BoardPortAdapter), never visible to the tool.
             addAll(boardTools())
+            // Per-conversation schedule tools (SPEC.md M4), alongside the board tools and riding the
+            // same recursion-guard + approval-strip policy. `schedule_create`/`schedule_delete` carry
+            // needsApproval=true, so the approval strip drops them from a subagent pool; conversation
+            // scope and owner are bound inside the port (SchedulePortAdapter), never visible here.
+            addAll(scheduleTools())
             mcpToolsForAssistant(ctx.targetAssistant).forEach { (serverId, tool) ->
                 add(mapMcpTool(serverId, tool) { sid, name, args -> mcpCall(sid, name, args) })
             }

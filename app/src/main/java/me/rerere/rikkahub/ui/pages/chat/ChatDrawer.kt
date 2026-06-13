@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.AlarmClock
 import me.rerere.hugeicons.stroke.ChartColumn
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.InLove
@@ -350,6 +351,18 @@ fun ChatDrawerContent(
                     },
                     onClick = {
                         navController.navigate(Screen.Stats)
+                    },
+                )
+
+                DrawerAction(
+                    icon = {
+                        Icon(HugeIcons.AlarmClock, "Scheduled tasks")
+                    },
+                    label = {
+                        Text("Scheduled tasks")
+                    },
+                    onClick = {
+                        navController.navigate(Screen.Schedule(assistantId = settings.assistantId.toString()))
                     },
                 )
 
