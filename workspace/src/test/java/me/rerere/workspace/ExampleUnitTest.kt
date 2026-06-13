@@ -101,6 +101,23 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun commandReceivesStdin() {
+        val baseDir = Files.createTempDirectory("workspace-stdin-test").toFile()
+        val manager = WorkspaceManager(baseDir)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        val result = manager.executeCommand(
+            root = root,
+            command = "cat > stdin.txt",
+            stdin = "hello\nstdin".toByteArray(),
+        )
+
+        assertEquals(0, result.exitCode)
+        assertEquals("hello\nstdin", File(manager.filesDir(root), "stdin.txt").readText())
+    }
+
+    @Test
     fun prootRunnerRequiresRootfs() {
         val baseDir = Files.createTempDirectory("workspace-proot-test").toFile()
         val manager = WorkspaceManager(

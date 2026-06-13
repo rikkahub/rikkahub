@@ -18,6 +18,7 @@ data class WorkspaceShellContext(
     val tempDir: File,
     val workingDir: File,
     val timeoutMillis: Long,
+    val stdin: ByteArray? = null,
 )
 
 class HostShellRunner : WorkspaceShellRunner {
@@ -26,7 +27,7 @@ class HostShellRunner : WorkspaceShellRunner {
             .directory(context.workingDir)
             .redirectErrorStream(false)
             .start()
-        return process.readResult(context.timeoutMillis)
+        return process.readResult(context.timeoutMillis, context.stdin)
     }
 
     private fun defaultShell(): String =
@@ -36,14 +37,16 @@ class HostShellRunner : WorkspaceShellRunner {
 // 单个流保留的最大字符数, 防止命令疯狂输出导致 OOM 或撑爆 LLM 上下文
 const val MAX_OUTPUT_CHARS = 128 * 1024
 
-fun Process.readResult(timeoutMillis: Long): WorkspaceCommandResult {
+fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): WorkspaceCommandResult {
     val stdout = StreamCollector(inputStream)
     val stderr = StreamCollector(errorStream)
+    val stdinWriter = stdin?.let { bytes -> StreamWriter(outputStream, bytes) }
     try {
         val finished = waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
         if (!finished) {
             destroyForcibly()
         }
+        stdinWriter?.join(1_000)
         stdout.join(1_000)
         stderr.join(1_000)
         return WorkspaceCommandResult(
@@ -57,10 +60,32 @@ fun Process.readResult(timeoutMillis: Long): WorkspaceCommandResult {
         // 调用方线程被中断（如协程取消时的 runInterruptible），杀掉进程避免命令继续执行
         destroyForcibly()
         // 进程被杀后 stdout/stderr 会关闭, 这里 join 回收两个采集线程, 避免每次取消泄漏一对线程
+        stdinWriter?.join(1_000)
         stdout.join(1_000)
         stderr.join(1_000)
         throw e
     }
+}
+
+private class StreamWriter(
+    private val stream: java.io.OutputStream,
+    private val bytes: ByteArray,
+) {
+    private val thread = Thread {
+        try {
+            stream.use { output ->
+                output.write(bytes)
+                output.flush()
+            }
+        } catch (_: IOException) {
+            // 子进程提前退出或被强杀时 stdin 可能关闭, 忽略即可, 退出状态会由进程本身返回
+        }
+    }.apply {
+        isDaemon = true
+        start()
+    }
+
+    fun join(millis: Long) = thread.join(millis)
 }
 
 private class StreamCollector(
