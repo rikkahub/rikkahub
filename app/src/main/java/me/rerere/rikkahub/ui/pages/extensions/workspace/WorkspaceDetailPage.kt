@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import android.content.Intent
 import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
@@ -64,6 +66,7 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Share08
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -193,6 +196,21 @@ fun WorkspaceDetailPage(id: String) {
                     onExport = { entry ->
                         exportTarget = entry
                         exportLauncher.launch(entry.name)
+                    },
+                    onShare = { entry ->
+                        vm.shareFile(entry, context.cacheDir) { file ->
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file,
+                            )
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/octet-stream"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(intent, null))
+                        }
                     },
                 )
             }
@@ -543,6 +561,7 @@ private fun WorkspaceFilesPage(
     onOpen: (WorkspaceFileEntry) -> Unit,
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
+    onShare: (WorkspaceFileEntry) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -582,6 +601,7 @@ private fun WorkspaceFilesPage(
                 onOpen = { onOpen(entry) },
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
+                onShare = { onShare(entry) },
             )
         }
     }
@@ -643,6 +663,7 @@ private fun WorkspaceFileCard(
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     onExport: () -> Unit,
+    onShare: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -708,6 +729,19 @@ private fun WorkspaceFileCard(
                             onClick = {
                                 menuExpanded = false
                                 onExport()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("分享") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.Share08,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onShare()
                             },
                         )
                     }

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -139,6 +140,26 @@ class WorkspaceDetailVM(
                 )
             }.onFailure { error ->
                 _state.update { it.copy(error = error.message ?: "导出文件失败") }
+            }
+        }
+    }
+
+    fun shareFile(entry: WorkspaceFileEntry, cacheDir: File, onReady: (File) -> Unit) {
+        viewModelScope.launch {
+            runCatching {
+                val dir = File(cacheDir, "workspace_share").apply { mkdirs() }
+                val file = File(dir, entry.name)
+                file.outputStream().use { output ->
+                    repository.exportFile(
+                        id = id,
+                        area = state.value.area,
+                        path = entry.path,
+                        outputStream = output,
+                    )
+                }
+                file
+            }.onSuccess(onReady).onFailure { error ->
+                _state.update { it.copy(error = error.message ?: "分享文件失败") }
             }
         }
     }
