@@ -38,10 +38,13 @@ fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>):
 suspend fun createWorkspaceTools(
     workspaceId: String?,
     workspaceRepository: WorkspaceRepository,
+    cwd: String? = null,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
     fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
+
+    val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
 
     return listOf(
         createListFilesTool(workspaceId, ::needsApproval, workspaceRepository),
@@ -50,7 +53,7 @@ suspend fun createWorkspaceTools(
         createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createDeleteFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createMoveFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createShellTool(workspaceId, ::needsApproval, workspaceRepository),
+        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
     )
 }
 
@@ -322,12 +325,17 @@ private fun createShellTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
+    defaultCwd: String? = null,
 ) = Tool(
     name = "workspace_shell",
-    description = """
-        Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace.
-        Use cwd for a path relative to the workspace files root. Requires Rootfs to be installed and ready.
-    """.trimIndent().replace("\n", " "),
+    description = buildString {
+        append("Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace. ")
+        append("Use cwd for a path relative to the workspace files root. ")
+        if (!defaultCwd.isNullOrBlank()) {
+            append("Defaults to '$defaultCwd'. ")
+        }
+        append("Requires Rootfs to be installed and ready.")
+    },
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -337,7 +345,14 @@ private fun createShellTool(
                 })
                 put("cwd", buildJsonObject {
                     put("type", "string")
-                    put("description", "Working directory relative to the workspace files root. Defaults to root.")
+                    put(
+                        "description",
+                        if (!defaultCwd.isNullOrBlank()) {
+                            "Working directory relative to the workspace files root. Defaults to '$defaultCwd'."
+                        } else {
+                            "Working directory relative to the workspace files root. Defaults to root."
+                        }
+                    )
                 })
                 put("timeout", buildJsonObject {
                     put("type", "integer")
@@ -354,7 +369,8 @@ private fun createShellTool(
     execute = {
         val params = it.jsonObject
         val command = params.string("command") ?: error("command is required")
-        val cwd = params.string("cwd").orEmpty()
+        val cwd = (params.string("cwd") ?: defaultCwd.orEmpty())
+            .removePrefix("/workspace/").removePrefix("/workspace")
         val timeoutMillis = params.string("timeout")?.toLongOrNull()
             ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
             ?.times(1_000L)

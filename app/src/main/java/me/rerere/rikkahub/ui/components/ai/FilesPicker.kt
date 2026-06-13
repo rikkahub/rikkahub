@@ -6,9 +6,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +29,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
@@ -58,6 +62,7 @@ import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Codesandbox
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Files02
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Package
@@ -82,6 +87,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.workspace.WorkspaceShellStatus
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
@@ -141,8 +147,10 @@ internal fun FilesPicker(
         if (workspaces.isNotEmpty()) {
             WorkspacePickerListItem(
                 assistant = assistant,
+                conversation = conversation,
                 workspaces = workspaces,
                 onUpdateAssistant = onUpdateAssistant,
+                onUpdateConversation = onUpdateConversation,
                 onNavigateToDetail = { id ->
                     onDismiss()
                     navController.navigate(Screen.WorkspaceDetail(id))
@@ -236,6 +244,41 @@ internal fun FilesPicker(
                     onShowCompressDialogChange(true)
                 },
         )
+
+        // Workspace CWD
+        val boundWorkspace = remember(workspaces, assistant.workspaceId) {
+            workspaces.find { it.id == assistant.workspaceId?.toString() }
+        }
+        if (boundWorkspace != null && boundWorkspace.shellStatus == WorkspaceShellStatus.READY.name) {
+            var showCwdSheet by remember { mutableStateOf(false) }
+            TextButton(
+                onClick = { showCwdSheet = true },
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Folder01,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = conversation.workspaceCwd ?: "/workspace",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (showCwdSheet) {
+                WorkspaceCwdPickerSheet(
+                    workspaceId = boundWorkspace.id,
+                    currentCwd = conversation.workspaceCwd,
+                    onSelectCwd = { newCwd ->
+                        onUpdateConversation(conversation.copy(workspaceCwd = newCwd))
+                    },
+                    onDismiss = { showCwdSheet = false },
+                )
+            }
+        }
     }
 
     // Injection Bottom Sheet
@@ -263,8 +306,10 @@ internal fun FilesPicker(
 @Composable
 private fun WorkspacePickerListItem(
     assistant: Assistant,
+    conversation: Conversation,
     workspaces: List<WorkspaceEntity>,
     onUpdateAssistant: (Assistant) -> Unit,
+    onUpdateConversation: (Conversation) -> Unit,
     onNavigateToDetail: (String) -> Unit,
     onNavigateToTerminal: (String) -> Unit,
     onNavigateToManage: () -> Unit,
@@ -296,14 +341,12 @@ private fun WorkspacePickerListItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (boundWorkspace != null) {
-                    // A: 进入工作区详情页
                     IconButton(onClick = { onNavigateToDetail(boundWorkspace.id) }) {
                         Icon(
                             imageVector = HugeIcons.Settings02,
                             contentDescription = "工作区详情",
                         )
                     }
-                    // B: 进入工作区终端 (仅启用 shell 时显示)
                     if (boundWorkspace.shellEnabled) {
                         IconButton(onClick = { onNavigateToTerminal(boundWorkspace.id) }) {
                             Icon(
@@ -313,11 +356,6 @@ private fun WorkspacePickerListItem(
                         }
                     }
                 }
-                Icon(
-                    imageVector = HugeIcons.ArrowRight01,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         },
         colors = ListItemDefaults.colors(
@@ -328,15 +366,18 @@ private fun WorkspacePickerListItem(
             .clickable { showSheet = true },
     )
 
-    // 点击卡片弹出 bottom sheet 切换工作区
     if (showSheet) {
         WorkspaceSelectSheet(
             assistant = assistant,
             workspaces = workspaces,
             onSelect = { workspaceId ->
-                onUpdateAssistant(
-                    assistant.copy(workspaceId = workspaceId?.let { Uuid.parse(it) })
-                )
+                val newId = workspaceId?.let { Uuid.parse(it) }
+                if (newId != assistant.workspaceId) {
+                    onUpdateAssistant(assistant.copy(workspaceId = newId))
+                    if (conversation.workspaceCwd != null) {
+                        onUpdateConversation(conversation.copy(workspaceCwd = null))
+                    }
+                }
                 showSheet = false
             },
             onManage = {

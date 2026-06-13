@@ -25,7 +25,7 @@ class WorkspaceReminderTransformer(
         // 与 ChatService.createWorkspaceToolsIfReady 保持一致: 仅在 shell 就绪时注入
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) return messages
 
-        val prompt = buildWorkspacePrompt(workspace)
+        val prompt = buildWorkspacePrompt(workspace, ctx.workspaceCwd)
 
         // 追加到第一条 system 消息; 若不存在则插入一条
         val systemIndex = messages.indexOfFirst { it.role == MessageRole.SYSTEM }
@@ -39,7 +39,7 @@ class WorkspaceReminderTransformer(
     }
 }
 
-private fun buildWorkspacePrompt(workspace: WorkspaceEntity): String = buildString {
+private fun buildWorkspacePrompt(workspace: WorkspaceEntity, cwd: String? = null): String = buildString {
     appendLine("<workspace>")
     appendLine("You have access to a persistent Linux workspace named \"${workspace.name}\", running in a sandboxed proot rootfs environment.")
     appendLine("- The workspace files area is mounted at `/workspace`. Use it as your working directory; files written there persist across turns of this conversation.")
@@ -51,6 +51,9 @@ private fun buildWorkspacePrompt(workspace: WorkspaceEntity): String = buildStri
     appendLine("  - `workspace_shell`: run shell commands (the files area is mounted at /workspace).")
     appendLine("- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files.")
     appendLine("- The skills directory is mounted at `/skills`. Each skill is a subdirectory `/skills/<skill-name>/` containing a `SKILL.md` (with `name` and `description` frontmatter) plus any supporting files. Read a skill's `SKILL.md` before using it, and follow its instructions.")
+    if (!cwd.isNullOrBlank()) {
+        appendLine("- Current working directory: `$cwd`. Use this as the default context for file operations and shell commands.")
+    }
     append("</workspace>")
 }
 
