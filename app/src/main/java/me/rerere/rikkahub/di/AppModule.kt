@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.ai.runtime.FilesManagerRuntimeFileStore
 import me.rerere.rikkahub.data.ai.runtime.MonotonicTaskBudgetClock
 import me.rerere.rikkahub.data.ai.runtime.SettingsStoreRuntimeAdapter
 import me.rerere.rikkahub.data.ai.runtime.SystemRuntimeClock
+import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -94,6 +95,9 @@ val appModule = module {
     // The TaskBudgetClock is REQUIRED here: it is what makes the wall-time budget cap enforceable in
     // the shipped build (a missing/zero clock silently disables it — review finding #1).
     single<TaskBudgetClock> { MonotonicTaskBudgetClock() }
+    // The single in-memory home for live subagent execution handles (SPEC.md M4): board claim
+    // ownership and orphan release both key on the handle ids registered here.
+    single { ExecutionHandleRegistry() }
     single {
         TaskCoordinator(
             generationHandler = get(),
@@ -150,6 +154,8 @@ val appModule = module {
             filesManager = get(),
             skillManager = get(),
             taskBoardRepository = get(),
+            executionHandles = get(),
+            taskRunStore = get(),
             automationRegistry = get(),
             automationKillSwitch = get(),
             hookDispatcher = get()

@@ -71,10 +71,11 @@ class BoardPortAdapter(
             conversationId: Uuid,
             registry: ExecutionHandleRegistry,
             handle: ExecutionHandle,
+            displayName: String? = null,
         ): BoardPortAdapter = BoardPortAdapter(
             repository = repository,
             conversationId = conversationId,
-            actor = BoardActor(handleId = handle.id, displayName = handle.id),
+            actor = BoardActor(handleId = handle.id, displayName = displayName ?: handle.id),
             onClaimAccepted = { itemId -> registry.attachWorkItem(handle.id, itemId) },
         )
     }

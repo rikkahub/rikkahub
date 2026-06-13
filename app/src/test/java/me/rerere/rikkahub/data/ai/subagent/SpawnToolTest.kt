@@ -12,6 +12,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.runtime.GenerationChunk
+import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
@@ -29,8 +30,8 @@ import kotlin.uuid.Uuid
  * Two regressions pinned here:
  *  - processingStatus is RESTORED on every terminal path (success AND the error() throw on an
  *    unknown subagent) — a stale "Running <sub>" label must not leak into the parent loading UI.
- *  - needsApproval=true tools are dropped from the pool handed to the subagent (approval UI is
- *    unreachable mid-subagent), and the sub's pool is actually used (not emptyList()).
+ *  - needsApproval=true tools are GATED through the parent approval gate (Gap A) — kept in the
+ *    pool with needsApproval rewritten off — and the sub's pool is actually used (not emptyList()).
  */
 class SpawnToolTest {
 
@@ -84,7 +85,18 @@ class SpawnToolTest {
             coordinator = fakeCoordinator(mutableListOf(), store = store),
             parentModelId = null,
             settings = settingsWith(subModel),
-            buildSubagentTools = { emptyList() },
+            registry = ExecutionHandleRegistry(),
+            buildSubagentTools = { _, _ -> emptyList() },
+            releaseOrphanedClaims = {},
+            approvalGateFor = {
+                object : me.rerere.ai.runtime.contract.TaskApprovalGate {
+                    override suspend fun await(
+                        taskId: kotlin.uuid.Uuid,
+                        request: me.rerere.ai.runtime.task.TaskApprovalRequest,
+                    ): me.rerere.ai.runtime.task.TaskApprovalDecision =
+                        me.rerere.ai.runtime.task.TaskApprovalDecision.Denied()
+                }
+            },
             processingStatus = status,
             progressLabel = { "Running $it" },
             parentConversationId = conversationId,
@@ -107,7 +119,18 @@ class SpawnToolTest {
             coordinator = fakeCoordinator(mutableListOf()),
             parentModelId = null,
             settings = settingsWith(subModel),
-            buildSubagentTools = { emptyList() },
+            registry = ExecutionHandleRegistry(),
+            buildSubagentTools = { _, _ -> emptyList() },
+            releaseOrphanedClaims = {},
+            approvalGateFor = {
+                object : me.rerere.ai.runtime.contract.TaskApprovalGate {
+                    override suspend fun await(
+                        taskId: kotlin.uuid.Uuid,
+                        request: me.rerere.ai.runtime.task.TaskApprovalRequest,
+                    ): me.rerere.ai.runtime.task.TaskApprovalDecision =
+                        me.rerere.ai.runtime.task.TaskApprovalDecision.Denied()
+                }
+            },
             processingStatus = status,
             progressLabel = { "Running $it" },
             parentConversationId = Uuid.random(),
@@ -135,7 +158,18 @@ class SpawnToolTest {
             coordinator = fakeCoordinator(mutableListOf()),
             parentModelId = null,
             settings = settingsWith(subModel),
-            buildSubagentTools = { emptyList() },
+            registry = ExecutionHandleRegistry(),
+            buildSubagentTools = { _, _ -> emptyList() },
+            releaseOrphanedClaims = {},
+            approvalGateFor = {
+                object : me.rerere.ai.runtime.contract.TaskApprovalGate {
+                    override suspend fun await(
+                        taskId: kotlin.uuid.Uuid,
+                        request: me.rerere.ai.runtime.task.TaskApprovalRequest,
+                    ): me.rerere.ai.runtime.task.TaskApprovalDecision =
+                        me.rerere.ai.runtime.task.TaskApprovalDecision.Denied()
+                }
+            },
             processingStatus = status,
             progressLabel = { "Running $it" },
             parentConversationId = Uuid.random(),
@@ -155,7 +189,18 @@ class SpawnToolTest {
             coordinator = fakeCoordinator(mutableListOf()),
             parentModelId = null,
             settings = settingsWith(subModel),
-            buildSubagentTools = { emptyList() },
+            registry = ExecutionHandleRegistry(),
+            buildSubagentTools = { _, _ -> emptyList() },
+            releaseOrphanedClaims = {},
+            approvalGateFor = {
+                object : me.rerere.ai.runtime.contract.TaskApprovalGate {
+                    override suspend fun await(
+                        taskId: kotlin.uuid.Uuid,
+                        request: me.rerere.ai.runtime.task.TaskApprovalRequest,
+                    ): me.rerere.ai.runtime.task.TaskApprovalDecision =
+                        me.rerere.ai.runtime.task.TaskApprovalDecision.Denied()
+                }
+            },
             processingStatus = status,
             progressLabel = { "Running $it" },
             parentConversationId = Uuid.random(),
@@ -171,7 +216,7 @@ class SpawnToolTest {
     }
 
     @Test
-    fun `execute drops needsApproval tools and uses the sub's own pool`() {
+    fun `execute gates needsApproval tools instead of dropping them and uses the sub's own pool`() {
         val capturedTools = mutableListOf<Tool>()
         val status = MutableStateFlow<String?>(null)
         val sub = Assistant(name = "Researcher", chatModelId = subModel.id, spawnable = true)
@@ -180,8 +225,19 @@ class SpawnToolTest {
             coordinator = fakeCoordinator(capturedTools),
             parentModelId = null,
             settings = settingsWith(subModel),
-            buildSubagentTools = {
+            registry = ExecutionHandleRegistry(),
+            buildSubagentTools = { _, _ ->
                 listOf(tool("mcp__search"), tool("ask_user", needsApproval = true))
+            },
+            releaseOrphanedClaims = {},
+            approvalGateFor = {
+                object : me.rerere.ai.runtime.contract.TaskApprovalGate {
+                    override suspend fun await(
+                        taskId: kotlin.uuid.Uuid,
+                        request: me.rerere.ai.runtime.task.TaskApprovalRequest,
+                    ): me.rerere.ai.runtime.task.TaskApprovalDecision =
+                        me.rerere.ai.runtime.task.TaskApprovalDecision.Denied()
+                }
             },
             processingStatus = status,
             progressLabel = { "Running $it" },
@@ -190,9 +246,11 @@ class SpawnToolTest {
 
         runBlocking { tool.execute(spawnArgs("Researcher")) }
 
-        assertEquals(listOf("mcp__search"), capturedTools.map { it.name })
+        // Gap A: the approval tool stays in the pool — gated through the parent's approval gate —
+        // but the child runtime must never gate anything itself: needsApproval is rewritten off.
+        assertEquals(listOf("mcp__search", "ask_user"), capturedTools.map { it.name })
         assertTrue(
-            "needsApproval tools are unreachable mid-subagent and must be dropped",
+            "the child pool must carry no needsApproval=true tool (the gate is the only decision point)",
             capturedTools.none { it.needsApproval },
         )
     }

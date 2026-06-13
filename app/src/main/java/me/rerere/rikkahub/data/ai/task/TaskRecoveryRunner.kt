@@ -25,14 +25,14 @@ import me.rerere.rikkahub.data.repository.TaskRunRepository
  * `recoverInterruptedRuns()` was unreachable at runtime; binding the concrete type here is the
  * fix.
  *
- * Orphan board-claim release on recovery (decision #5) is intentionally NOT performed here yet: in
- * the current production spawn path every subagent claim is owned by the per-conversation actor id
- * rather than a per-execution-handle id, so there are no dead-handle-owned claims for
- * [TaskBoardRepository.releaseClaimsOf] to find. Wiring per-handle claim ownership (and therefore
- * a meaningful orphan release) is a separate slice (review findings #1/#5); until it lands, the
- * claim lease backstop ([TaskBoardRepository.DEFAULT_CLAIM_LEASE_MILLIS]) bounds a stale claim's
- * lifetime. Adding a claim-release call here before that wiring would be dead code that releases
- * nothing.
+ * Orphan board-claim release (decision #5) does not live here: subagent claims are owned by the
+ * live execution-handle id, and the spawn path itself releases every claim a handle still holds
+ * the moment that handle dies (success, failure, or cancellation — see `buildSpawnTool`'s
+ * `releaseOrphanedClaims`). The one path in-process release cannot reach is process death, where
+ * the handle, its registry, and the releasing coroutine all die together; for that the claim
+ * lease backstop ([TaskBoardRepository.DEFAULT_CLAIM_LEASE_MILLIS]) bounds the stale claim's
+ * lifetime — a startup scan cannot tell a dead handle's claim from a live one's by owner id
+ * alone, so the lease, not a blanket release, is the correct cold-start story.
  */
 class TaskRecoveryRunner(
     private val taskRuns: TaskRunRepository,

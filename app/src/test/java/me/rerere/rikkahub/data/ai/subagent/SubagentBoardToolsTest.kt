@@ -1,10 +1,13 @@
 package me.rerere.rikkahub.data.ai.subagent
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.runtime.contract.BoardMutationResult
 import me.rerere.ai.runtime.contract.WorkItemDraft
+import me.rerere.rikkahub.data.ai.task.ExecutionHandle
+import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.TaskBoardRepository
 import me.rerere.rikkahub.data.repository.fakes.FakeBoardTransactions
@@ -26,6 +29,7 @@ class SubagentBoardToolsTest {
 
     private val conversationId = Uuid.random()
     private val sub = Assistant(name = "Researcher", chatModelId = Uuid.random(), spawnable = true)
+    private val registry = ExecutionHandleRegistry()
 
     private fun repository(dao: FakeWorkItemDAO) = TaskBoardRepository(
         dao = dao,
@@ -33,13 +37,23 @@ class SubagentBoardToolsTest {
         now = { 1_000L },
     )
 
+    private fun handle(): ExecutionHandle = registry.register(
+        conversationId = conversationId,
+        assistantId = sub.id,
+        parentJob = Job(),
+    )
+
+    private fun subagentBoardTools(repository: TaskBoardRepository) = subagentBoardTools(
+        repository = repository,
+        conversationId = conversationId,
+        registry = registry,
+        handle = handle(),
+        sub = sub,
+    )
+
     @Test
     fun `exposes the four shared board tools to a spawned subagent`() {
-        val tools = subagentBoardTools(
-            repository = repository(FakeWorkItemDAO()),
-            conversationId = conversationId,
-            sub = sub,
-        )
+        val tools = subagentBoardTools(repository(FakeWorkItemDAO()))
 
         assertEquals(
             setOf("task_create", "task_get", "task_list", "task_update"),
@@ -51,7 +65,7 @@ class SubagentBoardToolsTest {
     fun `a subagent task_create lands on its conversation's shared board`() {
         val dao = FakeWorkItemDAO()
         val repository = repository(dao)
-        val tools = subagentBoardTools(repository, conversationId, sub)
+        val tools = subagentBoardTools(repository)
         val create = tools.single { it.name == "task_create" }
 
         runBlocking {
@@ -66,15 +80,21 @@ class SubagentBoardToolsTest {
     }
 
     @Test
-    fun `a subagent can claim a shared board item as the subagent actor`() {
+    fun `a subagent claim is owned by its execution handle id`() {
         val dao = FakeWorkItemDAO()
         val repository = repository(dao)
         val item = runBlocking {
             (repository.create(conversationId, WorkItemDraft(subject = "to claim")) as BoardMutationResult.Accepted)
                 .snapshot.item.id
         }
-        val update = subagentBoardTools(repository, conversationId, sub)
-            .single { it.name == "task_update" }
+        val handle = handle()
+        val update = subagentBoardTools(
+            repository = repository,
+            conversationId = conversationId,
+            registry = registry,
+            handle = handle,
+            sub = sub,
+        ).single { it.name == "task_update" }
 
         runBlocking {
             update.execute(buildJsonObject {
@@ -83,9 +103,14 @@ class SubagentBoardToolsTest {
             })
         }
 
-        // The claim is owned (decision #4 requires a non-null actor for a claim); without a subagent
-        // actor binding the repository would reject the claim and the item would stay unowned.
-        val owner = runBlocking { repository.get(conversationId, item)!!.item.ownerHandleId }
-        assertTrue("a subagent claim must be accepted and owned", owner != null)
+        // The claim's owner is the live execution handle id (findings #1/#5) — the identity orphan
+        // recovery releases by — and the registry mirrors the claim onto the handle.
+        val claimed = runBlocking { repository.get(conversationId, item)!!.item }
+        assertEquals("a subagent claim must be owned by the handle id", handle.id, claimed.ownerHandleId)
+        assertEquals("the display name is the subagent's name", sub.name, claimed.ownerName)
+        assertTrue(
+            "the registry must track the claim on the owning handle",
+            registry.get(handle.id)!!.workItemIds.contains(item),
+        )
     }
 }

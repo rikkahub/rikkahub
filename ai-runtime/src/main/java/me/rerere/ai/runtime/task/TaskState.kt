@@ -65,11 +65,40 @@ sealed interface TaskState {
  * An allowlisted child tool call waiting for the parent's decision, namespaced
  * `taskId/childToolCallId` on the parent approval surface. [toolName] is whatever name the
  * child's pool carries — this neutral domain names no concrete tool.
+ *
+ * @param argumentsJson the call's raw JSON arguments, carried for the parent-visible pending
+ *   item so the user decides on what the tool would actually do, not just its name. Display
+ *   payload only — never persisted (the pending-approval column stores id + name) and absent
+ *   ("") when a caller has nothing to show.
  */
 data class TaskApprovalRequest(
     val childToolCallId: String,
     val toolName: String,
+    val argumentsJson: String = "",
 )
+
+/**
+ * The parent's decision on a forwarded child approval. A plain Boolean cannot carry an
+ * answer-style decision (`ask_user`-class tools whose ANSWER is the tool result and whose
+ * `execute` must never run), so the gate returns this instead:
+ *
+ *  - [Approved]: run the real tool with its original arguments.
+ *  - [Answered]: the answer IS the tool result; the tool does not execute — identical to the
+ *    parent runtime's own `Answered` handling.
+ *  - [Denied]: the tool does not execute; the denial (with [Denied.reason]) is the result. Both
+ *    deny shapes resume the child (decision #2).
+ */
+sealed interface TaskApprovalDecision {
+    /** True for every decision that is not a denial (drives [TaskEvent.ApprovalResolved]). */
+    val approved: Boolean
+        get() = this !is Denied
+
+    data object Approved : TaskApprovalDecision
+
+    data class Answered(val answer: String) : TaskApprovalDecision
+
+    data class Denied(val reason: String = "") : TaskApprovalDecision
+}
 
 /** Everything that can happen to a task run; [TaskStateReducer] folds these over [TaskState]. */
 sealed interface TaskEvent {

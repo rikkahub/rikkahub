@@ -4,6 +4,7 @@ import me.rerere.ai.runtime.board.WorkItem
 import me.rerere.ai.runtime.board.WorkItemAction
 import me.rerere.ai.runtime.board.WorkItemStatus
 import me.rerere.ai.runtime.task.AgentTypeSpec
+import me.rerere.ai.runtime.task.TaskApprovalDecision
 import me.rerere.ai.runtime.task.TaskApprovalRequest
 import me.rerere.ai.runtime.task.TaskEvent
 import kotlin.time.Duration
@@ -40,16 +41,16 @@ interface TaskEventSink {
 }
 
 /**
- * Forwards an ALLOWLISTED child tool approval to the parent's approval surface and suspends
- * until the parent decides (maintainer decision #2: callers consult the agent type's
- * `TaskToolPolicy` BEFORE calling this — a non-allowlisted tool never reaches the gate, it
- * auto-denies with the reason recorded in the task summary).
+ * Forwards a child tool approval request and suspends until a decision exists: ALLOWLISTED
+ * tools reach the parent's approval surface; everything else auto-denies with the reason
+ * recorded in the task summary (maintainer decision #2).
  *
- * @return true when the parent approved, false when it denied. Both outcomes resume the child;
- *   the decision travels to the child as the tool result.
+ * @return the parent's [TaskApprovalDecision]. Every shape resumes the child: Approved runs the
+ *   real tool, Answered IS the tool result (the tool never executes), Denied travels to the
+ *   child as the denial result.
  */
 interface TaskApprovalGate {
-    suspend fun await(taskId: Uuid, request: TaskApprovalRequest): Boolean
+    suspend fun await(taskId: Uuid, request: TaskApprovalRequest): TaskApprovalDecision
 }
 
 /**

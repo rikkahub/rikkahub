@@ -105,27 +105,32 @@ class TaskBoardRepository(
      * dies without recovery ever running; when recovery DOES run it must release all of the dead
      * handle's claims explicitly. Returns the number of items released.
      *
-     * Each release goes through the same validated [update] path the UI/tools use (decision #4),
-     * so an `InProgress` claim folds `InProgress -> Pending` via [WorkItemAction.Release] and
-     * clears the owner/lease; a row that is no longer `InProgress` (already completed/deleted by a
-     * concurrent caller, or whose release the validator rejects) is skipped, never force-written.
+     * ONE transaction for the scan AND every release. A scan-then-update-per-item shape had a
+     * TOCTOU hole: an item released and RECLAIMED by a live handle between the scan and its
+     * update would have the live owner cleared by the dead handle's cleanup. Inside a single
+     * transaction the owner read and the release write are atomic, so only rows still owned by
+     * [handleId] can be touched. Each release is still the validator's call
+     * ([WorkItemAction.Release] from `InProgress`; anything else is skipped, never force-written)
+     * — legality stays the single repository enforcement point (decision #4).
      */
-    suspend fun releaseClaimsOf(handleId: String): Int {
-        // The owner scan is its own read; each release is then one atomic [update] transaction.
-        // A claim that races to a terminal between the scan and the release simply fails the
-        // Release transition and is skipped — no partial/forced write.
-        val owned = transactions.inTransaction { dao.listByOwner(handleId) }
+    suspend fun releaseClaimsOf(handleId: String): Int = transactions.inTransaction {
         var released = 0
-        for (entity in owned) {
+        for (entity in dao.listByOwner(handleId)) {
             val item = entity.toDomain()
             if (item.status != WorkItemStatus.InProgress) continue
-            val result = update(
-                conversationId = Uuid.parse(entity.conversationId),
-                patch = WorkItemPatch(id = item.id, action = WorkItemAction.Release),
+            val to = validatedTarget(item.status, WorkItemAction.Release) ?: continue
+            dao.update(
+                WorkItemEntity.fromWorkItem(
+                    item = item.copy(status = to, ownerHandleId = null, ownerName = null),
+                    createdAt = entity.createdAt,
+                    updatedAt = now(),
+                    metadataJson = entity.metadataJson,
+                    leaseExpiresAt = null,
+                )
             )
-            if (result is BoardMutationResult.Accepted) released++
+            released++
         }
-        return released
+        released
     }
 
     /**

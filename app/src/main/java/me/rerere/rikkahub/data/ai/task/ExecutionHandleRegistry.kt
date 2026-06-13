@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.task
 
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.Job
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
@@ -116,9 +117,15 @@ class ExecutionHandleRegistry(
         if (handle.status.isTerminal) handle else handle.copy(workItemIds = handle.workItemIds + workItemId)
     }
 
-    /** Drop a handle from the registry (it is never persisted, so this is the only cleanup). */
+    /**
+     * Drop a handle from the registry (it is never persisted, so this is the only cleanup). The
+     * handle's [Job] is COMPLETED here: it was created as a child of the parent generation job,
+     * and a child Job that never completes keeps its parent in `completing` forever — so a dropped
+     * handle would otherwise pin the whole generation. Completion (not cancel) lets any structural
+     * descendants still running finish under normal structured-concurrency rules.
+     */
     fun unregister(id: String) {
-        handles.remove(id)
+        (handles.remove(id)?.job as? CompletableJob)?.complete()
     }
 
     /**

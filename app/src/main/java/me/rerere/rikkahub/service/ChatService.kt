@@ -72,10 +72,20 @@ import me.rerere.automation.cap.Sink
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.ai.runtime.contract.ToolAssemblyContext
+import me.rerere.ai.runtime.task.TaskApprovalDecision
+import me.rerere.ai.runtime.task.TaskApprovalRequest
+import me.rerere.ai.runtime.task.TaskToolPolicy
 import me.rerere.ai.runtime.contract.TurnMode
 import me.rerere.rikkahub.data.ai.runtime.AppToolCatalog
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
+import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
+import me.rerere.rikkahub.data.ai.task.ParentApprovalSurface
+import me.rerere.rikkahub.data.ai.task.PendingChildApprovals
+import me.rerere.rikkahub.data.ai.task.TaskApprovalRouter
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
+import me.rerere.rikkahub.data.ai.task.TaskRunStore
+import me.rerere.rikkahub.data.ai.task.injectChildApprovalPart
+import me.rerere.rikkahub.data.ai.task.resolveChildApprovalPart
 import me.rerere.rikkahub.data.ai.subagent.buildSpawnTool
 import me.rerere.rikkahub.data.ai.subagent.subagentBoardTools
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -457,6 +467,13 @@ class ChatService(
     // Per-conversation work-item board (SPEC.md M3/T7). Board tools delegate through this single
     // repository — the same path the board UI uses (decision #4) — so legality is enforced once.
     private val taskBoardRepository: TaskBoardRepository,
+    // Live subagent execution handles (SPEC.md M4/M6). The spawn path registers one handle per
+    // child; its id is the owner of every board claim the child takes, and the same id is what
+    // orphan release frees when the handle dies.
+    private val executionHandles: ExecutionHandleRegistry,
+    // Task-run persistence seam (SPEC.md M2). The child-approval router records auto-deny
+    // reasons and drives the WaitingApproval round-trip on the SAME rows TaskCoordinator owns.
+    private val taskRunStore: TaskRunStore,
     // On-device UI automation (#187 v1, read-only). Registry hands out the live, system-instantiated
     // AccessibilityRuntime as a pure backend; the kill-switch dispatches STOP to the active guard(s).
     private val automationRegistry: AutomationRuntimeRegistry,
@@ -472,6 +489,11 @@ class ChatService(
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
+
+    // In-flight forwarded CHILD approvals (SPEC.md M4 / Gap A), keyed taskId/childToolCallId.
+    // The waiter suspends inside the live generation; handleToolApproval resolves it IN PLACE —
+    // never through launchGenerationEntry, whose cancel-previous would kill the waiting child.
+    private val pendingChildApprovals = PendingChildApprovals()
 
     // 活跃生成 -> 前台服务的生命周期状态机。引用计数（0->1 启动、1->0 停止）、前台服务运行标志、
     // WakeLock 续期节流统一由协调器独占持有；ChatService 只委派，不再直接调用 GenerationForegroundService。
@@ -909,6 +931,25 @@ class ChatService(
         reason: String = "",
         answer: String? = null,
     ) {
+        // A forwarded CHILD approval (namespaced taskId/childToolCallId, Gap A) resolves IN
+        // PLACE: the parent generation is alive, suspended inside the spawn tool waiting on this
+        // very decision — launchGenerationEntry's cancel-previous would kill it, and the
+        // continue-generation tail below belongs to the parent path only. A stale child id (its
+        // waiter already gone) still gets its part state finalized, nothing else.
+        if (TaskApprovalRouter.isNamespacedChildApprovalId(toolCallId)) {
+            appScope.launch {
+                try {
+                    resolveChildApproval(conversationId, toolCallId, approved, reason, answer)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Throwable) {
+                    Log.e(TAG, "child approval resolution failed", error)
+                    addError(error, conversationId, title = context.getString(R.string.error_title_tool_approval))
+                }
+            }
+            return
+        }
+
         launchGenerationEntry(
             conversationId = conversationId,
             errorTitle = context.getString(R.string.error_title_tool_approval),
@@ -953,6 +994,36 @@ class ChatService(
                 handleMessageComplete(conversationId)
             }
         }
+    }
+
+    /**
+     * Resolve one forwarded child approval (Gap A): write the decision onto the visible pending
+     * part (so the live transcript records what was decided), then release the waiting child
+     * through [pendingChildApprovals] with the FULL decision — an answer travels as
+     * [TaskApprovalDecision.Answered] and becomes the child's tool
+     * result without executing anything (ask_user-class tools). The resolve is a no-op for a
+     * dead waiter; the part update still applies, finalizing a stale pending record cosmetically.
+     */
+    private suspend fun resolveChildApproval(
+        conversationId: Uuid,
+        toolCallId: String,
+        approved: Boolean,
+        reason: String,
+        answer: String?,
+    ) {
+        val state = when {
+            answer != null -> ToolApprovalState.Answered(answer)
+            approved -> ToolApprovalState.Approved
+            else -> ToolApprovalState.Denied(reason)
+        }
+        val session = getOrCreateSession(conversationId)
+        saveConversation(conversationId, resolveChildApprovalPart(session.state.value, toolCallId, state))
+        val decision = when {
+            answer != null -> TaskApprovalDecision.Answered(answer)
+            approved -> TaskApprovalDecision.Approved
+            else -> TaskApprovalDecision.Denied(reason)
+        }
+        pendingChildApprovals.resolve(toolCallId, decision)
     }
 
     // UI automation (#187 v1) per-conversation capability lease (issue #244, god-function split #2b).
@@ -1097,6 +1168,45 @@ class ChatService(
             // `automationGuard` and the session's processingStatus (the spawn-status carrier). The main
             // turn invokes it as TurnMode.Main with the spawn tool included only when some assistant is
             // spawnable — exactly the pre-slice main-pool semantics.
+            // Gap A: the parent's approval surface for forwarded CHILD approvals. requestApproval
+            // makes the request visible FIRST — a pending UIMessagePart.Tool keyed by the
+            // namespaced taskId/childToolCallId, anchored under the running `task` step
+            // (TASK_APPROVAL_VISIBLE: no hidden suspension) — then parks on pendingChildApprovals
+            // until handleToolApproval resolves it. Fail closed: with no visible task step to
+            // anchor on, the request is DENIED rather than suspended invisibly. Cancellation of
+            // the generation cancels the waiting child through the suspended await itself.
+            val childApprovalSurface = object : ParentApprovalSurface {
+                override suspend fun requestApproval(
+                    namespacedToolCallId: String,
+                    request: TaskApprovalRequest,
+                ): TaskApprovalDecision {
+                    // Register BEFORE making the request visible (review mustFix #1): the moment
+                    // the part is on screen a decision can arrive, and a resolve that finds no
+                    // waiter is dropped — the child would then suspend forever on a decision the
+                    // user already made. An early resolve now completes the registered deferred
+                    // and await returns immediately.
+                    pendingChildApprovals.register(namespacedToolCallId)
+                    val visible = try {
+                        injectChildApprovalPart(
+                            conversation = getOrCreateSession(conversationId).state.value,
+                            namespacedToolCallId = namespacedToolCallId,
+                            toolName = request.toolName,
+                            argumentsJson = request.argumentsJson,
+                        )?.also { saveConversation(conversationId, it) }
+                    } catch (error: Throwable) {
+                        pendingChildApprovals.abandon(namespacedToolCallId)
+                        throw error
+                    }
+                    if (visible == null) {
+                        pendingChildApprovals.abandon(namespacedToolCallId)
+                        return TaskApprovalDecision.Denied(
+                            "no visible task step to anchor the approval on"
+                        )
+                    }
+                    return pendingChildApprovals.await(namespacedToolCallId)
+                }
+            }
+
             val appToolCatalog = AppToolCatalog(
                 // Non-MCP/non-spawn base pool: search/local/workspace/ui-automation/skills. The seam's
                 // (target, mode) args are unused on the main turn — production only ever invokes this
@@ -1161,7 +1271,8 @@ class ChatService(
                             coordinator = taskCoordinator,
                             parentModelId = parentModelId,
                             settings = settings,
-                            buildSubagentTools = { sub ->
+                            registry = executionHandles,
+                            buildSubagentTools = { sub, handle ->
                                 buildList {
                                     addAll(localTools.getTools(sub.localTools))
                                     if (sub.enabledSkills.isNotEmpty()) {
@@ -1183,17 +1294,38 @@ class ChatService(
                                     // TaskCoordinator.run, never the catalog's TurnMode.Subagent arm,
                                     // so without this a spawned subagent cannot task_list/task_update
                                     // the board the parent and UI share (spec assumption 5 / decision
-                                    // #5). Bound to THIS conversation and owned by a per-subagent
-                                    // actor so its claims are attributable; the repository remains the
-                                    // single enforcement point (decision #4).
+                                    // #5). Bound to THIS conversation and owned by the child's live
+                                    // EXECUTION HANDLE (findings #1/#5) so claims are precisely
+                                    // attributable and orphan release frees a dead handle's claims;
+                                    // the repository remains the single enforcement point (decision #4).
                                     addAll(
                                         subagentBoardTools(
                                             repository = taskBoardRepository,
                                             conversationId = conversationId,
+                                            registry = executionHandles,
+                                            handle = handle,
                                             sub = sub,
                                         )
                                     )
                                 }
+                            },
+                            releaseOrphanedClaims = { handleId ->
+                                taskBoardRepository.releaseClaimsOf(handleId)
+                            },
+                            // The child-approval gate (Gap A, decision #2): an EXPLICIT per-
+                            // assistant allowlist — default empty = forward nothing — over the
+                            // surface above; non-allowlisted approval tools auto-deny with the
+                            // reason recorded in the task summary.
+                            approvalGateFor = { sub ->
+                                TaskApprovalRouter(
+                                    policyFor = {
+                                        TaskToolPolicy(
+                                            approvalForwardAllowlist = sub.subagentApprovalAllowlist.toSet()
+                                        )
+                                    },
+                                    surface = childApprovalSurface,
+                                    store = taskRunStore,
+                                )
                             },
                             processingStatus = session.processingStatus,
                             progressLabel = { subName ->

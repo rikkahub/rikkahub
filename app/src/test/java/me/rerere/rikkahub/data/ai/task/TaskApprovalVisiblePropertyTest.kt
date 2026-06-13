@@ -8,6 +8,7 @@ import io.kotest.property.arbitrary.set
 import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import me.rerere.ai.runtime.task.TaskApprovalDecision
 import me.rerere.ai.runtime.task.TaskApprovalRequest
 import me.rerere.ai.runtime.task.TaskBudget
 import me.rerere.ai.runtime.task.TaskBudgetBreach
@@ -50,17 +51,21 @@ class TaskApprovalVisiblePropertyTest {
         override suspend fun requestApproval(
             namespacedToolCallId: String,
             request: TaskApprovalRequest,
-        ): Boolean {
+        ): TaskApprovalDecision {
             forwarded += namespacedToolCallId to request
-            return decide(request.toolName)
+            return if (decide(request.toolName)) TaskApprovalDecision.Approved else TaskApprovalDecision.Denied()
         }
     }
 
-    /** A fake store recording only the auto-deny summary entries (kind + summary), per task. */
+    /** A fake store recording auto-deny summary entries and every lifecycle event, per task. */
     private class RecordingStore : TaskRunStore {
         val summaries = ConcurrentHashMap<Uuid, MutableList<Pair<String, String>>>()
+        val events = ConcurrentHashMap<Uuid, MutableList<TaskEvent>>()
         override suspend fun create(spec: TaskSpec): TaskState = TaskState.Created
-        override suspend fun applyEvent(taskId: Uuid, event: TaskEvent): TaskState? = null
+        override suspend fun applyEvent(taskId: Uuid, event: TaskEvent): TaskState? {
+            events.getOrPut(taskId) { mutableListOf() } += event
+            return null
+        }
         override suspend fun claimResume(taskId: Uuid): Boolean = false
         override suspend fun appendEventSummary(taskId: Uuid, summary: String, kind: String): Long? {
             summaries.getOrPut(taskId) { mutableListOf() } += kind to summary
@@ -102,12 +107,12 @@ class TaskApprovalVisiblePropertyTest {
                             "$taskId/${request.childToolCallId}",
                             match.single().first,
                         )
-                        assertEquals("router decision == parent decision for allowlisted tool", parentApproves, decision)
+                        assertEquals("router decision == parent decision for allowlisted tool", parentApproves, decision.approved)
                     } else {
                         // Auto-denied: never reached the surface, returned false, recorded a reason.
                         assertFalse("a non-allowlisted tool must never reach the parent surface: $toolName",
                             surface.forwarded.any { it.second === request })
-                        assertFalse("a non-allowlisted tool auto-denies (false)", decision)
+                        assertFalse("a non-allowlisted tool auto-denies", decision.approved)
                         val recorded = store.summaries[taskId].orEmpty()
                         assertTrue(
                             "auto-deny must record an approval-denied summary mentioning the tool: $toolName",
@@ -118,6 +123,93 @@ class TaskApprovalVisiblePropertyTest {
                     }
                 }
             }
+        }
+    }
+
+    @Test
+    fun `a forwarded approval drives the WaitingApproval round-trip on the state machine`() {
+        // The round-trip is exactly ApprovalRequested (Running -> WaitingApproval), ApprovalResolved
+        // (WaitingApproval -> Resuming), ChildProgressed (Resuming -> Running — the child resumes
+        // the moment the gate returns). An auto-deny never blocks the child, so it drives NO
+        // lifecycle events; its only trace is the summary entry.
+        runBlocking {
+            checkAll(200, Arb.list(arbToolName, 1..6), Arb.boolean()) { probes, parentApproves ->
+                val taskId = Uuid.random()
+                val allowlisted = probes.first()
+                val store = RecordingStore()
+                val router = TaskApprovalRouter(
+                    policyFor = { TaskToolPolicy(approvalForwardAllowlist = setOf(allowlisted)) },
+                    surface = FakeSurface { parentApproves },
+                    store = store,
+                )
+
+                probes.forEachIndexed { i, toolName ->
+                    val request = TaskApprovalRequest(childToolCallId = "call-$i", toolName = toolName)
+                    val before = store.events[taskId].orEmpty().size
+                    router.await(taskId, request)
+
+                    val driven = store.events[taskId].orEmpty().drop(before)
+                    if (toolName == allowlisted) {
+                        assertEquals(
+                            "a forwarded approval must drive the full WaitingApproval round-trip",
+                            listOf(
+                                TaskEvent.ApprovalRequested(request),
+                                TaskEvent.ApprovalResolved(parentApproves),
+                                TaskEvent.ChildProgressed,
+                            ),
+                            driven,
+                        )
+                        // The decision's DURABLE audit record: the transcript part is a live
+                        // projection the next publish replaces, so the summary must carry it.
+                        assertTrue(
+                            "a resolved approval must be recorded in the task summary: $toolName",
+                            store.summaries[taskId].orEmpty().any { (kind, text) ->
+                                kind == TaskApprovalRouter.SUMMARY_KIND_APPROVAL_RESOLVED &&
+                                    text.contains(toolName) &&
+                                    text.contains(if (parentApproves) "approved" else "denied")
+                            },
+                        )
+                    } else {
+                        assertEquals(
+                            "an auto-deny never blocks the child, so it drives no lifecycle events",
+                            emptyList<TaskEvent>(),
+                            driven,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `an answered decision's answer survives into the durable summary`() {
+        // Recovery seeds an interrupted run from the LAST event summary; for Answered the answer
+        // IS the child's tool result, so reducing it to "approved" would resume a process-death
+        // run without the one fact the child was waiting on.
+        runBlocking {
+            val taskId = Uuid.random()
+            val store = RecordingStore()
+            val router = TaskApprovalRouter(
+                policyFor = { TaskToolPolicy(approvalForwardAllowlist = setOf("ask_user")) },
+                surface = object : ParentApprovalSurface {
+                    override suspend fun requestApproval(
+                        namespacedToolCallId: String,
+                        request: TaskApprovalRequest,
+                    ): TaskApprovalDecision = TaskApprovalDecision.Answered("ship the green build")
+                },
+                store = store,
+            )
+
+            val decision = router.await(taskId, TaskApprovalRequest("c1", "ask_user"))
+
+            assertEquals(TaskApprovalDecision.Answered("ship the green build"), decision)
+            assertTrue(
+                "the durable summary must carry the answer payload",
+                store.summaries[taskId].orEmpty().any { (kind, text) ->
+                    kind == TaskApprovalRouter.SUMMARY_KIND_APPROVAL_RESOLVED &&
+                        text.contains("ship the green build")
+                },
+            )
         }
     }
 
@@ -135,7 +227,7 @@ class TaskApprovalVisiblePropertyTest {
 
                 probes.forEachIndexed { i, toolName ->
                     val decision = router.await(taskId, TaskApprovalRequest("call-$i", toolName))
-                    assertFalse("empty allowlist auto-denies every tool: $toolName", decision)
+                    assertFalse("empty allowlist auto-denies every tool: $toolName", decision.approved)
                 }
                 assertTrue("empty allowlist must forward NOTHING to the parent surface", surface.forwarded.isEmpty())
             }
@@ -155,9 +247,9 @@ class TaskApprovalVisiblePropertyTest {
                 override suspend fun requestApproval(
                     namespacedToolCallId: String,
                     request: TaskApprovalRequest,
-                ): Boolean {
+                ): TaskApprovalDecision {
                     surfaceEnteredAt = resumeOrder.getAndIncrement()
-                    return true
+                    return TaskApprovalDecision.Approved
                 }
             }
             val router = TaskApprovalRouter(
@@ -173,7 +265,7 @@ class TaskApprovalVisiblePropertyTest {
             // surface's, never a value invented before the parent was asked.
             assertTrue("router must enter the parent surface before returning a decision",
                 surfaceEnteredAt in 0 until routerReturnedAt)
-            assertTrue("approve-then-resume yields the parent's approval", decision)
+            assertTrue("approve-then-resume yields the parent's approval", decision.approved)
         }
     }
 }

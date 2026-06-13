@@ -204,6 +204,35 @@ class SubagentBoardClaimTest {
     }
 
     @Test
+    fun releaseClaimsOf_releasesOnlyRowsTheDeadHandleStillOwns(): Unit = runBlocking {
+        // The dead-handle cleanup must be owner-scoped (review mustFix): an item the dead handle
+        // once claimed but that a LIVE handle now owns must not be touched. The scan and every
+        // release run in ONE transaction, so ownership cannot change between them.
+        val fx = Fixture()
+        val parentJob = Job()
+        val stillMine = fx.seedItem("still-mine")
+        val takenOver = fx.seedItem("taken-over")
+        val (dead, deadBoard) = fx.subagent(parentJob)
+        val (live, liveBoard) = fx.subagent(parentJob)
+
+        assertTrue(deadBoard.update(WorkItemPatch(id = stillMine, action = WorkItemAction.Claim)) is BoardMutationResult.Accepted)
+        assertTrue(deadBoard.update(WorkItemPatch(id = takenOver, action = WorkItemAction.Claim)) is BoardMutationResult.Accepted)
+        // The contested item is released and re-claimed by the LIVE handle before cleanup runs.
+        assertTrue(deadBoard.update(WorkItemPatch(id = takenOver, action = WorkItemAction.Release)) is BoardMutationResult.Accepted)
+        assertTrue(liveBoard.update(WorkItemPatch(id = takenOver, action = WorkItemAction.Claim)) is BoardMutationResult.Accepted)
+
+        val released = fx.repository.releaseClaimsOf(dead.id)
+
+        assertEquals("only the row still owned by the dead handle is released", 1, released)
+        assertEquals(WorkItemStatus.Pending, fx.repository.get(conversationId, stillMine)!!.item.status)
+        val survivor = fx.repository.get(conversationId, takenOver)!!.item
+        assertEquals("the live handle's claim must survive the dead handle's cleanup", live.id, survivor.ownerHandleId)
+        assertEquals(WorkItemStatus.InProgress, survivor.status)
+
+        parentJob.cancel()
+    }
+
+    @Test
     fun nonClaimActions_doNotTrackOnTheHandle(): Unit = runBlocking {
         val fx = Fixture()
         val parentJob = Job()

@@ -3,8 +3,9 @@ package me.rerere.rikkahub.data.ai.subagent
 import me.rerere.ai.core.Tool
 import me.rerere.ai.runtime.board.buildBoardTools
 import me.rerere.rikkahub.data.ai.task.BoardPortAdapter
+import me.rerere.rikkahub.data.ai.task.ExecutionHandle
+import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.repository.BoardActor
 import me.rerere.rikkahub.data.repository.TaskBoardRepository
 import kotlin.uuid.Uuid
 
@@ -21,24 +22,28 @@ import kotlin.uuid.Uuid
  * that lambda. This is the seam it calls — extracted here as a pure, Android-free function so the
  * binding is unit-testable without `ChatService`.
  *
- * The board is bound to [conversationId] (the PARENT conversation) and owned by a per-subagent
- * [BoardActor], so a `task_update claim` takes ownership AS this subagent rather than rejecting for a
- * missing owner (decision #4: a claim requires a non-null actor). Conversation scope and owner are
- * closed over in the [BoardPortAdapter]; the tools never see either, so a subagent physically cannot
- * reach across conversations or claim under the wrong owner — every invariant is still enforced once,
- * in [TaskBoardRepository] (decision #4).
+ * The board is bound to [conversationId] (the PARENT conversation) and every claim is owned by the
+ * subagent's live execution [handle] via [BoardPortAdapter.forHandle] (review findings #1/#5): the
+ * owner is the HANDLE id — the same identity orphan recovery releases by — so a dead handle's
+ * claims are precisely identifiable, and accepted claims are mirrored onto the [registry] as the
+ * handle's `workItemIds`. The subagent's display name is carried separately for the board UI.
+ * Conversation scope and owner are closed over in the adapter; the tools never see either, so a
+ * subagent physically cannot reach across conversations or claim under the wrong owner — every
+ * invariant is still enforced once, in [me.rerere.rikkahub.data.repository.TaskBoardRepository]
+ * (decision #4).
  */
 fun subagentBoardTools(
     repository: TaskBoardRepository,
     conversationId: Uuid,
+    registry: ExecutionHandleRegistry,
+    handle: ExecutionHandle,
     sub: Assistant,
 ): List<Tool> = buildBoardTools(
-    BoardPortAdapter(
+    BoardPortAdapter.forHandle(
         repository = repository,
         conversationId = conversationId,
-        actor = BoardActor(
-            handleId = "subagent:$conversationId:${sub.id}",
-            displayName = sub.name,
-        ),
+        registry = registry,
+        handle = handle,
+        displayName = sub.name,
     )
 )
