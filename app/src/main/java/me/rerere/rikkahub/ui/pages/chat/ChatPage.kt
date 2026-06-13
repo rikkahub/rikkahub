@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -59,8 +60,10 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
@@ -248,8 +251,21 @@ private fun ChatPageContent(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val workspaceRepository: WorkspaceRepository = koinInject()
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
+    val assistant = setting.getCurrentAssistant()
+    val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
+        assistant.workspaceId?.let { workspaceId ->
+            listOf(
+                WorkspaceCompletionProvider(
+                    workspaceId = workspaceId.toString(),
+                    repository = workspaceRepository,
+                    currentCwd = conversation.workspaceCwd,
+                )
+            )
+        }.orEmpty()
+    }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
@@ -285,6 +301,7 @@ private fun ChatPageContent(
                     conversation = conversation,
                     mcpManager = vm.mcpManager,
                     hazeState = hazeState,
+                    completionProviders = completionProviders,
                     onCancelClick = {
                         vm.stopGeneration()
                     },
