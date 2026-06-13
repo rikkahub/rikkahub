@@ -33,7 +33,6 @@ import me.rerere.common.json.JsonInstant
 import me.rerere.rikkahub.ui.components.ai.chatinput.SoundEffectPlayer
 import me.rerere.rikkahub.ui.pages.chat.board.BoardViewModel
 import me.rerere.rikkahub.ui.pages.schedule.ScheduleVM
-import me.rerere.rikkahub.utils.lifecycle.UpdateChecker
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
 import org.koin.core.module.dsl.viewModel
@@ -53,10 +52,6 @@ val appModule = module {
 
     single {
         LocalTools(get(), get())
-    }
-
-    single {
-        UpdateChecker(get())
     }
 
     single {

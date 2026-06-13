@@ -15,10 +15,9 @@ import java.io.File
  * guard — only live code is checked. A CJK char (CJK Unified Ideographs block
  * U+4E00..U+9FFF) surviving in stripped code is a violation.
  *
- * Scoped to exactly the five files this slice owns:
+ * Scoped to exactly the four files this slice owns:
  *   - ui/pages/translator/TranslatorPage.kt
  *   - ui/pages/setting/SettingProviderPage.kt
- *   - ui/pages/setting/SettingDonatePage.kt
  *   - ui/pages/setting/components/ProviderConnectionTester.kt
  *   - ui/pages/setting/mcp/McpToolCard.kt
  */
@@ -100,7 +99,6 @@ class NoHardcodedCjkInSettingsTranslatorTest {
     private fun resolveFiles(): List<File> = listOf(
         "ui/pages/translator/TranslatorPage.kt",
         "ui/pages/setting/SettingProviderPage.kt",
-        "ui/pages/setting/SettingDonatePage.kt",
         "ui/pages/setting/components/ProviderConnectionTester.kt",
         "ui/pages/setting/mcp/McpToolCard.kt",
     ).map { rel ->

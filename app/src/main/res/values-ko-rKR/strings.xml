@@ -296,6 +296,7 @@
   <string name="chat_page_nickname_placeholder">이름을 입력하세요</string>
   <string name="chat_page_no_conversations">대화 없음</string>
   <string name="chat_page_regenerate_title">제목 다시 생성</string>
+  <string name="chat_page_rename">이름 변경</string>
   <string name="chat_page_save">저장</string>
   <string name="chat_page_scroll_to_bottom">맨 아래로 스크롤</string>
   <string name="chat_page_search_chats">채팅 검색</string>

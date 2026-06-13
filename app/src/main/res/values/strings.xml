@@ -299,6 +299,7 @@
   <string name="chat_page_nickname_placeholder">Please enter nickname</string>
   <string name="chat_page_no_conversations">No conversations</string>
   <string name="chat_page_regenerate_title">Regenerate title</string>
+  <string name="chat_page_rename">Rename</string>
   <string name="chat_page_save">Save</string>
   <string name="chat_page_scroll_to_bottom">Scroll to bottom</string>
   <string name="chat_page_search_chats">Search Chats</string>

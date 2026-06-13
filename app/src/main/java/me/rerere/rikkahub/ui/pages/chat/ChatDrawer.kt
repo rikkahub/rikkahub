@@ -73,11 +73,9 @@ import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.Greeting
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
-import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
-import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.chat.navigateToChatPage
@@ -95,7 +93,6 @@ fun ChatDrawerContent(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
 
     val activity = context as ComponentActivity
@@ -138,6 +135,10 @@ fun ChatDrawerContent(
     var conversationToMove by remember { mutableStateOf<Conversation?>(null) }
     val bottomSheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
+    // 重命名对话状态
+    var conversationToRename by remember { mutableStateOf<Conversation?>(null) }
+    var renameInput by remember { mutableStateOf("") }
+
     // Menu popup 状态
     var showMenuPopup by remember { mutableStateOf(false) }
 
@@ -148,10 +149,6 @@ fun ChatDrawerContent(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (settings.displaySetting.showUpdates && !isPlayStore) {
-                UpdateCard(vm)
-            }
-
             BackupReminderCard(
                 settings = settings,
                 onClick = { navController.navigate(Screen.Backup) },
@@ -229,6 +226,10 @@ fun ChatDrawerContent(
                 },
                 onRegenerateTitle = {
                     vm.generateTitle(it, true)
+                },
+                onRename = {
+                    conversationToRename = it
+                    renameInput = it.title
                 },
                 onDelete = {
                     vm.deleteConversation(it)
@@ -327,49 +328,37 @@ fun ChatDrawerContent(
                                 navController.navigate(Screen.ImageGen)
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.favorite_page_title)) },
+                            leadingIcon = { Icon(HugeIcons.InLove, null) },
+                            onClick = {
+                                showMenuPopup = false
+                                navController.navigate(Screen.Favorite)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.chat_drawer_statistics)) },
+                            leadingIcon = { Icon(HugeIcons.ChartColumn, null) },
+                            onClick = {
+                                showMenuPopup = false
+                                navController.navigate(Screen.Stats)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Scheduled tasks") },
+                            leadingIcon = { Icon(HugeIcons.AlarmClock, null) },
+                            onClick = {
+                                showMenuPopup = false
+                                navController.navigate(
+                                    Screen.Schedule(
+                                        assistantId = settings.assistantId.toString(),
+                                        conversationId = current.id.toString(),
+                                    )
+                                )
+                            }
+                        )
                     }
                 }
-
-                DrawerAction(
-                    icon = {
-                        Icon(HugeIcons.InLove, stringResource(R.string.favorite_page_title))
-                    },
-                    label = {
-                        Text(stringResource(R.string.favorite_page_title))
-                    },
-                    onClick = {
-                        navController.navigate(Screen.Favorite)
-                    },
-                )
-
-                DrawerAction(
-                    icon = {
-                        Icon(HugeIcons.ChartColumn, stringResource(R.string.chat_drawer_statistics))
-                    },
-                    label = {
-                        Text(stringResource(R.string.chat_drawer_statistics))
-                    },
-                    onClick = {
-                        navController.navigate(Screen.Stats)
-                    },
-                )
-
-                DrawerAction(
-                    icon = {
-                        Icon(HugeIcons.AlarmClock, "Scheduled tasks")
-                    },
-                    label = {
-                        Text("Scheduled tasks")
-                    },
-                    onClick = {
-                        navController.navigate(
-                            Screen.Schedule(
-                                assistantId = settings.assistantId.toString(),
-                                conversationId = current.id.toString(),
-                            )
-                        )
-                    },
-                )
 
                 Spacer(Modifier.weight(1f))
 
@@ -418,6 +407,44 @@ fun ChatDrawerContent(
                     onClick = {
                         nicknameEditState.dismiss()
                     }
+                ) {
+                    Text(stringResource(R.string.chat_page_cancel))
+                }
+            }
+        )
+    }
+
+    // 重命名对话框
+    conversationToRename?.let { conversation ->
+        AlertDialog(
+            onDismissRequest = { conversationToRename = null },
+            title = {
+                Text(stringResource(R.string.chat_page_rename))
+            },
+            text = {
+                OutlinedTextField(
+                    value = renameInput,
+                    onValueChange = { renameInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.chat_page_new_message)) }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (renameInput.isNotBlank()) {
+                            vm.renameConversation(conversation, renameInput)
+                        }
+                        conversationToRename = null
+                    }
+                ) {
+                    Text(stringResource(R.string.chat_page_save))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { conversationToRename = null }
                 ) {
                     Text(stringResource(R.string.chat_page_cancel))
                 }

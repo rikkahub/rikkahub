@@ -2,9 +2,6 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Code
-import me.rerere.hugeicons.stroke.Earth
-import me.rerere.hugeicons.stroke.File02
-import me.rerere.hugeicons.stroke.Github
 import me.rerere.hugeicons.stroke.SmartPhone01
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -35,7 +32,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -47,13 +43,11 @@ import me.rerere.rikkahub.ui.components.easteregg.EmojiBurstHost
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.ui.ext.plus
 
 @Composable
 fun SettingAboutPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val context = LocalContext.current
     val navController = LocalNavController.current
     val emojiOptions = remember {
         listOf(
@@ -148,31 +142,6 @@ fun SettingAboutPage() {
                                 Text("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} / Android ${android.os.Build.VERSION.RELEASE} / SDK ${android.os.Build.VERSION.SDK_INT}")
                             },
                             headlineContent = { Text(stringResource(R.string.about_page_system)) },
-                        )
-                    }
-                }
-
-                item {
-                    CardGroup(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
-                        item(
-                            onClick = { context.openUrl("https://rikka-ai.com/") },
-                            leadingContent = { Icon(HugeIcons.Earth, null) },
-                            supportingContent = { Text("https://rikka-ai.com") },
-                            headlineContent = { Text(stringResource(R.string.about_page_website)) },
-                        )
-                        item(
-                            onClick = { context.openUrl("https://github.com/rikkahub/rikkahub") },
-                            leadingContent = { Icon(HugeIcons.Github, null) },
-                            supportingContent = { Text("https://github.com/rikkahub/rikkahub") },
-                            headlineContent = { Text(stringResource(R.string.about_page_github)) },
-                        )
-                        item(
-                            onClick = { context.openUrl("https://github.com/rikkahub/rikkahub/blob/master/LICENSE") },
-                            leadingContent = { Icon(HugeIcons.File02, null) },
-                            supportingContent = { Text("https://github.com/rikkahub/rikkahub/blob/master/LICENSE") },
-                            headlineContent = { Text(stringResource(R.string.about_page_license)) },
                         )
                     }
                 }

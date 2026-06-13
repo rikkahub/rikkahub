@@ -6,14 +6,11 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -41,7 +38,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
-import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
@@ -50,7 +46,6 @@ import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
-import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
@@ -60,7 +55,6 @@ import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
-import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
@@ -68,15 +62,11 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Select
-import me.rerere.rikkahub.ui.components.ui.icons.DiscordIcon
-import me.rerere.rikkahub.ui.components.ui.icons.TencentQQIcon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
 import me.rerere.rikkahub.ui.theme.ColorMode
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.joinQQGroup
-import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.ui.ext.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -87,32 +77,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val filesManager: FilesManager = koinInject()
-
-    if (settings.launchCount > 100 && (settings.launchCount - settings.sponsorAlertDismissedAt) >= 50) {
-        AlertDialog(
-            onDismissRequest = {
-                vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
-            },
-            icon = { Icon(HugeIcons.WavingHand01, null) },
-            title = { Text(stringResource(R.string.setting_page_sponsor_alert_title)) },
-            text = { Text(stringResource(R.string.setting_page_sponsor_alert_desc)) },
-            confirmButton = {
-                Button(onClick = {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
-                    navController.navigate(Screen.SettingDonate)
-                }) {
-                    Text(stringResource(R.string.setting_page_sponsor_alert_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
-                }) {
-                    Text(stringResource(R.string.setting_page_sponsor_alert_dismiss))
-                }
-            },
-        )
-    }
 
     Scaffold(
         topBar = {
@@ -309,54 +273,13 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         onClick = { navController.navigate(Screen.SettingAbout) },
                         leadingContent = { Icon(HugeIcons.Clapping01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_about_desc)) },
-                        trailingContent = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        context.joinQQGroup("Qsm0whzbPsm1UyNpR683ulLyMZ2Pqrw0")
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = TencentQQIcon,
-                                        contentDescription = "QQ",
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        context.openUrl("https://discord.gg/9weBqxe5c4")
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = DiscordIcon,
-                                        contentDescription = "Discord",
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            }
-                        },
                         headlineContent = { Text(stringResource(R.string.setting_page_about)) },
-                    )
-                    item(
-                        onClick = { context.openUrl("https://docs.rikka-ai.com/docs/basic/get-started") },
-                        leadingContent = { Icon(HugeIcons.Book01, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_documentation_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_documentation)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Log) },
                         leadingContent = { Icon(HugeIcons.Bookshelf01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_request_logs_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_request_logs)) },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingDonate) },
-                        leadingContent = { Icon(HugeIcons.InLove, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_donate_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_donate)) },
                     )
                     item(
                         onClick = {

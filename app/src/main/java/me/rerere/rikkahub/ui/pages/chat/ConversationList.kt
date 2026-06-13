@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Forward02
+import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Pin
 import me.rerere.hugeicons.stroke.PinOff
 import me.rerere.hugeicons.stroke.Refresh01
@@ -80,6 +81,7 @@ fun ColumnScope.ConversationList(
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
+    onRename: (Conversation) -> Unit = {},
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
@@ -155,6 +157,7 @@ fun ColumnScope.ConversationList(
                         onClick = onClick,
                         onDelete = onDelete,
                         onRegenerateTitle = onRegenerateTitle,
+                        onRename = onRename,
                         onPin = onPin,
                         onMoveToAssistant = onMoveToAssistant,
                         modifier = Modifier.animateItem()
@@ -225,6 +228,7 @@ private fun ConversationItem(
     modifier: Modifier = Modifier,
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
+    onRename: (Conversation) -> Unit = {},
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {},
     onClick: (Conversation) -> Unit
@@ -303,6 +307,19 @@ private fun ConversationItem(
                             if (conversation.isPinned) HugeIcons.PinOff else HugeIcons.Pin,
                             null
                         )
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(stringResource(id = R.string.chat_page_rename))
+                    },
+                    onClick = {
+                        onRename(conversation)
+                        showDropdownMenu = false
+                    },
+                    leadingIcon = {
+                        Icon(HugeIcons.PencilEdit01, null)
                     }
                 )
 

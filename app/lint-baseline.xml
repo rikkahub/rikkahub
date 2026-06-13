@@ -807,17 +807,6 @@
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current"
-        errorLine1="                toaster.show(context.getString(R.string.update_card_downloading), type = ToastType.Info)"
-        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/me/rerere/rikkahub/ui/components/ui/UpdateCard.kt"
-            line="128"
-            column="30"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current"
         errorLine1="                            context.getString(R.string.backup_page_backup_success),"
         errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location

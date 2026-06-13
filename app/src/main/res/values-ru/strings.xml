@@ -296,6 +296,7 @@
   <string name="chat_page_nickname_placeholder">Введите никнейм</string>
   <string name="chat_page_no_conversations">Нет бесед</string>
   <string name="chat_page_regenerate_title">Сгенерировать заголовок заново</string>
+  <string name="chat_page_rename">Переименовать</string>
   <string name="chat_page_save">Сохранить</string>
   <string name="chat_page_scroll_to_bottom">Прокрутить вниз</string>
   <string name="chat_page_search_chats">Поиск чатов</string>

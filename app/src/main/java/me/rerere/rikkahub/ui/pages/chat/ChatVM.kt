@@ -41,7 +41,6 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.common.state.UiState
-import me.rerere.rikkahub.utils.lifecycle.UpdateChecker
 import me.rerere.rikkahub.utils.launchVm
 import java.util.Locale
 import kotlin.uuid.Uuid
@@ -54,7 +53,6 @@ class ChatVM(
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
     private val chatService: ChatService,
-    val updateChecker: UpdateChecker,
     private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
@@ -173,10 +171,6 @@ class ChatVM(
             }
         }
     }
-
-    // Update checker
-    val updateState =
-        updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
 
     /**
      * 处理消息发送
@@ -297,6 +291,22 @@ class ChatVM(
                 settingsStore.updateAssistant(targetAssistantId)
             } else {
                 conversationRepo.updateConversation(updatedConversation)
+            }
+        }
+    }
+
+    fun renameConversation(target: Conversation, newTitle: String) {
+        val title = newTitle.trim()
+        launchVm(onError = { reportOperationError(it) }) {
+            if (target.id == _conversationId) {
+                // CAS-fold the title onto the LATEST live state so a concurrent streaming
+                // publish can't be clobbered (no session.state reassignment), then persist
+                // the folded result.
+                chatService.updateConversationState(_conversationId) { it.copy(title = title) }
+                conversationRepo.updateConversation(conversation.value)
+            } else {
+                val conversationFull = conversationRepo.getConversationById(target.id) ?: return@launchVm
+                conversationRepo.updateConversation(conversationFull.copy(title = title))
             }
         }
     }
