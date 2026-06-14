@@ -10,6 +10,7 @@ import java.net.URL
 import java.nio.file.Files
 import java.util.Locale
 import java.util.zip.GZIPInputStream
+import org.tukaani.xz.XZInputStream
 
 class RootfsInstaller(
     private val manager: WorkspaceManager,
@@ -22,8 +23,9 @@ class RootfsInstaller(
     ) {
         require(url.isNotBlank()) { "Rootfs download url is required" }
         manager.ensureWorkspace(root)
+        val format = ArchiveFormat.fromUrl(url)
         val tempDir = manager.tempDir(root)
-        val archive = File(tempDir, "rootfs.tar.gz")
+        val archive = File(tempDir, "rootfs.${format.extension}")
         val stagingDir = File(tempDir, "rootfs-staging")
         val linuxDir = manager.linuxDir(root)
 
@@ -31,7 +33,7 @@ class RootfsInstaller(
             stagingDir.deleteRecursively()
             stagingDir.mkdirs()
             download(url, archive, onProgress)
-            extractTarGz(archive, stagingDir, onProgress)
+            extractTar(archive, stagingDir, format, onProgress)
             linuxDir.deleteRecursively()
             require(stagingDir.renameTo(linuxDir)) {
                 "Failed to move rootfs into workspace"
@@ -96,12 +98,13 @@ class RootfsInstaller(
         }
     }
 
-    internal fun extractTarGz(
+    internal fun extractTar(
         archive: File,
         targetDir: File,
+        format: ArchiveFormat = ArchiveFormat.fromFile(archive),
         onProgress: (RootfsInstallProgress) -> Unit,
     ) {
-        GZIPInputStream(BufferedInputStream(archive.inputStream())).use { input ->
+        format.wrapStream(BufferedInputStream(archive.inputStream())).use { input ->
             var entries = 0
             var pendingName: String? = null
             var pendingLinkName: String? = null
@@ -380,6 +383,29 @@ class RootfsInstaller(
         LONG_LINK,
         PAX,
         OTHER,
+    }
+
+    enum class ArchiveFormat(val extension: String) {
+        TAR_GZ("tar.gz") {
+            override fun wrapStream(input: InputStream): InputStream = GZIPInputStream(input)
+        },
+        TAR_XZ("tar.xz") {
+            override fun wrapStream(input: InputStream): InputStream = XZInputStream(input)
+        };
+
+        abstract fun wrapStream(input: InputStream): InputStream
+
+        companion object {
+            fun fromUrl(url: String): ArchiveFormat {
+                val path = url.substringBefore('?').substringBefore('#')
+                return when {
+                    path.endsWith(".tar.xz") || path.endsWith(".txz") -> TAR_XZ
+                    else -> TAR_GZ
+                }
+            }
+
+            fun fromFile(file: File): ArchiveFormat = fromUrl(file.name)
+        }
     }
 
     companion object {
