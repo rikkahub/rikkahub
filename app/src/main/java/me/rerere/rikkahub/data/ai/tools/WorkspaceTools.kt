@@ -22,6 +22,7 @@ import org.koin.java.KoinJavaComponent.getKoin
 import java.io.ByteArrayOutputStream
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
+private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
 
 val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_read_file" to false,
@@ -274,23 +275,14 @@ private suspend fun WorkspaceRepository.readTextInRootfs(
     workspaceId: String,
     path: String,
 ): String {
-    val pathArg = path.shellQuote()
-    val result = runRootfsCommand(
-        workspaceId = workspaceId,
-        action = "Read file",
-        command = """
-            if [ ! -e $pathArg ]; then
-              printf '%s\n' ${"File does not exist: $path".shellQuote()} >&2
-              exit 1
-            fi
-            if [ ! -f $pathArg ]; then
-              printf '%s\n' ${"Path is not a file: $path".shellQuote()} >&2
-              exit 1
-            fi
-            cat -- $pathArg
-        """.trimIndent(),
-    )
-    return result.stdout
+    val (area, relativePath) = rootfsPathToAreaAndRelative(path)
+    val size = fileSize(workspaceId, area, relativePath)
+    require(size <= MAX_READ_FILE_BYTES) {
+        "File is too large to read: $path (${size / 1024 / 1024}MB, max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). Use shell commands like head, tail, or grep to read parts of it."
+    }
+    val buffer = ByteArrayOutputStream(size.toInt())
+    exportFile(workspaceId, area, relativePath, buffer)
+    return buffer.toString(Charsets.UTF_8.name())
 }
 
 private fun rootfsPathToAreaAndRelative(path: String): Pair<WorkspaceStorageArea, String> {

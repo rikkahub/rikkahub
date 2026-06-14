@@ -17,6 +17,8 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import me.rerere.rikkahub.data.files.FileFolders
+import java.io.File
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -68,6 +70,9 @@ class RikkaHubApp : Application() {
 
         // delete temp files
         deleteTempFiles()
+
+        // cleanup stale tool output files
+        cleanupToolOutputs()
 
         // cleanup workspace temp dirs (proot + rootfs /tmp)
         cleanupWorkspaceTempDirs()
@@ -121,6 +126,17 @@ class RikkaHubApp : Application() {
             val dir = appTempFolder
             if (dir.exists()) {
                 dir.deleteRecursively()
+            }
+        }
+    }
+
+    private fun cleanupToolOutputs() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val dir = File(filesDir, FileFolders.TOOL_OUTPUTS)
+                if (dir.exists()) {
+                    dir.deleteRecursively()
+                }
             }
         }
     }

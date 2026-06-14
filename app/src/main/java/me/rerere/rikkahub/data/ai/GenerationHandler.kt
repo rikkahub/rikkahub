@@ -34,6 +34,8 @@ import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
+import me.rerere.rikkahub.data.files.FileFolders
+import java.io.File
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
@@ -51,6 +53,8 @@ import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 private const val TAG = "GenerationHandler"
+private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
+private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
 
 @Serializable
 sealed interface GenerationChunk {
@@ -284,7 +288,10 @@ class GenerationHandler(
                             }
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
                             val result = toolDef.execute(args)
-                            executedTools += tool.copy(output = result)
+                            val hasShellAccess = toolsInternal.any { it.name == "workspace_shell" }
+                            executedTools += tool.copy(
+                                output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess)
+                            )
                         }.onFailure {
                             // 取消必须向上传播，否则停止生成会被误报为工具执行错误
                             if (it is CancellationException) throw it
@@ -469,6 +476,52 @@ class GenerationHandler(
                 }
             }
             onUpdateMessages(messages)
+        }
+    }
+
+    private fun maybeTruncateToolOutput(
+        toolCallId: String,
+        output: List<UIMessagePart>,
+        hasShellAccess: Boolean,
+    ): List<UIMessagePart> {
+        val textParts = output.filterIsInstance<UIMessagePart.Text>()
+        val nonTextParts = output.filter { it !is UIMessagePart.Text }
+        val totalChars = textParts.sumOf { it.text.length }
+
+        if (totalChars <= MAX_TOOL_OUTPUT_CHARS) return output
+
+        Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
+
+        val fullText = textParts.joinToString("\n") { it.text }
+        val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
+
+        if (hasShellAccess) {
+            val fileName = "${toolCallId}.txt"
+            val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
+            File(outputDir, fileName).writeText(fullText)
+
+            return listOf(
+                UIMessagePart.Text(
+                    buildString {
+                        appendLine("[Tool output truncated: $totalChars characters total]")
+                        appendLine("Full output saved to: /tool_outputs/$fileName")
+                        appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
+                        appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
+                        appendLine()
+                        append(preview)
+                    }
+                )
+            ) + nonTextParts
+        } else {
+            return listOf(
+                UIMessagePart.Text(
+                    buildString {
+                        appendLine("[Tool output truncated: showing first $TOOL_OUTPUT_PREVIEW_CHARS of $totalChars characters]")
+                        appendLine()
+                        append(preview)
+                    }
+                )
+            ) + nonTextParts
         }
     }
 

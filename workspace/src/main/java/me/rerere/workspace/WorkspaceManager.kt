@@ -73,6 +73,17 @@ class WorkspaceManager(
         return fileSystem.importBytes(areaRoot, targetPath, inputStream)
     }
 
+    fun fileSize(
+        root: String,
+        path: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+    ): Long {
+        val file = fileSystem.resolve(areaDir(root, area), path)
+        require(file.exists()) { "File does not exist: $path" }
+        require(file.isFile) { "Path is not a file: $path" }
+        return file.length()
+    }
+
     fun exportFile(
         root: String,
         path: String,
