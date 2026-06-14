@@ -18,6 +18,12 @@ interface WorkspaceDAO {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(workspace: WorkspaceEntity)
 
+    @Query("SELECT * FROM workspaces")
+    suspend fun getAll(): List<WorkspaceEntity>
+
+    @Query("UPDATE workspaces SET shell_status = :shellStatus, updated_at = :updatedAt WHERE id = :id")
+    suspend fun updateShellStatus(id: String, shellStatus: String, updatedAt: Long): Int
+
     @Query("DELETE FROM workspaces WHERE id = :id")
     suspend fun deleteById(id: String): Int
 }

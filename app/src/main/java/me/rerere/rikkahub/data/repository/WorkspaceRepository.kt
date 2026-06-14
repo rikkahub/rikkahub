@@ -30,6 +30,26 @@ class WorkspaceRepository(
 ) {
     fun listFlow(): Flow<List<WorkspaceEntity>> = dao.listFlow()
 
+    suspend fun checkIntegrity() = withContext(Dispatchers.IO) {
+        val workspaces = dao.getAll()
+        for (workspace in workspaces) {
+            val dir = manager.workspaceDir(workspace.root)
+            if (!dir.exists()) {
+                Log.w(TAG, "Workspace directory missing, removing record: id=${workspace.id}, root=${workspace.root}")
+                dao.deleteById(workspace.id)
+                cleanupAssistantReferences(workspace.id)
+                continue
+            }
+            val statusName = workspace.shellStatus
+            if ((statusName == WorkspaceShellStatus.READY.name || statusName == WorkspaceShellStatus.INSTALLING.name)
+                && !manager.hasRootfs(workspace.root)
+            ) {
+                Log.w(TAG, "Rootfs missing, resetting shell status: id=${workspace.id}")
+                updateShellState(workspace.id, WorkspaceShellStatus.DISABLED.name)
+            }
+        }
+    }
+
     suspend fun getById(id: String): WorkspaceEntity? = dao.getById(id)
 
     suspend fun create(name: String): WorkspaceEntity {
@@ -208,10 +228,15 @@ class WorkspaceRepository(
         withContext(Dispatchers.IO) {
             manager.deleteWorkspace(workspace.root)
         }
+        cleanupAssistantReferences(id)
+        return true
+    }
+
+    private suspend fun cleanupAssistantReferences(workspaceId: String) {
         settingsStore.update { settings ->
             settings.copy(
                 assistants = settings.assistants.map { assistant ->
-                    if (assistant.workspaceId?.toString() == id) {
+                    if (assistant.workspaceId?.toString() == workspaceId) {
                         assistant.copy(workspaceId = null)
                     } else {
                         assistant
@@ -219,23 +244,25 @@ class WorkspaceRepository(
                 }
             )
         }
-        return true
     }
 
     private suspend fun restoreShellState(workspace: WorkspaceEntity) {
-        updateShellState(workspace, workspace.shellStatus)
+        updateShellState(workspace.id, workspace.shellStatus)
     }
 
     private suspend fun updateShellState(
         workspace: WorkspaceEntity,
         shellStatus: String,
+    ) = updateShellState(workspace.id, shellStatus)
+
+    private suspend fun updateShellState(
+        workspaceId: String,
+        shellStatus: String,
     ) {
-        val current = dao.getById(workspace.id) ?: workspace
-        dao.upsert(
-            current.copy(
-                shellStatus = shellStatus,
-                updatedAt = System.currentTimeMillis(),
-            )
+        dao.updateShellStatus(
+            id = workspaceId,
+            shellStatus = shellStatus,
+            updatedAt = System.currentTimeMillis(),
         )
     }
 
