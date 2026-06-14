@@ -64,6 +64,8 @@ sqlite-vector = "0.9.92"
 jmdns = "3.6.3"
 slf4j = "2.0.17"
 sqlite-android = "-SNAPSHOT"
+termux = "0.118.0"
+diffutils = "4.15"
 
 [libraries]
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
@@ -142,6 +144,7 @@ reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reo
 commons-text = { module = "org.apache.commons:commons-text", version.ref = "commons-text" }
 modelcontextprotocol-kotlin-sdk = { module = "io.modelcontextprotocol:kotlin-sdk", version.ref = "mcp" }
 pebble = { module = "io.pebbletemplates:pebble", version.ref = "pebble" }
+diffutils = { module = "io.github.java-diff-utils:java-diff-utils", version.ref = "diffutils" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
@@ -173,9 +176,12 @@ ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 sqlite-vector = { module = "ai.sqlite:vector", version.ref = "sqlite-vector" }
 jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
+xz = { module = "org.tukaani:xz", version = "1.12" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-android = { module = "uk.uuid.slf4j:slf4j-android", version = "2.0.17-0" }
 sqlite-android = { module = "com.github.rikkahub:sqlite-android", version.ref = "sqlite-android" }
+termux-terminal-view = { module = "com.termux.termux-app:terminal-view", version.ref = "termux" }
+guava-listenablefuture = { module = "com.google.guava:listenablefuture", version = "9999.0-empty-to-avoid-conflict-with-guava" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

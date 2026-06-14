@@ -11,6 +11,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -30,13 +31,17 @@ class ChatCompletionsAPIMessageTest {
     }
 
     // Helper to invoke private buildMessages method via reflection
-    private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
+    private fun invokeBuildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean = true
+    ): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
-            List::class.java
+            List::class.java,
+            Boolean::class.javaPrimitiveType
         )
         method.isAccessible = true
-        return method.invoke(api, messages) as JsonArray
+        return method.invoke(api, messages, includeHistoryReasoning) as JsonArray
     }
 
     @Test
@@ -163,8 +168,40 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `reasoning should only be included for messages after last user message`() {
-        // First assistant message (before user's last message) - reasoning should NOT be included
+    fun `reasoning should be included for all assistant messages when history reasoning enabled`() {
+        val messages = createMultiRoundReasoningMessages()
+
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = true)
+
+        val assistantMessages = result.filter {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }
+
+        assertEquals(2, assistantMessages.size)
+        assertEquals("Initial thinking",
+            assistantMessages[0].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
+        assertEquals("Final thinking",
+            assistantMessages[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `reasoning should be excluded from all assistant messages when history reasoning disabled`() {
+        val messages = createMultiRoundReasoningMessages()
+
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = false)
+
+        val assistantMessages = result.filter {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }
+
+        assertEquals(2, assistantMessages.size)
+        assistantMessages.forEach { msg ->
+            assertFalse("Assistant should not have reasoning_content",
+                msg.jsonObject.containsKey("reasoning_content"))
+        }
+    }
+
+    private fun createMultiRoundReasoningMessages(): List<UIMessage> {
         val assistant1 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -172,8 +209,6 @@ class ChatCompletionsAPIMessageTest {
                 UIMessagePart.Text("Initial response")
             )
         )
-
-        // Second assistant message (after user's last message) - reasoning SHOULD be included
         val assistant2 = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -181,35 +216,11 @@ class ChatCompletionsAPIMessageTest {
                 UIMessagePart.Text("Final response")
             )
         )
-
-        val messages = listOf(
+        return listOf(
             UIMessage.user("First question"),
             assistant1,
             UIMessage.user("Second question"),
             assistant2
-        )
-
-        val result = invokeBuildMessages(messages)
-
-        // Find assistant messages
-        val assistantMessages = result.filter {
-            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
-        }
-
-        assertEquals(2, assistantMessages.size)
-
-        // First assistant should NOT have reasoning_content
-        val first = assistantMessages[0].jsonObject
-        assertTrue("First assistant should not have reasoning_content",
-            !first.containsKey("reasoning_content") ||
-            first["reasoning_content"]?.jsonPrimitive?.content.isNullOrEmpty()
-        )
-
-        // Second assistant SHOULD have reasoning_content
-        val second = assistantMessages[1].jsonObject
-        assertTrue("Second assistant should have reasoning_content",
-            second.containsKey("reasoning_content") &&
-            second["reasoning_content"]?.jsonPrimitive?.content?.isNotEmpty() == true
         )
     }
 
@@ -302,7 +313,7 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `assistant with only reasoning and empty text should be filtered out`() {
+    fun `assistant with only reasoning and empty text should be filtered out when history reasoning disabled`() {
         val messages = listOf(
             UIMessage.user("Question 1"),
             UIMessage(
@@ -315,13 +326,34 @@ class ChatCompletionsAPIMessageTest {
             UIMessage.user("Question 2")
         )
 
-        val result = invokeBuildMessages(messages)
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = false)
 
         assertEquals(2, result.size)
         assertEquals("user", result[0].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("Question 1", result[0].jsonObject["content"]?.jsonPrimitive?.content)
         assertEquals("user", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("Question 2", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `assistant with only reasoning and empty text should be kept when history reasoning enabled`() {
+        val messages = listOf(
+            UIMessage.user("Question 1"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "thinking"),
+                    UIMessagePart.Text("")
+                )
+            ),
+            UIMessage.user("Question 2")
+        )
+
+        val result = invokeBuildMessages(messages, includeHistoryReasoning = true)
+
+        assertEquals(3, result.size)
+        assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
     }
 
     @Test

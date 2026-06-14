@@ -297,7 +297,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                     required = listOf("questions")
                 )
             },
-            needsApproval = true,
+            needsApproval = { true },
             execute = {
                 error("ask_user tool should be handled by HITL flow")
             }

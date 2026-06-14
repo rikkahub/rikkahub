@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -26,10 +27,11 @@ fun rememberSharedPreferenceString(
     val stateFlow =
         remember(keyForString, defaultValue) { prefs.getStringFlowForKey(keyForString, defaultValue) }
     val state by stateFlow.collectAsStateWithLifecycle(prefs.getString(keyForString, defaultValue))
+    val currentState = rememberUpdatedState(state)
     return remember {
         object : MutableState<String?> {
             override var value: String?
-                get() = state
+                get() = currentState.value
                 set(value) {
                     prefs.edit { putString(keyForString, value) }
                 }
@@ -52,10 +54,11 @@ fun rememberSharedPreferenceBoolean(
     val stateFlow =
         remember(keyForBoolean, defaultValue) { prefs.getBooleanFlowForKey(keyForBoolean, defaultValue) }
     val state by stateFlow.collectAsStateWithLifecycle(prefs.getBoolean(keyForBoolean, defaultValue))
+    val currentState = rememberUpdatedState(state)
     return remember {
         object : MutableState<Boolean> {
             override var value: Boolean
-                get() = state
+                get() = currentState.value
                 set(value) {
                     prefs.edit { putBoolean(keyForBoolean, value) }
                 }

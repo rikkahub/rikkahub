@@ -1,0 +1,650 @@
+package me.rerere.rikkahub.data.ai.tools
+
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import me.rerere.ai.core.InputSchema
+import me.rerere.ai.core.Tool
+import me.rerere.ai.ui.DiffMetadata
+import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.toMetadata
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.utils.generateUnifiedDiff
+import me.rerere.workspace.WorkspaceCommandResult
+import me.rerere.workspace.WorkspaceFileEntry
+import me.rerere.workspace.WorkspaceManager
+
+private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
+private const val LIST_MAX_ENTRIES = 500
+
+val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
+    "workspace_list_files" to false,
+    "workspace_read_file" to false,
+    "workspace_write_file" to false,
+    "workspace_edit_file" to false,
+    "workspace_delete_file" to true,
+    "workspace_move_file" to true,
+    "workspace_shell" to true,
+)
+
+fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>): Boolean =
+    overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: false
+
+suspend fun createWorkspaceTools(
+    workspaceId: String?,
+    workspaceRepository: WorkspaceRepository,
+    cwd: String? = null,
+): List<Tool> {
+    if (workspaceId.isNullOrBlank()) return emptyList()
+    val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
+    fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
+
+    val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
+
+    return listOf(
+        createListFilesTool(workspaceId, ::needsApproval, workspaceRepository),
+        createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createDeleteFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createMoveFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
+    )
+}
+
+private fun createListFilesTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_list_files",
+    description = """
+        List files using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area. Response format: entries[].path, name, isDirectory, sizeBytes, updatedAt.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                putPathProperty(required = true)
+            },
+            required = listOf("path"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_list_files") },
+    execute = {
+        val params = it.jsonObject
+        val path = params.absolutePath("path")
+        val entries = workspaceRepository.listFilesInRootfs(workspaceId, path)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("entries", buildJsonArray {
+                        entries.forEach { entry ->
+                            add(
+                                buildJsonObject {
+                                    put("path", entry.path)
+                                    put("name", entry.name)
+                                    put("isDirectory", entry.isDirectory)
+                                    put("sizeBytes", entry.sizeBytes)
+                                    put("updatedAt", entry.updatedAt)
+                                }
+                            )
+                        }
+                    })
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun createReadFileTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_read_file",
+    description = """
+        Read a UTF-8 text file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                putPathProperty(required = true)
+            },
+            required = listOf("path"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_read_file") },
+    execute = {
+        val path = it.jsonObject.absolutePath("path")
+        val text = workspaceRepository.readTextInRootfs(workspaceId, path)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("path", path)
+                    put("text", text)
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun createWriteFileTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_write_file",
+    description = """
+        Write a UTF-8 text file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                putPathProperty(required = true)
+                put("text", buildJsonObject {
+                    put("type", "string")
+                    put("description", "UTF-8 text content to write")
+                })
+                put("overwrite", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Whether to overwrite an existing file. Defaults to true.")
+                })
+            },
+            required = listOf("path", "text"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_write_file") || it.pathOutsideWorkspace("path") },
+    execute = {
+        val params = it.jsonObject
+        val path = params.absolutePath("path")
+        val text = params.string("text") ?: error("text is required")
+        val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
+        val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, text, overwrite)
+        listOf(UIMessagePart.Text(entry.toJson().toString()))
+    },
+)
+
+private fun createEditFileTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_edit_file",
+    description = """
+        Edit a UTF-8 text file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area.
+        Provide old_text and new_text. By default old_text must occur exactly once; set replace_all=true to replace every occurrence.
+        If no exact match is found, whitespace-tolerant line matching is attempted automatically.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                putPathProperty(required = true)
+                put("old_text", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Exact text to replace")
+                })
+                put("new_text", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Replacement text")
+                })
+                put("replace_all", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Whether to replace every occurrence. Defaults to false.")
+                })
+            },
+            required = listOf("path", "old_text", "new_text"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_edit_file") || it.pathOutsideWorkspace("path") },
+    execute = {
+        val params = it.jsonObject
+        val path = params.absolutePath("path")
+        val oldText = params.string("old_text") ?: error("old_text is required")
+        val newText = params.string("new_text") ?: error("new_text is required")
+        val replaceAll = params["replace_all"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
+        require(oldText.isNotEmpty()) { "old_text must not be empty" }
+
+        val original = workspaceRepository.readTextInRootfs(workspaceId, path)
+        // 逐级尝试 exact -> line_trimmed -> block_anchor 替换器, 见 TextReplacers.kt
+        val result = try {
+            replaceText(original, oldText, newText, replaceAll)
+        } catch (e: IllegalArgumentException) {
+            error("${e.message} (path: $path)")
+        }
+        val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, result.updated, overwrite = true)
+        val diff = generateUnifiedDiff(original, result.updated, entry.path)
+        listOf(
+            UIMessagePart.Text(
+                text = buildJsonObject {
+                    put("path", entry.path)
+                    put("replacements", result.replacements)
+                    if (result.strategy != ExactReplacer.name) put("matchStrategy", result.strategy)
+                    put("sizeBytes", entry.sizeBytes)
+                    put("updatedAt", entry.updatedAt)
+                }.toString(),
+                // diff 存入 metadata 供 UI 渲染 diff view, 不会随工具结果发送给 API
+                metadata = diff?.let { d -> DiffMetadata(diff = d).toMetadata() },
+            )
+        )
+    },
+)
+
+private fun createDeleteFileTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_delete_file",
+    description = """
+        Delete a file or directory using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area. Use recursive=true for directories.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                putPathProperty(required = true)
+                put("recursive", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Required when deleting a directory. Defaults to false.")
+                })
+            },
+            required = listOf("path"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_delete_file") || it.pathOutsideWorkspace("path") },
+    execute = {
+        val params = it.jsonObject
+        val path = params.absolutePath("path")
+        val recursive = params["recursive"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
+        val deleted = workspaceRepository.deletePathInRootfs(workspaceId, path, recursive)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("success", deleted)
+                    put("path", path)
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun createMoveFileTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_move_file",
+    description = """
+        Move or rename a file or directory using the assistant's bound workspace Rootfs.
+        Source and target paths must be absolute inside Rootfs. Use /workspace for the workspace files area.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("source", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Absolute source path inside Rootfs, for example /workspace/src.txt")
+                })
+                put("target", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Absolute target path inside Rootfs, for example /workspace/dst.txt")
+                })
+                put("overwrite", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Whether to overwrite the target if it exists. Defaults to false.")
+                })
+            },
+            required = listOf("source", "target"),
+        )
+    },
+    needsApproval = {
+        needsApproval("workspace_move_file") ||
+            it.pathOutsideWorkspace("source") ||
+            it.pathOutsideWorkspace("target")
+    },
+    execute = {
+        val params = it.jsonObject
+        val source = params.absolutePath("source")
+        val target = params.absolutePath("target")
+        val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
+        val entry = workspaceRepository.movePathInRootfs(workspaceId, source, target, overwrite)
+        listOf(UIMessagePart.Text(entry.toJson().toString()))
+    },
+)
+
+private fun createShellTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+    defaultCwd: String? = null,
+) = Tool(
+    name = "workspace_shell",
+    description = buildString {
+        append("Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace. ")
+        append("Use cwd for a path relative to the workspace files root. ")
+        if (!defaultCwd.isNullOrBlank()) {
+            append("Defaults to '$defaultCwd'. ")
+        }
+        append("Requires Rootfs to be installed and ready.")
+    },
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("command", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Shell command to run")
+                })
+                put("cwd", buildJsonObject {
+                    put("type", "string")
+                    put(
+                        "description",
+                        if (!defaultCwd.isNullOrBlank()) {
+                            "Working directory relative to the workspace files root. Defaults to '$defaultCwd'."
+                        } else {
+                            "Working directory relative to the workspace files root. Defaults to root."
+                        }
+                    )
+                })
+                put("timeout", buildJsonObject {
+                    put("type", "integer")
+                    put(
+                        "description",
+                        "Command timeout in seconds. Defaults to 30, max $SHELL_TIMEOUT_MAX_SECONDS."
+                    )
+                })
+            },
+            required = listOf("command"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_shell") },
+    execute = {
+        val params = it.jsonObject
+        val command = params.string("command") ?: error("command is required")
+        val cwd = (params.string("cwd") ?: defaultCwd.orEmpty())
+            .removePrefix("/workspace/").removePrefix("/workspace")
+        val timeoutMillis = params.string("timeout")?.toLongOrNull()
+            ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
+            ?.times(1_000L)
+            ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
+        val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("exitCode", result.exitCode)
+                    put("stdout", result.stdout)
+                    put("stderr", result.stderr)
+                    put("timedOut", result.timedOut)
+                    if (result.truncated) put("truncated", true)
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun kotlinx.serialization.json.JsonObject.string(name: String): String? =
+    this[name]?.jsonPrimitive?.contentOrNull
+
+private suspend fun WorkspaceRepository.listFilesInRootfs(
+    workspaceId: String,
+    path: String,
+): List<WorkspaceFileEntry> {
+    val pathArg = path.shellQuote()
+    val result = runRootfsCommand(
+        workspaceId = workspaceId,
+        action = "List files",
+        command = """
+            if [ ! -e $pathArg ]; then
+              printf '%s\n' ${"Path does not exist: $path".shellQuote()} >&2
+              exit 1
+            fi
+            if [ ! -d $pathArg ]; then
+              printf '%s\n' ${"Path is not a directory: $path".shellQuote()} >&2
+              exit 1
+            fi
+            count=0
+            while IFS= read -r -d '' child; do
+              if [ -d "${'$'}child" ]; then entry_type=d; else entry_type=f; fi
+              entry_size=${'$'}(stat -c '%s' -- "${'$'}child") || exit 1
+              entry_mtime=${'$'}(stat -c '%Y' -- "${'$'}child") || exit 1
+              printf '%s\0%s\0%s\0%s\0' "${'$'}entry_type" "${'$'}entry_size" "${'$'}entry_mtime" "${'$'}child"
+              count=${'$'}((count + 1))
+              if [ "${'$'}count" -ge $LIST_MAX_ENTRIES ]; then break; fi
+            done < <(find $pathArg -mindepth 1 -maxdepth 1 -print0)
+        """.trimIndent(),
+    )
+    return result.stdout.parseRootfsEntries()
+        .sortedWith(compareBy<WorkspaceFileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+}
+
+private suspend fun WorkspaceRepository.readTextInRootfs(
+    workspaceId: String,
+    path: String,
+): String {
+    val pathArg = path.shellQuote()
+    val result = runRootfsCommand(
+        workspaceId = workspaceId,
+        action = "Read file",
+        command = """
+            if [ ! -e $pathArg ]; then
+              printf '%s\n' ${"File does not exist: $path".shellQuote()} >&2
+              exit 1
+            fi
+            if [ ! -f $pathArg ]; then
+              printf '%s\n' ${"Path is not a file: $path".shellQuote()} >&2
+              exit 1
+            fi
+            cat -- $pathArg
+        """.trimIndent(),
+    )
+    return result.stdout
+}
+
+private suspend fun WorkspaceRepository.writeTextInRootfs(
+    workspaceId: String,
+    path: String,
+    text: String,
+    overwrite: Boolean,
+): WorkspaceFileEntry {
+    val pathArg = path.shellQuote()
+    val result = runRootfsCommand(
+        workspaceId = workspaceId,
+        action = "Write file",
+        command = """
+            if [ -e $pathArg ] && [ ${(!overwrite).shellFlag()} = 1 ]; then
+              printf '%s\n' ${"File already exists: $path".shellQuote()} >&2
+              exit 1
+            fi
+            if [ -e $pathArg ] && [ ! -f $pathArg ]; then
+              printf '%s\n' ${"Path is not a file: $path".shellQuote()} >&2
+              exit 1
+            fi
+            parent=${'$'}(dirname -- $pathArg) || exit 1
+            mkdir -p -- "${'$'}parent" || exit 1
+            cat > $pathArg || exit 1
+            ${statEntryCommand(path)}
+        """.trimIndent(),
+        stdin = text.toByteArray(Charsets.UTF_8),
+    )
+    return result.stdout.parseRootfsEntry()
+}
+
+private suspend fun WorkspaceRepository.deletePathInRootfs(
+    workspaceId: String,
+    path: String,
+    recursive: Boolean,
+): Boolean {
+    requireMutableRootfsPath(path, "delete")
+    val pathArg = path.shellQuote()
+    val removeCommand = if (recursive) "rm -rf -- $pathArg" else "rm -- $pathArg"
+    val result = runRootfsCommand(
+        workspaceId = workspaceId,
+        action = "Delete file",
+        command = """
+            if [ ! -e $pathArg ] && [ ! -L $pathArg ]; then
+              printf 'false'
+              exit 0
+            fi
+            if [ -d $pathArg ] && [ ${recursive.shellFlag()} = 0 ]; then
+              printf '%s\n' ${"Directory delete requires recursive = true: $path".shellQuote()} >&2
+              exit 1
+            fi
+            $removeCommand || exit 1
+            printf 'true'
+        """.trimIndent(),
+    )
+    return result.stdout.trim().toBooleanStrict()
+}
+
+private suspend fun WorkspaceRepository.movePathInRootfs(
+    workspaceId: String,
+    source: String,
+    target: String,
+    overwrite: Boolean,
+): WorkspaceFileEntry {
+    requireMutableRootfsPath(source, "move")
+    requireMutableRootfsPath(target, "move")
+    val sourceArg = source.shellQuote()
+    val targetArg = target.shellQuote()
+    val result = runRootfsCommand(
+        workspaceId = workspaceId,
+        action = "Move file",
+        command = """
+            if [ ! -e $sourceArg ] && [ ! -L $sourceArg ]; then
+              printf '%s\n' ${"Source does not exist: $source".shellQuote()} >&2
+              exit 1
+            fi
+            if [ -e $targetArg ] || [ -L $targetArg ]; then
+              if [ ${overwrite.shellFlag()} = 0 ]; then
+                printf '%s\n' ${"Target already exists: $target".shellQuote()} >&2
+                exit 1
+              fi
+              rm -rf -- $targetArg || exit 1
+            fi
+            target_parent=${'$'}(dirname -- $targetArg) || exit 1
+            mkdir -p -- "${'$'}target_parent" || exit 1
+            mv -- $sourceArg $targetArg || exit 1
+            ${statEntryCommand(target)}
+        """.trimIndent(),
+    )
+    return result.stdout.parseRootfsEntry()
+}
+
+private suspend fun WorkspaceRepository.runRootfsCommand(
+    workspaceId: String,
+    action: String,
+    command: String,
+    stdin: ByteArray? = null,
+): WorkspaceCommandResult {
+    val result = executeCommand(
+        id = workspaceId,
+        command = command,
+        timeoutMillis = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+        stdin = stdin,
+    )
+    if (result.timedOut) {
+        error("$action timed out")
+    }
+    if (result.exitCode != 0) {
+        val message = result.stderr.ifBlank { result.stdout }.trim()
+        error(if (message.isBlank()) "$action failed with exit code ${result.exitCode}" else message)
+    }
+    if (result.truncated) {
+        error("$action output is too large")
+    }
+    return result
+}
+
+private fun statEntryCommand(path: String): String {
+    val pathArg = path.shellQuote()
+    return """
+        if [ -d $pathArg ]; then entry_type=d; else entry_type=f; fi
+        entry_size=${'$'}(stat -c '%s' -- $pathArg) || exit 1
+        entry_mtime=${'$'}(stat -c '%Y' -- $pathArg) || exit 1
+        printf '%s\0%s\0%s\0%s\0' "${'$'}entry_type" "${'$'}entry_size" "${'$'}entry_mtime" $pathArg
+    """.trimIndent()
+}
+
+private fun String.parseRootfsEntry(): WorkspaceFileEntry =
+    parseRootfsEntries().singleOrNull() ?: error("Invalid file metadata output")
+
+private fun String.parseRootfsEntries(): List<WorkspaceFileEntry> {
+    val fields = split('\u0000').dropLastWhile { it.isEmpty() }
+    require(fields.size % 4 == 0) { "Invalid file metadata output" }
+    return fields.chunked(4).map { chunk ->
+        val type = chunk[0]
+        val size = chunk[1].toLongOrNull() ?: error("Invalid file size: ${chunk[1]}")
+        val updatedAt = (chunk[2].toLongOrNull() ?: error("Invalid file mtime: ${chunk[2]}")) * 1_000L
+        val path = chunk[3]
+        WorkspaceFileEntry(
+            path = path,
+            name = path.rootfsName(),
+            isDirectory = type == "d",
+            sizeBytes = size,
+            updatedAt = updatedAt,
+        )
+    }
+}
+
+private fun kotlinx.serialization.json.JsonObject.absolutePath(name: String): String {
+    val path = string(name)?.replace('\\', '/')?.trim() ?: error("$name is required")
+    require(path.isNotBlank()) { "$name is required" }
+    require(path.startsWith("/")) { "$name must be an absolute path inside Rootfs" }
+    require(!path.contains('\u0000')) { "$name contains invalid character" }
+    return path
+}
+
+private fun kotlinx.serialization.json.JsonElement.pathOutsideWorkspace(name: String): Boolean =
+    runCatching {
+        jsonObject.absolutePath(name).isOutsideWorkspace()
+    }.getOrDefault(true)
+
+private fun String.isOutsideWorkspace(): Boolean {
+    val normalized = trimEnd('/').ifBlank { "/" }
+    return normalized != "/workspace" && !normalized.startsWith("/workspace/")
+}
+
+private fun requireMutableRootfsPath(path: String, action: String) {
+    val normalized = path.trimEnd('/').ifBlank { "/" }
+    require(normalized != "/" && normalized != "/workspace") {
+        "Refusing to $action protected root path: $path"
+    }
+}
+
+private fun String.rootfsName(): String =
+    trimEnd('/').substringAfterLast('/').ifBlank { "/" }
+
+private fun String.shellQuote(): String =
+    "'" + replace("'", "'\"'\"'") + "'"
+
+private fun Boolean.shellFlag(): Int = if (this) 1 else 0
+
+private fun JsonObjectBuilder.putPathProperty(required: Boolean) {
+    put("path", buildJsonObject {
+        put("type", "string")
+        put(
+            "description",
+            if (required) {
+                "Absolute path inside Rootfs. Use /workspace for the workspace files area."
+            } else {
+                "Optional absolute path inside Rootfs. Use /workspace for the workspace files area."
+            }
+        )
+    })
+}
+
+private fun WorkspaceFileEntry.toJson() = buildJsonObject {
+    put("path", path)
+    put("name", name)
+    put("isDirectory", isDirectory)
+    put("sizeBytes", sizeBytes)
+    put("updatedAt", updatedAt)
+}

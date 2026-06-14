@@ -28,4 +28,6 @@ data class ConversationEntity(
     val modeInjectionIds: String = "[]",
     @ColumnInfo("lorebook_ids", defaultValue = "[]")
     val lorebookIds: String = "[]",
+    @ColumnInfo("workspace_cwd", defaultValue = "")
+    val workspaceCwd: String = "",
 )

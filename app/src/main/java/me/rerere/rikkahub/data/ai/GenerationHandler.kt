@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +81,7 @@ class GenerationHandler(
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
+        workspaceCwd: String? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -157,6 +159,7 @@ class GenerationHandler(
                     conversationSystemPrompt = conversationSystemPrompt,
                     conversationModeInjectionIds = conversationModeInjectionIds,
                     conversationLorebookIds = conversationLorebookIds,
+                    workspaceCwd = workspaceCwd,
                 )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
@@ -190,7 +193,8 @@ class GenerationHandler(
                     val toolDef = toolsInternal.find { it.name == tool.toolName }
                     when {
                         // Tool needs approval and state is Auto -> set to Pending
-                        toolDef?.needsApproval == true && tool.approvalState is ToolApprovalState.Auto -> {
+                        toolDef?.needsApproval(tool.inputAsJson()) == true &&
+                            tool.approvalState is ToolApprovalState.Auto -> {
                             hasPendingApproval = true
                             tool.copy(approvalState = ToolApprovalState.Pending)
                         }
@@ -282,6 +286,8 @@ class GenerationHandler(
                             val result = toolDef.execute(args)
                             executedTools += tool.copy(output = result)
                         }.onFailure {
+                            // 取消必须向上传播，否则停止生成会被误报为工具执行错误
+                            if (it is CancellationException) throw it
                             it.printStackTrace()
                             executedTools += tool.copy(
                                 output = listOf(
@@ -349,6 +355,7 @@ class GenerationHandler(
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
+        workspaceCwd: String? = null,
     ) {
         val internalMessages = buildList {
             val system = buildString {
@@ -389,6 +396,7 @@ class GenerationHandler(
             conversationModeInjectionIds = conversationModeInjectionIds,
             conversationLorebookIds = conversationLorebookIds,
             processingStatus = processingStatus,
+            workspaceCwd = workspaceCwd,
         )
 
         var messages: List<UIMessage> = messages

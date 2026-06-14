@@ -27,6 +27,8 @@ data class Conversation(
     val customSystemPrompt: String? = null,
     val modeInjectionIds: Set<Uuid> = emptySet(),
     val lorebookIds: Set<Uuid> = emptySet(),
+    // Absolute path inside the workspace rootfs
+    val workspaceCwd: String? = null,
     @Transient
     val newConversation: Boolean = false
 ) {
