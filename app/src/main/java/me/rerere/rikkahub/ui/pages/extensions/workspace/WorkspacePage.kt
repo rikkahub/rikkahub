@@ -211,7 +211,7 @@ private fun WorkspaceCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "${workspace.id.take(8)} · ${workspace.shellStatus.lowercase()}",
+                        text = workspace.shellStatus.toShellStatusLabel(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

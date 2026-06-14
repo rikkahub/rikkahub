@@ -298,9 +298,7 @@ private fun WorkspaceBasicPage(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     WorkspaceInfoRow("名称", workspace?.name ?: "加载中")
-                    WorkspaceInfoRow("ID", workspace?.id ?: "-")
-                    WorkspaceInfoRow("Root", workspace?.root ?: "-")
-                    WorkspaceInfoRow("Shell 状态", workspace?.shellStatus?.lowercase() ?: "-")
+                    WorkspaceInfoRow("Shell 状态", workspace?.shellStatus?.toShellStatusLabel() ?: "-")
                 }
             }
         }
@@ -813,6 +811,14 @@ private fun formatBytes(bytes: Long): String {
         unitIndex++
     }
     return "%.1f %s".format(value, units[unitIndex])
+}
+
+internal fun String.toShellStatusLabel(): String = when (this) {
+    WorkspaceShellStatus.DISABLED.name -> "未启用"
+    WorkspaceShellStatus.INSTALLING.name -> "安装中"
+    WorkspaceShellStatus.READY.name -> "就绪"
+    WorkspaceShellStatus.BROKEN.name -> "异常"
+    else -> lowercase()
 }
 
 private const val DEFAULT_ROOTFS_URL =
