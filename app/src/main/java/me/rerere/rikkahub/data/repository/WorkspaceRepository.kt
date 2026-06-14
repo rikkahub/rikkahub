@@ -15,6 +15,7 @@ import me.rerere.common.json.JsonInstant
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceCommandResult
+import me.rerere.workspace.WorkspaceCwdPolicy
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
@@ -104,6 +105,41 @@ class WorkspaceRepository(
             true
         }
 
+    /**
+     * Persist a workspace-level shell working directory SEED (issue #282). The stored value is the
+     * NORMALIZED FILES-relative path ([WorkspaceCwdPolicy.normalize]), so a `..`/NUL/absolute escape is
+     * rejected at the source and the round-trip `setWorkingDir(p); getById().workingDir == normalize(p)`
+     * holds (W-R1). Read-modify-write inside a single transaction, matching the [rename]/[setToolApproval]
+     * lost-update guard (I-ATOMIC).
+     */
+    suspend fun setWorkingDir(id: String, path: String): Boolean = db.withTransaction {
+        val workspace = dao.getById(id) ?: return@withTransaction false
+        dao.upsert(
+            workspace.copy(
+                workingDir = WorkspaceCwdPolicy.normalize(path),
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+        true
+    }
+
+    /**
+     * Clear the working-directory seed back to the UNSET sentinel `""` (issue #282, W-D4): the
+     * resolver then falls back to the default `.xcloudz/scratch`. Resetting twice is a no-op — `""` is
+     * already the unset value — so this is idempotent. Distinct from explicitly setting the scratch
+     * path, which keeps "unset" and "set to scratch" distinguishable.
+     */
+    suspend fun resetWorkingDir(id: String): Boolean = db.withTransaction {
+        val workspace = dao.getById(id) ?: return@withTransaction false
+        dao.upsert(
+            workspace.copy(
+                workingDir = "",
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+        true
+    }
+
     suspend fun installRootfs(
         id: String,
         url: String,
@@ -188,6 +224,10 @@ class WorkspaceRepository(
     ): Boolean {
         val deleted = withContext(Dispatchers.IO) {
             val workspace = dao.getById(id) ?: return@withContext false
+            // ensureWorkspace before the delete, matching list/read/write/move (W-I7): a workspace whose
+            // dirs were never materialized (e.g. created before first access) must have its area dirs
+            // present so the path resolves inside the right root instead of against a missing tree.
+            manager.ensureWorkspace(workspace.root)
             manager.deleteFile(workspace.root, path, recursive, area)
         }
         return deleted
@@ -207,7 +247,10 @@ class WorkspaceRepository(
     suspend fun executeCommand(
         id: String,
         command: String,
-        cwd: String = "",
+        // NULLABLE: `null` == ABSENT (resolve from the workspace working_dir / default scratch); an
+        // explicit `""`/`"."` == the files root. The Absent-vs-Explicit distinction the old `String = ""`
+        // default + the tool gate's `.orEmpty()` collapsed (issue #282).
+        cwd: String? = null,
         timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
     ): WorkspaceCommandResult {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
@@ -225,7 +268,9 @@ class WorkspaceRepository(
         // runInterruptible turns coroutine cancellation into a thread interrupt, which unblocks the blocking Process.waitFor and kills the process
         return runInterruptible(Dispatchers.IO) {
             manager.ensureWorkspace(workspace.root)
-            manager.executeCommand(workspace.root, command, cwd, timeoutMillis)
+            // Pass the persisted working_dir SEED so the central policy resolves override > working_dir >
+            // default scratch; an ABSENT (null) cwd here falls through to that seed, an explicit cwd wins.
+            manager.executeCommand(workspace.root, command, cwd, workspace.workingDir, timeoutMillis)
         }
     }
 

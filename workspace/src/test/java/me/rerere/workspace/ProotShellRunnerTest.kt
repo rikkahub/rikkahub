@@ -57,4 +57,23 @@ class ProotShellRunnerTest {
         // $1 is the proot cwd (under /workspace); the script references it as "$1", never inlined.
         assertEquals("/workspace/sub/dir", argv[cIndex + 3])
     }
+
+    // The runner's cwd -> -w mapping MUST be the ONE central policy function, not a private copy
+    // (issue #282 W-I6): the -w value (after `-w`, and the $1 positional) is exactly
+    // WorkspaceCwdPolicy.toShellPath(context.cwd) for every cwd the manager hands down. A blank cwd
+    // (the resolved files root) maps to bare /workspace; a relative cwd maps to /workspace/<cwd>.
+    @Test
+    fun `prootCwd delegates to the central WorkspaceCwdPolicy mapping`() {
+        val runner = ProotShellRunner(File("/tmp/native"))
+        val proot = File("/tmp/native/libproot_exec.so")
+
+        listOf("", ".xcloudz/scratch", "project/sub").forEach { cwd ->
+            val argv = runner.buildCommand(context("ls", cwd = cwd), proot)
+            val expected = WorkspaceCwdPolicy.toShellPath(cwd)
+            val wIndex = argv.indexOf("-w")
+            assertEquals("the -w value must come from WorkspaceCwdPolicy.toShellPath", expected, argv[wIndex + 1])
+            val cIndex = argv.indexOf("-c")
+            assertEquals("the \$1 cwd positional must come from WorkspaceCwdPolicy.toShellPath", expected, argv[cIndex + 3])
+        }
+    }
 }

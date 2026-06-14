@@ -62,7 +62,7 @@ class ProotShellRunner(
             "-w",
             context.prootCwd(),
             "-b",
-            "${context.filesDir.absolutePath}:$WORKSPACE_DIR",
+            "${context.filesDir.absolutePath}:${WorkspaceCwdPolicy.WORKSPACE_DIR}",
         )
 
         listOf("/dev", "/proc", "/sys").forEach { path ->
@@ -95,14 +95,10 @@ class ProotShellRunner(
         return command
     }
 
-    private fun WorkspaceShellContext.prootCwd(): String {
-        val normalized = cwd.trim().trim('/')
-        return if (normalized.isBlank()) {
-            WORKSPACE_DIR
-        } else {
-            "$WORKSPACE_DIR/$normalized"
-        }
-    }
+    // The cwd -> PRoot `-w` mapping is NOT a private copy here: it delegates to the ONE central policy
+    // so the runner's `-w` and the sideload terminal's `-w` derive from the IDENTICAL function (issue
+    // #282 W-I6). [context.cwd] is the already-resolved FILES-relative path the manager produced.
+    private fun WorkspaceShellContext.prootCwd(): String = WorkspaceCwdPolicy.toShellPath(cwd)
 
     private fun File.hasUsableRootfs(): Boolean =
         isDirectory && File(this, "bin/sh").isFile
@@ -110,6 +106,5 @@ class ProotShellRunner(
     private companion object {
         private const val PROOT_EXEC = "libproot_exec.so"
         private const val PROOT_LOADER = "libproot_loader.so"
-        private const val WORKSPACE_DIR = "/workspace"
     }
 }

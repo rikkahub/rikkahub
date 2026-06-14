@@ -35,6 +35,10 @@ data class WorkspaceEntity(
     // Per-tool approval overrides (toolName -> needsApproval); tools not listed fall back to the default
     @ColumnInfo("tool_approvals", defaultValue = "{}")
     val toolApprovals: String = "{}",
+    // FILES-area relative seed for the resolved shell cwd; "" == UNSET. DEFAULT '' so legacy rows
+    // (and the v26->v27 migration) decode as unset rather than null (issue #282).
+    @ColumnInfo("working_dir", defaultValue = "")
+    val workingDir: String = "",
 ) {
     // Returns null when the stored blob cannot be parsed, so callers can distinguish an explicitly
     // empty policy ({}) from a corrupt one. A corrupt approval policy is a security-relevant case:
@@ -54,5 +58,6 @@ data class WorkspaceEntity(
         createdAt = createdAt,
         updatedAt = updatedAt,
         lastAccessAt = lastAccessAt,
+        workingDir = workingDir,
     )
 }

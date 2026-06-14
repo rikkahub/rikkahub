@@ -87,26 +87,51 @@ class WorkspaceManager(
     ): List<WorkspaceSearchMatch> =
         fileSystem.grep(filesDir(root), query, path, regex, ignoreCase, includeGlob)
 
+    /**
+     * Run [command] in the workspace shell. The cwd is resolved by the ONE central policy
+     * [WorkspaceCwdPolicy.resolveRelative] (issue #282) so the value handed to the runner — and thus
+     * mapped to PRoot `-w` — is the SAME normalized value the sideload terminal derives (W-I6):
+     *
+     *  - [cwd] is NULLABLE. `null` == ABSENT (fall back to [workingDir]/the scratch default); an
+     *    explicit `""`/`"."` == the files root. Collapsing the two (the old `String = ""` default, the
+     *    `.orEmpty()` at the tool gate) is the bug this nullable param recovers from.
+     *  - resolution order is explicit-override > [workingDir] > default `.xcloudz/scratch`.
+     *  - an ABSENT cwd over an UNSET [workingDir] materializes the default scratch dir via
+     *    [ensureDefaultScratch] (mkdir-p, clobber-safe) so the resolved directory actually exists.
+     */
     fun executeCommand(
         root: String,
         command: String,
-        cwd: String = "",
+        cwd: String? = null,
+        workingDir: String = "",
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
     ): WorkspaceCommandResult {
         require(command.isNotBlank()) { "Command is required" }
-        val workingDir = fileSystem.resolve(filesDir(root), cwd)
-        require(workingDir.exists()) { "Working directory does not exist: $cwd" }
-        require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
+        val files = filesDir(root)
+        val override =
+            if (cwd == null) WorkspaceCwdPolicy.CwdOverride.Absent
+            else WorkspaceCwdPolicy.CwdOverride.Explicit(cwd)
+        // ABSENT routes through the SAME [seededRelativeCwd] the sideload terminal uses, so the exec
+        // `-w` and the terminal `-w` are the IDENTICAL normalized value for a given workspace (W-I6).
+        // seededRelativeCwd materializes the scratch default clobber-safely on the unset path; an
+        // EXPLICIT override stays on the central policy resolver (override > files-root, no auto-mkdir).
+        val resolved: String = when (override) {
+            is WorkspaceCwdPolicy.CwdOverride.Absent -> seededRelativeCwd(files, workingDir)
+            is WorkspaceCwdPolicy.CwdOverride.Explicit -> WorkspaceCwdPolicy.resolveRelative(override, workingDir)
+        }
+        val workingDirFile: File = fileSystem.resolve(files, resolved)
+        require(workingDirFile.exists()) { "Working directory does not exist: $resolved" }
+        require(workingDirFile.isDirectory) { "Working path is not a directory: $resolved" }
 
         return shellRunner.execute(
             WorkspaceShellContext(
                 root = root,
                 command = command,
-                cwd = cwd,
-                filesDir = filesDir(root),
+                cwd = resolved,
+                filesDir = files,
                 linuxDir = linuxDir(root),
                 tempDir = tempDir(root),
-                workingDir = workingDir,
+                workingDir = workingDirFile,
                 timeoutMillis = timeoutMillis,
             )
         )

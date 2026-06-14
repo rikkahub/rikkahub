@@ -282,7 +282,10 @@ private fun createShellTool(
     execute = {
         val params = it.jsonObject
         val command = params.string("command") ?: error("command is required")
-        val cwd = params.string("cwd").orEmpty()
+        // NULLABLE (no .orEmpty()): an ABSENT `cwd` arg (key missing) stays null so the repository's
+        // central policy resolves it to working_dir/default, while an explicit "" / "." maps to the
+        // files root. Collapsing absent->"" (the old `.orEmpty()`) destroyed that distinction (#282).
+        val cwd = params.string("cwd")
         val timeoutMillis = params.string("timeout")?.toLongOrNull()
             ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
             ?.times(1_000L)

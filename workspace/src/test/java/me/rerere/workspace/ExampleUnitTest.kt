@@ -127,11 +127,31 @@ class ExampleUnitTest {
         val root = "test-workspace"
         manager.ensureWorkspace(root)
 
-        val result = manager.executeCommand(root, "printf hello > command.txt && cat command.txt")
+        // An EXPLICIT "" cwd is the files root (issue #282): with the cwd arg now nullable, OMITTING it
+        // means ABSENT (-> working_dir / default scratch), so a test that wants the files root must ask
+        // for it explicitly. This is the Absent-vs-Explicit distinction the central policy recovers.
+        val result = manager.executeCommand(root, "printf hello > command.txt && cat command.txt", cwd = "")
 
         assertEquals(0, result.exitCode)
         assertEquals("hello", result.stdout)
         assertEquals("hello", File(manager.filesDir(root), "command.txt").readText())
+    }
+
+    @Test
+    fun omittedCwdDefaultsToTheScratchDirectory() {
+        val baseDir = Files.createTempDirectory("workspace-default-cwd-test").toFile()
+        val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        // Omitting cwd over an unset working_dir resolves to and materializes `.xcloudz/scratch`, so the
+        // file lands there — NOT in the files root (the behavior change Assumption 5 documents).
+        val result = manager.executeCommand(root, "printf hi > here.txt && cat here.txt")
+
+        assertEquals(0, result.exitCode)
+        assertEquals("hi", result.stdout)
+        assertEquals("hi", File(manager.filesDir(root), ".xcloudz/scratch/here.txt").readText())
+        assertEquals(false, File(manager.filesDir(root), "here.txt").exists())
     }
 
     @Test

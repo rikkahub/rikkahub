@@ -15,12 +15,27 @@ import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import me.rerere.workspace.RootfsPatchOptions
 import me.rerere.workspace.RootfsPatcher
+import me.rerere.workspace.WorkspaceCwdPolicy
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.seededRelativeCwd
 import java.io.File
+
+/**
+ * The interactive terminal's initial PRoot `-w`, derived through the ONE central cwd mapping so it is
+ * the IDENTICAL normalized value the LLM exec sink uses for the same workspace (issue #282, W-I6).
+ * Both this and `WorkspaceManager.executeCommand`'s ABSENT branch reduce to
+ * `WorkspaceCwdPolicy.toShellPath(seededRelativeCwd(filesDir, workingDir))`; the terminal has no
+ * per-call override, so its cwd is the SEED from the workspace `working_dir` (an unset row resolves to
+ * the materialized `.xcloudz/scratch` default). This is a snapshot at session-open time — runtime `cd`
+ * drift is never written back (OSC 7 sync is out of scope, W-S3).
+ */
+internal fun workspaceTerminalCwd(filesDir: File, workingDir: String): String =
+    WorkspaceCwdPolicy.toShellPath(seededRelativeCwd(filesDir, workingDir))
 
 internal fun createWorkspaceTerminalSession(
     context: Context,
     root: String,
+    workingDir: String,
     client: TerminalSessionClient,
 ): TerminalSession {
     // The terminal resolves directories directly (it reimplements the interactive PRoot launch), so
@@ -40,6 +55,11 @@ internal fun createWorkspaceTerminalSession(
         RootfsPatchOptions(nameservers = appContext.activeDnsServers())
     )
 
+    // The initial `-w` is the seed resolved through the central policy (W-I6) — NOT a hard-coded
+    // `/workspace`. seededRelativeCwd materializes the scratch default before the session opens so the
+    // shell lands in an existing directory. The bind-mount target stays the workspace ROOT alias; only
+    // the working directory differs.
+    val initialCwd = workspaceTerminalCwd(filesDir, workingDir)
     val args = mutableListOf(
         "--root-id",
         "--link2symlink",
@@ -47,9 +67,9 @@ internal fun createWorkspaceTerminalSession(
         "-r",
         linuxDir.absolutePath,
         "-w",
-        WORKSPACE_DIR,
+        initialCwd,
         "-b",
-        "${filesDir.absolutePath}:$WORKSPACE_DIR",
+        "${filesDir.absolutePath}:${WorkspaceCwdPolicy.WORKSPACE_DIR}",
     )
     listOf("/dev", "/proc", "/sys").forEach { path ->
         if (File(path).exists()) {
@@ -251,8 +271,6 @@ internal class WorkspaceTerminalViewClient(
         Log.e(tag, "Terminal view error", e)
     }
 }
-
-private const val WORKSPACE_DIR = "/workspace"
 
 private fun Context.activeDnsServers(): List<String> {
     val connectivityManager =

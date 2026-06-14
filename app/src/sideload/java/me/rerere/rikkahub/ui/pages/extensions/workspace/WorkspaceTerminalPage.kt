@@ -82,6 +82,10 @@ fun WorkspaceTerminalPage(id: String) {
         } ?: false
         WorkspaceTerminalContent(
             root = state.workspace?.root,
+            // The terminal seeds its initial cwd from the workspace working_dir so its `-w` matches
+            // the LLM exec `-w` for this workspace (W-I6). An unset row ("") resolves to the scratch
+            // default inside createWorkspaceTerminalSession via the central policy.
+            workingDir = state.workspace?.workingDir.orEmpty(),
             shellRunnable = shellRunnable,
             contentPadding = innerPadding,
         )
@@ -91,6 +95,7 @@ fun WorkspaceTerminalPage(id: String) {
 @Composable
 private fun WorkspaceTerminalContent(
     root: String?,
+    workingDir: String,
     shellRunnable: Boolean,
     contentPadding: PaddingValues,
 ) {
@@ -99,10 +104,16 @@ private fun WorkspaceTerminalContent(
     val terminalTypeface = remember(context) {
         ResourcesCompat.getFont(context, R.font.jetbrains_mono) ?: Typeface.MONOSPACE
     }
-    var finished by remember(root) { mutableStateOf(false) }
+    // `finished` and `sessionClient` MUST share the session's key (root, workingDir), not just `root`.
+    // The session is recreated when working_dir changes (see `remember(root, workingDir)` below); the
+    // old session's onDispose calls finishIfRunning(), which fires sessionClient -> finished = true. If
+    // these survived a working_dir change (keyed on `root` alone) the stale finished=true would render
+    // the "exited" overlay over the freshly-created, still-running replacement session, and the reused
+    // client's terminalView would be nulled while bound to the new session.
+    var finished by remember(root, workingDir) { mutableStateOf(false) }
     var controlDown by remember(root) { mutableStateOf(false) }
     var altDown by remember(root) { mutableStateOf(false) }
-    val sessionClient = remember(root) {
+    val sessionClient = remember(root, workingDir) {
         WorkspaceTerminalSessionClient(context.applicationContext) {
             finished = true
         }
@@ -149,8 +160,11 @@ private fun WorkspaceTerminalContent(
         return
     }
 
-    val session = remember(root) {
-        createWorkspaceTerminalSession(context, root, sessionClient)
+    // Keyed on workingDir too: a session is a SEED of the cwd at open time (W-S3). A session opened
+    // before a default change keeps its initial -w; changing working_dir re-creates the session so a
+    // subsequently-opened terminal picks up the new cwd, matching exec.
+    val session = remember(root, workingDir) {
+        createWorkspaceTerminalSession(context, root, workingDir, sessionClient)
     }
 
     DisposableEffect(session) {
