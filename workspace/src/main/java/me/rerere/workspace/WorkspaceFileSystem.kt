@@ -18,6 +18,7 @@ class WorkspaceFileSystem(
         require(dir.isDirectory) { "Path is not a directory: $path" }
         return dir.listFiles()
             .orEmpty()
+            .filter { !it.name.startsWith(".l2s.") }
             .sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() })
             .take(config.maxListEntries)
             .map { it.toEntry(root) }
@@ -109,6 +110,7 @@ class WorkspaceFileSystem(
         return walk(start) { paths ->
             paths
                 .filter { Files.isRegularFile(it) || Files.isDirectory(it) }
+                .filter { !it.toFile().name.startsWith(".l2s.") }
                 .filter { matcher.matches(root.toPath().relativize(it).normalizeForMatch()) }
                 .take(config.maxListEntries)
                 .map { it.toFile().toEntry(root) }
@@ -137,6 +139,7 @@ class WorkspaceFileSystem(
         walk(start) { paths ->
             paths
                 .filter { Files.isRegularFile(it) }
+                .filter { !it.toFile().name.startsWith(".l2s.") }
                 .forEach { path ->
                     if (results.size >= config.maxSearchResults) return@forEach
                     if (includeMatcher != null &&
@@ -197,8 +200,11 @@ class WorkspaceFileSystem(
         updatedAt = lastModified(),
     )
 
-    private fun File.relativePath(root: File): String =
-        canonicalFile.relativeTo(root.canonicalFile).path.replace(File.separatorChar, '/')
+    private fun File.relativePath(root: File): String {
+        val rootCanonical = root.canonicalFile
+        val parentCanonical = (parentFile ?: rootCanonical).canonicalFile
+        return File(parentCanonical, name).relativeTo(rootCanonical).path.replace(File.separatorChar, '/')
+    }
 
     private fun Path.normalizeForMatch(): Path =
         FileSystems.getDefault().getPath(relativeToString())
