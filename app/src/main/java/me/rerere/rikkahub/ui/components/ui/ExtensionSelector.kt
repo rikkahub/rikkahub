@@ -15,12 +15,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
@@ -35,6 +39,17 @@ import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import org.koin.compose.koinInject
+
+
+// The Skills tab is the only tab that needs disk IO (listSkills). It sits at this
+// pager index; the load gate below targets the same index so the two never drift.
+internal const val SKILLS_PAGE_INDEX = 3
+
+/** Suspends until this flow first emits [target], then returns. Cancels the upstream after the
+ *  first match, so any work guarded behind it runs at most once per collection. */
+internal suspend fun Flow<Int>.awaitPage(target: Int) {
+    filter { it == target }.first()
+}
 
 
 @Composable
@@ -52,12 +67,6 @@ fun ExtensionSelector(
     val skillManager: SkillManager = koinInject()
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            skills = skillManager.listSkills()
-        }
-    }
-
     val useConversationInjections =
         assistant.allowConversationPromptInjection && conversation != null && onUpdateConversation != null
     val selectedModeInjectionIds = if (useConversationInjections) {
@@ -73,6 +82,15 @@ fun ExtensionSelector(
 
     val pagerState = rememberPagerState { 4 }
     val scope = rememberCoroutineScope()
+
+    // Defer the skills disk IO until the user actually settles on the Skills tab. Loading is
+    // single-shot per sheet instance: awaitPage cancels the snapshotFlow after the first match.
+    LaunchedEffect(Unit) {
+        snapshotFlow { pagerState.settledPage }.awaitPage(SKILLS_PAGE_INDEX)
+        withContext(Dispatchers.IO) {
+            skills = skillManager.listSkills()
+        }
+    }
 
     Column(
         modifier = modifier
@@ -105,9 +123,9 @@ fun ExtensionSelector(
                 text = { Text(stringResource(R.string.extension_selector_tab_lorebooks)) }
             )
             Tab(
-                selected = pagerState.currentPage == 3,
+                selected = pagerState.currentPage == SKILLS_PAGE_INDEX,
                 onClick = {
-                    scope.launch { pagerState.animateScrollToPage(3) }
+                    scope.launch { pagerState.animateScrollToPage(SKILLS_PAGE_INDEX) }
                 },
                 text = { Text(stringResource(R.string.extension_selector_tab_skills)) }
             )
@@ -200,7 +218,7 @@ fun ExtensionSelector(
                     }
                 }
 
-                3 -> {
+                SKILLS_PAGE_INDEX -> {
                     if (skills.isNotEmpty()) {
                         SkillsContent(
                             skills = skills,
