@@ -86,7 +86,7 @@ private fun WorkspaceTerminalContent(
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
-    val terminalTextSizePx = with(LocalDensity.current) { 13.sp.roundToPx() }
+    val terminalTextSizePx = with(LocalDensity.current) { 12.sp.roundToPx() }
     val terminalTypeface = remember(context) {
         ResourcesCompat.getFont(context, R.font.jetbrains_mono) ?: Typeface.MONOSPACE
     }
