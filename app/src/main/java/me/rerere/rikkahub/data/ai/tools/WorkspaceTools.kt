@@ -11,11 +11,15 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.generateUnifiedDiff
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.WorkspaceStorageArea
+import org.koin.java.KoinJavaComponent.getKoin
+import java.io.ByteArrayOutputStream
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 
@@ -48,6 +52,11 @@ suspend fun createWorkspaceTools(
     )
 }
 
+private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "svg")
+
+private fun String.isImagePath(): Boolean =
+    substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
+
 private fun createReadFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
@@ -55,8 +64,9 @@ private fun createReadFileTool(
 ) = Tool(
     name = "workspace_read_file",
     description = """
-        Read a UTF-8 text file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Read a file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
         Use /workspace for the workspace files area.
+        Supports UTF-8 text files and image files (png, jpg, jpeg, gif, webp, bmp).
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -69,15 +79,19 @@ private fun createReadFileTool(
     needsApproval = { needsApproval("workspace_read_file") },
     execute = {
         val path = it.jsonObject.absolutePath("path")
-        val text = workspaceRepository.readTextInRootfs(workspaceId, path)
-        listOf(
-            UIMessagePart.Text(
-                buildJsonObject {
-                    put("path", path)
-                    put("text", text)
-                }.toString()
+        if (path.isImagePath()) {
+            workspaceRepository.readImageInRootfs(workspaceId, path)
+        } else {
+            val text = workspaceRepository.readTextInRootfs(workspaceId, path)
+            listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("path", path)
+                        put("text", text)
+                    }.toString()
+                )
             )
-        )
+        }
     },
 )
 
@@ -277,6 +291,37 @@ private suspend fun WorkspaceRepository.readTextInRootfs(
         """.trimIndent(),
     )
     return result.stdout
+}
+
+private fun rootfsPathToAreaAndRelative(path: String): Pair<WorkspaceStorageArea, String> {
+    val trimmed = path.trimEnd('/')
+    return if (trimmed == "/workspace" || trimmed.startsWith("/workspace/")) {
+        WorkspaceStorageArea.FILES to trimmed.removePrefix("/workspace").trimStart('/')
+    } else {
+        WorkspaceStorageArea.LINUX to trimmed.trimStart('/')
+    }
+}
+
+private suspend fun WorkspaceRepository.readImageInRootfs(
+    workspaceId: String,
+    path: String,
+): List<UIMessagePart> {
+    val (area, relativePath) = rootfsPathToAreaAndRelative(path)
+    val buffer = ByteArrayOutputStream()
+    exportFile(workspaceId, area, relativePath, buffer)
+    val bytes = buffer.toByteArray()
+
+    val filesManager = getKoin().get<FilesManager>()
+    val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
+    return listOf(
+        UIMessagePart.Image(url = uris.first().toString()),
+        UIMessagePart.Text(
+            buildJsonObject {
+                put("path", path)
+                put("description", "Image file read successfully")
+            }.toString()
+        ),
+    )
 }
 
 private suspend fun WorkspaceRepository.writeTextInRootfs(
