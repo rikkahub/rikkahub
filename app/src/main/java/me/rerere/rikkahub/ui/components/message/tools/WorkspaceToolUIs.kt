@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -29,7 +27,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.metadataAs
@@ -37,14 +34,10 @@ import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
 import androidx.compose.ui.res.stringResource
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.ComputerTerminal01
-import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.FileAdd
 import me.rerere.hugeicons.stroke.FileEdit
-import me.rerere.hugeicons.stroke.FileExport
 import me.rerere.hugeicons.stroke.FileView
-import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.DiffAddedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffRemovedColor
@@ -289,176 +282,6 @@ private fun FileContentPreview(path: String?, code: String) {
             language = languageOf(path),
             modifier = Modifier.fillMaxWidth(),
         )
-    }
-}
-
-/**
- * 工作空间列出文件: 摘要显示条目数与首部名称, 详情为带类型图标和大小的文件列表
- */
-object ListFilesToolUI : ToolUIRenderer {
-    private const val SUMMARY_MAX_NAMES = 6
-
-    override val toolName: String = "workspace_list_files"
-
-    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Folder01
-
-    @Composable
-    override fun title(context: ToolUIContext): String {
-        val path = context.arguments.getStringContent("path")
-        return if (!path.isNullOrBlank()) stringResource(R.string.tool_ui_list_files, path) else stringResource(R.string.tool_ui_list_files_default)
-    }
-
-    private fun entries(context: ToolUIContext): List<JsonElement> =
-        context.content?.jsonObjectOrNull?.get("entries")?.jsonArray ?: emptyList()
-
-    override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
-
-    @Composable
-    override fun Summary(context: ToolUIContext) {
-        val entries = remember(context) { entries(context) }
-        val names = remember(entries) { entries.mapNotNull { it.getStringContent("name") } }
-        Text(
-            text = if (names.isEmpty()) {
-                stringResource(R.string.tool_ui_list_files_empty)
-            } else {
-                val shown = names.take(SUMMARY_MAX_NAMES).joinToString(", ")
-                val more = if (names.size > SUMMARY_MAX_NAMES) " …" else ""
-                stringResource(R.string.tool_ui_list_files_items, entries.size, "$shown$more")
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-            modifier = Modifier.shimmer(isLoading = context.loading),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-
-    @Composable
-    override fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {
-        val entries = remember(context) { entries(context) }
-        if (entries.isEmpty()) {
-            DefaultToolPreview(context = context)
-            return
-        }
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxHeight(0.8f)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            items(entries) { entry ->
-                val isDir = entry.boolean("isDirectory") ?: false
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isDir) HugeIcons.Folder01 else HugeIcons.FileView,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        text = entry.getStringContent("name") ?: "",
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (!isDir) {
-                        Text(
-                            text = formatBytes(entry.long("sizeBytes") ?: 0L),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 工作空间删除文件: 摘要显示删除结果, 详情沿用默认 JSON 展示
- */
-object DeleteFileToolUI : ToolUIRenderer {
-    override val toolName: String = "workspace_delete_file"
-
-    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Delete02
-
-    @Composable
-    override fun title(context: ToolUIContext): String {
-        val path = context.arguments.getStringContent("path")
-        return if (path != null) stringResource(R.string.tool_ui_delete_file, path) else stringResource(R.string.tool_ui_delete_file_default)
-    }
-
-    override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
-
-    @Composable
-    override fun Summary(context: ToolUIContext) {
-        val success = context.content.boolean("success") ?: return
-        val path = context.content.getStringContent("path") ?: ""
-        Text(
-            text = if (success) stringResource(R.string.tool_ui_deleted, path) else stringResource(R.string.tool_ui_delete_failed, path),
-            style = MaterialTheme.typography.labelSmall,
-            color = if (success) {
-                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-            } else {
-                MaterialTheme.colorScheme.error
-            },
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/**
- * 工作空间移动/重命名文件: 摘要显示 源 → 目标, 详情沿用默认 JSON 展示
- */
-object MoveFileToolUI : ToolUIRenderer {
-    override val toolName: String = "workspace_move_file"
-
-    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.FileExport
-
-    @Composable
-    override fun title(context: ToolUIContext): String = stringResource(R.string.tool_ui_move_file)
-
-    override fun hasSummary(context: ToolUIContext): Boolean =
-        context.arguments.getStringContent("source") != null
-
-    @Composable
-    override fun Summary(context: ToolUIContext) {
-        val source = context.arguments.getStringContent("source") ?: return
-        val target = context.arguments.getStringContent("target") ?: return
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = source,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Icon(
-                imageVector = HugeIcons.ArrowRight01,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(14.dp),
-            )
-            Text(
-                text = target,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-        }
     }
 }
 

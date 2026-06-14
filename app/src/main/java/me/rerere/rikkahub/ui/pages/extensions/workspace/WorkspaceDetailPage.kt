@@ -416,12 +416,9 @@ private fun WorkspaceToolApprovalCard(
 
 @Composable
 private fun workspaceToolApprovalItems() = listOf(
-    "workspace_list_files" to stringResource(R.string.workspace_detail_tool_list_files),
     "workspace_read_file" to stringResource(R.string.workspace_detail_tool_read_file),
     "workspace_write_file" to stringResource(R.string.workspace_detail_tool_write_file),
     "workspace_edit_file" to stringResource(R.string.workspace_detail_tool_edit_file),
-    "workspace_delete_file" to stringResource(R.string.workspace_detail_tool_delete_file),
-    "workspace_move_file" to stringResource(R.string.workspace_detail_tool_move_file),
     "workspace_shell" to stringResource(R.string.workspace_detail_tool_shell),
 )
 
