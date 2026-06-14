@@ -122,7 +122,7 @@ object MemoryToolUI : ToolUIRenderer {
                     ) {
                         Icon(
                             imageVector = HugeIcons.Delete01,
-                            contentDescription = "Delete memory"
+                            contentDescription = stringResource(R.string.tool_ui_delete_memory)
                         )
                     }
                 }
@@ -276,7 +276,7 @@ object TextToSpeechToolUI : ToolUIRenderer {
         val preview = context.arguments.getStringContent("text")?.let { text ->
             if (text.length > 24) text.take(24) + "…" else text
         } ?: ""
-        return "Speaking: $preview"
+        return stringResource(R.string.tool_ui_speaking, preview)
     }
 
     override fun hasSummary(context: ToolUIContext): Boolean =
@@ -306,7 +306,7 @@ object TextToSpeechToolUI : ToolUIRenderer {
             ) {
                 Icon(
                     imageVector = HugeIcons.Refresh01,
-                    contentDescription = "Replay",
+                    contentDescription = stringResource(R.string.tool_ui_replay),
                     modifier = Modifier.size(14.dp),
                 )
             }

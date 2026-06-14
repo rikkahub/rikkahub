@@ -180,10 +180,10 @@ internal fun AssistantBasicContent(
 
             FormItem(
                 label = {
-                    Text("工作区")
+                    Text(stringResource(R.string.assistant_page_workspace))
                 },
                 description = {
-                    Text("绑定后 Agent 可以使用该工作区的文件和沙盒能力")
+                    Text(stringResource(R.string.assistant_page_workspace_desc))
                 },
                 modifier = Modifier.padding(8.dp),
             ) {
@@ -200,7 +200,7 @@ internal fun AssistantBasicContent(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     optionToString = { workspace ->
-                        workspace?.name ?: "不绑定"
+                        workspace?.name ?: stringResource(R.string.workspace_no_binding)
                     },
                 )
             }

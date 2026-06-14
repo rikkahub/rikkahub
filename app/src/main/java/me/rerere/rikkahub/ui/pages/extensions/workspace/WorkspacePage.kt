@@ -46,6 +46,8 @@ import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import androidx.compose.ui.res.stringResource
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -65,7 +67,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("工作区") },
+                title = { Text(stringResource(R.string.workspace_page_title)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -103,7 +105,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
 
     if (showAddDialog) {
         EditWorkspaceDialog(
-            title = "新建工作区",
+            title = stringResource(R.string.workspace_page_create),
             initialName = "",
             onDismiss = { showAddDialog = false },
             onConfirm = { name ->
@@ -115,7 +117,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
 
     editTarget?.let { workspace ->
         EditWorkspaceDialog(
-            title = "重命名工作区",
+            title = stringResource(R.string.workspace_page_rename),
             initialName = workspace.name,
             onDismiss = { editTarget = null },
             onConfirm = { name ->
@@ -127,16 +129,16 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
 
     RikkaConfirmDialog(
         show = deleteTarget != null,
-        title = "删除工作区",
-        confirmText = "删除",
-        dismissText = "取消",
+        title = stringResource(R.string.workspace_page_delete),
+        confirmText = stringResource(R.string.common_delete),
+        dismissText = stringResource(R.string.common_cancel),
         onConfirm = {
             deleteTarget?.let { vm.delete(it) }
             deleteTarget = null
         },
         onDismiss = { deleteTarget = null },
     ) {
-        Text("会删除工作区元数据和本地文件，并清空引用它的 Assistant 绑定。")
+        Text(stringResource(R.string.workspace_page_delete_confirm))
     }
 }
 
@@ -156,12 +158,12 @@ private fun EmptyWorkspaceState() {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = "还没有工作区",
+            text = stringResource(R.string.workspace_page_empty),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = "新建后可以用于文件工具和沙盒环境",
+            text = stringResource(R.string.workspace_page_empty_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -227,7 +229,7 @@ private fun WorkspaceCard(
                         onDismissRequest = { menuExpanded = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text("重命名") },
+                            text = { Text(stringResource(R.string.common_rename)) },
                             leadingIcon = { Icon(HugeIcons.Edit01, contentDescription = null) },
                             onClick = {
                                 menuExpanded = false
@@ -235,7 +237,7 @@ private fun WorkspaceCard(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) },
                             leadingIcon = {
                                 Icon(
                                     imageVector = HugeIcons.Delete01,
@@ -272,7 +274,7 @@ private fun EditWorkspaceDialog(
                 value = name,
                 onValueChange = { name = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("名称") },
+                label = { Text(stringResource(R.string.workspace_page_name)) },
                 singleLine = true,
             )
         },
@@ -281,12 +283,12 @@ private fun EditWorkspaceDialog(
                 onClick = { onConfirm(name.trim()) },
                 enabled = name.isNotBlank(),
             ) {
-                Text("保存")
+                Text(stringResource(R.string.common_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )

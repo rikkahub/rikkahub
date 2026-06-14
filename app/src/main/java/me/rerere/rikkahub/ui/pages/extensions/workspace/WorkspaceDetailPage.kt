@@ -70,6 +70,8 @@ import me.rerere.hugeicons.stroke.Share08
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import androidx.compose.ui.res.stringResource
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -127,7 +129,7 @@ fun WorkspaceDetailPage(id: String) {
             TopAppBar(
                 title = {
                     Text(
-                        text = state.workspace?.name ?: "工作区详情",
+                        text = state.workspace?.name ?: stringResource(R.string.workspace_detail_title),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -150,13 +152,13 @@ fun WorkspaceDetailPage(id: String) {
             NavigationBar {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 0,
-                    label = { Text("基础") },
+                    label = { Text(stringResource(R.string.workspace_detail_tab_basic)) },
                     icon = { Icon(HugeIcons.Settings03, contentDescription = null) },
                     onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
                 )
                 NavigationBarItem(
                     selected = pagerState.currentPage == 1,
-                    label = { Text("文件") },
+                    label = { Text(stringResource(R.string.workspace_detail_tab_files)) },
                     icon = { Icon(HugeIcons.File02, contentDescription = null) },
                     onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                 )
@@ -165,7 +167,7 @@ fun WorkspaceDetailPage(id: String) {
         floatingActionButton = {
             if (pagerState.currentPage == 1) {
                 FloatingActionButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
-                    Icon(HugeIcons.FileImport, contentDescription = "导入文件")
+                    Icon(HugeIcons.FileImport, contentDescription = stringResource(R.string.workspace_detail_import_file))
                 }
             }
         },
@@ -233,11 +235,11 @@ fun WorkspaceDetailPage(id: String) {
     installError?.let { message ->
         AlertDialog(
             onDismissRequest = vm::dismissInstallError,
-            title = { Text("Rootfs 安装失败") },
+            title = { Text(stringResource(R.string.workspace_detail_rootfs_install_failed)) },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = vm::dismissInstallError) {
-                    Text("确定")
+                    Text(stringResource(R.string.common_confirm))
                 }
             },
         )
@@ -246,16 +248,16 @@ fun WorkspaceDetailPage(id: String) {
     deleteTarget?.let { entry ->
         RikkaConfirmDialog(
             show = true,
-            title = if (entry.isDirectory) "删除目录" else "删除文件",
-            confirmText = "删除",
-            dismissText = "取消",
+            title = if (entry.isDirectory) stringResource(R.string.workspace_detail_delete_directory) else stringResource(R.string.workspace_detail_delete_file),
+            confirmText = stringResource(R.string.common_delete),
+            dismissText = stringResource(R.string.common_cancel),
             onConfirm = {
                 vm.delete(entry)
                 deleteTarget = null
             },
             onDismiss = { deleteTarget = null },
         ) {
-            Text("将删除 ${entry.path}。")
+            Text(stringResource(R.string.workspace_detail_will_delete, entry.path))
         }
     }
 }
@@ -272,9 +274,9 @@ private fun WorkspaceBasicPage(
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
     val rootfsReady = shellStatus == WorkspaceShellStatus.READY.name
     val installButtonText = when {
-        installing -> "安装中"
-        rootfsReady -> "重新安装 Rootfs"
-        else -> "安装 Rootfs"
+        installing -> stringResource(R.string.workspace_detail_installing)
+        rootfsReady -> stringResource(R.string.workspace_detail_reinstall_rootfs)
+        else -> stringResource(R.string.workspace_detail_install_rootfs)
     }
 
     LazyColumn(
@@ -294,11 +296,11 @@ private fun WorkspaceBasicPage(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
-                        text = "工作区",
+                        text = stringResource(R.string.workspace_detail_workspace_info),
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    WorkspaceInfoRow("名称", workspace?.name ?: "加载中")
-                    WorkspaceInfoRow("Shell 状态", workspace?.shellStatus?.toShellStatusLabel() ?: "-")
+                    WorkspaceInfoRow(stringResource(R.string.workspace_detail_name), workspace?.name ?: stringResource(R.string.workspace_detail_loading))
+                    WorkspaceInfoRow(stringResource(R.string.workspace_detail_shell_status), workspace?.shellStatus?.toShellStatusLabel() ?: "-")
                 }
             }
         }
@@ -324,11 +326,11 @@ private fun WorkspaceBasicPage(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                text = "启用 Shell",
+                                text = stringResource(R.string.workspace_detail_enable_shell),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                text = "允许该工作区使用本地 Rootfs 运行终端环境",
+                                text = stringResource(R.string.workspace_detail_enable_shell_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -387,17 +389,17 @@ private fun WorkspaceToolApprovalCard(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "工具审批",
+                    text = stringResource(R.string.workspace_detail_tool_approval),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "开启后，AI 调用该工具前需要用户确认",
+                    text = stringResource(R.string.workspace_detail_tool_approval_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            WorkspaceToolApprovalItems.forEach { (toolName, label) ->
+            workspaceToolApprovalItems().forEach { (toolName, label) ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -430,14 +432,15 @@ private fun WorkspaceToolApprovalCard(
     }
 }
 
-private val WorkspaceToolApprovalItems = listOf(
-    "workspace_list_files" to "列出文件",
-    "workspace_read_file" to "读取文件",
-    "workspace_write_file" to "写入文件",
-    "workspace_edit_file" to "编辑文件",
-    "workspace_delete_file" to "删除文件",
-    "workspace_move_file" to "移动文件",
-    "workspace_shell" to "执行命令",
+@Composable
+private fun workspaceToolApprovalItems() = listOf(
+    "workspace_list_files" to stringResource(R.string.workspace_detail_tool_list_files),
+    "workspace_read_file" to stringResource(R.string.workspace_detail_tool_read_file),
+    "workspace_write_file" to stringResource(R.string.workspace_detail_tool_write_file),
+    "workspace_edit_file" to stringResource(R.string.workspace_detail_tool_edit_file),
+    "workspace_delete_file" to stringResource(R.string.workspace_detail_tool_delete_file),
+    "workspace_move_file" to stringResource(R.string.workspace_detail_tool_move_file),
+    "workspace_shell" to stringResource(R.string.workspace_detail_tool_shell),
 )
 
 @Composable
@@ -489,15 +492,15 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
             text = when (progress.stage) {
                 RootfsInstallStage.DOWNLOADING -> {
                     val total = progress.totalBytes?.let { " / ${formatBytes(it)}" }.orEmpty()
-                    "下载中 ${formatBytes(progress.bytesRead)}$total"
+                    stringResource(R.string.workspace_detail_downloading, formatBytes(progress.bytesRead), total)
                 }
 
                 RootfsInstallStage.EXTRACTING -> {
                     val entry = progress.currentEntry?.let { " · $it" }.orEmpty()
-                    "解包中 ${progress.entriesExtracted} 项$entry"
+                    stringResource(R.string.workspace_detail_extracting, progress.entriesExtracted, entry)
                 }
 
-                RootfsInstallStage.INSTALLED -> "安装完成"
+                RootfsInstallStage.INSTALLED -> stringResource(R.string.workspace_detail_install_complete)
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -517,11 +520,11 @@ private fun InstallRootfsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("安装 Rootfs") },
+        title = { Text(stringResource(R.string.workspace_detail_install_rootfs)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "会下载 tar.gz 并解包到 ${workspace.name} 的 linux 目录。",
+                    text = stringResource(R.string.workspace_detail_install_rootfs_desc, workspace.name),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -529,7 +532,7 @@ private fun InstallRootfsDialog(
                     value = url,
                     onValueChange = { url = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("tar.gz 下载链接") },
+                    label = { Text(stringResource(R.string.workspace_detail_download_url)) },
                     maxLines = 5,
                 )
             }
@@ -539,12 +542,12 @@ private fun InstallRootfsDialog(
                 onClick = { onConfirm(url.trim()) },
                 enabled = url.isNotBlank(),
             ) {
-                Text("安装")
+                Text(stringResource(R.string.common_install))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )
@@ -611,8 +614,8 @@ private fun WorkspaceAreaSelector(
     onSelected: (WorkspaceStorageArea) -> Unit,
 ) {
     val areas = listOf(
-        WorkspaceStorageArea.FILES to "文件",
-        WorkspaceStorageArea.LINUX to "Rootfs",
+        WorkspaceStorageArea.FILES to stringResource(R.string.workspace_detail_area_files),
+        WorkspaceStorageArea.LINUX to stringResource(R.string.workspace_detail_area_rootfs),
     )
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         areas.forEachIndexed { index, (area, label) ->
@@ -717,7 +720,7 @@ private fun WorkspaceFileCard(
                 ) {
                     if (!entry.isDirectory) {
                         DropdownMenuItem(
-                            text = { Text("导出") },
+                            text = { Text(stringResource(R.string.common_export)) },
                             leadingIcon = {
                                 Icon(
                                     imageVector = HugeIcons.FileImport,
@@ -730,7 +733,7 @@ private fun WorkspaceFileCard(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("分享") },
+                            text = { Text(stringResource(R.string.common_share)) },
                             leadingIcon = {
                                 Icon(
                                     imageVector = HugeIcons.Share08,
@@ -744,7 +747,7 @@ private fun WorkspaceFileCard(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = {
                             Icon(
                                 imageVector = HugeIcons.Delete01,
@@ -779,7 +782,7 @@ private fun EmptyDirectoryState() {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = "空目录",
+            text = stringResource(R.string.workspace_detail_empty_directory),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -813,11 +816,12 @@ private fun formatBytes(bytes: Long): String {
     return "%.1f %s".format(value, units[unitIndex])
 }
 
+@Composable
 internal fun String.toShellStatusLabel(): String = when (this) {
-    WorkspaceShellStatus.DISABLED.name -> "未启用"
-    WorkspaceShellStatus.INSTALLING.name -> "安装中"
-    WorkspaceShellStatus.READY.name -> "就绪"
-    WorkspaceShellStatus.BROKEN.name -> "异常"
+    WorkspaceShellStatus.DISABLED.name -> stringResource(R.string.workspace_detail_shell_disabled)
+    WorkspaceShellStatus.INSTALLING.name -> stringResource(R.string.workspace_detail_shell_installing)
+    WorkspaceShellStatus.READY.name -> stringResource(R.string.workspace_detail_shell_ready)
+    WorkspaceShellStatus.BROKEN.name -> stringResource(R.string.workspace_detail_shell_broken)
     else -> lowercase()
 }
 

@@ -323,15 +323,15 @@ private fun WorkspacePickerListItem(
         leadingContent = {
             Icon(
                 imageVector = HugeIcons.Codesandbox,
-                contentDescription = "工作区",
+                contentDescription = stringResource(R.string.assistant_page_workspace),
             )
         },
         headlineContent = {
-            Text("工作区")
+            Text(stringResource(R.string.assistant_page_workspace))
         },
         supportingContent = {
             Text(
-                text = boundWorkspace?.name ?: "未绑定",
+                text = boundWorkspace?.name ?: stringResource(R.string.assistant_page_workspace_unbound),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -344,14 +344,14 @@ private fun WorkspacePickerListItem(
                     IconButton(onClick = { onNavigateToDetail(boundWorkspace.id) }) {
                         Icon(
                             imageVector = HugeIcons.Settings02,
-                            contentDescription = "工作区详情",
+                            contentDescription = stringResource(R.string.workspace_detail),
                         )
                     }
                     if (boundWorkspace.shellEnabled) {
                         IconButton(onClick = { onNavigateToTerminal(boundWorkspace.id) }) {
                             Icon(
                                 imageVector = HugeIcons.ComputerTerminal01,
-                                contentDescription = "工作区终端",
+                                contentDescription = stringResource(R.string.workspace_terminal),
                             )
                         }
                     }
@@ -412,7 +412,7 @@ private fun WorkspaceSelectSheet(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = "选择工作区",
+                text = stringResource(R.string.workspace_select),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.padding(vertical = 8.dp),
             )
@@ -425,7 +425,7 @@ private fun WorkspaceSelectSheet(
             ) {
                 // 不绑定
                 WorkspaceSelectRow(
-                    title = "不绑定",
+                    title = stringResource(R.string.workspace_no_binding),
                     selected = assistant.workspaceId == null,
                     onClick = { onSelect(null) },
                 )
@@ -446,7 +446,7 @@ private fun WorkspaceSelectSheet(
                     Icon(HugeIcons.Codesandbox, contentDescription = null)
                 },
                 headlineContent = {
-                    Text("管理工作区")
+                    Text(stringResource(R.string.workspace_manage))
                 },
                 trailingContent = {
                     Icon(

@@ -77,8 +77,8 @@ fun ExtensionsPage() {
                     item(
                         onClick = { navController.navigate(Screen.Workspaces) },
                         leadingContent = { Icon(HugeIcons.Folder01, null) },
-                        headlineContent = { Text("工作区") },
-                        supportingContent = { Text("管理 Agent 可访问的本地工作目录") },
+                        headlineContent = { Text(stringResource(R.string.extensions_page_workspace)) },
+                        supportingContent = { Text(stringResource(R.string.extensions_page_workspace_desc)) },
                     )
                 }
             }

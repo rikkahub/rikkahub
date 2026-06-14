@@ -35,6 +35,7 @@ import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.metadataAs
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
+import androidx.compose.ui.res.stringResource
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.ComputerTerminal01
@@ -44,6 +45,7 @@ import me.rerere.hugeicons.stroke.FileEdit
 import me.rerere.hugeicons.stroke.FileExport
 import me.rerere.hugeicons.stroke.FileView
 import me.rerere.hugeicons.stroke.Folder01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.DiffAddedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffRemovedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffView
@@ -66,7 +68,7 @@ object EditFileToolUI : ToolUIRenderer {
     @Composable
     override fun title(context: ToolUIContext): String {
         val path = context.arguments.getStringContent("path")
-        return if (path != null) "Edit: $path" else "Edit file"
+        return if (path != null) stringResource(R.string.tool_ui_edit_file, path) else stringResource(R.string.tool_ui_edit_file_default)
     }
 
     /**
@@ -169,7 +171,7 @@ object ReadFileToolUI : ToolUIRenderer {
     @Composable
     override fun title(context: ToolUIContext): String {
         val path = context.arguments.getStringContent("path")
-        return if (path != null) "Read: $path" else "Read file"
+        return if (path != null) stringResource(R.string.tool_ui_read_file, path) else stringResource(R.string.tool_ui_read_file_default)
     }
 
     /** 已执行时从输出 JSON 读取文件内容 */
@@ -210,7 +212,7 @@ object WriteFileToolUI : ToolUIRenderer {
     @Composable
     override fun title(context: ToolUIContext): String {
         val path = context.arguments.getStringContent("path")
-        return if (path != null) "Write: $path" else "Write file"
+        return if (path != null) stringResource(R.string.tool_ui_write_file, path) else stringResource(R.string.tool_ui_write_file_default)
     }
 
     private fun textOf(context: ToolUIContext): String? =
@@ -276,7 +278,7 @@ private fun FileContentPreview(path: String?, code: String) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = path ?: "file",
+            text = path ?: stringResource(R.string.tool_ui_file),
             style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -303,7 +305,7 @@ object ListFilesToolUI : ToolUIRenderer {
     @Composable
     override fun title(context: ToolUIContext): String {
         val path = context.arguments.getStringContent("path")
-        return if (!path.isNullOrBlank()) "List: $path" else "List files"
+        return if (!path.isNullOrBlank()) stringResource(R.string.tool_ui_list_files, path) else stringResource(R.string.tool_ui_list_files_default)
     }
 
     private fun entries(context: ToolUIContext): List<JsonElement> =
@@ -317,11 +319,11 @@ object ListFilesToolUI : ToolUIRenderer {
         val names = remember(entries) { entries.mapNotNull { it.getStringContent("name") } }
         Text(
             text = if (names.isEmpty()) {
-                "Empty"
+                stringResource(R.string.tool_ui_list_files_empty)
             } else {
                 val shown = names.take(SUMMARY_MAX_NAMES).joinToString(", ")
                 val more = if (names.size > SUMMARY_MAX_NAMES) " …" else ""
-                "${entries.size} items: $shown$more"
+                stringResource(R.string.tool_ui_list_files_items, entries.size, "$shown$more")
             },
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
@@ -388,7 +390,7 @@ object DeleteFileToolUI : ToolUIRenderer {
     @Composable
     override fun title(context: ToolUIContext): String {
         val path = context.arguments.getStringContent("path")
-        return if (path != null) "Delete: $path" else "Delete file"
+        return if (path != null) stringResource(R.string.tool_ui_delete_file, path) else stringResource(R.string.tool_ui_delete_file_default)
     }
 
     override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
@@ -398,7 +400,7 @@ object DeleteFileToolUI : ToolUIRenderer {
         val success = context.content.boolean("success") ?: return
         val path = context.content.getStringContent("path") ?: ""
         Text(
-            text = if (success) "Deleted $path" else "Failed to delete $path",
+            text = if (success) stringResource(R.string.tool_ui_deleted, path) else stringResource(R.string.tool_ui_delete_failed, path),
             style = MaterialTheme.typography.labelSmall,
             color = if (success) {
                 MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
@@ -420,7 +422,7 @@ object MoveFileToolUI : ToolUIRenderer {
     override fun icon(context: ToolUIContext): ImageVector = HugeIcons.FileExport
 
     @Composable
-    override fun title(context: ToolUIContext): String = "Move file"
+    override fun title(context: ToolUIContext): String = stringResource(R.string.tool_ui_move_file)
 
     override fun hasSummary(context: ToolUIContext): Boolean =
         context.arguments.getStringContent("source") != null
@@ -473,10 +475,10 @@ object ShellToolUI : ToolUIRenderer {
 
     @Composable
     override fun title(context: ToolUIContext): String {
-        val command = context.arguments.getStringContent("command") ?: return "Shell"
+        val command = context.arguments.getStringContent("command") ?: return stringResource(R.string.tool_ui_shell_default)
         val preview = command.replace("\n", " ").trim()
         val truncated = if (preview.length > TITLE_MAX_CHARS) preview.take(TITLE_MAX_CHARS) + "…" else preview
-        return "Shell: $truncated"
+        return stringResource(R.string.tool_ui_shell, truncated)
     }
 
     override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
@@ -538,7 +540,7 @@ object ShellToolUI : ToolUIRenderer {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "Shell",
+                    text = stringResource(R.string.tool_ui_shell_default),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
@@ -581,8 +583,8 @@ private fun ShellExitStatus(content: JsonElement, style: androidx.compose.ui.tex
     val ok = !timedOut && exitCode == 0
     Text(
         text = when {
-            timedOut -> "timeout"
-            else -> "exit ${exitCode ?: "?"}"
+            timedOut -> stringResource(R.string.tool_ui_shell_timeout)
+            else -> stringResource(R.string.tool_ui_shell_exit, exitCode?.toString() ?: "?")
         },
         style = style,
         color = if (ok) DiffAddedColor else MaterialTheme.colorScheme.error,

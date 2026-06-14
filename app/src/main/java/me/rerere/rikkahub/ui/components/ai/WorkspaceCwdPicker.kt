@@ -35,9 +35,11 @@ import androidx.compose.ui.unit.dp
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Folder01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceStorageArea
@@ -81,11 +83,11 @@ fun WorkspaceCwdPickerSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "选择工作目录",
+                text = stringResource(R.string.workspace_cwd_select_directory),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             )
             Text(
-                text = "设置当前会话的工作目录",
+                text = stringResource(R.string.workspace_cwd_select_desc),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -148,7 +150,7 @@ fun WorkspaceCwdPickerSheet(
                 if (!loading && dirs.isEmpty()) {
                     item {
                         Text(
-                            text = "No subdirectories",
+                            text = stringResource(R.string.workspace_cwd_no_subdirectories),
                             modifier = Modifier.padding(16.dp),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -169,14 +171,14 @@ fun WorkspaceCwdPickerSheet(
                         onSelectCwd(null)
                         onDismiss()
                     }) {
-                        Text("Reset")
+                        Text(stringResource(R.string.workspace_cwd_reset))
                     }
                 }
                 FilledTonalButton(onClick = {
                     onSelectCwd(toAbsolutePath(browsePath))
                     onDismiss()
                 }) {
-                    Text("Set as CWD")
+                    Text(stringResource(R.string.workspace_cwd_set))
                 }
             }
         }
