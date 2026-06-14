@@ -30,7 +30,6 @@ import me.rerere.automation.cap.Sink
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.common.android.redactAndTruncate
-import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -110,14 +109,17 @@ class UiAutomationToolsTest {
         ),
     )
 
-    /** The full tool list the factory exposes (ui_observe + the act tools when enabled). */
+    /**
+     * The full tool list the factory exposes (ui_observe + the act tools when a guard is present).
+     * Activation is now a function of the guard alone — `ChatService` mints one only for an active,
+     * usable grant (standing-grant-gated-by-switch OR a per-run grant), so the factory takes no
+     * assistant (finding 1).
+     */
     private fun allTools(
-        assistant: Assistant,
         guard: CapabilityGuard?,
         backend: FakeBackend,
         foregroundPkg: String? = target,
     ) = getUiAutomationTools(
-        assistant = assistant,
         guard = guard,
         core = AutomationCore(backend),
         foregroundPkg = { foregroundPkg },
@@ -128,30 +130,17 @@ class UiAutomationToolsTest {
 
     /** Just the ui_observe tool — the behavior tests below exercise observe in isolation. */
     private fun observeTool(
-        assistant: Assistant,
         guard: CapabilityGuard?,
         backend: FakeBackend,
         foregroundPkg: String? = target,
-    ) = allTools(assistant, guard, backend, foregroundPkg).first { it.name == UI_OBSERVE_TOOL_NAME }
+    ) = allTools(guard, backend, foregroundPkg).first { it.name == UI_OBSERVE_TOOL_NAME }
 
     // --- 1. ACTIVATION GATING ---
 
     @Test
-    fun `factory returns empty list when ui automation is disabled`() {
+    fun `factory returns empty list when there is no guard`() {
         val backend = FakeBackend(targetTree())
         val tools = allTools(
-            assistant = Assistant(uiAutomationEnabled = false),
-            guard = healthyGuard(),
-            backend = backend,
-        )
-        assertTrue("disabled assistant must expose no automation tools", tools.isEmpty())
-    }
-
-    @Test
-    fun `factory returns empty list when there is no guard even if enabled`() {
-        val backend = FakeBackend(targetTree())
-        val tools = allTools(
-            assistant = Assistant(uiAutomationEnabled = true),
             guard = null,
             backend = backend,
         )
@@ -159,10 +148,26 @@ class UiAutomationToolsTest {
     }
 
     @Test
-    fun `factory exposes the observe plus nav act tools when enabled`() {
+    fun `factory exposes the tools for any guard ChatService already minted`() {
+        // The guard is the single source of truth for activation here — its mere existence means
+        // ChatService already applied the master switch and derived usable authority, so the tools
+        // MUST surface. Gating on uiAutomationEnabled in addition to the guard would split that source
+        // of truth and could hide tools for an otherwise valid guard.
         val backend = FakeBackend(targetTree())
         val tools = allTools(
-            assistant = Assistant(uiAutomationEnabled = true),
+            guard = healthyGuard(),
+            backend = backend,
+        )
+        assertTrue(
+            "a minted guard must surface the automation tools because activation already happened",
+            tools.isNotEmpty(),
+        )
+    }
+
+    @Test
+    fun `factory exposes the observe plus nav act tools when a guard is present`() {
+        val backend = FakeBackend(targetTree())
+        val tools = allTools(
             guard = healthyGuard(),
             backend = backend,
         )
@@ -186,7 +191,7 @@ class UiAutomationToolsTest {
     fun `revoked guard yields a denied text and never touches the backend`() {
         val backend = FakeBackend(targetTree())
         val guard = healthyGuard().also { it.revoke() }
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), guard, backend)
+        val tool = observeTool(guard, backend)
 
         val parts = runBlocking { tool.execute(buildJsonObject { }) }
 
@@ -199,7 +204,7 @@ class UiAutomationToolsTest {
     fun `expired lease yields a denied text and never touches the backend`() {
         val backend = FakeBackend(targetTree())
         val guard = healthyGuard(expiresAt = fixedNow - 1L) // already past expiry under the trust clock
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), guard, backend)
+        val tool = observeTool(guard, backend)
 
         val parts = runBlocking { tool.execute(buildJsonObject { }) }
 
@@ -212,7 +217,7 @@ class UiAutomationToolsTest {
         val backend = FakeBackend(targetTree())
         // Default-empty surface = deny-all (S1): observing the foreground app is not authorized.
         val guard = healthyGuard(surface = emptySet())
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), guard, backend)
+        val tool = observeTool(guard, backend)
 
         val parts = runBlocking { tool.execute(buildJsonObject { }) }
 
@@ -223,7 +228,7 @@ class UiAutomationToolsTest {
     @Test
     fun `healthy guard captures exactly one snapshot and returns it as text`() {
         val backend = FakeBackend(targetTree())
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), healthyGuard(), backend)
+        val tool = observeTool(healthyGuard(), backend)
 
         val parts = runBlocking { tool.execute(buildJsonObject { }) }
 
@@ -236,7 +241,7 @@ class UiAutomationToolsTest {
     @Test
     fun `rendered snapshot carries the table header and never leaks password text or an image`() {
         val backend = FakeBackend(targetTree(stateSeq = 7L))
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), healthyGuard(), backend)
+        val tool = observeTool(healthyGuard(), backend)
 
         val parts = runBlocking { tool.execute(buildJsonObject { }) }
 
@@ -271,7 +276,6 @@ class UiAutomationToolsTest {
         val backend = FakeBackend(hostTree)
         val guard = healthyGuard(surface = setOf("me.rerere.rikkahub"))
         val tool = getUiAutomationTools(
-            assistant = Assistant(uiAutomationEnabled = true),
             guard = guard,
             core = AutomationCore(backend),
             foregroundPkg = { "me.rerere.rikkahub" },
@@ -289,7 +293,7 @@ class UiAutomationToolsTest {
     @Test
     fun `a non-object argument fails closed without touching the backend`() {
         val backend = FakeBackend(targetTree())
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), healthyGuard(), backend)
+        val tool = observeTool(healthyGuard(), backend)
 
         // ui_observe takes an empty object; a JsonNull (or any non-object) is malformed and must
         // fail closed at the guard (P24), never reaching AutomationCore.
@@ -302,7 +306,7 @@ class UiAutomationToolsTest {
     @Test
     fun `a primitive argument fails closed without touching the backend`() {
         val backend = FakeBackend(targetTree())
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), healthyGuard(), backend)
+        val tool = observeTool(healthyGuard(), backend)
 
         val parts = runBlocking { tool.execute(JsonPrimitive("not-an-object")) }
 
@@ -326,7 +330,7 @@ class UiAutomationToolsTest {
             val backend = FakeBackend(targetTree())
             backend.armGate() // the next snapshotRawTree() parks until the owning coroutine is cancelled
             val guard = healthyGuard()
-            val tool = observeTool(Assistant(uiAutomationEnabled = true), guard, backend)
+            val tool = observeTool(guard, backend)
 
             val entered = CompletableDeferred<Unit>().also { backend.snapshotEntered = it }
             val job: Job = launch(Dispatchers.Default) {
@@ -364,7 +368,7 @@ class UiAutomationToolsTest {
     fun `a revoke between authorize and observe denies without capturing`() {
         val backend = FakeBackend(targetTree())
         val guard = healthyGuard()
-        val tool = observeTool(Assistant(uiAutomationEnabled = true), guard, backend)
+        val tool = observeTool(guard, backend)
 
         guard.revoke()
         val parts = runBlocking { tool.execute(buildJsonObject { }) }
@@ -401,7 +405,6 @@ class UiAutomationToolsTest {
         val backend = FakeBackend(capturedAfterSwitch)
         val guard = healthyGuard(surface = setOf(target, switchedTo))
         val tool = getUiAutomationTools(
-            assistant = Assistant(uiAutomationEnabled = true),
             guard = guard,
             core = AutomationCore(backend),
             foregroundPkg = { target }, // authorize-time foreground is the authorized one
@@ -496,7 +499,6 @@ class UiAutomationToolsTest {
         backend: FakeBackend,
         foregroundPkg: String? = target,
     ) = getUiAutomationTools(
-        assistant = Assistant(uiAutomationEnabled = true),
         guard = guard,
         core = AutomationCore(backend),
         foregroundPkg = { foregroundPkg },
@@ -532,23 +534,24 @@ class UiAutomationToolsTest {
         put("selector", selector)
     }
 
-    // --- 7a. FACTORY GATING — the act tools obey the same default-OFF gate as ui_observe ---
+    // --- 7a. FACTORY GATING — the act tools obey the same guard-only gate as ui_observe ---
 
     @Test
-    fun `disabled assistant exposes no act tools either`() {
+    fun `a null guard exposes no act tools either`() {
         val backend = FakeBackend(scrollableTree())
         val tools = getUiAutomationTools(
-            assistant = Assistant(uiAutomationEnabled = false),
-            guard = actGuard(),
+            guard = null,
             core = AutomationCore(backend),
             foregroundPkg = { target },
             confirm = AlwaysConfirm,
         )
-        assertTrue("disabled assistant must expose no automation tools at all", tools.isEmpty())
+        assertTrue("no guard ⇒ no authority ⇒ no automation tools at all", tools.isEmpty())
     }
 
     // (Presence + needsApproval==false for all three tools is asserted by
-    // `factory exposes the observe plus nav act tools when enabled` above.)
+    // `factory exposes the observe plus nav act tools when a guard is present` above. The guard
+    // source-of-truth invariant is pinned by
+    // `factory exposes the tools for any guard ChatService already minted`.)
 
     // --- 7b. GROUNDING — an act before any ui_observe must not touch the backend ---
 

@@ -30,6 +30,9 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AutomationGrant
+import me.rerere.rikkahub.data.model.AutomationSink
+import me.rerere.rikkahub.data.model.AutomationVerb
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
@@ -257,6 +260,20 @@ class ChatVM(
         }
     }
 
+    // Foreground package the assistant would observe/drive if granted (#187 v2). Read live from the
+    // accessibility runtime via ChatService so the in-chat grant sheet can show the user exactly which
+    // app the scope will cover. Null when the accessibility service is not connected.
+    fun automationForegroundPackage(): String? =
+        chatService.automationForegroundPackage()
+
+    // Write the user's per-run automation scope (#187 v2). Transient: it lands on the session's
+    // pendingAutomationGrant (not the persisted Assistant), consumed by the lease derivation and
+    // cleared with the rest of the automation lease lifecycle. Confirming the grant sheet calls this.
+    fun grantAutomation(grant: AutomationGrant) {
+        analytics.logEvent("ai_grant_automation", null)
+        chatService.setPendingAutomationGrant(_conversationId, grant)
+    }
+
     fun saveConversationAsync() {
         launchVm(onError = { reportOperationError(it) }) {
             chatService.saveConversation(_conversationId, conversation.value)
@@ -376,4 +393,55 @@ class ChatVM(
         }
     }
 
+}
+
+/**
+ * The sinks a selected verb requires in the grant's budget, mirroring the kernel's verb→sink
+ * derivation ([AutomationCore.act]: SET_TEXT⇒TYPE_INTO, GLOBAL⇒GLOBAL_NAV; TAP/OBSERVE/SCROLL carry
+ * no sink — an ordinary tap is verb-gated only and the submit-class SUBMIT is the separate opt-in the
+ * kernel withholds). Pure so [buildPerRunGrant] cannot mint a verb without the sink that authorizes it.
+ *
+ * The kernel guard DENYs a non-null sink absent from the budget (`CapabilityGuard.decide`): a
+ * SET_TEXT/GLOBAL grant with an empty sink budget authorizes the verb but then denies the action,
+ * which is the lie this mapping closes — the sheet exposes only verbs, so the sinks MUST be derived
+ * from them, never taken from a caller that could drift from (or contradict) the verb selection.
+ */
+internal fun requiredSinksForVerbs(verbs: Set<AutomationVerb>): Set<AutomationSink> =
+    buildSet {
+        if (AutomationVerb.SET_TEXT in verbs) add(AutomationSink.TYPE_INTO)
+        if (AutomationVerb.GLOBAL in verbs) add(AutomationSink.GLOBAL_NAV)
+        // TAP's submit-class SUBMIT is intentionally NOT minted here — it is the stricter separate
+        // opt-in the kernel deliberately withholds (the kernel's `toCapability` strips it again).
+    }
+
+/**
+ * Pure confirm-logic of the in-chat per-run automation grant sheet (T10). Builds the transient
+ * [AutomationGrant] the user is authorizing from the live foreground package + their selected verbs,
+ * TTL and step budget. The grant's sink budget is DERIVED from the verbs ([requiredSinksForVerbs]),
+ * not caller-supplied, so a write/navigation verb always carries the sink the kernel guard needs to
+ * authorize its action. Top-level so it is JVM-testable without the ViewModel/Android (mirrors
+ * [shouldBlockSubmitForMissingModel] in ChatPage).
+ *
+ * Returns `null` when there is no foreground package to scope to — an in-chat grant is always scoped
+ * to exactly the one app currently on screen, so without it there is nothing to authorize.
+ *
+ * [AutomationSink.SUBMIT] is never derived: submit-class automation is the stricter, separate opt-in
+ * the kernel deliberately withholds (Boundaries: "Ask first — adding Sink.SUBMIT"), and this UX must
+ * never mint it. The kernel's `toCapability` strips SUBMIT again at the lease seam regardless.
+ */
+internal fun buildPerRunGrant(
+    foregroundPackage: String?,
+    verbs: Set<AutomationVerb>,
+    ttlMinutes: Int,
+    maxSteps: Int,
+): AutomationGrant? {
+    val pkg = foregroundPackage?.takeIf { it.isNotBlank() } ?: return null
+    return AutomationGrant(
+        enabled = true,
+        allowedPackages = setOf(pkg),
+        verbs = verbs,
+        sinks = requiredSinksForVerbs(verbs),
+        ttlMinutes = ttlMinutes,
+        maxSteps = maxSteps,
+    )
 }

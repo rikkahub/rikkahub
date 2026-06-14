@@ -71,7 +71,53 @@ data class Assistant(
     // Event hooks (#200 v1, llm handlers only). Additive with a default so legacy JSON decodes
     // without migration; HookConfig.trusted defaults false (import-trust gate).
     val hooks: HookConfig = HookConfig(),
+    // On-device UI automation scope grant (#187 v2). Additive with a default `AutomationGrant()`
+    // (disabled, no packages/verbs/sinks, zero TTL/steps) so legacy assistant JSON decodes
+    // UNCHANGED to the fail-closed deny-all posture — no DataStore migration. `uiAutomationEnabled`
+    // stays the master switch; this grant is the narrowing scope the kernel derives a Capability
+    // from. The empty default mints `surface = emptySet()` ⇒ DENY for every package, preserving
+    // today's inert behavior until the user fills the grant.
+    val automationGrant: AutomationGrant = AutomationGrant(),
 )
+
+/**
+ * User-granted, narrowing scope for on-device UI automation (#187 v2). All-default fields encode a
+ * fail-closed deny-all grant: a generation derives the kernel `Capability` from this, and an empty
+ * grant yields `surface = emptySet()` ⇒ every request DENIED. The grant only ever *narrows* — it
+ * never widens beyond what the user approved (zero TTL = already expired; zero steps = no admit).
+ *
+ * [AutomationVerb]/[AutomationSink] mirror the `:automation` kernel `Verb`/`Sink` enums (same names,
+ * same order) as local `@Serializable` mirrors so the persisted `Assistant` model carries no
+ * serialization coupling onto the deliberately Android-free, non-`@Serializable` kernel enums; they
+ * are mapped to the kernel enums at the ChatService lease boundary (Open Q1: mirror, not reuse).
+ */
+@Serializable
+data class AutomationGrant(
+    val enabled: Boolean = false,
+    val allowedPackages: Set<String> = emptySet(),
+    val verbs: Set<AutomationVerb> = emptySet(),
+    val sinks: Set<AutomationSink> = emptySet(),
+    val ttlMinutes: Int = 0,
+    val maxSteps: Int = 0,
+)
+
+/** Mirror of the `:automation` `Verb` enum (names/order match) for serialized assistant grants. */
+@Serializable
+enum class AutomationVerb {
+    OBSERVE,
+    TAP,
+    SET_TEXT,
+    SCROLL,
+    GLOBAL,
+}
+
+/** Mirror of the `:automation` `Sink` enum (names/order match) for serialized assistant grants. */
+@Serializable
+enum class AutomationSink {
+    TYPE_INTO,
+    SUBMIT,
+    GLOBAL_NAV,
+}
 
 @Serializable
 data class QuickMessage(

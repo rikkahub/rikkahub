@@ -8,6 +8,7 @@ import me.rerere.hugeicons.stroke.Code
 import me.rerere.hugeicons.stroke.Message02
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Puzzle
+import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.hugeicons.stroke.Zap
 import androidx.compose.foundation.layout.Arrangement
@@ -148,6 +149,13 @@ fun AssistantDetailPage(id: String) {
                         leadingContent = { Icon(HugeIcons.Zap, null) },
                         supportingContent = { Text("Gate tool calls and inject context at agent-loop events") },
                         headlineContent = { Text("Hooks") },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantAutomation(id)) },
+                        leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_automation_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_automation_title)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }

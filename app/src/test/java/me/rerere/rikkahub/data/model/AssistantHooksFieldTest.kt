@@ -121,4 +121,54 @@ class AssistantHooksFieldTest {
         val hooks = json.getValue("hooks").jsonObject
         assertEquals("false", hooks.getValue("trusted").toString().trim('"'))
     }
+
+    // ---- T6 / M3: additive AutomationGrant field ----------------------------------------------
+    //
+    // Same additive-default invariant as `hooks`: [Assistant.automationGrant] is `@Serializable`
+    // with a default `AutomationGrant()`, so legacy assistant JSON written BEFORE this field
+    // existed decodes UNCHANGED to the fail-closed default (disabled, no packages/verbs/sinks,
+    // zero TTL/steps == deny-all). No DataStore migration is required.
+
+    @Test
+    fun `legacy assistant JSON without automationGrant decodes to the deny-all default`() {
+        val legacyJson = """
+            {
+              "id": "66666666-6666-6666-6666-666666666666",
+              "name": "LegacyGrantless"
+            }
+        """.trimIndent()
+
+        val decoded = JsonInstant.decodeFromString<Assistant>(legacyJson)
+
+        assertEquals("LegacyGrantless", decoded.name)
+        assertEquals(AutomationGrant(), decoded.automationGrant)
+        assertFalse("grant must default disabled", decoded.automationGrant.enabled)
+        assertTrue(decoded.automationGrant.allowedPackages.isEmpty())
+        assertTrue(decoded.automationGrant.verbs.isEmpty())
+        assertTrue(decoded.automationGrant.sinks.isEmpty())
+        assertEquals(0, decoded.automationGrant.ttlMinutes)
+        assertEquals(0, decoded.automationGrant.maxSteps)
+    }
+
+    @Test
+    fun `assistant with a populated automationGrant survives an encode then decode round-trip`() {
+        val original = Assistant(
+            name = "Granted",
+            automationGrant = AutomationGrant(
+                enabled = true,
+                allowedPackages = setOf("com.example.target"),
+                verbs = setOf(AutomationVerb.OBSERVE, AutomationVerb.TAP),
+                sinks = setOf(AutomationSink.TYPE_INTO),
+                ttlMinutes = 5,
+                maxSteps = 50,
+            ),
+        )
+
+        val roundTripped = JsonInstant.decodeFromString<Assistant>(
+            JsonInstant.encodeToString(original)
+        )
+
+        assertEquals(original.id, roundTripped.id)
+        assertEquals(original.automationGrant, roundTripped.automationGrant)
+    }
 }

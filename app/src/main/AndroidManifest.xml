@@ -33,6 +33,15 @@
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
     </intent>
+    <!--
+      Package-visibility filter (Android 11+/API 30) for the app-launch tools. list_app enumerates and
+      open_app resolves only LAUNCHER-class apps; this <intent> is the narrow, Play-policy-safe
+      alternative to QUERY_ALL_PACKAGES (which must NOT be requested on the play flavor).
+    -->
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
   </queries>
 
   <application
@@ -128,10 +137,13 @@
       android:foregroundServiceType="dataSync" />
 
     <!--
-      On-device UI-automation accessibility service (#187 v1, read-only). Inert until the user
-      enables it in system accessibility settings. Read-only: the config grants no gestures (write
-      verbs are #198). The floating STOP kill-switch is a TYPE_ACCESSIBILITY_OVERLAY granted with the
-      service, so no SYSTEM_ALERT_WINDOW permission is needed.
+      On-device UI-automation accessibility service. Inert until the user enables it in system
+      accessibility settings. It reads the screen of other apps AND acts on it: tap, type, scroll,
+      and global navigation (Back/Home/Recents) may occur, each gated by the user-granted capability
+      scope. Actions are issued as node accessibility actions and performGlobalAction, never raw
+      screen-point gesture dispatch (design D1), so the config grants no canPerformGestures. The
+      floating STOP kill-switch is a TYPE_ACCESSIBILITY_OVERLAY granted with the service, so no
+      SYSTEM_ALERT_WINDOW permission is needed.
     -->
     <service
       android:name=".service.automation.AccessibilityRuntime"

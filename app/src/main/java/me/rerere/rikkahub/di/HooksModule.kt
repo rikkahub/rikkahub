@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.di
 
 import me.rerere.ai.runtime.hooks.HookDispatcher
+import me.rerere.ai.runtime.hooks.StaticHookExecutor
 import me.rerere.rikkahub.data.ai.hooks.HookExecutorRegistry
 import me.rerere.rikkahub.data.ai.hooks.HookSettingsReader
 import me.rerere.rikkahub.data.ai.hooks.LlmHookExecutor
@@ -26,7 +27,11 @@ val hooksModule = module {
     }
 
     single {
-        HookExecutorRegistry(llm = get())
+        StaticHookExecutor()
+    }
+
+    single {
+        HookExecutorRegistry(llm = get(), static = get())
     }
 
     single {

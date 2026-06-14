@@ -28,7 +28,6 @@ import me.rerere.automation.cap.Sink
 import me.rerere.automation.cap.Verb
 import me.rerere.automation.observe.Selector
 import me.rerere.automation.observe.UiSnapshot
-import me.rerere.rikkahub.data.model.Assistant
 
 /**
  * The per-generation UI-automation [Tool] factory — the `:app` surface of #187/#198, built on the
@@ -52,8 +51,11 @@ import me.rerere.rikkahub.data.model.Assistant
  * `service/automation/AccessibilityRuntime`.
  *
  * Safety wiring (the design's hard prerequisites, all enforced here):
- *  - **Default-OFF / empty surface (S1):** returns `emptyList()` unless the assistant explicitly
- *    enabled automation AND a non-null [CapabilityGuard] is supplied. A null guard = no authority.
+ *  - **Default-OFF / empty surface (S1):** returns `emptyList()` unless a non-null [CapabilityGuard]
+ *    is supplied. The guard is the single source of truth for activation — `ChatService` mints one
+ *    only when the master switch is enabled and an active, usable grant exists (a fresh per-run grant
+ *    can override the standing grant, but cannot bypass the switch). A null guard = no authority =
+ *    no tool.
  *  - **Guard BEFORE backend (S2):** `ui_observe` calls [CapabilityGuard.authorize] before reaching
  *    [AutomationCore.observe]; the act tools delegate to [AutomationCore.act], which authorizes
  *    internally before any [me.rerere.automation.backend.AutomationBackend.perform]. The backend is
@@ -97,14 +99,18 @@ import me.rerere.rikkahub.data.model.Assistant
  *   [me.rerere.automation.act.AlwaysDeny] is the right default when no real confirm surface is reachable.
  */
 fun getUiAutomationTools(
-    assistant: Assistant,
     guard: CapabilityGuard?,
     core: AutomationCore,
     foregroundPkg: () -> String?,
     confirm: ConfirmChannel,
 ): List<Tool> {
-    // Default-OFF, empty surface (design §2/§5/S1): no activation OR no authority ⇒ no tool at all.
-    if (!assistant.uiAutomationEnabled || guard == null) return emptyList()
+    // The minted [guard] is the single source of truth for activation: ChatService only mints one
+    // when `uiAutomationEnabled` is on and an ACTIVE, usable grant exists. A fresh per-run grant can
+    // override the standing grant, but cannot bypass that master gate. A null guard ⇒ no authority ⇒
+    // no tool at all (default-OFF, empty surface; design §2/§5/S1). Re-checking `uiAutomationEnabled`
+    // here in ADDITION to the guard would split the activation source of truth and risk dropping tools
+    // even after ChatService minted a valid guard.
+    if (guard == null) return emptyList()
 
     // The last snapshot ui_observe grounded this turn. The act tools (ui_scroll/ui_global) resolve
     // their selector against THIS snapshot and pass it as the act's grounding — tids are turn-scoped,

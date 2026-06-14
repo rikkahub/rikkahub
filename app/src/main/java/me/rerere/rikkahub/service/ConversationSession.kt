@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.automation.cap.CapabilityGuard
+import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
@@ -60,9 +61,40 @@ class ConversationSession(
     @Volatile
     var activeAutomationGuard: CapabilityGuard? = null
 
+    // Per-run automation scope grant (#187 v2). The transient, user-authorized scope (allowed
+    // packages / verbs / sinks / TTL / steps) from an in-chat grant, consumed by the lease derivation
+    // to mint activeAutomationGuard. Lives beside the guard because it is the SAME transient lease
+    // state on the SAME lifecycle: minted per generation, cleared when the lease tears down. Keeping
+    // it on the session lets the kill-switch thread reach it; cleared in lock-step with the guard so a
+    // stale prior-run grant can never leak into the next derivation. Same single-writer + kill-switch
+    // access shape as the guard, so @Volatile.
+    @Volatile
+    var pendingAutomationGrant: AutomationGrant? = null
+
     /** Kill-switch (design I9): revoke the active automation grant — future authorize ⇒ DENY. */
     fun revokeAutomation() {
         activeAutomationGuard?.revoke()
+    }
+
+    /**
+     * Tears down the transient automation lease state. The per-generation guard is ALWAYS dropped —
+     * it is minted fresh per `withAutomationLease` entry and never reused. The per-run grant, however,
+     * is scoped to the whole TURN, which can span more than one lease entry: an ASK-guardrail approval
+     * breaks the turn (a Pending tool waits for the user) and the lease tears down, then the
+     * approval-resume re-enters the lease and must re-mint the SAME guard from the SAME grant.
+     *
+     * So [preserveGrant] decides the grant's fate (finding 3):
+     *  - `true`  — the turn is still open (a Pending tool approval is outstanding); KEEP the grant so
+     *    the resume re-mints the guard. Clearing it here is the bug: on resume no guard is minted, the
+     *    `ui_*` tools are not assembled, and the approved call errors "Tool not found".
+     *  - `false` — the turn truly ended; clear the grant too, so a per-run authorization can never
+     *    leak onto a LATER, unrelated run (the #187 v2 transient-grant invariant).
+     *
+     * Idempotent: nulling already-null fields is a no-op.
+     */
+    fun clearAutomationLeaseState(preserveGrant: Boolean = false) {
+        activeAutomationGuard = null
+        if (!preserveGrant) pendingAutomationGrant = null
     }
 
     fun acquire(): Int = refCount.incrementAndGet().also {
@@ -138,5 +170,6 @@ class ConversationSession(
         _generationJob.value = null
         idleCheckJob?.cancel()
         idleCheckJob = null
+        clearAutomationLeaseState()
     }
 }

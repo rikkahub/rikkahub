@@ -67,8 +67,8 @@ import me.rerere.ai.runtime.mcp.McpTool
 import me.rerere.automation.act.AlwaysDeny
 import me.rerere.automation.cap.Capability
 import me.rerere.automation.cap.CapabilityGuard
-import me.rerere.automation.cap.Lease
 import me.rerere.automation.cap.Sink
+import me.rerere.automation.cap.toCapability
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.ai.runtime.contract.ToolAssemblyContext
@@ -117,6 +117,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
@@ -176,10 +177,109 @@ internal fun backgroundTextGenerationParams(
 // 单 token 间隔，避免逐 token IPC。
 internal const val WAKE_LOCK_RENEW_INTERVAL_MS = 60L * 1000L
 
-// UI-automation lease bounds (#187 v1, design I5). A per-conversation grant is time-boxed and
-// step-capped so a session expires on its own (primary recovery) even if no STOP is pressed.
-private const val UI_AUTOMATION_LEASE_TTL_MS = 30L * 60L * 1000L // 30 min per task
-private const val UI_AUTOMATION_MAX_STEPS = 256 // ADMITs over the lease (P22)
+/**
+ * Map the persisted `:app` [AutomationGrant] mirror onto the Android-free, non-`@Serializable`
+ * kernel grant (Open Q1: mirror, not reuse — the kernel carries no serialization coupling). Pure
+ * name-for-name enum translation; the kernel grant's own [toCapability] then enforces the
+ * fail-closed gates (deny-all on absent surface, SUBMIT-strip, TTL/step bounds).
+ */
+private fun AutomationGrant.toKernelGrant(): me.rerere.automation.cap.AutomationGrant =
+    me.rerere.automation.cap.AutomationGrant(
+        enabled = enabled,
+        allowedPackages = allowedPackages,
+        verbs = verbs.map { Verb.valueOf(it.name) }.toSet(),
+        sinks = sinks.map { Sink.valueOf(it.name) }.toSet(),
+        ttlMinutes = ttlMinutes,
+        maxSteps = maxSteps,
+    )
+
+/**
+ * The capability a generation's automation lease derives from the effective grant — the per-run
+ * [pendingGrant] (if any) ELSE the assistant's standing [assistantGrant] (Assumption 4: per-run
+ * overrides the standing default). PURE so the deny-all root-cause invariant is JVM-testable without
+ * the service.
+ *
+ * #187 v2 activation policy (finding 1): [masterSwitchEnabled]
+ * ([Assistant.uiAutomationEnabled]) is the single gate for every grant source. The per-run
+ * [pendingGrant] can override the assistant's standing [assistantGrant], but it cannot bypass the
+ * master switch. With the switch off, neither source activates.
+ *
+ * Returns `null` (⇒ NO guard is minted ⇒ every request DENIED) when no source is both active AND a
+ * usable authorization (disabled, no approved package, zero TTL, or zero steps). This preserves the
+ * pre-#187-v2 deny-all an empty grant must keep: the root cause of the inert subsystem was
+ * `surface = emptySet()` minted unconditionally; here a usable grant fills the surface the user
+ * approved while an empty/absent grant — or any grant whose switch is off — still denies all.
+ */
+internal fun effectiveAutomationCapability(
+    pendingGrant: AutomationGrant?,
+    assistantGrant: AutomationGrant,
+    masterSwitchEnabled: Boolean,
+    sessionId: String,
+    now: Long,
+): Capability? {
+    // The master switch gates the whole expression; a pending grant may override the standing grant,
+    // but neither branch contributes authority while UI automation is disabled.
+    if (!masterSwitchEnabled) return null
+    val effectiveGrant = pendingGrant ?: assistantGrant
+    return effectiveGrant.toKernelGrant().toCapability(sessionId, now)
+}
+
+/**
+ * The turn-boundary signal for the per-run automation grant (finding 3). A per-run grant authorizes a
+ * whole TURN, but one `withAutomationLease` entry is NOT the whole turn: an ASK-guardrail approval
+ * breaks the turn — a [ToolApprovalState.Pending] tool waits for the user — and the lease tears down,
+ * then the approval-resume re-enters the lease. So the lease teardown must KEEP the grant while the
+ * turn is still open and clear it only when the turn truly ended; an outstanding Pending tool approval
+ * in the conversation is exactly "still open". PURE so the boundary is JVM-testable without the
+ * service. (Mirrors the inline Pending checks the approval-resume + Stop-hook paths already use.)
+ */
+internal fun conversationHasPendingToolApproval(conversation: Conversation): Boolean =
+    conversation.currentMessages.any { message ->
+        message.parts.any { it is UIMessagePart.Tool && it.isPending }
+    }
+
+/**
+ * Whether `withAutomationLease`'s teardown must PRESERVE the per-run grant for an approval-resume
+ * (finding 3). The grant survives the lease entry ONLY when BOTH hold:
+ *  - [completedNormally] — the generation block returned normally (the ASK-guardrail break: the
+ *    runtime paused and the flow finished without error). A non-normal exit — an error, or a
+ *    CancellationException from a Stop / a newer entry superseding this job — is a turn ABANDON: the
+ *    turn will not resume, so the grant must clear or it would scope the next, unrelated turn.
+ *  - [hasPendingApproval] — a Pending tool approval is still outstanding, i.e. the turn is genuinely
+ *    paused waiting for the user (not simply finished).
+ * Any other combination clears the grant (the #187 v2 transient-grant invariant). PURE so the
+ * boundary is JVM-testable without the service.
+ */
+internal fun shouldPreservePerRunGrant(
+    completedNormally: Boolean,
+    hasPendingApproval: Boolean,
+): Boolean = completedNormally && hasPendingApproval
+
+internal fun finishInterruptedPendingToolsForNewSend(
+    session: ConversationSession,
+    cancelTool: (UIMessagePart.Tool) -> UIMessagePart.Tool,
+): Conversation? {
+    val currentConversation = session.state.value
+    val lastNode = currentConversation.messageNodes.lastOrNull() ?: return null
+    val lastMessage = lastNode.currentMessage
+    val updatedMessage = lastMessage.finishPendingTools(cancelTool)
+    if (updatedMessage == lastMessage) {
+        return null
+    }
+
+    // A new-send/stop abandon finalizes the paused tool instead of resuming it. The preserved
+    // per-run grant was only for that paused operation, so clear it before the updated conversation
+    // is saved and before a later generation can derive a guard from stale state.
+    session.pendingAutomationGrant = null
+
+    return currentConversation.copy(
+        messageNodes = currentConversation.messageNodes.dropLast(1) + lastNode.copy(
+            messages = lastNode.messages.map { message ->
+                if (message.id == lastMessage.id) updatedMessage else message
+            }
+        )
+    )
+}
 
 // 自动压缩保留的最近消息数：与手动压缩对话框（CompressContextDialog）的默认值一致。
 private const val AUTO_COMPACT_KEEP_RECENT_MESSAGES = 32
@@ -660,6 +760,25 @@ class ChatService(
         return session.processingStatus
     }
 
+    // ---- 自动化按运行授权 (#187 v2) ----
+
+    /**
+     * The package currently in the device foreground, read live from the accessibility runtime — the
+     * single app an in-chat grant can be scoped to. Null when the accessibility service is not
+     * connected. Surfaced here (not the registry) so the chat ViewModel depends only on ChatService.
+     */
+    fun automationForegroundPackage(): String? = automationRegistry.foregroundPackage()
+
+    /**
+     * Record the user's per-run automation scope on the conversation's session. Transient lease state
+     * (lives beside `activeAutomationGuard`, cleared by `clearAutomationLeaseState`), NOT persisted on
+     * the Assistant. The lease derivation consumes it to mint the guard; an empty/absent grant stays
+     * fail-closed (deny-all). Writing it here keeps the private session map encapsulated in ChatService.
+     */
+    fun setPendingAutomationGrant(conversationId: Uuid, grant: AutomationGrant) {
+        getOrCreateSession(conversationId).pendingAutomationGrant = grant
+    }
+
     // 不在这里 catch/降级：本流是对一组 in-memory StateFlow（每个 session 的 generationJob，热流、
     // 永不完成、永不抛）做 combine，没有可重试的瞬时故障。下游对错误的诉求各不相同，故把错误边界下放到
     // 各消费者本身——ChatVM 的 stateIn 收集器需在异常下存活（见 #92，catch 置于 stateIn 之前）；
@@ -1066,52 +1185,68 @@ class ChatService(
         session: ConversationSession,
         block: (CapabilityGuard?) -> R,
     ): R {
-        val automationGuard: CapabilityGuard? = if (assistant.uiAutomationEnabled) {
-            CapabilityGuard(
-                capability = Capability.root(
-                    sessionId = conversationId.toString(),
-                    // Surface stays empty-by-default = deny-all (S1): a per-app whitelist is a
-                    // separate later UI. This grant makes the nav verbs, the input sink, and the
-                    // general tap (Verb.TAP, #198 slice 10) AUTHORIZABLE but does NOT widen the
-                    // admitted surface — authorize still DENYs on the surface branch for any real
-                    // foreground app today, exactly as OBSERVE does.
-                    surface = emptySet(),
-                    verbs = setOf(Verb.OBSERVE, Verb.SCROLL, Verb.GLOBAL, Verb.SET_TEXT, Verb.TAP),
-                    // GLOBAL_NAV must be in budget for ui_global's authorize to pass the
-                    // sink-in-budget branch; TYPE_INTO for ui_set_text (#198 slice 9, the input
-                    // sink). ui_scroll and ui_tap (#198 slice 10) carry NO sink for an ordinary tap
-                    // (the SCROLL/TAP verb suffices). Sink.SUBMIT is INTENTIONALLY WITHHELD from this
-                    // default lease (#198 slice 11, the conservative default): a submit-class
-                    // (send/pay/checkout) tap derives SUBMIT in core.act, and with SUBMIT not in
-                    // budget the guard DENYs it at the sink-in-budget branch BEFORE the confirm gate
-                    // is even reached. So the confirm gate is fully wired and proven but un-reachable
-                    // through this default lease — submit-class automation is a separate, stricter,
-                    // explicit opt-in (a later grant that adds SUBMIT to the budget), exactly mirroring
-                    // how slices 8-10 made verbs AUTHORIZABLE without widening the admitted surface.
-                    // Surface stays empty = deny-all (S1): these grants make the verbs/sinks
-                    // AUTHORIZABLE but do NOT widen the admitted surface — authorize still DENYs on
-                    // surface for any real foreground app today.
-                    sinkBudget = setOf(Sink.GLOBAL_NAV, Sink.TYPE_INTO),
-                    lease = Lease(
-                        expiresAt = trustClock.now() + UI_AUTOMATION_LEASE_TTL_MS,
-                        maxSteps = UI_AUTOMATION_MAX_STEPS,
-                    ),
-                ),
-                clock = trustClock,
-            ).also { guard -> session.activeAutomationGuard = guard }
-        } else {
-            null
+        // Per-run-transient (#187 v2): PEEK the pending grant to derive THIS generation's lease — do
+        // NOT consume (null) it here. A per-run grant is scoped to the whole TURN, and a turn can span
+        // more than one lease entry: an ASK-guardrail approval breaks the turn (a Pending tool waits
+        // for the user) and the lease tears down, then the approval-resume re-enters this lease and
+        // must re-mint the SAME guard from the SAME grant (finding 3). Consuming on entry destroyed the
+        // grant on the first pass, so the resume minted no guard, assembled no ui_* tools, and the
+        // approved call errored "Tool not found". The grant's clearing instead happens in the finally,
+        // gated on the real turn boundary (no pending approval) — which still prevents a per-run grant
+        // from leaking onto a LATER, unrelated turn (the transient-grant invariant the consume-once
+        // step was protecting, just keyed on the correct boundary).
+        val pendingGrant = session.pendingAutomationGrant
+        // Root cause (#187 v2): the lease used to mint `surface = emptySet()` UNCONDITIONALLY, so the
+        // guard DENIED every request — the automation subsystem was inert. The capability now derives
+        // from the EFFECTIVE grant (consumed per-run grant ?: the assistant's standing
+        // `automationGrant`), filling exactly the surface/verbs/sinks/TTL/steps the user approved. An
+        // empty/absent grant ⇒ `effectiveAutomationCapability` returns null ⇒ NO guard is minted ⇒ the
+        // guard-closed-over tools still DENY (no regression). SUBMIT is stripped inside the derivation
+        // (submit-class stays the stricter, separate opt-in), so a grant can never bypass the confirm
+        // gate. The STOP overlay below remains mandatory for ANY minted guard.
+        //
+        // Finding 1: `uiAutomationEnabled` is passed into the derivation as the single master gate
+        // for BOTH grant sources. A per-run grant can override the standing grant only after that gate
+        // is open; with the switch off, no automation guard is minted.
+        val capability: Capability? = effectiveAutomationCapability(
+            pendingGrant = pendingGrant,
+            assistantGrant = assistant.automationGrant,
+            masterSwitchEnabled = assistant.uiAutomationEnabled,
+            sessionId = conversationId.toString(),
+            now = trustClock.now(),
+        )
+        val automationGuard: CapabilityGuard? = capability?.let { cap ->
+            CapabilityGuard(capability = cap, clock = trustClock)
+                .also { guard -> session.activeAutomationGuard = guard }
         }
         if (automationGuard != null && !automationActivation.activate(conversationId)) {
-            if (session.activeAutomationGuard === automationGuard) session.activeAutomationGuard = null
+            if (session.activeAutomationGuard === automationGuard) session.clearAutomationLeaseState()
             automationGuard.revoke()
             throw IllegalStateException(context.getString(R.string.automation_kill_switch_unavailable))
         }
+        // Tracks a NORMAL return from [block] vs an exceptional exit. Only a normal completion that
+        // PAUSED on an approval is a resumable break; a CancellationException (Stop, or a newer entry
+        // superseding this job via the previousJob.join barrier) is a turn ABANDON, after which the
+        // grant must NOT survive — otherwise the next, unrelated turn inherits this run's authorization.
+        var completedNormally = false
         try {
-            return block(automationGuard)
+            val result = block(automationGuard)
+            completedNormally = true
+            return result
         } finally {
             if (automationGuard != null && session.activeAutomationGuard === automationGuard) {
-                session.activeAutomationGuard = null
+                // Keep the per-run grant alive ONLY when the turn is still open AND was not abandoned:
+                // a normal completion that left a Pending tool approval is the ASK-guardrail break
+                // (finding 3) — the resume re-enters this lease and re-mints the guard + STOP overlay
+                // from the preserved grant. Every OTHER terminal path — normal finish with no pending
+                // approval, an error, or a cancellation (Stop / supersede / regenerate) — clears the
+                // grant so a one-run authorization can never scope a LATER, unrelated turn. The
+                // per-generation guard and the STOP overlay are torn down regardless.
+                val preserveGrant = shouldPreservePerRunGrant(
+                    completedNormally = completedNormally,
+                    hasPendingApproval = conversationHasPendingToolApproval(session.state.value),
+                )
+                session.clearAutomationLeaseState(preserveGrant = preserveGrant)
                 automationActivation.deactivate(conversationId)
             }
         }
@@ -1234,7 +1369,6 @@ class ChatService(
                         automationRegistry.core()?.let { automationCore ->
                             addAll(
                                 getUiAutomationTools(
-                                    assistant = assistant,
                                     guard = automationGuard,
                                     core = automationCore,
                                     foregroundPkg = { automationRegistry.foregroundPackage() },
@@ -1542,21 +1676,11 @@ class ChatService(
     }
 
     private suspend fun finishInterruptedPendingTools(conversationId: Uuid) {
-        val currentConversation = getConversationFlow(conversationId).value
-        val lastNode = currentConversation.messageNodes.lastOrNull() ?: return
-        val lastMessage = lastNode.currentMessage
-        val updatedMessage = lastMessage.finishPendingTools(::cancelToolByUser)
-        if (updatedMessage == lastMessage) {
-            return
-        }
-
-        val updatedConversation = currentConversation.copy(
-            messageNodes = currentConversation.messageNodes.dropLast(1) + lastNode.copy(
-                messages = lastNode.messages.map { message ->
-                    if (message.id == lastMessage.id) updatedMessage else message
-                }
-            )
-        )
+        val session = getOrCreateSession(conversationId)
+        val updatedConversation = finishInterruptedPendingToolsForNewSend(
+            session = session,
+            cancelTool = ::cancelToolByUser,
+        ) ?: return
         saveConversation(conversationId, updatedConversation)
     }
 
@@ -1990,7 +2114,9 @@ class ChatService(
         // The in-app Stop is the second kill-switch (#187 §7): revoke THIS conversation's automation
         // grant before cancelling so a tool step that is mid-authorize fails closed. Cancelling the
         // job tears down only this conversation's in-flight capture (the capture is a child of this
-        // generation coroutine) — a concurrent automation session is untouched.
+        // generation coroutine) — a concurrent automation session is untouched. The cancellation
+        // propagates through withAutomationLease as a non-normal exit, so its finally clears the
+        // per-run grant too (finding 3): a stopped turn will not resume, so the grant must not survive.
         sessions[conversationId]?.revokeAutomation()
         job.cancel()
         runCatching { job.join() }

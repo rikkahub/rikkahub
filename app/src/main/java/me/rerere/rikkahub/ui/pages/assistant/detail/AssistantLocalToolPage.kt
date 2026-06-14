@@ -156,6 +156,34 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_open_app_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_open_app_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.OpenApp),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.OpenApp, it) }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_list_app_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_list_app_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.ListApp),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ListApp, it) }
+                    )
+                }
+            )
         }
     }
 }

@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import com.whl.quickjs.wrapper.QuickJSContext
 import com.whl.quickjs.wrapper.QuickJSObject
 import kotlinx.serialization.SerialName
@@ -8,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -45,9 +49,146 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("ask_user")
     data object AskUser : LocalToolOption()
+
+    @Serializable
+    @SerialName("open_app")
+    data object OpenApp : LocalToolOption()
+
+    @Serializable
+    @SerialName("list_app")
+    data object ListApp : LocalToolOption()
 }
 
+/** A launchable app: package name + human-readable label. */
+data class AppInfo(val packageName: String, val label: String)
+
+/**
+ * Intent-only app launch/enumeration seam. Pulled behind an interface so the no-throw payload logic
+ * of [openAppTool]/[listAppTool] is exercisable on the pure JVM without Android — the production
+ * implementation is [AndroidAppLauncher]; tests inject a fake.
+ */
+interface AppLauncher {
+    /**
+     * Launch the app identified by [packageName]. Returns true if a launch intent existed and the
+     * activity was started, false if the package is not installed / has no launchable activity.
+     */
+    fun launch(packageName: String): Boolean
+
+    /** Enumerate launchable apps (package + label) via the LAUNCHER intent filter. */
+    fun listApps(): List<AppInfo>
+}
+
+/**
+ * Production [AppLauncher] over a real Android [Context]. `open_app` uses
+ * [PackageManager.getLaunchIntentForPackage] (null ⇒ not launchable ⇒ caller reports an error, never
+ * throws) and starts it with [Intent.FLAG_ACTIVITY_NEW_TASK] (required: launched from the non-Activity
+ * app context). `list_app` enumerates via ACTION_MAIN + CATEGORY_LAUNCHER and returns package + label
+ * only — no QUERY_ALL_PACKAGES; a `<queries>` LAUNCHER filter in the manifest scopes visibility.
+ */
+class AndroidAppLauncher(private val context: Context) : AppLauncher {
+    override fun launch(packageName: String): Boolean {
+        val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
+        // A non-null launch intent does NOT guarantee startActivity succeeds: the package can be
+        // uninstalled between resolve and launch (ActivityNotFoundException) or the target activity may
+        // not be exported (SecurityException). Honor the interface contract — every launch failure maps
+        // to false, never an escaping throw — so the caller reports the structured error payload. The
+        // failure is fully surfaced to the model via that payload, not swallowed.
+        return try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        } catch (e: SecurityException) {
+            false
+        }
+    }
+
+    override fun listApps(): List<AppInfo> {
+        val pm = context.packageManager
+        val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return pm.queryIntentActivities(mainIntent, 0).map { resolveInfo ->
+            val activityInfo = resolveInfo.activityInfo
+            AppInfo(
+                packageName = activityInfo.packageName,
+                label = resolveInfo.loadLabel(pm).toString(),
+            )
+        }
+    }
+}
+
+/**
+ * `open_app(package)` — launch an installed app by package name. Returns `{success:false,error}` (never
+ * throws) when the package has no launchable activity, so the model can see why and recover. Low-risk,
+ * Intent-only: no AccessibilityService, no lease, no approval gate.
+ */
+fun openAppTool(launcher: AppLauncher): Tool = Tool(
+    name = "open_app",
+    description = "Launch an installed app by its package name. " +
+        "Returns an error if the package is not installed or has no launchable activity.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("package", buildJsonObject {
+                    put("type", "string")
+                    put("description", "The exact package name, e.g. com.android.settings")
+                })
+            },
+            required = listOf("package"),
+        )
+    },
+    execute = {
+        val pkg = it.jsonObject["package"]?.jsonPrimitive?.contentOrNull
+            ?: error("package is required")
+        // Spec contract: open_app returns a structured {success:false,error} payload, NEVER throws.
+        // The launcher's no-throw contract is enforced at this boundary too — a misbehaving launcher
+        // (or a launch failure surfaced as a throw) maps to launched=false, not an escaping exception
+        // that the runtime would otherwise rewrite into a generic stacktrace error.
+        val launched = runCatching { launcher.launch(pkg) }.getOrDefault(false)
+        val payload = if (!launched) {
+            buildJsonObject {
+                put("success", false)
+                put("error", "Package '$pkg' could not be launched (not installed, no launchable activity, or launch was rejected).")
+            }
+        } else {
+            buildJsonObject {
+                put("success", true)
+                put("package", pkg)
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    },
+)
+
+/**
+ * `list_app()` — enumerate launchable apps via the LAUNCHER intent filter. Returns each app's package
+ * name + label only (no icons / install metadata) to keep the tool payload small. Low-risk, no approval.
+ */
+fun listAppTool(launcher: AppLauncher): Tool = Tool(
+    name = "list_app",
+    description = "List the installed apps that have a launcher entry. " +
+        "Returns each app's package name and display label.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject { })
+    },
+    execute = {
+        val apps = launcher.listApps()
+        val payload = buildJsonObject {
+            put("apps", buildJsonArray {
+                apps.forEach { app ->
+                    add(buildJsonObject {
+                        put("package", app.packageName)
+                        put("label", app.label)
+                    })
+                }
+            })
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    },
+)
+
 class LocalTools(private val context: Context, private val eventBus: AppEventBus) {
+    private val appLauncher: AppLauncher = AndroidAppLauncher(context)
+
     val javascriptTool by lazy {
         Tool(
             name = "eval_javascript",
@@ -161,7 +302,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                             put("type", "string")
                             put(
                                 "enum",
-                                kotlinx.serialization.json.buildJsonArray {
+                                buildJsonArray {
                                     add("read")
                                     add("write")
                                 }
@@ -275,7 +416,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                                         put("type", "string")
                                         put(
                                             "enum",
-                                            kotlinx.serialization.json.buildJsonArray {
+                                            buildJsonArray {
                                                 add("text")
                                                 add("single")
                                                 add("multi")
@@ -287,7 +428,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                                         )
                                     })
                                 })
-                                put("required", kotlinx.serialization.json.buildJsonArray {
+                                put("required", buildJsonArray {
                                     add("id")
                                     add("question")
                                 })
@@ -303,6 +444,10 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             }
         )
     }
+
+    val openAppTool by lazy { openAppTool(appLauncher) }
+
+    val listAppTool by lazy { listAppTool(appLauncher) }
 
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
@@ -321,6 +466,25 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         if (options.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)
         }
+        tools.addAll(toolsFor(options, appLauncher))
         return tools
+    }
+
+    companion object {
+        /**
+         * Dispatch the Intent-only app tools ([openAppTool]/[listAppTool]) for the enabled options
+         * over the given [appLauncher]. Extracted so the open_app/list_app wiring is JVM-testable
+         * without constructing a [LocalTools] (which needs an Android [Context]).
+         */
+        fun toolsFor(options: List<LocalToolOption>, appLauncher: AppLauncher): List<Tool> {
+            val tools = mutableListOf<Tool>()
+            if (options.contains(LocalToolOption.OpenApp)) {
+                tools.add(openAppTool(appLauncher))
+            }
+            if (options.contains(LocalToolOption.ListApp)) {
+                tools.add(listAppTool(appLauncher))
+            }
+            return tools
+        }
     }
 }

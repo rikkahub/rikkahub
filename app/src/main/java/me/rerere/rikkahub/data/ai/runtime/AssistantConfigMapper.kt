@@ -69,6 +69,8 @@ fun LocalToolOption.localToolId(): String = when (this) {
     LocalToolOption.Clipboard -> "clipboard"
     LocalToolOption.Tts -> "tts"
     LocalToolOption.AskUser -> "ask_user"
+    LocalToolOption.OpenApp -> "open_app"
+    LocalToolOption.ListApp -> "list_app"
 }
 
 /** Inverse of [localToolId]; null for an unknown id (defensive — a future option not yet mapped). */
@@ -78,5 +80,7 @@ fun localToolOptionOf(id: String): LocalToolOption? = when (id) {
     "clipboard" -> LocalToolOption.Clipboard
     "tts" -> LocalToolOption.Tts
     "ask_user" -> LocalToolOption.AskUser
+    "open_app" -> LocalToolOption.OpenApp
+    "list_app" -> LocalToolOption.ListApp
     else -> null
 }

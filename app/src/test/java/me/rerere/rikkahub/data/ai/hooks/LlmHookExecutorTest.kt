@@ -22,6 +22,7 @@ import me.rerere.ai.runtime.hooks.HookDispatcher
 import me.rerere.ai.runtime.hooks.HookEvent
 import me.rerere.ai.runtime.hooks.HookHandler
 import me.rerere.ai.runtime.hooks.HookMatcher
+import me.rerere.ai.runtime.hooks.StaticHookExecutor
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -255,7 +256,7 @@ class LlmHookExecutorTest {
             providerManager = providerManager(openAI),
         )
         return HookDispatcher(
-            executors = HookExecutorRegistry(llm = executor).executors,
+            executors = HookExecutorRegistry(llm = executor, static = StaticHookExecutor()).executors,
             logSink = NoopLogSink,
         )
     }
