@@ -1,6 +1,10 @@
 package me.rerere.rikkahub.ui.pages.extensions.skills
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,7 +31,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -72,6 +78,16 @@ fun SkillDetailPage(skillName: String) {
     var deleteTarget by remember { mutableStateOf<SkillFile?>(null) }
     val deleteFailedMsg = stringResource(R.string.skill_detail_page_delete_failed)
 
+    val scrollState = rememberScrollState()
+    var previousScrollOffset by remember { mutableIntStateOf(0) }
+    val fabVisible by remember {
+        derivedStateOf {
+            val delta = scrollState.value - previousScrollOffset
+            previousScrollOffset = scrollState.value
+            delta <= 0
+        }
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -82,8 +98,14 @@ fun SkillDetailPage(skillName: String) {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Lucide.Plus, contentDescription = null)
+            AnimatedVisibility(
+                visible = fabVisible,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+            ) {
+                FloatingActionButton(onClick = { showAddDialog = true }) {
+                    Icon(Lucide.Plus, contentDescription = null)
+                }
             }
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -92,7 +114,7 @@ fun SkillDetailPage(skillName: String) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(innerPadding + PaddingValues(8.dp)),
         ) {
             FileTree(
