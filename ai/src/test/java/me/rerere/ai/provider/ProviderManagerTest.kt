@@ -77,9 +77,28 @@ class ProviderManagerTest {
         ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
+    private class FakeChatGPTProvider : Provider<ProviderSetting.ChatGPT> {
+        override suspend fun listModels(providerSetting: ProviderSetting.ChatGPT): List<Model> = emptyList()
+        override suspend fun generateText(
+            providerSetting: ProviderSetting.ChatGPT,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): MessageChunk = error("unused")
+        override suspend fun streamText(
+            providerSetting: ProviderSetting.ChatGPT,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): Flow<MessageChunk> = emptyFlow()
+        override suspend fun generateImage(
+            providerSetting: ProviderSetting,
+            params: ImageGenerationParams,
+        ): Flow<ImageGenerationItem> = emptyFlow()
+    }
+
     private val fakeOpenAI = FakeOpenAIProvider()
     private val fakeGoogle = FakeGoogleProvider()
     private val fakeClaude = FakeClaudeProvider()
+    private val fakeChatGPT = FakeChatGPTProvider()
 
     private fun manager() = ProviderManager(
         client = OkHttpClient(),
@@ -88,6 +107,7 @@ class ProviderManagerTest {
             openAI = fakeOpenAI,
             google = fakeGoogle,
             claude = fakeClaude,
+            chatGPT = fakeChatGPT,
         ),
     )
 
@@ -107,11 +127,17 @@ class ProviderManagerTest {
     }
 
     @Test
+    fun `getProviderByType dispatches ChatGPT setting to injected ChatGPT provider`() {
+        assertSame(fakeChatGPT, manager().getProviderByType(ProviderSetting.ChatGPT()))
+    }
+
+    @Test
     fun `getProvider resolves known names to injected providers`() {
         val m = manager()
         assertSame(fakeOpenAI, m.getProvider("openai"))
         assertSame(fakeGoogle, m.getProvider("google"))
         assertSame(fakeClaude, m.getProvider("claude"))
+        assertSame(fakeChatGPT, m.getProvider("chatgpt"))
     }
 
     @Test

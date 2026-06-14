@@ -269,6 +269,7 @@ class LlmHookExecutorTest {
             openAI = openAI,
             google = UnusedProvider(),
             claude = UnusedProvider(),
+            chatGPT = UnusedProvider(),
         ),
     )
 

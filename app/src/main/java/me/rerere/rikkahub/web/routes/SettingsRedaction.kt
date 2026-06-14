@@ -29,6 +29,7 @@ internal fun ProviderSetting.redactSecrets(): ProviderSetting = when (this) {
     is ProviderSetting.OpenAI -> copy(apiKey = "")
     is ProviderSetting.Google -> copy(apiKey = "", privateKey = "")
     is ProviderSetting.Claude -> copy(apiKey = "", oauthToken = "")
+    is ProviderSetting.ChatGPT -> copy(accessToken = "")
 }
 
 internal fun SearchServiceOptions.redactSecrets(): SearchServiceOptions = when (this) {

@@ -107,6 +107,18 @@ object ProviderSettingTestArb {
         )
     }
 
+    private val arbChatGPT: Arb<ProviderSetting.ChatGPT> = arbitrary {
+        ProviderSetting.ChatGPT(
+            id = arbKotlinUuid.bind(),
+            enabled = Arb.boolean().bind(),
+            name = arbShortString.bind(),
+            models = arbModels.bind(),
+            balanceOption = arbBalanceOption.bind(),
+            accessToken = arbShortString.bind(),
+            baseUrl = arbShortString.bind(),
+        )
+    }
+
     val arbProviderSetting: Arb<ProviderSetting> =
-        Arb.choice(arbOpenAI, arbGoogle, arbClaude)
+        Arb.choice(arbOpenAI, arbGoogle, arbClaude, arbChatGPT)
 }

@@ -21,6 +21,7 @@ class ProviderManager(
     private val openAI = providers.openAI
     private val google = providers.google
     private val claude = providers.claude
+    private val chatGPT = providers.chatGPT
 
     /**
      * 按名称获取Provider实例（只读）
@@ -33,6 +34,7 @@ class ProviderManager(
         "openai" -> openAI
         "google" -> google
         "claude" -> claude
+        "chatgpt" -> chatGPT
         else -> throw IllegalArgumentException("Provider not found: $name")
     }
 
@@ -48,6 +50,7 @@ class ProviderManager(
             is ProviderSetting.OpenAI -> openAI
             is ProviderSetting.Google -> google
             is ProviderSetting.Claude -> claude
+            is ProviderSetting.ChatGPT -> chatGPT
         } as Provider<T>
     }
 }

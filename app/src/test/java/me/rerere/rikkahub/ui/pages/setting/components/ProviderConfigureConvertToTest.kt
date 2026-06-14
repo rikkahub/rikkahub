@@ -86,6 +86,29 @@ class ProviderConfigureConvertToTest {
     }
 
     @Test
+    fun `convertTo should switch default chatgpt endpoint to target default`() {
+        val original = ProviderSetting.ChatGPT(
+            name = "ChatGPT",
+            baseUrl = "https://chatgpt.com/backend-api/codex"
+        )
+
+        val converted = original.convertTo(ProviderSetting.OpenAI::class) as ProviderSetting.OpenAI
+        assertEquals("https://api.openai.com/v1", converted.baseUrl)
+    }
+
+    @Test
+    fun `convertTo should switch official endpoint to chatgpt default`() {
+        val original = ProviderSetting.OpenAI(
+            name = "OpenAI",
+            apiKey = "sk-test",
+            baseUrl = "https://api.openai.com/v1"
+        )
+
+        val converted = original.convertTo(ProviderSetting.ChatGPT::class) as ProviderSetting.ChatGPT
+        assertEquals("https://chatgpt.com/backend-api/codex", converted.baseUrl)
+    }
+
+    @Test
     fun `convertTo should return same instance for same type`() {
         val original = ProviderSetting.OpenAI(
             name = "Same Type",

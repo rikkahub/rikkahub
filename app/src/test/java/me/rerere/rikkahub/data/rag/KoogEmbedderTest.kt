@@ -91,6 +91,24 @@ class KoogEmbedderTest {
         ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
+    private inner class FakeChatGPTProvider : Provider<ProviderSetting.ChatGPT> {
+        override suspend fun listModels(providerSetting: ProviderSetting.ChatGPT): List<Model> = emptyList()
+        override suspend fun generateText(
+            providerSetting: ProviderSetting.ChatGPT,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): MessageChunk = error("unused")
+        override suspend fun streamText(
+            providerSetting: ProviderSetting.ChatGPT,
+            messages: List<UIMessage>,
+            params: TextGenerationParams,
+        ): Flow<MessageChunk> = emptyFlow()
+        override suspend fun generateImage(
+            providerSetting: ProviderSetting,
+            params: ImageGenerationParams,
+        ): Flow<ImageGenerationItem> = emptyFlow()
+    }
+
     @Test
     fun `float embedding maps to Vector of identical doubles and dimension`() = runBlocking {
         val manager = ProviderManager(
@@ -100,6 +118,7 @@ class KoogEmbedderTest {
                 openAI = FakeOpenAIProvider(),
                 google = FakeGoogleProvider(),
                 claude = FakeClaudeProvider(),
+                chatGPT = FakeChatGPTProvider(),
             ),
         )
 

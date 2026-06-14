@@ -76,6 +76,7 @@ fun ProviderConfigure(
             is ProviderSetting.OpenAI -> ProviderConfigureOpenAI(provider, onEdit)
             is ProviderSetting.Google -> ProviderConfigureGoogle(provider, onEdit)
             is ProviderSetting.Claude -> ProviderConfigureClaude(provider, onEdit)
+            is ProviderSetting.ChatGPT -> ProviderConfigureChatGPT(provider, onEdit)
         }
     }
 }
@@ -87,16 +88,21 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.OpenAI -> this.apiKey
         is ProviderSetting.Google -> this.apiKey
         is ProviderSetting.Claude -> this.apiKey
+        // ChatGPT has no apiKey field; its pasted access token is a distinct credential not carried
+        // across a type switch (different wire format), so it contributes nothing here.
+        is ProviderSetting.ChatGPT -> ""
     }
     val sourceBaseUrl = when (this) {
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
+        is ProviderSetting.ChatGPT -> this.baseUrl
     }
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
         ProviderSetting.Google::class -> ProviderSetting.Google().baseUrl
         ProviderSetting.Claude::class -> ProviderSetting.Claude().baseUrl
+        ProviderSetting.ChatGPT::class -> ProviderSetting.ChatGPT().baseUrl
         else -> error("Unsupported provider type: $type")
     }
     val convertedBaseUrl = sourceBaseUrl.convertToTargetBaseUrl(targetDefaultBaseUrl)
@@ -117,6 +123,11 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
+        ProviderSetting.ChatGPT::class -> ProviderSetting.ChatGPT(
+            id = this.id, enabled = this.enabled, name = this.name, models = this.models,
+            balanceOption = this.balanceOption, builtIn = this.builtIn,
+            baseUrl = convertedBaseUrl
+        )
         else -> error("Unsupported provider type: $type")
     }
 }
@@ -128,12 +139,14 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
             is ProviderSetting.OpenAI -> if (defaultProvider is ProviderSetting.OpenAI) return defaultProvider.baseUrl
             is ProviderSetting.Google -> if (defaultProvider is ProviderSetting.Google) return defaultProvider.baseUrl
             is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
+            is ProviderSetting.ChatGPT -> if (defaultProvider is ProviderSetting.ChatGPT) return defaultProvider.baseUrl
         }
     }
     return when (this) {
         is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().baseUrl
         is ProviderSetting.Google -> ProviderSetting.Google().baseUrl
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
+        is ProviderSetting.ChatGPT -> ProviderSetting.ChatGPT().baseUrl
     }
 }
 
@@ -143,6 +156,7 @@ internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
         is ProviderSetting.OpenAI -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.Google -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
+        is ProviderSetting.ChatGPT -> this.copy(baseUrl = defaultBaseUrl)
     }
 }
 
@@ -151,6 +165,7 @@ internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
+        is ProviderSetting.ChatGPT -> this.baseUrl
     }
     return baseUrl == defaultBaseUrlForReset()
 }
@@ -188,12 +203,14 @@ private fun String.isValidBaseUrl(): Boolean = this.toHttpUrlOrNull() != null
 private const val OPENAI_OFFICIAL_HOST = "api.openai.com"
 private const val GOOGLE_OFFICIAL_HOST = "generativelanguage.googleapis.com"
 private const val CLAUDE_OFFICIAL_HOST = "api.anthropic.com"
+private const val CHATGPT_OFFICIAL_HOST = "chatgpt.com"
 private const val V1_SUFFIX = "/v1"
 private const val V1_BETA_SUFFIX = "/v1beta"
 private val OFFICIAL_PROVIDER_HOSTS = setOf(
     OPENAI_OFFICIAL_HOST,
     GOOGLE_OFFICIAL_HOST,
-    CLAUDE_OFFICIAL_HOST
+    CLAUDE_OFFICIAL_HOST,
+    CHATGPT_OFFICIAL_HOST
 )
 
 @Composable
@@ -420,6 +437,57 @@ private fun ProviderConfigureClaude(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ProviderConfigureChatGPT(
+    provider: ProviderSetting.ChatGPT,
+    onEdit: (provider: ProviderSetting.ChatGPT) -> Unit
+) {
+    ProviderDescription(provider)
+
+    OutlinedTextField(
+        value = provider.name,
+        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_name)) },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+    )
+
+    var tokenVisible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = provider.accessToken,
+        onValueChange = { onEdit(provider.copy(accessToken = it.trim())) },
+        label = { Text("Access Token") },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+        visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                Icon(if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+            }
+        },
+    )
+
+    OutlinedTextField(
+        value = provider.baseUrl,
+        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+        modifier = Modifier.fillMaxWidth(),
+        isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_provider_page_enable))
+        Switch(
+            checked = provider.enabled,
+            onCheckedChange = { onEdit(provider.copy(enabled = it)) }
+        )
     }
 }
 

@@ -226,12 +226,67 @@ sealed class ProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("chatgpt")
+    data class ChatGPT(
+        override var id: Uuid = Uuid.random(),
+        override var enabled: Boolean = true,
+        override var name: String = "ChatGPT",
+        override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        @Transient override val builtIn: Boolean = false,
+        // Paste-only ChatGPT subscription (Codex backend) access token; no in-app login/refresh.
+        var accessToken: String = "",
+        var baseUrl: String = "https://chatgpt.com/backend-api/codex",
+    ) : ProviderSetting() {
+        override fun addModel(model: Model): ProviderSetting {
+            return copy(models = models + model)
+        }
+
+        override fun editModel(model: Model): ProviderSetting {
+            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        }
+
+        override fun delModel(model: Model): ProviderSetting {
+            return copy(models = models.filter { it.id != model.id })
+        }
+
+        override fun moveMove(
+            from: Int,
+            to: Int
+        ): ProviderSetting {
+            return copy(models = models.toMutableList().apply {
+                val model = removeAt(from)
+                add(to, model)
+            })
+        }
+
+        override fun copyProvider(
+            id: Uuid,
+            enabled: Boolean,
+            name: String,
+            models: List<Model>,
+            balanceOption: BalanceOption,
+            builtIn: Boolean,
+        ): ProviderSetting {
+            return this.copy(
+                id = id,
+                enabled = enabled,
+                name = name,
+                models = models,
+                balanceOption = balanceOption,
+                builtIn = builtIn,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
                 OpenAI::class,
                 Google::class,
                 Claude::class,
+                ChatGPT::class,
             )
         }
     }

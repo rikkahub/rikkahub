@@ -1,6 +1,7 @@
 package me.rerere.ai.provider
 
 import android.content.Context
+import me.rerere.ai.provider.providers.ChatGPTProvider
 import me.rerere.ai.provider.providers.ClaudeProvider
 import me.rerere.ai.provider.providers.GoogleProvider
 import me.rerere.ai.provider.providers.OpenAIProvider
@@ -16,6 +17,7 @@ data class ProviderInstances(
     val openAI: Provider<ProviderSetting.OpenAI>,
     val google: Provider<ProviderSetting.Google>,
     val claude: Provider<ProviderSetting.Claude>,
+    val chatGPT: Provider<ProviderSetting.ChatGPT>,
 ) {
     companion object {
         fun default(
@@ -26,6 +28,7 @@ data class ProviderInstances(
             openAI = OpenAIProvider(client, context, streamClient),
             google = GoogleProvider(client, context, streamClient),
             claude = ClaudeProvider(client, context, streamClient),
+            chatGPT = ChatGPTProvider(client, context, streamClient),
         )
     }
 }

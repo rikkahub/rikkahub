@@ -38,6 +38,11 @@ class SettingsRoutesRedactionTest {
             useServiceAccount = true,
             baseUrl = "https://google.example/v1beta",
         ),
+        ProviderSetting.ChatGPT(
+            name = "ChatGPT",
+            accessToken = "chatgpt-jwt-secret",
+            baseUrl = "https://chatgpt.example/codex",
+        ),
     )
 
     @Test
@@ -49,6 +54,7 @@ class SettingsRoutesRedactionTest {
         assertFalse("oauthToken of Claude leaked", json.contains("oauth-secret"))
         assertFalse("apiKey of Google leaked", json.contains("g-secret"))
         assertFalse("privateKey of Google leaked", json.contains("BEGIN PRIVATE KEY"))
+        assertFalse("accessToken of ChatGPT leaked", json.contains("chatgpt-jwt-secret"))
     }
 
     @Test
@@ -58,9 +64,11 @@ class SettingsRoutesRedactionTest {
         assertTrue("provider name dropped", json.contains("OpenAI"))
         assertTrue("provider name dropped", json.contains("Claude"))
         assertTrue("provider name dropped", json.contains("Google"))
+        assertTrue("provider name dropped", json.contains("ChatGPT"))
         assertTrue("baseUrl dropped", json.contains("https://openai.example/v1"))
         assertTrue("baseUrl dropped", json.contains("https://claude.example/v1"))
         assertTrue("baseUrl dropped", json.contains("https://google.example/v1beta"))
+        assertTrue("baseUrl dropped", json.contains("https://chatgpt.example/codex"))
     }
 
     // The SSE stream serializes the WHOLE Settings object, not just providers.
