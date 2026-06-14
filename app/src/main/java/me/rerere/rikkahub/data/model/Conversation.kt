@@ -261,7 +261,12 @@ private fun List<MessageNode>.collapseConsecutiveSameRole(): List<MessageNode> {
     val result = mutableListOf<MessageNode>()
     for (node in this) {
         val previous = result.lastOrNull()
-        if (previous != null && previous.currentMessage.role == node.currentMessage.role) {
+        // SYNTHETIC_DISTINCTNESS (#290): never merge a synthetic agent-event message into an adjacent
+        // same-role turn (nor a real turn into it) — merging would fuse the synthetic marker onto real
+        // user content (so FTS/stats would wrongly exclude it) and blur distinct injected context.
+        if (previous != null && previous.currentMessage.role == node.currentMessage.role &&
+            !previous.currentMessage.isSyntheticAgentEvent() && !node.currentMessage.isSyntheticAgentEvent()
+        ) {
             val prevMsg = previous.currentMessage
             val nodeMsg = node.currentMessage
             val merged = when {

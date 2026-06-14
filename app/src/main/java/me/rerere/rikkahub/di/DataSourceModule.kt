@@ -30,6 +30,9 @@ import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.ai.agentevent.AgentEventRecoveryRunner
+import me.rerere.rikkahub.data.ai.agentevent.AgentEventStore
+import me.rerere.rikkahub.data.ai.agentevent.RoomAgentEventStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.repository.RoomBoardTransactionRunner
 import me.rerere.rikkahub.data.repository.TaskBoardRepository
@@ -301,6 +304,31 @@ val dataSourceModule = module {
     }
     single<me.rerere.rikkahub.data.ai.task.TaskRunStore> { get<TaskRunRepository>() }
 
+    // Durable agent-event queue (issue #290): the async-injection store ChatService drains at an
+    // idle turn-end. Persistence only — never inside ChatTurnRuntime/TaskCoordinator/registry. The
+    // store wraps the DAO in the same one-transaction-per-op runner the board/task repos use, so a
+    // claim is atomic against a concurrent drain or startup replay.
+    single { get<AppDatabase>().agentEventDao() }
+    single<AgentEventStore> {
+        RoomAgentEventStore(
+            dao = get(),
+            transactions = RoomBoardTransactionRunner(get<AppDatabase>()),
+        )
+    }
+    // Cold-start replay for the agent-event queue (issue #290): PENDING events survive in Room and at
+    // startup are drained through the SAME idle-gated claim path the live turn-end uses. ChatService
+    // is resolved LAZILY inside the drain lambda (not at construction) to avoid a startup init-order /
+    // circular dependency; the drain is idle-gated (preserving NO_DOUBLE_GENERATION) and the single
+    // store-claim keeps replay AT_MOST_ONCE.
+    single {
+        AgentEventRecoveryRunner(
+            store = get(),
+            drainIfIdle = { conversationId ->
+                get<me.rerere.rikkahub.service.ChatService>().maybeDrainAgentEventsWhenIdle(conversationId)
+            },
+        )
+    }
+
     // Cold-start recovery + retention composition root (SPEC.md M6, Success Criterion #4). Invoked
     // once from RikkaHubApp.onCreate: marks active task rows Interrupted (no replay) and sweeps
     // expired terminal runs / completed-deleted board items.
@@ -343,7 +371,12 @@ val dataSourceModule = module {
     // not-yet-Interrupted killed run, and leave a recurring schedule pinned "running" forever.
     single {
         me.rerere.rikkahub.data.ai.task.StartupRecoveryRunner(
-            recover = { get<me.rerere.rikkahub.data.ai.task.TaskRecoveryRunner>().runStartupRecovery() },
+            recover = {
+                get<me.rerere.rikkahub.data.ai.task.TaskRecoveryRunner>().runStartupRecovery()
+                // Agent-event replay pass (issue #290), beside task recovery: observe-only at cold
+                // start (defers delivery to the next idle turn-end drain); swallows its own failures.
+                get<AgentEventRecoveryRunner>().runStartupReplay()
+            },
             reschedule = { get<me.rerere.rikkahub.data.ai.schedule.ScheduleRescheduler>().rescheduleOverdue() },
         )
     }

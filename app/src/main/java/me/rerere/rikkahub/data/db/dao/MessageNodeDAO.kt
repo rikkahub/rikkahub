@@ -9,6 +9,8 @@ import androidx.room.Update
 import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.sqlite.db.SupportSQLiteQuery
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import me.rerere.rikkahub.data.model.AGENT_EVENT_SYNTHETIC_KIND
+import me.rerere.rikkahub.data.model.SYNTHETIC_KIND_METADATA_KEY
 
 @Dao
 interface MessageNodeDAO {
@@ -57,13 +59,28 @@ data class MessageTokenStats(
 
 data class MessageDayCount(val day: String, val count: Int)
 
+// SYNTHETIC_DISTINCTNESS (#290): synthetic agent-event messages must NOT be counted in stats. The
+// marker lives in a Text part's metadata, serialized inside the message JSON (j.value), so a substring
+// match on the compact `"<key>":"<value>"` pair excludes them without a schema column. User-typed text
+// containing the literal is JSON-escaped (\" not ") inside j.value, so it cannot false-match.
+// Escape LIKE metacharacters in the interpolated marker so the predicate matches LITERALLY: the value
+// `agent_event` contains `_`, a LIKE single-char wildcard, which would otherwise also exclude e.g.
+// `agentXevent`. The surrounding `%` stay as real wildcards; ESCAPE '\' makes `\_` / `\%` literal.
+private fun likeEscapeLiteral(s: String): String =
+    s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+private val EXCLUDE_SYNTHETIC_SQL =
+    "j.value NOT LIKE '%\"" + likeEscapeLiteral(SYNTHETIC_KIND_METADATA_KEY) + "\":\"" +
+        likeEscapeLiteral(AGENT_EVENT_SYNTHETIC_KIND) + "\"%' ESCAPE '\\'"
+
 // SQLite json_each() 展开 messages JSON 数组，json_extract() 提取 Token 字段并聚合
 private val TOKEN_STATS_SQL = SimpleSQLiteQuery(
     "SELECT COUNT(*) AS totalMessages, " +
         "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.promptTokens') AS INTEGER)), 0) AS promptTokens, " +
         "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.completionTokens') AS INTEGER)), 0) AS completionTokens, " +
         "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.cachedTokens') AS INTEGER)), 0) AS cachedTokens " +
-        "FROM message_node mn, json_each(mn.messages) j"
+        "FROM message_node mn, json_each(mn.messages) j " +
+        "WHERE " + EXCLUDE_SYNTHETIC_SQL
 )
 
 suspend fun MessageNodeDAO.getTokenStats(): MessageTokenStats = getTokenStatsRaw(TOKEN_STATS_SQL)
@@ -76,6 +93,7 @@ suspend fun MessageNodeDAO.getMessageCountPerDay(startDate: String): List<Messag
                 "COUNT(*) AS count " +
                 "FROM message_node mn, json_each(mn.messages) j " +
                 "WHERE json_extract(j.value, '$.role') = 'user' " +
+                "AND " + EXCLUDE_SYNTHETIC_SQL + " " +
                 "AND json_extract(j.value, '$.createdAt') >= ? " +
                 "GROUP BY day",
             arrayOf(startDate)

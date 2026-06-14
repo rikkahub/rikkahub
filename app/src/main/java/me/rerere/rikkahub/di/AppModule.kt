@@ -182,6 +182,7 @@ val appModule = module {
             taskScheduleRepository = get(),
             executionHandles = get(),
             taskRunStore = get(),
+            agentEventStore = get(),
             automationRegistry = get(),
             automationKillSwitch = get(),
             hookDispatcher = get()

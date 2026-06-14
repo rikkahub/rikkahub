@@ -31,7 +31,7 @@ import java.io.File
 
 val repositoryModule = module {
     single {
-        ConversationRepository(get(), get(), get(), get(), get(), get(), get(), get(), get())
+        ConversationRepository(get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     // Neutral :ai-runtime contract adapters over the repos they wrap (issue #243 slice 3). Bound in

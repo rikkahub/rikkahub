@@ -148,6 +148,40 @@ class ConversationSession(
         }
     }
 
+    /**
+     * Claim the generation slot for a BACKGROUND agent-event drain (#290), but ONLY if no generation
+     * is currently live — a background drain must NEVER supersede a live user turn (the difference
+     * from [setJob], which always cancels the previous job). [jobFactory] MUST build a LAZILY-started
+     * job; on a won claim this registers it with the same start/stop + completion wiring as [setJob]
+     * and starts it, returning true. Race-safe: if a concurrent [setJob]/claim took the slot between
+     * the idle read and the compareAndSet, the claim fails, the lazy job is cancelled UNSTARTED (no
+     * work, no event consumed), and the caller leaves its event buffered for the next genuine
+     * turn-end. Makes the drain VISIBLE to idle-gating ([isGenerating]) and to stop/cancel, so a
+     * concurrent enqueue cannot start a second drain (NO_DOUBLE_GENERATION).
+     */
+    fun tryClaimIdleGenerationSlot(jobFactory: () -> Job): Boolean {
+        val current = _generationJob.value
+        // Occupied if a job is registered AND not yet completed — this includes a job another claim
+        // just registered but has not started yet (a LAZY job is NOT isActive until started, so an
+        // isActive-only guard would let a second claim CAS over it and double-start the drain).
+        if (current != null && !current.isCompleted) return false
+        val job = jobFactory()
+        if (!_generationJob.compareAndSet(current, job)) {
+            job.cancel()
+            return false
+        }
+        onGenerationStart()
+        job.invokeOnCompletion {
+            _generationJob.compareAndSet(job, null)
+            onGenerationStop()
+            if (refCount.get() <= 0) {
+                scheduleIdleCheck()
+            }
+        }
+        job.start()
+        return true
+    }
+
     fun getJob(): Job? = _generationJob.value
 
     private fun scheduleIdleCheck() {

@@ -6,6 +6,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import me.rerere.ai.core.TokenUsage
+import me.rerere.rikkahub.data.db.dao.AgentEventDAO
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.GenMediaDAO
@@ -18,6 +19,7 @@ import me.rerere.rikkahub.data.db.dao.TaskRunDAO
 import me.rerere.rikkahub.data.db.dao.TaskScheduleDAO
 import me.rerere.rikkahub.data.db.dao.WorkItemDAO
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
+import me.rerere.rikkahub.data.db.entity.AgentEventEntity
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
@@ -49,9 +51,10 @@ import me.rerere.common.json.JsonInstant
         TaskRunEntity::class,
         WorkItemEntity::class,
         WorkItemDependencyEntity::class,
-        TaskScheduleEntity::class
+        TaskScheduleEntity::class,
+        AgentEventEntity::class
     ],
-    version = 27,
+    version = 28,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -74,6 +77,9 @@ import me.rerere.common.json.JsonInstant
         // 25 -> 26 is purely additive (one new table: task_schedules); no existing table is
         // altered, so Room derives the migration from the exported schemas without a spec.
         AutoMigration(from = 25, to = 26),
+        // 27 -> 28 is purely additive (one new table: agent_events, issue #290); no existing table
+        // is altered, so Room derives the migration from the exported schemas without a spec.
+        AutoMigration(from = 27, to = 28),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -101,6 +107,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workItemDao(): WorkItemDAO
 
     abstract fun taskScheduleDao(): TaskScheduleDAO
+
+    abstract fun agentEventDao(): AgentEventDAO
 }
 
 object TokenUsageConverter {

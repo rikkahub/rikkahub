@@ -8,6 +8,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.isSyntheticAgentEvent
 import java.time.Instant
 
 data class MessageSearchResult(
@@ -131,7 +132,12 @@ internal fun expectedFtsRowCount(conversations: List<Conversation>): Int =
         }
     }
 
-private fun UIMessage.extractFtsText(): String =
-    parts.filterIsInstance<UIMessagePart.Text>()
+private fun UIMessage.extractFtsText(): String {
+    // A synthetic agent-event message is display-only injected context, not user-authored content —
+    // never index it for search (SYNTHETIC_DISTINCTNESS). expectedFtsRowCount uses this same
+    // predicate, so the FTS consistency baseline can never disagree with what the indexer writes.
+    if (isSyntheticAgentEvent()) return ""
+    return parts.filterIsInstance<UIMessagePart.Text>()
         .joinToString("\n") { it.text }
         .take(10_000)
+}

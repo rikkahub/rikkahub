@@ -18,6 +18,7 @@ import me.rerere.rikkahub.data.db.fts.expectedFtsRowCount
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
+import me.rerere.rikkahub.data.db.dao.AgentEventDAO
 import me.rerere.rikkahub.data.db.dao.TaskRunDAO
 import me.rerere.rikkahub.data.db.dao.TaskScheduleDAO
 import me.rerere.rikkahub.data.db.dao.WorkItemDAO
@@ -40,6 +41,7 @@ class ConversationRepository(
     private val taskRunDAO: TaskRunDAO,
     private val workItemDAO: WorkItemDAO,
     private val taskScheduleDAO: TaskScheduleDAO,
+    private val agentEventDAO: AgentEventDAO,
 ) {
     companion object {
         private const val TAG = "ConversationRepository"
@@ -252,6 +254,10 @@ class ConversationRepository(
             // forever (review finding #4). Delete them explicitly in the SAME transaction as the
             // conversation so the conversation and all its task artifacts vanish atomically.
             deleteConversationTaskArtifacts(taskRunDAO, workItemDAO, taskScheduleDAO, conversation.id)
+            // agent_events likewise carries no foreign key to the conversation (#290), so CASCADE
+            // does not reach it; delete its rows in the SAME transaction so a deleted conversation
+            // never orphans pending/consumed agent events (review finding #4).
+            agentEventDAO.deleteByConversationId(conversation.id.toString())
         }
         filesManager.deleteChatFiles(fullConversation.files)
     }
