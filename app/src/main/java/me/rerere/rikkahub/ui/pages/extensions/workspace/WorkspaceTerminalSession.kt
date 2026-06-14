@@ -207,13 +207,17 @@ internal class WorkspaceTerminalViewClient(
         val columnAndRow = view.getColumnAndRow(e, true)
         val column = columnAndRow[0]
         val row = columnAndRow[1]
+        val rows = emulator.mRows
+        val minAccessibleRow = -screen.activeTranscriptRows
+        val maxAccessibleRow = rows - 1
         if (column < 0 || column >= columns) return false
+        if (row < minAccessibleRow || row > maxAccessibleRow) return false
 
         // 向上/向下扩展到完整逻辑行(被软换行拆开的行 mLineWrap 为 true).
         // 限制最多扩展 URL_MAX_WRAP_ROWS 行: 真实 URL 跨不了这么多行, 同时避免连续无换行的
         // 长输出导致单次点击遍历整个 transcript.
-        val minRow = (row - URL_MAX_WRAP_ROWS).coerceAtLeast(-screen.activeTranscriptRows)
-        val maxRow = (row + URL_MAX_WRAP_ROWS).coerceAtMost(emulator.mRows - 1)
+        val minRow = (row - URL_MAX_WRAP_ROWS).coerceAtLeast(minAccessibleRow)
+        val maxRow = (row + URL_MAX_WRAP_ROWS).coerceAtMost(maxAccessibleRow)
         var startRow = row
         while (startRow > minRow && screen.getLineWrap(startRow - 1)) startRow--
         var endRow = row
