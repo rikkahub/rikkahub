@@ -16,8 +16,12 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
@@ -63,6 +67,9 @@ class VoiceAgentCoordinator(
     private val logHermesToolFailure: (String) -> Unit = { detail ->
         Log.w(E2E_TAG, "hermes_tool_failed $detail")
     },
+    private val logHermesQueueEvent: (String) -> Unit = { detail ->
+        Log.d(E2E_TAG, "hermes_queue_event $detail")
+    },
     private val conversationStore: VoiceConversationStore? = null,
     private val persister: VoiceConversationPersister = VoiceConversationPersister(),
     private val hermesJobPollIntervalMs: Long = HERMES_JOB_POLL_INTERVAL_MS,
@@ -96,7 +103,7 @@ class VoiceAgentCoordinator(
         maxElapsedMs = hermesJobMaxElapsedMs,
         updateToolStatus = ::updateHermesToolStatusFromManager,
         recordDiagnostic = diagnostics::record,
-        writeQueueEvent = { line -> writeArtifactSafely(VoiceE2EArtifact.HermesEvents, line) },
+        writeQueueEvent = ::writeHermesQueueArtifactLine,
         writeHermesAnswer = { answer -> writeArtifactSafely(VoiceE2EArtifact.HermesAnswer, answer) },
         persistenceSessionId = { voiceArtifactSessionId },
         onJobCompleted = ::recordHermesJobCompletion,
@@ -872,14 +879,35 @@ class VoiceAgentCoordinator(
             answerChars?.let { put("answerChars", it) }
             sent?.let { put("sent", it) }
         }.toString()
+        logHermesQueueEventSafely(
+            "type=$type callId=$callId jobId=$jobId status=${status ?: "none"} sent=${sent ?: "n/a"}"
+        )
+        writeArtifactSafely(artifact = VoiceE2EArtifact.HermesEvents, content = content, callId = callId)
+    }
+
+    private fun writeHermesQueueArtifactLine(content: String) {
+        val detail = runCatching {
+            content.toHermesQueueLogDetail()
+        }.getOrElse { error ->
+            diagnostics.record(
+                "hermes_queue_event_parse_failed",
+                error.message ?: error.javaClass.simpleName,
+            )
+            "type=unknown callId=unknown jobId=none status=none sent=n/a"
+        }
+        logHermesQueueEventSafely(detail)
+        writeArtifactSafely(artifact = VoiceE2EArtifact.HermesEvents, content = content)
+    }
+
+    private fun logHermesQueueEventSafely(detail: String) {
         runCatching {
-            Log.d(
-                E2E_TAG,
-                "hermes_queue_event type=$type callId=$callId jobId=$jobId " +
-                    "status=${status ?: "none"} sent=${sent ?: "n/a"}",
+            logHermesQueueEvent(detail)
+        }.onFailure { error ->
+            diagnostics.record(
+                "hermes_queue_event_log_failed",
+                error.message ?: error.javaClass.simpleName,
             )
         }
-        writeArtifactSafely(artifact = VoiceE2EArtifact.HermesEvents, content = content, callId = callId)
     }
 
     private fun persistAssistantTranscript(statusOverride: VoiceTranscriptStatus? = null) {
@@ -1025,6 +1053,16 @@ class VoiceAgentCoordinator(
     private fun String.e2eSafeHermesFailureMessage(): String {
         Regex("Voice Lab request failed \\d+").find(this)?.let { return it.value }
         return substringBefore(':').take(120).ifBlank { "Hermes tool failed" }
+    }
+
+    private fun String.toHermesQueueLogDetail(): String {
+        val event = Json.parseToJsonElement(this).jsonObject
+        fun value(name: String): String? = event[name]?.jsonPrimitive?.contentOrNull
+        return "type=${value("type") ?: "unknown"} " +
+            "callId=${value("callId") ?: "unknown"} " +
+            "jobId=${value("jobId") ?: "none"} " +
+            "status=${value("status") ?: "none"} " +
+            "sent=${value("sent") ?: "n/a"}"
     }
 
     private data class ToolCallKey(

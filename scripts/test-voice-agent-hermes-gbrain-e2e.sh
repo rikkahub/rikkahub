@@ -233,13 +233,27 @@ LOGS
       printf '06-08 12:00:02.500 E/VoiceAgentCallService(1): Voice Lab request failed 403\n'
     fi
     if [[ "${FAKE_ADB_SKIP_TOOL_CALL:-0}" != "1" ]]; then
-      cat <<'LOGS'
+      if [[ "${FAKE_ADB_ASYNC_QUEUE_FLOW:-0}" == "1" ]]; then
+        cat <<'LOGS'
+06-08 12:00:02.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_created callId=call-1 jobId=job-1 status=queued sent=n/a
+06-08 12:00:02.600 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_completed callId=call-1 jobId=job-1 status=succeeded sent=n/a
+06-08 12:00:03.600 D/VoiceAgentGemini(1): send kind=clientContent sent=true
+06-08 12:00:03.700 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
+06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
+06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
+LOGS
+      else
+        cat <<'LOGS'
 06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
 06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 LOGS
+      fi
     fi
     deadline=$((SECONDS + 5))
     while [[ ! -f "${FAKE_ADB_END_MARKER:?}" && "$SECONDS" -lt "$deadline" ]]; do
@@ -486,6 +500,34 @@ assert_contains "$manual_no_hash_output" "  adb server: ${ADB_SERVER_SOCKET:-def
 assert_contains "$manual_no_hash_output" "  selected serial: RZ"
 assert_contains "$manual_no_hash_output" "  device: model=SM-S711B android=16"
 assert_contains "$manual_no_hash_output" "  package: me.rerere.rikkahub.debug installed"
+
+async_queue_log_dir="$TMP_DIR/async-queue-log"
+set +e
+async_queue_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_ASYNC_QUEUE_FLOW=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$async_queue_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+async_queue_status=$?
+set -e
+
+if [[ "$async_queue_status" -ne 0 ]]; then
+  printf 'Expected async queue manual mode to pass, got status %s.\n' "$async_queue_status" >&2
+  printf 'Actual output:\n%s\n' "$async_queue_output" >&2
+  exit 1
+fi
+assert_contains "$async_queue_output" "PASS marker: queued acknowledgement sent"
+assert_contains "$async_queue_output" "PASS marker: Hermes response hash observed for manual review"
+assert_contains "$async_queue_output" "PASS marker: completed Hermes answer sent to Gemini"
+assert_contains "$async_queue_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
 
 explicit_serial_multiple_devices_log_dir="$TMP_DIR/explicit-serial-multiple-devices-log"
 : > "$FAKE_ADB_ARGS_LOG"

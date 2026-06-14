@@ -184,6 +184,19 @@ wait_for_log() {
   return 1
 }
 
+wait_for_log_without_advancing() {
+  local label="$1"
+  local pattern="$2"
+  local timeout_seconds="${3:-90}"
+  local saved_search_start="$LOG_SEARCH_START_LINE"
+  if wait_for_log "$label" "$pattern" "$timeout_seconds"; then
+    LOG_SEARCH_START_LINE="$saved_search_start"
+    return 0
+  fi
+  LOG_SEARCH_START_LINE="$saved_search_start"
+  return 1
+}
+
 wait_for_cleanup_log() {
   local pattern="$1"
   local timeout_seconds="${2:-30}"
@@ -599,6 +612,9 @@ if ! wait_for_log "Gemini ask_hermes tool call received" \
   fi
   exit 1
 fi
+wait_for_log_without_advancing "queued acknowledgement sent" \
+  'VoiceAgentGemini.*send kind=toolResponse sent=true' \
+  60
 if [[ "$MANUAL_REVIEW" == "1" ]]; then
   wait_for_log "Hermes response hash observed for manual review" \
     'VoiceAgentE2E.*hermes_tool_response_hash .*actualHash=[0-9a-f]+(,|$)' \
@@ -608,7 +624,9 @@ else
     "VoiceAgentE2E.*hermes_tool_response_hash .*actualHash=$EXPECTED_HASH_LOWER(,|$)" \
     "$HERMES_RESPONSE_TIMEOUT_SECONDS"
 fi
-wait_for_log "Gemini tool response sent" 'VoiceAgentGemini.*send kind=toolResponse sent=true' 60
+wait_for_log "completed Hermes answer sent to Gemini" \
+  'VoiceAgentE2E.*hermes_queue_event type=late_text_turn_sent .*sent=true|VoiceAgentGemini.*send kind=clientContent sent=true|VoiceAgentGemini.*send kind=toolResponse sent=true' \
+  60
 wait_for_log "Gemini output audio received" 'VoiceAgentGemini.*event kind=OutputAudio' 120
 wait_for_log "Voice playback queued" 'AndroidVoiceAudioEngine.*Voice playback queued' 60
 wait_for_log "Voice playback wrote" 'AndroidVoiceAudioEngine.*Voice playback wrote' 60

@@ -29,6 +29,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -1042,13 +1043,17 @@ class VoiceAgentRuntimeTest {
         )
         assertEquals("call-a" to "First", toolApi.awaitRequest("call-a"))
         assertEquals("call-b" to "Second", toolApi.awaitRequest("call-b"))
-        assertEquals(
-            mapOf(
-                "call-a" to VoiceToolStatus.QueuedHermes("call-a", "job-1"),
-                "call-b" to VoiceToolStatus.QueuedHermes("call-b", "job-2"),
-            ),
-            coordinator.state.value.toolCalls,
-        )
+        withTimeout(500) {
+            while (
+                coordinator.state.value.toolCalls.keys != setOf("call-a", "call-b") ||
+                coordinator.state.value.toolCalls.values.any { it !is VoiceToolStatus.QueuedHermes }
+            ) {
+                kotlinx.coroutines.delay(10)
+            }
+        }
+        val callBQueued = coordinator.state.value.toolCalls.getValue("call-b")
+        assertHermesQueued(callId = "call-a", status = coordinator.state.value.toolCalls.getValue("call-a"))
+        assertHermesQueued(callId = "call-b", status = callBQueued)
 
         toolApi.complete(response(callId = "call-a", answer = "First answer"))
         withTimeout(500) {
@@ -1056,10 +1061,10 @@ class VoiceAgentRuntimeTest {
                 kotlinx.coroutines.delay(10)
             }
         }
-        assertEquals(VoiceToolStatus.QueuedHermes("call-b", "job-2"), coordinator.state.value.tool)
+        assertEquals(callBQueued, coordinator.state.value.tool)
         assertEquals(setOf("call-a", "call-b"), coordinator.state.value.toolCalls.keys)
         assertHermesAnswered(callId = "call-a", status = coordinator.state.value.toolCalls.getValue("call-a"))
-        assertEquals(VoiceToolStatus.QueuedHermes("call-b", "job-2"), coordinator.state.value.toolCalls.getValue("call-b"))
+        assertEquals(callBQueued, coordinator.state.value.toolCalls.getValue("call-b"))
 
         toolApi.complete(response(callId = "call-b", answer = "Second answer"))
         coordinator.awaitToolJobsWithTimeout()
@@ -1101,12 +1106,14 @@ class VoiceAgentRuntimeTest {
     fun `coordinator writes queue e2e events for multiple Hermes jobs`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
-        val artifacts = mutableListOf<Pair<VoiceE2EArtifact, String>>()
+        val artifacts = Collections.synchronizedList(mutableListOf<Pair<VoiceE2EArtifact, String>>())
+        val queueLogs = Collections.synchronizedList(mutableListOf<String>())
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = FakeVoiceAudioEngine(),
             writeVoiceE2EArtifact = { name, content -> artifacts += name to content },
+            logHermesQueueEvent = queueLogs::add,
             scope = this,
         )
 
@@ -1146,12 +1153,13 @@ class VoiceAgentRuntimeTest {
             rows.filter { it.string("type") != "late_text_turn_sent" }.map { it.string("jobId") }.toSet(),
         )
 
-        listOf("call-a" to "job-1", "call-b" to "job-2").forEach { (callId, jobId) ->
+        listOf("call-a", "call-b").forEach { callId ->
             val callRows = rows.filter { it.string("callId") == callId }
             assertEquals(
                 listOf("job_created", "job_completed", "late_text_turn_sent"),
                 callRows.map { it.string("type") },
             )
+            val jobId = callRows.single { it.string("type") == "job_created" }.string("jobId")
             assertEquals(
                 setOf(jobId),
                 callRows.filter { it.string("type") != "late_text_turn_sent" }.map { it.string("jobId") }.toSet(),
@@ -1161,7 +1169,11 @@ class VoiceAgentRuntimeTest {
             assertEquals("succeeded", completedRow.string("status"))
             assertFalse("HermesEvents rows must not duplicate raw answers", completedRow.containsKey("answer"))
             assertTrue(callRows.single { it.string("type") == "late_text_turn_sent" }.boolean("sent"))
+            assertTrue(queueLogs.contains("type=job_created callId=$callId jobId=$jobId status=queued sent=n/a"))
+            assertTrue(queueLogs.contains("type=job_completed callId=$callId jobId=$jobId status=succeeded sent=n/a"))
+            assertTrue(queueLogs.contains("type=late_text_turn_sent callId=$callId jobId=none status=none sent=true"))
         }
+        assertEquals(rows.size, queueLogs.size)
         assertEquals(
             "First answer\nfor review".length,
             rows.single { it.string("type") == "job_completed" && it.string("callId") == "call-a" }
@@ -3116,6 +3128,20 @@ class VoiceAgentRuntimeTest {
         assertEquals(callId, answered.callId)
         assertTrue("Expected non-negative elapsed time", answered.elapsedMs >= 0L)
         return answered
+    }
+
+    private fun assertHermesQueued(
+        callId: String,
+        status: VoiceToolStatus,
+    ): VoiceToolStatus.QueuedHermes {
+        assertTrue(
+            "Expected QueuedHermes($callId) but was $status",
+            status is VoiceToolStatus.QueuedHermes,
+        )
+        val queued = status as VoiceToolStatus.QueuedHermes
+        assertEquals(callId, queued.callId)
+        assertTrue("Expected non-empty job id", queued.jobId.isNotBlank())
+        return queued
     }
 
     private suspend fun VoiceAgentCoordinator.awaitToolJobsWithTimeout() {
