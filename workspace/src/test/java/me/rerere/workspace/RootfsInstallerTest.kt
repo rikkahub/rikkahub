@@ -26,7 +26,7 @@ class RootfsInstallerTest {
         }
 
         val target = tmp.newFolder("out")
-        createInstaller().extractTarGz(archive, target) {}
+        createInstaller().extractTar(archive, target) {}
 
         assertEquals("hello", File(target, "a.txt").readText())
         assertEquals("world", File(target, "b.txt").readText())
@@ -43,7 +43,7 @@ class RootfsInstallerTest {
         }
 
         val target = tmp.newFolder("out")
-        createInstaller().extractTarGz(archive, target) {}
+        createInstaller().extractTar(archive, target) {}
 
         assertEquals(true, File(target, "dir").isDirectory)
         assertEquals("content", File(target, "dir/file.txt").readText())
