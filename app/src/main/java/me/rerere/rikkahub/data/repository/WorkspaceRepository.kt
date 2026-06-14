@@ -39,8 +39,6 @@ class WorkspaceRepository(
             id = id,
             name = name.ifBlank { "Workspace" },
             root = id,
-            shellEnabled = false,
-            shellStatus = WorkspaceShellStatus.DISABLED.name,
             createdAt = now,
             updatedAt = now,
             lastAccessAt = null,
@@ -55,27 +53,6 @@ class WorkspaceRepository(
         dao.upsert(
             workspace.copy(
                 name = name.ifBlank { workspace.name },
-                updatedAt = System.currentTimeMillis(),
-            )
-        )
-        return true
-    }
-
-    suspend fun setShellEnabled(id: String, enabled: Boolean): Boolean {
-        val workspace = dao.getById(id) ?: return false
-        manager.ensureWorkspace(workspace.root)
-        dao.upsert(
-            workspace.copy(
-                shellEnabled = enabled,
-                shellStatus = if (enabled) {
-                    if (manager.hasRootfs(workspace.root)) {
-                        WorkspaceShellStatus.READY.name
-                    } else {
-                        WorkspaceShellStatus.BROKEN.name
-                    }
-                } else {
-                    WorkspaceShellStatus.DISABLED.name
-                },
                 updatedAt = System.currentTimeMillis(),
             )
         )
@@ -100,19 +77,13 @@ class WorkspaceRepository(
         onProgress: (RootfsInstallProgress) -> Unit = {},
     ): Boolean {
         val workspace = dao.getById(id) ?: return false
-        dao.upsert(
-            workspace.copy(
-                shellEnabled = true,
-                shellStatus = WorkspaceShellStatus.INSTALLING.name,
-                updatedAt = System.currentTimeMillis(),
-            )
-        )
+        updateShellState(workspace, WorkspaceShellStatus.INSTALLING.name)
         try {
             // runInterruptible 让协程取消转成线程中断, 打断 install 内阻塞的下载/解压循环
             runInterruptible(Dispatchers.IO) {
                 rootfsInstaller.install(workspace.root, url, onProgress)
             }
-            updateShellState(workspace, shellEnabled = true, shellStatus = WorkspaceShellStatus.READY.name)
+            updateShellState(workspace, WorkspaceShellStatus.READY.name)
             return true
         } catch (e: CancellationException) {
             withContext(NonCancellable) {
@@ -126,7 +97,7 @@ class WorkspaceRepository(
             throw CancellationException("Rootfs install cancelled").also { it.initCause(e) }
         } catch (e: Throwable) {
             Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}, url=$url", e)
-            updateShellState(workspace, shellEnabled = true, shellStatus = WorkspaceShellStatus.BROKEN.name)
+            updateShellState(workspace, WorkspaceShellStatus.BROKEN.name)
             throw e
         }
     }
@@ -243,22 +214,16 @@ class WorkspaceRepository(
     }
 
     private suspend fun restoreShellState(workspace: WorkspaceEntity) {
-        updateShellState(
-            workspace = workspace,
-            shellEnabled = workspace.shellEnabled,
-            shellStatus = workspace.shellStatus,
-        )
+        updateShellState(workspace, workspace.shellStatus)
     }
 
     private suspend fun updateShellState(
         workspace: WorkspaceEntity,
-        shellEnabled: Boolean,
         shellStatus: String,
     ) {
         val current = dao.getById(workspace.id) ?: workspace
         dao.upsert(
             current.copy(
-                shellEnabled = shellEnabled,
                 shellStatus = shellStatus,
                 updatedAt = System.currentTimeMillis(),
             )

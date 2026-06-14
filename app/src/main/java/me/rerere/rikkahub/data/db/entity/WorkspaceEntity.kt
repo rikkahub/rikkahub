@@ -22,8 +22,6 @@ data class WorkspaceEntity(
     val name: String,
     @ColumnInfo("root")
     val root: String,
-    @ColumnInfo("shell_enabled")
-    val shellEnabled: Boolean = false,
     @ColumnInfo("shell_status")
     val shellStatus: String = WorkspaceShellStatus.DISABLED.name,
     @ColumnInfo("created_at")
@@ -44,7 +42,6 @@ data class WorkspaceEntity(
         id = id,
         name = name,
         root = root,
-        shellEnabled = shellEnabled,
         shellStatus = runCatching { WorkspaceShellStatus.valueOf(shellStatus) }
             .getOrDefault(WorkspaceShellStatus.DISABLED),
         createdAt = createdAt,

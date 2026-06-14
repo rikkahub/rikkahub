@@ -164,14 +164,6 @@ class WorkspaceDetailVM(
         }
     }
 
-    fun setShellEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            val workspace = state.value.workspace ?: return@launch
-            repository.setShellEnabled(workspace.id, enabled)
-            loadWorkspace()
-        }
-    }
-
     fun setToolApproval(toolName: String, needsApproval: Boolean) {
         viewModelScope.launch {
             val workspace = state.value.workspace ?: return@launch
