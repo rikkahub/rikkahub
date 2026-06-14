@@ -555,6 +555,7 @@
   <string name="safe_mode_current_assistant">Current assistant: %s</string>
   <string name="safe_mode_default_assistant">Default Assistant</string>
   <string name="safe_mode_description">The app crashed on the last launch. You can switch to a different assistant to resolve the issue.</string>
+  <string name="safe_mode_enter_app">Enter App</string>
   <string name="safe_mode_switch_assistant">Switch Assistant</string>
   <string name="safe_mode_title">Safe Mode</string>
   <string name="search_ability_scrape">Scrape</string>

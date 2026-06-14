@@ -530,7 +530,7 @@ private fun InstallRootfsDialog(
                     onValueChange = { url = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("tar.gz 下载链接") },
-                    singleLine = true,
+                    maxLines = 5,
                 )
             }
         },
