@@ -358,9 +358,36 @@ class ResponseAPI(
                         add(buildJsonObject {
                             put("type", "function_call_output")
                             put("call_id", tool.toolCallId)
-                            put(
-                                "output",
-                                tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                            val hasImage = tool.output.any { it is UIMessagePart.Image }
+                            if (hasImage) {
+                                putJsonArray("output") {
+                                    tool.output.forEach { part ->
+                                        when (part) {
+                                            is UIMessagePart.Image -> add(buildJsonObject {
+                                                part.encodeBase64().onSuccess { encoded ->
+                                                    put("type", "input_image")
+                                                    put("image_url", encoded.base64)
+                                                }.onFailure {
+                                                    it.printStackTrace()
+                                                    put("type", "input_text")
+                                                    put("text", "Error: Failed to encode image to base64")
+                                                }
+                                            })
+                                            is UIMessagePart.Text -> add(buildJsonObject {
+                                                put("type", "input_text")
+                                                put("text", part.text)
+                                            })
+                                            else -> {}
+                                        }
+                                    }
+                                }
+                            } else {
+                                put(
+                                    "output",
+                                    tool.output.filterIsInstance<UIMessagePart.Text>()
+                                        .joinToString("\n") { it.text }
+                                )
+                            }
                         })
                     }
                 }
