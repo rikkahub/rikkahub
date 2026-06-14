@@ -169,6 +169,7 @@ class PreToolUseGuardrailTest {
                 openAI = UnusedProvider(),
                 google = UnusedProvider(),
                 claude = UnusedProvider(),
+                chatGPT = UnusedProvider(),
             ),
         ),
         json = json,
