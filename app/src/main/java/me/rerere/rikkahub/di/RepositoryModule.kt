@@ -21,6 +21,8 @@ import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.ui.components.ui.DefaultWorkspaceSheetStore
+import me.rerere.rikkahub.ui.components.ui.WorkspaceSheetStore
 import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceManager
@@ -117,5 +119,9 @@ val repositoryModule = module {
 
     single {
         WorkspaceRepository(get(), get(), get(), get(), get())
+    }
+
+    single<WorkspaceSheetStore> {
+        DefaultWorkspaceSheetStore(get())
     }
 }

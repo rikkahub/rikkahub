@@ -20,6 +20,7 @@ import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
+import me.rerere.workspace.seededRelativeCwd
 import kotlin.uuid.Uuid
 
 class WorkspaceRepository(
@@ -194,6 +195,15 @@ class WorkspaceRepository(
         val workspace = dao.getById(id) ?: return@withContext emptyList()
         manager.ensureWorkspace(workspace.root)
         manager.listFiles(workspace.root, path, area)
+    }
+
+    suspend fun resolvedWorkingDir(id: String): String = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext ""
+        manager.ensureWorkspace(workspace.root)
+        seededRelativeCwd(
+            filesDir = manager.filesDir(workspace.root),
+            workingDir = workspace.workingDir,
+        )
     }
 
     suspend fun readText(

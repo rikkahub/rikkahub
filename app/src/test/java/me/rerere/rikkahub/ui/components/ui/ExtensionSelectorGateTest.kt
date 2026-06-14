@@ -30,8 +30,8 @@ class ExtensionSelectorGateTest {
     @Test
     fun `awaitPage fires once, only after the first target, never before`() = runBlocking<Unit> {
         val target = SKILLS_PAGE_INDEX
-        val nonTarget = Arb.int(0..2)          // the three non-Skills tabs
-        checkAll(Arb.list(nonTarget, 0..6), Arb.list(Arb.int(0..3), 0..6)) { prefix, suffix ->
+            val nonTarget = Arb.int(0..3)          // Workspace, Quick Messages, Mode, Lorebooks
+            checkAll(Arb.list(nonTarget, 0..6), Arb.list(Arb.int(0..4), 0..6)) { prefix, suffix ->
             var nonTargetSeen = 0
             var targetSeen = 0
             var loadCount = 0
@@ -47,23 +47,25 @@ class ExtensionSelectorGateTest {
         }
     }
 
-    /** The issue's exact scenario: open → tabs 0,1,2 → Skills(3) → 0 → Skills(3). One load, after 0,1,2. */
+    /** Open on Quick Messages, visit non-Skills tabs, then Skills. One load, after the non-target pages. */
     @Test
     fun `awaitPage matches the reported open-close cycle`() = runBlocking {
         var nonTargetSeen = 0
         var targetSeen = 0
 
-        listOf(0, 1, 2, SKILLS_PAGE_INDEX, 0, SKILLS_PAGE_INDEX).asFlow()
+        listOf(QUICK_MESSAGES_PAGE_INDEX, MODE_INJECTIONS_PAGE_INDEX, LOREBOOKS_PAGE_INDEX, SKILLS_PAGE_INDEX, 0, SKILLS_PAGE_INDEX).asFlow()
             .onEach { if (it == SKILLS_PAGE_INDEX) targetSeen++ else nonTargetSeen++ }
             .awaitPage(SKILLS_PAGE_INDEX)
 
-        assertEquals(3, nonTargetSeen)  // 0,1,2 consumed; trailing 0 never reached
-        assertEquals(1, targetSeen)     // trailing second Skills(3) never reached
+        assertEquals(3, nonTargetSeen)  // Quick, Mode, Lorebooks consumed; trailing Workspace never reached
+        assertEquals(1, targetSeen)     // trailing second Skills never reached
     }
 
     /** Boundary: the gate must target the same pager index the Skills tab lives at. */
     @Test
     fun `skills page index is pinned`() {
-        assertEquals(3, SKILLS_PAGE_INDEX)
+        assertEquals(0, WORKSPACE_PAGE_INDEX)
+        assertEquals(1, QUICK_MESSAGES_PAGE_INDEX)
+        assertEquals(4, SKILLS_PAGE_INDEX)
     }
 }
