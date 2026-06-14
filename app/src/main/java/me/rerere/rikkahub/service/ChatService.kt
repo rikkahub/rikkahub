@@ -567,10 +567,10 @@ class ChatService(
                             )
                         )
                     }
-                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
+                    mcpManager.getAllAvailableTools().forEach { (serverId, serverName, tool) ->
                         add(
                             Tool(
-                                name = "mcp__" + tool.name,
+                                name = "mcp__${serverName}__${tool.name}",
                                 description = tool.description ?: "",
                                 parameters = { tool.inputSchema },
                                 needsApproval = { tool.needsApproval },
@@ -973,7 +973,7 @@ class ChatService(
         return when {
             // 正在执行工具
             lastTool != null && !lastTool.isExecuted -> {
-                val toolName = lastTool.toolName.removePrefix("mcp__")
+                val toolName = lastTool.toolName.substringAfterLast("__")
                 Triple(
                     context.getString(R.string.notification_live_update_chip_tool),
                     context.getString(R.string.notification_live_update_tool, toolName),
