@@ -589,6 +589,10 @@
   <string name="search_page_rebuild_index_desc">这将清除现有索引并重新扫描所有聊天记录。消息越多，耗时越长。是否继续？</string>
   <string name="search_page_rebuilding">正在重建索引 (%1$d / %2$d)…</string>
   <string name="search_page_rebuilding_simple">正在重建索引…</string>
+  <string name="search_page_sort">排序</string>
+  <string name="search_page_sort_newest">最新优先</string>
+  <string name="search_page_sort_oldest">最旧优先</string>
+  <string name="search_page_sort_relevance">相关性</string>
   <string name="search_page_title">搜索消息</string>
   <string name="search_page_untitled">无标题</string>
   <string name="search_picker_title">搜索设置</string>

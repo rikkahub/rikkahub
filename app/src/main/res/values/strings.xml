@@ -590,6 +590,10 @@
   <string name="search_page_rebuild_index_desc">This will clear the existing index and re-scan all chat history. The more messages, the longer it takes. Continue?</string>
   <string name="search_page_rebuilding">Rebuilding index (%1$d / %2$d)...</string>
   <string name="search_page_rebuilding_simple">Rebuilding index...</string>
+  <string name="search_page_sort">Sort</string>
+  <string name="search_page_sort_newest">Newest first</string>
+  <string name="search_page_sort_oldest">Oldest first</string>
+  <string name="search_page_sort_relevance">Relevance</string>
   <string name="search_page_title">Search Messages</string>
   <string name="search_page_untitled">Untitled</string>
   <string name="search_picker_title">Search Settings</string>

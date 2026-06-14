@@ -589,6 +589,10 @@
   <string name="search_page_rebuild_index_desc">Это удалит существующий индекс и повторно просканирует всю историю чатов. Чем больше сообщений, тем дольше займет. Продолжить?</string>
   <string name="search_page_rebuilding">Пересоздание индекса (%1$d / %2$d)…</string>
   <string name="search_page_rebuilding_simple">Пересоздание индекса…</string>
+  <string name="search_page_sort">Сортировка</string>
+  <string name="search_page_sort_newest">Сначала новые</string>
+  <string name="search_page_sort_oldest">Сначала старые</string>
+  <string name="search_page_sort_relevance">По релевантности</string>
   <string name="search_page_title">Поиск сообщений</string>
   <string name="search_page_untitled">Без названия</string>
   <string name="search_picker_title">Поиск настроек</string>

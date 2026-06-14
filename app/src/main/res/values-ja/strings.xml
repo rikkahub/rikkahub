@@ -589,6 +589,10 @@
   <string name="search_page_rebuild_index_desc">既存のインデックスをクリアし、すべてのチャット履歴を再スキャンします。メッセージが多いほど時間がかかります。続行しますか？</string>
   <string name="search_page_rebuilding">インデックスを再構築中 (%1$d / %2$d)…</string>
   <string name="search_page_rebuilding_simple">インデックスを再構築中…</string>
+  <string name="search_page_sort">並び替え</string>
+  <string name="search_page_sort_newest">新しい順</string>
+  <string name="search_page_sort_oldest">古い順</string>
+  <string name="search_page_sort_relevance">関連度</string>
   <string name="search_page_title">メッセージを検索</string>
   <string name="search_page_untitled">無題</string>
   <string name="search_picker_title">検索設定</string>
