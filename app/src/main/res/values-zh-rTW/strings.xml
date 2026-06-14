@@ -1211,5 +1211,7 @@
   <string name="tool_ui_replay">重播</string>
   <string name="tool_ui_delete_memory">刪除記憶</string>
   <string name="tool_ui_file">文件</string>
+  <string name="backup_page_s3_path_style">路徑樣式</string>
+  <string name="backup_page_s3_path_style_desc">使用 endpoint/bucket/object。關閉後使用 bucket.endpoint/object。</string>
 </resources>
 

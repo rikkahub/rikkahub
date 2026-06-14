@@ -214,6 +214,8 @@
   <string name="backup_page_s3_backup_files">S3备份文件</string>
   <string name="backup_page_s3_bucket">Bucket</string>
   <string name="backup_page_s3_endpoint">端点</string>
+  <string name="backup_page_s3_path_style">路径样式</string>
+  <string name="backup_page_s3_path_style_desc">使用 endpoint/bucket/object。关闭后使用 bucket.endpoint/object。</string>
   <string name="backup_page_s3_region">区域</string>
   <string name="backup_page_s3_secret_access_key">秘密访问密钥</string>
   <string name="backup_page_test_connection">测试连接</string>
