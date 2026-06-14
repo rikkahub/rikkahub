@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
@@ -21,6 +22,10 @@ import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
+import me.rerere.rikkahub.data.codex.CodexAccountRepository
+import me.rerere.rikkahub.data.codex.CodexCredentialStore
+import me.rerere.rikkahub.data.codex.CodexOAuthManager
+import me.rerere.rikkahub.data.codex.CodexProvider
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
@@ -38,6 +43,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.dsl.module
+import org.koin.core.qualifier.named
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.Locale
@@ -205,12 +211,52 @@ val dataSourceModule = module {
             .build().also { SearchService.init(it, get()) }
     }
 
+    single<OkHttpClient>(named("codex")) {
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.MINUTES)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .followSslRedirects(true)
+            .followRedirects(true)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
     single {
         SponsorAPI.create(get())
     }
 
     single {
-        ProviderManager(client = get(), context = get())
+        CodexAccountRepository(
+            store = CodexCredentialStore(context = get(), json = get()),
+            client = get(named("codex")),
+            json = get(),
+        )
+    }
+
+    single {
+        CodexOAuthManager(
+            context = get(),
+            scope = get<AppScope>(),
+            client = get(named("codex")),
+            repository = get(),
+        )
+    }
+
+    single {
+        val codexRepository: CodexAccountRepository = get()
+        val json: Json = get()
+        ProviderManager(client = get(), context = get()).apply {
+            registerProvider(
+                "codex",
+                CodexProvider(
+                    context = get(),
+                    client = get(named("codex")),
+                    repository = codexRepository,
+                    json = json,
+                )
+            )
+        }
     }
 
     single {

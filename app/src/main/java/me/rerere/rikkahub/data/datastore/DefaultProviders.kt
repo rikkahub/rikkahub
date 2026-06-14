@@ -18,6 +18,7 @@ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import kotlin.uuid.Uuid
 
 val DEFAULT_AUTO_MODEL_ID = Uuid.parse("b7055fb4-39f9-4042-a88a-0d80ed76cf08")
+val DEFAULT_CODEX_PROVIDER_ID = Uuid.parse("7ce7e322-b995-4b0c-9d48-42e08dcfcdda")
 
 val DEFAULT_PROVIDERS = listOf(
     ProviderSetting.OpenAI(
@@ -47,6 +48,12 @@ val DEFAULT_PROVIDERS = listOf(
         baseUrl = "https://api.openai.com/v1",
         apiKey = "",
         builtIn = true
+    ),
+    ProviderSetting.Codex(
+        id = DEFAULT_CODEX_PROVIDER_ID,
+        name = "Codex",
+        enabled = false,
+        builtIn = true,
     ),
     ProviderSetting.Google(
         id = Uuid.parse("6ab18148-c138-4394-a46f-1cd8c8ceaa6d"),

@@ -120,6 +120,7 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
+import me.rerere.rikkahub.ui.pages.setting.components.CodexProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
 import me.rerere.rikkahub.ui.pages.setting.components.isUsingDefaultBaseUrl
@@ -182,14 +183,16 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                     }
                 },
                 actions = {
-                    val shareSheetState = rememberShareSheetState()
-                    ShareSheet(shareSheetState)
-                    IconButton(
-                        onClick = {
-                            shareSheetState.show(provider)
+                    if (provider !is ProviderSetting.Codex) {
+                        val shareSheetState = rememberShareSheetState()
+                        ShareSheet(shareSheetState)
+                        IconButton(
+                            onClick = {
+                                shareSheetState.show(provider)
+                            }
+                        ) {
+                            Icon(HugeIcons.Share01, null)
                         }
-                    ) {
-                        Icon(HugeIcons.Share01, null)
                     }
                 }
             )
@@ -261,6 +264,13 @@ private fun SettingProviderConfigPage(
     onEdit: (ProviderSetting) -> Unit,
     onDelete: () -> Unit
 ) {
+    if (provider is ProviderSetting.Codex) {
+        CodexProviderConfigure(
+            provider = provider,
+            onEdit = onEdit,
+        )
+        return
+    }
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
