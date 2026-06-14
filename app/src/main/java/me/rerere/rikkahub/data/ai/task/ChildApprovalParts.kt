@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.task
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_MODEL_NAME
 import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
 import me.rerere.rikkahub.data.model.Conversation
 
@@ -34,7 +35,9 @@ fun injectChildApprovalPart(
     val nodeIndex = nodes.indexOfLast { node ->
         val message = node.messages.getOrNull(node.selectIndex) ?: return@indexOfLast false
         message.role == MessageRole.ASSISTANT && message.parts.any {
-            it is UIMessagePart.Tool && it.toolName == SPAWN_TOOL_NAME && !it.isExecuted
+            it is UIMessagePart.Tool &&
+                (it.toolName == SPAWN_TOOL_MODEL_NAME || it.toolName == SPAWN_TOOL_NAME) &&
+                !it.isExecuted
         }
     }
     if (nodeIndex < 0) return null

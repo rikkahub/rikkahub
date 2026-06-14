@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import kotlinx.serialization.json.JsonElement
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_MODEL_NAME
+import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
@@ -86,17 +88,24 @@ private object DefaultToolUIRenderer : ToolUIRenderer {
  * 工具 UI 渲染器注册表, 为新工具定制渲染时在 [renderers] 中注册即可
  */
 object ToolUIRegistry {
-    private val renderers: Map<String, ToolUIRenderer> = listOf(
-        MemoryToolUI,
-        SearchWebToolUI,
-        ScrapeWebToolUI,
-        GetTimeInfoToolUI,
-        ClipboardToolUI,
-        TextToSpeechToolUI,
-        UseSkillToolUI,
-        EditFileToolUI,
-        TaskToolUI,
-    ).associateBy { it.toolName }
+    private val renderers: Map<String, ToolUIRenderer> = buildMap {
+        listOf(
+            MemoryToolUI,
+            SearchWebToolUI,
+            ScrapeWebToolUI,
+            GetTimeInfoToolUI,
+            ClipboardToolUI,
+            TextToSpeechToolUI,
+            UseSkillToolUI,
+            EditFileToolUI,
+            TaskToolUI,
+        ).forEach { put(it.toolName, it) }
+        // The spawn tool is advertised to the model as `agent` but pre-rename transcripts and
+        // in-flight pending calls carry the legacy `task` name; alias the SAME renderer under both
+        // keys so old and new steps render identically (TaskToolUI.toolName stays "task").
+        put(SPAWN_TOOL_NAME, TaskToolUI)
+        put(SPAWN_TOOL_MODEL_NAME, TaskToolUI)
+    }
 
     /** 查找工具对应的渲染器, 未注册时返回默认渲染器 */
     fun resolve(toolName: String): ToolUIRenderer = renderers[toolName] ?: DefaultToolUIRenderer

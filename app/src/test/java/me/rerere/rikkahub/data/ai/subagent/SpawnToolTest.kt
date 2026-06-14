@@ -149,6 +149,54 @@ class SpawnToolTest {
         put("prompt", prompt)
     }
 
+    private fun buildSpawnToolFor(spawnable: List<Assistant>): Tool = buildSpawnTool(
+        spawnableAssistants = spawnable,
+        coordinator = fakeCoordinator(mutableListOf()),
+        parentModelId = null,
+        settings = settingsWith(subModel),
+        registry = ExecutionHandleRegistry(),
+        buildSubagentTools = { _, _ -> emptyList() },
+        releaseOrphanedClaims = {},
+        approvalGateFor = {
+            object : me.rerere.ai.runtime.contract.TaskApprovalGate {
+                override suspend fun await(
+                    taskId: kotlin.uuid.Uuid,
+                    request: me.rerere.ai.runtime.task.TaskApprovalRequest,
+                ): me.rerere.ai.runtime.task.TaskApprovalDecision =
+                    me.rerere.ai.runtime.task.TaskApprovalDecision.Denied()
+            }
+        },
+        processingStatus = MutableStateFlow(null),
+        progressLabel = { "Running $it" },
+        parentConversationId = Uuid.random(),
+    )
+
+    @Test
+    fun `buildSpawnTool advertises the spawn tool under the model-facing name agent`() {
+        // The model-facing tool name was renamed task -> agent (issue #286) to remove the collision
+        // with the work-board task_* family. The factory must advertise the NEW name; SPAWN_TOOL_NAME
+        // is kept only as the legacy execution/UI/approval alias.
+        val tool = buildSpawnToolFor(emptyList())
+
+        assertEquals("agent", tool.name)
+        assertEquals("agent", SPAWN_TOOL_MODEL_NAME)
+    }
+
+    @Test
+    fun `advertiseSpawnableAssistants prompt names the agent tool, not the legacy task tool`() {
+        // The system-prompt text the model reads must use the model-facing name. A `task` reference
+        // here would steer the model back at the renamed name.
+        val sub = Assistant(name = "Researcher", description = "Researches topics", spawnable = true)
+
+        val prompt = advertiseSpawnableAssistants(listOf(sub))
+
+        assertTrue("prompt must mention the agent tool, was: $prompt", prompt.contains("agent"))
+        assertTrue(
+            "prompt must not reference the legacy `task` tool name, was: $prompt",
+            !prompt.contains("`task`"),
+        )
+    }
+
     @Test
     fun `execute restores processingStatus to its prior value on success`() {
         val status = MutableStateFlow<String?>(null)
@@ -213,6 +261,33 @@ class SpawnToolTest {
         // The unknown-subagent error() is thrown before the status is set, so it must remain
         // exactly the prior value — and never a stale "Running ..." from a partial set.
         assertEquals("prior", status.value)
+    }
+
+    @Test
+    fun `stripSpawnTools removes both spawn names while leaving the board family and lookalikes intact`() {
+        // The depth-1 recursion guard must strip BOTH the advertised name (agent) and the legacy
+        // execution alias (task) from any subagent pool — neither can be allowed to let a child
+        // spawn. Everything that merely LOOKS like a spawn name (the work-board task_* family, the
+        // mcp__-prefixed tools, the plural lookalikes) must survive untouched (issue #286).
+        val pool = listOf(
+            tool(SPAWN_TOOL_MODEL_NAME), // "agent" — advertised spawn name, must be stripped
+            tool(SPAWN_TOOL_NAME),       // "task"  — legacy spawn alias, must be stripped
+            tool("task_create"),
+            tool("task_get"),
+            tool("task_list"),
+            tool("task_update"),
+            tool("mcp__agent"),
+            tool("mcp__task"),
+            tool("agents"),
+            tool("tasks"),
+        )
+
+        val survivors = stripSpawnTools(pool).map { it.name }
+
+        assertEquals(
+            listOf("task_create", "task_get", "task_list", "task_update", "mcp__agent", "mcp__task", "agents", "tasks"),
+            survivors,
+        )
     }
 
     @Test

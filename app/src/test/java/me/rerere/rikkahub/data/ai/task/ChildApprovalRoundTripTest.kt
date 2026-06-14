@@ -16,6 +16,7 @@ import me.rerere.ai.runtime.task.TaskApprovalRequest
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_MODEL_NAME
 import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.toMessageNode
@@ -221,6 +222,57 @@ class ChildApprovalRoundTripTest {
             UIMessage(role = MessageRole.ASSISTANT, parts = listOf(runningTaskPart)).toMessageNode(),
         ),
     )
+
+    /** A running spawn step under an arbitrary spawn name (legacy `task` or the new `agent`). */
+    private fun conversationWithRunningSpawn(spawnToolName: String): Conversation = Conversation.ofId(
+        id = Uuid.random(),
+        messages = listOf(
+            UIMessage.user("do the thing").toMessageNode(),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "call_spawn_1",
+                        toolName = spawnToolName,
+                        input = """{"subagent":"Researcher","prompt":"go"}""",
+                        output = emptyList(), // unexecuted = the spawn is suspended right now
+                    ),
+                ),
+            ).toMessageNode(),
+        ),
+    )
+
+    @Test
+    fun `a child approval anchors identically under a legacy task step and a new agent step`() {
+        // The rename makes a fresh spawn step carry toolName="agent" while pre-rename transcripts
+        // and in-flight pending calls still carry "task". Both must be valid anchors, or a stored
+        // conversation cannot surface the child approval and the child suspends invisibly.
+        val namespacedId = "${Uuid.random()}/call-1"
+
+        fun anchoredPart(spawnToolName: String): UIMessagePart.Tool {
+            val injected = injectChildApprovalPart(
+                conversation = conversationWithRunningSpawn(spawnToolName),
+                namespacedToolCallId = namespacedId,
+                toolName = "ask_user",
+                argumentsJson = """{"q":"may I?"}""",
+            )
+            assertNotNull("a running $spawnToolName step must be a valid anchor", injected)
+            return injected!!.messageNodes.last().currentMessage.parts
+                .filterIsInstance<UIMessagePart.Tool>()
+                .single { it.toolCallId == namespacedId }
+        }
+
+        val underTask = anchoredPart(SPAWN_TOOL_NAME)
+        val underAgent = anchoredPart(SPAWN_TOOL_MODEL_NAME)
+
+        assertEquals(
+            "the child approval part is identical regardless of which spawn name anchored it",
+            underTask, underAgent,
+        )
+        assertTrue("the part anchored under the agent step is pending", underAgent.isPending)
+        assertEquals("ask_user", underAgent.toolName)
+        assertEquals("""{"q":"may I?"}""", underAgent.input)
+    }
 
     @Test
     fun `inject anchors a pending part inside the message holding the running task step`() {

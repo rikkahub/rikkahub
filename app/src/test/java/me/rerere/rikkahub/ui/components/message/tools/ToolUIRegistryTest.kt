@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.message.tools
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 /**
@@ -25,5 +26,15 @@ class ToolUIRegistryTest {
         assertEquals("memory_tool", ToolUIRegistry.resolve("memory_tool").toolName)
         assertEquals("search_web", ToolUIRegistry.resolve("search_web").toolName)
         assertEquals("scrape_web", ToolUIRegistry.resolve("scrape_web").toolName)
+    }
+
+    @Test
+    fun `both the legacy task name and the new agent name resolve to TaskToolUI`() {
+        // The spawn tool is advertised as `agent` but pre-rename transcripts and in-flight pending
+        // calls carry `task`; the registry must alias the SAME renderer object under both keys so an
+        // old `toolName="task"` step and a new `toolName="agent"` step render identically. Identity
+        // (not just equal toolName) pins that it is the one TaskToolUI, not an unrelated renderer.
+        assertSame(TaskToolUI, ToolUIRegistry.resolve("task"))
+        assertSame(TaskToolUI, ToolUIRegistry.resolve("agent"))
     }
 }

@@ -16,6 +16,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.runtime.contract.TaskApprovalGate
+import me.rerere.ai.runtime.subagent.filterToolsForSubagent
 import me.rerere.ai.runtime.task.TaskState
 import me.rerere.rikkahub.data.ai.task.ExecutionHandle
 import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
@@ -27,11 +28,23 @@ import me.rerere.rikkahub.data.model.Assistant
 import kotlin.uuid.Uuid
 
 /**
- * The reserved tool NAME the spawn ("task") tool occupies. A subagent must never be able to
- * spawn further subagents (recursion guard, depth bounded at 1), so this name is filtered out
- * of any tool pool handed to a subagent — see [filterToolsForSubagent], which takes this name as
- * its caller-supplied reserved name. This identity is app-side because the spawn [Tool] itself is
- * built only here; the neutral `:ai-runtime` recursion-guard names no concrete tool.
+ * The advertised (model-facing) NAME of the spawn tool. The model sees ONLY this name and the
+ * system prompt refers to it. Renamed `task` -> `agent` (issue #286) so it no longer collides with
+ * the work-board `task_*` family the model also sees in the same turn pool — a bare `task` was
+ * ambiguously readable as the board's "create" verb. This is the name [buildSpawnTool] advertises.
+ */
+const val SPAWN_TOOL_MODEL_NAME: String = "agent"
+
+/**
+ * The legacy execution / UI / approval alias for the spawn tool — kept, NOT advertised for fresh
+ * turns. Pre-rename transcripts and in-flight pending calls carry this name in their persisted
+ * `UIMessagePart.Tool.toolName`; keeping it resolvable on every read path (pool resolution, renderer
+ * registry, child-approval anchor) means stored conversations keep working byte-for-byte without
+ * rewriting any stored row. A subagent must never be able to spawn further subagents (recursion
+ * guard, depth bounded at 1), so BOTH this name and [SPAWN_TOOL_MODEL_NAME] are filtered out of any
+ * tool pool handed to a subagent — see [filterToolsForSubagent], which takes a name as its
+ * caller-supplied reserved name. This identity is app-side because the spawn [Tool] itself is built
+ * only here; the neutral `:ai-runtime` recursion-guard names no concrete tool.
  *
  * Raw MCP tools are prefixed `mcp__` at the ChatService build site, so a malicious MCP tool
  * literally named `task` becomes `mcp__task` and cannot collide with this reserved name. Filtering
@@ -40,11 +53,28 @@ import kotlin.uuid.Uuid
 const val SPAWN_TOOL_NAME: String = "task"
 
 /**
- * The spawn ("task") [Tool] that lets the parent assistant delegate a self-contained sub-task to a
- * named, `spawnable` [Assistant] (issue #201; rewired onto [TaskCoordinator] in SPEC.md M4).
+ * Strip BOTH spawn-tool names from a subagent's tool pool — the advertised [SPAWN_TOOL_MODEL_NAME]
+ * (`agent`) AND the legacy execution alias [SPAWN_TOOL_NAME] (`task`). A subagent must never be
+ * able to spawn further subagents (recursion guard, depth bounded at 1), and either name reaching a
+ * child pool would defeat that — so the depth-1 guard must remove both.
  *
- * The tool's wire surface is UNCHANGED — same reserved name [SPAWN_TOOL_NAME], same `subagent` /
- * `prompt` args, same `UIMessagePart` output — so existing callers and transcripts keep working.
+ * The two-name policy lives in `:app` (where both names are defined), not in the neutral
+ * `:ai-runtime` primitive: [filterToolsForSubagent] takes ONE caller-supplied name and stays
+ * name-agnostic. This helper chains it for both names so the two-call pattern is not duplicated at
+ * the strip sites (catalog subagent branch, [TaskCoordinator.run], [TaskCoordinator.resume]).
+ */
+fun stripSpawnTools(tools: List<Tool>): List<Tool> =
+    filterToolsForSubagent(filterToolsForSubagent(tools, SPAWN_TOOL_MODEL_NAME), SPAWN_TOOL_NAME)
+
+/**
+ * The spawn ("agent", legacy alias "task") [Tool] that lets the parent assistant delegate a
+ * self-contained sub-task to a named, `spawnable` [Assistant] (issue #201; rewired onto
+ * [TaskCoordinator] in SPEC.md M4; model-facing name decoupled to `agent` in #286).
+ *
+ * The tool is advertised to the model under [SPAWN_TOOL_MODEL_NAME] (`agent`); [SPAWN_TOOL_NAME]
+ * (`task`) survives as the legacy resolution / UI / approval alias. The rest of the wire surface is
+ * UNCHANGED — same `subagent` / `prompt` args, same `UIMessagePart` output — so existing callers and
+ * transcripts keep working.
  * What changed under it: the child now runs through [TaskCoordinator] instead of `SubagentRunner`,
  * so the run is a persisted, lifecycle-tracked, budget/concurrency-gated [me.rerere.ai.runtime.task.TaskState]
  * machine. The final answer still lands in the same `UIMessagePart.Tool` output (the parent's
@@ -103,7 +133,7 @@ fun buildSpawnTool(
     progressLabel: (subName: String) -> String,
     parentConversationId: Uuid,
 ): Tool = Tool(
-    name = SPAWN_TOOL_NAME,
+    name = SPAWN_TOOL_MODEL_NAME,
     description = "Delegate a self-contained sub-task to a specialized subagent and return its result.",
     parameters = {
         InputSchema.Obj(
@@ -249,7 +279,7 @@ internal fun advertiseSpawnableAssistants(spawnableAssistants: List<Assistant>):
         .map { "- ${it.name}: ${it.description}" }
     if (lines.isEmpty()) return ""
     return buildString {
-        append("Available subagents you can run via the `$SPAWN_TOOL_NAME` tool ")
+        append("Available subagents you can run via the `$SPAWN_TOOL_MODEL_NAME` tool ")
         append("(pass the subagent's name as `subagent` and a self-contained task as `prompt`):")
         append("\n")
         append(lines.joinToString("\n"))

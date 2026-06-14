@@ -15,7 +15,6 @@ import me.rerere.ai.runtime.GenerationChunk
 import me.rerere.ai.runtime.contract.TaskBudgetClock
 import me.rerere.ai.runtime.contract.TurnConfig
 import me.rerere.ai.runtime.subagent.extractFinalAssistantText
-import me.rerere.ai.runtime.subagent.filterToolsForSubagent
 import me.rerere.ai.runtime.subagent.resolveSubagentModel
 import me.rerere.ai.runtime.task.TaskBudget
 import me.rerere.ai.runtime.task.TaskBudgetUsage
@@ -26,8 +25,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.runtime.MonotonicTaskBudgetClock
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
-import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
 import me.rerere.rikkahub.data.ai.subagent.SubagentGenerate
+import me.rerere.rikkahub.data.ai.subagent.stripSpawnTools
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
@@ -191,7 +190,7 @@ class TaskCoordinator(
      * @param parentToolCallId the spawn tool call that owns this child; the per-parent concurrency
      *   cap is keyed on it (a `null`/blank id means "no parent grouping" — only the global cap
      *   applies). Defaults blank so callers that don't track it still get global gating.
-     * @param tools the child's tool pool; [filterToolsForSubagent] strips the spawn tool from it
+     * @param tools the child's tool pool; [stripSpawnTools] strips BOTH spawn-tool names from it
      *   unconditionally (the depth-1 recursion guard, TASK_DEPTH_ONE) before it reaches the engine.
      */
     suspend fun run(
@@ -228,9 +227,10 @@ class TaskCoordinator(
 
         val maxSteps = sub.maxSteps ?: budget.maxSteps
         val messages = listOf(UIMessage.user(prompt))
-        // The depth-1 recursion guard (TASK_DEPTH_ONE): the spawn tool is stripped from EVERY child
-        // pool unconditionally, regardless of how the caller assembled it.
-        val childTools = filterToolsForSubagent(tools, SPAWN_TOOL_NAME)
+        // The depth-1 recursion guard (TASK_DEPTH_ONE): BOTH spawn-tool names (advertised `agent` +
+        // legacy `task`) are stripped from EVERY child pool unconditionally, regardless of how the
+        // caller assembled it — either name reaching a child would let it spawn recursively.
+        val childTools = stripSpawnTools(tools)
 
         // Acquire the global slot first, then (optionally) the per-parent slot. Acquisition is the
         // queue: a child with no free slot suspends here in TaskState.Queued. Ordering global-then-
@@ -371,7 +371,8 @@ class TaskCoordinator(
         // (decision #1). The summary is injected, not replayed: a blank summary degrades to the
         // bare prompt, which is still a valid fresh spawn.
         val messages = listOf(UIMessage.user(resumePrompt(prompt, progressSummary)))
-        val childTools = filterToolsForSubagent(tools, SPAWN_TOOL_NAME)
+        // Same depth-1 guard as run(): strip BOTH spawn-tool names from the resumed child's pool.
+        val childTools = stripSpawnTools(tools)
 
         // The run already holds no slot (its handle died); re-acquire one, then drive the engine.
         // From Resuming, the first child event folds Resuming -> Running (an early SlotClaimed is an
