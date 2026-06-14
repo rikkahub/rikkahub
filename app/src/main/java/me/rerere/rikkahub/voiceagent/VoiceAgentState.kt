@@ -22,6 +22,7 @@ sealed interface VoiceAudioStatus {
 
 sealed interface VoiceToolStatus {
     data object Idle : VoiceToolStatus
+    data class QueuedHermes(val callId: String, val jobId: String) : VoiceToolStatus
     data class CallingHermes(val callId: String, val elapsedMs: Long = 0L) : VoiceToolStatus
     data class HermesAnswered(val callId: String, val elapsedMs: Long) : VoiceToolStatus
     data class HermesFailed(val callId: String, val message: String) : VoiceToolStatus

@@ -68,6 +68,14 @@ class OkHttpGeminiLiveVoiceClient(
         return delegate.sendToolResponse(callId = callId, answer = answer, sessionId = sessionId)
     }
 
+    override fun sendTextTurn(text: String): Boolean {
+        return delegate.sendTextTurn(text = text)
+    }
+
+    override fun sendTextTurn(text: String, sessionId: Long?): Boolean {
+        return delegate.sendTextTurn(text = text, sessionId = sessionId)
+    }
+
     override fun close() {
         delegate.close()
     }
@@ -83,7 +91,8 @@ class OkHttpGeminiLiveVoiceClient(
                     "toolConfigMode=${event.toolConfigMode ?: "none"} " +
                     "allowedFunctionNames=${event.allowedFunctionNames.joinToString()} " +
                     "responseModalities=${event.responseModalities.joinToString()} " +
-                    "systemInstructionChars=${event.systemInstructionChars}",
+                    "systemInstructionChars=${event.systemInstructionChars} " +
+                    "realtimeInputConfig=${event.realtimeInputConfig ?: "none"}",
             )
             is GeminiLiveDebugEvent.Send -> Log.d(
                 TAG,

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.ContextCompat
+import android.os.Build
 import kotlinx.coroutines.flow.StateFlow
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
@@ -51,6 +52,7 @@ import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionBluetoothConnect
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
@@ -123,14 +125,24 @@ private fun VoiceAgentScreen(
     } else {
         null
     }
+    val bluetoothPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        rememberPermissionState(PermissionBluetoothConnect)
+    } else {
+        null
+    }
     val startGate = voiceAgentStartGate(
         hasMicrophonePermission = microphonePermission.allRequiredPermissionsGranted,
+        hasBluetoothConnectPermission = bluetoothPermission?.allRequiredPermissionsGranted ?: true,
         hasNotificationPermission = notificationPermission?.allRequiredPermissionsGranted ?: true,
     )
     var requestedMicrophonePermission by remember { mutableStateOf(false) }
+    var requestedBluetoothPermission by remember { mutableStateOf(false) }
     var requestedNotificationPermission by remember { mutableStateOf(false) }
 
     PermissionManager(permissionState = microphonePermission)
+    if (bluetoothPermission != null) {
+        PermissionManager(permissionState = bluetoothPermission)
+    }
     if (notificationPermission != null) {
         PermissionManager(permissionState = notificationPermission)
     }
@@ -142,6 +154,10 @@ private fun VoiceAgentScreen(
             startGate == VoiceAgentStartGate.NeedsMicrophonePermission && !requestedMicrophonePermission -> {
                 requestedMicrophonePermission = true
                 microphonePermission.requestPermissions()
+            }
+            startGate == VoiceAgentStartGate.NeedsBluetoothPermission && !requestedBluetoothPermission -> {
+                requestedBluetoothPermission = true
+                bluetoothPermission?.requestPermissions()
             }
             startGate == VoiceAgentStartGate.NeedsNotificationPermission && !requestedNotificationPermission -> {
                 requestedNotificationPermission = true
@@ -162,6 +178,7 @@ private fun VoiceAgentScreen(
         onBack = onBack,
         primaryStatus = when (startGate) {
             VoiceAgentStartGate.NeedsMicrophonePermission -> "Microphone permission required"
+            VoiceAgentStartGate.NeedsBluetoothPermission -> "Bluetooth permission required"
             VoiceAgentStartGate.NeedsNotificationPermission -> "Notification permission required"
             VoiceAgentStartGate.Ready -> state.statusText()
         },
@@ -190,6 +207,16 @@ private fun VoiceAgentScreen(
                     onRequestPermission = {
                         requestedMicrophonePermission = true
                         microphonePermission.requestPermissions()
+                    },
+                )
+                DiagnosticsCard(diagnostics = state.diagnostics)
+                return@VoiceAgentScaffold
+            }
+            if (startGate == VoiceAgentStartGate.NeedsBluetoothPermission) {
+                BluetoothPermissionCard(
+                    onRequestPermission = {
+                        requestedBluetoothPermission = true
+                        bluetoothPermission?.requestPermissions()
                     },
                 )
                 DiagnosticsCard(diagnostics = state.diagnostics)
@@ -396,6 +423,30 @@ private fun MicrophonePermissionCard(
 }
 
 @Composable
+private fun BluetoothPermissionCard(
+    onRequestPermission: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+        ) {
+            Text("Bluetooth permission required", fontWeight = FontWeight.SemiBold)
+            Text("Voice Agent needs Bluetooth permission to use a connected headset microphone.")
+            Button(onClick = onRequestPermission) {
+                Text("Grant Bluetooth")
+            }
+        }
+    }
+}
+
+@Composable
 private fun NotificationPermissionCard(
     onRequestPermission: () -> Unit,
 ) {
@@ -590,10 +641,13 @@ private fun VoiceAudioStatus.statusLabel(): String = when (this) {
 
 internal fun VoiceToolStatus.visibleStatusLabel(): String = when (this) {
     VoiceToolStatus.Idle -> "Idle"
+    is VoiceToolStatus.QueuedHermes -> "Hermes/MS agent queued (${callId.withJob(jobId)})"
     is VoiceToolStatus.CallingHermes -> "Calling Hermes/MS agent... (${callId.withElapsed(elapsedMs)})"
     is VoiceToolStatus.HermesAnswered -> "Hermes/MS agent answered (${callId.withElapsed(elapsedMs)})"
     is VoiceToolStatus.HermesFailed -> "Hermes/MS agent failed ($callId): $message"
 }
+
+private fun String.withJob(jobId: String): String = "$this / $jobId"
 
 private fun String.withElapsed(elapsedMs: Long): String =
     if (elapsedMs > 0L) "$this, ${elapsedMs}ms" else this

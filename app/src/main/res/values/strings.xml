@@ -456,6 +456,8 @@
   <string name="permission_local_network_desc">Allow the web server to be accessed from devices on the same local network</string>
   <string name="permission_microphone">Microphone</string>
   <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
+  <string name="permission_bluetooth">Bluetooth</string>
+  <string name="permission_bluetooth_desc">Bluetooth permission is required to use headset audio during voice calls</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
@@ -1109,4 +1111,3 @@
   <string name="setting_display_page_bubble_opacity_title">Bubble Opacity</string>
   <string name="setting_provider_page_include_history_reasoning">Include History Reasoning</string>
 </resources>
-

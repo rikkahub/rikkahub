@@ -2,11 +2,17 @@ package me.rerere.rikkahub.voiceagent
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
@@ -15,6 +21,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
+import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,13 +51,18 @@ class VoiceAgentRuntimeTest {
             )
         )
 
-        assertEquals(VoiceToolStatus.CallingHermes("call-1"), coordinator.state.value.tool)
         assertEquals("call-1" to "Look this up", toolApi.awaitRequest("call-1"))
+        withTimeout(500) {
+            while (coordinator.state.value.tool != VoiceToolStatus.QueuedHermes("call-1", "job-1")) {
+                delay(10)
+            }
+        }
+        assertEquals(VoiceToolStatus.QueuedHermes("call-1", "job-1"), coordinator.state.value.tool)
 
         coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
         assertEquals(VoiceAudioStatus.PlaybackSuppressed, coordinator.state.value.audio)
         audio.awaitSuppressPlaybackCalls(1)
-        assertEquals(VoiceToolStatus.CallingHermes("call-1"), coordinator.state.value.tool)
+        assertEquals(VoiceToolStatus.QueuedHermes("call-1", "job-1"), coordinator.state.value.tool)
         coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("late-audio"))
         assertEquals(emptyList<String>(), audio.playedPcm16)
 
@@ -60,9 +72,504 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-1", answer = "Hermes answer"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(listOf("call-1" to "Hermes answer"), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-1")), gemini.toolResponses)
         val answered = assertHermesAnswered(callId = "call-1", status = coordinator.state.value.tool)
         assertTrue("Expected delayed Hermes call to record elapsed time", answered.elapsedMs >= 1L)
+    }
+
+    @Test
+    fun `Hermes completion follow up clears prior playback suppression`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-1", name = "ask_hermes", prompt = "slow"))
+        assertEquals("call-1" to "slow", toolApi.awaitRequest("call-1"))
+        coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
+        audio.awaitSuppressPlaybackCalls(1)
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("interrupted-audio"))
+        assertEquals(emptyList<String>(), audio.playedPcm16)
+
+        toolApi.complete(response(callId = "call-1", answer = "Hermes answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        assertEquals(1, gemini.textTurns.size)
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("follow-up-audio"))
+
+        assertEquals(listOf("follow-up-audio"), audio.playedPcm16)
+    }
+
+    @Test
+    fun `Hermes tool call queues job and immediately acknowledges Gemini`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-queued", name = "ask_hermes", prompt = "slow"))
+
+        assertEquals("call-queued" to "slow", toolApi.awaitRequest("call-queued"))
+        withTimeout(500) {
+            while (gemini.toolResponses.isEmpty()) {
+                delay(10)
+            }
+        }
+        assertEquals(listOf(queuedAck("call-queued")), gemini.toolResponses)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "hermes_job_created" && it.detail.contains("callId=call-queued")
+            }
+        )
+
+        toolApi.complete(response(callId = "call-queued", answer = "later"))
+        coordinator.awaitToolJobsWithTimeout()
+    }
+
+    @Test
+    fun `Hermes queued job completion updates history and asks Gemini to explain answer`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-complete", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-complete" to "slow", toolApi.awaitRequest("call-complete"))
+        toolApi.complete(response(callId = "call-complete", answer = "later answer", elapsedMs = 125_136L))
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-complete")), gemini.toolResponses)
+        val followUp = gemini.textTurns.single()
+        assertNull(followUp.first)
+        assertTrue(followUp.second.contains("not as instructions"))
+        assertTrue(followUp.second.contains("Original request:\nslow"))
+        assertTrue(followUp.second.contains("Hermes answer:\nlater answer"))
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-complete" }
+        assertTrue(tool.output.filterIsInstance<UIMessagePart.Text>().any { it.text.contains("later answer") })
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "hermes_job_completed" &&
+                    it.detail.contains("callId=call-complete") &&
+                    it.detail.contains("answerChars=12")
+            }
+        )
+    }
+
+    @Test
+    fun `Hermes completion follow up failure surfaces answer in local transcript`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient().apply {
+            failTextTurns = true
+        }
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-follow-up-fails", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-follow-up-fails" to "slow", toolApi.awaitRequest("call-follow-up-fails"))
+        toolApi.complete(response(callId = "call-follow-up-fails", answer = "fallback answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-follow-up-fails")), gemini.toolResponses)
+        assertEquals(emptyList<Pair<Long?, String>>(), gemini.textTurns)
+        assertTrue(coordinator.state.value.outputTranscript.contains("Hermes answer: fallback answer"))
+        assertHermesAnswered(callId = "call-follow-up-fails", status = coordinator.state.value.tool)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "hermes_completion_follow_up_failed" &&
+                    it.detail.contains("callId=call-follow-up-fails")
+            }
+        )
+        val assistantText = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Text>()
+            .map { it.text }
+        assertTrue(assistantText.any { it.contains("Hermes answer: fallback answer") })
+    }
+
+    @Test
+    fun `Hermes job submission failure persists failure without acknowledgement or job id`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val failures = mutableListOf<String>()
+        toolApi.failSubmit(
+            callId = "call-submit-fails",
+            error = IllegalStateException("Voice Lab request failed 429: private prompt detail"),
+        )
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            logHermesToolFailure = failures::add,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-submit-fails", name = "ask_hermes", prompt = "slow")
+        )
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
+        assertEquals(emptyList<Pair<Long?, String>>(), gemini.textTurns)
+        assertEquals(emptyList<Pair<String, String>>(), toolApi.requests)
+        assertEquals(
+            VoiceToolStatus.HermesFailed(
+                callId = "call-submit-fails",
+                message = "Voice Lab request failed 429: private prompt detail",
+            ),
+            coordinator.state.value.tool,
+        )
+        assertEquals(1, failures.size)
+        assertTrue(failures.single().contains("callId=call-submit-fails"))
+        assertTrue(failures.single().contains("message=Voice Lab request failed 429"))
+        assertFalse(failures.single().contains("private prompt detail"))
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-submit-fails" }
+        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertNull(tool.metadata?.get("voice_tool_job_id"))
+    }
+
+    @Test
+    fun `Hermes queued job polls queued running and succeeded statuses`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            hermesJobPollIntervalMs = 1,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-poll", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-poll" to "slow", toolApi.awaitRequest("call-poll"))
+
+        toolApi.scriptPoll("call-poll", jobPoll(callId = "call-poll", jobId = "job-1", status = "queued"))
+        withTimeout(500) {
+            while (coordinator.state.value.tool != VoiceToolStatus.QueuedHermes("call-poll", "job-1")) {
+                delay(10)
+            }
+        }
+
+        toolApi.scriptPoll("call-poll", jobPoll(callId = "call-poll", jobId = "job-1", status = "running"))
+        withTimeout(500) {
+            while (coordinator.state.value.tool !is VoiceToolStatus.CallingHermes) {
+                delay(10)
+            }
+        }
+
+        toolApi.complete(response(callId = "call-poll", answer = "done"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-poll")), gemini.toolResponses)
+        assertHermesAnswered(callId = "call-poll", status = coordinator.state.value.tool)
+    }
+
+    @Test
+    fun `Hermes returned failed status persists failure without second Gemini response`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-job-failed", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-job-failed" to "slow", toolApi.awaitRequest("call-job-failed"))
+        toolApi.failJob(callId = "call-job-failed", message = "Hermes request failed")
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-job-failed")), gemini.toolResponses)
+        assertEquals(
+            VoiceToolStatus.HermesFailed(callId = "call-job-failed", message = "Hermes request failed"),
+            coordinator.state.value.tool,
+        )
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-job-failed" }
+        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertEquals("job-1", tool.metadata?.get("voice_tool_job_id")?.jsonPrimitive?.content)
+        assertTrue(tool.output.text().contains("Hermes request failed"))
+    }
+
+    @Test
+    fun `Hermes returned expired status without error uses stable local message`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-expired", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-expired" to "slow", toolApi.awaitRequest("call-expired"))
+        toolApi.expireJob(callId = "call-expired")
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-expired")), gemini.toolResponses)
+        assertEquals(
+            VoiceToolStatus.HermesFailed(
+                callId = "call-expired",
+                message = "Hermes job was no longer available.",
+            ),
+            coordinator.state.value.tool,
+        )
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-expired" }
+        assertTrue(tool.output.text().contains("Hermes job was no longer available."))
+        assertEquals("job-1", tool.metadata?.get("voice_tool_job_id")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `Hermes poll transport failures are retried before completion`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            hermesJobPollIntervalMs = 1,
+            hermesJobPollRetryDelayMs = 1,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-retry", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-retry" to "slow", toolApi.awaitRequest("call-retry"))
+        repeat(5) {
+            toolApi.scriptPollFailure("call-retry", IllegalStateException("temporary network failure"))
+        }
+        toolApi.complete(response(callId = "call-retry", answer = "done"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-retry")), gemini.toolResponses)
+        assertHermesAnswered(callId = "call-retry", status = coordinator.state.value.tool)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "hermes_job_poll_failed" && it.detail.contains("attempt=1")
+            }
+        )
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "hermes_job_poll_failed" && it.detail.contains("attempt=5")
+            }
+        )
+    }
+
+    @Test
+    fun `Hermes local poll timeout cancels remote job`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            hermesJobPollIntervalMs = 1,
+            hermesJobMaxElapsedMs = 0,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-local-timeout", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-local-timeout" to "slow", toolApi.awaitRequest("call-local-timeout"))
+        toolApi.scriptPoll(
+            "call-local-timeout",
+            jobPoll(callId = "call-local-timeout", jobId = "job-1", status = "queued"),
+        )
+        coordinator.awaitToolJobsWithTimeout()
+
+        toolApi.awaitRemoteCancelled("call-local-timeout")
+        assertEquals(listOf(queuedAck("call-local-timeout")), gemini.toolResponses)
+        assertEquals(emptyList<Pair<Long?, String>>(), gemini.textTurns)
+        assertEquals(
+            VoiceToolStatus.HermesFailed(
+                callId = "call-local-timeout",
+                message = "Hermes job polling timed out.",
+            ),
+            coordinator.state.value.tool,
+        )
+    }
+
+    @Test
+    fun `Hermes malformed succeeded poll persists failure without leaking answer`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            hermesJobPollIntervalMs = 1,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-malformed", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-malformed" to "slow", toolApi.awaitRequest("call-malformed"))
+        toolApi.scriptPoll(
+            "call-malformed",
+            MobileHermesJobPollResponse(
+                jobId = "job-1",
+                callId = "call-malformed",
+                status = "succeeded",
+                answer = null,
+                createdAt = "2026-06-11T00:00:00.000Z",
+                completedAt = "2026-06-11T00:00:01.000Z",
+            ),
+        )
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-malformed")), gemini.toolResponses)
+        assertEquals(
+            VoiceToolStatus.HermesFailed(
+                callId = "call-malformed",
+                message = "Hermes job succeeded without an answer",
+            ),
+            coordinator.state.value.tool,
+        )
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-malformed" }
+        assertEquals("job-1", tool.metadata?.get("voice_tool_job_id")?.jsonPrimitive?.content)
+        assertTrue(tool.output.text().contains("Hermes job succeeded without an answer"))
+    }
+
+    @Test
+    fun `Hermes unknown poll status persists failure with job id`() = runTest {
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            hermesJobPollIntervalMs = 1,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-unknown", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-unknown" to "slow", toolApi.awaitRequest("call-unknown"))
+        toolApi.scriptPoll("call-unknown", jobPoll(callId = "call-unknown", jobId = "job-1", status = "mystery"))
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(
+            VoiceToolStatus.HermesFailed(
+                callId = "call-unknown",
+                message = "Unknown Hermes job status: mystery",
+            ),
+            coordinator.state.value.tool,
+        )
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-unknown" }
+        assertEquals("job-1", tool.metadata?.get("voice_tool_job_id")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `Hermes poll timeout persists a failed tool record`() = runTest {
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            hermesJobPollIntervalMs = 1,
+            hermesJobMaxElapsedMs = 10,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-timeout", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-timeout" to "slow", toolApi.awaitRequest("call-timeout"))
+        toolApi.scriptQueuedPolls(callId = "call-timeout", count = 20)
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        assertEquals(
+            VoiceToolStatus.HermesFailed(
+                callId = "call-timeout",
+                message = "Hermes job polling timed out.",
+            ),
+            coordinator.state.value.tool,
+        )
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-timeout" }
+        assertTrue(tool.output.text().contains("Hermes job polling timed out."))
     }
 
     @Test
@@ -92,7 +599,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `pending Hermes tool status refreshes elapsed time while request is waiting`() = runTest {
+    fun `pending Hermes tool status shows queued job while request is waiting`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val coordinator = VoiceAgentCoordinator(
             gemini = FakeGeminiLiveVoiceClient(),
@@ -106,15 +613,12 @@ class VoiceAgentRuntimeTest {
         )
         assertEquals("call-timer" to "wait", toolApi.awaitRequest("call-timer"))
 
-        withTimeout(1500) {
-            while ((coordinator.state.value.tool as? VoiceToolStatus.CallingHermes)?.elapsedMs == 0L) {
+        withTimeout(500) {
+            while (coordinator.state.value.tool != VoiceToolStatus.QueuedHermes("call-timer", "job-1")) {
                 delay(10)
             }
         }
-
-        val calling = coordinator.state.value.tool as VoiceToolStatus.CallingHermes
-        assertEquals("call-timer", calling.callId)
-        assertTrue("Expected pending Hermes status to expose elapsed time", calling.elapsedMs > 0L)
+        assertEquals(VoiceToolStatus.QueuedHermes("call-timer", "job-1"), coordinator.state.value.tool)
 
         toolApi.complete(response(callId = "call-timer", answer = "done"))
         coordinator.awaitToolJobsWithTimeout()
@@ -254,7 +758,7 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-supported", answer = "Supported answer"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(listOf("call-supported" to "Supported answer"), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-supported")), gemini.toolResponses)
         assertTrue(
             diagnostics.events.value.any {
                 it.name == "unsupported_tool_call" &&
@@ -265,7 +769,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `close cancels in-flight Hermes call from external scope and prevents Gemini response`() = runTest {
+    fun `close keeps in-flight Hermes call running without remote cancellation`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
         val audio = FakeVoiceAudioEngine()
@@ -280,17 +784,21 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-close" to "wait", toolApi.awaitRequest("call-close"))
 
         coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
-        assertEquals(VoiceToolStatus.CallingHermes("call-close"), coordinator.state.value.tool)
+        withTimeout(500) {
+            while (coordinator.state.value.tool != VoiceToolStatus.QueuedHermes("call-close", "job-1")) {
+                delay(10)
+            }
+        }
+        assertEquals(VoiceToolStatus.QueuedHermes("call-close", "job-1"), coordinator.state.value.tool)
         assertEquals(false, toolApi.wasCancelled("call-close"))
 
         coordinator.close()
-        withTimeout(500) {
-            toolApi.awaitCancelled("call-close")
-        }
         toolApi.complete(response(callId = "call-close", answer = "late answer"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
+        assertFalse(toolApi.wasCancelled("call-close"))
+        assertFalse(toolApi.wasRemoteCancelled("call-close"))
+        assertEquals(listOf(queuedAck("call-close")), gemini.toolResponses)
         assertEquals(1, audio.releaseCalls)
     }
 
@@ -321,9 +829,9 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(GeminiLiveEvent.ToolCallCancellation(listOf("call-a")))
         toolApi.awaitCancelled("call-a")
 
-        assertEquals(VoiceToolStatus.CallingHermes("call-b"), coordinator.state.value.tool)
+        assertEquals(VoiceToolStatus.QueuedHermes("call-b", "job-2"), coordinator.state.value.tool)
         assertEquals(
-            mapOf("call-b" to VoiceToolStatus.CallingHermes("call-b")),
+            mapOf("call-b" to VoiceToolStatus.QueuedHermes("call-b", "job-2")),
             coordinator.state.value.toolCalls,
         )
         assertEquals(false, toolApi.wasCancelled("call-b"))
@@ -332,7 +840,7 @@ class VoiceAgentRuntimeTest {
         coordinator.awaitToolJobsWithTimeout()
         toolApi.complete(response(callId = "call-a", answer = "First late answer"))
 
-        assertEquals(listOf("call-b" to "Second answer"), gemini.toolResponses)
+        assertEquals(setOf(queuedAck("call-a"), queuedAck("call-b")), gemini.toolResponses.toSet())
         assertEquals(false, toolApi.wasCancelled("call-b"))
         assertHermesAnswered(callId = "call-b", status = coordinator.state.value.tool)
         assertEquals(setOf("call-b"), coordinator.state.value.toolCalls.keys)
@@ -369,10 +877,42 @@ class VoiceAgentRuntimeTest {
         assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
         assertEquals(VoiceToolStatus.Idle, coordinator.state.value.tool)
         assertEquals(emptyMap<String, VoiceToolStatus>(), coordinator.state.value.toolCalls)
+        toolApi.complete(response(callId = "call-close-idempotent", answer = "late answer"))
+        coordinator.awaitToolJobsWithTimeout()
     }
 
     @Test
-    fun `duplicate tool call id cancels replaced Hermes job and only latest response is sent`() = runTest {
+    fun `close while Hermes submit is in flight lets background job finish`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val blockedSubmit = toolApi.blockSubmit("call-close-inflight")
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            scope = this,
+            dispatcher = Dispatchers.Default,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-close-inflight", name = "ask_hermes", prompt = "slow")
+        )
+        assertEquals("call-close-inflight" to "slow", toolApi.awaitRequest("call-close-inflight"))
+        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
+
+        coordinator.close()
+        blockedSubmit.release.countDown()
+
+        toolApi.complete(response(callId = "call-close-inflight", answer = "late answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        assertFalse(toolApi.wasCancelled("call-close-inflight"))
+        assertFalse(toolApi.wasRemoteCancelled("call-close-inflight"))
+        assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
+        assertHermesAnswered(callId = "call-close-inflight", status = coordinator.state.value.tool)
+    }
+
+    @Test
+    fun `duplicate tool call id after queued acknowledgement keeps original job`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
         val coordinator = VoiceAgentCoordinator(
@@ -390,14 +930,50 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(
             GeminiLiveEvent.ToolCall(callId = "call-replay", name = "ask_hermes", prompt = "new")
         )
-        toolApi.awaitCancelled("call-replay")
-        assertEquals("call-replay" to "new", toolApi.awaitRequest("call-replay"))
+        delay(50)
+        assertFalse(("call-replay" to "new") in toolApi.requests)
 
-        toolApi.complete(response(callId = "call-replay", answer = "new answer"))
+        toolApi.complete(response(callId = "call-replay", answer = "old answer"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(listOf("call-replay" to "new answer"), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-replay")), gemini.toolResponses)
         assertHermesAnswered(callId = "call-replay", status = coordinator.state.value.tool)
+    }
+
+    @Test
+    fun `duplicate tool call id while submit is in flight keeps original job`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val blockedSubmit = toolApi.blockSubmit("call-submit-inflight")
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            scope = this,
+            dispatcher = Dispatchers.Default,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-submit-inflight", name = "ask_hermes", prompt = "old")
+        )
+        assertEquals("call-submit-inflight" to "old", toolApi.awaitRequest("call-submit-inflight"))
+        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-submit-inflight", name = "ask_hermes", prompt = "new")
+        )
+        delay(50)
+        assertFalse(("call-submit-inflight" to "new") in toolApi.requests)
+        assertTrue(diagnostics.events.value.any { it.name == "duplicate_tool_call_active" })
+
+        blockedSubmit.release.countDown()
+        toolApi.complete(response(callId = "call-submit-inflight", answer = "old answer"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-submit-inflight")), gemini.toolResponses)
+        assertHermesAnswered(callId = "call-submit-inflight", status = coordinator.state.value.tool)
     }
 
     @Test
@@ -436,7 +1012,7 @@ class VoiceAgentRuntimeTest {
         coordinator.awaitToolJobsWithTimeout()
 
         assertEquals(
-            listOf("call-replay-send" to "old answer"),
+            listOf(queuedAck("call-replay-send")),
             gemini.toolResponses,
         )
         assertEquals("old", artifacts[VoiceE2EArtifact.HermesCall])
@@ -468,8 +1044,8 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-b" to "Second", toolApi.awaitRequest("call-b"))
         assertEquals(
             mapOf(
-                "call-a" to VoiceToolStatus.CallingHermes("call-a"),
-                "call-b" to VoiceToolStatus.CallingHermes("call-b"),
+                "call-a" to VoiceToolStatus.QueuedHermes("call-a", "job-1"),
+                "call-b" to VoiceToolStatus.QueuedHermes("call-b", "job-2"),
             ),
             coordinator.state.value.toolCalls,
         )
@@ -480,16 +1056,16 @@ class VoiceAgentRuntimeTest {
                 kotlinx.coroutines.delay(10)
             }
         }
-        assertEquals(VoiceToolStatus.CallingHermes("call-b"), coordinator.state.value.tool)
+        assertEquals(VoiceToolStatus.QueuedHermes("call-b", "job-2"), coordinator.state.value.tool)
         assertEquals(setOf("call-a", "call-b"), coordinator.state.value.toolCalls.keys)
         assertHermesAnswered(callId = "call-a", status = coordinator.state.value.toolCalls.getValue("call-a"))
-        assertEquals(VoiceToolStatus.CallingHermes("call-b"), coordinator.state.value.toolCalls.getValue("call-b"))
+        assertEquals(VoiceToolStatus.QueuedHermes("call-b", "job-2"), coordinator.state.value.toolCalls.getValue("call-b"))
 
         toolApi.complete(response(callId = "call-b", answer = "Second answer"))
         coordinator.awaitToolJobsWithTimeout()
 
         assertEquals(
-            setOf("call-a" to "First answer", "call-b" to "Second answer"),
+            setOf(queuedAck("call-a"), queuedAck("call-b")),
             gemini.toolResponses.toSet(),
         )
         assertEquals(setOf("call-a", "call-b"), coordinator.state.value.toolCalls.keys)
@@ -497,14 +1073,14 @@ class VoiceAgentRuntimeTest {
         assertHermesAnswered(callId = "call-b", status = coordinator.state.value.toolCalls.getValue("call-b"))
         assertTrue(
             diagnostics.events.value.any {
-                it.name == "hermes_tool_succeeded" &&
+                it.name == "hermes_job_completed" &&
                     it.detail.contains("callId=call-a") &&
                     it.detail.contains("elapsedMs=")
             }
         )
         assertTrue(
             diagnostics.events.value.any {
-                it.name == "hermes_tool_succeeded" &&
+                it.name == "hermes_job_completed" &&
                     it.detail.contains("callId=call-b") &&
                     it.detail.contains("elapsedMs=")
             }
@@ -518,6 +1094,83 @@ class VoiceAgentRuntimeTest {
             diagnostics.events.value.any {
                 it.name == "hermes_tool_started" && it.detail.contains("callId=call-b")
             }
+        )
+    }
+
+    @Test
+    fun `coordinator writes queue e2e events for multiple Hermes jobs`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val artifacts = mutableListOf<Pair<VoiceE2EArtifact, String>>()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            writeVoiceE2EArtifact = { name, content -> artifacts += name to content },
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCalls(
+                listOf(
+                    GeminiLiveEvent.ToolCall(callId = "call-a", name = "ask_hermes", prompt = "First"),
+                    GeminiLiveEvent.ToolCall(callId = "call-b", name = "ask_hermes", prompt = "Second"),
+                )
+            )
+        )
+        assertEquals("call-a" to "First", toolApi.awaitRequest("call-a"))
+        assertEquals("call-b" to "Second", toolApi.awaitRequest("call-b"))
+
+        toolApi.complete(response(callId = "call-a", answer = "First answer\nfor review"))
+        toolApi.complete(response(callId = "call-b", answer = "Second answer"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        assertEquals(
+            setOf(queuedAck("call-a"), queuedAck("call-b")),
+            gemini.toolResponses.toSet(),
+        )
+        assertEquals(2, gemini.textTurns.size)
+
+        val rows = artifacts
+            .filter { it.first == VoiceE2EArtifact.HermesEvents }
+            .map { (_, content) ->
+                assertFalse("HermesEvents rows must not contain literal LF", content.contains('\n'))
+                assertFalse("HermesEvents rows must not contain literal CR", content.contains('\r'))
+                Json.parseToJsonElement(content).jsonObject
+            }
+
+        assertEquals(6, rows.size)
+        assertEquals(setOf("call-a", "call-b"), rows.map { it.string("callId") }.toSet())
+        assertEquals(
+            setOf("job-1", "job-2"),
+            rows.filter { it.string("type") != "late_text_turn_sent" }.map { it.string("jobId") }.toSet(),
+        )
+
+        listOf("call-a" to "job-1", "call-b" to "job-2").forEach { (callId, jobId) ->
+            val callRows = rows.filter { it.string("callId") == callId }
+            assertEquals(
+                listOf("job_created", "job_completed", "late_text_turn_sent"),
+                callRows.map { it.string("type") },
+            )
+            assertEquals(
+                setOf(jobId),
+                callRows.filter { it.string("type") != "late_text_turn_sent" }.map { it.string("jobId") }.toSet(),
+            )
+            assertEquals("none", callRows.single { it.string("type") == "late_text_turn_sent" }.string("jobId"))
+            val completedRow = callRows.single { it.string("type") == "job_completed" }
+            assertEquals("succeeded", completedRow.string("status"))
+            assertFalse("HermesEvents rows must not duplicate raw answers", completedRow.containsKey("answer"))
+            assertTrue(callRows.single { it.string("type") == "late_text_turn_sent" }.boolean("sent"))
+        }
+        assertEquals(
+            "First answer\nfor review".length,
+            rows.single { it.string("type") == "job_completed" && it.string("callId") == "call-a" }
+                .int("answerChars"),
+        )
+        assertEquals(
+            "Second answer".length,
+            rows.single { it.string("type") == "job_completed" && it.string("callId") == "call-b" }
+                .int("answerChars"),
         )
     }
 
@@ -573,7 +1226,7 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-hash", answer = " \nalpha\t  beta\r\n", elapsedMs = 321))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(listOf("call-hash" to " \nalpha\t  beta\r\n"), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-hash")), gemini.toolResponses)
         val hashEvent = diagnostics.events.value.single { it.name == "hermes_tool_response_hash" }
         assertTrue(hashEvent.detail.contains("callId=call-hash"))
         assertTrue(hashEvent.detail.contains("actualHash=$expectedHash"))
@@ -582,7 +1235,7 @@ class VoiceAgentRuntimeTest {
         assertFalse(hashEvent.detail.contains("alpha"))
         assertFalse(hashEvent.detail.contains("beta"))
 
-        val successEvent = diagnostics.events.value.single { it.name == "hermes_tool_succeeded" }
+        val successEvent = diagnostics.events.value.single { it.name == "hermes_job_completed" }
         assertTrue(successEvent.detail.contains("callId=call-hash"))
         assertTrue(successEvent.detail.contains("answerChars=16"))
         assertFalse(successEvent.detail.contains("alpha"))
@@ -675,7 +1328,7 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-no-hash", answer = " \nalpha\t  beta\r\n"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(listOf("call-no-hash" to " \nalpha\t  beta\r\n"), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-no-hash")), gemini.toolResponses)
         val hashEvent = diagnostics.events.value.single { it.name == "hermes_tool_response_hash" }
         assertTrue(hashEvent.detail.contains("callId=call-no-hash"))
         assertTrue(hashEvent.detail.contains("actualHash=$expectedHash"))
@@ -684,7 +1337,7 @@ class VoiceAgentRuntimeTest {
         assertFalse(hashEvent.detail.contains("beta"))
         assertEquals(hashEvent.detail, loggedDetail)
 
-        val successEvent = diagnostics.events.value.single { it.name == "hermes_tool_succeeded" }
+        val successEvent = diagnostics.events.value.single { it.name == "hermes_job_completed" }
         assertTrue(successEvent.detail.contains("callId=call-no-hash"))
         assertTrue(successEvent.detail.contains("answerChars=16"))
         assertFalse(successEvent.detail.contains("alpha beta"))
@@ -713,7 +1366,7 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-log-fails", answer = "alpha beta"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(listOf("call-log-fails" to "alpha beta"), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-log-fails")), gemini.toolResponses)
         assertHermesAnswered(callId = "call-log-fails", status = coordinator.state.value.tool)
         assertTrue(
             diagnostics.events.value.any {
@@ -722,13 +1375,13 @@ class VoiceAgentRuntimeTest {
                     it.detail.contains("expectedHashMatch=true")
             }
         )
-        val successEvent = diagnostics.events.value.single { it.name == "hermes_tool_succeeded" }
+        val successEvent = diagnostics.events.value.single { it.name == "hermes_job_completed" }
         assertTrue(successEvent.detail.contains("callId=call-log-fails"))
         assertTrue(successEvent.detail.contains("answerChars=10"))
         assertFalse(successEvent.detail.contains("alpha beta"))
         assertFalse(
             diagnostics.events.value.any {
-                it.name == "hermes_tool_failed" && it.detail.contains("logger failed")
+                it.name == "hermes_job_failed" && it.detail.contains("logger failed")
             }
         )
     }
@@ -755,13 +1408,13 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-fail" to "First", toolApi.awaitRequest("call-fail"))
         assertEquals("call-ok" to "Second", toolApi.awaitRequest("call-ok"))
 
-        toolApi.fail(callId = "call-fail", error = IllegalStateException("Hermes failed"))
+        toolApi.failJob(callId = "call-fail", message = "Hermes failed")
         withTimeout(500) {
             while (coordinator.state.value.toolCalls["call-fail"] !is VoiceToolStatus.HermesFailed) {
                 kotlinx.coroutines.delay(10)
             }
         }
-        assertEquals(VoiceToolStatus.CallingHermes("call-ok"), coordinator.state.value.tool)
+        assertEquals(VoiceToolStatus.QueuedHermes("call-ok", "job-2"), coordinator.state.value.tool)
 
         toolApi.complete(response(callId = "call-ok", answer = "Second answer"))
         coordinator.awaitToolJobsWithTimeout()
@@ -776,7 +1429,7 @@ class VoiceAgentRuntimeTest {
             coordinator.state.value.toolCalls.getValue("call-fail"),
         )
         assertHermesAnswered(callId = "call-ok", status = coordinator.state.value.toolCalls.getValue("call-ok"))
-        assertEquals(listOf("call-ok" to "Second answer"), gemini.toolResponses)
+        assertEquals(setOf(queuedAck("call-fail"), queuedAck("call-ok")), gemini.toolResponses.toSet())
     }
 
     @Test
@@ -795,16 +1448,16 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-3", name = "ask_hermes", prompt = "fail"))
         assertEquals("call-3" to "fail", toolApi.awaitRequest("call-3"))
 
-        toolApi.fail(IllegalStateException("Hermes offline"))
+        toolApi.failJob(callId = "call-3", message = "Hermes offline")
         coordinator.awaitToolJobsWithTimeout()
 
         assertEquals(
             VoiceToolStatus.HermesFailed(callId = "call-3", message = "Hermes offline"),
             coordinator.state.value.tool,
         )
-        assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-3")), gemini.toolResponses)
         assertTrue(
-            diagnostics.events.value.any { it.name == "hermes_tool_failed" && it.detail.contains("Hermes offline") }
+            diagnostics.events.value.any { it.name == "hermes_job_failed" && it.detail.contains("Hermes offline") }
         )
     }
 
@@ -848,7 +1501,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `failed Gemini tool response send marks Hermes tool failed instead of answered`() = runTest {
+    fun `failed Gemini tool response send does not cancel Hermes background job`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient().apply {
             failToolResponses += "call-send-fails"
         }
@@ -869,13 +1522,8 @@ class VoiceAgentRuntimeTest {
         coordinator.awaitToolJobsWithTimeout()
 
         assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
-        assertEquals(
-            VoiceToolStatus.HermesFailed(
-                callId = "call-send-fails",
-                message = "Failed to send Gemini tool response message",
-            ),
-            coordinator.state.value.tool,
-        )
+        assertFalse(toolApi.wasRemoteCancelled("call-send-fails"))
+        assertHermesAnswered(callId = "call-send-fails", status = coordinator.state.value.tool)
     }
 
     @Test
@@ -924,24 +1572,17 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `close is idempotent and clears active tool state`() = runTest {
+    fun `close is idempotent and clears visible state`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
-        val toolApi = FakeVoiceToolApi()
         val audio = FakeVoiceAudioEngine()
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
-            toolApi = toolApi,
+            toolApi = FakeVoiceToolApi(),
             audio = audio,
             scope = this,
         )
 
-        coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-close-idempotent", name = "ask_hermes", prompt = "close")
-        )
-        assertEquals("call-close-idempotent" to "close", toolApi.awaitRequest("call-close-idempotent"))
-
         coordinator.close()
-        toolApi.awaitCancelled("call-close-idempotent")
         coordinator.close()
 
         assertTrue(gemini.closeCalls >= 1)
@@ -951,7 +1592,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `close waits for in flight Gemini tool response send before releasing resources`() = runTest {
+    fun `close does not wait for in flight Gemini tool response send before releasing resources`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val blockedSend = gemini.blockToolResponse("call-close-send")
         val toolApi = FakeVoiceToolApi()
@@ -976,17 +1617,16 @@ class VoiceAgentRuntimeTest {
             coordinator.close()
         }
         assertFalse(blockedSend.release.await(50, TimeUnit.MILLISECONDS))
-        assertEquals(0, gemini.closeCalls)
-        assertEquals(0, audio.releaseCalls)
-
-        blockedSend.release.countDown()
         withTimeout(500) {
             closeJob.join()
         }
-
-        assertEquals(listOf("call-close-send" to "answer before close"), gemini.toolResponses)
         assertTrue(gemini.closeCalls >= 1)
         assertEquals(1, audio.releaseCalls)
+
+        blockedSend.release.countDown()
+        coordinator.awaitToolJobsWithTimeout()
+
+        assertEquals(listOf(queuedAck("call-close-send")), gemini.toolResponses)
     }
 
     @Test
@@ -1024,7 +1664,7 @@ class VoiceAgentRuntimeTest {
             closeJob.join()
         }
 
-        assertEquals(listOf("call-close-reentry" to "answer before close"), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-close-reentry")), gemini.toolResponses)
         assertEquals(1, gemini.closeCalls)
         assertEquals(1, audio.releaseCalls)
     }
@@ -1149,7 +1789,7 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-close-wait", answer = "late answer"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
+        assertEquals(listOf(queuedAck("call-close-wait")), gemini.toolResponses)
         assertEquals(0, audio.releaseCalls)
 
         blockedPlayback.release.countDown()
@@ -1302,15 +1942,16 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-persist" to "look up", toolApi.awaitRequest("call-persist"))
         toolApi.complete(response(callId = "call-persist", answer = "tool answer", elapsedMs = 321L))
         coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
         conversationStore.awaitUpdateCount(6)
 
         val messages = conversationStore.conversation.value.currentMessages
         assertEquals(3, messages.size)
-        assertTrue(messages[0].parts.filterIsInstance<UIMessagePart.Text>().any { it.text == "hello" })
-        assertTrue(messages[1].parts.filterIsInstance<UIMessagePart.Text>().any { it.text == "hi" })
-        val userText = messages[0].parts.filterIsInstance<UIMessagePart.Text>().single()
-        val assistantText = messages[1].parts.filterIsInstance<UIMessagePart.Text>().single()
-        val tool = messages[2].parts.filterIsInstance<UIMessagePart.Tool>().single()
+        val textParts = messages.flatMap { it.parts }.filterIsInstance<UIMessagePart.Text>()
+        assertTrue(textParts.any { it.text == "hello" })
+        val userText = textParts.single { it.text == "hello" }
+        val assistantText = textParts.single { it.metadata?.get("voice_event_id")?.jsonPrimitive?.content == "assistant-2" }
+        val tool = messages.flatMap { it.parts }.filterIsInstance<UIMessagePart.Tool>().single()
         val sessionId = userText.metadata?.get("voice_session_id")?.jsonPrimitive?.content
         assertTrue(!sessionId.isNullOrBlank())
         assertEquals("voice_agent", userText.metadata?.get("voice_source")?.jsonPrimitive?.content)
@@ -1335,7 +1976,7 @@ class VoiceAgentRuntimeTest {
         )
         assertTrue(
             coordinator.state.value.diagnostics.any {
-                it.name == "hermes_tool_succeeded" &&
+                it.name == "hermes_job_completed" &&
                     it.detail.contains("elapsedMs=") &&
                     it.detail.contains("serverElapsedMs=321") &&
                     it.detail.contains("answerChars=11")
@@ -1411,7 +2052,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `tool cancellation persists accepted Hermes record as failed`() = runTest {
+    fun `tool cancellation persists accepted Hermes record as canceled`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
         val coordinator = VoiceAgentCoordinator(
@@ -1428,20 +2069,20 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-cancel-persist" to "cancel me", toolApi.awaitRequest("call-cancel-persist"))
 
         coordinator.onGeminiEvent(GeminiLiveEvent.ToolCallCancellation(listOf("call-cancel-persist")))
-        toolApi.awaitCancelled("call-cancel-persist")
-        coordinator.awaitPersistenceJobsWithTimeout()
+        toolApi.awaitRemoteCancelled("call-cancel-persist")
+        conversationStore.awaitHermesToolStatus("call-cancel-persist", "canceled")
 
         val tool = conversationStore.conversation.value.currentMessages
             .flatMap { it.parts }
             .filterIsInstance<UIMessagePart.Tool>()
             .single()
         assertEquals("call-cancel-persist", tool.toolCallId)
-        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals("Tool call canceled by Gemini", tool.output.text())
+        assertEquals("canceled", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertEquals("Hermes job canceled.", tool.output.text())
     }
 
     @Test
-    fun `reconnect cleanup persists accepted Hermes record as failed`() = runTest {
+    fun `reconnect cleanup leaves accepted Hermes record running`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
         val coordinator = VoiceAgentCoordinator(
@@ -1458,7 +2099,8 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-reconnect-persist" to "old", toolApi.awaitRequest("call-reconnect-persist"))
 
         coordinator.prepareForReconnect()
-        toolApi.awaitCancelled("call-reconnect-persist")
+        toolApi.complete(response(callId = "call-reconnect-persist", answer = "old answer"))
+        coordinator.awaitToolJobsWithTimeout()
         coordinator.awaitPersistenceJobsWithTimeout()
 
         val tool = conversationStore.conversation.value.currentMessages
@@ -1466,12 +2108,14 @@ class VoiceAgentRuntimeTest {
             .filterIsInstance<UIMessagePart.Tool>()
             .single()
         assertEquals("call-reconnect-persist", tool.toolCallId)
-        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals("Tool call canceled by reconnect", tool.output.text())
+        assertEquals("complete", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertEquals("old answer", tool.output.text())
+        assertFalse(toolApi.wasCancelled("call-reconnect-persist"))
+        assertFalse(toolApi.wasRemoteCancelled("call-reconnect-persist"))
     }
 
     @Test
-    fun `close persists accepted Hermes record as failed`() = runTest {
+    fun `close leaves accepted Hermes record running`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
         val coordinator = VoiceAgentCoordinator(
@@ -1488,7 +2132,8 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-close-persist" to "close", toolApi.awaitRequest("call-close-persist"))
 
         coordinator.close()
-        toolApi.awaitCancelled("call-close-persist")
+        toolApi.complete(response(callId = "call-close-persist", answer = "close answer"))
+        coordinator.awaitToolJobsWithTimeout()
         coordinator.awaitPersistenceJobsWithTimeout()
 
         val tool = conversationStore.conversation.value.currentMessages
@@ -1496,12 +2141,14 @@ class VoiceAgentRuntimeTest {
             .filterIsInstance<UIMessagePart.Tool>()
             .single()
         assertEquals("call-close-persist", tool.toolCallId)
-        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals("Tool call canceled by session end", tool.output.text())
+        assertEquals("complete", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertEquals("close answer", tool.output.text())
+        assertFalse(toolApi.wasCancelled("call-close-persist"))
+        assertFalse(toolApi.wasRemoteCancelled("call-close-persist"))
     }
 
     @Test
-    fun `close after Gemini tool response send starts persists Hermes record as complete`() = runTest {
+    fun `close after queued Gemini acknowledgement send starts lets Hermes record complete`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val gemini = FakeGeminiLiveVoiceClient()
         val blockedSend = gemini.blockToolResponse("call-close-sending-persist")
@@ -1530,7 +2177,7 @@ class VoiceAgentRuntimeTest {
         withTimeout(500) {
             closeJob.join()
         }
-        coordinator.awaitPersistenceJobsWithTimeout()
+        conversationStore.awaitHermesToolStatus("call-close-sending-persist", "complete")
 
         val tool = conversationStore.conversation.value.currentMessages
             .flatMap { it.parts }
@@ -1542,7 +2189,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `reconnect after Gemini tool response send starts does not wait and persists Hermes record as failed`() = runTest {
+    fun `reconnect after Gemini tool response send starts does not wait and lets Hermes record complete`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val gemini = FakeGeminiLiveVoiceClient()
         val blockedSend = gemini.blockToolResponse("call-reconnect-sending-persist")
@@ -1572,24 +2219,18 @@ class VoiceAgentRuntimeTest {
         assertFalse(blockedSend.release.await(50, TimeUnit.MILLISECONDS))
 
         blockedSend.release.countDown()
-        val tool = withTimeout(500) {
-            var completedTool: UIMessagePart.Tool? = null
-            while (completedTool?.metadata?.get("voice_tool_status")?.jsonPrimitive?.content != "failed") {
-                delay(10)
-                completedTool = conversationStore.conversation.value.currentMessages
-                    .flatMap { it.parts }
-                    .filterIsInstance<UIMessagePart.Tool>()
-                    .singleOrNull()
-            }
-            completedTool
-        }
+        coordinator.awaitToolJobsWithTimeout()
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single()
         assertEquals("call-reconnect-sending-persist", tool.toolCallId)
-        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals("Tool call canceled by reconnect", tool.output.text())
+        assertEquals("complete", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertEquals("sent answer", tool.output.text())
     }
 
     @Test
-    fun `forced close after Gemini tool response send starts persists Hermes record as failed`() = runTest {
+    fun `forced close after Gemini tool response send starts lets Hermes record complete`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val gemini = FakeGeminiLiveVoiceClient()
         val blockedSend = gemini.blockToolResponse("call-forced-close-sending-persist")
@@ -1619,24 +2260,18 @@ class VoiceAgentRuntimeTest {
         assertFalse(blockedSend.release.await(50, TimeUnit.MILLISECONDS))
 
         blockedSend.release.countDown()
-        val tool = withTimeout(500) {
-            var completedTool: UIMessagePart.Tool? = null
-            while (completedTool?.metadata?.get("voice_tool_status")?.jsonPrimitive?.content != "failed") {
-                delay(10)
-                completedTool = conversationStore.conversation.value.currentMessages
-                    .flatMap { it.parts }
-                    .filterIsInstance<UIMessagePart.Tool>()
-                    .singleOrNull()
-            }
-            completedTool
-        }
+        coordinator.awaitToolJobsWithTimeout()
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single()
         assertEquals("call-forced-close-sending-persist", tool.toolCallId)
-        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals("Tool call canceled by session end", tool.output.text())
+        assertEquals("complete", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertEquals("sent answer", tool.output.text())
     }
 
     @Test
-    fun `Gemini cancellation after tool response send starts persists Hermes record as complete`() = runTest {
+    fun `Gemini cancellation after queued acknowledgement send starts persists Hermes record as canceled`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val gemini = FakeGeminiLiveVoiceClient()
         val blockedSend = gemini.blockToolResponse("call-cancel-sending-persist")
@@ -1672,8 +2307,8 @@ class VoiceAgentRuntimeTest {
             .filterIsInstance<UIMessagePart.Tool>()
             .single()
         assertEquals("call-cancel-sending-persist", tool.toolCallId)
-        assertEquals("complete", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals("sent answer", tool.output.text())
+        assertEquals("canceled", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertEquals("Hermes job canceled.", tool.output.text())
     }
 
     @Test
@@ -1700,7 +2335,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `reconnect cleanup cancels in flight Hermes call and suppresses stale response`() = runTest {
+    fun `reconnect cleanup keeps in flight Hermes call alive`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
         val coordinator = VoiceAgentCoordinator(
@@ -1717,8 +2352,10 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-reconnect", answer = "old answer"))
         coordinator.awaitToolJobsWithTimeout()
 
-        assertEquals(emptyList<Pair<String, String>>(), gemini.toolResponses)
-        assertEquals(VoiceToolStatus.Idle, coordinator.state.value.tool)
+        assertEquals(listOf(queuedAck("call-reconnect")), gemini.toolResponses)
+        assertHermesAnswered(callId = "call-reconnect", status = coordinator.state.value.tool)
+        assertFalse(toolApi.wasCancelled("call-reconnect"))
+        assertFalse(toolApi.wasRemoteCancelled("call-reconnect"))
     }
 
     @Test
@@ -1921,9 +2558,10 @@ class VoiceAgentRuntimeTest {
             .filterIsInstance<UIMessagePart.Tool>()
             .single()
         assertEquals("call-async-error", tool.toolCallId)
-        assertEquals("failed", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals("Tool call canceled by session end", tool.output.text())
-        toolApi.awaitCancelled("call-async-error")
+        assertEquals("queued", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
+        assertFalse(toolApi.wasCancelled("call-async-error"))
+        toolApi.complete(response(callId = "call-async-error", answer = "late answer"))
+        conversationStore.awaitUpdateCount(3)
         audio.emitCapture(byteArrayOf(4, 5, 6))
         assertEquals(listOf(Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3))), gemini.audioMessages)
     }
@@ -1967,7 +2605,7 @@ class VoiceAgentRuntimeTest {
         withTimeout(500) {
             reconnectJob.join()
         }
-        conversationStore.awaitUpdateCount(2)
+        conversationStore.awaitHermesToolStatus("call-vm-reconnect-order", "complete")
 
         val toolStatuses = conversationStore.updatesSnapshot()
             .flatMap { it.currentMessages }
@@ -1976,8 +2614,8 @@ class VoiceAgentRuntimeTest {
             .filter { it.toolCallId == "call-vm-reconnect-order" }
             .mapNotNull { it.metadata?.get("voice_tool_status")?.jsonPrimitive?.content }
 
-        assertTrue(toolStatuses.toString(), "failed" in toolStatuses)
-        assertTrue(toolStatuses.toString(), "complete" !in toolStatuses)
+        assertTrue(toolStatuses.toString(), "complete" in toolStatuses)
+        assertTrue(toolStatuses.toString(), "failed" !in toolStatuses)
     }
 
     @Test
@@ -2218,7 +2856,7 @@ class VoiceAgentRuntimeTest {
 
         session.reconnect()
         assertTrue(closeHookCalled.await(500, TimeUnit.MILLISECONDS))
-        conversationStore.awaitUpdateCount(2)
+        conversationStore.awaitHermesToolStatus("call-vm-reconnect-sending", "complete")
 
         val toolStatuses = conversationStore.updatesSnapshot()
             .flatMap { it.currentMessages }
@@ -2228,8 +2866,95 @@ class VoiceAgentRuntimeTest {
             .mapNotNull { it.metadata?.get("voice_tool_status")?.jsonPrimitive?.content }
         val diagnosticNames = diagnostics.events.value.map { it.name }
 
-        assertTrue("statuses=$toolStatuses diagnostics=$diagnosticNames", "complete" !in toolStatuses)
-        assertTrue("statuses=$toolStatuses diagnostics=$diagnosticNames", "failed" in toolStatuses)
+        assertTrue("statuses=$toolStatuses diagnostics=$diagnosticNames", "complete" in toolStatuses)
+        assertTrue("statuses=$toolStatuses diagnostics=$diagnosticNames", "failed" !in toolStatuses)
+    }
+
+    @Test
+    fun `session reconnect announces detached Hermes completion through new session bridge`() = runTest {
+        val sessionApi = FakeVoiceSessionApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = toolApi,
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            scope = CoroutineScope(coroutineContext + Dispatchers.Default),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        val oldCallback = gemini.eventHandlers.single()
+        oldCallback(GeminiLiveEvent.ToolCall(callId = "call-detached-complete", name = "ask_hermes", prompt = "old"))
+        assertEquals("call-detached-complete" to "old", toolApi.awaitRequest("call-detached-complete"))
+        val blockedNextSession = sessionApi.blockNextSession()
+
+        session.reconnect()
+        withTimeout(500) {
+            blockedNextSession.started.await()
+        }
+        toolApi.complete(response(callId = "call-detached-complete", answer = "detached answer"))
+        conversationStore.awaitHermesToolStatus("call-detached-complete", "complete")
+        assertEquals(emptyList<Pair<Long?, String>>(), gemini.textTurns)
+
+        blockedNextSession.release.complete(Unit)
+        gemini.awaitConnectCount(2)
+        withTimeout(500) {
+            while (gemini.textTurns.none { it.first == 3L && it.second.contains("detached answer") }) {
+                delay(10)
+            }
+        }
+
+        assertTrue(
+            gemini.textTurns.any { (sessionId, text) ->
+                sessionId == 3L &&
+                    text.contains("Original request:\nold") &&
+                    text.contains("Hermes answer:\ndetached answer")
+            }
+        )
+    }
+
+    @Test
+    fun `session closeNow Hermes job survives canceled session scope`() = runTest {
+        val sessionApi = FakeVoiceSessionApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = toolApi,
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            scope = sessionScope,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        gemini.eventHandlers.single()(
+            GeminiLiveEvent.ToolCall(callId = "call-service-scope-cancel", name = "ask_hermes", prompt = "survive")
+        )
+        assertEquals("call-service-scope-cancel" to "survive", toolApi.awaitRequest("call-service-scope-cancel"))
+
+        session.closeNow()
+        sessionScope.cancel()
+        toolApi.complete(response(callId = "call-service-scope-cancel", answer = "survived scope cancellation"))
+        conversationStore.awaitHermesToolStatus("call-service-scope-cancel", "complete")
+
+        assertFalse(toolApi.wasCancelled("call-service-scope-cancel"))
+        assertFalse(toolApi.wasRemoteCancelled("call-service-scope-cancel"))
     }
 
     @Test
@@ -2264,7 +2989,7 @@ class VoiceAgentRuntimeTest {
 
         session.end()
         assertTrue(closeHookCalled.await(500, TimeUnit.MILLISECONDS))
-        conversationStore.awaitUpdateCount(2)
+        conversationStore.awaitHermesToolStatus("call-vm-end-pending", "complete")
 
         val toolStatuses = conversationStore.updatesSnapshot()
             .flatMap { it.currentMessages }
@@ -2273,8 +2998,8 @@ class VoiceAgentRuntimeTest {
             .filter { it.toolCallId == "call-vm-end-pending" }
             .mapNotNull { it.metadata?.get("voice_tool_status")?.jsonPrimitive?.content }
 
-        assertTrue(toolStatuses.toString(), "complete" !in toolStatuses)
-        assertTrue(toolStatuses.toString(), "failed" in toolStatuses)
+        assertTrue(toolStatuses.toString(), "complete" in toolStatuses)
+        assertTrue(toolStatuses.toString(), "failed" !in toolStatuses)
     }
 
     @Test
@@ -2309,7 +3034,7 @@ class VoiceAgentRuntimeTest {
 
         session.closeNow()
         assertTrue(closeHookCalled.await(500, TimeUnit.MILLISECONDS))
-        conversationStore.awaitUpdateCount(2)
+        conversationStore.awaitHermesToolStatus("call-vm-cleared-pending", "complete")
 
         val toolStatuses = conversationStore.updatesSnapshot()
             .flatMap { it.currentMessages }
@@ -2318,8 +3043,8 @@ class VoiceAgentRuntimeTest {
             .filter { it.toolCallId == "call-vm-cleared-pending" }
             .mapNotNull { it.metadata?.get("voice_tool_status")?.jsonPrimitive?.content }
 
-        assertTrue(toolStatuses.toString(), "complete" !in toolStatuses)
-        assertTrue(toolStatuses.toString(), "failed" in toolStatuses)
+        assertTrue(toolStatuses.toString(), "complete" in toolStatuses)
+        assertTrue(toolStatuses.toString(), "failed" !in toolStatuses)
     }
 
     @Test
@@ -2366,6 +3091,19 @@ class VoiceAgentRuntimeTest {
         elapsedMs = elapsedMs,
     )
 
+    private fun jobPoll(
+        callId: String,
+        jobId: String,
+        status: String,
+    ): MobileHermesJobPollResponse = MobileHermesJobPollResponse(
+        jobId = jobId,
+        callId = callId,
+        status = status,
+        createdAt = "2026-06-11T00:00:00.000Z",
+    )
+
+    private fun queuedAck(callId: String): Pair<String, String> = callId to HERMES_QUEUED_ACKNOWLEDGEMENT
+
     private fun assertHermesAnswered(
         callId: String,
         status: VoiceToolStatus,
@@ -2395,9 +3133,29 @@ class VoiceAgentRuntimeTest {
     private fun List<UIMessagePart>.text(): String =
         filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
 
+    private fun JsonObject.string(key: String): String = getValue(key).jsonPrimitive.content
+
+    private fun JsonObject.boolean(key: String): Boolean = getValue(key).jsonPrimitive.boolean
+
+    private fun JsonObject.int(key: String): Int = getValue(key).jsonPrimitive.content.toInt()
+
     private suspend fun VoiceDiagnostics.awaitEvent(name: String) {
         withTimeout(500) {
             while (events.value.none { it.name == name }) {
+                delay(10)
+            }
+        }
+    }
+
+    private suspend fun FakeVoiceConversationStore.awaitHermesToolStatus(callId: String, status: String) {
+        withTimeout(500) {
+            while (
+                conversation.value.currentMessages
+                    .flatMap { it.parts }
+                    .filterIsInstance<UIMessagePart.Tool>()
+                    .filter { it.toolCallId == callId }
+                    .none { it.metadata?.get("voice_tool_status")?.jsonPrimitive?.content == status }
+            ) {
                 delay(10)
             }
         }

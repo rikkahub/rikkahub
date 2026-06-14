@@ -67,6 +67,47 @@ data class MobileHermesResponse(
 }
 
 @Serializable
+data class MobileHermesJobSubmitResponse(
+    val jobId: String,
+    val callId: String,
+    val status: String,
+    val createdAt: String,
+) {
+    override fun toString(): String =
+        "MobileHermesJobSubmitResponse(jobId=$jobId, callId=$callId, status=$status, createdAt=$createdAt)"
+}
+
+@Serializable
+data class MobileHermesJobPollResponse(
+    val jobId: String? = null,
+    val callId: String? = null,
+    val status: String,
+    val answer: String? = null,
+    val model: String? = null,
+    val profileId: String? = null,
+    val profileLabel: String? = null,
+    val elapsedMs: Long? = null,
+    val error: String? = null,
+    val createdAt: String? = null,
+    val completedAt: String? = null,
+) {
+    override fun toString(): String =
+        "MobileHermesJobPollResponse(" +
+            "jobId=$jobId, " +
+            "callId=$callId, " +
+            "status=$status, " +
+            "answer=${answer?.let { "[redacted]" }}, " +
+            "model=$model, " +
+            "profileId=$profileId, " +
+            "profileLabel=$profileLabel, " +
+            "elapsedMs=$elapsedMs, " +
+            "error=$error, " +
+            "createdAt=$createdAt, " +
+            "completedAt=$completedAt" +
+            ")"
+}
+
+@Serializable
 data class VoiceLabMobileCredentials(
     val hermesProfileApiKey: String,
     val cloudflareClientId: String? = null,

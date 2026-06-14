@@ -54,6 +54,8 @@ private val ERROR_SENSITIVE_KEYS = setOf(
     "connectconfig",
     "providerconfig",
     "sessionurl",
+    "prompt",
+    "answer",
 )
 private val ERROR_SECRET_PATTERNS = listOf(
     Regex(
@@ -61,15 +63,15 @@ private val ERROR_SECRET_PATTERNS = listOf(
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """("?(?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url)"?\s*[:=]\s*")([^"]*)("?|$)""",
+        pattern = """("?(?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)"?\s*[:=]\s*")([^"]*)("?|$)""",
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """('?(?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url)'?\s*[:=]\s*')([^']*)('?|$)""",
+        pattern = """('?(?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)'?\s*[:=]\s*')([^']*)('?|$)""",
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """\b((?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url)\s*[:=]\s*)([^\r\n,;}\]]+)""",
+        pattern = """\b((?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)\s*[:=]\s*)([^\r\n,;}\]]+)""",
         option = RegexOption.IGNORE_CASE,
     ),
 )
@@ -163,17 +165,54 @@ class VoiceLabMobileApi internal constructor(
             body = MobileHermesRequest(callId = callId, prompt = prompt, profileId = profileId),
         )
 
+    suspend fun submitHermesJob(
+        callId: String,
+        prompt: String,
+        profileId: String? = null,
+    ): MobileHermesJobSubmitResponse =
+        postJson(
+            path = "/api/mobile/hermes/jobs",
+            body = MobileHermesRequest(callId = callId, prompt = prompt, profileId = profileId),
+        )
+
+    suspend fun getHermesJob(jobId: String): MobileHermesJobPollResponse =
+        getJson(path = "/api/mobile/hermes/jobs/$jobId")
+
+    suspend fun cancelHermesJob(jobId: String): MobileHermesJobPollResponse =
+        deleteJson(path = "/api/mobile/hermes/jobs/$jobId")
+
     private suspend inline fun <reified Req, reified Res> postJson(path: String, body: Req): Res =
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url(normalizedBaseUrl + path)
-                .addHeader("Authorization", "Bearer ${credentials.hermesProfileApiKey}")
-                .apply {
-                    credentials.cloudflareClientId?.let { addHeader("CF-Access-Client-Id", it) }
-                    credentials.cloudflareClientSecret?.let { addHeader("CF-Access-Client-Secret", it) }
-                }
+        executeJson(
+            requestBuilder(path)
                 .post(json.encodeToString(body).toRequestBody(JSON_MEDIA_TYPE))
                 .build()
+        )
+
+    private suspend inline fun <reified Res> getJson(path: String): Res =
+        executeJson(
+            requestBuilder(path)
+                .get()
+                .build()
+        )
+
+    private suspend inline fun <reified Res> deleteJson(path: String): Res =
+        executeJson(
+            requestBuilder(path)
+                .delete()
+                .build()
+        )
+
+    private fun requestBuilder(path: String): Request.Builder =
+        Request.Builder()
+            .url(normalizedBaseUrl + path)
+            .addHeader("Authorization", "Bearer ${credentials.hermesProfileApiKey}")
+            .apply {
+                credentials.cloudflareClientId?.let { addHeader("CF-Access-Client-Id", it) }
+                credentials.cloudflareClientSecret?.let { addHeader("CF-Access-Client-Secret", it) }
+            }
+
+    private suspend inline fun <reified Res> executeJson(request: Request): Res =
+        withContext(Dispatchers.IO) {
             transport.execute(request).use { response ->
                 if (!response.isSuccessful) {
                     throw IllegalStateException(

@@ -114,6 +114,9 @@ class VoiceAgentCallService : Service() {
                             telecomCallRegistry.hasActiveConnection()
                         val needsTelecomSetup = startedNewSession || !hasActiveTelecomCall
                         if (needsTelecomSetup) {
+                            startTelecomCall(id)
+                        }
+                        if (needsTelecomSetup) {
                             VoiceAgentLog.d(TAG, "waiting for startup state")
                             var observedReconnectAttempt = !serviceReconnect
                             val startupState = manager.state.first { state ->
@@ -154,9 +157,6 @@ class VoiceAgentCallService : Service() {
                         }
                         if (!needsTelecomSetup && manager.state.value.call !is VoiceCallStatus.Degraded) {
                             manager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
-                        }
-                        if (needsTelecomSetup) {
-                            startTelecomCall(id)
                         }
                     }
                     is VoiceAgentConfigResult.Unavailable -> {

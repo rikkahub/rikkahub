@@ -11,3 +11,5 @@ local.properties
 .cursor
 .history
 .kotlin
+docs/run/
+docs/tool-output/

@@ -18,6 +18,7 @@ class VoiceAgentConnectionService : ConnectionService() {
             context = applicationContext,
             onDisconnected = telecomCallRegistry::clear,
         ).apply {
+            setAudioModeIsVoip(true)
             setInitializing()
             setActive()
         }

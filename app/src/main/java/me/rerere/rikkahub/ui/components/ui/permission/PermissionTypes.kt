@@ -67,6 +67,14 @@ val PermissionRecordAudio = PermissionInfo(
     required = true
 )
 
+@RequiresApi(Build.VERSION_CODES.S)
+val PermissionBluetoothConnect = PermissionInfo(
+    permission = Manifest.permission.BLUETOOTH_CONNECT,
+    displayName = { Text(stringResource(R.string.permission_bluetooth)) },
+    usage = { Text(stringResource(R.string.permission_bluetooth_desc)) },
+    required = true
+)
+
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 val PermissionNotification = PermissionInfo(
     permission = Manifest.permission.POST_NOTIFICATIONS,

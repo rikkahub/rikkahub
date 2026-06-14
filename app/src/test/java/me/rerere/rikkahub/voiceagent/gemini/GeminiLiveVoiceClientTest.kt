@@ -33,6 +33,24 @@ class GeminiLiveVoiceClientTest {
             "responseModalities" to JsonArray(listOf(JsonPrimitive("AUDIO"))),
         )
     )
+    private val liveConnectConfigWithRealtimeInput = JsonObject(
+        mapOf(
+            "responseModalities" to JsonArray(listOf(JsonPrimitive("AUDIO"))),
+            "realtimeInputConfig" to JsonObject(
+                mapOf(
+                    "automaticActivityDetection" to JsonObject(
+                        mapOf(
+                            "disabled" to JsonPrimitive(false),
+                            "startOfSpeechSensitivity" to JsonPrimitive("START_SENSITIVITY_LOW"),
+                            "endOfSpeechSensitivity" to JsonPrimitive("END_SENSITIVITY_LOW"),
+                            "prefixPaddingMs" to JsonPrimitive(20),
+                            "silenceDurationMs" to JsonPrimitive(100),
+                        )
+                    )
+                )
+            ),
+        )
+    )
 
     @Test
     fun `connect sends setup then context and forwards parsed tool calls`() = runBlocking {
@@ -130,6 +148,36 @@ class GeminiLiveVoiceClientTest {
             .jsonObject
         assertEquals("call-1", response["id"]!!.jsonPrimitive.content)
         assertEquals("42", response["response"]!!.jsonObject["answer"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `send text turn sends client content after setup`() = runBlocking {
+        val socket = FakeGeminiSocket()
+        val client = TestableGeminiLiveVoiceClient(socket = socket, codec = GeminiLiveCodec())
+
+        client.connect(
+            token = "token-1",
+            websocketUrl = "wss://example.test/live",
+            providerModel = "gemini-2.0-flash-live-001",
+            liveConnectConfig = liveConnectConfig,
+            systemInstruction = "You are Hermes.",
+            contextTurns = emptyList(),
+            onEvent = {},
+        )
+        socket.receive(setupCompleteMessage)
+
+        assertTrue(client.sendTextTurn("Hermes answer is ready"))
+
+        val clientContent = socket.sentMessages.last()
+            .jsonObject()["clientContent"]!!
+            .jsonObject
+        assertTrue(clientContent["turnComplete"]!!.jsonPrimitive.boolean)
+        val turn = clientContent["turns"]!!.jsonArray.single().jsonObject
+        assertEquals("user", turn["role"]!!.jsonPrimitive.content)
+        assertEquals(
+            "Hermes answer is ready",
+            turn["parts"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content,
+        )
     }
 
     @Test
@@ -370,6 +418,7 @@ class GeminiLiveVoiceClientTest {
                     allowedFunctionNames = emptyList(),
                     responseModalities = listOf("AUDIO"),
                     systemInstructionChars = "You are Hermes.".length,
+                    realtimeInputConfig = null,
                 ),
                 GeminiLiveDebugEvent.Open,
                 GeminiLiveDebugEvent.Send(kind = "setup", sent = true, dataBytes = null),
@@ -379,6 +428,41 @@ class GeminiLiveVoiceClientTest {
                 GeminiLiveDebugEvent.Send(kind = "realtimeInput.audioStreamEnd", sent = true, dataBytes = null),
             ),
             observed,
+        )
+    }
+
+    @Test
+    fun `debug observer reports sanitized realtime input config from setup`() = runBlocking {
+        val socket = FakeGeminiSocket()
+        val observed = mutableListOf<GeminiLiveDebugEvent>()
+        val client = TestableGeminiLiveVoiceClient(
+            socket = socket,
+            codec = GeminiLiveCodec(),
+            debugObserver = observed::add,
+        )
+
+        client.connect(
+            token = "token-1",
+            websocketUrl = "wss://example.test/live",
+            providerModel = "gemini-2.0-flash-live-001",
+            liveConnectConfig = liveConnectConfigWithRealtimeInput,
+            systemInstruction = "You are Hermes.",
+            contextTurns = emptyList(),
+            onEvent = {},
+        )
+
+        assertEquals(
+            GeminiLiveDebugEvent.Setup(
+                hasAskHermesTool = false,
+                toolConfigMode = null,
+                allowedFunctionNames = emptyList(),
+                responseModalities = listOf("AUDIO"),
+                systemInstructionChars = "You are Hermes.".length,
+                realtimeInputConfig = "automaticActivityDetection.disabled=false " +
+                    "start=START_SENSITIVITY_LOW end=END_SENSITIVITY_LOW " +
+                    "prefixPaddingMs=20 silenceDurationMs=100",
+            ),
+            observed.first(),
         )
     }
 

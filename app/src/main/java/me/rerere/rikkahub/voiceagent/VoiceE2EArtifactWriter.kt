@@ -6,12 +6,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
+import java.nio.file.Files
 
-enum class VoiceE2EArtifact(val fileName: String) {
+enum class VoiceE2EArtifact(
+    val fileName: String,
+    val appendOnly: Boolean = false,
+) {
     InputTranscript("input-transcript.txt"),
     OutputTranscript("output-transcript.txt"),
     HermesCall("hermes-call.txt"),
     HermesAnswer("hermes-answer.txt"),
+    HermesEvents("hermes-events.ndjson", appendOnly = true),
 }
 
 class VoiceE2EArtifactWriter private constructor(
@@ -20,13 +25,14 @@ class VoiceE2EArtifactWriter private constructor(
     scope: CoroutineScope?,
 ) {
     private val commands = if (enabled) {
-        Channel<WriteCommand>(capacity = 1)
+        Channel<WriteCommand>(capacity = Channel.UNLIMITED)
     } else {
         null
     }
     private val directory = File(rootDirectory, "voice-e2e")
     private val pendingLock = Any()
     private val pendingWrites = LinkedHashMap<VoiceE2EArtifact, String>()
+    private val pendingAppends = mutableListOf<PendingAppend>()
     private var flushQueued = false
 
     init {
@@ -35,6 +41,7 @@ class VoiceE2EArtifactWriter private constructor(
             scope.launch(Dispatchers.IO) {
                 for (command in queue) {
                     when (command) {
+                        WriteCommand.ClearAppendOnlyArtifacts -> clearAppendOnlyArtifacts()
                         WriteCommand.Flush -> flushPendingWrites()
                         is WriteCommand.Drain -> {
                             flushPendingWrites()
@@ -43,6 +50,9 @@ class VoiceE2EArtifactWriter private constructor(
                     }
                 }
             }
+            if (queue.trySend(WriteCommand.ClearAppendOnlyArtifacts).isFailure) {
+                VoiceAgentLog.w(TAG, "artifact append cleanup queue rejected")
+            }
         }
     }
 
@@ -50,9 +60,17 @@ class VoiceE2EArtifactWriter private constructor(
 
     fun write(artifact: VoiceE2EArtifact, content: String) {
         val queue = commands ?: return
+        if (artifact.appendOnly && content.containsLineBreak()) {
+            VoiceAgentLog.w(TAG, "artifact append rejected multiline name=${artifact.fileName}")
+            return
+        }
         var shouldQueueFlush = false
         synchronized(pendingLock) {
-            pendingWrites[artifact] = content
+            if (artifact.appendOnly) {
+                pendingAppends += PendingAppend(artifact, content)
+            } else {
+                pendingWrites[artifact] = content
+            }
             if (!flushQueued) {
                 flushQueued = true
                 shouldQueueFlush = true
@@ -70,10 +88,26 @@ class VoiceE2EArtifactWriter private constructor(
         completed.await()
     }
 
-    private fun writeArtifact(artifact: VoiceE2EArtifact, content: String) {
+    private fun clearAppendOnlyArtifacts() {
+        VoiceE2EArtifact.entries.filter { it.appendOnly }.forEach { artifact ->
+            runCatching {
+                Files.deleteIfExists(File(directory, artifact.fileName).toPath())
+            }.onFailure { error ->
+                val message = (error.message ?: error.javaClass.simpleName).redactForVoiceAgentLog()
+                VoiceAgentLog.w(TAG, "artifact append cleanup failed name=${artifact.fileName} message=$message")
+            }
+        }
+    }
+
+    private fun writeArtifact(artifact: VoiceE2EArtifact, content: String, append: Boolean) {
         runCatching {
             directory.mkdirs()
-            File(directory, artifact.fileName).writeText(content)
+            val file = File(directory, artifact.fileName)
+            if (append) {
+                file.appendText("$content\n")
+            } else {
+                file.writeText(content)
+            }
         }.onFailure { error ->
             val message = error.message ?: error.javaClass.simpleName
             VoiceAgentLog.w(TAG, "artifact write failed name=${artifact.fileName} message=$message")
@@ -82,22 +116,33 @@ class VoiceE2EArtifactWriter private constructor(
 
     private fun flushPendingWrites() {
         while (true) {
-            val snapshot = synchronized(pendingLock) {
-                if (pendingWrites.isEmpty()) {
+            val (writeSnapshot, appendSnapshot) = synchronized(pendingLock) {
+                if (pendingWrites.isEmpty() && pendingAppends.isEmpty()) {
                     flushQueued = false
                     return
                 }
-                LinkedHashMap(pendingWrites).also {
-                    pendingWrites.clear()
-                }
+                val writes = LinkedHashMap(pendingWrites)
+                val appends = pendingAppends.toList()
+                pendingWrites.clear()
+                pendingAppends.clear()
+                writes to appends
             }
-            snapshot.forEach { (name, content) ->
-                writeArtifact(name, content)
+            writeSnapshot.forEach { (artifact, content) ->
+                writeArtifact(artifact, content, append = false)
+            }
+            appendSnapshot.forEach { append ->
+                writeArtifact(append.artifact, append.content, append = true)
             }
         }
     }
 
+    private data class PendingAppend(
+        val artifact: VoiceE2EArtifact,
+        val content: String,
+    )
+
     private sealed interface WriteCommand {
+        object ClearAppendOnlyArtifacts : WriteCommand
         object Flush : WriteCommand
         data class Drain(val completed: CompletableDeferred<Unit>) : WriteCommand
     }
@@ -120,5 +165,7 @@ class VoiceE2EArtifactWriter private constructor(
         )
     }
 }
+
+private fun String.containsLineBreak(): Boolean = contains('\n') || contains('\r')
 
 private const val TAG = "VoiceE2EArtifactWriter"

@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.voiceagent
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
@@ -14,6 +17,35 @@ interface VoiceConversationStore {
     val conversation: StateFlow<Conversation>
     suspend fun update(transform: (Conversation) -> Conversation)
     fun close() = Unit
+}
+
+class InMemoryVoiceConversationStore(
+    initialConversation: Conversation = Conversation.ofId(id = Uuid.random()),
+) : VoiceConversationStore {
+    private val conversationFlow = MutableStateFlow(initialConversation)
+    override val conversation: StateFlow<Conversation> = conversationFlow
+
+    override suspend fun update(transform: (Conversation) -> Conversation) {
+        conversationFlow.value = transform(conversationFlow.value)
+    }
+}
+
+class SynchronizedVoiceConversationStore(
+    private val delegate: VoiceConversationStore,
+) : VoiceConversationStore {
+    private val lock = Mutex()
+
+    override val conversation: StateFlow<Conversation> = delegate.conversation
+
+    override suspend fun update(transform: (Conversation) -> Conversation) {
+        lock.withLock {
+            delegate.update(transform)
+        }
+    }
+
+    override fun close() {
+        delegate.close()
+    }
 }
 
 class ChatServiceVoiceConversationStore(

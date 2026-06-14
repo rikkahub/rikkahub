@@ -4,17 +4,19 @@ This runbook verifies the real Voice Agent pipeline:
 
 1. Android app starts Gemini Live.
 2. Gemini calls `ask_hermes`.
-3. The app calls Hermes/MS-agent.
-4. Hermes retrieves an existing private Gbrain fact.
-5. The app hashes the Hermes response inside the app process.
-6. The shell script matches the emitted actual hash to the expected SHA-256 value.
-7. The app sends the tool response back to Gemini.
-8. Gemini returns output audio.
-9. Android playback queues and writes the audio.
+3. The app submits a queued Hermes/MS-agent job to Voice Lab.
+4. The app sends Gemini a queued acknowledgement as the function response.
+5. Hermes retrieves an existing private Gbrain fact in the background.
+6. The app polls the job, then hashes the final Hermes response inside the app process.
+7. The shell script matches the emitted actual hash to the expected SHA-256 value.
+8. The app sends Gemini a follow-up text turn containing the completed Hermes answer.
+9. Gemini returns output audio.
+10. Android playback queues and writes the audio.
 
 This is a live, credentialed, device-backed check. It is not part of CI.
 `scripts/test-voice-agent-hermes-gbrain-e2e.sh` only tests the shell harness with fake ADB; it does not replace the live
 device-backed verification. Use the live script below when asked to run the Voice Agent Hermes/Gbrain E2E.
+For the multi-request queued Hermes stress test, use `docs/voice-agent-hermes-queue-e2e.md`.
 
 Before running this script, the installed Android app must already be configured with the Hermes/MS-agent provider API
 key and any Cloudflare Access headers required by the Hermes endpoint. The script validates that installed-app
@@ -227,7 +229,8 @@ The script passes only when all of these markers appear in the same run:
 - Debug PCM injection delivered.
 - Gemini emits tool call.
 - App emits `hermes_tool_response_hash` with an `actualHash` equal to `VOICE_AGENT_E2E_EXPECTED_HASH`.
-- App sends tool response back to Gemini.
+- App sends the queued acknowledgement tool response back to Gemini.
+- App sends a follow-up text turn after the completed Hermes answer is ready.
 - Gemini emits output audio.
 - Android playback queues audio.
 - Android playback writes audio.

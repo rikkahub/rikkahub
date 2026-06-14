@@ -10,6 +10,7 @@ class VoiceAgentStartGateTest {
             VoiceAgentStartGate.Ready,
             voiceAgentStartGate(
                 hasMicrophonePermission = true,
+                hasBluetoothConnectPermission = true,
                 hasNotificationPermission = true,
             ),
         )
@@ -21,6 +22,19 @@ class VoiceAgentStartGateTest {
             VoiceAgentStartGate.NeedsMicrophonePermission,
             voiceAgentStartGate(
                 hasMicrophonePermission = false,
+                hasBluetoothConnectPermission = true,
+                hasNotificationPermission = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `start gate requires bluetooth permission after microphone permission`() {
+        assertEquals(
+            VoiceAgentStartGate.NeedsBluetoothPermission,
+            voiceAgentStartGate(
+                hasMicrophonePermission = true,
+                hasBluetoothConnectPermission = false,
                 hasNotificationPermission = true,
             ),
         )
@@ -32,6 +46,7 @@ class VoiceAgentStartGateTest {
             VoiceAgentStartGate.NeedsNotificationPermission,
             voiceAgentStartGate(
                 hasMicrophonePermission = true,
+                hasBluetoothConnectPermission = true,
                 hasNotificationPermission = false,
             ),
         )
@@ -43,6 +58,7 @@ class VoiceAgentStartGateTest {
             VoiceAgentStartGate.Ready,
             voiceAgentStartGate(
                 hasMicrophonePermission = true,
+                hasBluetoothConnectPermission = true,
                 hasNotificationPermission = true,
             ),
         )

@@ -12,6 +12,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
+import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import java.util.Base64
@@ -41,6 +42,7 @@ class VoiceAgentCallSession(
     private var muted = false
     private var sessionId = 0L
     private var ended = false
+    private var hermesBridge: HermesSessionBridge? = null
 
     override val state: StateFlow<VoiceAgentUiState> = coordinator.state
     private val conversation = conversationStore.conversation
@@ -114,6 +116,10 @@ class VoiceAgentCallSession(
             coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
             VoiceAgentLog.d(TAG, "session connected sessionId=$currentSessionId")
             gemini.activateOutboundSession(currentSessionId)
+            val bridge = coordinator.createHermesSessionBridge(currentSessionId)
+            hermesBridge = bridge
+            coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)
+            coordinator.resumeHermesJobs()
             audio.activatePlaybackSession(currentSessionId)
             if (!muted) {
                 startCapture(currentSessionId)
@@ -158,6 +164,7 @@ class VoiceAgentCallSession(
     private fun cleanupFailedStartup(sessionId: Long, closeGemini: Boolean) {
         if (!coordinator.isActiveSession(sessionId)) return
         VoiceAgentLog.d(TAG, "cleanup failed startup sessionId=$sessionId closeGemini=$closeGemini")
+        detachHermesBridge()
         coordinator.prepareForSessionEnd()
         invalidateAudioSessions()
         audio.stopCapture()
@@ -193,6 +200,7 @@ class VoiceAgentCallSession(
     override fun reconnect() {
         if (ended) return
         val previousJob = startJob
+        detachHermesBridge()
         coordinator.prepareForReconnect()
         invalidateAudioSessions()
         audio.stopCapture()
@@ -233,6 +241,7 @@ class VoiceAgentCallSession(
         if (ended) return null
         ended = true
         val previousJob = startJob
+        detachHermesBridge()
         coordinator.prepareForSessionEnd()
         invalidateAudioSessions()
         audio.stopCapture()
@@ -256,6 +265,7 @@ class VoiceAgentCallSession(
             ended = true
         }
         startJob?.cancel()
+        detachHermesBridge()
         coordinator.prepareForSessionEnd()
         invalidateAudioSessions()
         audio.stopCapture()
@@ -299,6 +309,11 @@ class VoiceAgentCallSession(
     private fun invalidateAudioSessions() {
         gemini.invalidateOutboundSession()
         audio.invalidatePlaybackSession()
+    }
+
+    private fun detachHermesBridge() {
+        hermesBridge?.let(coordinator::detachHermesBridge)
+        hermesBridge = null
     }
 
     private data class EndPreparation(
