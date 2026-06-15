@@ -38,6 +38,14 @@ class WorkspaceManagerCwdResolutionTest {
             last = context
             return WorkspaceCommandResult(exitCode = 0, stdout = "", stderr = "")
         }
+
+        // These cwd-resolution tests exercise only the blocking executeCommand path; the non-blocking
+        // seam (issue #291) is unused here, so it is intentionally unimplemented.
+        override fun startShellRun(
+            context: WorkspaceShellContext,
+            outputFile: File,
+            sizeCapBytes: Long,
+        ): ShellRunHandle = throw UnsupportedOperationException("startShellRun unused in cwd-resolution tests")
     }
 
     private fun manager(runner: WorkspaceShellRunner): WorkspaceManager =

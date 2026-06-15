@@ -7,6 +7,28 @@ class ProotShellRunner(
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
+        val precheck = precheck(context) ?: return startProcess(context).readResult(context.timeoutMillis)
+        return precheck
+    }
+
+    override fun startShellRun(
+        context: WorkspaceShellContext,
+        outputFile: File,
+        sizeCapBytes: Long,
+    ): ShellRunHandle {
+        // A precheck failure (no rootfs / missing proot binary) has no process to own; surface it as a
+        // pre-resolved handle so the caller's await() yields the SAME WorkspaceCommandResult execute()
+        // would have. Otherwise hand back a live process-owning handle.
+        precheck(context)?.let { return PreResolvedShellRunHandle(it) }
+        return ProcessShellRunHandle.start(startProcess(context), context.timeoutMillis, outputFile, sizeCapBytes)
+    }
+
+    /**
+     * The shared rootfs / binary preconditions. Returns a terminal [WorkspaceCommandResult] (exit 127)
+     * when the run cannot start, or null when it is safe to spawn the process. Side effects (tempDir
+     * mkdirs, rootfs patch) run only on the success path, exactly as the old [execute] did.
+     */
+    private fun precheck(context: WorkspaceShellContext): WorkspaceCommandResult? {
         if (!context.linuxDir.hasUsableRootfs()) {
             return WorkspaceCommandResult(
                 exitCode = 127,
@@ -14,7 +36,6 @@ class ProotShellRunner(
                 stderr = "Rootfs is not installed",
             )
         }
-
         val proot = File(nativeLibraryDir, PROOT_EXEC)
         val loader = File(nativeLibraryDir, PROOT_LOADER)
         if (!proot.isFile) {
@@ -31,10 +52,15 @@ class ProotShellRunner(
                 stderr = "proot loader not found: ${loader.absolutePath}",
             )
         }
+        return null
+    }
 
+    private fun startProcess(context: WorkspaceShellContext): Process {
+        val proot = File(nativeLibraryDir, PROOT_EXEC)
+        val loader = File(nativeLibraryDir, PROOT_LOADER)
         context.tempDir.mkdirs()
         patcher.patch(context.linuxDir)
-        val process = ProcessBuilder(buildCommand(context, proot))
+        return ProcessBuilder(buildCommand(context, proot))
             .directory(context.filesDir)
             .redirectErrorStream(false)
             .apply {
@@ -43,8 +69,6 @@ class ProotShellRunner(
                 environment()["TMPDIR"] = context.tempDir.absolutePath
             }
             .start()
-
-        return process.readResult(context.timeoutMillis)
     }
 
     // internal (not private) so the positional-arg escaping form is unit-testable without a rootfs.
