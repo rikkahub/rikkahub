@@ -139,6 +139,7 @@ class SettingsStore(
         val WEB_SERVER_JWT_ENABLED = booleanPreferencesKey("web_server_jwt_enabled")
         val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
         val WEB_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("web_server_localhost_only")
+        val A2A_ENABLED = booleanPreferencesKey("a2a_enabled")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -236,6 +237,7 @@ class SettingsStore(
             webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
             webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
             webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
+            a2aEnabled = preferences[A2A_ENABLED] == true,
             backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                 JsonInstant.decodeFromString(it)
             } ?: BackupReminderConfig(),
@@ -422,6 +424,7 @@ class SettingsStore(
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
             preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
             preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
+            preferences[A2A_ENABLED] = settings.a2aEnabled
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
@@ -554,6 +557,7 @@ data class Settings(
     val webServerJwtEnabled: Boolean = false,
     val webServerAccessPassword: String = "",
     val webServerLocalhostOnly: Boolean = false,
+    val a2aEnabled: Boolean = false,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,

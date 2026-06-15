@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +15,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.web.a2a.A2aTaskRegistry
 import me.rerere.rikkahub.web.startWebServer
 import java.net.ServerSocket
 
@@ -40,7 +40,8 @@ class WebServerManager(
     private val chatService: ChatService,
     private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore,
-    private val filesManager: FilesManager
+    private val filesManager: FilesManager,
+    private val a2aTaskRegistry: A2aTaskRegistry,
 ) {
     private val lifecycle =
         WebServerLifecycle<EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>>()
@@ -73,7 +74,16 @@ class WebServerManager(
                 // 检查与赋值在同一把锁内原子完成，避免并发 start/restart 泄漏服务器实例
                 val started = lifecycle.start {
                     startWebServer(port = port, host = host) {
-                        configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
+                        configureWebApi(
+                            context = context,
+                            appScope = appScope,
+                            chatService = chatService,
+                            conversationRepo = conversationRepo,
+                            settingsStore = settingsStore,
+                            filesManager = filesManager,
+                            a2aTaskRegistry = a2aTaskRegistry,
+                            localhostOnly = localhostOnly,
+                        )
                     }.start(wait = false)
                 }
                 if (started == null) {
@@ -138,7 +148,16 @@ class WebServerManager(
                     factory = {
                         if (!isPortAvailable(port)) error("Port $port is already in use")
                         startWebServer(port = port, host = host) {
-                            configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
+                            configureWebApi(
+                                context = context,
+                                appScope = appScope,
+                                chatService = chatService,
+                                conversationRepo = conversationRepo,
+                                settingsStore = settingsStore,
+                                filesManager = filesManager,
+                                a2aTaskRegistry = a2aTaskRegistry,
+                                localhostOnly = localhostOnly,
+                            )
                         }.start(wait = false)
                     }
                 )

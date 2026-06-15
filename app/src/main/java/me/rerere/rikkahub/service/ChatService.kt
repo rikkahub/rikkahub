@@ -155,6 +155,7 @@ import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundControll
 import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
 import me.rerere.rikkahub.service.mutation.ConversationMutations
 import me.rerere.rikkahub.service.notification.ChatNotificationSender
+import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.common.text.applyPlaceholders
 import me.rerere.rikkahub.utils.shouldRethrowVmError
@@ -852,6 +853,30 @@ class ChatService(
         }
     }
 
+    suspend fun initializeConversationForSkill(conversationId: Uuid, assistantId: Uuid) {
+        getOrCreateSession(conversationId) // 确保 session 存在
+        val conversation = conversationRepo.getConversationById(conversationId)
+        val settings = settingsStore.settingsFlow.first()
+        val assistant = settings.getAssistantById(assistantId)
+            ?: throw NotFoundException("skill assistant not found")
+
+        if (conversation == null) {
+            val newConversation = Conversation.ofId(
+                id = conversationId,
+                assistantId = assistant.id,
+                newConversation = true
+            ).updateCurrentMessages(assistant.presetMessages)
+            updateConversationFromInitialization(conversationId, newConversation)
+            return
+        }
+
+        if (!isA2aConversationBindingAllowed(conversation.assistantId, assistantId)) {
+            throw BadRequestException("conversation already initialized for another assistant")
+        }
+
+        updateConversationFromInitialization(conversationId, conversation)
+    }
+
     // ---- 发送消息 ----
 
     // The ONE generation entry-point lifecycle (audit Q3, PR #266): sendMessage,
@@ -864,7 +889,7 @@ class ChatService(
         conversationId: Uuid,
         errorTitle: String,
         block: suspend (ConversationSession) -> Unit,
-    ) {
+    ): Job {
         val session = getOrCreateSession(conversationId)
         val previousJob = session.getJob()
         previousJob?.cancel()
@@ -881,12 +906,17 @@ class ChatService(
             _generationDoneFlow.emit(conversationId)
         }
         session.setJob(job)
+        return job
     }
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
-        if (content.isEmptyInputMessage()) return
+    fun sendMessageReturningJob(
+        conversationId: Uuid,
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+    ): Job {
+        if (content.isEmptyInputMessage()) return Job().apply { complete() }
 
-        launchGenerationEntry(
+        return launchGenerationEntry(
             conversationId = conversationId,
             errorTitle = context.getString(R.string.error_title_send_message),
         ) { session ->
@@ -940,6 +970,12 @@ class ChatService(
                 )
             }
         }
+    }
+
+    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+        if (content.isEmptyInputMessage()) return
+
+        sendMessageReturningJob(conversationId, content, answer)
     }
 
     // Stop fire-point (#200 T8). Runs after the agentic turn handleMessageComplete owns has
@@ -1256,13 +1292,13 @@ class ChatService(
 
     // ---- 处理工具调用审批 ----
 
-    fun handleToolApproval(
+    fun handleToolApprovalReturningJob(
         conversationId: Uuid,
         toolCallId: String,
         approved: Boolean,
         reason: String = "",
         answer: String? = null,
-    ) {
+    ): Job? {
         // A forwarded CHILD approval (namespaced taskId/childToolCallId, Gap A) resolves IN
         // PLACE: the parent generation is alive, suspended inside the spawn tool waiting on this
         // very decision — launchGenerationEntry's cancel-previous would kill it, and the
@@ -1279,10 +1315,10 @@ class ChatService(
                     addError(error, conversationId, title = context.getString(R.string.error_title_tool_approval))
                 }
             }
-            return
+            return null
         }
 
-        launchGenerationEntry(
+        return launchGenerationEntry(
             conversationId = conversationId,
             errorTitle = context.getString(R.string.error_title_tool_approval),
         ) { session ->
@@ -1326,6 +1362,16 @@ class ChatService(
                 handleMessageComplete(conversationId)
             }
         }
+    }
+
+    fun handleToolApproval(
+        conversationId: Uuid,
+        toolCallId: String,
+        approved: Boolean,
+        reason: String = "",
+        answer: String? = null,
+    ) {
+        handleToolApprovalReturningJob(conversationId, toolCallId, approved, reason, answer)
     }
 
     /**
@@ -2344,8 +2390,11 @@ class ChatService(
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
-    suspend fun stopGeneration(conversationId: Uuid) {
-        val job = sessions[conversationId]?.getJob() ?: return
+    suspend fun stopGeneration(conversationId: Uuid, expectedJob: Job) {
+        val session = sessions[conversationId] ?: return
+        if (!shouldStopA2aJob(session.getJob(), expectedJob)) return
+
+        val job = session.getJob() ?: return
         // The in-app Stop is the second kill-switch (#187 §7): revoke THIS conversation's automation
         // grant before cancelling so a tool step that is mid-authorize fails closed. Cancelling the
         // job tears down only this conversation's in-flight capture (the capture is a child of this
@@ -2358,7 +2407,19 @@ class ChatService(
         finishInterruptedPendingTools(conversationId)
     }
 
+    suspend fun stopGeneration(conversationId: Uuid) {
+        val job = sessions[conversationId]?.getJob() ?: return
+        stopGeneration(conversationId, job)
+    }
+
 }
+
+internal fun shouldStopA2aJob(currentJob: Job?, expectedJob: Job): Boolean = currentJob === expectedJob
+
+internal fun isA2aConversationBindingAllowed(
+    existingAssistantId: Uuid?,
+    requestedAssistantId: Uuid,
+): Boolean = existingAssistantId == null || existingAssistantId == requestedAssistantId
 
 /**
  * Pure file-diff decision used by [ChatService.checkFilesDelete]. Returns the file URIs present

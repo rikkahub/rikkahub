@@ -269,6 +269,23 @@ fun SettingWebPage() {
                         },
                     )
                     item(
+                        headlineContent = { Text("A2A inbound server") },
+                        supportingContent = { Text("Expose spawnable assistants through the local A2A JSON-RPC endpoint.") },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.a2aEnabled,
+                                onCheckedChange = { checked ->
+                                    scope.launch {
+                                        settingsStore.update {
+                                            it.copy(a2aEnabled = checked)
+                                        }
+                                    }
+                                },
+                                enabled = !serverState.isRunning,
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server_password)) },
                         supportingContent = { Text(stringResource(R.string.setting_page_web_server_password_desc)) },
                         trailingContent = {

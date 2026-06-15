@@ -31,6 +31,7 @@ fun startWebServer(
         }
         install(SSE)
         install(DefaultHeaders)
+        module()
         routing {
             staticResources("/", "static") {
                 default("index.html")
@@ -38,6 +39,5 @@ fun startWebServer(
                 singlePageApplication()
             }
         }
-        module()
     })
 }
