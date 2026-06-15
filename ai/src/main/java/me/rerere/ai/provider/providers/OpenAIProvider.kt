@@ -2,15 +2,12 @@ package me.rerere.ai.provider.providers
 
 import android.content.Context
 import android.util.Log
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -35,7 +32,6 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
-import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.getByKey
@@ -45,11 +41,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import java.io.File
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 private const val TAG = "OpenAIProvider"
 
@@ -210,7 +204,7 @@ class OpenAIProvider(
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): Flow<ImageGenerationItem> {
+    ): Flow<ImageGenerationItem> = flow {
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
         }
@@ -222,8 +216,6 @@ class OpenAIProvider(
                 put("model", params.model.modelId)
                 put("prompt", params.prompt)
                 put("n", params.numOfImages)
-                put("stream", true)
-                put("partial_images", params.partialImages.coerceIn(0, 3))
                 put(
                     "size", when (params.aspectRatio) {
                         ImageAspectRatio.SQUARE -> "1024x1024"
@@ -233,10 +225,9 @@ class OpenAIProvider(
                 )
             }
                 .mergeCustomBody(params.customBody)
-                .forceImageStream()
         )
 
-        Log.i(TAG, "generateImage: ${json.encodeToString(requestBody)}")
+        Log.i(TAG, "generateImage: $requestBody")
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
@@ -247,17 +238,21 @@ class OpenAIProvider(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        return streamImageRequest(
-            request = request,
-            partialEventType = "image_generation.partial_image",
-            completedEventType = "image_generation.completed",
-        )
+        val items = withContext(Dispatchers.IO) {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                error("Failed to generate image: ${response.code} ${response.body?.string()}")
+            }
+            parseImageResponse(response.body.string())
+        }
+
+        items.forEach { emit(it) }
     }
 
     override suspend fun editImage(
         providerSetting: ProviderSetting,
         params: ImageEditParams
-    ): Flow<ImageGenerationItem> {
+    ): Flow<ImageGenerationItem> = flow {
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
         }
@@ -271,7 +266,6 @@ class OpenAIProvider(
             .addFormDataPart("model", params.model.modelId)
             .addFormDataPart("prompt", params.prompt)
             .addFormDataPart("n", params.numOfImages.toString())
-            .addFormDataPart("partial_images", params.partialImages.coerceIn(0, 3).toString())
             .addFormDataPart(
                 "size", when (params.aspectRatio) {
                     ImageAspectRatio.SQUARE -> "1024x1024"
@@ -303,7 +297,6 @@ class OpenAIProvider(
             }
             bodyBuilder.addFormDataPart(customBody.key, value)
         }
-        bodyBuilder.addFormDataPart("stream", "true")
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/edits")
@@ -313,66 +306,58 @@ class OpenAIProvider(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        return streamImageRequest(
-            request = request,
-            partialEventType = "image_edit.partial_image",
-            completedEventType = "image_edit.completed",
-        )
+        val items = withContext(Dispatchers.IO) {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                error("Failed to edit image: ${response.code} ${response.body?.string()}")
+            }
+            parseImageResponse(response.body.string())
+        }
+
+        items.forEach { emit(it) }
     }
 
-    private fun streamImageRequest(
-        request: Request,
-        partialEventType: String,
-        completedEventType: String,
-    ): Flow<ImageGenerationItem> = callbackFlow {
-        val listener = object : EventSourceListener() {
-            override fun onEvent(
-                eventSource: EventSource,
-                id: String?,
-                type: String?,
-                data: String
-            ) {
-                if (data == "[DONE]") {
-                    close()
-                    return
-                }
-
-                val event = json.parseToJsonElement(data).jsonObject
-                val eventType = event["type"]?.jsonPrimitive?.contentOrNull ?: type
-                Log.d(TAG, "onEvent(streamImageRequest): $eventType")
-                if (eventType != partialEventType && eventType != completedEventType) return
-
-                val b64Json = event["b64_json"]?.jsonPrimitive?.contentOrNull ?: return
-                val outputFormat = event["output_format"]?.jsonPrimitive?.contentOrNull ?: "png"
-                val partialImageIndex = event["partial_image_index"]?.jsonPrimitive?.intOrNull
-                trySend(
-                    ImageGenerationItem(
-                        data = b64Json,
-                        mimeType = outputFormat.toImageMimeType(),
-                        partial = eventType == partialEventType,
-                        partialImageIndex = partialImageIndex,
-                    )
+    private suspend fun parseImageResponse(bodyStr: String): List<ImageGenerationItem> {
+        val body = json.parseToJsonElement(bodyStr).jsonObject
+        val defaultFormat = body["output_format"]?.jsonPrimitive?.contentOrNull ?: "png"
+        val data = body["data"]?.jsonArray ?: error("No data in image response")
+        return data.map { element ->
+            val obj = element.jsonObject
+            val b64Json = obj["b64_json"]?.jsonPrimitive?.contentOrNull
+            if (b64Json != null) {
+                val outputFormat = obj["output_format"]?.jsonPrimitive?.contentOrNull ?: defaultFormat
+                ImageGenerationItem(
+                    data = b64Json,
+                    mimeType = outputFormat.toImageMimeType(),
                 )
-            }
-
-            override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                val responseMessage = response?.let {
-                    "${it.code} ${it.body?.stringSafe() ?: ""}".trim()
-                }
-                close(t ?: Exception("Failed to stream image: $responseMessage"))
-            }
-
-            override fun onClosed(eventSource: EventSource) {
-                close()
+            } else {
+                val url = obj["url"]?.jsonPrimitive?.contentOrNull
+                    ?: error("No b64_json or url in image response")
+                downloadImageAsBase64(url)
             }
         }
+    }
 
-        val eventSource = EventSources.createFactory(client)
-            .newEventSource(request, listener)
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun downloadImageAsBase64(url: String): ImageGenerationItem {
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
 
-        awaitClose {
-            eventSource.cancel()
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to download generated image: ${response.code} ${response.body.string()}")
         }
+
+        val body = response.body
+        val mimeType = body.contentType()?.toString() ?: "image/png"
+        val base64 = Base64.encode(body.bytes())
+
+        return ImageGenerationItem(
+            data = base64,
+            mimeType = mimeType
+        )
     }
 
     private fun File.imageMediaType(): String = when (extension.lowercase()) {
@@ -386,11 +371,6 @@ class OpenAIProvider(
         "webp" -> "image/webp"
         else -> "image/png"
     }
-
-    private fun JsonObject.forceImageStream(): JsonObject =
-        JsonObject(toMutableMap().apply {
-            put("stream", JsonPrimitive(true))
-        })
 
     companion object {
         private val SUPPORTED_EDIT_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
