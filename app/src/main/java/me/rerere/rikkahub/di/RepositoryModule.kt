@@ -11,6 +11,7 @@ import me.rerere.rikkahub.data.ai.memory.RecencyMemoryRecaller
 import me.rerere.rikkahub.data.ai.runtime.AppConversationReader
 import me.rerere.rikkahub.data.ai.runtime.AppMemoryReader
 import me.rerere.rikkahub.data.ai.runtime.AppMemoryWriter
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunCoordinator
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
@@ -31,7 +32,7 @@ import java.io.File
 
 val repositoryModule = module {
     single {
-        ConversationRepository(get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        ConversationRepository(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     // Neutral :ai-runtime contract adapters over the repos they wrap (issue #243 slice 3). Bound in
@@ -117,8 +118,51 @@ val repositoryModule = module {
         RootfsInstaller(get())
     }
 
+    // The background-shell coordinator (issue #291): the :app state machine that foreground-waits a
+    // shell run and either returns it inline or detaches it. PURE/DIP — it depends on the ShellRunStore
+    // seam, the process-lifetime AppScope (so a detached awaiter outlives the turn), the completion
+    // sink, and a startHandle lambda bound to WorkspaceManager.startShellRun. ChatService is resolved
+    // LAZILY inside onCompletion to avoid the startup init-order cycle (the coordinator is constructed
+    // before ChatService), mirroring the agent-event recovery runner's lazy ChatService resolution.
     single {
-        WorkspaceRepository(get(), get(), get(), get(), get())
+        val manager = get<WorkspaceManager>()
+        ShellRunCoordinator(
+            store = get(),
+            appScope = get<me.rerere.rikkahub.AppScope>(),
+            onCompletion = { completion ->
+                get<me.rerere.rikkahub.service.ChatService>().enqueueAgentEvent(
+                    conversationId = completion.conversationId,
+                    kind = completion.kind,
+                    payloadJson = completion.payloadJson,
+                    dedupeKey = completion.dedupeKey,
+                )
+            },
+            startHandle = { request ->
+                manager.startShellRun(
+                    root = request.root,
+                    command = request.command,
+                    cwd = request.cwd,
+                    workingDir = request.workingDir,
+                    outputFile = File(request.outputPath),
+                    hardTimeoutMillis = request.hardTimeoutMillis,
+                    sizeCapBytes = request.sizeCapBytes,
+                )
+            },
+        )
+    }
+
+    single {
+        val context: Context = get()
+        WorkspaceRepository(
+            dao = get(),
+            manager = get(),
+            rootfsInstaller = get(),
+            settingsStore = get(),
+            db = get(),
+            shellRunCoordinator = get(),
+            // App-private output dir for backgrounded shell runs (productDecision #3).
+            shellTasksDir = File(context.cacheDir, "workspace-shell-tasks"),
+        )
     }
 
     single<WorkspaceSheetStore> {

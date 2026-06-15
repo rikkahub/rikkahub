@@ -6,12 +6,16 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunCoordinator
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunRequest
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunResult
 import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.common.json.JsonInstant
+import me.rerere.workspace.DEFAULT_OUTPUT_SIZE_CAP_BYTES
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceCommandResult
@@ -21,6 +25,7 @@ import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import me.rerere.workspace.seededRelativeCwd
+import java.io.File
 import kotlin.uuid.Uuid
 
 class WorkspaceRepository(
@@ -29,6 +34,11 @@ class WorkspaceRepository(
     private val rootfsInstaller: RootfsInstaller,
     private val settingsStore: SettingsStore,
     private val db: AppDatabase,
+    private val shellRunCoordinator: ShellRunCoordinator,
+    // App-private directory the detachable shell runs stream their output to (productDecision #3:
+    // <cacheDir>/workspace-shell-tasks/<taskId>.output — chosen over /workspace/.rikkahub/tasks
+    // because the latter is shell-mutable). Read back only via the workspace_shell_tail tool.
+    private val shellTasksDir: File,
 ) {
     fun listFlow(): Flow<List<WorkspaceEntity>> = dao.listFlow()
 
@@ -283,6 +293,87 @@ class WorkspaceRepository(
             manager.executeCommand(workspace.root, command, cwd, workspace.workingDir, timeoutMillis)
         }
     }
+
+    /**
+     * Run a command that may AUTO-BACKGROUND (issue #291). Distinct from [executeCommand] — the
+     * blocking path is untouched. The [ShellRunCoordinator] owns the foreground-wait-and-maybe-detach
+     * state machine; this method only re-runs the SAME I-ENABLE guard ([isShellRunnable]) so
+     * NO_PROCESS_WHEN_DISABLED holds (a disabled/not-ready workspace returns the byte-identical
+     * "Shell is not enabled" result WITHOUT starting a process), resolves the app-private output file,
+     * and hands the run to the coordinator.
+     *
+     * @param detachAfterSeconds the foreground budget before the run backgrounds; null == never
+     *   detach (the coordinator then waits inline, identical to [executeCommand]'s result shape).
+     * @param hardTimeoutMillis the kill ceiling the handle's `await()` enforces (foreground +
+     *   detached); the size cap is [sizeCapBytes].
+     * @throws kotlinx.coroutines.CancellationException on a user stop during the foreground wait,
+     *   AFTER the run was detached under NonCancellable (STOP_IS_DETACH_NOT_KILL).
+     */
+    suspend fun startBackgroundCommand(
+        id: String,
+        conversationId: Uuid,
+        command: String,
+        cwd: String? = null,
+        detachAfterSeconds: Int?,
+        hardTimeoutMillis: Long,
+        sizeCapBytes: Long = DEFAULT_OUTPUT_SIZE_CAP_BYTES,
+    ): ShellRunResult {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        // I-ENABLE / NO_PROCESS_WHEN_DISABLED: the same guard executeCommand applies, BEFORE the
+        // coordinator can start a process. A disabled/not-ready workspace returns the byte-identical
+        // inline "Shell is not enabled" result and never spawns.
+        if (!isShellRunnable(workspace.shellEnabled, workspace.shellStatus)) {
+            return ShellRunResult.Inline(
+                WorkspaceCommandResult(
+                    exitCode = -1,
+                    stdout = "",
+                    stderr = "Shell is not enabled for this workspace",
+                    timedOut = false,
+                )
+            )
+        }
+        manager.ensureWorkspace(workspace.root)
+        val taskId = Uuid.random()
+        val outputFile = File(shellTasksDir, "$taskId.output")
+        return shellRunCoordinator.run(
+            request = ShellRunRequest(
+                workspaceId = id,
+                root = workspace.root,
+                conversationId = conversationId,
+                command = command,
+                cwd = cwd,
+                workingDir = workspace.workingDir,
+                outputPath = outputFile.absolutePath,
+                detachAfterSeconds = detachAfterSeconds,
+                hardTimeoutMillis = hardTimeoutMillis,
+                sizeCapBytes = sizeCapBytes,
+            ),
+            taskId = taskId,
+        )
+    }
+
+    /**
+     * Read the trailing [maxBytes] of a background shell run's app-private output file by [taskId]
+     * (issue #291). The output lives under [shellTasksDir] (app-private, NOT the workspace root), so
+     * workspace_read_file — which only reads under the workspace files root — cannot reach it; this is
+     * the read path the workspace_shell_tail tool uses. Returns "" when the file does not exist.
+     */
+    suspend fun tailShellRun(id: String, taskId: String, maxBytes: Int): String =
+        withContext(Dispatchers.IO) {
+            // Validate taskId is a canonical UUID string before interpolating into the file path.
+            // Without this a model-controlled taskId containing '..' or '/' could escape shellTasksDir.
+            val canonicalId = Uuid.parse(taskId).toString()
+            // id is accepted for symmetry/future per-workspace scoping; the output path is keyed by
+            // the random taskId, so it is already unambiguous.
+            val file = File(shellTasksDir, "$canonicalId.output")
+            if (!file.exists()) return@withContext ""
+            val length = file.length()
+            if (length <= maxBytes) return@withContext file.readText()
+            file.inputStream().use { stream ->
+                stream.skip(length - maxBytes)
+                stream.readBytes().toString(Charsets.UTF_8)
+            }
+        }
 
     suspend fun delete(id: String): Boolean {
         val workspace = dao.getById(id) ?: return false

@@ -72,4 +72,20 @@ class WorkspaceRepositoryShellEnableTest {
         assertFalse(isShellRunnable(shellEnabled = false, shellStatus = WorkspaceShellStatus.BROKEN.name))
         assertFalse(isShellRunnable(shellEnabled = true, shellStatus = WorkspaceShellStatus.BROKEN.name))
     }
+
+    // NO_PROCESS_WHEN_DISABLED for the auto-background entry point (issue #291): the new
+    // [WorkspaceRepository.startBackgroundCommand] re-runs the SAME [isShellRunnable] guard BEFORE the
+    // coordinator can start a process (it returns the byte-identical "Shell is not enabled" inline
+    // result on the disabled/not-ready path). So the disabled cases below also pin "the coordinator's
+    // startHandle is unreachable", exactly as they pin it for the blocking executeCommand sink — the
+    // predicate is the single chokepoint both shell entry points share, so duplicating it across a
+    // (Android-ctor-coupled) integration test would add no CI-runnable coverage the predicate lacks.
+    @Test
+    fun `background command obeys the same disabled guard`() {
+        // Disabled or not-ready -> the background entry must short-circuit before any process.
+        assertFalse(isShellRunnable(shellEnabled = false, shellStatus = ready))
+        assertFalse(isShellRunnable(shellEnabled = true, shellStatus = WorkspaceShellStatus.INSTALLING.name))
+        // Only the fully-runnable workspace admits a backgrounded process.
+        assertTrue(isShellRunnable(shellEnabled = true, shellStatus = ready))
+    }
 }

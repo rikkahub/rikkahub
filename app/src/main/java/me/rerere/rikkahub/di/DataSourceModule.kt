@@ -33,6 +33,9 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventRecoveryRunner
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventStore
 import me.rerere.rikkahub.data.ai.agentevent.RoomAgentEventStore
+import me.rerere.rikkahub.data.ai.shellrun.RoomShellRunStore
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunRecoveryRunner
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.repository.RoomBoardTransactionRunner
 import me.rerere.rikkahub.data.repository.TaskBoardRepository
@@ -329,6 +332,31 @@ val dataSourceModule = module {
         )
     }
 
+    // Durable shell-run state (issue #291): the background-shell coordinator persists every run's
+    // lifecycle here so a detach survives a turn (and a process kill is recovered honestly). Same
+    // posture as the agent-event store — persistence only, wrapped in one-transaction-per-op.
+    single { get<AppDatabase>().shellRunDao() }
+    single<ShellRunStore> {
+        RoomShellRunStore(
+            dao = get(),
+            transactions = RoomBoardTransactionRunner(get<AppDatabase>()),
+        )
+    }
+    // Cold-start recovery for shell runs (issue #291): folds every row left running by a process kill
+    // to INTERRUPTED_PROCESS_DEATH (never SUCCEEDED) and enqueues one honest interrupted event each.
+    // ChatService is resolved LAZILY inside the enqueue lambda (not at construction) to avoid the
+    // startup init-order cycle, exactly like AgentEventRecoveryRunner. dedupeKey=taskId keeps the
+    // enqueue AT_MOST_ONCE against any real completion that may have already won the terminal CAS.
+    single {
+        ShellRunRecoveryRunner(
+            store = get(),
+            enqueue = { conversationId, kind, payloadJson, dedupeKey ->
+                get<me.rerere.rikkahub.service.ChatService>()
+                    .enqueueAgentEvent(conversationId, kind, payloadJson, dedupeKey)
+            },
+        )
+    }
+
     // Cold-start recovery + retention composition root (SPEC.md M6, Success Criterion #4). Invoked
     // once from RikkaHubApp.onCreate: marks active task rows Interrupted (no replay) and sweeps
     // expired terminal runs / completed-deleted board items.
@@ -376,6 +404,10 @@ val dataSourceModule = module {
                 // Agent-event replay pass (issue #290), beside task recovery: observe-only at cold
                 // start (defers delivery to the next idle turn-end drain); swallows its own failures.
                 get<AgentEventRecoveryRunner>().runStartupReplay()
+                // Shell-run recovery pass (issue #291): fold every running shell row to
+                // INTERRUPTED_PROCESS_DEATH and enqueue an honest interrupted event; swallows its own
+                // failures. Runs after agent-event replay so its enqueue uses the same drained queue.
+                get<ShellRunRecoveryRunner>().runStartupRecovery()
             },
             reschedule = { get<me.rerere.rikkahub.data.ai.schedule.ScheduleRescheduler>().rescheduleOverdue() },
         )

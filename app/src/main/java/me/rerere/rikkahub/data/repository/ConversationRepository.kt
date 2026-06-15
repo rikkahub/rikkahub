@@ -19,6 +19,7 @@ import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.AgentEventDAO
+import me.rerere.rikkahub.data.db.dao.ShellRunDAO
 import me.rerere.rikkahub.data.db.dao.TaskRunDAO
 import me.rerere.rikkahub.data.db.dao.TaskScheduleDAO
 import me.rerere.rikkahub.data.db.dao.WorkItemDAO
@@ -42,6 +43,7 @@ class ConversationRepository(
     private val workItemDAO: WorkItemDAO,
     private val taskScheduleDAO: TaskScheduleDAO,
     private val agentEventDAO: AgentEventDAO,
+    private val shellRunDAO: ShellRunDAO,
 ) {
     companion object {
         private const val TAG = "ConversationRepository"
@@ -258,6 +260,9 @@ class ConversationRepository(
             // does not reach it; delete its rows in the SAME transaction so a deleted conversation
             // never orphans pending/consumed agent events (review finding #4).
             agentEventDAO.deleteByConversationId(conversation.id.toString())
+            // shell_runs likewise carries no foreign key to the conversation (#291). Delete in the
+            // same transaction so a deleted conversation never receives recovered/completion events.
+            shellRunDAO.deleteByConversationId(conversation.id.toString())
         }
         filesManager.deleteChatFiles(fullConversation.files)
     }

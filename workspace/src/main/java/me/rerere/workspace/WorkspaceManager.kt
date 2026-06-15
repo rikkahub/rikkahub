@@ -105,16 +105,58 @@ class WorkspaceManager(
         cwd: String? = null,
         workingDir: String = "",
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
-    ): WorkspaceCommandResult {
+    ): WorkspaceCommandResult =
+        shellRunner.execute(buildShellContext(root, command, cwd, workingDir, timeoutMillis))
+
+    /**
+     * Start [command] WITHOUT blocking on its result and hand back the [ShellRunHandle] that owns the
+     * spawned process (issue #291, PR-2). It resolves the cwd through the EXACT same central policy
+     * [executeCommand] uses (the shared [buildShellContext] helper, no copy), then delegates to the
+     * non-blocking seam [WorkspaceShellRunner.startShellRun] instead of the blocking
+     * [WorkspaceShellRunner.execute]. The foreground timeout the handle's `await()` enforces is the
+     * shell-specific [hardTimeoutMillis]; the size watchdog uses [sizeCapBytes]. [executeCommand] is
+     * untouched (the blocking path stays byte-identical).
+     */
+    fun startShellRun(
+        root: String,
+        command: String,
+        cwd: String? = null,
+        workingDir: String = "",
+        outputFile: File,
+        hardTimeoutMillis: Long,
+        sizeCapBytes: Long = DEFAULT_OUTPUT_SIZE_CAP_BYTES,
+    ): ShellRunHandle =
+        shellRunner.startShellRun(
+            buildShellContext(root, command, cwd, workingDir, hardTimeoutMillis),
+            outputFile,
+            sizeCapBytes,
+        )
+
+    /**
+     * The shared cwd-resolution + context-build both shell entry points use (Linus: one logical
+     * resolution, no drift between the blocking and non-blocking paths). Resolves [cwd] through the
+     * ONE central policy [WorkspaceCwdPolicy.resolveRelative]/[seededRelativeCwd] so the value handed
+     * to the runner — and thus mapped to PRoot `-w` — is the SAME normalized value the sideload
+     * terminal derives (W-I6):
+     *
+     *  - [cwd] is NULLABLE. `null` == ABSENT (fall back to [workingDir]/the scratch default); an
+     *    explicit `""`/`"."` == the files root.
+     *  - resolution order is explicit-override > [workingDir] > default `.xcloudz/scratch`.
+     *  - an ABSENT cwd over an UNSET [workingDir] materializes the default scratch dir via
+     *    [seededRelativeCwd] (mkdir-p, clobber-safe) so the resolved directory actually exists.
+     */
+    private fun buildShellContext(
+        root: String,
+        command: String,
+        cwd: String?,
+        workingDir: String,
+        timeoutMillis: Long,
+    ): WorkspaceShellContext {
         require(command.isNotBlank()) { "Command is required" }
         val files = filesDir(root)
         val override =
             if (cwd == null) WorkspaceCwdPolicy.CwdOverride.Absent
             else WorkspaceCwdPolicy.CwdOverride.Explicit(cwd)
-        // ABSENT routes through the SAME [seededRelativeCwd] the sideload terminal uses, so the exec
-        // `-w` and the terminal `-w` are the IDENTICAL normalized value for a given workspace (W-I6).
-        // seededRelativeCwd materializes the scratch default clobber-safely on the unset path; an
-        // EXPLICIT override stays on the central policy resolver (override > files-root, no auto-mkdir).
         val resolved: String = when (override) {
             is WorkspaceCwdPolicy.CwdOverride.Absent -> seededRelativeCwd(files, workingDir)
             is WorkspaceCwdPolicy.CwdOverride.Explicit -> WorkspaceCwdPolicy.resolveRelative(override, workingDir)
@@ -122,18 +164,15 @@ class WorkspaceManager(
         val workingDirFile: File = fileSystem.resolve(files, resolved)
         require(workingDirFile.exists()) { "Working directory does not exist: $resolved" }
         require(workingDirFile.isDirectory) { "Working path is not a directory: $resolved" }
-
-        return shellRunner.execute(
-            WorkspaceShellContext(
-                root = root,
-                command = command,
-                cwd = resolved,
-                filesDir = files,
-                linuxDir = linuxDir(root),
-                tempDir = tempDir(root),
-                workingDir = workingDirFile,
-                timeoutMillis = timeoutMillis,
-            )
+        return WorkspaceShellContext(
+            root = root,
+            command = command,
+            cwd = resolved,
+            filesDir = files,
+            linuxDir = linuxDir(root),
+            tempDir = tempDir(root),
+            workingDir = workingDirFile,
+            timeoutMillis = timeoutMillis,
         )
     }
 

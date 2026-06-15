@@ -15,6 +15,7 @@ import me.rerere.rikkahub.data.db.dao.KnowledgeChunkDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MemoryVectorDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
+import me.rerere.rikkahub.data.db.dao.ShellRunDAO
 import me.rerere.rikkahub.data.db.dao.TaskRunDAO
 import me.rerere.rikkahub.data.db.dao.TaskScheduleDAO
 import me.rerere.rikkahub.data.db.dao.WorkItemDAO
@@ -28,6 +29,7 @@ import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.db.entity.MemoryVectorEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 import me.rerere.rikkahub.data.db.entity.TaskRunEntity
 import me.rerere.rikkahub.data.db.entity.TaskScheduleEntity
 import me.rerere.rikkahub.data.db.entity.WorkItemDependencyEntity
@@ -52,9 +54,10 @@ import me.rerere.common.json.JsonInstant
         WorkItemEntity::class,
         WorkItemDependencyEntity::class,
         TaskScheduleEntity::class,
-        AgentEventEntity::class
+        AgentEventEntity::class,
+        ShellRunEntity::class
     ],
-    version = 28,
+    version = 29,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -80,6 +83,9 @@ import me.rerere.common.json.JsonInstant
         // 27 -> 28 is purely additive (one new table: agent_events, issue #290); no existing table
         // is altered, so Room derives the migration from the exported schemas without a spec.
         AutoMigration(from = 27, to = 28),
+        // 28 -> 29 is purely additive (one new table: shell_runs, issue #291); no existing table is
+        // altered, so Room derives the migration from the exported schemas without a spec.
+        AutoMigration(from = 28, to = 29),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -109,6 +115,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskScheduleDao(): TaskScheduleDAO
 
     abstract fun agentEventDao(): AgentEventDAO
+
+    abstract fun shellRunDao(): ShellRunDAO
 }
 
 object TokenUsageConverter {

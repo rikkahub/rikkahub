@@ -13,10 +13,14 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceStorageArea
+import kotlin.uuid.Uuid
 
 val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_list_files" to false,
     "workspace_read_file" to false,
+    // workspace_shell_tail reads a background run's app-private output by taskId — a read, so it
+    // defaults to no-approval like the other read verbs (issue #291).
+    "workspace_shell_tail" to false,
     // I-APPROVE (#197 HP-1, design note §4.2): arbitrary write/edit must break the auto-loop like
     // shell/delete/move — an LLM-driven write is a write-capable sink, not a read.
     "workspace_write_file" to true,
@@ -38,6 +42,10 @@ fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>?)
 
 suspend fun createWorkspaceTools(
     workspaceId: String?,
+    // The conversation this tool pool serves. The background-shell completion (issue #291) is routed
+    // back into THIS conversation as a synthetic #290 event; Tool.execute has no toolCallId, so the
+    // conversation is threaded through the factory rather than recovered from the args.
+    conversationId: Uuid,
     workspaceRepository: WorkspaceRepository,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
@@ -59,7 +67,7 @@ suspend fun createWorkspaceTools(
     return listOf(
         createListFilesTool(workspaceId, ::needsApproval, workspaceRepository),
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
-    ) + sideloadWorkspaceTools(workspaceId, workspaceRepository, ::needsApproval)
+    ) + sideloadWorkspaceTools(workspaceId, conversationId, workspaceRepository, ::needsApproval)
 }
 
 private fun createListFilesTool(

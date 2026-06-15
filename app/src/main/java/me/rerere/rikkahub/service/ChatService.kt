@@ -35,7 +35,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.toJavaLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
@@ -293,6 +295,28 @@ internal fun finishInterruptedPendingToolsForNewSend(
             }
         )
     )
+}
+
+/**
+ * STOP_IS_DETACH_NOT_KILL (issue #291): whether an interrupted (not-yet-executed) tool part is a
+ * `workspace_shell` run that a user stop should BACKGROUND rather than finalize as cancelled. The
+ * coordinator already persisted the run DETACHED under NonCancellable and launched the detached
+ * awaiter; the completion arrives later as a synthetic #290 event. So the turn finalizer must leave
+ * this part pending instead of stamping `{status:cancelled}` over a run that is still alive. PURE so
+ * the predicate is JVM-testable without the service. A backgrounded run is necessarily NOT executed
+ * (the coordinator rethrew cancellation rather than returning inline output); an inline-exited or
+ * killed run already has output and never reaches the finalizer.
+ */
+internal fun shouldBackgroundShellOnStop(tool: UIMessagePart.Tool): Boolean {
+    if (tool.isExecuted) return false
+    if (tool.isPending) return false  // approval-pending → cancel normally; no process started yet
+    if (tool.toolName != "workspace_shell") return false
+    // Only detach if the call explicitly opted in (detachAfterSeconds > 0). Default-kill shells
+    // (detachAfterSeconds absent/null) are cancelled normally — no completion event ever arrives
+    // for them, so leaving them pending would strand the tool part forever.
+    val secs = tool.inputAsJson().jsonObject["detachAfterSeconds"]
+        ?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+    return secs != null && secs > 0
 }
 
 // 自动压缩保留的最近消息数：与手动压缩对话框（CompressContextDialog）的默认值一致。
@@ -1542,7 +1566,7 @@ class ChatService(
                             addAll(createSearchTools(settings))
                         }
                         addAll(localTools.getTools(assistant.localTools))
-                        addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository))
+                        addAll(createWorkspaceTools(assistant.workspaceId?.toString(), conversationId, workspaceRepository))
                         // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
                         // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
                         // unless automation is enabled AND a guard was minted; each tool authorizes via the
@@ -1855,6 +1879,13 @@ class ChatService(
     }
 
     private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {
+        // STOP_IS_DETACH_NOT_KILL (issue #291): a user stop during a workspace_shell foreground wait
+        // BACKGROUNDS the run (the coordinator persisted DETACHED under NonCancellable and launched a
+        // detached awaiter on AppScope), it does NOT kill it. So a still-pending workspace_shell tool
+        // part at finalize time must NOT be stamped {status:cancelled} — its completion arrives later
+        // as a synthetic #290 event. Leave it unchanged; finishPendingTools then skips it. Every other
+        // interrupted tool is still finalized as cancelled.
+        if (shouldBackgroundShellOnStop(tool)) return tool
         return tool.copy(
             output = listOf(
                 UIMessagePart.Text(
