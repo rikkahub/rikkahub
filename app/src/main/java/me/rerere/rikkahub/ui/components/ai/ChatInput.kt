@@ -73,6 +73,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -505,6 +506,7 @@ fun ChatInput(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .size(30.dp)
+                                    .testTag("chat_send_button")
                                     .clip(CircleShape)
                                     .combinedClickable(
                                         enabled = loading || !state.isEmpty(),
@@ -738,6 +740,7 @@ private fun TextInputRow(
             state = state.textContent,
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag("chat_input")
                 .contentReceiver(receiveContentListener)
                 .onFocusChanged {
                     isFocused = it.isFocused
