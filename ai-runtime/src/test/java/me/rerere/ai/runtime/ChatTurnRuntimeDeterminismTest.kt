@@ -9,6 +9,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.Tool
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
@@ -36,7 +37,9 @@ import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 import org.junit.Test
@@ -74,13 +77,18 @@ class ChatTurnRuntimeDeterminismTest {
         private val script: List<MessageChunk>,
     ) : Provider<ProviderSetting> {
         var sentMessages: List<UIMessage>? = null
+        var sentParams: TextGenerationParams? = null
 
         override suspend fun listModels(providerSetting: ProviderSetting): List<Model> = emptyList()
         override suspend fun generateText(
             providerSetting: ProviderSetting,
             messages: List<UIMessage>,
             params: TextGenerationParams,
-        ): MessageChunk = error("unused")
+        ): MessageChunk {
+            sentMessages = messages
+            sentParams = params
+            return script.first()
+        }
 
         override suspend fun streamText(
             providerSetting: ProviderSetting,
@@ -88,6 +96,7 @@ class ChatTurnRuntimeDeterminismTest {
             params: TextGenerationParams,
         ): Flow<MessageChunk> {
             sentMessages = messages
+            sentParams = params
             return flow { script.forEach { emit(it) } }
         }
 
@@ -202,14 +211,18 @@ class ChatTurnRuntimeDeterminismTest {
         UIMessage(role = MessageRole.ASSISTANT, parts = emptyList()),
     )
 
-    private fun runtime(provider: Provider<ProviderSetting>, reader: ConversationReader): ChatTurnRuntime =
+    private fun runtime(
+        provider: Provider<ProviderSetting>,
+        reader: ConversationReader,
+        logSink: RecordingLogSink = RecordingLogSink(),
+    ): ChatTurnRuntime =
         ChatTurnRuntime(
             json = json,
             resolver = FixedResolver(provider),
             memoryWriter = noopMemoryWriter,
             conversationReader = reader,
             clock = FixedRuntimeClock(fixedInstant, TimeZone.UTC),
-            logSink = RecordingLogSink(),
+            logSink = logSink,
             generationLog = noopGenerationLog,
         )
 
@@ -284,6 +297,66 @@ class ChatTurnRuntimeDeterminismTest {
         val systemWithTools = withToolProvider.sentMessages!!.first { it.role == MessageRole.SYSTEM }.toText()
         assertTrue("untrusted-tool clause present with tools", systemWithTools.contains("untrusted DATA"))
         assertTrue(systemWithTools.indexOf("SYSTEM_MARKER") < systemWithTools.indexOf("untrusted DATA"))
+    }
+
+    @Test
+    fun `tool schema budget exhaustion retries provider turn without tools`() = runBlocking {
+        val fake = FakeProvider(listOf(chunk(UIMessagePart.Text("ok"))))
+        val logSink = RecordingLogSink()
+        val smallWindowModel = model.copy(contextWindow = 1_002)
+        val hugeTool = Tool(
+            name = "huge_schema_tool",
+            description = "schema ".repeat(5_000),
+            execute = { emptyList() },
+        )
+
+        runtime(fake, emptyConversationReader(), logSink).run(
+            turn = TurnConfig(defaultModelId = smallWindowModel.id, providers = listOf(provider), assistants = emptyList()),
+            model = smallWindowModel,
+            messages = seed(),
+            assistant = assistant(systemPrompt = "SYSTEM_MARKER"),
+            transforms = identityTransforms,
+            tools = listOf(hugeTool),
+        ).toList()
+
+        assertTrue(fake.sentParams!!.tools.isEmpty())
+        val systemMessage = fake.sentMessages!!.first { it.role == MessageRole.SYSTEM }.toText()
+        assertTrue(systemMessage.contains("SYSTEM_MARKER"))
+        assertFalse(systemMessage.contains("untrusted DATA"))
+        assertTrue(logSink.lines.any { it.level == "warn" && it.msg.contains("retrying without tools") })
+    }
+
+    @Test
+    fun `irreducible over-budget payload fails before provider send`() = runBlocking {
+        val fake = FakeProvider(listOf(chunk(UIMessagePart.Text("ok"))))
+        val logSink = RecordingLogSink()
+        val smallWindowModel = model.copy(contextWindow = 1_002)
+        val irreducibleMessage = UIMessage(
+            role = MessageRole.USER,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = "oversized",
+                    toolName = "oversized",
+                    input = "x".repeat(20_000),
+                )
+            )
+        )
+
+        try {
+            runtime(fake, emptyConversationReader(), logSink).run(
+                turn = TurnConfig(defaultModelId = smallWindowModel.id, providers = listOf(provider), assistants = emptyList()),
+                model = smallWindowModel,
+                messages = listOf(irreducibleMessage),
+                assistant = assistant(),
+                transforms = identityTransforms,
+            ).toList()
+            fail("expected loop-safe budget failure")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("cannot satisfy loop-safe provider payload budget"))
+        }
+
+        assertNull(fake.sentMessages)
+        assertTrue(logSink.lines.any { it.level == "error" && it.msg.contains("after fitting") })
     }
 
     /**

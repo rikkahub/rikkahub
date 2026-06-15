@@ -14,8 +14,13 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
+import me.rerere.ai.core.computeAllowedTokens
+import me.rerere.ai.core.estimatedToolSchemaTokens
 import me.rerere.ai.core.estimateTokens
+import me.rerere.ai.core.estimateTokensForMessages
+import me.rerere.ai.core.fitToWindow
 import me.rerere.ai.core.merge
+import me.rerere.ai.core.resolveReserveOutput
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
@@ -44,6 +49,7 @@ import me.rerere.ai.runtime.knowledge.KnowledgeScope
 import me.rerere.ai.runtime.knowledge.KnowledgeSource
 import me.rerere.ai.runtime.memory.buildMemoryTools
 import me.rerere.ai.runtime.memory.memoryAgeLabel
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.ToolCallExecutionState
 import me.rerere.ai.ui.UIMessage
@@ -54,6 +60,7 @@ import me.rerere.ai.ui.toolCallExecutionState
 import me.rerere.common.json.JsonInstantPretty
 
 private const val TAG = "ChatTurnRuntime"
+private const val MIN_VIABLE_PROVIDER_PAYLOAD_BUDGET = 256
 
 // I-DELIMIT standing clause (#197 design note §4.5). Kept terse and provider-agnostic; appended to the
 // system prompt whenever the generation exposes tools (see buildInternalSystemPrompt).
@@ -329,18 +336,63 @@ class ChatTurnRuntime(
         stream: Boolean,
         conversationSystemPrompt: String?,
     ) {
+        val window = ModelRegistry.getContextWindowForModel(model)
+        val allowedTokens = computeAllowedTokens(window, resolveReserveOutput(assistant.maxTokens))
+        val toolSchemaTokens = estimatedToolSchemaTokens(tools)
+        val requestedPayloadBudget = allowedTokens - toolSchemaTokens
+        val effectiveTools = if (requestedPayloadBudget <= MIN_VIABLE_PROVIDER_PAYLOAD_BUDGET && tools.isNotEmpty()) {
+            logSink.warn(
+                TAG,
+                "generateInternal: tool schema consumes prompt budget; retrying without tools " +
+                    "allowed=$allowedTokens schema=$toolSchemaTokens requestedBudget=$requestedPayloadBudget"
+            )
+            emptyList()
+        } else {
+            tools
+        }
+        val payloadBudget = if (effectiveTools.isEmpty() && tools.isNotEmpty()) {
+            allowedTokens
+        } else {
+            requestedPayloadBudget
+        }
+        if (payloadBudget <= MIN_VIABLE_PROVIDER_PAYLOAD_BUDGET) {
+            val message = "generateInternal: cannot satisfy loop-safe provider payload budget " +
+                "allowed=$allowedTokens schema=$toolSchemaTokens budget=$payloadBudget tools=${tools.size}"
+            logSink.error(TAG, message)
+            error(message)
+        }
+
         val internalMessages = buildList {
             val system = buildInternalSystemPrompt(
                 assistant = assistant,
                 model = model,
                 messages = messages,
                 memories = memories,
-                tools = tools,
+                tools = effectiveTools,
                 conversationSystemPrompt = conversationSystemPrompt,
             )
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
             addAll(messages.limitContext(assistant.contextMessageSize))
         }.let { transforms.transformInput(it) }
+        val fit = internalMessages.fitToWindow(budget = payloadBudget)
+        val providerMessages = fit.payload
+        if (fit.elidedTokens > 0 || fit.droppedCount > 0 || fit.overBudget) {
+            val beforeTokens = estimateTokensForMessages(internalMessages)
+            val afterTokens = estimateTokensForMessages(providerMessages)
+            logSink.info(
+                TAG,
+                "generateInternal: context fit fired " +
+                    "before=$beforeTokens after=$afterTokens budget=$payloadBudget " +
+                    "elidedTokens=${fit.elidedTokens} droppedCount=${fit.droppedCount} overBudget=${fit.overBudget}"
+            )
+        }
+        if (fit.overBudget) {
+            val afterTokens = estimateTokensForMessages(providerMessages)
+            val message = "generateInternal: cannot satisfy loop-safe provider payload budget after fitting " +
+                "after=$afterTokens budget=$payloadBudget"
+            logSink.error(TAG, message)
+            error(message)
+        }
 
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
@@ -348,7 +400,7 @@ class ChatTurnRuntime(
             temperature = assistant.temperature,
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
-            tools = tools,
+            tools = effectiveTools,
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
@@ -360,10 +412,10 @@ class ChatTurnRuntime(
             }
         )
         if (stream) {
-            generationLog.onGeneration(messages, params, provider, stream = true)
+            generationLog.onGeneration(providerMessages, params, provider, stream = true)
             providerImpl.streamText(
                 providerSetting = provider,
-                messages = internalMessages,
+                messages = providerMessages,
                 params = params
             ).collect {
                 messages = messages.handleMessageChunk(chunk = it, model = model)
@@ -379,10 +431,10 @@ class ChatTurnRuntime(
                 onUpdateMessages(messages)
             }
         } else {
-            generationLog.onGeneration(messages, params, provider, stream = false)
+            generationLog.onGeneration(providerMessages, params, provider, stream = false)
             val chunk = providerImpl.generateText(
                 providerSetting = provider,
-                messages = internalMessages,
+                messages = providerMessages,
                 params = params,
             )
             messages = messages.handleMessageChunk(chunk = chunk, model = model)
