@@ -17,7 +17,7 @@
 
 ## 🚀 下載
 
-🔗 [前往官網下載](https://rikka-ai.com/download)
+🔗 [前往官網下載](https://rikka-ai.com/download)（推薦）
 🔗 [前往 Google Play 下載](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
 ## 💖 贊助商
