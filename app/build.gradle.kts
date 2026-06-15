@@ -11,6 +11,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -248,6 +249,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.paging)
+    baselineProfile(project(":app:baselineprofile"))
     ksp(libs.androidx.room.compiler)
 
     // Paging3
