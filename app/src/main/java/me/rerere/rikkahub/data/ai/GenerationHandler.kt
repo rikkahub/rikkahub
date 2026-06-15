@@ -488,41 +488,29 @@ class GenerationHandler(
         val nonTextParts = output.filter { it !is UIMessagePart.Text }
         val totalChars = textParts.sumOf { it.text.length }
 
-        if (totalChars <= MAX_TOOL_OUTPUT_CHARS) return output
+        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return output
 
         Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
 
         val fullText = textParts.joinToString("\n") { it.text }
         val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
 
-        if (hasShellAccess) {
-            val fileName = "${toolCallId}.txt"
-            val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
-            File(outputDir, fileName).writeText(fullText)
+        val fileName = "${toolCallId}.txt"
+        val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
+        File(outputDir, fileName).writeText(fullText)
 
-            return listOf(
-                UIMessagePart.Text(
-                    buildString {
-                        appendLine("[Tool output truncated: $totalChars characters total]")
-                        appendLine("Full output saved to: /tool_outputs/$fileName")
-                        appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
-                        appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
-                        appendLine()
-                        append(preview)
-                    }
-                )
-            ) + nonTextParts
-        } else {
-            return listOf(
-                UIMessagePart.Text(
-                    buildString {
-                        appendLine("[Tool output truncated: showing first $TOOL_OUTPUT_PREVIEW_CHARS of $totalChars characters]")
-                        appendLine()
-                        append(preview)
-                    }
-                )
-            ) + nonTextParts
-        }
+        return listOf(
+            UIMessagePart.Text(
+                buildString {
+                    appendLine("[Tool output truncated: $totalChars characters total]")
+                    appendLine("Full output saved to: /tool_outputs/$fileName")
+                    appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
+                    appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
+                    appendLine()
+                    append(preview)
+                }
+            )
+        ) + nonTextParts
     }
 
     fun translateText(
