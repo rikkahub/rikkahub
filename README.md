@@ -35,6 +35,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 ## ✨ Features
 
 - 🎨 Material You Design and 🌙 Dark mode
+- 📦 Workspace: a proot-based Linux agent environment
 - 🔄 Multiple AI Provider Support: custom API / URL / models (all OpenAI, Google, Anthropic compatible api)
 - 🖼️ Multimodal input support (Image, Text Documentation, PDF, Docx)
 - 🖥️ Web access for multi-platform use
@@ -65,10 +66,9 @@ Technology stack documentation:
 - [Room](https://developer.android.com/training/data-storage/room) (Database)
 - [Coil](https://coil-kt.github.io/coil/) (Image loading)
 - [Material You](https://m3.material.io/) (UI design)
-- [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation) (Navigation)
+- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (Navigation)
 - [Okhttp](https://square.github.io/okhttp/) (HTTP client)
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
-- [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (Icon library)
 
 > [!TIP]
 > You need a `google-services.json` file at `app` folder to build the app.

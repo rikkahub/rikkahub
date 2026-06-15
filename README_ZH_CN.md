@@ -32,8 +32,8 @@
 
 ## ✨ 功能特色
 
-- 🎨 现代化安卓APP设计（Material You / 预测性返回）
-- 🌙 暗色模式
+- 🎨 现代化安卓APP设计（Material You / 预测性返回）和 🌙 暗色模式
+- 📦 工作区：基于 proot 的 Linux 智能体环境
 - 🖥️ Web多端访问支持
 - 🛠️ MCP 支持
 - 🔄 多种类型的供应商支持，自定义 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
@@ -61,10 +61,9 @@
 - [Room](https://developer.android.com/training/data-storage/room) (数据库)
 - [Coil](https://coil-kt.github.io/coil/) (图片加载)
 - [Material You](https://m3.material.io/) (UI 设计)
-- [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation) (导航)
+- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (导航)
 - [Okhttp](https://square.github.io/okhttp/) (HTTP 客户端)
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
-- [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (图标库)
 
 > [!TIP]
 > 你需要在 `app` 文件夹下添加 `google-services.json` 文件才能构建应用。
