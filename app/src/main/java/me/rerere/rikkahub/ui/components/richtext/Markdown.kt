@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ClipEntry
@@ -960,6 +961,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
             columnMinWidths = List(columnCount) { 80.dp },
             columnMaxWidths = List(columnCount) { 200.dp },
             outerBorder = null,
+            shape = RectangleShape,
         )
     }
 }
