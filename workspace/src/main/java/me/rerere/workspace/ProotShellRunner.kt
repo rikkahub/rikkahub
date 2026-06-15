@@ -1,6 +1,8 @@
 package me.rerere.workspace
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
 
 data class WorkspaceBindMount(
     val source: File,
@@ -88,19 +90,11 @@ class ProotShellRunner(
             }
         }
 
+        val shell = context.linuxDir.rootfsShell()
         command += listOf(
-            "/usr/bin/env",
-            "-i",
-            "HOME=/root",
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            "TERM=xterm-256color",
-            "LANG=C.UTF-8",
-            "LC_ALL=C.UTF-8",
-            "/bin/bash",
-            "-l",
-            "-c",
-            // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
-            "cd -- \"\$1\" && eval \"\$2\"",
+            shell.path,
+            shell.commandFlag,
+            "export HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm-256color LANG=C.UTF-8 LC_ALL=C.UTF-8 USER=root SHELL=${shell.path}; cd -- \"\$1\" && eval \"\$2\"",
             "rikkahub",
             context.prootCwd(),
             context.command,
@@ -118,11 +112,31 @@ class ProotShellRunner(
     }
 
     private fun File.hasUsableRootfs(): Boolean =
-        isDirectory && File(this, "bin/sh").isFile
+        isDirectory && rootfsShellOrNull() != null
+
+    private fun File.rootfsShell(): RootfsShell =
+        rootfsShellOrNull() ?: RootfsShell("/bin/sh", "-c")
+
+    private fun File.rootfsShellOrNull(): RootfsShell? = ROOTFS_SHELLS.firstOrNull { shell ->
+        Files.exists(File(this, shell.path.trimStart('/')).toPath(), LinkOption.NOFOLLOW_LINKS)
+    }
+
+    private data class RootfsShell(
+        val path: String,
+        val commandFlag: String,
+    )
 
     private companion object {
         private const val PROOT_EXEC = "libproot_exec.so"
         private const val PROOT_LOADER = "libproot_loader.so"
         private const val WORKSPACE_DIR = "/workspace"
+        private val ROOTFS_SHELLS = listOf(
+            RootfsShell("/bin/bash", "-lc"),
+            RootfsShell("/usr/bin/bash", "-lc"),
+            RootfsShell("/bin/ash", "-c"),
+            RootfsShell("/bin/dash", "-c"),
+            RootfsShell("/bin/sh", "-c"),
+            RootfsShell("/usr/bin/sh", "-c"),
+        )
     }
 }

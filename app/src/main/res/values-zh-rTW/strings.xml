@@ -1151,8 +1151,11 @@
   <string name="workspace_detail_tool_delete_file">刪除檔案</string>
   <string name="workspace_detail_tool_move_file">移動檔案</string>
   <string name="workspace_detail_tool_shell">執行命令</string>
-  <string name="workspace_detail_install_rootfs_desc">將下載 tar.gz 並解壓縮到 %s 的 linux 目錄。</string>
-  <string name="workspace_detail_download_url">tar.gz 下載網址</string>
+  <string name="workspace_detail_install_rootfs_desc">選擇 Rootfs 安裝方式。</string>
+  <string name="workspace_detail_install_rootfs_url_desc">將下載 tar.gz 或 tar.xz 並解壓縮到 %s 的 linux 目錄。</string>
+  <string name="workspace_detail_install_from_local">本地檔案</string>
+  <string name="workspace_detail_install_from_url">URL</string>
+  <string name="workspace_detail_download_url">Rootfs 壓縮包 URL</string>
   <string name="workspace_detail_area_files">檔案</string>
   <string name="workspace_detail_area_rootfs">Rootfs</string>
   <string name="workspace_detail_empty_directory">空目錄</string>
@@ -1161,6 +1164,7 @@
   <string name="workspace_detail_shell_ready">就緒</string>
   <string name="workspace_detail_shell_broken">錯誤</string>
   <string name="workspace_detail_downloading">正在下載 %1$s%2$s</string>
+  <string name="workspace_detail_uploading">正在上傳 %1$s%2$s</string>
   <string name="workspace_detail_extracting">正在提取 %1$d 個項目%2$s</string>
   <string name="workspace_detail_install_complete">安裝完成</string>
   <string name="workspace_terminal_title">終端</string>

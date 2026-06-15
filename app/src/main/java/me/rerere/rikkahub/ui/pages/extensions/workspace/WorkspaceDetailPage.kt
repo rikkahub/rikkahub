@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -95,18 +97,22 @@ fun WorkspaceDetailPage(id: String) {
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
-    var showInstallDialog by remember { mutableStateOf(false) }
+    var showInstallChoiceDialog by remember { mutableStateOf(false) }
+    var showUrlInstallDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val rootfsPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val fileName = context.displayName(uri) ?: uri.lastPathSegment ?: "rootfs.tar.gz"
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return@rememberLauncherForActivityResult
+        vm.installRootfs(fileName, inputStream)
+    }
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val fileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (nameIndex >= 0) cursor.getString(nameIndex) else null
-            } else null
-        } ?: uri.lastPathSegment ?: "imported_file"
+        val fileName = context.displayName(uri) ?: uri.lastPathSegment ?: "imported_file"
         val inputStream = context.contentResolver.openInputStream(uri) ?: return@rememberLauncherForActivityResult
         vm.importFile(inputStream, fileName)
     }
@@ -183,7 +189,7 @@ fun WorkspaceDetailPage(id: String) {
                 0 -> WorkspaceBasicPage(
                     workspace = state.workspace,
                     installProgress = installProgress,
-                    onInstallRootfs = { showInstallDialog = true },
+                    onInstallRootfs = { showInstallChoiceDialog = true },
                     onToolApprovalChange = vm::setToolApproval,
                 )
 
@@ -219,13 +225,26 @@ fun WorkspaceDetailPage(id: String) {
     }
 
     state.workspace?.let { workspace ->
-        if (showInstallDialog) {
-            InstallRootfsDialog(
+        if (showInstallChoiceDialog) {
+            RootfsInstallChoiceDialog(
+                onDismiss = { showInstallChoiceDialog = false },
+                onLocalInstall = {
+                    showInstallChoiceDialog = false
+                    rootfsPicker.launch(arrayOf("application/gzip", "application/x-gzip", "application/x-xz", "application/octet-stream", "*/*"))
+                },
+                onUrlInstall = {
+                    showInstallChoiceDialog = false
+                    showUrlInstallDialog = true
+                },
+            )
+        }
+        if (showUrlInstallDialog) {
+            InstallRootfsUrlDialog(
                 workspace = workspace,
-                onDismiss = { showInstallDialog = false },
+                onDismiss = { showUrlInstallDialog = false },
                 onConfirm = { url ->
                     vm.installRootfs(url)
-                    showInstallDialog = false
+                    showUrlInstallDialog = false
                 },
             )
         }
@@ -459,7 +478,7 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
         val fraction = progress.totalBytes?.takeIf { it > 0 }?.let {
             (progress.bytesRead.toFloat() / it).coerceIn(0f, 1f)
         }
-        if (fraction != null && progress.stage == RootfsInstallStage.DOWNLOADING) {
+        if (fraction != null && progress.stage in listOf(RootfsInstallStage.DOWNLOADING, RootfsInstallStage.UPLOADING)) {
             LinearProgressIndicator(
                 progress = { fraction },
                 modifier = Modifier.fillMaxWidth(),
@@ -472,6 +491,11 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
                 RootfsInstallStage.DOWNLOADING -> {
                     val total = progress.totalBytes?.let { " / ${formatBytes(it)}" }.orEmpty()
                     stringResource(R.string.workspace_detail_downloading, formatBytes(progress.bytesRead), total)
+                }
+
+                RootfsInstallStage.UPLOADING -> {
+                    val total = progress.totalBytes?.let { " / ${formatBytes(it)}" }.orEmpty()
+                    stringResource(R.string.workspace_detail_uploading, formatBytes(progress.bytesRead), total)
                 }
 
                 RootfsInstallStage.EXTRACTING -> {
@@ -490,7 +514,30 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
 }
 
 @Composable
-private fun InstallRootfsDialog(
+private fun RootfsInstallChoiceDialog(
+    onDismiss: () -> Unit,
+    onLocalInstall: () -> Unit,
+    onUrlInstall: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.workspace_detail_install_rootfs)) },
+        text = { Text(stringResource(R.string.workspace_detail_install_rootfs_desc)) },
+        confirmButton = {
+            TextButton(onClick = onLocalInstall) {
+                Text(stringResource(R.string.workspace_detail_install_from_local))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onUrlInstall) {
+                Text(stringResource(R.string.workspace_detail_install_from_url))
+            }
+        },
+    )
+}
+
+@Composable
+private fun InstallRootfsUrlDialog(
     workspace: WorkspaceEntity,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
@@ -499,11 +546,11 @@ private fun InstallRootfsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.workspace_detail_install_rootfs)) },
+        title = { Text(stringResource(R.string.workspace_detail_install_from_url)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = stringResource(R.string.workspace_detail_install_rootfs_desc, workspace.name),
+                    text = stringResource(R.string.workspace_detail_install_rootfs_url_desc, workspace.name),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -781,6 +828,13 @@ private fun ErrorCard(message: String) {
             color = MaterialTheme.colorScheme.error,
         )
     }
+}
+
+private fun Context.displayName(uri: Uri): String? = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+    if (cursor.moveToFirst()) {
+        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (nameIndex >= 0) cursor.getString(nameIndex) else null
+    } else null
 }
 
 private fun formatBytes(bytes: Long): String {

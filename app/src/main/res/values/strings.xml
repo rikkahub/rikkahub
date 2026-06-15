@@ -1154,8 +1154,11 @@
   <string name="workspace_detail_tool_delete_file">Delete File</string>
   <string name="workspace_detail_tool_move_file">Move File</string>
   <string name="workspace_detail_tool_shell">Execute Command</string>
-  <string name="workspace_detail_install_rootfs_desc">Will download tar.gz and extract to the linux directory of %s.</string>
-  <string name="workspace_detail_download_url">tar.gz download URL</string>
+  <string name="workspace_detail_install_rootfs_desc">Choose how to install Rootfs.</string>
+  <string name="workspace_detail_install_rootfs_url_desc">Will download tar.gz or tar.xz and extract to the linux directory of %s.</string>
+  <string name="workspace_detail_install_from_local">Local file</string>
+  <string name="workspace_detail_install_from_url">URL</string>
+  <string name="workspace_detail_download_url">Rootfs archive URL</string>
   <string name="workspace_detail_area_files">Files</string>
   <string name="workspace_detail_area_rootfs">Rootfs</string>
   <string name="workspace_detail_empty_directory">Empty directory</string>
@@ -1164,6 +1167,7 @@
   <string name="workspace_detail_shell_ready">Ready</string>
   <string name="workspace_detail_shell_broken">Error</string>
   <string name="workspace_detail_downloading">Downloading %1$s%2$s</string>
+  <string name="workspace_detail_uploading">Uploading %1$s%2$s</string>
   <string name="workspace_detail_extracting">Extracting %1$d items%2$s</string>
   <string name="workspace_detail_install_complete">Installation complete</string>
   <string name="workspace_terminal_title">Terminal</string>

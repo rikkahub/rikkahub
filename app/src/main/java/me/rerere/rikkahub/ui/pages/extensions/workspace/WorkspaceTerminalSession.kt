@@ -19,6 +19,8 @@ import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.workspace.RootfsPatchOptions
 import me.rerere.workspace.RootfsPatcher
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
 
 internal fun createWorkspaceTerminalSession(
     context: Context,
@@ -54,23 +56,20 @@ internal fun createWorkspaceTerminalSession(
             args += path
         }
     }
-    args += listOf(
-        "/usr/bin/env",
-        "-i",
+    val shell = linuxDir.rootfsShell()
+    args += shell.path
+
+    val env = arrayOf(
+        "PROOT_LOADER=${loader.absolutePath}",
+        "PROOT_TMP_DIR=${tempDir.absolutePath}",
+        "TMPDIR=${tempDir.absolutePath}",
         "HOME=/root",
         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "TERM=xterm-256color",
         "LANG=C.UTF-8",
         "LC_ALL=C.UTF-8",
         "USER=root",
-        "SHELL=/bin/bash",
-        "/bin/bash",
-    )
-
-    val env = arrayOf(
-        "PROOT_LOADER=${loader.absolutePath}",
-        "PROOT_TMP_DIR=${tempDir.absolutePath}",
-        "TMPDIR=${tempDir.absolutePath}",
+        "SHELL=${shell.path}",
     )
 
     return TerminalSession(
@@ -100,8 +99,19 @@ internal fun prepareWorkspaceTerminalSession(context: Context, root: String) {
 
 internal fun workspaceRootfsReady(context: Context, root: String): Boolean {
     val linuxDir = File(File(File(context.applicationContext.filesDir, "workspaces"), root), "linux")
-    return linuxDir.isDirectory && File(linuxDir, "bin/sh").isFile
+    return linuxDir.isDirectory && linuxDir.rootfsShellOrNull() != null
 }
+
+private fun File.rootfsShell(): RootfsShell =
+    rootfsShellOrNull() ?: RootfsShell("/bin/sh")
+
+private fun File.rootfsShellOrNull(): RootfsShell? = ROOTFS_SHELLS.firstOrNull { shell ->
+    Files.exists(File(this, shell.path.trimStart('/')).toPath(), LinkOption.NOFOLLOW_LINKS)
+}
+
+private data class RootfsShell(
+    val path: String,
+)
 
 internal class WorkspaceTerminalSessionClient(
     private val context: Context,
@@ -315,6 +325,15 @@ internal class WorkspaceTerminalViewClient(
 
 private const val WORKSPACE_DIR = "/workspace"
 private const val SKILLS_DIR = "/skills"
+
+private val ROOTFS_SHELLS = listOf(
+    RootfsShell("/bin/bash"),
+    RootfsShell("/usr/bin/bash"),
+    RootfsShell("/bin/ash"),
+    RootfsShell("/bin/dash"),
+    RootfsShell("/bin/sh"),
+    RootfsShell("/usr/bin/sh"),
+)
 
 // 一个 URL 最多还原跨越的软换行行数(向上/向下各算), 足够覆盖任意真实 URL
 private const val URL_MAX_WRAP_ROWS = 50

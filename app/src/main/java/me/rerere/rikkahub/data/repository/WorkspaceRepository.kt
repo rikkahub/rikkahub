@@ -55,13 +55,9 @@ class WorkspaceRepository(
     suspend fun create(name: String): WorkspaceEntity {
         val id = Uuid.random().toString()
         val now = System.currentTimeMillis()
-        val finalName = name.trim().ifBlank { "Workspace" }
-        require(!isNameTaken(finalName, excludeId = null)) {
-            "Workspace name already exists: $finalName"
-        }
         val workspace = WorkspaceEntity(
             id = id,
-            name = finalName,
+            name = name.ifBlank { "Workspace" },
             root = id,
             createdAt = now,
             updatedAt = now,
@@ -74,23 +70,13 @@ class WorkspaceRepository(
 
     suspend fun rename(id: String, name: String): Boolean {
         val workspace = dao.getById(id) ?: return false
-        val finalName = name.trim().ifBlank { workspace.name }
-        require(!isNameTaken(finalName, excludeId = id)) {
-            "Workspace name already exists: $finalName"
-        }
         dao.upsert(
             workspace.copy(
-                name = finalName,
+                name = name.ifBlank { workspace.name },
                 updatedAt = System.currentTimeMillis(),
             )
         )
         return true
-    }
-
-    /** 名字是否已被其他 workspace 占用（trim 后精确匹配，排除 [excludeId] 自身） */
-    suspend fun isNameTaken(name: String, excludeId: String?): Boolean {
-        val target = name.trim()
-        return dao.getAll().any { it.id != excludeId && it.name.trim() == target }
     }
 
     suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean {
@@ -110,12 +96,33 @@ class WorkspaceRepository(
         url: String,
         onProgress: (RootfsInstallProgress) -> Unit = {},
     ): Boolean {
+        return installRootfs(id, onProgress) { workspace ->
+            rootfsInstaller.install(workspace.root, url, onProgress)
+        }
+    }
+
+    suspend fun installRootfs(
+        id: String,
+        archiveName: String,
+        inputStream: InputStream,
+        onProgress: (RootfsInstallProgress) -> Unit = {},
+    ): Boolean {
+        return installRootfs(id, onProgress) { workspace ->
+            rootfsInstaller.install(workspace.root, archiveName, inputStream, onProgress)
+        }
+    }
+
+    private suspend fun installRootfs(
+        id: String,
+        onProgress: (RootfsInstallProgress) -> Unit,
+        installer: (WorkspaceEntity) -> Unit,
+    ): Boolean {
         val workspace = dao.getById(id) ?: return false
         updateShellState(workspace, WorkspaceShellStatus.INSTALLING.name)
         try {
             // runInterruptible 让协程取消转成线程中断, 打断 install 内阻塞的下载/解压循环
             runInterruptible(Dispatchers.IO) {
-                rootfsInstaller.install(workspace.root, url, onProgress)
+                installer(workspace)
             }
             updateShellState(workspace, WorkspaceShellStatus.READY.name)
             return true
@@ -130,7 +137,7 @@ class WorkspaceRepository(
             }
             throw CancellationException("Rootfs install cancelled").also { it.initCause(e) }
         } catch (e: Throwable) {
-            Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}, url=$url", e)
+            Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}", e)
             updateShellState(workspace, WorkspaceShellStatus.BROKEN.name)
             throw e
         }
