@@ -1214,5 +1214,6 @@
   <string name="backup_page_s3_path_style">路徑樣式</string>
   <string name="backup_page_s3_path_style_desc">使用 endpoint/bucket/object。關閉後使用 bucket.endpoint/object。</string>
   <string name="workspace_page_name_duplicate">名稱已存在</string>
+  <string name="setting_mcp_page_name_invalid">名稱只能包含英文字母和數字</string>
 </resources>
 
