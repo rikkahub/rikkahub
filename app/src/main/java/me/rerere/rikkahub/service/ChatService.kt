@@ -132,6 +132,8 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.SYNTHETIC_KIND_METADATA_KEY
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AutomationGrant
+import me.rerere.rikkahub.data.model.SHELL_BACKGROUNDED_MARKER
+import me.rerere.rikkahub.data.model.isBackgroundableShell
 import me.rerere.rikkahub.data.model.isSyntheticAgentEvent
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.sanitizeForUpload
@@ -310,13 +312,11 @@ internal fun finishInterruptedPendingToolsForNewSend(
 internal fun shouldBackgroundShellOnStop(tool: UIMessagePart.Tool): Boolean {
     if (tool.isExecuted) return false
     if (tool.isPending) return false  // approval-pending → cancel normally; no process started yet
-    if (tool.toolName != "workspace_shell") return false
-    // Only detach if the call explicitly opted in (detachAfterSeconds > 0). Default-kill shells
-    // (detachAfterSeconds absent/null) are cancelled normally — no completion event ever arrives
-    // for them, so leaving them pending would strand the tool part forever.
-    val secs = tool.inputAsJson().jsonObject["detachAfterSeconds"]
-        ?.jsonPrimitive?.contentOrNull?.toIntOrNull()
-    return secs != null && secs > 0
+    // isBackgroundableShell encodes toolName==workspace_shell && detachAfterSeconds>0 (the shared
+    // predicate, so the finalizer and the sanitizer classify a backgroundable shell identically).
+    // Default-kill shells (detachAfterSeconds absent/0) are cancelled normally — no completion event
+    // ever arrives for them, so leaving them pending would strand the tool part forever.
+    return tool.isBackgroundableShell()
 }
 
 // 自动压缩保留的最近消息数：与手动压缩对话框（CompressContextDialog）的默认值一致。
@@ -1883,9 +1883,13 @@ class ChatService(
         // BACKGROUNDS the run (the coordinator persisted DETACHED under NonCancellable and launched a
         // detached awaiter on AppScope), it does NOT kill it. So a still-pending workspace_shell tool
         // part at finalize time must NOT be stamped {status:cancelled} — its completion arrives later
-        // as a synthetic #290 event. Leave it unchanged; finishPendingTools then skips it. Every other
-        // interrupted tool is still finalized as cancelled.
-        if (shouldBackgroundShellOnStop(tool)) return tool
+        // as a synthetic #290 event. Stamp the SAME honest {status:running} marker the shipped Detached
+        // path emits (approvalState UNCHANGED — Denied is resumable), so this finalizer agrees
+        // byte-for-byte with sanitizeForUpload's repairOrphanTools; whichever runs first makes the part
+        // executed and the other no-ops. Every other interrupted tool is still finalized as cancelled.
+        if (shouldBackgroundShellOnStop(tool)) {
+            return tool.copy(output = listOf(UIMessagePart.Text(SHELL_BACKGROUNDED_MARKER)))
+        }
         return tool.copy(
             output = listOf(
                 UIMessagePart.Text(

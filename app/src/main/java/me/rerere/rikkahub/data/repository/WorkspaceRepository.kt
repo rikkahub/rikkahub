@@ -9,6 +9,8 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunCoordinator
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunRequest
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunResult
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
+import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
@@ -35,6 +37,9 @@ class WorkspaceRepository(
     private val settingsStore: SettingsStore,
     private val db: AppDatabase,
     private val shellRunCoordinator: ShellRunCoordinator,
+    // Durable shell-run rows (issue #291). The tail seam looks a run up by taskId here and verifies
+    // it belongs to the calling workspace+conversation before reading its output file.
+    private val shellRunStore: ShellRunStore,
     // App-private directory the detachable shell runs stream their output to (productDecision #3:
     // <cacheDir>/workspace-shell-tasks/<taskId>.output — chosen over /workspace/.rikkahub/tasks
     // because the latter is shell-mutable). Read back only via the workspace_shell_tail tool.
@@ -356,16 +361,22 @@ class WorkspaceRepository(
      * Read the trailing [maxBytes] of a background shell run's app-private output file by [taskId]
      * (issue #291). The output lives under [shellTasksDir] (app-private, NOT the workspace root), so
      * workspace_read_file — which only reads under the workspace files root — cannot reach it; this is
-     * the read path the workspace_shell_tail tool uses. Returns "" when the file does not exist.
+     * the read path the workspace_shell_tail tool uses.
+     *
+     * SCOPING INVARIANT: taskIds are MODEL-controlled, so the read MUST be confined to runs the caller
+     * actually owns. The taskId is resolved to its persisted [ShellRunEntity] and read ONLY when the
+     * row's `workspaceId` AND `conversationId` both match the caller's [id] / [conversationId] — else
+     * "" (no cross-workspace or cross-conversation read, and no stale read after the row was deleted).
+     * The output path read is the row's own persisted `outputPath`, not a reconstructed
+     * shellTasksDir path, so a missing/deleted row can never resolve to a file on disk.
      */
-    suspend fun tailShellRun(id: String, taskId: String, maxBytes: Int): String =
+    suspend fun tailShellRun(id: String, conversationId: Uuid, taskId: String, maxBytes: Int): String =
         withContext(Dispatchers.IO) {
-            // Validate taskId is a canonical UUID string before interpolating into the file path.
-            // Without this a model-controlled taskId containing '..' or '/' could escape shellTasksDir.
-            val canonicalId = Uuid.parse(taskId).toString()
-            // id is accepted for symmetry/future per-workspace scoping; the output path is keyed by
-            // the random taskId, so it is already unambiguous.
-            val file = File(shellTasksDir, "$canonicalId.output")
+            // Parse rejects a non-canonical UUID (preserved behaviour); the row lookup + scoping below
+            // is what actually confines the read, not the file-name shape.
+            val uuid = Uuid.parse(taskId)
+            val run = shellRunStore.getByTaskId(uuid)
+            val file = resolveTailFile(run, id, conversationId.toString()) ?: return@withContext ""
             if (!file.exists()) return@withContext ""
             val length = file.length()
             if (length <= maxBytes) return@withContext file.readText()
@@ -407,6 +418,24 @@ class WorkspaceRepository(
  */
 internal fun isShellRunnable(shellEnabled: Boolean, shellStatus: String): Boolean =
     shellEnabled && shellStatus == WorkspaceShellStatus.READY.name
+
+/**
+ * The tail-scoping chokepoint (issue #291): the only file a `workspace_shell_tail` read may touch is
+ * the persisted [run]'s own `outputPath`, and ONLY when the row belongs to the calling [workspaceId]
+ * AND [conversationId]. A missing/deleted row ([run] == null) or any workspace/conversation mismatch
+ * resolves to null (⇒ the tail returns ""), so a model-controlled taskId can never read another
+ * workspace's / conversation's run, nor a stale output file whose row was already deleted. Pure (no
+ * IO/Context) so the scoping invariant is unit-testable in the :app JVM source set, matching the
+ * [isShellRunnable] precedent. [conversationId] is the caller's id stringified, compared against the
+ * row's stored `conversationId` (a `Uuid.toString()`), mirroring the existing `workspaceId` compare.
+ */
+internal fun resolveTailFile(
+    run: ShellRunEntity?,
+    workspaceId: String,
+    conversationId: String,
+): File? =
+    if (run == null || run.workspaceId != workspaceId || run.conversationId != conversationId) null
+    else File(run.outputPath)
 
 /**
  * Merge one tool's approval policy onto the row's existing `tool_approvals` blob, returning the

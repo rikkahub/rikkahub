@@ -65,6 +65,13 @@ interface ShellRunStore {
      */
     suspend fun recoverInterrupted(): List<ShellRunEntity>
 
+    /**
+     * Scoped row lookup for the `workspace_shell_tail` seam: the tail tool must verify a
+     * model-controlled taskId resolves to a row that belongs to the calling workspace AND conversation
+     * before reading its output file. Returns null for a missing/deleted row.
+     */
+    suspend fun getByTaskId(taskId: Uuid): ShellRunEntity?
+
     /** Cleanup hook for a deleted conversation (explicit delete, no FK cascade). */
     suspend fun deleteByConversationId(conversationId: Uuid): Int
 }
@@ -180,6 +187,9 @@ class RoomShellRunStore(
             if (won == 1) row else null
         }
     }
+
+    override suspend fun getByTaskId(taskId: Uuid): ShellRunEntity? =
+        transactions.inTransaction { dao.getById(taskId.toString()) }
 
     override suspend fun deleteByConversationId(conversationId: Uuid): Int =
         transactions.inTransaction { dao.deleteByConversationId(conversationId.toString()) }

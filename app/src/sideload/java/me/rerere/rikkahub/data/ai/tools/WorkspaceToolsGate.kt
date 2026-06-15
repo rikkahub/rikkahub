@@ -53,7 +53,7 @@ internal fun sideloadWorkspaceTools(
     createDeleteFileTool(workspaceId, needsApproval, workspaceRepository),
     createMoveFileTool(workspaceId, needsApproval, workspaceRepository),
     createShellTool(workspaceId, conversationId, needsApproval, workspaceRepository),
-    createShellTailTool(workspaceId, needsApproval, workspaceRepository),
+    createShellTailTool(workspaceId, conversationId, needsApproval, workspaceRepository),
 )
 
 // Gated (issue #197 design-gate, section C): wired into [sideloadWorkspaceTools] behind the
@@ -370,6 +370,7 @@ private fun createShellTool(
 // defaults to no-approval (WorkspaceToolDefaultApprovals["workspace_shell_tail"] = false).
 private fun createShellTailTool(
     workspaceId: String,
+    conversationId: Uuid,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -402,7 +403,7 @@ private fun createShellTailTool(
             .getOrElse { error("invalid taskId: must be a UUID") }
         val maxBytes = params.string("maxBytes")?.toIntOrNull()?.coerceIn(1, MAX_SHELL_TAIL_BYTES)
             ?: SHELL_TAIL_MAX_BYTES
-        val tail = workspaceRepository.tailShellRun(workspaceId, taskId, maxBytes)
+        val tail = workspaceRepository.tailShellRun(workspaceId, conversationId, taskId, maxBytes)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {

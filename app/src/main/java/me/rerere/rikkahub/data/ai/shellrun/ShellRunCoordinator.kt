@@ -140,8 +140,15 @@ class ShellRunCoordinator(
             store.recordTerminal(taskId, ShellRunStatus.INTERRUPTED_PROCESS_DEATH, null, 0, null)
             throw t
         }
-        store.markForegroundWaiting(taskId, handle.pidMeta)
-
+        // INVARIANT: once the process is live (startHandle returned) an awaiter MUST be installed, so
+        // the run always reaches a terminal row + completion no matter how this turn ends. The awaiter
+        // is created FIRST — appScope.async is non-suspending and cannot fail at creation — so the
+        // invariant holds regardless of what markForegroundWaiting does. If the FOREGROUND_WAITING flip
+        // then throws (a user Stop's CancellationException, OR a non-cancellation Room failure such as
+        // a locked DB / disk-full), that throw propagates out of run() honestly, but the live process
+        // is NOT stranded: the awaiter terminalises it via the store's CAS, which accepts a STARTED row
+        // (and runningRows() includes STARTED), so the missed flip never breaks terminalisation.
+        //
         // The single await Deferred, owned by appScope. On exit it ALWAYS terminalises the run via the
         // store's CAS, and the store reports — in the SAME transaction — whether the run had been
         // DETACHED (i.e. the agent already received a Detached handle and is owed a completion). That
@@ -152,6 +159,14 @@ class ShellRunCoordinator(
             val result = awaitDispatcher.await(handle)
             recordTerminalAndMaybeNotify(taskId, request, handle, result)
             result
+        }
+        // markForegroundWaiting is the only cancellable suspend between the live process and the
+        // foreground wait below; the awaiter is already installed above, so a Stop (or DB error) here
+        // strands nothing. Run it NonCancellable so a user Stop does NOT abort the flip mid-write —
+        // the held Stop then surfaces at the foreground-wait suspension below (where the catch detaches
+        // it). A non-cancellation throw still propagates: the awaiter keeps the process honest.
+        withContext(NonCancellable) {
+            store.markForegroundWaiting(taskId, handle.pidMeta)
         }
 
         val detachBudgetMillis = request.detachAfterSeconds?.let { it.toLong() * 1_000L }

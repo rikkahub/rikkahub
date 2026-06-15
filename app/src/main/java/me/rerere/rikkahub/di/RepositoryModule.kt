@@ -160,6 +160,7 @@ val repositoryModule = module {
             settingsStore = get(),
             db = get(),
             shellRunCoordinator = get(),
+            shellRunStore = get(),
             // App-private output dir for backgrounded shell runs (productDecision #3).
             shellTasksDir = File(context.cacheDir, "workspace-shell-tasks"),
         )

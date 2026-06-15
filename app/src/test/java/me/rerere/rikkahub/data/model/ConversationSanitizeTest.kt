@@ -319,6 +319,147 @@ class ConversationSanitizeTest {
         )
     }
 
+    // STOP_IS_DETACH_NOT_KILL (issue #291): a detach-opted, auto-approved workspace_shell left with
+    // empty output by a user Stop is a STILL-ALIVE backgrounded run, not a cancelled one. Stamping
+    // {status:cancelled} over it (the unfixed repairOrphanTools) lies about a running process. The
+    // honest marker is {status:running} — byte-identical to the shipped Detached path — so both
+    // order-independent finalizers (repairOrphanTools and ChatService.cancelToolByUser) agree.
+    private fun shellTool(input: String, executed: Boolean = false) = UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(
+            UIMessagePart.Tool(
+                toolCallId = "call_1",
+                toolName = "workspace_shell",
+                input = input,
+                output = if (executed) listOf(UIMessagePart.Text("{}")) else emptyList(),
+                approvalState = me.rerere.ai.ui.ToolApprovalState.Auto,
+            )
+        )
+    ).toMessageNode()
+
+    private fun shellOutputText(sanitized: List<MessageNode>): String =
+        (sanitized.flatMap { it.currentMessage.getTools() }.single().output.single() as UIMessagePart.Text).text
+
+    @Test
+    fun `backgroundable shell orphan is stamped status running not cancelled`() {
+        val nodes = listOf(
+            userNode("run it"),
+            shellTool("""{"command":"sleep 999","detachAfterSeconds":30}"""),
+        )
+
+        val sanitized = nodes.sanitizeForUpload()
+        val shell = sanitized.flatMap { it.currentMessage.getTools() }.single()
+
+        // FAILS-BEFORE: the unfixed repairOrphanTools stamps the cancelled marker over the empty
+        // backgroundable shell, so the tool's synthetic output contains "cancelled".
+        assertFalse(
+            "a still-alive backgrounded shell must not be stamped cancelled",
+            shellOutputText(sanitized).contains("cancelled"),
+        )
+        assertTrue("the shell is made executed (balanced) by the running marker", shell.isExecuted)
+        assertEquals(
+            "the marker is the honest {status:running}",
+            SHELL_BACKGROUNDED_MARKER,
+            shellOutputText(sanitized),
+        )
+    }
+
+    @Test
+    fun `backgroundable shell sanitize is idempotent`() {
+        val nodes = listOf(
+            userNode("run it"),
+            shellTool("""{"command":"sleep 999","detachAfterSeconds":30}"""),
+        )
+
+        val once = nodes.sanitizeForUpload()
+        val twice = once.sanitizeForUpload()
+
+        assertEquals(
+            once.map { it.currentMessage.toText() },
+            twice.map { it.currentMessage.toText() },
+        )
+        val onceShell = once.flatMap { it.currentMessage.getTools() }.single()
+        val twiceShell = twice.flatMap { it.currentMessage.getTools() }.single()
+        assertEquals(onceShell.output, twiceShell.output)
+    }
+
+    @Test
+    fun `adversarial shell input does not crash sanitizeForUpload`() {
+        // The orphaned workspace_shell's input is MODEL-controlled. Valid-but-non-object JSON ("[]")
+        // routed through repairOrphanTools (sanitizeForUpload) crashed at isBackgroundableShell's
+        // throwing .jsonObject — taking down the whole conversation's upload finalization instead of
+        // repairing the orphan. FAILS-BEFORE with IllegalArgumentException; after the fix the non-object
+        // input simply reads as non-backgroundable, so the orphan is stamped cancelled and balanced.
+        val nodes = listOf(
+            userNode("run it"),
+            shellTool("[]"),
+        )
+
+        val sanitized = nodes.sanitizeForUpload()
+        val shell = sanitized.flatMap { it.currentMessage.getTools() }.single()
+        assertTrue("the orphan is repaired, not crashed", shell.isExecuted)
+        assertEquals(
+            "non-object input is non-backgroundable, so the orphan is cancelled",
+            TOOL_CANCELLED_MARKER,
+            shellOutputText(sanitized),
+        )
+    }
+
+    @Test
+    fun `non-detach shell orphan is still stamped cancelled`() {
+        // A default-kill shell (no detachAfterSeconds) is NOT backgrounded: no completion event ever
+        // arrives, so it must still be finalized as cancelled — not left as a phantom running run.
+        val nodes = listOf(
+            userNode("run it"),
+            shellTool("""{"command":"echo hi"}"""),
+        )
+
+        val sanitized = nodes.sanitizeForUpload()
+        val output = shellOutputText(sanitized)
+        assertTrue("a non-detach shell orphan is still cancelled", output.contains("cancelled"))
+        assertEquals(
+            "a non-detach shell must not become a phantom running run",
+            TOOL_CANCELLED_MARKER,
+            output,
+        )
+    }
+
+    @Test
+    fun `isBackgroundableShell truth table`() {
+        fun tool(name: String, input: String) = UIMessagePart.Tool(
+            toolCallId = "c", toolName = name, input = input, output = emptyList(),
+        )
+        assertTrue(tool("workspace_shell", """{"detachAfterSeconds":30}""").isBackgroundableShell())
+        assertFalse(tool("workspace_shell", """{"detachAfterSeconds":0}""").isBackgroundableShell())
+        assertFalse(tool("workspace_shell", """{"command":"echo hi"}""").isBackgroundableShell())
+        assertFalse(tool("workspace_shell", "").isBackgroundableShell())
+        assertFalse(tool("web_search", """{"detachAfterSeconds":30}""").isBackgroundableShell())
+        // ADVERSARIAL model-controlled input: valid-but-non-object JSON and a non-primitive
+        // detachAfterSeconds must read as non-backgroundable WITHOUT throwing. The throwing
+        // .jsonObject/.jsonPrimitive accessors would crash repairOrphanTools (sanitizeForUpload) here.
+        assertFalse(tool("workspace_shell", "[]").isBackgroundableShell())
+        assertFalse(tool("workspace_shell", "1").isBackgroundableShell())
+        assertFalse(tool("workspace_shell", "\"x\"").isBackgroundableShell())
+        assertFalse(tool("workspace_shell", """{"detachAfterSeconds":{}}""").isBackgroundableShell())
+        assertFalse(tool("workspace_shell", """{"detachAfterSeconds":[30]}""").isBackgroundableShell())
+        // LENIENT model JSON: the runtime executes tool args through a lenient parser (unquoted keys),
+        // so the sanitizer must classify the SAME input identically. A strict parse falls back to {} and
+        // would misclassify these genuinely-detached runs as non-backgroundable → {status:cancelled}
+        // stamped over a live process. These FAIL before the lenient-parse fix.
+        assertTrue(
+            "unquoted keys (lenient) must still read as backgroundable",
+            tool("workspace_shell", """{command:"sleep 999",detachAfterSeconds:30}""").isBackgroundableShell(),
+        )
+        assertTrue(
+            "detachAfterSeconds as a quoted numeric string must read as backgroundable",
+            tool("workspace_shell", """{"detachAfterSeconds":"30"}""").isBackgroundableShell(),
+        )
+        assertTrue(
+            "unquoted key with quoted numeric value must read as backgroundable",
+            tool("workspace_shell", """{detachAfterSeconds:"45"}""").isBackgroundableShell(),
+        )
+    }
+
     @Test
     fun `valid alternating sequence passes through unchanged`() {
         val nodes = listOf(
