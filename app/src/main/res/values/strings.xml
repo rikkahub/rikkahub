@@ -1214,5 +1214,6 @@
   <string name="tool_ui_replay">Replay</string>
   <string name="tool_ui_delete_memory">Delete memory</string>
   <string name="tool_ui_file">file</string>
+  <string name="workspace_page_name_duplicate">Name already exists</string>
 </resources>
 

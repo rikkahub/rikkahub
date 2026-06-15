@@ -1215,5 +1215,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="tool_ui_file">ファイル</string>
   <string name="backup_page_s3_path_style">パス形式</string>
   <string name="backup_page_s3_path_style_desc">endpoint/bucket/object を使用します。オフにすると bucket.endpoint/object を使用します。</string>
+  <string name="workspace_page_name_duplicate">名前は既に存在します</string>
 </resources>
 

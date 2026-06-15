@@ -21,13 +21,13 @@ class WorkspaceVM(
 
     fun create(name: String) {
         viewModelScope.launch {
-            repository.create(name)
+            runCatching { repository.create(name) }
         }
     }
 
     fun rename(workspace: WorkspaceEntity, name: String) {
         viewModelScope.launch {
-            repository.rename(workspace.id, name)
+            runCatching { repository.rename(workspace.id, name) }
         }
     }
 

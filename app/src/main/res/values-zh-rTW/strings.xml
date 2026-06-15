@@ -1213,5 +1213,6 @@
   <string name="tool_ui_file">文件</string>
   <string name="backup_page_s3_path_style">路徑樣式</string>
   <string name="backup_page_s3_path_style_desc">使用 endpoint/bucket/object。關閉後使用 bucket.endpoint/object。</string>
+  <string name="workspace_page_name_duplicate">名稱已存在</string>
 </resources>
 

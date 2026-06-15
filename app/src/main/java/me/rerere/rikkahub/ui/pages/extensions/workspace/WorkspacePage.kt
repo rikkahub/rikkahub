@@ -107,6 +107,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
         EditWorkspaceDialog(
             title = stringResource(R.string.workspace_page_create),
             initialName = "",
+            existingNames = workspaces.map { it.name.trim() }.toSet(),
             onDismiss = { showAddDialog = false },
             onConfirm = { name ->
                 vm.create(name)
@@ -119,6 +120,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
         EditWorkspaceDialog(
             title = stringResource(R.string.workspace_page_rename),
             initialName = workspace.name,
+            existingNames = workspaces.filter { it.id != workspace.id }.map { it.name.trim() }.toSet(),
             onDismiss = { editTarget = null },
             onConfirm = { name ->
                 vm.rename(workspace, name)
@@ -261,10 +263,13 @@ private fun WorkspaceCard(
 private fun EditWorkspaceDialog(
     title: String,
     initialName: String,
+    existingNames: Set<String>,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
     var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val trimmedName = name.trim()
+    val isDuplicate = trimmedName.isNotEmpty() && trimmedName in existingNames
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -276,12 +281,16 @@ private fun EditWorkspaceDialog(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.workspace_page_name)) },
                 singleLine = true,
+                isError = isDuplicate,
+                supportingText = if (isDuplicate) {
+                    { Text(stringResource(R.string.workspace_page_name_duplicate)) }
+                } else null,
             )
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name.trim()) },
-                enabled = name.isNotBlank(),
+                onClick = { onConfirm(trimmedName) },
+                enabled = name.isNotBlank() && !isDuplicate,
             ) {
                 Text(stringResource(R.string.common_save))
             }

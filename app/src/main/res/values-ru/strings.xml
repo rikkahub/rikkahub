@@ -1215,5 +1215,6 @@
   <string name="tool_ui_file">файл</string>
   <string name="backup_page_s3_path_style">Стиль пути</string>
   <string name="backup_page_s3_path_style_desc">Используйте endpoint/bucket/object. Отключите, чтобы использовать bucket.endpoint/object.</string>
+  <string name="workspace_page_name_duplicate">Такое имя уже существует</string>
 </resources>
 
