@@ -57,12 +57,9 @@ internal fun createWorkspaceTerminalSession(
         }
     }
     val shell = linuxDir.rootfsShell()
-    args += shell.path
-
-    val env = arrayOf(
-        "PROOT_LOADER=${loader.absolutePath}",
-        "PROOT_TMP_DIR=${tempDir.absolutePath}",
-        "TMPDIR=${tempDir.absolutePath}",
+    args += listOf(
+        "/usr/bin/env",
+        "-i",
         "HOME=/root",
         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "TERM=xterm-256color",
@@ -70,6 +67,13 @@ internal fun createWorkspaceTerminalSession(
         "LC_ALL=C.UTF-8",
         "USER=root",
         "SHELL=${shell.path}",
+        shell.path,
+    )
+
+    val env = arrayOf(
+        "PROOT_LOADER=${loader.absolutePath}",
+        "PROOT_TMP_DIR=${tempDir.absolutePath}",
+        "TMPDIR=${tempDir.absolutePath}",
     )
 
     return TerminalSession(

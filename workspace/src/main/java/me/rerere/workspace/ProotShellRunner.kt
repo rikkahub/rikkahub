@@ -92,9 +92,18 @@ class ProotShellRunner(
 
         val shell = context.linuxDir.rootfsShell()
         command += listOf(
+            "/usr/bin/env",
+            "-i",
+            "HOME=/root",
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "TERM=xterm-256color",
+            "LANG=C.UTF-8",
+            "LC_ALL=C.UTF-8",
+            "USER=root",
+            "SHELL=${shell.path}",
             shell.path,
             shell.commandFlag,
-            "export HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm-256color LANG=C.UTF-8 LC_ALL=C.UTF-8 USER=root SHELL=${shell.path}; cd -- \"\$1\" && eval \"\$2\"",
+            "cd -- \"\$1\" && eval \"\$2\"",
             "rikkahub",
             context.prootCwd(),
             context.command,
