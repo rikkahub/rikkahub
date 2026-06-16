@@ -55,9 +55,13 @@ class WorkspaceRepository(
     suspend fun create(name: String): WorkspaceEntity {
         val id = Uuid.random().toString()
         val now = System.currentTimeMillis()
+        val finalName = name.trim().ifBlank { "Workspace" }
+        require(!isNameTaken(finalName, excludeId = null)) {
+            "Workspace name already exists: $finalName"
+        }
         val workspace = WorkspaceEntity(
             id = id,
-            name = name.ifBlank { "Workspace" },
+            name = finalName,
             root = id,
             createdAt = now,
             updatedAt = now,
@@ -70,13 +74,22 @@ class WorkspaceRepository(
 
     suspend fun rename(id: String, name: String): Boolean {
         val workspace = dao.getById(id) ?: return false
+        val finalName = name.trim().ifBlank { workspace.name }
+        require(!isNameTaken(finalName, excludeId = id)) {
+            "Workspace name already exists: $finalName"
+        }
         dao.upsert(
             workspace.copy(
-                name = name.ifBlank { workspace.name },
+                name = finalName,
                 updatedAt = System.currentTimeMillis(),
             )
         )
         return true
+    }
+
+    suspend fun isNameTaken(name: String, excludeId: String?): Boolean {
+        val target = name.trim()
+        return dao.getAll().any { it.id != excludeId && it.name.trim() == target }
     }
 
     suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean {
