@@ -44,6 +44,7 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.retryAfterMillisFromHeaders
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
+import me.rerere.ai.util.SSEEventSource
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -51,7 +52,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
@@ -177,7 +177,10 @@ class ChatGPTProvider(
         val request = buildRequest(providerSetting, messages, params)
         AiLog.request(TAG, "chatgpt", params.model.modelId, true)
 
-        val factory = EventSources.createFactory(streamClient)
+        // Use the custom SSEEventSource factory (not OkHttp's EventSources): the ChatGPT/Codex backend
+        // returns a 200 SSE stream with NO Content-Type header, which OkHttp's RealEventSource rejects
+        // with "Invalid content-type: null". SSEEventSource accepts an absent content-type on a 2xx.
+        val factory = SSEEventSource.factory(streamClient)
         lateinit var listener: EventSourceListener
 
         // Pre-first-frame retry state lives behind the controller's lock — the proven structure
