@@ -37,6 +37,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Switch
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -176,6 +177,16 @@ fun S3Tab(
                             onValueChange = { updateS3Config(s3Config.copy(bucket = it.trim())) },
                             placeholder = { Text("my-bucket") },
                             singleLine = true
+                        )
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_s3_path_style)) },
+                    supportingContent = { Text(stringResource(R.string.backup_page_s3_path_style_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = s3Config.pathStyle,
+                            onCheckedChange = { updateS3Config(s3Config.copy(pathStyle = it)) },
                         )
                     },
                 )

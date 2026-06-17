@@ -88,7 +88,7 @@ fun subagentDispatchTool(
             required = listOf("task"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         // Hard recursion guard — refuse the dispatch if the caller is itself a headless
         // run (cron / workflow / external-automation / another sub-agent). The engine's

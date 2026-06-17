@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.TextUnit
 import ru.noties.jlatexmath.JLatexMathDrawable
+import ru.noties.jlatexmath.JLatexMathSplitter
 
 fun assumeLatexSize(latex: String, fontSize: Float): Rect {
     return runCatching {
@@ -93,6 +94,42 @@ fun getLatexDrawable(
     }.onFailure {
         it.printStackTrace()
     }.getOrNull()
+}
+
+/**
+ * 将一条行内公式按顶层运算符水平拆分为多段 Drawable，
+ * 以便在文本流中换行，避免单体公式过长被挤出屏幕。
+ * 拆分失败时返回空列表，调用方需自行回退。
+ */
+fun splitLatex(
+    latex: String,
+    maxWidthPx: Float,
+    fontSize: Float,
+    color: Int
+): List<JLatexMathDrawable> {
+    return runCatching {
+        JLatexMathSplitter.split(processLatex(latex), maxWidthPx, fontSize, color)
+    }.onFailure {
+        it.printStackTrace()
+    }.getOrElse { emptyList() }
+}
+
+@Composable
+fun LatexDrawable(
+    drawable: JLatexMathDrawable,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    with(density) {
+        Canvas(
+            modifier = modifier.size(
+                width = drawable.bounds.width().toDp(),
+                height = drawable.bounds.height().toDp()
+            )
+        ) {
+            drawable.draw(drawContext.canvas.nativeCanvas)
+        }
+    }
 }
 
 private val inlineDollarRegex = Regex("""^\$(.*?)\$""", RegexOption.DOT_MATCHES_ALL)

@@ -63,7 +63,7 @@ fun generateBugReportTool(context: Context, builder: BugReportBuilder): Tool = T
     name = "generate_bug_report",
     description = "Build a bug-report ZIP: last ~5000 lines of secret-redacted logcat + app/device/Android version + a README listing what's excluded (conversations, tokens, hosts, memories all stay private). Returns absolute path + content:// URI for ACTION_SEND share. File lives in app cache.",
     parameters = { InputSchema.Obj(properties = buildJsonObject {}, required = emptyList()) },
-    needsApproval = true,
+    needsApproval = { true },
     execute = {
         val zip = builder.build()
         val authority = "${context.packageName}.fileprovider"

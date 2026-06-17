@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.extensions
+package me.rerere.rikkahub.ui.pages.extensions.skills
 
 import android.content.Context
 import android.net.Uri
@@ -29,6 +29,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
+import kotlin.collections.iterator
 
 class SkillsVM(
     private val context: Context,

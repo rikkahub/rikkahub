@@ -70,7 +70,7 @@ fun runJsTool(
             required = listOf("skill_name"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val skillName = params["skill_name"]?.jsonPrimitive?.contentOrNull

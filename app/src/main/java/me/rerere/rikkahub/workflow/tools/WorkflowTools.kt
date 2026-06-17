@@ -105,7 +105,7 @@ fun workflowCreateTool(
             required = listOf("definition"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { json ->
         val definitionEl = json.jsonObject["definition"]
             ?: return@Tool errorResponse("missing_definition", "definition object required")
@@ -250,7 +250,7 @@ fun workflowUpdateTool(
             required = listOf("definition"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { json ->
         val definitionEl = json.jsonObject["definition"]
             ?: return@Tool errorResponse("missing_definition", "definition object required")
@@ -300,7 +300,7 @@ fun workflowDeleteTool(repository: WorkflowRepository): Tool = Tool(
             required = listOf("id"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { json ->
         val id = json.jsonObject["id"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errorResponse("missing_id", "id is required")
@@ -333,7 +333,7 @@ fun workflowSetEnabledTool(repository: WorkflowRepository): Tool = Tool(
             required = listOf("id", "enabled"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { json ->
         val obj = json.jsonObject
         val id = obj["id"]?.jsonPrimitive?.contentOrNull
@@ -374,7 +374,7 @@ fun workflowRunTool(
             required = listOf("id"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { json ->
         val id = json.jsonObject["id"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errorResponse("missing_id", "id is required")

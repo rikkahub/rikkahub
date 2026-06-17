@@ -10,7 +10,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.ImageGenerationResult
+import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
@@ -691,7 +691,7 @@ class LiteRtProvider(
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
-    ): ImageGenerationResult = error("LiteRT does not support image generation in 22A")
+    ): Flow<ImageGenerationItem> = error("LiteRT does not support image generation in 22A")
 
     /**
      * Translate the LiteRT-LM SDK's raw native error message into a user-actionable

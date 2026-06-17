@@ -81,7 +81,7 @@ fun createCalendarEventTool(
             required = listOf("title"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         wakeScreenIfNeeded(context)
         val params = args.jsonObject
@@ -149,7 +149,7 @@ fun createContactTool(
             },
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         wakeScreenIfNeeded(context)
         val params = args.jsonObject
@@ -209,7 +209,7 @@ fun sendEmailIntentTool(
             required = listOf("to"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         wakeScreenIfNeeded(context)
         val params = args.jsonObject
@@ -258,7 +258,7 @@ fun sendSmsIntentTool(
             required = listOf("phone_number"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         wakeScreenIfNeeded(context)
         val params = args.jsonObject
@@ -291,7 +291,7 @@ fun openWifiSettingsTool(
         WiFi is off and the user wants to fix it.
     """.trimIndent().replace("\n", " "),
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { _ ->
         wakeScreenIfNeeded(context)
         val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
@@ -324,7 +324,7 @@ fun showLocationOnMapTool(
             required = listOf("query"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         wakeScreenIfNeeded(context)
         val query = args.jsonObject["query"]?.jsonPrimitive?.contentOrNull

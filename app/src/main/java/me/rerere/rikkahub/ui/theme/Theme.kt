@@ -22,7 +22,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
-import me.rerere.rikkahub.ui.hooks.rememberColorMode
+import me.rerere.rikkahub.ui.hooks.rememberCurrentColorMode
 import me.rerere.rikkahub.ui.hooks.rememberUserSettingsState
 
 private val ExtendLightColors = lightExtendColors()
@@ -42,11 +42,11 @@ enum class ColorMode {
 
 @Composable
 fun RikkahubTheme(
+    colorMode: ColorMode = rememberCurrentColorMode(),
     content: @Composable () -> Unit
 ) {
     val settings by rememberUserSettingsState()
 
-    val colorMode by rememberColorMode()
     val darkTheme = when (colorMode) {
         ColorMode.SYSTEM -> isSystemInDarkTheme()
         ColorMode.LIGHT -> false

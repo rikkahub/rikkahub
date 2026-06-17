@@ -208,6 +208,11 @@ fun ChatMessage(
             }
         }
 
+        EditedFilesList(
+            parts = message.parts,
+            assistant = assistant,
+        )
+
         ProvideTextStyle(textStyle) {
             ChatMessageNerdLine(message = message)
         }
@@ -366,16 +371,15 @@ private fun MessagePartsBlock(
             is MessagePartBlock.ContentBlock -> key(block.index) {
                 when (val part = block.part) {
                     is UIMessagePart.Text -> {
-                        // Pass 3: a Text part may carry a `rikkahub.webview` metadata
-                        // block emitted by a JS skill (Phase 20-audit). When present we
-                        // render a tap-to-open card that routes into BrowserActivity
-                        // instead of the standard markdown — "browser as the viewer."
-                        // The card returns true on render so we skip the markdown branch.
-                        // Only consider for non-user messages — user messages don't carry
-                        // this metadata.
+                        // A Text part may carry a `rikkahub.webview` metadata block
+                        // emitted by a JS skill. When present we render a tap-to-open
+                        // card that routes into BrowserActivity instead of the standard
+                        // markdown ("browser as the viewer"). The card returns true on
+                        // render so we skip the markdown branch. Only consider for
+                        // non-user messages: user messages don't carry this metadata.
                         val renderedAsWebviewCard =
                             role != MessageRole.USER && SkillWebviewCardOrNull(part)
-                        if (!renderedAsWebviewCard) SelectionContainer {
+                        val textContent = @Composable {
                             if (role == MessageRole.USER) {
                                 Surface(
                                     modifier = Modifier.animateContentSize(),
@@ -423,6 +427,20 @@ private fun MessagePartsBlock(
                                         modifier = Modifier
                                             .animateContentSize()
                                     )
+                                }
+                            }
+                        }
+
+                        // 流式生成期间不启用 SelectionContainer：Markdown 在不断重渲染，
+                        // 内部可选择的 Text 会频繁注册/注销，与 Compose 选择工具栏在绘制阶段
+                        // 对 selectable 列表的排序产生并发修改，导致 ConcurrentModificationException。
+                        // 生成结束后内容稳定，再启用文本选择。
+                        if (!renderedAsWebviewCard) {
+                            if (loading) {
+                                textContent()
+                            } else {
+                                SelectionContainer {
+                                    textContent()
                                 }
                             }
                         }

@@ -48,6 +48,8 @@ import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
+import me.rerere.rikkahub.data.files.FileFolders
+import java.io.File
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
@@ -66,6 +68,8 @@ import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 private const val TAG = "GenerationHandler"
+private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
+private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
 
 /**
  * Keys whose string values are sensitive enough that the raw value MUST NOT land in
@@ -300,6 +304,7 @@ class GenerationHandler(
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
+        workspaceCwd: String? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -435,6 +440,7 @@ class GenerationHandler(
                         conversationSystemPrompt = conversationSystemPrompt,
                         conversationModeInjectionIds = conversationModeInjectionIds,
                         conversationLorebookIds = conversationLorebookIds,
+                        workspaceCwd = workspaceCwd,
                     )
                 } catch (t: Throwable) {
                     // CancellationException is honoured verbatim — stopGeneration has its
@@ -520,7 +526,8 @@ class GenerationHandler(
                             ))
                         }
                         // Tool needs approval and state is Auto:
-                        toolDef?.needsApproval == true && tool.approvalState is ToolApprovalState.Auto -> {
+                        toolDef?.needsApproval(tool.inputAsJson()) == true &&
+                            tool.approvalState is ToolApprovalState.Auto -> {
                             // Fresh per-tool auto-approval check (was a frozen pre-
                             // resolved set). Costs a DataStore.first() per tool but tools
                             // are typically <5 per turn so the latency is negligible, and
@@ -794,7 +801,15 @@ class GenerationHandler(
                                         })))
                                     }
                             }
-                            executedTools += markedTool.copy(output = result)
+                            // Upstream tool-output truncation: when the workspace shell is
+                            // available, oversized text output is spilled to /tool_outputs/
+                            // and replaced with a preview + read/grep instructions so the
+                            // model can pull the full payload on demand instead of burning
+                            // the context window.
+                            val hasShellAccess = toolsInternal.any { it.name == "workspace_shell" }
+                            executedTools += markedTool.copy(
+                                output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess)
+                            )
                         }.onFailure {
                             // Stack trace stays in logcat for debugging; the JSON envelope
                             // sent BACK to the LLM gets just the exception's message and a
@@ -937,6 +952,7 @@ class GenerationHandler(
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
+        workspaceCwd: String? = null,
     ) {
         val internalMessages = buildList {
             // Conversation-level system prompt override (upstream): when the assistant
@@ -981,6 +997,7 @@ class GenerationHandler(
             conversationModeInjectionIds = conversationModeInjectionIds,
             conversationLorebookIds = conversationLorebookIds,
             processingStatus = processingStatus,
+            workspaceCwd = workspaceCwd,
         )
 
         var messages: List<UIMessage> = messages
@@ -1054,6 +1071,40 @@ class GenerationHandler(
             }
             onUpdateMessages(messages)
         }
+    }
+
+    private fun maybeTruncateToolOutput(
+        toolCallId: String,
+        output: List<UIMessagePart>,
+        hasShellAccess: Boolean,
+    ): List<UIMessagePart> {
+        val textParts = output.filterIsInstance<UIMessagePart.Text>()
+        val nonTextParts = output.filter { it !is UIMessagePart.Text }
+        val totalChars = textParts.sumOf { it.text.length }
+
+        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return output
+
+        Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
+
+        val fullText = textParts.joinToString("\n") { it.text }
+        val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
+
+        val fileName = "${toolCallId}.txt"
+        val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
+        File(outputDir, fileName).writeText(fullText)
+
+        return listOf(
+            UIMessagePart.Text(
+                buildString {
+                    appendLine("[Tool output truncated: $totalChars characters total]")
+                    appendLine("Full output saved to: /tool_outputs/$fileName")
+                    appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
+                    appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
+                    appendLine()
+                    append(preview)
+                }
+            )
+        ) + nonTextParts
     }
 
     fun translateText(

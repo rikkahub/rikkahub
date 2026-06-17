@@ -42,7 +42,7 @@ import java.time.ZoneId
  * race on the daily counter. Cross-workflow execution stays parallel.
  *
  * Approval semantics: HARDLINE applies in workflow context. Tool factories that set
- * `needsApproval = true` would normally pop a prompt — workflows are headless and the
+ * `needsApproval = { true }` would normally pop a prompt — workflows are headless and the
  * pre-authorisation is the workflow_create approval the user already granted. So the
  * action runner just calls the tool's [Tool.execute] directly. This matches scheduled-jobs
  * direct-mode behavior.

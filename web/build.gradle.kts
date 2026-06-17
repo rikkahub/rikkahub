@@ -31,14 +31,7 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
     dependsOn(installWebUiDeps)
 
     workingDir = webUiDir.asFile
-    val hasZsh = runCatching {
-        ProcessBuilder("which", "zsh").start().waitFor() == 0
-    }.getOrDefault(false)
-    if (hasZsh) {
-        commandLine("zsh", "-ic", "pnpm run build")
-    } else {
-        commandLine("pnpm", "run", "build")
-    }
+    commandLine("zsh", "-ic", "pnpm run build")
 
     inputs.files(
         webUiDir.file("package.json"),
@@ -58,7 +51,7 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
 android {
     namespace = "me.rerere.rikkahub.web"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {

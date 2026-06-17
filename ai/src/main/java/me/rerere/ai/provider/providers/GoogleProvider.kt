@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
@@ -37,14 +38,16 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
+import me.rerere.ai.ui.GoogleThoughtMetadata
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
-import me.rerere.ai.ui.ImageGenerationResult
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -566,9 +569,9 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
                     input = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
                     output = emptyList(),
-                    metadata = buildJsonObject {
-                        put("thoughtSignature", jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
-                    }
+                    metadata = GoogleThoughtMetadata(
+                        thoughtSignature = jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull
+                    ).toMetadata()
                 )
             }
 
@@ -591,9 +594,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 }
                 UIMessagePart.Image(
                     url = data,
-                    metadata = buildJsonObject {
-                        put("thoughtSignature", thoughtSignature)
-                    }
+                    metadata = GoogleThoughtMetadata(thoughtSignature = thoughtSignature).toMetadata()
                 )
             }
 
@@ -706,7 +707,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         put("mimeType", encoded.mimeType)
                         put("data", encoded.base64)
                     })
-                    metadata?.get("thoughtSignature")?.jsonPrimitive?.contentOrNull?.let {
+                    metadataAs<GoogleThoughtMetadata>()?.thoughtSignature?.let {
                         put("thoughtSignature", it)
                     }
                 }
@@ -743,7 +744,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             put("name", toolName)
             put("args", inputAsJson())
         })
-        metadata?.get("thoughtSignature")?.let {
+        metadataAs<GoogleThoughtMetadata>()?.thoughtSignature?.let {
             put("thoughtSignature", it)
         }
     }
@@ -781,73 +782,80 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): ImageGenerationResult = withContext(Dispatchers.IO) {
+    ): Flow<ImageGenerationItem> = flow {
         require(providerSetting is ProviderSetting.Google) {
             "Expected Google provider setting"
         }
 
-        val requestBody = buildJsonObject {
-            putJsonArray("instances") {
-                add(buildJsonObject {
-                    put("prompt", params.prompt)
-                })
-            }
-            putJsonObject("parameters") {
-                put("sampleCount", params.numOfImages)
-                put(
-                    "aspectRatio", when (params.aspectRatio) {
-                        ImageAspectRatio.SQUARE -> "1:1"
-                        ImageAspectRatio.LANDSCAPE -> "16:9"
-                        ImageAspectRatio.PORTRAIT -> "9:16"
-                    }
-                )
-            }
-        }.mergeCustomBody(params.customBody)
+        val items = withContext(Dispatchers.IO) {
+            val requestBody = buildJsonObject {
+                putJsonArray("instances") {
+                    add(buildJsonObject {
+                        put("prompt", params.prompt)
+                    })
+                }
+                putJsonObject("parameters") {
+                    put("sampleCount", params.numOfImages)
+                    put(
+                        "aspectRatio", when (params.aspectRatio) {
+                            ImageAspectRatio.SQUARE -> "1:1"
+                            ImageAspectRatio.LANDSCAPE -> "16:9"
+                            ImageAspectRatio.PORTRAIT -> "9:16"
+                        }
+                    )
+                }
+            }.mergeCustomBody(params.customBody)
 
-        val url = buildUrl(
-            providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
-                "publishers/google/models/${params.model.modelId}:predict"
-            } else {
-                "models/${params.model.modelId}:predict"
+            val url = buildUrl(
+                providerSetting = providerSetting,
+                path = if (providerSetting.vertexAI) {
+                    "publishers/google/models/${params.model.modelId}:predict"
+                } else {
+                    "models/${params.model.modelId}:predict"
+                }
+            )
+
+            val request = transformRequest(
+                providerSetting = providerSetting,
+                request = Request.Builder()
+                    .url(url)
+                    .headers(params.customHeaders.toHeaders())
+                    .post(
+                        json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
+                    )
+                    .configureReferHeaders(providerSetting.baseUrl)
+                    .build()
+            )
+
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                error("Failed to generate image: ${response.code} ${response.body.string()}")
             }
-        )
 
-        val request = transformRequest(
-            providerSetting = providerSetting,
-            request = Request.Builder()
-                .url(url)
-                .headers(params.customHeaders.toHeaders())
-                .post(
-                    json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
-                )
-                .configureReferHeaders(providerSetting.baseUrl)
-                .build()
-        )
+            val bodyStr = response.body.string()
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            error("Failed to generate image: ${response.code} ${response.body.string()}")
+            val predictions = bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
+
+            predictions.mapNotNull { prediction ->
+                val predictionObj = prediction.jsonObject
+                val bytesBase64Encoded = predictionObj["bytesBase64Encoded"]?.jsonPrimitive?.contentOrNull
+
+                if (bytesBase64Encoded != null) {
+                    ImageGenerationItem(
+                        data = bytesBase64Encoded,
+                        mimeType = "image/png"
+                    )
+                } else {
+                    null
+                }
+            }
         }
 
-        val bodyStr = response.body.string()
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-
-        val predictions = bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
-
-        val items = predictions.mapNotNull { prediction ->
-            val predictionObj = prediction.jsonObject
-            val bytesBase64Encoded = predictionObj["bytesBase64Encoded"]?.jsonPrimitive?.contentOrNull
-
-            if (bytesBase64Encoded != null) {
-                ImageGenerationItem(
-                    data = bytesBase64Encoded,
-                    mimeType = "image/png"
-                )
-            } else null
-        }
         if (items.isEmpty()) error("No images in response (the model may have refused the prompt).")
 
-        ImageGenerationResult(items = items)
+        items.forEach { item ->
+            emit(item)
+        }
     }
 }

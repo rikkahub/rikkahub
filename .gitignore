@@ -35,3 +35,6 @@ app/google-services.json
 
 # Separate companion repo - cloned locally, not part of this repo
 /agent-keyboard/
+
+# Generated baseline profiles (baseline profiling dropped in this fork)
+/app/src/release/generated/

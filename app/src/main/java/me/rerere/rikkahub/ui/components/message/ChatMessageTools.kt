@@ -5,25 +5,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -37,122 +30,45 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.fastForEach
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.highlight.HighlightText
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.BubbleChatQuestion
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.Clipboard
-import me.rerere.hugeicons.stroke.Clock02
-import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.Eraser
-import me.rerere.hugeicons.stroke.GlobalSearch
-import me.rerere.hugeicons.stroke.MagicWand01
-import me.rerere.hugeicons.stroke.Message01
-import me.rerere.hugeicons.stroke.Message02
-import me.rerere.hugeicons.stroke.Pin
-import me.rerere.hugeicons.stroke.QuillWrite01
-import me.rerere.hugeicons.stroke.Refresh01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Settings03
-import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Tick01
-import me.rerere.hugeicons.stroke.Time02
-import me.rerere.hugeicons.stroke.Tools
-import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.event.AppEvent
-import me.rerere.rikkahub.data.event.AppEventBus
-import me.rerere.rikkahub.data.repository.MemoryRepository
-import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
-import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.components.message.tools.ToolUIContext
+import me.rerere.rikkahub.ui.components.message.tools.ToolUIRegistry
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.DotLoading
-import me.rerere.rikkahub.ui.components.ui.Favicon
-import me.rerere.rikkahub.ui.components.ui.FaviconRow
-import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
-import me.rerere.rikkahub.utils.openUrl
-import org.koin.compose.koinInject
 
-private object ToolNames {
-    const val MEMORY = "memory_tool"
-    const val SEARCH_WEB = "search_web"
-    const val SCRAPE_WEB = "scrape_web"
-    const val GET_TIME_INFO = "get_time_info"
-    const val CLIPBOARD = "clipboard_tool"
-    const val TTS = "text_to_speech"
-    const val ASK_USER = "ask_user"
-    const val USE_SKILL = "use_skill"
-}
-
-private object MemoryActions {
-    const val CREATE = "create"
-    const val EDIT = "edit"
-    const val DELETE = "delete"
-}
-
-private object ClipboardActions {
-    const val READ = "read"
-    const val WRITE = "write"
-}
-
-private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
-    ToolNames.MEMORY -> when (action) {
-        MemoryActions.CREATE, MemoryActions.EDIT -> HugeIcons.QuillWrite01
-        MemoryActions.DELETE -> HugeIcons.Eraser
-        else -> HugeIcons.QuillWrite01
-    }
-
-    ToolNames.SEARCH_WEB -> HugeIcons.Search01
-    ToolNames.SCRAPE_WEB -> HugeIcons.GlobalSearch
-    ToolNames.GET_TIME_INFO -> HugeIcons.Time02
-    ToolNames.CLIPBOARD -> HugeIcons.Clipboard
-    ToolNames.TTS -> HugeIcons.VolumeHigh
-    ToolNames.ASK_USER -> HugeIcons.BubbleChatQuestion
-    ToolNames.USE_SKILL, "run_js" -> HugeIcons.MagicWand01
-
-    // Phase 18 — system intent action chips. These tools fire a system intent the user
-    // finalises in the destination app; the chip shows what got staged.
-    "create_calendar_event" -> HugeIcons.Clock02
-    "create_contact", "send_sms_intent" -> HugeIcons.SmartPhone01
-    "send_email_intent" -> HugeIcons.Message02
-    "open_wifi_settings" -> HugeIcons.Settings03
-    "show_location_on_map" -> HugeIcons.Pin
-
-    else -> HugeIcons.Tools
-}
-
+// Per-tool icon/title/summary/preview rendering now lives in ToolUIRegistry
+// (see message/tools/BuiltinToolUIs.kt). This file only keeps the cross-cutting
+// approval-card UI and the interactive ask_user flow, plus the small JSON helper
+// they rely on.
 private fun JsonElement?.getStringContent(key: String): String? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
+
+private const val ASK_USER_TOOL_NAME = "ask_user"
 
 @Composable
 fun ChainOfThoughtScope.ChatMessageToolStep(
@@ -161,122 +77,40 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
-    val isAskUser = tool.toolName == ToolNames.ASK_USER
-
-    if (isAskUser) {
+    // ask_user 是交互式问答流程, 不走注册式渲染框架
+    if (tool.toolName == ASK_USER_TOOL_NAME) {
         AskUserToolStep(tool = tool, loading = loading, onToolAnswer = onToolAnswer)
         return
     }
+
+    val renderer = remember(tool.toolName) { ToolUIRegistry.resolve(tool.toolName) }
+    val context = remember(tool, loading) {
+        ToolUIContext(
+            tool = tool,
+            arguments = tool.inputAsJson(),
+            content = if (tool.isExecuted) {
+                runCatching {
+                    JsonInstant.parseToJsonElement(
+                        tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+                    )
+                }.getOrElse { JsonObject(emptyMap()) }
+            } else {
+                null
+            },
+            loading = loading,
+        )
+    }
+
     var showResult by remember { mutableStateOf(false) }
     var showDenyDialog by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(true) }
-    val eventBus: AppEventBus = koinInject()
-    val scope = rememberCoroutineScope()
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
-    val arguments = tool.inputAsJson()
-    val memoryAction = arguments.getStringContent("action")
-    val content = if (tool.isExecuted) {
-        runCatching {
-            JsonInstant.parseToJsonElement(
-                tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-            )
-        }.getOrElse { JsonObject(emptyMap()) }
-    } else {
-        null
-    }
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
 
-    val title = when (tool.toolName) {
-        ToolNames.MEMORY -> when (memoryAction) {
-            MemoryActions.CREATE -> stringResource(R.string.chat_message_tool_create_memory)
-            MemoryActions.EDIT -> stringResource(R.string.chat_message_tool_edit_memory)
-            MemoryActions.DELETE -> stringResource(R.string.chat_message_tool_delete_memory)
-            else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
-        }
-
-        ToolNames.SEARCH_WEB -> stringResource(
-            R.string.chat_message_tool_search_web,
-            arguments.getStringContent("query") ?: ""
-        )
-
-        ToolNames.SCRAPE_WEB -> stringResource(R.string.chat_message_tool_scrape_web)
-        ToolNames.GET_TIME_INFO -> stringResource(R.string.chat_message_tool_get_time)
-        ToolNames.CLIPBOARD -> when (memoryAction) {
-            ClipboardActions.READ -> stringResource(R.string.chat_message_tool_clipboard_read)
-            ClipboardActions.WRITE -> stringResource(R.string.chat_message_tool_clipboard_write)
-            else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
-        }
-
-        ToolNames.TTS -> {
-            val preview = arguments.getStringContent("text")?.let { text ->
-                if (text.length > 24) text.take(24) + "…" else text
-            } ?: ""
-            "Speaking: $preview"
-        }
-
-        ToolNames.USE_SKILL -> {
-            val skillName = arguments.getStringContent("name") ?: ""
-            val path = arguments.getStringContent("path")
-            if (path != null) "Skill: $skillName / $path" else "Skill: $skillName"
-        }
-
-        // Phase 18 — system intent action chips. Title comes from the executed result's
-        // `summary` field (e.g. "Calendar event: Lunch with Bob") so the user sees what
-        // got staged without the JSON envelope. Pre-execution the title falls back to
-        // the args-derived preview so the approval card is also readable.
-        "create_calendar_event", "create_contact", "send_email_intent",
-        "send_sms_intent", "open_wifi_settings", "show_location_on_map" -> {
-            val summaryFromResult = content.getStringContent("summary")
-            summaryFromResult ?: when (tool.toolName) {
-                "create_calendar_event" -> {
-                    val t = arguments.getStringContent("title") ?: ""
-                    if (t.isNotBlank()) "Calendar event: $t" else "Create calendar event"
-                }
-                "create_contact" -> {
-                    val first = arguments.getStringContent("first_name").orEmpty()
-                    val last = arguments.getStringContent("last_name").orEmpty()
-                    val name = listOf(first, last).filter { it.isNotBlank() }.joinToString(" ")
-                    if (name.isNotBlank()) "Contact: $name" else "Create contact"
-                }
-                "send_email_intent" -> {
-                    val to = arguments.getStringContent("to").orEmpty()
-                    if (to.isNotBlank()) "Email to $to" else "Compose email"
-                }
-                "send_sms_intent" -> {
-                    val ph = arguments.getStringContent("phone_number").orEmpty()
-                    if (ph.isNotBlank()) "SMS to $ph" else "Compose SMS"
-                }
-                "open_wifi_settings" -> "WiFi Settings"
-                "show_location_on_map" -> {
-                    val q = arguments.getStringContent("query").orEmpty()
-                    if (q.isNotBlank()) "Map: $q" else "Open map"
-                }
-                else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
-            }
-        }
-
-        // run_js — show "Skill: <name>" so the user knows what JS skill ran.
-        "run_js" -> {
-            val skillName = arguments.getStringContent("skill_name") ?: ""
-            "JS skill: $skillName"
-        }
-
-        else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
-    }
-
-    // 判断是否有额外内容需要显示
-    val hasExtraContent = when (tool.toolName) {
-        ToolNames.MEMORY -> memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT) &&
-            content.getStringContent("content") != null
-
-        ToolNames.SEARCH_WEB -> content.getStringContent("answer") != null ||
-            (content?.jsonObject?.get("items")?.jsonArray?.isNotEmpty() == true)
-
-        ToolNames.SCRAPE_WEB -> arguments.getStringContent("url") != null
-        ToolNames.TTS -> arguments.getStringContent("text") != null
-        else -> false
-    } || isDenied || images.isNotEmpty()
+    // Summary detection is delegated to the registered renderer; image output and
+    // denial reasons are common to all tools.
+    val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty()
 
     ControlledChainOfThoughtStep(
         expanded = expanded,
@@ -288,7 +122,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                 )
             } else {
                 Icon(
-                    imageVector = getToolIcon(tool.toolName, memoryAction),
+                    imageVector = renderer.icon(context),
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = LocalContentColor.current.copy(alpha = 0.7f)
@@ -297,7 +131,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         },
         label = {
             Text(
-                text = title,
+                text = renderer.title(context),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.shimmer(isLoading = loading),
@@ -364,7 +198,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                     // card. Generic args display would leak them (audit finding).
                     if (tool.toolName.startsWith("mcp_")) {
                         val mcpRendered = runCatching {
-                            (arguments as? JsonObject)?.let {
+                            (tool.inputAsJson() as? JsonObject)?.let {
                                 me.rerere.rikkahub.data.ai.mcp.control.McpApprovalRenderer
                                     .render(tool.toolName, it)
                             }
@@ -474,7 +308,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (content != null || isPending || images.isNotEmpty()) {
+        onClick = if (context.content != null || isPending || images.isNotEmpty()) {
             { showResult = true }
         } else {
             null
@@ -482,84 +316,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         content = if (hasExtraContent) {
             {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (tool.toolName == ToolNames.MEMORY &&
-                        memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT)
-                    ) {
-                        content.getStringContent("content")?.let { memoryContent ->
-                            Text(
-                                text = memoryContent,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.shimmer(isLoading = loading),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    if (tool.toolName == ToolNames.SEARCH_WEB) {
-                        content.getStringContent("answer")?.let { answer ->
-                            Text(
-                                text = answer,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.shimmer(isLoading = loading),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        val items = content?.jsonObject?.get("items")?.jsonArray ?: emptyList()
-                        if (items.isNotEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                FaviconRow(
-                                    urls = items.mapNotNull { it.getStringContent("url") },
-                                    size = 18.dp,
-                                )
-                                Text(
-                                    text = stringResource(R.string.chat_message_tool_search_results_count, items.size),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                                )
-                            }
-                        }
-                    }
-                    if (tool.toolName == ToolNames.SCRAPE_WEB) {
-                        val url = arguments.getStringContent("url") ?: ""
-                        Text(
-                            text = url,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                        )
-                    }
-                    if (tool.toolName == ToolNames.TTS) {
-                        val text = arguments.getStringContent("text") ?: ""
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = text,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            FilledTonalIconButton(
-                                onClick = { scope.launch { eventBus.emit(AppEvent.Speak(text)) } },
-                                modifier = Modifier.size(28.dp),
-                            ) {
-                                Icon(
-                                    imageVector = HugeIcons.Refresh01,
-                                    contentDescription = "Replay",
-                                    modifier = Modifier.size(14.dp),
-                                )
-                            }
-                        }
-                    }
+                    renderer.Summary(context)
                     if (images.isNotEmpty()) {
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -607,291 +364,19 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     }
 
     if (showResult) {
-        ToolCallPreviewSheet(
-            toolName = tool.toolName,
-            arguments = arguments,
-            content = content,
-            output = tool.output,
-            onDismissRequest = { showResult = false }
+        ModalBottomSheet(
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+            ),
+            onDismissRequest = { showResult = false },
+            content = {
+                renderer.Preview(
+                    context = context,
+                    onDismissRequest = { showResult = false },
+                )
+            },
         )
-    }
-}
-
-@Composable
-private fun ToolCallPreviewSheet(
-    toolName: String,
-    arguments: JsonElement,
-    content: JsonElement?,
-    output: List<UIMessagePart>,
-    onDismissRequest: () -> Unit = {}
-) {
-    val memoryRepo: MemoryRepository = koinInject()
-    val scope = rememberCoroutineScope()
-
-    val memoryAction = arguments.getStringContent("action")
-    val isMemoryOperation = toolName == ToolNames.MEMORY &&
-        memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT)
-    val memoryId = (content as? JsonObject)?.get("id")?.jsonPrimitiveOrNull?.intOrNull
-
-    ModalBottomSheet(
-        sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
-        onDismissRequest = onDismissRequest,
-        content = {
-            when {
-                content == null -> GenericToolPreview(
-                    toolName = toolName,
-                    arguments = arguments,
-                    output = emptyList(),
-                    isMemoryOperation = false,
-                    memoryId = null,
-                    memoryRepo = memoryRepo,
-                    scope = scope,
-                    onDismissRequest = onDismissRequest
-                )
-
-                toolName == ToolNames.SEARCH_WEB -> SearchWebPreview(
-                    arguments = arguments,
-                    content = content,
-                )
-
-                toolName == ToolNames.SCRAPE_WEB -> ScrapeWebPreview(content = content)
-                else -> GenericToolPreview(
-                    toolName = toolName,
-                    arguments = arguments,
-                    output = output,
-                    isMemoryOperation = isMemoryOperation,
-                    memoryId = memoryId,
-                    memoryRepo = memoryRepo,
-                    scope = scope,
-                    onDismissRequest = onDismissRequest
-                )
-            }
-        },
-    )
-}
-
-@Composable
-private fun SearchWebPreview(
-    arguments: JsonElement,
-    content: JsonElement,
-) {
-    val context = LocalContext.current
-    val items = content.jsonObject["items"]?.jsonArray ?: emptyList()
-    val answer = content.getStringContent("answer")
-    val query = arguments.getStringContent("query") ?: ""
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxHeight(0.8f)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item {
-            Text(stringResource(R.string.chat_message_tool_search_prefix, query))
-        }
-
-        if (answer != null) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    MarkdownBlock(
-                        content = answer,
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        if (items.isNotEmpty()) {
-            items(items, key = { item -> item.getStringContent("url") ?: item.hashCode().toString() }) { item ->
-                val url = item.getStringContent("url") ?: return@items
-                val title = item.getStringContent("title") ?: return@items
-                val text = item.getStringContent("text") ?: return@items
-
-                Card(
-                    onClick = { context.openUrl(url) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp, horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Favicon(
-                            url = url,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column {
-                            Text(text = title, maxLines = 1)
-                            Text(
-                                text = text,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = url,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            item {
-                HighlightText(
-                    code = JsonInstantPretty.encodeToString(content),
-                    language = "json",
-                    fontSize = 12.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScrapeWebPreview(content: JsonElement) {
-    val urls = content.jsonObject["urls"]?.jsonArray ?: emptyList()
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxHeight(0.8f)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item {
-            Text(
-                text = stringResource(
-                    R.string.chat_message_tool_scrape_prefix,
-                    urls.joinToString(", ") { it.getStringContent("url") ?: "" }
-                )
-            )
-        }
-
-        items(urls, key = { it.getStringContent("url") ?: it.hashCode().toString() }) { url ->
-            val urlObject = url.jsonObject
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = urlObject["url"]?.jsonPrimitive?.content ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Card {
-                    MarkdownBlock(
-                        content = urlObject["content"]?.jsonPrimitive?.content ?: "",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GenericToolPreview(
-    toolName: String,
-    arguments: JsonElement,
-    output: List<UIMessagePart>,
-    isMemoryOperation: Boolean,
-    memoryId: Int?,
-    memoryRepo: MemoryRepository,
-    scope: kotlinx.coroutines.CoroutineScope,
-    onDismissRequest: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxHeight(0.8f)
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.chat_message_tool_call_title),
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center
-            )
-
-            if (isMemoryOperation && memoryId != null) {
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            memoryRepo.deleteMemory(memoryId)
-                            onDismissRequest()
-                        }
-                    }
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Delete01,
-                        contentDescription = "Delete memory"
-                    )
-                }
-            }
-        }
-        FormItem(
-            label = {
-                Text(stringResource(R.string.chat_message_tool_call_label, toolName))
-            }
-        ) {
-            HighlightCodeBlock(
-                code = JsonInstantPretty.encodeToString(arguments),
-                language = "json",
-                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
-            )
-        }
-        if (output.isNotEmpty()) {
-            FormItem(
-                label = {
-                    Text(stringResource(R.string.chat_message_tool_call_result))
-                }
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    output.fastForEach { part ->
-                        when (part) {
-                            is UIMessagePart.Text -> HighlightCodeBlock(
-                                code = runCatching {
-                                    JsonInstantPretty.encodeToString(
-                                        JsonInstant.parseToJsonElement(part.text)
-                                    )
-                                }.getOrElse { part.text },
-                                language = "json",
-                                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
-                            )
-
-                            is UIMessagePart.Image -> ZoomableAsyncImage(
-                                model = part.url,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-
-                            else -> {}
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

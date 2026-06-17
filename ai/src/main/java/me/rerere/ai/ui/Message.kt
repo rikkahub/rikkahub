@@ -147,13 +147,14 @@ data class UIMessage(
         } ?: this
     }
 
-    fun summaryAsText(): String {
-        return "[${role.name}]: " + parts.joinToString(separator = "\n") { part ->
+    fun summaryAsText(maxLength: Int = Int.MAX_VALUE): String {
+        val text = "[${role.name}]: " + parts.joinToString(separator = "\n") { part ->
             when (part) {
                 is UIMessagePart.Text -> part.text
                 else -> ""
             }
         }
+        return if (text.length > maxLength) text.take(maxLength) + "..." else text
     }
 
     fun toText() = parts.joinToString(separator = "\n") { part ->

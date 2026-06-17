@@ -105,7 +105,7 @@ class McpManager(
                 .collect { mcpServerConfigs ->
                     runCatching {
                         Log.i(TAG, "update configs: ${mcpServerConfigs.joinToString { redactConfigForLog(it) }}")
-                        val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable }
+                        val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable && it.commonOptions.name.isNotBlank() }
                         val currentConfigs = clients.keys.toList()
                         val (toAdd, toRemove) = currentConfigs.checkDifferent(
                             other = newConfigs,
@@ -152,7 +152,7 @@ class McpManager(
         return clients.entries.find { it.key.id == config.id }?.value
     }
 
-    fun getAllAvailableTools(): List<Pair<Uuid, McpTool>> {
+    fun getAllAvailableTools(): List<Triple<Uuid, String, McpTool>> {
         val settings = settingsStore.settingsFlow.value
         val assistant = settings.getCurrentAssistant()
         return settings.mcpServers
@@ -162,7 +162,7 @@ class McpManager(
             .flatMap { server ->
                 server.commonOptions.tools
                     .filter { tool -> tool.enable }
-                    .map { tool -> server.id to tool }
+                    .map { tool -> Triple(server.id, server.commonOptions.name, tool) }
             }
     }
 

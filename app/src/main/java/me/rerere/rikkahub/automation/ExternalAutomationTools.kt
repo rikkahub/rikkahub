@@ -95,7 +95,7 @@ fun externalAutomationSetEnabledTool(config: ExternalAutomationConfig): Tool = T
             required = listOf("enabled"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val enabled = args.jsonObject["enabled"]?.jsonPrimitive?.booleanOrNull
             ?: return@Tool errEnv("invalid_enabled", "enabled is required (true or false)")
@@ -123,7 +123,7 @@ fun externalAutomationAddTrustedPackageTool(config: ExternalAutomationConfig): T
             required = listOf("package_name"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val pkg = args.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.trim()
             ?: return@Tool errEnv("invalid_package_name", "package_name is required")
@@ -161,7 +161,7 @@ fun externalAutomationRemoveTrustedPackageTool(config: ExternalAutomationConfig)
             required = listOf("package_name"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val pkg = args.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.trim()
             ?: return@Tool errEnv("invalid_package_name", "package_name is required")

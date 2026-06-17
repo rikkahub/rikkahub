@@ -19,6 +19,12 @@ data class MessageSearchResult(
     val snippet: String,
 )
 
+enum class MessageSearchSort(val orderBy: String) {
+    RELEVANCE("rank, update_at DESC"),
+    NEWEST_FIRST("update_at DESC, rank"),
+    OLDEST_FIRST("update_at ASC, rank"),
+}
+
 private const val TAG = "MessageFtsManager"
 
 /**
@@ -86,7 +92,10 @@ class MessageFtsManager(private val database: AppDatabase) {
         db.execSQL("DELETE FROM message_fts")
     }
 
-    suspend fun search(keyword: String): List<MessageSearchResult> = withContext(Dispatchers.IO) {
+    suspend fun search(
+        keyword: String,
+        sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
+    ): List<MessageSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<MessageSearchResult>()
         val cursor = db.query(
             """
@@ -94,7 +103,7 @@ class MessageFtsManager(private val database: AppDatabase) {
                    simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
             FROM message_fts
             WHERE text MATCH jieba_query(?)
-            ORDER BY rank, update_at DESC
+            ORDER BY ${sort.orderBy}
             LIMIT 50
             """.trimIndent(),
             arrayOf(keyword)

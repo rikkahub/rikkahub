@@ -359,7 +359,7 @@ fun mcpAddTool(settingsStore: SettingsStore, manager: McpManager): Tool = Tool(
             required = listOf("transport", "name", "url"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val transport = params["transport"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()
@@ -466,7 +466,7 @@ fun mcpUpdateTool(settingsStore: SettingsStore, manager: McpManager): Tool = Too
             required = listOf("id", "transport", "name", "url"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val rawId = params["id"]?.jsonPrimitive?.contentOrNull
@@ -536,7 +536,7 @@ fun mcpDeleteTool(settingsStore: SettingsStore, manager: McpManager): Tool = Too
             required = listOf("id"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val rawId = params["id"]?.jsonPrimitive?.contentOrNull
@@ -578,7 +578,7 @@ fun mcpSetEnabledTool(settingsStore: SettingsStore, manager: McpManager): Tool =
             required = listOf("id", "enabled"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val rawId = params["id"]?.jsonPrimitive?.contentOrNull
@@ -717,7 +717,7 @@ fun mcpSetToolApprovalTool(settingsStore: SettingsStore): Tool = Tool(
             required = listOf("server_id", "tool_name", "needs_approval"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val rawServerId = params["server_id"]?.jsonPrimitive?.contentOrNull

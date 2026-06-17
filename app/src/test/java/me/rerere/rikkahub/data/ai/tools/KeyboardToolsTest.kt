@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.tools
 import android.view.KeyEvent
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.NULL_CONTEXT
@@ -115,14 +116,14 @@ class KeyboardToolsTest {
             keyboardSetCursorTool(client),
             keyboardSelectRangeTool(client),
         ).forEach { tool ->
-            assertTrue("${tool.name} should require approval", tool.needsApproval)
+            assertTrue("${tool.name} should require approval", tool.needsApproval(JsonObject(emptyMap())))
         }
     }
 
     @Test
     fun `read keyboard tools are not approval gated`() {
         listOf(keyboardReadFieldTool(client), keyboardEditorInfoTool(client)).forEach { tool ->
-            assertFalse("${tool.name} is read-only", tool.needsApproval)
+            assertFalse("${tool.name} is read-only", tool.needsApproval(JsonObject(emptyMap())))
         }
     }
 

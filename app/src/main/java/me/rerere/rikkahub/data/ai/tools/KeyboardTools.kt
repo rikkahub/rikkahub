@@ -132,7 +132,7 @@ fun keyboardTypeTool(client: KeyboardApiClient): Tool = Tool(
             required = listOf("text"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val text = args.jsonObject["text"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errEnvelope(
@@ -198,7 +198,7 @@ fun keyboardPressKeyTool(client: KeyboardApiClient): Tool = Tool(
             required = listOf("key"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val raw = args.jsonObject["key"]?.jsonPrimitive?.contentOrNull
         val keyCode = resolveKeyCode(raw)
@@ -225,7 +225,7 @@ fun keyboardDeleteTool(client: KeyboardApiClient): Tool = Tool(
             required = listOf("count"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val count = args.jsonObject["count"]?.jsonPrimitive?.intOrNull
             ?: return@Tool errEnvelope(
@@ -245,7 +245,7 @@ fun keyboardClearTool(client: KeyboardApiClient): Tool = Tool(
     description = "Clear all text from the currently focused text field via the " +
         "agent-keyboard IME. Example: keyboard_clear().",
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
-    needsApproval = true,
+    needsApproval = { true },
     execute = {
         handle(client.clearField()) { ok { put("cleared", true) } }
     },
@@ -293,7 +293,7 @@ fun keyboardSetCursorTool(client: KeyboardApiClient): Tool = Tool(
             required = listOf("pos"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val pos = args.jsonObject["pos"]?.jsonPrimitive?.intOrNull
             ?: return@Tool errEnvelope(
@@ -327,7 +327,7 @@ fun keyboardSelectRangeTool(client: KeyboardApiClient): Tool = Tool(
             required = listOf("start", "end"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val start = params["start"]?.jsonPrimitive?.intOrNull

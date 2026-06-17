@@ -1,8 +1,10 @@
 package me.rerere.ai.provider.providers
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -30,10 +32,10 @@ import me.rerere.ai.provider.providers.openai.openRouterModelFromJson
 import me.rerere.ai.provider.providers.openai.parseImageDataUri
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
-import me.rerere.ai.ui.ImageGenerationResult
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.toHeaders
@@ -48,6 +50,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+
+private const val TAG = "OpenAIProvider"
 
 // Same shape as ClaudeProvider.MINIMAX_FALLBACK_MODELS — see comment there for
 // why a fallback is needed (Minimax's /v1/models returns `{"object":"","data":null}`
@@ -249,7 +253,7 @@ class OpenAIProvider(
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): ImageGenerationResult = withContext(Dispatchers.IO) {
+    ): Flow<ImageGenerationItem> = flow {
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
         }
@@ -259,7 +263,8 @@ class OpenAIProvider(
         // OpenRouter has no /images/generations endpoint (that 404s to its website). Image
         // generation goes through /chat/completions with modalities:["image","text"].
         if (providerSetting.baseUrl.contains("openrouter.ai", ignoreCase = true)) {
-            return@withContext generateImageViaChatCompletions(providerSetting, params, key)
+            generateImageViaChatCompletions(providerSetting, params, key).forEach { emit(it) }
+            return@flow
         }
 
         val requestBody = json.encodeToString(
@@ -274,8 +279,11 @@ class OpenAIProvider(
                         ImageAspectRatio.PORTRAIT -> "1024x1536"
                     }
                 )
-            }.mergeCustomBody(params.customBody)
+            }
+                .mergeCustomBody(params.customBody)
         )
+
+        Log.i(TAG, "generateImage: $requestBody")
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
@@ -283,21 +291,18 @@ class OpenAIProvider(
             .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
+            .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            error("Failed to generate image: ${response.code} ${response.body.string()}")
+        val items = withContext(Dispatchers.IO) {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                error("Failed to generate image: ${response.code} ${response.body?.string()}")
+            }
+            parseImageResponse(response.body.string())
         }
 
-        val bodyStr = response.body.string()
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-        val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
-
-        val items = parseImageGenerationItems(data)
-        if (items.isEmpty()) error("No image returned by the provider.")
-
-        ImageGenerationResult(items = items)
+        items.forEach { emit(it) }
     }
 
     /** OpenRouter image generation via /chat/completions with modalities:["image","text"]. */
@@ -305,7 +310,7 @@ class OpenAIProvider(
         providerSetting: ProviderSetting.OpenAI,
         params: ImageGenerationParams,
         key: String,
-    ): ImageGenerationResult {
+    ): List<ImageGenerationItem> {
         val body = buildJsonObject {
             put("model", params.model.modelId)
             putJsonArray("messages") {
@@ -359,13 +364,13 @@ class OpenAIProvider(
                     (text?.takeIf { it.isNotBlank() }?.let { " Model said: $it" } ?: "")
             )
         }
-        return ImageGenerationResult(items = items)
+        return items
     }
 
     override suspend fun editImage(
         providerSetting: ProviderSetting,
         params: ImageEditParams
-    ): ImageGenerationResult = withContext(Dispatchers.IO) {
+    ): Flow<ImageGenerationItem> = flow {
         require(providerSetting is ProviderSetting.OpenAI) {
             "Expected OpenAI provider setting"
         }
@@ -416,36 +421,36 @@ class OpenAIProvider(
             .headers(params.customHeaders.toHeaders())
             .addHeader("Authorization", "Bearer $key")
             .post(bodyBuilder.build())
+            .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            error("Failed to edit image: ${response.code} ${response.body.string()}")
+        val items = withContext(Dispatchers.IO) {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                error("Failed to edit image: ${response.code} ${response.body?.string()}")
+            }
+            parseImageResponse(response.body.string())
         }
 
-        val bodyStr = response.body.string()
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-        val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
-
-        val items = parseImageGenerationItems(data)
-        if (items.isEmpty()) error("No image returned by the provider.")
-
-        ImageGenerationResult(items = items)
+        items.forEach { emit(it) }
     }
 
-    private suspend fun parseImageGenerationItems(data: JsonArray): List<ImageGenerationItem> {
-        return data.map { imageJson ->
-            val imageObj = imageJson.jsonObject
-            val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
-
+    private suspend fun parseImageResponse(bodyStr: String): List<ImageGenerationItem> {
+        val body = json.parseToJsonElement(bodyStr).jsonObject
+        val defaultFormat = body["output_format"]?.jsonPrimitive?.contentOrNull ?: "png"
+        val data = body["data"]?.jsonArray ?: error("No data in image response")
+        return data.map { element ->
+            val obj = element.jsonObject
+            val b64Json = obj["b64_json"]?.jsonPrimitive?.contentOrNull
             if (b64Json != null) {
+                val outputFormat = obj["output_format"]?.jsonPrimitive?.contentOrNull ?: defaultFormat
                 ImageGenerationItem(
                     data = b64Json,
-                    mimeType = "image/png"
+                    mimeType = outputFormat.toImageMimeType(),
                 )
             } else {
-                val url = imageObj["url"]?.jsonPrimitive?.contentOrNull
-                    ?: error("No b64_json or url in response")
+                val url = obj["url"]?.jsonPrimitive?.contentOrNull
+                    ?: error("No b64_json or url in image response")
                 downloadImageAsBase64(url)
             }
         }
@@ -474,6 +479,12 @@ class OpenAIProvider(
     }
 
     private fun File.imageMediaType(): String = when (extension.lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        else -> "image/png"
+    }
+
+    private fun String.toImageMimeType(): String = when (lowercase()) {
         "jpg", "jpeg" -> "image/jpeg"
         "webp" -> "image/webp"
         else -> "image/png"

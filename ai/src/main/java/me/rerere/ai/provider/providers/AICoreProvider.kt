@@ -35,7 +35,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.ImageGenerationResult
+import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
@@ -211,7 +211,7 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
-    ): ImageGenerationResult = error("AICore does not support image generation")
+    ): Flow<ImageGenerationItem> = error("AICore does not support image generation")
 
     /**
      * Live status of the AICore feature on this device. Surfaced by the settings UI so the

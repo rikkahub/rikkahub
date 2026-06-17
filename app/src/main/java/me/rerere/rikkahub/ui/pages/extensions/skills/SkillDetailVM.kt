@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.extensions
+package me.rerere.rikkahub.ui.pages.extensions.skills
 
 import android.content.Context
 import androidx.lifecycle.ViewModel

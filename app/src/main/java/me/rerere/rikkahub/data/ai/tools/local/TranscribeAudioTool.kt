@@ -76,7 +76,7 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
             required = listOf("path")
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { input ->
         val params = input.jsonObject
         val rawPath = params["path"]?.jsonPrimitive?.contentOrNull
@@ -388,7 +388,7 @@ fun whisperStatusTool(context: Context, settingsStore: SettingsStore): Tool = To
     parameters = {
         InputSchema.Obj(properties = buildJsonObject { })
     },
-    needsApproval = false,
+    needsApproval = { false },
     execute = { _ ->
         val missingSteps = mutableListOf<String>()
 

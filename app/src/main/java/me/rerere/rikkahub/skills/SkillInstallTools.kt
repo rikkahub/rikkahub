@@ -157,7 +157,7 @@ fun skillInstallFromUrlTool(
             required = listOf("url"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { json ->
         val url = json.jsonObject["url"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool err("missing_url", "url is required")
@@ -231,7 +231,7 @@ fun skillInstallFromTextTool(
             required = listOf("content"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { json ->
         val content = json.jsonObject["content"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool err("missing_content", "content is required")

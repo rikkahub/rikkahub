@@ -14,8 +14,10 @@ import me.rerere.rikkahub.ui.pages.stats.StatsVM
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
 import me.rerere.rikkahub.ui.pages.extensions.PromptVM
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesVM
-import me.rerere.rikkahub.ui.pages.extensions.SkillDetailVM
-import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailVM
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsVM
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailVM
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
 import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxViewModel
@@ -54,6 +56,7 @@ val viewModelModule = module {
             memoryRepository = get(),
             filesManager = get(),
             skillManager = get(),
+            workspaceRepository = get(),
         )
     }
     viewModelOf(::TranslatorVM)
@@ -76,6 +79,13 @@ val viewModelModule = module {
         )
     }
     viewModelOf(::SkillDetailVM)
+    viewModelOf(::WorkspaceVM)
+    viewModel<WorkspaceDetailVM> {
+        WorkspaceDetailVM(
+            id = it.get(),
+            repository = get(),
+        )
+    }
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)

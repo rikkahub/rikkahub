@@ -244,6 +244,7 @@ val appModule = module {
             filesManager = get(),
             skillManager = get(),
             toolApprovalPreferences = get(),
+            workspaceRepository = get()
         )
     }
 

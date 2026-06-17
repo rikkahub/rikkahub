@@ -64,6 +64,7 @@ import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
@@ -74,6 +75,7 @@ import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -88,11 +90,13 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
+import me.rerere.workspace.WorkspaceShellStatus
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -155,7 +159,11 @@ class ChatService(
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val toolApprovalPreferences: me.rerere.rikkahub.data.preferences.ToolApprovalPreferences,
+    private val workspaceRepository: WorkspaceRepository,
 ) {
+    // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
+    private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
+
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
@@ -854,6 +862,7 @@ class ChatService(
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
+                workspaceCwd = conversation.workspaceCwd,
                 memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
@@ -862,6 +871,7 @@ class ChatService(
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)
+                    add(workspaceReminderTransformer)
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
@@ -883,6 +893,7 @@ class ChatService(
                         modelCanSeeImages = Modality.IMAGE in model.inputModalities,
                     )
                     addAll(localTools.getTools(assistant.localTools, invocationCtx))
+                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
@@ -892,17 +903,40 @@ class ChatService(
                             )
                         )
                     }
-                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
+                    mcpManager.getAllAvailableTools().also { allTools ->
+                        // Upstream name validation: a server name that isn't pure
+                        // English+digits would produce an invalid `mcp__<name>__tool`
+                        // surface, so surface it as an error rather than emit a tool the
+                        // model can't address.
+                        val invalidNames = allTools
+                            .map { it.second }
+                            .distinct()
+                            .filter { name -> name.isEmpty() || !name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' } }
+                        if (invalidNames.isNotEmpty()) {
+                            addError(
+                                error = IllegalStateException(
+                                    context.getString(
+                                        R.string.error_mcp_invalid_server_name,
+                                        invalidNames.joinToString(", ")
+                                    )
+                                ),
+                                conversationId = conversationId,
+                            )
+                            return
+                        }
+                    }.forEach { (serverId, serverName, tool) ->
                         // Namespace MCP tools by a server-id slug so two enabled servers that
                         // each expose a tool of the same name don't collide (which would 400 or
                         // mis-route to whichever server registered last). Keep the `mcp__` prefix
                         // intact: HardlineCommandGuard and ToolApprovalDefaults both branch on
                         // `startsWith("mcp__")`. The slug is the first 8 hex chars of the id with
-                        // dashes stripped, keeping the name within the 64-char / ^[a-zA-Z0-9_-]+$
-                        // limit. The execute lambda below still calls callTool with the REAL
-                        // tool.name, since the namespacing exists only on the model-facing surface.
+                        // dashes stripped; the validated server name follows for human-readable
+                        // disambiguation, keeping the name within the 64-char /
+                        // ^[a-zA-Z0-9_-]+$ limit. The execute lambda below still calls callTool
+                        // with the REAL tool.name, since the namespacing exists only on the
+                        // model-facing surface.
                         val serverSlug = serverId.toString().take(8).replace("-", "")
-                        val mcpToolName = "mcp__" + serverSlug + "__" + tool.name
+                        val mcpToolName = "mcp__" + serverSlug + "_" + serverName + "__" + tool.name
                         add(
                             Tool(
                                 name = mcpToolName,
@@ -916,9 +950,11 @@ class ChatService(
                                 // applies via HardlineCommandGuard's `mcp__*` branch,
                                 // which scans every string arg for shell-content
                                 // patterns (rm -rf /, mkfs, shutdown, encoded payloads).
-                                needsApproval = me.rerere.rikkahub.data.ai.tools
-                                    .ToolApprovalDefaults.requiresApproval(mcpToolName) ||
-                                    tool.needsApproval,
+                                needsApproval = {
+                                    me.rerere.rikkahub.data.ai.tools
+                                        .ToolApprovalDefaults.requiresApproval(mcpToolName) ||
+                                        tool.needsApproval
+                                },
                                 execute = {
                                     mcpManager.callTool(serverId, tool.name, it.jsonObject)
                                 },
@@ -1006,6 +1042,19 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
         }
+    }
+
+    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
+        if (workspaceId.isNullOrBlank()) return emptyList()
+        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
+            Log.d(
+                TAG,
+                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
+            )
+            return emptyList()
+        }
+        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
     }
 
     // ---- 检查无效消息 ----
@@ -1117,7 +1166,7 @@ class ChatService(
                         prompt = settings.titlePrompt.applyPlaceholders(
                             "locale" to Locale.getDefault().displayName,
                             "content" to conversation.currentMessages
-                                .takeLast(4).joinToString("\n\n") { it.summaryAsText() })
+                                .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
                     ),
                 ),
                 params = backgroundTextGenerationParams(model),
@@ -1167,7 +1216,7 @@ class ChatService(
                         settings.suggestionPrompt.applyPlaceholders(
                             "locale" to Locale.getDefault().displayName,
                             "content" to conversation.currentMessages
-                                .takeLast(8).joinToString("\n\n") { it.summaryAsText() }),
+                                .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
                     )
                 ),
                 params = backgroundTextGenerationParams(model),
@@ -1246,7 +1295,7 @@ class ChatService(
         }
 
         suspend fun compressMessages(messages: List<UIMessage>): String {
-            val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText() }
+            val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText(maxLength = 2000) }
             val prompt = settings.compressPrompt.applyPlaceholders(
                 "content" to contentToCompress,
                 "target_tokens" to targetTokens.toString(),
@@ -1348,8 +1397,10 @@ class ChatService(
         return when {
             // 正在执行工具
             lastTool != null && !lastTool.isExecuted -> {
-                // MCP tools are exposed as `mcp__<serverSlug>__<toolName>`; strip both the
-                // prefix and the server-id slug so the notification shows the bare tool name.
+                // MCP tools are exposed as `mcp__<serverSlug>_<serverName>__<toolName>`; strip
+                // both the prefix and the server segment so the notification shows the bare tool
+                // name. Non-MCP tool names (no `mcp__` prefix) fall through unchanged via the
+                // missingDelimiterValue, instead of being truncated at an embedded `__`.
                 val toolName = lastTool.toolName
                     .removePrefix("mcp__")
                     .substringAfter("__", missingDelimiterValue = lastTool.toolName.removePrefix("mcp__"))

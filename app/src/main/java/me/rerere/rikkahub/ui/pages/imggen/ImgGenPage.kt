@@ -270,36 +270,35 @@ private fun ImageGenScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            if (isGenerating && currentGeneratedImages.isEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                (0 until minOf(2, currentGeneratedImages.size)).forEach { index ->
+                    val image = currentGeneratedImages[index]
+                    var showPreview by remember { mutableStateOf(false) }
+                    AsyncImage(
+                        model = File(image.filePath),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showPreview = true },
+                        contentScale = ContentScale.Crop
+                    )
+
+                    if (showPreview) {
+                        ImagePreviewDialog(
+                            images = listOf(image.filePath),
+                            onDismissRequest = { showPreview = false },
+                        )
+                    }
+                }
+            }
+            if (isGenerating) {
                 ContainedLoadingIndicator(
                     modifier = Modifier.align(Alignment.Center)
                 )
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    (0 until minOf(2, currentGeneratedImages.size)).forEach { index ->
-                        val image = currentGeneratedImages[index]
-                        var showPreview by remember { mutableStateOf(false) }
-                        AsyncImage(
-                            model = File(image.filePath),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .weight(1f)
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { showPreview = true },
-                            contentScale = ContentScale.Crop
-                        )
-
-                        if (showPreview) {
-                            ImagePreviewDialog(
-                                images = listOf(image.filePath),
-                                onDismissRequest = { showPreview = false },
-                            )
-                        }
-                    }
-                }
             }
         }
         InputBar(
