@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RikkaHub is a native Android LLM chat client that supports switching between different AI providers for conversations.
+xcloudz is a native Android LLM chat client that supports switching between different AI providers for conversations.
 Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 
 ## Build, Test & Lint

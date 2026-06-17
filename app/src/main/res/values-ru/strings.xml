@@ -7,7 +7,7 @@
   <string name="about_page_version">Версия</string>
   <string name="about_page_website">Веб-сайт</string>
   <string name="add">Добавить</string>
-  <string name="app_name">RikkaHub</string>
+  <string name="app_name">xcloudz</string>
   <string name="asr_button_content_description">Распознавание речи</string>
   <string name="asr_button_stop">Стоп</string>
   <string name="assistant_detail_basic_desc">Настройте имя, аватар, модель и параметры</string>
@@ -816,7 +816,7 @@
   <string name="setting_page_search_title">Служба поиска</string>
   <string name="setting_page_share">Поделиться</string>
   <string name="setting_page_share_desc">Поделиться этим приложением с друзьями</string>
-  <string name="setting_page_share_text">RikkaHub — открытый Android-ассистент с ИИ\n\nСайт: https://rikka-ai.com/</string>
+  <string name="setting_page_share_text">xcloudz — открытый Android-ассистент с ИИ\n\nСайт: https://github.com/rdh073/rikkahub</string>
   <string name="setting_page_sponsor_alert_confirm">Пожертвовать</string>
   <string name="setting_page_sponsor_alert_desc">Вы запустили приложение более 100 раз! Если вам нравится им пользоваться, пожалуйста, поддержите разработчика.</string>
   <string name="setting_page_sponsor_alert_dismiss">Не сейчас</string>
@@ -844,7 +844,7 @@
   <string name="setting_page_web_server_address_note_desc">LAN-адрес: использует IP-адрес устройства в Wi-Fi, доступен другим устройствам в той же сети. Недоступен при использовании мобильных данных.
 Локальный адрес: использует localhost, доступен только на этом устройстве.
 Адрес mDNS: использует имя хоста .local, доступен по имени с других устройств в той же сети без знания IP-адреса.</string>
-  <string name="setting_page_web_server_desc">Разрешить доступ к RikkaHub через веб</string>
+  <string name="setting_page_web_server_desc">Разрешить доступ к xcloudz через веб</string>
   <string name="setting_page_web_server_error">Ошибка</string>
   <string name="setting_page_web_server_jwt_enable">Включить аутентификацию</string>
   <string name="setting_page_web_server_jwt_enable_desc">Требовать проверку пароля при доступе к веб-интерфейсу</string>
@@ -1158,14 +1158,14 @@
   <string name="assistant_page_subagent_max_steps">Макс. шагов подагента</string>
   <string name="assistant_page_subagent_max_steps_desc">Максимальное количество шагов использования инструментов, когда этот ассистент работает как подагент. Оставьте пустым, чтобы использовать по умолчанию</string>
   <string name="chat_subagent_running">Выполняется %1$s</string>
-  <string name="automation_a11y_service_label">Автоматизация интерфейса RikkaHub</string>
+  <string name="automation_a11y_service_label">Автоматизация интерфейса xcloudz</string>
   <string name="automation_a11y_service_description">Позволяет включенному помощнику наблюдать (только для чтения) за экраном других приложений, чтобы помочь вам. Он не может нажимать, вводить текст или прокручивать. Вы можете остановить его в любое время с помощью плавающей кнопки ОСТАНОВИТЬ.</string>
   <string name="automation_kill_switch_stop">СТОП</string>
   <string name="assistant_page_ui_automation">Автоматизация интерфейса (управление экраном)</string>
-  <string name="assistant_page_ui_automation_desc">Разрешите этому ассистенту наблюдать за экраном других приложений (только для чтения). Требуется включение службы доступности RikkaHub в системных настройках. Только для чтения: без нажатий или ввода текста.</string>
+  <string name="assistant_page_ui_automation_desc">Разрешите этому ассистенту наблюдать за экраном других приложений (только для чтения). Требуется включение службы доступности xcloudz в системных настройках. Только для чтения: без нажатий или ввода текста.</string>
   <string name="assistant_page_gradient_background">Градиентный фон</string>
   <string name="assistant_page_gradient_background_desc">Использовать динамический градиентный фон на странице чата</string>
-  <string name="automation_kill_switch_unavailable">Не удалось запустить автоматизацию: не удалось показать аварийный выключатель «СТОП». Включите службу специальных возможностей rikkahub и наложение, затем повторите попытку.</string>
+  <string name="automation_kill_switch_unavailable">Не удалось запустить автоматизацию: не удалось показать аварийный выключатель «СТОП». Включите службу специальных возможностей xcloudz и наложение, затем повторите попытку.</string>
   <string name="chat_status_retrieving_knowledge">Поиск в базе знаний…</string>
   <string name="automation_confirm_prompt">Подтвердите действие в %1$s: %2$s %3$s?</string>
   <string name="automation_confirm_allow">Подтвердить</string>

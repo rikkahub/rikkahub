@@ -7,7 +7,7 @@
   <string name="about_page_version">バージョン</string>
   <string name="about_page_website">ウェブサイト</string>
   <string name="add">追加</string>
-  <string name="app_name">RikkaHub</string>
+  <string name="app_name">xcloudz</string>
   <string name="asr_button_content_description">音声認識</string>
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">名前、アバター、モデル、パラメータを設定</string>
@@ -816,7 +816,7 @@
   <string name="setting_page_search_title">検索サービス</string>
   <string name="setting_page_share">共有</string>
   <string name="setting_page_share_desc">このアプリを友達と共有</string>
-  <string name="setting_page_share_text">RikkaHub - オープンソースAndroid AIアシスタント\n\nウェブサイト: https://rikka-ai.com/</string>
+  <string name="setting_page_share_text">xcloudz - オープンソースAndroid AIアシスタント\n\nウェブサイト: https://github.com/rdh073/rikkahub</string>
   <string name="setting_page_sponsor_alert_confirm">寄付</string>
   <string name="setting_page_sponsor_alert_desc">アプリを100回以上起動しました！気に入っていただけたら、開発者をサポートしていただけると嬉しいです。</string>
   <string name="setting_page_sponsor_alert_dismiss">今はしない</string>
@@ -844,7 +844,7 @@
   <string name="setting_page_web_server_address_note_desc">LANアドレス: デバイスのWiFi IPを使用し、同じネットワーク上の他のデバイスからアクセス可能です。モバイルデータでは利用できません。
 ローカルアドレス: localhostを使用し、このデバイスのみでアクセス可能です。
 mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じネットワーク上の他のデバイスから名前でアクセス可能です。</string>
-  <string name="setting_page_web_server_desc">Web経由でRikkaHubにアクセスできるようにする</string>
+  <string name="setting_page_web_server_desc">Web経由でxcloudzにアクセスできるようにする</string>
   <string name="setting_page_web_server_error">エラー</string>
   <string name="setting_page_web_server_jwt_enable">認証を有効にする</string>
   <string name="setting_page_web_server_jwt_enable_desc">Webインターフェースにアクセスする際にパスワード認証が必要</string>
@@ -1158,14 +1158,14 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_subagent_max_steps">サブエージェントの最大ステップ数</string>
   <string name="assistant_page_subagent_max_steps_desc">このアシスタントがサブエージェントとして実行されるときの最大ツール使用ステップ。デフォルトを使用するには空のままにしてください</string>
   <string name="chat_subagent_running">%1$s を実行中</string>
-  <string name="automation_a11y_service_label">RikkaHub UI自動化</string>
+  <string name="automation_a11y_service_label">xcloudz UI自動化</string>
   <string name="automation_a11y_service_description">有効なアシスタントが他のアプリの画面を（読み取り専用で）観察してあなたを助けます。タップ、入力、スクロールはできません。浮動STOPボタンからいつでも停止できます。</string>
   <string name="automation_kill_switch_stop">停止</string>
   <string name="assistant_page_ui_automation">UI自動化（画面コントロール）</string>
-  <string name="assistant_page_ui_automation_desc">このアシスタントが他のアプリの画面を観察することを許可します（読み取り専用）。システム設定でRikkaHubのアクセシビリティサービスを有効にする必要があります。読み取り専用：タップや入力はできません。</string>
+  <string name="assistant_page_ui_automation_desc">このアシスタントが他のアプリの画面を観察することを許可します（読み取り専用）。システム設定でxcloudzのアクセシビリティサービスを有効にする必要があります。読み取り専用：タップや入力はできません。</string>
   <string name="assistant_page_gradient_background">グラデーション背景</string>
   <string name="assistant_page_gradient_background_desc">チャットページで動的なグラデーション背景を使用します</string>
-  <string name="automation_kill_switch_unavailable">自動化を開始できません：「停止」キルスイッチを表示できませんでした。rikkahub のユーザー補助サービスとオーバーレイを有効にして、もう一度お試しください。</string>
+  <string name="automation_kill_switch_unavailable">自動化を開始できません：「停止」キルスイッチを表示できませんでした。xcloudz のユーザー補助サービスとオーバーレイを有効にして、もう一度お試しください。</string>
   <string name="chat_status_retrieving_knowledge">ナレッジベースを検索中…</string>
   <string name="automation_confirm_prompt">%1$s での操作を確認: %2$s %3$s？</string>
   <string name="automation_confirm_allow">確認</string>

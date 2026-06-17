@@ -7,7 +7,7 @@
   <string name="about_page_version">版本</string>
   <string name="about_page_website">官網</string>
   <string name="add">添加</string>
-  <string name="app_name">RikkaHub</string>
+  <string name="app_name">xcloudz</string>
   <string name="asr_button_content_description">語音辨識</string>
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">設定名稱、頭像、模型與參數</string>
@@ -816,7 +816,7 @@
   <string name="setting_page_search_title">搜尋服務</string>
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP給朋友</string>
-  <string name="setting_page_share_text">RikkaHub - 開源安卓AI助手\n\n官網: https://rikka-ai.com/</string>
+  <string name="setting_page_share_text">xcloudz - 開源安卓AI助手\n\n官網: https://github.com/rdh073/rikkahub</string>
   <string name="setting_page_sponsor_alert_confirm">捐款</string>
   <string name="setting_page_sponsor_alert_desc">您已啟動應用程式超過 100 次！如果您喜歡使用它，請考慮支持開發者。</string>
   <string name="setting_page_sponsor_alert_dismiss">稍後再說</string>
@@ -842,7 +842,7 @@
   <string name="setting_page_web_server">Web伺服器</string>
   <string name="setting_page_web_server_address_note">位址備註</string>
   <string name="setting_page_web_server_address_note_desc">LAN 位址：使用裝置 WiFi IP，可供同一網路上的其他裝置存取。行動數據無法使用。\n本機位址：使用 localhost，僅供本裝置存取。\nmDNS 位址：使用 .local 主機名稱，可供同一網路上的其他裝置透過名稱存取，無需知道 IP。</string>
-  <string name="setting_page_web_server_desc">允許您透過網頁存取 RikkaHub</string>
+  <string name="setting_page_web_server_desc">允許您透過網頁存取 xcloudz</string>
   <string name="setting_page_web_server_error">錯誤</string>
   <string name="setting_page_web_server_jwt_enable">啟用身分驗證</string>
   <string name="setting_page_web_server_jwt_enable_desc">存取網頁介面時需要密碼驗證</string>
@@ -1156,14 +1156,14 @@
   <string name="assistant_page_subagent_max_steps">子代理最大步驟</string>
   <string name="assistant_page_subagent_max_steps_desc">此助手作為子代理運行時的最大工具使用步驟。若要使用默認設置，請留空</string>
   <string name="chat_subagent_running">正在執行 %1$s</string>
-  <string name="automation_a11y_service_label">RikkaHub 使用者介面自動化</string>
+  <string name="automation_a11y_service_label">xcloudz 使用者介面自動化</string>
   <string name="automation_a11y_service_description">允許已啟用的助手以只讀方式觀察其他應用程式的螢幕，以幫助您。它無法點擊、輸入或滾動。您可以隨時從浮動的停止按鈕中停止它。</string>
   <string name="automation_kill_switch_stop">停止</string>
   <string name="assistant_page_ui_automation">UI 自動化（螢幕控制）</string>
-  <string name="assistant_page_ui_automation_desc">允許此助手觀察其他應用的螢幕（只讀）。需要在系統設定中啟用 RikkaHub 的輔助功能服務。只讀：無法點擊或輸入。</string>
+  <string name="assistant_page_ui_automation_desc">允許此助手觀察其他應用的螢幕（只讀）。需要在系統設定中啟用 xcloudz 的輔助功能服務。只讀：無法點擊或輸入。</string>
   <string name="assistant_page_gradient_background">漸層背景</string>
   <string name="assistant_page_gradient_background_desc">在聊天頁面上使用動態漸變背景</string>
-  <string name="automation_kill_switch_unavailable">無法啟動自動化：無法顯示「停止」緊急開關。請啟用 rikkahub 的無障礙服務和懸浮視窗權限後重試。</string>
+  <string name="automation_kill_switch_unavailable">無法啟動自動化：無法顯示「停止」緊急開關。請啟用 xcloudz 的無障礙服務和懸浮視窗權限後重試。</string>
   <string name="chat_status_retrieving_knowledge">正在搜尋知識庫…</string>
   <string name="automation_confirm_prompt">在 %1$s 中確認操作：%2$s %3$s？</string>
   <string name="automation_confirm_allow">確認</string>
