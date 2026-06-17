@@ -50,4 +50,13 @@ class McpAlwaysAllowExclusionTest {
             assertTrue("$name should requireApproval", ToolApprovalDefaults.requiresApproval(name))
         }
     }
+
+    // eval_javascript runs attacker-controllable code in the QuickJS engine; a blanket
+    // "Always Allow" would hand unattended cron / Telegram paths a standing arbitrary-code
+    // primitive, so it must require per-call confirmation like the other code-exec surfaces.
+    @Test fun `eval_javascript rejects always-allow scope and still asks`() {
+        assertFalse(ToolApprovalDefaults.allowsAlwaysAllow("eval_javascript"))
+        assertTrue("eval_javascript" in ToolApprovalDefaults.ALWAYS_ASK)
+        assertTrue(ToolApprovalDefaults.requiresApproval("eval_javascript"))
+    }
 }

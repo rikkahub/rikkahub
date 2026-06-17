@@ -28,6 +28,35 @@ private fun arcErr(code: String, vararg extra: Pair<String, String>) =
         extra.forEach { put(it.first, it.second) }
     }.toString()))
 
+// ---------- extraction ceilings (zip-bomb defence) ----------
+
+/** Abort an unzip once total extracted size crosses this. 2 GiB. */
+private const val UNZIP_MAX_TOTAL_BYTES = 2L * 1024 * 1024 * 1024
+
+/** Abort an unzip once entry count crosses this. */
+private const val UNZIP_MAX_ENTRIES = 100_000
+
+/** Skip any single entry whose declared (central-directory) size exceeds this. 1 GiB. */
+private const val UNZIP_MAX_ENTRY_BYTES = 1L * 1024 * 1024 * 1024
+
+// ---------- path-safety guard ----------
+
+/**
+ * Guard a single archive path argument the same way the file-manager tools do: content://
+ * URIs go through [ContentUriSafetyGuard] (structural; SAF grant is the real gate), every
+ * other path is `~`-expanded then run through [PathSafetyGuard] on its file:// -stripped
+ * form. Returns null when safe, otherwise an [arcErr] envelope to return verbatim.
+ */
+private fun guardArchivePath(raw: String): List<UIMessagePart>? {
+    if (isContent(raw)) {
+        ContentUriSafetyGuard.check(raw)?.let { return arcErr(it.code, "detail" to it.detail) }
+        return null
+    }
+    val expanded = AgentWorkspace.expand(raw).removePrefix("file://")
+    PathSafetyGuard.check(expanded)?.let { return arcErr(it.code, "detail" to it.detail) }
+    return null
+}
+
 // ---------- URI abstraction (file:// or content://) ----------
 
 /** True for an LLM-supplied path that points to a content:// URI. */
@@ -119,13 +148,21 @@ fun zipFilesTool(context: Context): Tool = Tool(
     },
     execute = { input ->
         val obj = input.jsonObject
+        // `~`-expand every path arg up-front so the guard and the collectors see the same
+        // concrete path the streams will open.
         val sources = obj["sources"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
+            ?.map { AgentWorkspace.expand(it) }
             ?: emptyList()
         if (sources.isEmpty()) return@Tool arcErr("sources is required")
-        val destination = obj["destination"]?.jsonPrimitive?.contentOrNull
-            ?: return@Tool arcErr("destination is required")
-        val baseDir = obj["base_dir"]?.jsonPrimitive?.contentOrNull
+        val destination = (obj["destination"]?.jsonPrimitive?.contentOrNull
+            ?: return@Tool arcErr("destination is required")).let { AgentWorkspace.expand(it) }
+        val baseDir = obj["base_dir"]?.jsonPrimitive?.contentOrNull?.let { AgentWorkspace.expand(it) }
         val level = (obj["compression_level"]?.jsonPrimitive?.intOrNull ?: 6).coerceIn(0, 9)
+
+        // Path-safety: every source and the destination must clear the guard before any
+        // stream is opened (file:// → PathSafetyGuard, content:// → ContentUriSafetyGuard).
+        for (src in sources) guardArchivePath(src)?.let { return@Tool it }
+        guardArchivePath(destination)?.let { return@Tool it }
 
         val archiveSources = mutableListOf<ArchiveSource>()
         for (src in sources) {
@@ -217,13 +254,19 @@ fun unzipFileTool(context: Context): Tool = Tool(
     },
     execute = { input ->
         val obj = input.jsonObject
-        val source = obj["source"]?.jsonPrimitive?.contentOrNull
-            ?: return@Tool arcErr("source is required")
-        val destDir = obj["destination_dir"]?.jsonPrimitive?.contentOrNull
-            ?: return@Tool arcErr("destination_dir is required")
+        val source = (obj["source"]?.jsonPrimitive?.contentOrNull
+            ?: return@Tool arcErr("source is required")).let { AgentWorkspace.expand(it) }
+        val destDir = (obj["destination_dir"]?.jsonPrimitive?.contentOrNull
+            ?: return@Tool arcErr("destination_dir is required")).let { AgentWorkspace.expand(it) }
         val overwrite = obj["overwrite"]?.jsonPrimitive?.let {
             it.contentOrNull?.toBooleanStrictOrNull()
         } ?: false
+
+        // Guard both the archive source and the extraction destination before opening
+        // any stream, so a poisoned source path can't be read and entries can't be
+        // written outside a safe destination.
+        guardArchivePath(source)?.let { return@Tool it }
+        guardArchivePath(destDir)?.let { return@Tool it }
 
         val ins = openIn(context, source) ?: return@Tool arcErr("invalid_zip")
 
@@ -241,7 +284,9 @@ fun unzipFileTool(context: Context): Tool = Tool(
         } else null
 
         var extracted = 0
-        var bytesWritten = 0L
+        // Remaining extraction budget — shared across all entries so a lying declared size
+        // can't slip a bomb past the per-entry skip. Decremented as bytes are written.
+        val budget = longArrayOf(UNZIP_MAX_TOTAL_BYTES)
         return@Tool try {
             ZipInputStream(BufferedInputStream(ins)).use { zis ->
                 var entry: ZipEntry? = zis.nextEntry
@@ -250,6 +295,21 @@ fun unzipFileTool(context: Context): Tool = Tool(
                     val name = entry.name
                     if (isUnsafeZipEntry(name)) {
                         return@Tool arcErr("unsafe_zip_entry", "entry" to name)
+                    }
+                    if (extracted >= UNZIP_MAX_ENTRIES) {
+                        return@Tool arcErr(
+                            "zip_bomb",
+                            "detail" to "archive has more than $UNZIP_MAX_ENTRIES entries",
+                        )
+                    }
+                    // Declared (central-directory) size sanity check; -1 means unknown
+                    // (streamed) and is enforced by the running budget below instead.
+                    if (entry.size > UNZIP_MAX_ENTRY_BYTES) {
+                        return@Tool arcErr(
+                            "zip_bomb",
+                            "entry" to name,
+                            "detail" to "declared entry size exceeds $UNZIP_MAX_ENTRY_BYTES bytes",
+                        )
                     }
                     if (!entry.isDirectory) {
                         if (fileDestRoot != null) {
@@ -263,13 +323,14 @@ fun unzipFileTool(context: Context): Tool = Tool(
                             }
                             target.parentFile?.mkdirs()
                             target.outputStream().use { os ->
-                                bytesWritten += copyStream(zis, os)
+                                copyStreamCapped(zis, os, budget)
                             }
                         } else if (contentDestTree != null) {
-                            val written = writeEntryToTree(
-                                context, contentDestTree, name, overwrite, zis,
+                            // null return == entry already exists and overwrite=false; the
+                            // byte total is tracked via the shared budget, not the return.
+                            writeEntryToTree(
+                                context, contentDestTree, name, overwrite, zis, budget,
                             ) ?: return@Tool arcErr("entry_exists", "entry" to name)
-                            bytesWritten += written
                         }
                         extracted++
                     }
@@ -280,8 +341,10 @@ fun unzipFileTool(context: Context): Tool = Tool(
             listOf(UIMessagePart.Text(buildJsonObject {
                 put("success", true)
                 put("entries_extracted", extracted)
-                put("bytes_written", bytesWritten)
+                put("bytes_written", UNZIP_MAX_TOTAL_BYTES - budget[0])
             }.toString()))
+        } catch (e: ZipBombException) {
+            arcErr("zip_bomb", "detail" to "total extracted size exceeds $UNZIP_MAX_TOTAL_BYTES bytes")
         } catch (e: java.util.zip.ZipException) {
             arcErr("invalid_zip")
         } catch (e: Throwable) {
@@ -290,13 +353,22 @@ fun unzipFileTool(context: Context): Tool = Tool(
     },
 )
 
-/** Copy a stream into [os], returning the byte count. */
-private fun copyStream(ins: InputStream, os: OutputStream): Long {
+/** Thrown when an unzip exceeds [UNZIP_MAX_TOTAL_BYTES] mid-stream (lying declared size). */
+private class ZipBombException : Exception()
+
+/**
+ * Copy [ins] into [os], debiting [budget]\[0] (remaining total bytes) as it goes. Throws
+ * [ZipBombException] the moment the running total would exceed the extraction ceiling, so a
+ * deflate bomb with a forged declared size is stopped before it fills storage.
+ */
+private fun copyStreamCapped(ins: InputStream, os: OutputStream, budget: LongArray): Long {
     val buf = ByteArray(8192)
     var total = 0L
     var read: Int
     while (ins.read(buf).also { read = it } >= 0) {
+        if (read > budget[0]) throw ZipBombException()
         os.write(buf, 0, read)
+        budget[0] -= read
         total += read
     }
     return total
@@ -312,6 +384,7 @@ private fun writeEntryToTree(
     entryName: String,
     overwrite: Boolean,
     zis: InputStream,
+    budget: LongArray,
 ): Long? {
     val parts = entryName.replace('\\', '/').split('/').filter { it.isNotEmpty() }
     if (parts.isEmpty()) return 0L
@@ -327,7 +400,7 @@ private fun writeEntryToTree(
     }
     val created = dir.createFile("application/octet-stream", fileName) ?: return 0L
     val os = context.contentResolver.openOutputStream(created.uri) ?: return 0L
-    return os.use { copyStream(zis, it) }
+    return os.use { copyStreamCapped(zis, it, budget) }
 }
 
 // ---------- list_zip_contents ----------

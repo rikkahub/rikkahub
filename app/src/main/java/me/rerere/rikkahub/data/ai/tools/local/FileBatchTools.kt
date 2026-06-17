@@ -197,13 +197,57 @@ fun batchMoveTool(): Tool = Tool(
             if (target.exists() && !overwrite) { failed += path to "destination_exists"; continue }
             try {
                 destination.mkdirs()
-                if (target.exists()) target.deleteRecursively()
-                if (!src.renameTo(target)) {
-                    // renameTo fails across filesystems — fall back to copy + delete.
-                    src.copyRecursively(target, overwrite = true)
-                    src.deleteRecursively()
+                if (!target.exists()) {
+                    // No destination to protect: rename, copy+delete across filesystems.
+                    if (!src.renameTo(target)) {
+                        src.copyRecursively(target, overwrite = false)
+                        src.deleteRecursively()
+                    }
+                    success++
+                } else {
+                    // Overwriting: never delete the old target until the new content is in
+                    // place, so a failed move can't lose it. Move the old target aside, swap,
+                    // and only then drop the backup. Restore it if the swap fails.
+                    val backup = File(destination, "${target.name}.rkmv-old-${System.nanoTime()}")
+                    if (target.renameTo(backup)) {
+                        if (src.renameTo(target)) {
+                            backup.deleteRecursively()
+                            success++
+                        } else {
+                            val tmp = File(destination, "${target.name}.rkmv-new-${System.nanoTime()}")
+                            src.copyRecursively(tmp, overwrite = false)
+                            if (tmp.renameTo(target)) {
+                                src.deleteRecursively()
+                                backup.deleteRecursively()
+                                success++
+                            } else {
+                                tmp.deleteRecursively()
+                                backup.renameTo(target)
+                                failed += path to "io_error"
+                            }
+                        }
+                    } else {
+                        // Couldn't move the old target aside (e.g. cross-fs): copy src to a
+                        // temp beside target first. The old target is dropped only AFTER the
+                        // copy lands and is moved to a backup, so a failed swap restores the
+                        // original target instead of losing it.
+                        val tmp = File(destination, "${target.name}.rkmv-new-${System.nanoTime()}")
+                        val backup = File(destination, "${target.name}.rkmv-old-${System.nanoTime()}")
+                        src.copyRecursively(tmp, overwrite = false)
+                        if (!target.renameTo(backup)) {
+                            tmp.deleteRecursively()
+                            failed += path to "io_error"
+                        } else if (tmp.renameTo(target)) {
+                            backup.deleteRecursively()
+                            src.deleteRecursively()
+                            success++
+                        } else {
+                            tmp.deleteRecursively()
+                            backup.renameTo(target)
+                            failed += path to "io_error"
+                        }
+                    }
                 }
-                success++
             } catch (e: SecurityException) {
                 failed += path to (e.message ?: "permission_denied")
             } catch (e: IOException) {

@@ -146,7 +146,27 @@ fun writeTextFileTool(context: Context): Tool = Tool(
             if (append) {
                 file.appendBytes(bytes)
             } else {
-                file.writeBytes(bytes)
+                // Atomic truncate/overwrite: write to a temp file in the SAME directory then
+                // rename over the target, so an interrupted write can't leave the file half
+                // written (or empty). Same-dir keeps the rename on one filesystem.
+                val tmp = File(file.parentFile, "${file.name}.rkwr-${System.nanoTime()}")
+                // The temp file must never outlive this block: if writeBytes throws mid-write
+                // (disk full, IO error) the partial temp would otherwise be orphaned on disk,
+                // so delete it on EVERY failure path before propagating the error.
+                try {
+                    tmp.writeBytes(bytes)
+                    if (!tmp.renameTo(file)) {
+                        // Some filesystems won't rename onto an existing target; delete + retry.
+                        file.delete()
+                        if (!tmp.renameTo(file)) {
+                            tmp.delete()
+                            return@Tool errEnvelope("write_failed", "could not place written file at '$path'")
+                        }
+                    }
+                } catch (e: Throwable) {
+                    tmp.delete()
+                    throw e
+                }
             }
             listOf(UIMessagePart.Text(buildJsonObject {
                 put("success", true)

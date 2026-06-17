@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.browser
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
@@ -40,8 +42,10 @@ import java.io.File
  *  - `browser_done` fires (clears the task window; the pool sees no further activity).
  *  - The calling FGS dies (process kill: the whole pool dies with it; on next launch
  *    the AI sees `browser_session_lost` because no Mode.Headless is bound).
- *  - The pool's eviction timer fires (idle > 5 min) — caller hasn't run a tool in a
- *    while, the LLM has likely moved on.
+ *  - The pool's idle sweep evicts it (no tool call for longer than the per-task budget,
+ *    `BrowserController.singleTaskTimeoutMs`, default 5 min) on the next getOrCreate — the
+ *    caller hasn't run a tool in a while, the LLM has likely moved on. This is the backstop
+ *    for a caller FGS that died before browser_done/release fired.
  */
 class HeadlessBrowserSession(private val context: Context) {
 
@@ -147,21 +151,37 @@ class HeadlessBrowserSession(private val context: Context) {
      * memory; not optional.
      */
     fun stop() {
-        runCatching {
-            webView?.let { wv ->
-                wv.stopLoading()
-                wv.loadUrl("about:blank")
-                host?.removeView(wv)
-                wv.destroy()
-            }
-        }.onFailure {
-            // Teardown is best-effort — a throw here (e.g. WebView already destroyed on a
-            // racing path) must not corrupt the pool's bookkeeping. Log so a genuine leak
-            // is visible rather than silently swallowed; the field nulling below still runs.
-            android.util.Log.w("HeadlessBrowserSession", "stop: WebView teardown threw", it)
-        }
+        val wv = webView
+        val h = host
+        // Null the fields synchronously so the pool sees the session as stopped immediately,
+        // even though the actual WebView teardown is marshalled to the main thread below.
         webView = null
         host = null
+        if (wv == null) return
+        val teardown = Runnable {
+            runCatching {
+                wv.stopLoading()
+                wv.loadUrl("about:blank")
+                h?.removeView(wv)
+                wv.destroy()
+            }.onFailure {
+                // Teardown is best-effort — a throw here (e.g. WebView already destroyed on a
+                // racing path) must not corrupt the pool's bookkeeping. Log so a genuine leak
+                // is visible rather than silently swallowed.
+                android.util.Log.w("HeadlessBrowserSession", "stop: WebView teardown threw", it)
+            }
+        }
+        // WebView methods must run on the thread that created the view. start() builds the
+        // WebView under Dispatchers.Main, but the pool's idle sweep calls stop() from
+        // getOrCreate, which runs OFF the main thread — calling destroy() there throws the
+        // "all WebView methods must be called on the same thread" violation (swallowed by the
+        // runCatching), leaving the ~30 MB WebView un-destroyed and defeating the eviction.
+        // Marshal the teardown onto the main looper so the memory is actually released.
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            teardown.run()
+        } else {
+            Handler(Looper.getMainLooper()).post(teardown)
+        }
     }
 
     /** Cheap accessor for the live WebView, or null if [stop] has run. */
@@ -201,23 +221,74 @@ class HeadlessBrowserSession(private val context: Context) {
  * has at most one (the polling loop is single-threaded), cron jobs run sequentially in
  * their worker, and sub-agents are also serialised. So in practice the pool holds 0–1
  * sessions at a time.
+ *
+ * Backstop: a caller whose FGS is killed never runs [release], so its session would leak for
+ * the process lifetime. Every [getOrCreate] therefore sweeps and closes sessions idle longer
+ * than [idleTtlMs] first, so an abandoned WebView can't outlive one task window.
  */
 object HeadlessBrowserSessionPool {
 
-    private val sessions = mutableMapOf<String, HeadlessBrowserSession>()
+    /**
+     * A pooled session plus the wall-clock millis it was last handed out by [getOrCreate].
+     * The timestamp drives idle eviction: a conversation whose FGS died (so [release] never
+     * fired) leaves an orphaned ~30 MB WebView behind, and without a sweep those accumulate
+     * for the process lifetime. See [idleTtlMs].
+     */
+    private class Entry(val session: HeadlessBrowserSession, var lastUsedAtMs: Long)
+
+    private val sessions = mutableMapOf<String, Entry>()
     private val lock = Any()
+
+    /**
+     * Idle TTL: a session untouched for longer than this is swept on the next [getOrCreate].
+     * Tracks [BrowserController.singleTaskTimeoutMs] — the per-task budget the user already
+     * configures in Settings → Browser. A session that hasn't run a tool for at least a full
+     * task window is one the LLM has almost certainly moved on from; reusing the same value
+     * keeps one knob instead of inventing a second idle constant. Read each sweep so a live
+     * settings edit takes effect without restarting the pool.
+     */
+    private val idleTtlMs: Long get() = BrowserController.singleTaskTimeoutMs
 
     /**
      * Look up an existing session for [callerConvId] or construct a new one. Reusing on
      * lookup gives us cookie persistence within a multi-tool task without a separate
      * "warmup" call.
+     *
+     * Every call first sweeps sessions idle longer than [idleTtlMs] (excluding the one being
+     * requested, whose timestamp is refreshed). This bounds the pool against the leak where a
+     * caller's FGS dies before `browser_done`/[release] runs, orphaning its WebView forever.
      */
     fun getOrCreate(context: Context, callerConvId: String): HeadlessBrowserSession {
         synchronized(lock) {
-            sessions[callerConvId]?.let { return it }
+            val now = System.currentTimeMillis()
+            sweepIdleLocked(now, keep = callerConvId)
+            sessions[callerConvId]?.let { it.lastUsedAtMs = now; return it.session }
             val s = HeadlessBrowserSession(context.applicationContext ?: context)
-            sessions[callerConvId] = s
+            sessions[callerConvId] = Entry(s, now)
             return s
+        }
+    }
+
+    /**
+     * Close + remove every session whose last use is older than [idleTtlMs], except [keep]
+     * (the conv currently being served — it's about to be refreshed). Caller holds [lock].
+     */
+    private fun sweepIdleLocked(now: Long, keep: String?) {
+        val ttl = idleTtlMs
+        val stale = sessions.entries.filter { (id, entry) ->
+            id != keep && (now - entry.lastUsedAtMs) > ttl
+        }
+        for ((id, entry) in stale) {
+            // stop() is best-effort/idempotent; remove the mapping regardless so a throwing
+            // teardown can't pin a dead entry in the pool forever.
+            runCatching { entry.session.stop() }
+            sessions.remove(id)
+            // The controller's single mode slot may still be Mode.Headless for this conv,
+            // pointing at the WebView stop() just destroyed. Reset it to Idle so the next tool
+            // call returns browser_session_lost instead of dispatching onto a dead view.
+            // clearModeIfHeadless only acts when this conv still owns the slot and never calls
+            // back into the pool, so holding `lock` here is safe (no lock-order inversion).
+            runCatching { BrowserController.clearModeIfHeadless(id) }
         }
     }
 
@@ -226,14 +297,14 @@ object HeadlessBrowserSessionPool {
      * mapping; subsequent [getOrCreate] returns a fresh session. Idempotent.
      */
     fun release(callerConvId: String) {
-        val s = synchronized(lock) { sessions.remove(callerConvId) } ?: return
-        s.stop()
+        val e = synchronized(lock) { sessions.remove(callerConvId) } ?: return
+        e.session.stop()
     }
 
     /** Test seam: clear all sessions. Not used in production. */
     internal fun clearAll() {
         synchronized(lock) {
-            sessions.values.forEach { runCatching { it.stop() } }
+            sessions.values.forEach { runCatching { it.session.stop() } }
             sessions.clear()
         }
     }

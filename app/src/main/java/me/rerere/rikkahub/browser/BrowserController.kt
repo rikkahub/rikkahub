@@ -113,6 +113,16 @@ object BrowserController {
     private var mode: Mode = Mode.Idle
 
     /**
+     * Serialises every read-modify-write of [mode] and [streamDedupe]. The bind/unbind
+     * entry points and the per-conv de-dupe map mutate shared state from multiple coroutines
+     * (Telegram polling loop, cron worker, sub-agent), so a plain `@Volatile` on [mode] is
+     * not enough to make "check the current binding, then replace it" atomic. Without it, two
+     * concurrent headless conversations can both pass [bindHeadless]'s clobber check and the
+     * second silently overwrites the first — a later screenshot then routes to the wrong chat.
+     */
+    private val bindLock = Any()
+
+    /**
      * Pass 2 publishes a fresh deferred each time the binding is cleared, so a tool that
      * fires `browser_open` can `awaitBind` after starting the Activity. The Volatile lets
      * the awaiting coroutine see the new instance the moment unbind() swaps it in.
@@ -134,18 +144,24 @@ object BrowserController {
     var pendingTaskJob: Job? = null
 
     /**
-     * De-dupe state for [streamScreenshotIfHeadless]. When the LLM bounces between the
-     * same/very-similar URL (e.g. minimax-m2.7 occasionally calls browser_open 5x in a
-     * row trying to find a page) every state-changing tool fires the streamer, flooding
-     * the user's Telegram chat with near-identical PNGs. Skip the send when the URL is
-     * the same as the last stream AND the last stream was within [STREAM_DEDUPE_WINDOW_MS].
-     * A click that didn't change the URL is also caught by this rule (URL stays equal).
+     * De-dupe state for [streamScreenshotIfHeadless], keyed by [Mode.Headless.callerConvId].
+     * When the LLM bounces between the same/very-similar URL (e.g. minimax-m2.7 occasionally
+     * calls browser_open 5x in a row trying to find a page) every state-changing tool fires
+     * the streamer, flooding the user's Telegram chat with near-identical PNGs. Skip the send
+     * when the URL is the same as that conversation's last stream AND the last stream was
+     * within [STREAM_DEDUPE_WINDOW_MS]. A click that didn't change the URL is also caught by
+     * this rule (URL stays equal).
+     *
+     * **Why keyed per conv.** A single global last-URL/last-time pair let two concurrent
+     * headless conversations clobber each other's de-dupe memory: conv A streams page X, conv
+     * B then streams the same X within the window and gets wrongly suppressed (or vice-versa,
+     * A's stale mark suppresses B's legitimate first frame). Keying on the caller conv id
+     * isolates the windows. Entries are dropped on [unbindHeadless] so a finished conversation
+     * doesn't retain memory. Guarded by [bindLock] for the same reason [mode] is.
      */
-    @Volatile
-    private var lastStreamedUrl: String? = null
+    private data class StreamMark(val url: String?, val atMs: Long)
 
-    @Volatile
-    private var lastStreamedAtMs: Long = 0L
+    private val streamDedupe = mutableMapOf<String, StreamMark>()
 
     private val _recentActions = MutableStateFlow<List<String>>(emptyList())
 
@@ -206,13 +222,42 @@ object BrowserController {
      *
      * Sets the Mode to [Mode.Headless] and completes the bind deferred, mirroring the
      * foreground path so [awaitBind] can be reused if needed.
+     *
+     * Returns false WITHOUT mutating state if a DIFFERENT conversation already holds a live
+     * headless (or foreground) binding — the controller's [mode] is a single global slot, so
+     * letting a second concurrent conversation overwrite it would route the first's streamed
+     * screenshots into the wrong chat. The caller (browser_open) surfaces a clean
+     * [bindBusyEnvelope] in that case. Re-binding the SAME conv id is always allowed (the
+     * normal per-task reuse where browser_open fires again on a session that's already bound).
      */
-    fun bindHeadless(callerConvId: String, webView: WebView) {
-        mode = Mode.Headless(callerConvId, webView)
-        // Fresh session — drop the de-dupe memory so the first stream of a new task
-        // isn't suppressed by a URL match against the previous session.
-        lastStreamedUrl = null
-        lastStreamedAtMs = 0L
+    fun bindHeadless(callerConvId: String, webView: WebView): Boolean {
+        synchronized(bindLock) {
+            when (val current = mode) {
+                is Mode.Headless ->
+                    // A DIFFERENT conversation may take over the single controller slot only
+                    // while the current owner's task is genuinely in flight — i.e. browser_open
+                    // armed the task window and browser_done hasn't cleared it (and it hasn't
+                    // expired). During that window a second conversation would clobber the
+                    // owner's screenshot routing, so reject it (bindBusyEnvelope). Once the owner
+                    // finishes (window cleared), its window expires (forgetful model), or its
+                    // idle session is swept, the slot is free to hand off — without this the
+                    // binding would pin to the finished conversation until its /new and block
+                    // every other conversation forever. Same-conv re-bind always refreshes the ref.
+                    if (current.callerConvId != callerConvId &&
+                        currentTaskStartedAt != null && isWithinTaskWindow()
+                    ) return false
+                is Mode.Foreground ->
+                    // The visible Activity is using the controller; don't steal it from under
+                    // the user. (bindForeground itself routes around an existing headless bind
+                    // per its own contract.) Reject only if the foreground WebView is still live.
+                    if (current.activityRef.get() != null) return false
+                Mode.Idle -> Unit
+            }
+            mode = Mode.Headless(callerConvId, webView)
+            // Fresh session for this conv — drop its de-dupe memory so the first stream of a
+            // new task isn't suppressed by a URL match against a previous task on the same id.
+            streamDedupe.remove(callerConvId)
+        }
         if (!bindDeferred.isCompleted) {
             bindDeferred.complete(Unit)
         }
@@ -220,6 +265,30 @@ object BrowserController {
         // produce streamer PNGs in `browser-stream/` after every state-changing tool, so
         // a long bot conversation can put real pressure on cacheDir without this.
         runCatching { BrowserCacheSweeper.sweep(webView.context.applicationContext) }
+        return true
+    }
+
+    /**
+     * Non-mutating peek: would [bindHeadless] for [callerConvId] currently succeed?
+     * Mirrors [bindHeadless]'s reject rule EXACTLY (a different live headless owner whose
+     * task is genuinely in flight, or a live foreground binding) so browser_open can avoid
+     * allocating a ~30 MB WebView session it would only have to discard on rejection.
+     *
+     * This is advisory: [bindHeadless] stays authoritative and re-checks under [bindLock],
+     * so a race between the peek and the bind can only cost the (now closed) allocation, not
+     * a wrong binding. Reads [mode] / [currentTaskStartedAt] under the lock for a coherent
+     * snapshot, matching how the real bind decides.
+     */
+    fun canBindHeadless(callerConvId: String): Boolean {
+        synchronized(bindLock) {
+            return when (val current = mode) {
+                is Mode.Headless ->
+                    !(current.callerConvId != callerConvId &&
+                        currentTaskStartedAt != null && isWithinTaskWindow())
+                is Mode.Foreground -> current.activityRef.get() == null
+                Mode.Idle -> true
+            }
+        }
     }
 
     /**
@@ -228,12 +297,44 @@ object BrowserController {
      * tore it down or we're racing a foreground bind).
      */
     fun unbindHeadless(callerConvId: String) {
-        val m = mode
-        if (m is Mode.Headless && m.callerConvId == callerConvId) {
-            mode = Mode.Idle
-            currentTaskStartedAt = null
-            _recentActions.value = emptyList()
-            bindDeferred = CompletableDeferred()
+        synchronized(bindLock) {
+            val m = mode
+            if (m is Mode.Headless && m.callerConvId == callerConvId) {
+                mode = Mode.Idle
+                currentTaskStartedAt = null
+                _recentActions.value = emptyList()
+                bindDeferred = CompletableDeferred()
+            }
+            // Drop the conversation's de-dupe memory regardless of which mode is live, so a
+            // finished conv can't leave a stale URL mark that suppresses a future reuse.
+            streamDedupe.remove(callerConvId)
+        }
+    }
+
+    /**
+     * Reset [mode] to [Mode.Idle] iff it is currently [Mode.Headless] for [callerConvId].
+     * Called by [HeadlessBrowserSessionPool]'s idle sweep when it evicts (and destroys) a
+     * session: without this the controller's [mode] keeps pointing at the now-destroyed
+     * WebView, so the next tool call would dispatch onto a dead view (evaluateJavascript
+     * throws, screenshots stream white) instead of cleanly returning `browser_session_lost`.
+     *
+     * Mirrors [unbindHeadless]'s teardown (task timer, action log, fresh bind deferred, de-dupe
+     * memory) but ONLY when this conv still owns the slot — a different live owner or a
+     * foreground binding is left untouched. Guarded by [bindLock] so it composes safely with
+     * concurrent bind/unbind; the pool calls it while holding its OWN (separate) pool lock, and
+     * this method never reaches back into the pool, so the two locks never nest in conflicting
+     * order.
+     */
+    fun clearModeIfHeadless(callerConvId: String) {
+        synchronized(bindLock) {
+            val m = mode
+            if (m is Mode.Headless && m.callerConvId == callerConvId) {
+                mode = Mode.Idle
+                currentTaskStartedAt = null
+                _recentActions.value = emptyList()
+                bindDeferred = CompletableDeferred()
+            }
+            streamDedupe.remove(callerConvId)
         }
     }
 
@@ -342,6 +443,17 @@ object BrowserController {
     }
 
     /**
+     * Returned when a headless browser_open lands while a DIFFERENT conversation already
+     * holds the (single, global) controller binding. The controller can drive one WebView at
+     * a time; binding a second concurrently would route the first conversation's streamed
+     * screenshots into the wrong chat, so the second is rejected here instead.
+     */
+    fun bindBusyEnvelope(): JsonObject = buildJsonObject {
+        put("error", "browser_busy")
+        put("recovery", "Another conversation is currently driving the browser. Wait for it to finish (it calls browser_done), then retry browser_open.")
+    }
+
+    /**
      * Pass 3 auto-stream hook: every state-changing tool calls this AFTER its action
      * completes (and after [awaitReadyState]) so the remote user gets a screenshot.
      * No-op when the controller isn't in [Mode.Headless] — foreground users watch the
@@ -383,10 +495,13 @@ object BrowserController {
             android.util.Log.w(TAG, "streamScreenshotIfHeadless: reading webView.url failed", it)
         }.getOrNull()
         val now = System.currentTimeMillis()
+        // Per-conv de-dupe: only this conversation's own prior stream can suppress this one,
+        // so a concurrent conversation streaming the same URL can't wrongly gate it.
+        val lastMark = synchronized(bindLock) { streamDedupe[m.callerConvId] }
         if (
             currentUrl != null &&
-            currentUrl == lastStreamedUrl &&
-            (now - lastStreamedAtMs) < STREAM_DEDUPE_WINDOW_MS
+            currentUrl == lastMark?.url &&
+            (now - lastMark.atMs) < STREAM_DEDUPE_WINDOW_MS
         ) {
             android.util.Log.d(TAG, "streamScreenshotIfHeadless: skipping duplicate URL $currentUrl within ${STREAM_DEDUPE_WINDOW_MS}ms")
             return
@@ -421,8 +536,7 @@ object BrowserController {
             .getOrNull() ?: return
         // Record what we just streamed AFTER the bitmap path succeeds so a transient
         // capture failure doesn't lock out a subsequent attempt for the dedupe window.
-        lastStreamedUrl = capture.url
-        lastStreamedAtMs = now
+        synchronized(bindLock) { streamDedupe[m.callerConvId] = StreamMark(capture.url, now) }
 
         val streamer: BrowserScreenshotStreamer? = runCatching {
             org.koin.java.KoinJavaComponent.getKoin().getOrNull<BrowserScreenshotStreamer>()

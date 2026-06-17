@@ -126,6 +126,22 @@ class FileBatchToolsTest {
         assertEquals("old", File(dst, "dup.txt").readText())
     }
 
+    @Test fun `batch_move overwrite=true swaps in new content without temp leftovers`() {
+        // Regression: the old path deleted the target up front, risking loss on a failed
+        // move. The swap must replace content, remove src, and leave no temp siblings.
+        val a = tmp.newFile("ow.txt").apply { writeText("new") }
+        val dst = tmp.newFolder("owdest")
+        File(dst, "ow.txt").writeText("old")
+        val res = invoke(
+            batchMoveTool(),
+            """{"paths":["${a.absolutePath}"],"dst_dir":"${dst.absolutePath}","overwrite":true}""",
+        )
+        assertEquals(1, res.success())
+        assertFalse(a.exists())
+        assertEquals("new", File(dst, "ow.txt").readText())
+        assertFalse(dst.listFiles()!!.any { it.name.contains(".rkmv-") })
+    }
+
     // ---------- batch_delete ----------
 
     @Test fun `batch_delete removes an explicit list`() {

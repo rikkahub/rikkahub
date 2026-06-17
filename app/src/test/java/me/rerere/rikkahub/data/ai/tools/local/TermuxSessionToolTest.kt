@@ -109,4 +109,70 @@ class TermuxSessionToolTest {
         assertTrue(isSessionNotFound("no server running on /tmp/tmux-0/default"))
         assertTrue(!isSessionNotFound("some other error"))
     }
+
+    @Test
+    fun staleSessionsToReap_reapsOnlyOlderThanTtl() {
+        val now = 1_700_000_000L // epoch seconds
+        val ttlMs = 6L * 60 * 60 * 1000 // 6h
+        val fresh = TmuxSessionInfo("rk_fresh", created = now - 10, lastActivity = now - 60)
+        val stale = TmuxSessionInfo("rk_stale", created = now - 100000, lastActivity = now - 7 * 60 * 60)
+        // lastActivity == 0 (unparsed) must never be reaped, even though 0 < cutoff.
+        val unknown = TmuxSessionInfo("rk_unknown", created = now, lastActivity = 0L)
+        val reaped = staleSessionsToReap(listOf(fresh, stale, unknown), now, ttlMs)
+        assertEquals(listOf("rk_stale"), reaped.map { it.name })
+    }
+
+    @Test
+    fun takeLastUtf8Bytes_keepsTailOnByteBoundary() {
+        // ASCII: byte count == char count.
+        assertEquals("cde", takeLastUtf8Bytes("abcde", 3))
+        // fits entirely.
+        assertEquals("abc", takeLastUtf8Bytes("abc", 10))
+        assertEquals("", takeLastUtf8Bytes("abc", 0))
+    }
+
+    @Test
+    fun takeLastUtf8Bytes_neverSplitsMultibyte() {
+        // Each CJK char is 3 UTF-8 bytes. Budget 4 must keep only the last whole char (3 bytes),
+        // never half of a 3-byte sequence.
+        val s = "你好" // two 3-byte chars, 6 bytes total
+        val out = takeLastUtf8Bytes(s, 4)
+        assertEquals("好", out)
+        assertTrue(out.toByteArray(Charsets.UTF_8).size <= 4)
+    }
+
+    @Test
+    fun takeFirstUtf8Bytes_neverSplitsMultibyte() {
+        val s = "你好世" // three 3-byte chars, 9 bytes
+        val out = takeFirstUtf8Bytes(s, 4)
+        assertEquals("你", out) // only the first whole char fits in 4 bytes
+        assertTrue(out.toByteArray(Charsets.UTF_8).size <= 4)
+        assertEquals("abc", takeFirstUtf8Bytes("abcde", 3))
+    }
+
+    @Test
+    fun takeLastUtf8Bytes_honorsSurrogatePairs() {
+        // Each emoji is a surrogate PAIR (2 Java chars) but a single 4-byte UTF-8 sequence.
+        // Regression: measuring per-char counted each surrogate half separately, ~2x over
+        // budget, and could cut between the halves. Budget 4 must keep exactly one whole emoji.
+        val s = "😀😁" // two emoji, 8 bytes, 4 chars
+        val out = takeLastUtf8Bytes(s, 4)
+        assertEquals("😁", out)
+        assertEquals(4, out.toByteArray(Charsets.UTF_8).size)
+        // Budget 5 still fits only one emoji (the second is 4 bytes, no room for a partial).
+        assertEquals("😁", takeLastUtf8Bytes(s, 5))
+        // Budget 7 still under 8 total: one whole emoji survives, never a split surrogate pair.
+        assertEquals("😁", takeLastUtf8Bytes(s, 7))
+    }
+
+    @Test
+    fun takeFirstUtf8Bytes_honorsSurrogatePairs() {
+        val s = "😀😁" // two emoji, 8 bytes
+        val out = takeFirstUtf8Bytes(s, 4)
+        assertEquals("😀", out)
+        assertEquals(4, out.toByteArray(Charsets.UTF_8).size)
+        assertEquals("😀", takeFirstUtf8Bytes(s, 7))
+        // Mixed: an ASCII prefix then an emoji. Budget 5 keeps "a" + one emoji (1 + 4 = 5).
+        assertEquals("a😀", takeFirstUtf8Bytes("a😀😁", 5))
+    }
 }

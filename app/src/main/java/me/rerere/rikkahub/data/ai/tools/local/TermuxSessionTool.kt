@@ -33,6 +33,11 @@ private const val POLL_INTERVAL_MS = 200L
 private const val MAX_SESSIONS = 8
 private const val TMUX_OP_TIMEOUT_MS = 8_000L
 private const val INSTALL_TIMEOUT_MS = 180_000L
+// Idle sessions are never explicitly killed by the model, so they would otherwise pin the
+// MAX_SESSIONS budget forever. Reap any rk_ session whose tmux session_activity is older than
+// this before enforcing the slot cap. 6h is long enough to leave a genuinely in-use shell
+// (ssh, a REPL, a watched build) alone while clearing forgotten ones.
+private const val SESSION_TTL_MS = 6L * 60 * 60 * 1000
 
 /** Builds the argv passed to the tmux executable for each session operation. Pure. */
 internal object TmuxOps {
@@ -127,6 +132,18 @@ internal fun parseSessions(stdout: String, prefix: String = "rk_"): List<TmuxSes
             )
         }.toList()
 
+/** Sessions whose last tmux activity is older than [ttlMs] relative to [nowEpochSecs]. Pure. */
+internal fun staleSessionsToReap(
+    sessions: List<TmuxSessionInfo>,
+    nowEpochSecs: Long,
+    ttlMs: Long,
+): List<TmuxSessionInfo> {
+    val cutoffSecs = nowEpochSecs - ttlMs / 1000
+    // session_activity is epoch seconds; treat a 0/unparsed activity as not-stale so a session
+    // with a malformed timestamp is never reaped out from under an active user.
+    return sessions.filter { it.lastActivity in 1 until cutoffSecs }
+}
+
 internal fun isSessionNotFound(stderr: String): Boolean {
     val s = stderr.lowercase()
     return s.contains("can't find session") ||
@@ -142,8 +159,13 @@ private suspend fun tmux(context: Context, argv: Array<String>, timeoutMs: Long 
 private suspend fun ensureTmux(context: Context): String? {
     val check = runCommandCapture(context, "$TERMUX_BIN/sh", arrayOf("-c", "command -v tmux"), TERMUX_HOME, TMUX_OP_TIMEOUT_MS)
     if (check is CaptureResult.Success && check.stdout.isNotBlank()) return null
+    // The install can run for the full INSTALL_TIMEOUT_MS (~180s). Keep the bound but surface
+    // each outcome distinctly instead of silently blocking ~3 min and then reporting a generic
+    // failure: a Denied means the permission path, a Timeout means the install is still going
+    // (network / large download) so the caller can tell the user to retry shortly.
     val install = runCommandCapture(context, "$TERMUX_BIN/bash", arrayOf("-c", "pkg install -y tmux"), TERMUX_HOME, INSTALL_TIMEOUT_MS)
     if (install is CaptureResult.Denied) return "termux_permission_denied"
+    if (install is CaptureResult.Timeout) return "tmux_installing"
     val recheck = runCommandCapture(context, "$TERMUX_BIN/sh", arrayOf("-c", "command -v tmux"), TERMUX_HOME, TMUX_OP_TIMEOUT_MS)
     return if (recheck is CaptureResult.Success && recheck.stdout.isNotBlank()) null else "tmux_install_failed"
 }
@@ -157,13 +179,77 @@ private fun resolveTimeoutMs(input: JsonElement): Long {
     return secs.toLong() * 1000
 }
 
+/**
+ * UTF-8 byte width of the Unicode code point [cp]. Used to budget truncation by bytes while
+ * iterating code points (NOT chars): an astral char (emoji, some CJK) is a surrogate PAIR of
+ * two Java chars but a single 4-byte UTF-8 sequence. Measuring per-char would count each
+ * surrogate half separately — overshooting the budget ~2x and letting a cut fall between the
+ * two halves, corrupting the very emoji this boundary-snapping is meant to protect.
+ */
+private fun utf8Width(cp: Int): Int = when {
+    cp < 0x80 -> 1
+    cp < 0x800 -> 2
+    cp < 0x10000 -> 3
+    else -> 4
+}
+
+/**
+ * Keep at most [maxBytes] of UTF-8 from the end of [s], snapping the cut to a code-point
+ * boundary so a multi-byte sequence (including a surrogate-pair emoji) is never split, which
+ * would otherwise corrupt CJK / emoji output. Returns the whole string when it already fits.
+ * Pure.
+ */
+internal fun takeLastUtf8Bytes(s: String, maxBytes: Int): String {
+    if (maxBytes <= 0) return ""
+    if (s.toByteArray(Charsets.UTF_8).size <= maxBytes) return s
+    // Walk back from the end one code point at a time, counting its true UTF-8 width, until
+    // adding one more would exceed the budget; the surviving slice is byte-bounded and aligned.
+    var bytes = 0
+    var i = s.length
+    while (i > 0) {
+        val cp = s.codePointBefore(i)
+        val w = utf8Width(cp)
+        if (bytes + w > maxBytes) break
+        bytes += w
+        i -= Character.charCount(cp)
+    }
+    return s.substring(i)
+}
+
+/**
+ * Keep at most [maxBytes] of UTF-8 from the start of [s], snapping the cut to a code-point
+ * boundary so a multi-byte sequence (including a surrogate-pair emoji) is never split. Returns
+ * the whole string when it already fits. Pure. Counterpart to [takeLastUtf8Bytes] for
+ * head-keeping truncation.
+ */
+internal fun takeFirstUtf8Bytes(s: String, maxBytes: Int): String {
+    if (maxBytes <= 0) return ""
+    if (s.toByteArray(Charsets.UTF_8).size <= maxBytes) return s
+    var bytes = 0
+    var i = 0
+    while (i < s.length) {
+        val cp = s.codePointAt(i)
+        val w = utf8Width(cp)
+        if (bytes + w > maxBytes) break
+        bytes += w
+        i += Character.charCount(cp)
+    }
+    return s.substring(0, i)
+}
+
 private fun truncateOut(s: String): String {
     // capture-pane emits the full terminal height, so the screen arrives padded with a wall
     // of blank lines below the cursor. Drop trailing blank lines so each read does not burn
     // tokens on empty padding.
     val trimmed = s.trimEnd('\n', ' ', '\t')
     val max = TermuxRuntime.maxStdoutBytes
-    return if (trimmed.length > max) trimmed.takeLast(max) + "\n…[older scrollback truncated]" else trimmed
+    // Bound on UTF-8 bytes, not chars: maxStdoutBytes is a byte budget, and a char-count cut
+    // would over- or under-shoot for multibyte text and could split a code point.
+    return if (trimmed.toByteArray(Charsets.UTF_8).size > max) {
+        takeLastUtf8Bytes(trimmed, max) + "\n…[older scrollback truncated]"
+    } else {
+        trimmed
+    }
 }
 
 private fun reasonTag(r: PollResult.Reason): String = when (r) {
@@ -245,10 +331,33 @@ fun termuxSessionStartTool(context: Context): Tool = Tool(
     },
     execute = { input ->
         preflight(context)?.let { return@Tool it }
-        ensureTmux(context)?.let {
-            return@Tool sessionErrorEnvelope(it, "tmux could not be installed. Open Termux, run 'pkg install tmux', and retry.")
+        ensureTmux(context)?.let { err ->
+            val recovery = if (err == "tmux_installing") {
+                "tmux is still installing (download in progress). Wait a moment and call termux_session_start again."
+            } else {
+                "tmux could not be installed. Open Termux, run 'pkg install tmux', and retry."
+            }
+            return@Tool sessionErrorEnvelope(err, recovery)
         }
-        val live = (tmux(context, TmuxOps.listArgv()) as? CaptureResult.Success)?.let { parseSessions(it.stdout) } ?: emptyList()
+        var live = (tmux(context, TmuxOps.listArgv()) as? CaptureResult.Success)?.let { parseSessions(it.stdout) } ?: emptyList()
+        // Reap idle sessions before enforcing the cap: nothing else kills forgotten sessions,
+        // so without this the MAX_SESSIONS budget fills permanently. session_activity is epoch
+        // seconds, so compare against wall-clock seconds (not SystemClock.elapsedRealtime).
+        val nowSecs = System.currentTimeMillis() / 1000
+        val stale = staleSessionsToReap(live, nowSecs, SESSION_TTL_MS)
+        if (stale.isNotEmpty()) {
+            // Only drop a stale session from the live count if its kill actually succeeded.
+            // A failed kill (tmux error, session wedged) leaves the session occupying a slot,
+            // so optimistically subtracting it would let live.size dip below the true count and
+            // transiently blow past MAX_SESSIONS. isSessionNotFound also counts as reaped: the
+            // session is already gone, which is the outcome we wanted.
+            val reaped = stale.filter { s ->
+                val killed = tmux(context, TmuxOps.killArgv(s.name))
+                killed is CaptureResult.Success ||
+                    (killed is CaptureResult.OtherError && isSessionNotFound(killed.message))
+            }
+            live = live - reaped.toSet()
+        }
         if (live.size >= MAX_SESSIONS) {
             return@Tool sessionErrorEnvelope("too_many_sessions", "Max $MAX_SESSIONS sessions. Kill one with termux_session_kill first. Live: ${live.joinToString { it.name }}")
         }
@@ -310,8 +419,21 @@ fun termuxSessionSendTool(context: Context): Tool = Tool(
                 return@Tool sessionNotFoundEnvelope(context, session)
             }
         }
-        if (keys.isNotEmpty()) tmux(context, TmuxOps.sendKeysArgv(session, keys))
-        if (enter) tmux(context, TmuxOps.enterArgv(session))
+        // Check the keys/enter sends for a dead session too. Previously these failures were
+        // swallowed and only surfaced indirectly by the later read, so a not-found returned a
+        // generic read_failed instead of the actionable session_not_found envelope.
+        if (keys.isNotEmpty()) {
+            val sentKeys = tmux(context, TmuxOps.sendKeysArgv(session, keys))
+            if (sentKeys is CaptureResult.OtherError && isSessionNotFound(sentKeys.message)) {
+                return@Tool sessionNotFoundEnvelope(context, session)
+            }
+        }
+        if (enter) {
+            val sentEnter = tmux(context, TmuxOps.enterArgv(session))
+            if (sentEnter is CaptureResult.OtherError && isSessionNotFound(sentEnter.message)) {
+                return@Tool sessionNotFoundEnvelope(context, session)
+            }
+        }
         val read = readUntilDone(context, session, DEFAULT_READ_LINES, waitFor, timeoutMs)
         if (read is CaptureResult.OtherError && isSessionNotFound(read.message)) {
             return@Tool sessionNotFoundEnvelope(context, session)

@@ -75,9 +75,63 @@ internal val sshDnsCache: DnsCache = DnsCache().also { cache ->
 private const val MAX_RETURNED_STDOUT = 8_000
 private const val MAX_RETURNED_STDERR = 2_000
 
-/** Truncate [s] to [max] chars and append a "[truncated; N bytes more]" suffix. */
-private fun cap(s: String, max: Int): String =
-    if (s.length > max) s.take(max) + "\n…[truncated; ${s.length - max} bytes more]" else s
+/**
+ * Bounded stdout/stderr sink for a remote command. JSch streams the remote process's output
+ * into the OutputStream we hand the channel; a previous version pointed that at an unbounded
+ * ByteArrayOutputStream and only truncated AFTER, so `cat /dev/zero | base64` (or any chatty
+ * remote command) could pull megabytes into the heap and OOM the app before we ever truncated.
+ * This keeps at most [cap] + [SLACK] bytes in memory and discards the rest, counting what it
+ * threw away so the user still sees a faithful "[truncated; N bytes more]" suffix.
+ *
+ * The slack lets us hold a few bytes past [cap] so [snapshot] can render the truncation marker
+ * without splitting a trailing multi-byte UTF-8 sequence. [cap] and the discarded-byte count
+ * are both measured in BYTES so multibyte (CJK / emoji) output is sized honestly: a char-based
+ * kept slice would over- or under-shoot the byte budget and, worse, falsely report truncation
+ * when the byte count (total) exceeds the char-count cap even though nothing was discarded.
+ */
+internal class BoundedOutputStream(private val cap: Int) : java.io.OutputStream() {
+    private val buf = ByteArrayOutputStream(minOf(cap + SLACK, 16_384))
+    /** Total bytes the remote process wrote, including the ones we discarded. */
+    private var total: Long = 0L
+
+    override fun write(b: Int) {
+        total += 1
+        if (buf.size() < cap + SLACK) buf.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        total += len
+        val remaining = (cap + SLACK) - buf.size()
+        if (remaining > 0) buf.write(b, off, minOf(len, remaining))
+    }
+
+    /**
+     * Render the captured bytes with a "[truncated; N bytes more]" tail derived from the true
+     * byte count we observed — the discarded bytes never hit the heap, so a post-hoc length
+     * check on the buffer alone couldn't know about them.
+     *
+     * Everything here is byte-accurate: we keep at most [cap] bytes (snapped down to a UTF-8
+     * code-point boundary so a trailing multi-byte sequence is never split) and report the
+     * remainder as (total bytes written minus bytes kept). When nothing exceeded [cap] there is no
+     * marker, even for multibyte text whose byte count outruns its char count.
+     */
+    fun snapshot(): String {
+        val bytes = buf.toByteArray()
+        if (total <= cap.toLong()) return String(bytes, Charsets.UTF_8)
+        // Keep up to [cap] bytes, backing off to a code-point boundary so we don't slice a
+        // multi-byte UTF-8 sequence in half. The buffer holds cap + SLACK bytes, so there is
+        // always at least one whole code point's worth of headroom past the cut.
+        var keep = minOf(cap, bytes.size)
+        while (keep in 1 until bytes.size && (bytes[keep].toInt() and 0xC0) == 0x80) keep--
+        val kept = String(bytes, 0, keep, Charsets.UTF_8)
+        return kept + "\n…[truncated; ${total - keep.toLong()} bytes more]"
+    }
+
+    private companion object {
+        /** Headroom past [cap] so a final multi-byte UTF-8 sequence isn't split. */
+        const val SLACK = 4_096
+    }
+}
 
 /**
  * Single-quote [s] for safe embedding in a POSIX shell command. Wraps the whole string in
@@ -364,8 +418,11 @@ internal fun unreachableEnvelope(host: String, port: Int, outcome: ProbeOutcome)
 
 /** Run a single command on an open session. Returns a JSON object with exit_code/stdout/stderr. */
 internal fun runOnSession(session: Session, command: String, timeoutMs: Int, stdin: String? = null): JsonObject {
-    val stdout = ByteArrayOutputStream()
-    val stderr = ByteArrayOutputStream()
+    // Bounded sinks: cap peak memory at a few KB regardless of how much the remote command
+    // emits, so a high-throughput command can't OOM the app before we truncate. See
+    // [BoundedOutputStream].
+    val stdout = BoundedOutputStream(MAX_RETURNED_STDOUT)
+    val stderr = BoundedOutputStream(MAX_RETURNED_STDERR)
     val channel = session.openChannel("exec") as ChannelExec
     var hitDeadline = false
     try {
@@ -400,16 +457,16 @@ internal fun runOnSession(session: Session, command: String, timeoutMs: Int, std
                     "timeout_seconds, or pass background=true to launch it detached so the call " +
                     "returns immediately with the launched PID. Partial stdout/stderr captured " +
                     "before the timeout is included.")
-                put("partial_stdout", cap(stdout.toString(Charsets.UTF_8), MAX_RETURNED_STDOUT))
-                put("partial_stderr", cap(stderr.toString(Charsets.UTF_8), MAX_RETURNED_STDERR))
+                put("partial_stdout", stdout.snapshot())
+                put("partial_stderr", stderr.snapshot())
             }
         }
         val exitCode = channel.exitStatus
         return buildJsonObject {
             put("success", exitCode == 0)
             put("exit_code", exitCode)
-            put("stdout", cap(stdout.toString(Charsets.UTF_8), MAX_RETURNED_STDOUT))
-            put("stderr", cap(stderr.toString(Charsets.UTF_8), MAX_RETURNED_STDERR))
+            put("stdout", stdout.snapshot())
+            put("stderr", stderr.snapshot())
         }
     } finally {
         try { channel.disconnect() } catch (_: Throwable) {}

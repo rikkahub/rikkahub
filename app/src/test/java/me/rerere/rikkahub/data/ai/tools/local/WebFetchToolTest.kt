@@ -66,4 +66,25 @@ class WebFetchToolTest {
         // Passes the http(s)-prefix check but is not a valid URL — caught at request build.
         assertEquals("bad_request", invoke("""{"url":"http://"}""").error())
     }
+
+    // readBounded must never buffer more than cap+1 bytes, and must flag overflow.
+    @Test fun `readBounded returns all bytes under cap without truncation`() {
+        val (bytes, truncated) = readBounded("abc".byteInputStream(), 8192)
+        assertEquals(3, bytes.size)
+        assertEquals(false, truncated)
+    }
+
+    @Test fun `readBounded at exactly cap is not truncated`() {
+        val cap = 256
+        val (bytes, truncated) = readBounded(ByteArray(cap).inputStream(), cap)
+        assertEquals(cap, bytes.size)
+        assertEquals(false, truncated)
+    }
+
+    @Test fun `readBounded over cap stops at cap plus one and flags truncated`() {
+        val cap = 256
+        val (bytes, truncated) = readBounded(ByteArray(cap + 100).inputStream(), cap)
+        assertEquals(cap + 1, bytes.size)
+        assertEquals(true, truncated)
+    }
 }

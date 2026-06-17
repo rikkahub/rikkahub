@@ -466,14 +466,22 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                 put("exit_code", res.exitCode)
                 val maxOut = TermuxRuntime.maxStdoutBytes
                 val maxErr = TermuxRuntime.maxStderrBytes
+                // maxStdoutBytes/maxStderrBytes are UTF-8 byte budgets. Measure and cut on bytes
+                // (boundary-aligned via takeFirstUtf8Bytes) so multibyte output isn't mis-sized
+                // and the "bytes more" count is honest rather than a char-count delta.
                 put(
                     "stdout",
-                    res.stdout.let { if (it.length > maxOut) it.take(maxOut) + "\n…[truncated; ${it.length - maxOut} bytes more]" else it }
+                    res.stdout.let {
+                        val outBytes = it.toByteArray(Charsets.UTF_8).size
+                        if (outBytes > maxOut) takeFirstUtf8Bytes(it, maxOut) + "\n…[truncated; ${outBytes - maxOut} bytes more]" else it
+                    }
                 )
                 if (res.stderr.isNotBlank()) {
                     put(
                         "stderr",
-                        res.stderr.let { if (it.length > maxErr) it.take(maxErr) + "\n…[truncated]" else it }
+                        res.stderr.let {
+                            if (it.toByteArray(Charsets.UTF_8).size > maxErr) takeFirstUtf8Bytes(it, maxErr) + "\n…[truncated]" else it
+                        }
                     )
                 }
                 if (res.exitCode != 0) {

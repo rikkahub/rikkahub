@@ -12,7 +12,9 @@ import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 
 private const val WEB_FETCH_TIMEOUT_MS = 30_000L
 private const val WEB_FETCH_BODY_CAP = 8 * 1024  // 8 KB
@@ -105,8 +107,10 @@ fun webFetchTool(client: OkHttpClient): Tool = Tool(
         val result = withTimeoutOrNull(WEB_FETCH_TIMEOUT_MS) {
             try {
                 client.newCall(request).execute().use { resp ->
-                    val raw = resp.body.bytes()
-                    val truncated = raw.size > WEB_FETCH_BODY_CAP
+                    // Read the body through a bounded buffer instead of resp.body.bytes(),
+                    // which would pull the whole (possibly multi-GB) response into memory.
+                    // Read at most CAP+1 bytes: the extra byte tells us more remained.
+                    val (raw, truncated) = readBounded(resp.body.byteStream(), WEB_FETCH_BODY_CAP)
                     val bodyText = String(
                         raw, 0, minOf(raw.size, WEB_FETCH_BODY_CAP), Charsets.UTF_8,
                     )
@@ -136,3 +140,26 @@ fun webFetchTool(client: OkHttpClient): Tool = Tool(
         fmTextPart(result)
     },
 )
+
+/**
+ * Read at most [cap] bytes from [ins], plus one probe byte to detect overflow. Returns the
+ * accumulated bytes (up to cap+1) and a truncated flag set when the stream had more than
+ * [cap] bytes. Bounds memory regardless of Content-Length or a missing/lying one.
+ */
+internal fun readBounded(ins: InputStream, cap: Int): Pair<ByteArray, Boolean> {
+    val out = ByteArrayOutputStream(minOf(cap, 8 * 1024))
+    val buf = ByteArray(8192)
+    // Stop once we have cap+1 bytes: the (cap+1)th byte is enough to flag truncation
+    // without buffering the rest of the response.
+    val limit = cap.toLong() + 1
+    var total = 0L
+    while (total < limit) {
+        val want = minOf(buf.size.toLong(), limit - total).toInt()
+        val read = ins.read(buf, 0, want)
+        if (read < 0) break
+        out.write(buf, 0, read)
+        total += read
+    }
+    val bytes = out.toByteArray()
+    return bytes to (bytes.size > cap)
+}

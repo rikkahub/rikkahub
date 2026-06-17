@@ -198,6 +198,38 @@ class FileManagerToolTest {
         )
     }
 
+    @Test fun `write_text_file deletes the temp file when the write itself fails`() {
+        // Regression: the atomic-write temp ("<name>.rkwr-<nanoTime>") must be cleaned up on
+        // EVERY failure path, including a throw from the temp write itself. Force that throw
+        // by pointing at a path whose "parent" is a regular file: the parent exists (so the
+        // parent_missing guard passes) but no file can be created under it, so writeBytes
+        // throws. The temp must not be left orphaned beside the bogus parent.
+        val notADir = tmp.newFile("not-a-dir")
+        notADir.writeText("x")
+        val target = "${notADir.absolutePath}/child.txt"
+        val result = invokeTool(
+            writeTextFileTool(NULL_CONTEXT),
+            """{"path":"$target","content":"data","overwrite":true}"""
+        )
+        assertEquals("write_failed", result["error"]?.jsonPrimitive?.content)
+        assertFalse(tmp.root.listFiles()!!.any { it.name.contains(".rkwr-") })
+    }
+
+    @Test fun `write_text_file overwrite replaces content atomically without temp leftovers`() {
+        // Regression: the truncate path now writes a temp sibling then renames over the
+        // target. Verify content is replaced and no .rkwr- temp is left behind. The truncate
+        // path never touches Context, so the ghost NULL_CONTEXT is safe here.
+        val f = tmp.newFile("atomic.txt")
+        f.writeText("old contents")
+        val result = invokeTool(
+            writeTextFileTool(NULL_CONTEXT),
+            """{"path":"${f.absolutePath}","content":"new contents","overwrite":true}"""
+        )
+        assertTrue(result["success"]!!.jsonPrimitive.boolean)
+        assertEquals("new contents", f.readText())
+        assertFalse(tmp.root.listFiles()!!.any { it.name.contains(".rkwr-") })
+    }
+
     // ========== delete_file ==========
 
     @Test fun `delete_file removes a file`() {
@@ -252,6 +284,21 @@ class FileManagerToolTest {
         val result = invokeTool(moveFileTool(),
             """{"src":"${src.absolutePath}","dst":"${dst.absolutePath}"}""")
         assertEquals("destination_exists", result["error"]?.jsonPrimitive?.content)
+    }
+
+    @Test fun `move_file overwrite swaps in new content and removes src`() {
+        // Regression: the old path deleted dst up front, risking loss on a failed move.
+        // Now the swap must replace dst's content and leave src gone on success.
+        val src = tmp.newFile("oswsrc.txt")
+        val dst = tmp.newFile("oswdst.txt")
+        src.writeText("source"); dst.writeText("original")
+        val result = invokeTool(moveFileTool(),
+            """{"src":"${src.absolutePath}","dst":"${dst.absolutePath}","overwrite":true}""")
+        assertTrue(result["success"]!!.jsonPrimitive.boolean)
+        assertFalse(src.exists())
+        assertEquals("source", dst.readText())
+        // No temp backup/new siblings left behind.
+        assertFalse(tmp.root.listFiles()!!.any { it.name.contains(".rkmv-") })
     }
 
     // ========== copy_file ==========

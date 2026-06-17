@@ -55,6 +55,13 @@ private const val MAX_SCREENSHOT_HEIGHT_PX = 8192
 private const val SCREENSHOT_CACHE_SUBDIR = "browser-shots"
 
 /**
+ * Hard cap on the string browser_eval_js puts in its result envelope. Matches the 64 KB
+ * ceiling the read tools (runGetText / runReadHelper) clamp page text/HTML to, so an eval of
+ * something like `document.body.outerHTML` can't bloat the turn with megabytes of payload.
+ */
+private const val EVAL_JS_MAX_RESULT_CHARS = 64 * 1024
+
+/**
  * Per-tool timeout budget every browser tool wraps its dispatch in. User-configurable via
  * Settings → Browser (GitHub issue #4) — resolved fresh on each tool call from
  * [BrowserController.perToolTimeoutMs], which [me.rerere.rikkahub.browser.BrowserPreferences]
@@ -168,13 +175,28 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                 val headless = isHeadlessInvocation(invocationContext)
 
                 if (headless && callerConvId != null) {
+                    // Peek BEFORE allocating: getOrCreate + start() spin up a ~30 MB WebView,
+                    // which bindHeadless would then immediately reject if a different live
+                    // conversation owns the controller slot — wasting the allocation.
+                    // canBindHeadless mirrors bindHeadless's reject rule without mutating state;
+                    // bindHeadless stays authoritative and re-checks under its lock, so a race
+                    // here costs at most a discarded allocation, never a wrong binding.
+                    if (!BrowserController.canBindHeadless(callerConvId)) {
+                        return@withTimeoutOrNull BrowserController.bindBusyEnvelope()
+                    }
                     // Headless path: get-or-create the per-conv WebView session. The
                     // lifecycle of the WebView piggybacks on the calling FGS — when the
                     // FGS dies, the whole pool dies with it. Subsequent tool calls will
                     // see Mode.Idle and return `browser_session_lost`.
                     val session = HeadlessBrowserSessionPool.getOrCreate(context, callerConvId)
                     val webView = withContext(Dispatchers.Main) { session.start(callerConvId) }
-                    BrowserController.bindHeadless(callerConvId, webView)
+                    // Reject if another conversation already holds the (single, global)
+                    // controller binding — binding a second concurrently would route this
+                    // conv's streamed screenshots into the other chat. Same-conv re-bind is
+                    // always accepted, so the common per-task reuse path is unaffected.
+                    if (!BrowserController.bindHeadless(callerConvId, webView)) {
+                        return@withTimeoutOrNull BrowserController.bindBusyEnvelope()
+                    }
                     BrowserController.startTaskWindow()
                     BrowserController.appendAction("Open: $url")
                     val result = BrowserControllerHandle.withController {
@@ -843,7 +865,15 @@ fun browserEvalJsTool(): Tool = Tool(
                 BrowserControllerHandle.withController {
                     val raw = webView.evaluateJavascriptAsync(code, toolTimeoutMs - 1_000L)
                     BrowserController.appendAction("Run JS")
-                    buildJsonObject { put("result", raw ?: "null") }
+                    // Clamp the raw result before it enters the envelope. evaluateJavascript
+                    // returns whatever the page's last expression serialised to — a model that
+                    // evals e.g. `document.body.outerHTML` can dump megabytes into the turn.
+                    // Reuse the 64 KB cap the read tools (runGetText / runReadHelper) apply.
+                    val (clipped, truncated) = clipText(raw ?: "null", EVAL_JS_MAX_RESULT_CHARS)
+                    buildJsonObject {
+                        put("result", clipped)
+                        if (truncated) put("truncated", true)
+                    }
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.EVAL_JS)
         }

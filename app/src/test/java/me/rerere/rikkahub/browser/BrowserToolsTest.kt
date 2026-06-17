@@ -228,6 +228,41 @@ class BrowserToolsTest {
         assertTrue("expected browser_not_open, got: $out2", out2.contains("browser_not_open"))
     }
 
+    @Test fun `bindBusyEnvelope is a distinct error shape from the other browser envelopes`() {
+        // Concurrent-bind guard (fix for the global-mode clobber): a second headless
+        // conversation that lands while another holds the single global binding gets this
+        // envelope instead of silently stealing the binding and mis-routing screenshots.
+        // The error code MUST be distinct so the LLM can tell "someone else is busy" apart
+        // from "no browser open" / "session lost" and back off rather than retry forever.
+        val busy = BrowserController.bindBusyEnvelope().toString()
+        assertTrue("expected browser_busy code, got: $busy", busy.contains("browser_busy"))
+        assertTrue("busy envelope should carry recovery guidance, got: $busy",
+            busy.contains("recovery"))
+        val notOpen = BrowserController.notOpenEnvelope().toString()
+        val lost = BrowserController.sessionLostEnvelope().toString()
+        assertTrue("busy must differ from not_open", busy != notOpen)
+        assertTrue("busy must differ from session_lost", busy != lost)
+    }
+
+    @Test fun `canBindHeadless allows binding when controller is idle`() {
+        // The browser_open allocation-avoidance peek (fix for wasting a ~30 MB WebView on a
+        // bind that bindHeadless would reject). On an unbound (Idle) controller the slot is
+        // free, so the peek MUST allow the bind regardless of which conv asks — otherwise
+        // browser_open would refuse to allocate even when nothing owns the controller.
+        BrowserController.clearTaskWindow()
+        assertTrue(BrowserController.canBindHeadless("conv-a"))
+        assertTrue(BrowserController.canBindHeadless("conv-b"))
+    }
+
+    @Test fun `clearModeIfHeadless is a no-op on an unowned controller`() {
+        // Called by the pool's idle sweep per evicted conv id. When the controller isn't in
+        // Mode.Headless for that conv (Idle here, or a different owner), it must leave state
+        // untouched and never throw — the sweep wraps it in runCatching but it shouldn't need to.
+        BrowserController.clearModeIfHeadless("conv-not-bound")
+        // Controller stays usable: an idle slot still reports bindable.
+        assertTrue(BrowserController.canBindHeadless("conv-not-bound"))
+    }
+
     @Test fun `task window starts unbounded and accepts startTaskWindow`() {
         // Sanity check the controller's task-window helpers — Pass 2 added these and
         // the tool factories rely on them. Within-window must default true (no task

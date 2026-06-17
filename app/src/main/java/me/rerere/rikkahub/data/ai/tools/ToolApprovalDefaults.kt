@@ -255,6 +255,11 @@ object ToolApprovalDefaults {
     val NO_ALWAYS_ALLOW: Set<String> = setOf(
         "mcp_add",
         "mcp_update",
+        // eval_javascript runs arbitrary code in the QuickJS engine. Even with a wall-clock
+        // timeout + a bounded native heap/stack, the code itself is attacker-controllable, so
+        // a blanket "Always Allow" would hand unattended cron / Telegram paths a standing
+        // arbitrary-code primitive. Require a per-call confirmation every time.
+        "eval_javascript",
         // Phase 16 — skill_install_from_url + skill_install_from_text. The skill body is
         // fetched from an arbitrary URL (or supplied as raw text via any other tool, e.g.
         // ssh_exec / termux_run_command for authenticated servers) and installed against
