@@ -23,7 +23,11 @@ class GeofenceTriggerReceiver : BroadcastReceiver() {
         val transition = event.geofenceTransition
         val workflowIds = event.triggeringGeofences?.map { it.requestId }.orEmpty()
         if (workflowIds.isEmpty()) return
-        GeofenceTriggerDispatcher.onEvent(workflowIds, transition)
+        // goAsync keeps the process alive past onReceive's return so the cold-start path
+        // (no bound family yet) can finish its repository lookup + fire. The dispatcher
+        // calls finish() on the returned PendingResult when its work completes.
+        val pending = goAsync()
+        GeofenceTriggerDispatcher.onEvent(workflowIds, transition, pending)
     }
 
     companion object {

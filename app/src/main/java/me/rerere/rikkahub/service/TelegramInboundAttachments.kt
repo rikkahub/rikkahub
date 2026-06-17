@@ -23,8 +23,10 @@ import java.io.File
 private const val TAG = "TelegramInboundAttachments"
 
 /** Maximum file size for auto-downloading inbound non-photo attachments.
- *  Telegram allows up to 2 GB; we cap at 50 MB to avoid surprise storage use. */
-const val INBOUND_ATTACHMENT_SIZE_CAP_BYTES: Long = 50L * 1024 * 1024   // 50 MB
+ *  Telegram allows up to 2 GB, but the Bot API's getFile only serves files up to ~20 MB;
+ *  above that getFile fails outright. We cap here at 20 MB so larger files hit the over-cap
+ *  guard (and get a visible SKIPPED note) instead of silently failing in the download path. */
+const val INBOUND_ATTACHMENT_SIZE_CAP_BYTES: Long = 20L * 1024 * 1024   // 20 MB
 
 /** Total size cap for the per-chat attachment inbox. Oldest files are pruned when
  *  this is exceeded. */
@@ -133,7 +135,7 @@ internal suspend fun downloadInboundAttachments(
         // Skip over-sized attachments without downloading.
         if (att.sizeBytes != null && att.sizeBytes > INBOUND_ATTACHMENT_SIZE_CAP_BYTES) {
             val sizeMb = att.sizeBytes / (1024.0 * 1024.0)
-            out.add(DownloadedAttachment(att, savedPath = null, skipReason = "exceeds 50 MB cap (${String.format("%.1f", sizeMb)} MB)"))
+            out.add(DownloadedAttachment(att, savedPath = null, skipReason = "exceeds 20 MB cap (${String.format("%.1f", sizeMb)} MB)"))
             continue
         }
 
@@ -150,9 +152,16 @@ internal suspend fun downloadInboundAttachments(
             client.downloadFile(filePath, dest)
             out.add(DownloadedAttachment(att, savedPath = dest.absolutePath, skipReason = null))
             Log.i(TAG, "downloadInboundAttachments: saved ${dest.name} (${dest.length()} bytes)")
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            // Cancellation is not a download failure — rethrow so structured concurrency
+            // unwinds cleanly instead of emitting a misleading "download failed" note and
+            // silently swallowing the cancel.
+            throw c
         } catch (e: Throwable) {
             Log.w(TAG, "downloadInboundAttachments: failed for ${att.fileId}", e)
-            // Don't add to out — error is silently skipped so other attachments still download.
+            // Surface the failure as a SKIPPED note instead of dropping the file: the LLM/user
+            // still learns the attachment arrived (e.g. getFile rejects files near the 20 MB edge).
+            out.add(DownloadedAttachment(att, savedPath = null, skipReason = "download failed: ${e.message ?: e.javaClass.simpleName}"))
         }
     }
     return out
@@ -167,7 +176,7 @@ internal suspend fun downloadInboundAttachments(
  * [User attached N file(s) with this message:
  * - documents/Invoice.pdf  (application/pdf, 1.2 MB) → saved to /sdcard/Download/telegram_inbox/123/Invoice.pdf
  * - voice/voice.ogg  (audio/ogg, 30s, 0.3 MB) → saved to /sdcard/Download/telegram_inbox/123/voice.ogg
- * - documents/huge.zip  (application/zip, 200 MB) → SKIPPED: exceeds 50 MB cap
+ * - documents/huge.zip  (application/zip, 200 MB) → SKIPPED: exceeds 20 MB cap
  * ]
  * ```
  */

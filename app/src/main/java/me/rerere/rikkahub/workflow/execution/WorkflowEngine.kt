@@ -365,6 +365,11 @@ class WorkflowActionRunner {
                 ?: return RunResult(false, "action $idx: unknown_tool:${action.tool}", outputs.joinToString("\n"))
             val out = try {
                 withTimeoutOrNull(action.timeoutSeconds * 1000L) { tool.execute(action.args) }
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                // Don't swallow cancellation — re-throw so structured concurrency can
+                // unwind the fire (e.g. the engine scope is cancelled on shutdown). The
+                // generic catch below would otherwise turn it into a spurious FAILED row.
+                throw c
             } catch (t: Throwable) {
                 logSafe("workflow action $idx tool=${action.tool} threw: ${t.message}")
                 return RunResult(false,

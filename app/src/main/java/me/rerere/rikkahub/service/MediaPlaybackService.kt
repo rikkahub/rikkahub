@@ -152,7 +152,12 @@ class MediaPlaybackService : Service() {
                 if (pos >= 0) seekTo(pos)
             }
         }
-        return START_STICKY
+        // NOT_STICKY: ad-hoc playback has no queue to auto-revive (v1). A sticky restart
+        // redelivers a null intent, which falls through the when above without calling
+        // startForeground() — and a foreground service that misses that call crashes.
+        // Sibling services (WebServerService, TelegramBotService) are NOT_STICKY for the
+        // same reason.
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

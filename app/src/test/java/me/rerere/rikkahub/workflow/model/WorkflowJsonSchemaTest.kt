@@ -172,6 +172,17 @@ class WorkflowJsonSchemaTest {
         assertEquals(longName, def!!.name)
     }
 
+    @Test fun `parseStored tolerates a forward-compat unknown key on a trigger spec`() {
+        // A future build adds a field to battery_below; an older build (or a downgrade) must
+        // still load the row instead of dropping the trigger and tearing the workflow down.
+        // The lenient stored decoder ignores the unknown key; the strict create path would
+        // (correctly) still reject it as a repair signal.
+        val raw = """{"id":"abc","name":"X","trigger":{"type":"battery_below","params":{"threshold_percent":20,"future_field":"v2"}},"actions":[{"tool":"show_toast","args":{}}]}"""
+        val def = WorkflowJson.parseStored(raw)
+        assertNotNull("parseStored must tolerate unknown forward-compat keys", def)
+        assertEquals(20, (def!!.trigger as TriggerSpec.BatteryBelow).thresholdPercent)
+    }
+
     // ------- Trigger / condition param-shape leniency (regression) ------
     // The decoders historically required the canonical `{type, params:{...}}` envelope.
     // Most LLMs default to flat `{type, key1, key2}` and silently mis-authored every

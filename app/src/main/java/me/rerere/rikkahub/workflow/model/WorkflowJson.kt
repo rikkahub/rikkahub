@@ -45,6 +45,23 @@ object WorkflowJson {
         namingStrategy = kotlinx.serialization.json.JsonNamingStrategy.SnakeCase
     }
 
+    /**
+     * Lenient decoder for the stored-read path ONLY. Identical to [strict] except it tolerates
+     * unknown keys. Persistence is forward-compatible: if a future build adds a field to a
+     * trigger/condition spec, an older build (or a downgrade) must still load the row instead
+     * of silently dropping the whole trigger and tearing the workflow down. The strict decoder
+     * stays on the LLM create/validate path so an unrecognised key there still surfaces as a
+     * repair signal to the model.
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val lenient: Json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = false
+        explicitNulls = false
+        encodeDefaults = true
+        namingStrategy = kotlinx.serialization.json.JsonNamingStrategy.SnakeCase
+    }
+
     sealed class ParseResult {
         data class Ok(val definition: WorkflowDefinition) : ParseResult()
         data class Err(val error: String, val detail: String) : ParseResult() {
@@ -225,9 +242,9 @@ object WorkflowJson {
         val obj = element as? JsonObject ?: return null
         val name = obj["name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: return null
         val triggerObj = obj["trigger"] as? JsonObject ?: return null
-        val triggerSpec = (decodeTrigger(triggerObj) as? DecodeOk)?.value as? TriggerSpec ?: return null
+        val triggerSpec = (decodeTrigger(triggerObj, lenient) as? DecodeOk)?.value as? TriggerSpec ?: return null
         val conditions = (obj["conditions"]?.jsonArray ?: buildJsonArray { }).mapNotNull { el ->
-            (el as? JsonObject)?.let { (decodeCondition(it) as? DecodeOk)?.value as? ConditionSpec }
+            (el as? JsonObject)?.let { (decodeCondition(it, lenient) as? DecodeOk)?.value as? ConditionSpec }
         }
         val actions = (obj["actions"]?.jsonArray ?: return null).mapNotNull { el ->
             val ao = el as? JsonObject ?: return@mapNotNull null
@@ -265,7 +282,7 @@ object WorkflowJson {
     private data class DecodeOk(val value: Any) : DecodeOutcome()
     private data class DecodeErr(val err: ParseResult.Err) : DecodeOutcome()
 
-    private fun decodeTrigger(triggerObj: JsonObject): DecodeOutcome {
+    private fun decodeTrigger(triggerObj: JsonObject, json: Json = strict): DecodeOutcome {
         val type = triggerObj["type"]?.jsonPrimitive?.contentOrNull
             ?: return DecodeErr(ParseResult.Err("missing_trigger_type", "trigger.type is required"))
         // Accept either nested {type, params:{...}} OR flat {type, ...keys}. The nested
@@ -284,7 +301,7 @@ object WorkflowJson {
             }
         }
         return runCatching {
-            DecodeOk(strict.decodeFromJsonElement(TriggerSpec.serializer(), flat))
+            DecodeOk(json.decodeFromJsonElement(TriggerSpec.serializer(), flat))
         }.getOrElse {
             DecodeErr(ParseResult.Err("unknown_trigger_type",
                 "trigger.type='$type' not recognised or params malformed: ${it.message}"))
@@ -301,7 +318,7 @@ object WorkflowJson {
         }
     }
 
-    private fun decodeCondition(condObj: JsonObject): DecodeOutcome {
+    private fun decodeCondition(condObj: JsonObject, json: Json = strict): DecodeOutcome {
         val type = condObj["type"]?.jsonPrimitive?.contentOrNull
             ?: return DecodeErr(ParseResult.Err("missing_condition_type", "condition.type is required"))
         // Accept either nested {type, params:{...}} OR flat {type, ...keys}. See the
@@ -316,7 +333,7 @@ object WorkflowJson {
             }
         }
         return runCatching {
-            DecodeOk(strict.decodeFromJsonElement(ConditionSpec.serializer(), flat))
+            DecodeOk(json.decodeFromJsonElement(ConditionSpec.serializer(), flat))
         }.getOrElse {
             DecodeErr(ParseResult.Err("unknown_condition_type",
                 "condition.type='$type' not recognised or params malformed: ${it.message}"))
