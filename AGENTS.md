@@ -1,50 +1,85 @@
 # Repository Guidelines
 
-本文档面向贡献者，概述本仓库的模块结构、开发流程，便于快速上手并保持一致的协作质量。
+This document is for contributors: it outlines the repository's module structure and development workflow so you can get productive quickly and keep collaboration consistent.
 
 ## Build, Test, and Development Commands
 
-使用 Android Studio 或命令行 Gradle：
+The app module is built across two axes: a `distribution` flavor dimension (`sideload` | `play`) and the build types
+`debug` / `release` / `baseline`. **Use the `sideloadDebug` variant for local development** — `sideload` is the
+full-feature flavor (the `play` flavor restricts the workspace shell/terminal surface; see Product flavors below).
 
 ```bash
-./gradlew assembleDebug          # 构建 Debug APK
-./gradlew test                   # 运行所有模块的 JVM 单元测试
-./gradlew connectedDebugAndroidTest  # 运行设备/模拟器上的仪器测试
-./gradlew lint                   # 运行 Android Lint
+# Compile the app (fast feedback, no tests)
+./gradlew :app:compileSideloadDebugKotlin --rerun-tasks -x :web:buildWebUi
+
+# App unit tests (flavored variant) — optionally narrowed to a class/package/method
+./gradlew :app:testSideloadDebugUnitTest --rerun-tasks -x :web:buildWebUi
+./gradlew :app:testSideloadDebugUnitTest --tests "me.rerere.rikkahub.data.ai.shellrun.*" --rerun-tasks -x :web:buildWebUi
+
+# Library-module unit tests have NO flavor — use the plain debug variant
+./gradlew :ai:testDebugUnitTest :ai-runtime:testDebugUnitTest :workspace:testDebugUnitTest --rerun-tasks
+
+# Lint — the authoritative gate. Pre-existing issues are filtered by app/lint-baseline.xml; only NEW issues fail.
+./gradlew :app:lintSideloadDebug --rerun-tasks -x :web:buildWebUi
+
+# Instrumented tests on a device/emulator
+./gradlew :app:connectedSideloadDebugAndroidTest
 ```
 
-构建应用需要在 `app/` 下提供 `google-services.json`（用于 Firebase）。
-`web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，需要本地可用 `pnpm`。
+Notes that save real time:
+- **Always pass `-x :web:buildWebUi`** in JVM/dev loops. The `:web` module's `buildWebUi` task shells out to
+  `pnpm run build` inside `web-ui/` (the React frontend embedded by the Ktor server) and requires Node + pnpm on PATH —
+  it is only needed when you actually change the embedded web UI.
+- **`--rerun-tasks`** — Gradle's incremental cache can report stale green; force a real run when verifying a change.
+- **Lint catches what a module compile misses.** A call available on the compile JDK can still be a `NewApi` error at
+  `minSdk = 26`; module-targeted `compileSideloadDebugKotlin` passes while `:app:lintSideloadDebug` rejects it. Run a
+  full lint before declaring a change done.
+- **Prerequisite:** the build applies the Google Services plugin and expects `app/google-services.json`; a placeholder
+  file is sufficient for local builds that don't exercise Firebase.
 
 ## Coding Style & Naming Conventions
 
-本仓库使用 `.editorconfig` 统一格式：
+Formatting is unified via `.editorconfig`:
 
-- Kotlin/Gradle 脚本：4 空格缩进，最大行长 120。
-- XML/JSON：2 空格缩进。
-- Markdown/YAML：2 空格缩进，允许尾随空格（用于对齐）。
+- Kotlin / Gradle scripts: 4-space indent, max line length 120.
+- XML / JSON: 2-space indent.
+- Markdown / YAML: 2-space indent, trailing whitespace allowed (used for alignment).
 
-命名习惯：模块名为小写目录（如 `ai/`、`speech/`），Kotlin 类遵循 PascalCase，测试类以 `*Test` 结尾。
+Naming conventions: modules are lowercase directories (e.g. `ai/`, `speech/`); Kotlin classes use PascalCase; test
+classes end with `*Test`.
 
 ## Testing Guidelines
 
-测试框架以 JUnit/AndroidX Test 为主。未设定强制覆盖率门槛，但新逻辑应配套新增/更新测试。测试文件命名建议：
+Tests are primarily JUnit / AndroidX Test. There is no enforced coverage threshold, but new logic should ship with
+new/updated tests. Suggested file naming:
 
-- 单元测试：`FooTest.kt`
-- 仪器测试：`FooInstrumentedTest.kt` 或 `*Test.kt`
+- Unit tests: `FooTest.kt`
+- Instrumented tests: `FooInstrumentedTest.kt` or `*Test.kt`
 
 ## Module Structure
 
-- **app**: Main application module with UI, ViewModels, and core logic
-- **ai**: AI SDK abstraction layer for different providers (OpenAI, Google, Anthropic)
-- **common**: Common utilities and extensions
-- **document**: Document parsing module for handling PDF, DOCX, PPTX, and EPUB files
-- **highlight**: Code syntax highlighting implementation
-- **material3**: Material color utility extensions used by the app UI
-- **search**: Search functionality SDK for multiple providers (Exa, Tavily, Zhipu, Bing, Brave, SearXNG, and others)
-- **speech**: Speech module for TTS and ASR implementations
-- **web**: Embedded web server module that provides Ktor server startup function and hosts static frontend build files (
-  built from web-ui/ React project)
+- **app**: Main application module with UI, ViewModels, services, Room database, DI wiring, and the app-specific
+  message transformers. The composition root that wires every other module together.
+- **ai**: Provider SDK abstraction — the wire layer. `provider/` (OpenAI, Google, Anthropic implementations),
+  `registry/`, `core/`, and `ui/` (the platform-agnostic `UIMessage`/streaming model). Knows nothing about agents.
+- **ai-runtime**: The agent/turn runtime that sits on top of `ai`. Owns the agent loop and its subsystems:
+  `task/` (the agent-loop coordinator + budgets), `subagent/`, `hooks/`, `transformers/` (transformer contracts),
+  `mcp/` (MCP config/contracts), `memory/` + `knowledge/` (RAG), `schedule/`, `board/`, and `contract/`. If a change is
+  about *how a turn runs* (tools, hooks, budgets, scheduling, subagents) it belongs here, not in `ai`.
+- **automation**: On-device UI automation surface (e.g. `ui_observe`/act) with package-scope gating and a kill switch.
+- **workspace**: Sandboxed filesystem + shell execution surface (background shell runs, tail scoping, path/symlink
+  containment) used by agent tooling.
+- **common**: Common utilities and extensions (incl. untrusted-content framing, JSON helpers).
+- **document**: Document parsing for PDF, DOCX, PPTX, and EPUB files.
+- **highlight**: Code syntax highlighting implementation.
+- **material3**: Material color utility extensions used by the app UI.
+- **search**: Search SDK for multiple providers (Exa, Tavily, Zhipu, Bing, Brave, SearXNG, and others); maintains its
+  own `values*/strings.xml`.
+- **speech**: TTS and ASR implementations.
+- **web**: Embedded Ktor web server that hosts the static frontend built from the `web-ui/` React project.
+
+Non-Gradle directories: **web-ui/** (the React frontend, built by `:web:buildWebUi` via pnpm) and **locale-tui/** (a TUI
+helper for managing string-resource translations; see the `locale-tui-localization` skill).
 
 ## Concepts
 
@@ -82,6 +117,25 @@
   Output transformers support `visualTransform()` for UI display during streaming and `onGenerationFinish()` for final
   processing after generation completes.
   (app/src/main/java/me/rerere/rikkahub/data/ai/transformers/Transformer.kt)
+
+## Product flavors (security boundary)
+
+The `sideload` and `play` flavors are not just store metadata — they gate the powerful on-device surfaces. The workspace
+shell/terminal and its tool-exposure differ by flavor via flavor-specific source sets in `app/src/{sideload,play}/`
+(e.g. `WorkspaceToolsGate.kt`, `WorkspaceControlsGate.kt`, `WorkspaceTerminalPage.kt`): `sideload` exposes the full
+shell/terminal; `play` restricts it. When touching workspace/automation tooling, check BOTH flavor variants — a change
+in only one source set silently diverges the two builds.
+
+## Agent runtime & durable state
+
+A turn is more than a single request. The `ai-runtime` task layer drives an agent loop (tool calls, hooks, per-step
+context fit, wall-time/token budgets); **subagent and scheduled turns run through the same generation path and the same
+`ChatMessageTransformers` pipeline as a normal chat turn** — fixes to turn behavior must hold for all three. Async work
+that must survive process death is persisted in Room and replayed at cold start, not held in memory: the
+`agent_events` queue (durable async-injection of e.g. background-shell completions into a conversation at an idle
+turn-end seam) and the `shell_runs` store (background shell lifecycle). When changing terminal/completion ordering,
+preserve the invariant that a row's terminal state and its completion event are made durable atomically (one
+transaction), or the cold-start replay paths will not re-emit a lost completion.
 
 ## Internationalization
 
