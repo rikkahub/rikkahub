@@ -488,6 +488,16 @@ class McpManager(
     fun getStatus(config: McpServerConfig): Flow<McpStatus> {
         return syncingStatus.map { it[config.id] ?: McpStatus.Idle }
     }
+
+    /**
+     * On-demand reconnect for the config UI. The settings-driven auto-connect ([init]) only ADDs
+     * servers whose id is not already tracked, so a server that is already in the clients map (one
+     * that has connected, errored, or exhausted its reconnect attempts) is never re-added by a plain
+     * settings emission — the UI must ask for the reconnect explicitly. Using this (not a second
+     * [addClient]) for an already-tracked id avoids racing the auto-connect path into a duplicate
+     * connect for the same id.
+     */
+    suspend fun reconnect(config: McpServerConfig) = reconnectClient(config)
 }
 
 // The reconnect/close invariant — every transport McpManager connects must carry
