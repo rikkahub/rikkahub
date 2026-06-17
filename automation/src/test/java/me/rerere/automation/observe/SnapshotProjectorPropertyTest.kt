@@ -171,6 +171,67 @@ class SnapshotProjectorPropertyTest {
         )
     }
 
+    // ---- includeHost (YOLO): the host self-exclusion is lifted ONLY when includeHost=true ----
+    @Test
+    fun `isWindowEligible includeHost lifts the host exclusion`() {
+        // Default (scoped) keeps the host out even when allow-listed (regression-pinned above).
+        assertFalse(
+            "host stays excluded with includeHost=false",
+            SnapshotProjector.isWindowEligible(SnapshotProjector.HOST_PACKAGE, false, setOf(SnapshotProjector.HOST_PACKAGE)),
+        )
+        // YOLO: the host becomes eligible when it is in the (singleton) allow-list.
+        assertTrue(
+            "host is eligible with includeHost=true and host in allow-list",
+            SnapshotProjector.isWindowEligible(
+                SnapshotProjector.HOST_PACKAGE, false, setOf(SnapshotProjector.HOST_PACKAGE), includeHost = true,
+            ),
+        )
+        // includeHost does NOT widen the package set: a foreign, non-system pkg not in the allow-list
+        // is still ineligible even under includeHost (only the host clause is relaxed).
+        assertFalse(
+            "includeHost must not admit a non-allow-listed foreign window",
+            SnapshotProjector.isWindowEligible(foreignPkg, false, setOf(grantedPkg), includeHost = true),
+        )
+    }
+
+    @Test
+    fun `includeHost projects the host foreground instead of FOREGROUND_IS_HOST`() {
+        val tree = RawTree(
+            stateSeq = 9L,
+            foregroundPkg = SnapshotProjector.HOST_PACKAGE,
+            windows = listOf(
+                RawWindow(
+                    pkg = SnapshotProjector.HOST_PACKAGE,
+                    root = RawNode(text = "host-target", className = "TextView", visible = true, hasArea = true),
+                ),
+            ),
+        )
+        // Scoped (default): host foreground short-circuits to FOREGROUND_IS_HOST, no targets (P2/P12).
+        val scoped = projector.project(tree, setOf(SnapshotProjector.HOST_PACKAGE))
+        assertEquals(ScreenState.FOREGROUND_IS_HOST, scoped.screenState)
+        assertTrue(scoped.targets.isEmpty())
+        // YOLO: the host is projected like any other app.
+        val yolo = projector.project(tree, setOf(SnapshotProjector.HOST_PACKAGE), includeHost = true)
+        assertFalse("includeHost must not report FOREGROUND_IS_HOST", yolo.screenState == ScreenState.FOREGROUND_IS_HOST)
+        assertTrue("the host target must be projected under includeHost", yolo.targets.any { it.text == "host-target" })
+    }
+
+    // ---- metamorphic: includeHost only ever WIDENS disclosure (never drops a scoped target) ----
+    @Test
+    fun `metamorphic includeHost is a superset of the scoped projection`() {
+        runBlocking {
+            checkAll(250, arbRawTree(maxDepth = 3)) { tree ->
+                val allow = tree.windows.firstOrNull { it.pkg != SnapshotProjector.HOST_PACKAGE }?.pkg ?: grantedPkg
+                val scopedTexts = projector.project(tree, setOf(allow)).targets.mapNotNull { it.text }
+                val yoloTexts = projector.project(tree, setOf(allow), includeHost = true).targets.mapNotNull { it.text }
+                assertTrue(
+                    "includeHost dropped a target the scoped projection kept",
+                    yoloTexts.containsAll(scopedTexts),
+                )
+            }
+        }
+    }
+
     // ---- P3: every tid is unique within one snapshot ----
     @Test
     fun `P3 tids are unique within a snapshot`() {

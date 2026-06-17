@@ -99,6 +99,12 @@ data class AutomationGrant(
     val sinks: Set<AutomationSink> = emptySet(),
     val ttlMinutes: Int = 0,
     val maxSteps: Int = 0,
+    // YOLO ("bypass all restriction"): a maximally-permissive grant (every package incl. the host,
+    // every verb, every sink incl. SUBMIT). Additive with a `false` default so legacy assistant JSON
+    // decodes UNCHANGED to the scoped posture — no DataStore migration. Honored ONLY from the standing
+    // assistant grant AND only once the user has acknowledged the danger
+    // (`DisplaySetting.automationYoloAcknowledged`); the per-run/pending grant can never flip it on.
+    val yolo: Boolean = false,
 )
 
 /** Mirror of the `:automation` `Verb` enum (names/order match) for serialized assistant grants. */

@@ -347,6 +347,7 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                         performOnProjectedNode(
                             tid = action.tid,
                             allowedPackages = action.allowedPackages,
+                            includeHost = action.includeHost,
                         ) { it.performAction(actionId) }
                     }
                 }
@@ -368,6 +369,7 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                         performOnProjectedNode(
                             tid = action.tid,
                             allowedPackages = action.allowedPackages,
+                            includeHost = action.includeHost,
                         ) {
                             it.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
                         }
@@ -401,6 +403,7 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     private fun performOnProjectedNode(
         tid: Int,
         allowedPackages: Set<String>,
+        includeHost: Boolean,
         perform: (AccessibilityNodeInfo) -> Boolean,
     ): Boolean {
         val cursor = intArrayOf(0) // running projected-node index, mutated across the recursive walk
@@ -410,7 +413,7 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                 try {
                     val pkg = root.packageName?.toString() ?: continue
                     val systemWindow = isSystemWindow(pkg, window.type)
-                    if (!SnapshotProjector.isWindowEligible(pkg, systemWindow, allowedPackages)) continue
+                    if (!SnapshotProjector.isWindowEligible(pkg, systemWindow, allowedPackages, includeHost)) continue
                     walkAndPerform(root, tid, cursor, perform)?.let { return it }
                 } finally {
                     @Suppress("DEPRECATION") // recycle() required below API 33 (no-op above); minSdk 26

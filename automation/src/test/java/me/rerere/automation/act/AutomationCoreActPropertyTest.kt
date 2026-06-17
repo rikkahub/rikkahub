@@ -21,6 +21,7 @@ import me.rerere.automation.cap.Capability
 import me.rerere.automation.cap.CapabilityGuard
 import me.rerere.automation.cap.Lease
 import me.rerere.automation.cap.Sink
+import me.rerere.automation.cap.Surface
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.automation.observe.Selector
@@ -87,7 +88,7 @@ class AutomationCoreActPropertyTest {
     ) = CapabilityGuard(
         Capability.root(
             sessionId = "s",
-            surface = setOf(pkg),
+            surface = Surface.Scoped(setOf(pkg)),
             verbs = verbs,
             sinkBudget = sinks,
             lease = Lease(expiresAt = expiresAt, maxSteps = 1000),

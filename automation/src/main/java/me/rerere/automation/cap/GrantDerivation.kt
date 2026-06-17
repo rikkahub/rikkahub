@@ -19,6 +19,16 @@ data class AutomationGrant(
     val sinks: Set<Sink> = emptySet(),
     val ttlMinutes: Int = 0,
     val maxSteps: Int = 0,
+    /**
+     * YOLO ("bypass all restriction"). When true, [toCapability] derives a maximally-permissive
+     * capability — [Surface.Unbounded], every [Verb], every [Sink] (incl. the otherwise-stripped
+     * `SUBMIT`), and host self-observation ([Capability.includeHost]) — instead of the scoped
+     * whitelist. This is the dangerous mode the user must explicitly accept; the `:app` derivation
+     * only ever sets it from the persisted assistant grant AND only once the danger is acknowledged
+     * (a per-run grant can never flip it on). The lease (ttl/steps) STILL bounds a YOLO grant, and the
+     * kill switch / revoke are unaffected — YOLO widens the agent-facing authority, not the user's stop.
+     */
+    val yolo: Boolean = false,
 )
 
 /** Wall-clock minutes are converted to the lease's millisecond clock at this single point. */
@@ -42,18 +52,36 @@ private const val MILLIS_PER_MINUTE = 60_000L
  */
 fun AutomationGrant.toCapability(sessionId: String, now: Long): Capability? {
     if (!enabled) return null
-    if (allowedPackages.isEmpty()) return null
+    // The lease still bounds EVERY grant, YOLO included (defense in depth: a zero/negative TTL or step
+    // budget is unusable regardless of mode — the kill switch is the other, independent stop).
     if (ttlMinutes <= 0) return null
     if (maxSteps <= 0) return null
+    val lease = Lease(
+        expiresAt = now + ttlMinutes.toLong() * MILLIS_PER_MINUTE,
+        maxSteps = maxSteps,
+    )
+    if (yolo) {
+        // YOLO bypasses the scoped restrictions: every package, every verb, every sink (INCLUDING the
+        // otherwise-stripped SUBMIT), and host self-observation. No allowedPackages requirement — the
+        // surface is unbounded. The guard still enforces lease/revoke; the out-of-band SUBMIT confirm
+        // is auto-approved at the :app wiring (the user already accepted the danger), and the kill
+        // switch overlay remains mandatory.
+        return Capability.root(
+            sessionId = sessionId,
+            surface = Surface.Unbounded,
+            verbs = Verb.entries.toSet(),
+            sinkBudget = Sink.entries.toSet(),
+            includeHost = true,
+            lease = lease,
+        )
+    }
+    if (allowedPackages.isEmpty()) return null
     return Capability.root(
         sessionId = sessionId,
-        surface = allowedPackages,
+        surface = Surface.Scoped(allowedPackages),
         verbs = verbs,
-        // Submit-class is never granted by this derivation, regardless of what the grant lists.
+        // Submit-class is never granted by the SCOPED derivation, regardless of what the grant lists.
         sinkBudget = sinks - Sink.SUBMIT,
-        lease = Lease(
-            expiresAt = now + ttlMinutes.toLong() * MILLIS_PER_MINUTE,
-            maxSteps = maxSteps,
-        ),
+        lease = lease,
     )
 }

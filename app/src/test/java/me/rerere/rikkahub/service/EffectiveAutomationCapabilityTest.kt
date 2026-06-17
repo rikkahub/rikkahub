@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import me.rerere.automation.cap.Sink
+import me.rerere.automation.cap.Surface
 import me.rerere.automation.cap.Verb
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.AutomationSink
@@ -112,7 +113,7 @@ class EffectiveAutomationCapabilityTest {
             now = now,
         )!!
 
-        assertEquals(setOf("com.example.target"), cap.surface)
+        assertEquals(Surface.Scoped(setOf("com.example.target")), cap.surface)
         assertEquals(setOf(Verb.OBSERVE, Verb.TAP), cap.verbs)
         assertEquals(sessionId, cap.sessionId)
         assertEquals(now + 5L * 60_000L, cap.lease.expiresAt)
@@ -162,7 +163,7 @@ class EffectiveAutomationCapabilityTest {
             now = now,
         )!!
 
-        assertEquals("per-run surface wins", setOf("com.perrun.app"), cap.surface)
+        assertEquals("per-run surface wins", Surface.Scoped(setOf("com.perrun.app")), cap.surface)
         assertEquals(now + 3L * 60_000L, cap.lease.expiresAt)
         assertEquals(10, cap.lease.maxSteps)
     }
@@ -183,7 +184,7 @@ class EffectiveAutomationCapabilityTest {
             now = now,
         )!!
 
-        assertEquals(setOf("com.assistant.default"), cap.surface)
+        assertEquals(Surface.Scoped(setOf("com.assistant.default")), cap.surface)
     }
 
     // --- #187 v2 activation policy: the master switch gates every grant source (finding 1) ---
@@ -261,5 +262,142 @@ class EffectiveAutomationCapabilityTest {
                 "pending-grant branch",
             cap,
         )
+    }
+
+    // --- YOLO ("bypass all restriction"): acknowledgement gate + pending-cannot-widen (codex P0-4) ---
+
+    private fun yoloGrant() = AutomationGrant(
+        enabled = true,
+        // YOLO needs no allowedPackages — the surface is unbounded. Left empty on purpose to prove the
+        // empty-surface deny does NOT apply to a YOLO grant.
+        allowedPackages = emptySet(),
+        ttlMinutes = 30,
+        maxSteps = 256,
+        yolo = true,
+    )
+
+    @Test
+    fun `an acknowledged standing YOLO grant derives an unbounded host-inclusive capability`() {
+        val cap = effectiveAutomationCapability(
+            pendingGrant = null,
+            assistantGrant = yoloGrant(),
+            masterSwitchEnabled = true,
+            sessionId = sessionId,
+            now = now,
+            yoloAcknowledged = true,
+        )!!
+
+        assertEquals("YOLO surface is unbounded", Surface.Unbounded, cap.surface)
+        assertTrue("YOLO includes the host", cap.includeHost)
+        assertTrue("YOLO grants every verb", cap.verbs.containsAll(Verb.entries.toSet()))
+        assertTrue("YOLO grants SUBMIT (not stripped)", cap.sinkBudget.contains(Sink.SUBMIT))
+    }
+
+    @Test
+    fun `a standing YOLO grant without the danger acknowledgement degrades to deny-all`() {
+        val cap = effectiveAutomationCapability(
+            pendingGrant = null,
+            assistantGrant = yoloGrant(), // empty allowedPackages
+            masterSwitchEnabled = true,
+            sessionId = sessionId,
+            now = now,
+            yoloAcknowledged = false,
+        )
+
+        // Without acknowledgement YOLO is stripped, leaving an enabled-but-empty-surface scoped grant
+        // ⇒ no usable capability. The dangerous mode is unreachable until the user accepts it.
+        assertNull("unacknowledged YOLO must not mint a capability", cap)
+    }
+
+    @Test
+    fun `a standing YOLO grant with a scoped fallback degrades to that scope when unacknowledged`() {
+        val cap = effectiveAutomationCapability(
+            pendingGrant = null,
+            assistantGrant = yoloGrant().copy(
+                allowedPackages = setOf("com.scoped.fallback"),
+                verbs = setOf(AutomationVerb.OBSERVE),
+            ),
+            masterSwitchEnabled = true,
+            sessionId = sessionId,
+            now = now,
+            yoloAcknowledged = false,
+        )!!
+
+        assertEquals(
+            "unacknowledged YOLO falls back to the scoped whitelist, never unbounded",
+            Surface.Scoped(setOf("com.scoped.fallback")),
+            cap.surface,
+        )
+        assertTrue("the scoped fallback never includes the host", !cap.includeHost)
+    }
+
+    @Test
+    fun `a pending grant can never widen to YOLO`() {
+        val cap = effectiveAutomationCapability(
+            // A per-run grant that tries to turn YOLO on — even with the danger acknowledged, the
+            // pending path must be stripped to scoped (only the STANDING assistant grant may be YOLO).
+            pendingGrant = AutomationGrant(
+                enabled = true,
+                allowedPackages = setOf("com.perrun.app"),
+                verbs = setOf(AutomationVerb.OBSERVE),
+                ttlMinutes = 5,
+                maxSteps = 50,
+                yolo = true,
+            ),
+            assistantGrant = AutomationGrant(),
+            masterSwitchEnabled = true,
+            sessionId = sessionId,
+            now = now,
+            yoloAcknowledged = true,
+        )!!
+
+        assertEquals(
+            "a pending grant must derive the scoped surface, never Unbounded",
+            Surface.Scoped(setOf("com.perrun.app")),
+            cap.surface,
+        )
+        assertTrue("a pending grant can never include the host", !cap.includeHost)
+    }
+
+    @Test
+    fun `an unsupported flavor strips YOLO even when acknowledged`() {
+        // The Play flavor passes yoloSupported=false. A restored/imported settings.json carrying both
+        // yolo=true AND automationYoloAcknowledged=true must STILL not mint an unrestricted capability —
+        // the derivation chokepoint is the runtime half of the sideload-only boundary (codex P1).
+        val cap = effectiveAutomationCapability(
+            pendingGrant = null,
+            assistantGrant = yoloGrant().copy(
+                allowedPackages = setOf("com.scoped.fallback"),
+                verbs = setOf(AutomationVerb.OBSERVE),
+            ),
+            masterSwitchEnabled = true,
+            sessionId = sessionId,
+            now = now,
+            yoloAcknowledged = true,
+            yoloSupported = false,
+        )!!
+
+        assertEquals(
+            "a flavor that does not support YOLO must fall back to the scoped surface, never Unbounded",
+            Surface.Scoped(setOf("com.scoped.fallback")),
+            cap.surface,
+        )
+        assertTrue("an unsupported flavor never includes the host", !cap.includeHost)
+    }
+
+    @Test
+    fun `an unsupported flavor with an empty-scope YOLO grant derives nothing`() {
+        // The exact Play-restore exploit shape: yolo + acknowledged but no scoped fallback packages.
+        // Stripping yolo leaves an enabled-but-empty-surface grant ⇒ no capability (deny-all).
+        val cap = effectiveAutomationCapability(
+            pendingGrant = null,
+            assistantGrant = yoloGrant(), // empty allowedPackages
+            masterSwitchEnabled = true,
+            sessionId = sessionId,
+            now = now,
+            yoloAcknowledged = true,
+            yoloSupported = false,
+        )
+        assertNull("an unsupported flavor must not mint a YOLO capability from imported state", cap)
     }
 }

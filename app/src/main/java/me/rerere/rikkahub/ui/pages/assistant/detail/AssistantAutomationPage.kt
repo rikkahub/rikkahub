@@ -1,28 +1,37 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,12 +63,15 @@ import me.rerere.rikkahub.data.ai.tools.UI_OBSERVE_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.UI_SCROLL_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.UI_SET_TEXT_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.UI_TAP_TOOL_NAME
+import me.rerere.rikkahub.data.InstalledPackageInfo
+import me.rerere.rikkahub.data.InstalledPackageSource
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.AutomationSink
 import me.rerere.rikkahub.data.model.AutomationVerb
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -221,6 +233,7 @@ fun AssistantAutomationPage(id: String) {
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val registry: AutomationRuntimeRegistry = koinInject()
     val a11yEnabled = registry.backend() != null
+    val yoloAcknowledged = LocalSettings.current.displaySetting.automationYoloAcknowledged
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -240,8 +253,10 @@ fun AssistantAutomationPage(id: String) {
             grant = assistant.automationGrant,
             hooks = assistant.hooks,
             a11yEnabled = a11yEnabled,
+            yoloAcknowledged = yoloAcknowledged,
             onUpdate = { vm.update(assistant.copy(automationGrant = it)) },
             onUpdateHooks = { vm.update(assistant.copy(hooks = it)) },
+            onAcknowledgeYolo = { vm.setAutomationYoloAcknowledged(true) },
         )
     }
 }
@@ -252,8 +267,10 @@ private fun AutomationScopeContent(
     grant: AutomationGrant,
     hooks: HookConfig,
     a11yEnabled: Boolean,
+    yoloAcknowledged: Boolean,
     onUpdate: (AutomationGrant) -> Unit,
     onUpdateHooks: (HookConfig) -> Unit,
+    onAcknowledgeYolo: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -291,6 +308,16 @@ private fun AutomationScopeContent(
         LeaseLimitsEditor(grant = grant, onUpdate = onUpdate)
 
         GuardrailEditor(hooks = hooks, onUpdate = onUpdateHooks)
+
+        // YOLO "bypass all restriction" danger zone. Flavor-gated: the sideload build renders the
+        // toggle + danger-consent dialog + warning banner; the Play build renders nothing (the
+        // unrestricted surface is sideload-only, mirroring the workspace shell security boundary).
+        AutomationYoloSection(
+            grant = grant,
+            yoloAcknowledged = yoloAcknowledged,
+            onUpdate = onUpdate,
+            onAcknowledge = onAcknowledgeYolo,
+        )
     }
 }
 
@@ -502,6 +529,7 @@ private fun SinkSwitches(grant: AutomationGrant, onUpdate: (AutomationGrant) -> 
 @Composable
 private fun AllowedPackagesEditor(grant: AutomationGrant, onUpdate: (AutomationGrant) -> Unit) {
     var input by remember { mutableStateOf("") }
+    var showPicker by remember { mutableStateOf(false) }
 
     fun commit() {
         if (input.isNotBlank()) {
@@ -521,6 +549,20 @@ private fun AllowedPackagesEditor(grant: AutomationGrant, onUpdate: (AutomationG
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // Pick-from-installed-apps shortcut: most users do not know exact package names, and the
+        // launcher/home package differs per device, so a tap-to-add picker is what makes scoped
+        // automation usable. The free-text field below stays as a fallback for packages the picker
+        // cannot enumerate (e.g. the launcher-only set on the play flavor).
+        OutlinedButton(
+            onClick = { showPicker = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(HugeIcons.Add01, contentDescription = null)
+            Text(
+                text = "Pick from installed apps",
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -567,6 +609,133 @@ private fun AllowedPackagesEditor(grant: AutomationGrant, onUpdate: (AutomationG
                             )
                         },
                     )
+                }
+            }
+        }
+    }
+
+    if (showPicker) {
+        PackagePickerSheet(
+            allowed = grant.allowedPackages,
+            onToggle = { pkg, add ->
+                onUpdate(if (add) grant.withAddedPackage(pkg) else grant.withRemovedPackage(pkg))
+            },
+            onDismiss = { showPicker = false },
+        )
+    }
+}
+
+/**
+ * Bottom-sheet picker over the installed packages ([InstalledPackageSource]) so the user can tap to
+ * add/remove a scope target instead of typing a package name. Includes a search box and a
+ * "show system packages" toggle (default ON — the home/launcher and many automation targets ARE
+ * system packages). Tapping a row toggles it in the grant immediately; the already-allowed packages
+ * render selected. On the play flavor the source returns only launcher-visible apps (no
+ * QUERY_ALL_PACKAGES), so the list is shorter but the picker still works.
+ */
+@Composable
+private fun PackagePickerSheet(
+    allowed: Set<String>,
+    onToggle: (pkg: String, add: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val source: InstalledPackageSource = koinInject()
+    var query by remember { mutableStateOf("") }
+    var showSystem by remember { mutableStateOf(true) }
+    // null = still loading (the enumeration hops to Dispatchers.IO); a non-null list = loaded.
+    var packages by remember { mutableStateOf<List<InstalledPackageInfo>?>(null) }
+
+    LaunchedEffect(showSystem) {
+        packages = null
+        packages = source.list(includeSystem = showSystem)
+    }
+
+    val filtered = remember(packages, query) {
+        val q = query.trim().lowercase()
+        packages.orEmpty().filter {
+            q.isEmpty() || it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q)
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Pick from installed apps",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Search apps") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Text,
+                ),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Show system packages")
+                Switch(checked = showSystem, onCheckedChange = { showSystem = it })
+            }
+            val loaded = packages
+            if (loaded == null) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.padding(24.dp))
+                }
+            } else if (filtered.isEmpty()) {
+                Text(
+                    text = "No matching packages.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 480.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(filtered, key = { it.packageName }) { pkg ->
+                        val selected = pkg.packageName in allowed
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggle(pkg.packageName, !selected) }
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = pkg.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = pkg.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (selected) {
+                                Icon(
+                                    imageVector = HugeIcons.CheckmarkCircle01,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

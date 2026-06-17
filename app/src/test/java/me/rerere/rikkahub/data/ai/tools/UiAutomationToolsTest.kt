@@ -27,6 +27,7 @@ import me.rerere.automation.cap.Decision
 import me.rerere.automation.cap.DenyReason
 import me.rerere.automation.cap.Lease
 import me.rerere.automation.cap.Sink
+import me.rerere.automation.cap.Surface
 import me.rerere.automation.cap.TrustClock
 import me.rerere.automation.cap.Verb
 import me.rerere.common.android.redactAndTruncate
@@ -75,7 +76,7 @@ class UiAutomationToolsTest {
     ): CapabilityGuard = CapabilityGuard(
         capability = Capability.root(
             sessionId = "conversation-1",
-            surface = surface,
+            surface = Surface.Scoped(surface),
             verbs = setOf(Verb.OBSERVE),
             lease = Lease(expiresAt = expiresAt, maxSteps = maxSteps),
         ),
@@ -510,7 +511,7 @@ class UiAutomationToolsTest {
     ): CapabilityGuard = CapabilityGuard(
         capability = Capability.root(
             sessionId = "conversation-1",
-            surface = surface,
+            surface = Surface.Scoped(surface),
             // slice 9 adds SET_TEXT + the TYPE_INTO input sink; slice 10 adds TAP (no sink — a general
             // tap is verb-gated only) alongside the slice-8 nav authority, so the act guard ADMITs
             // every act tool's authorize on the happy path.

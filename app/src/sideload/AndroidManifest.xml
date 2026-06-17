@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Sideload-only package visibility. The automation scope PICKER enumerates ALL installed packages
+      (including system ones) so the user can pick a target instead of typing a package name by hand —
+      the home/launcher package differs per device, and ui_observe fails on a screen outside the scope,
+      so a "see everything and tap to add" picker is what makes scoped automation usable.
+
+      QUERY_ALL_PACKAGES is Play-policy sensitive, so it is declared ONLY in this sideload flavor; the
+      play build keeps the narrow <queries> MAIN/LAUNCHER visibility from the main manifest and the
+      picker degrades to launchable apps. This permission feeds the UI picker ONLY — it is never wired
+      into the agent-facing list_app tool. The lint QueryAllPackagesPermission check is suppressed
+      deliberately: this is the intended, sideload-only broad visibility (the play build, which Play
+      policy governs, never declares it), not an oversight.
+    -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+</manifest>

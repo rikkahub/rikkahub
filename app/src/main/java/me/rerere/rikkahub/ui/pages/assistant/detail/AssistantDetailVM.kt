@@ -175,6 +175,24 @@ class AssistantDetailVM(
         }
     }
 
+    /**
+     * Persist the one-time automation YOLO danger acknowledgement (global, in DisplaySetting). A YOLO
+     * grant on any assistant is honored by the lease derivation only once this is true; the toggle UI
+     * sets it on the user's explicit accept.
+     */
+    fun setAutomationYoloAcknowledged(acknowledged: Boolean) {
+        viewModelScope.launch {
+            val current = settings.value
+            settingsStore.update(
+                settings = current.copy(
+                    displaySetting = current.displaySetting.copy(
+                        automationYoloAcknowledged = acknowledged,
+                    ),
+                ),
+            )
+        }
+    }
+
     fun addMemory(memory: AssistantMemory) {
         viewModelScope.launch {
             val memoryAssistantId = if (assistant.value.useGlobalMemory) {

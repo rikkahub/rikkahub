@@ -111,14 +111,14 @@ class FakeBackend(
                 true
             }
             is PerformAction.Node -> {
-                performOnProjectedNode(action.tid, action.allowedPackages) { true }.also { dispatched ->
+                performOnProjectedNode(action.tid, action.allowedPackages, action.includeHost) { true }.also { dispatched ->
                     if (dispatched) {
                         performed.add(action)
                     }
                 }
             }
             is PerformAction.SetText -> {
-                performOnProjectedNode(action.tid, action.allowedPackages) { true }.also { dispatched ->
+                performOnProjectedNode(action.tid, action.allowedPackages, action.includeHost) { true }.also { dispatched ->
                     if (dispatched) {
                         performed.add(action)
                     }
@@ -140,11 +140,12 @@ class FakeBackend(
     private fun performOnProjectedNode(
         tid: Int,
         allowedPackages: Set<String>,
+        includeHost: Boolean,
         perform: (RawNode) -> Boolean,
     ): Boolean {
         val cursor = intArrayOf(0)
         for (window in rawTree.windows) {
-            if (!isWindowAllowed(window.pkg, window.systemWindow, allowedPackages)) continue
+            if (!isWindowAllowed(window.pkg, window.systemWindow, allowedPackages, includeHost)) continue
             if (window.secure || window.root == null) continue
             if (walkAndPerform(window.root, tid, cursor, perform) == true) {
                 lastPerformedWindow = window.pkg
@@ -176,8 +177,13 @@ class FakeBackend(
     private fun isProjectedTarget(node: RawNode): Boolean =
         (node.visible && node.hasArea) || node.hasId || node.hasText
 
-    private fun isWindowAllowed(pkg: String, systemWindow: Boolean, allowedPackages: Set<String>): Boolean =
-        SnapshotProjector.isWindowEligible(pkg, systemWindow, allowedPackages)
+    private fun isWindowAllowed(
+        pkg: String,
+        systemWindow: Boolean,
+        allowedPackages: Set<String>,
+        includeHost: Boolean,
+    ): Boolean =
+        SnapshotProjector.isWindowEligible(pkg, systemWindow, allowedPackages, includeHost)
 
     override suspend fun awaitSettle() {
         settleCount++

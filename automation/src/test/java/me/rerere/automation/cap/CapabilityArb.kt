@@ -55,7 +55,7 @@ fun arbRootCapability(): Arb<Capability> = arbitrary {
     val expiresAt = Arb.int(0..1_000_000).bind().toLong()
     Capability.root(
         sessionId = Arb.string(1..8).bind(),
-        surface = surface,
+        surface = Surface.Scoped(surface),
         verbs = verbs,
         sinkBudget = sinks,
         lease = Lease(expiresAt = expiresAt, maxSteps = maxSteps),
@@ -68,15 +68,18 @@ fun arbRootCapability(): Arb<Capability> = arbitrary {
  */
 fun arbValidAttenuation(parent: Capability): Arb<Capability> = arbitrary {
     // A subset of each PARENT axis (⊆ parent ⇒ attenuate() never widens). arbSubsetOf is total even
-    // for an empty parent axis, so the old per-axis empty-guards are no longer needed.
-    val surface = arbSubsetOf(parent.surface).bind()
+    // for an empty parent axis, so the old per-axis empty-guards are no longer needed. The arb roots
+    // are always [Surface.Scoped] (YOLO's [Surface.Unbounded] is exercised by targeted tests), so the
+    // child surface is a subset of the parent's package set.
+    val parentPackages = (parent.surface as Surface.Scoped).packages
+    val surface = arbSubsetOf(parentPackages).bind()
     val verbs = arbSubsetOf(parent.verbs).bind()
     val sinks = arbSubsetOf(parent.sinkBudget).bind()
     val maxSteps = Arb.int(0..parent.lease.maxSteps.coerceAtLeast(0)).bind()
     val expiresAt = Arb.int(0..parent.lease.expiresAt.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
         .bind().toLong()
     parent.attenuate(
-        surface = surface,
+        surface = Surface.Scoped(surface),
         verbs = verbs,
         sinkBudget = sinks,
         expiresAt = expiresAt,

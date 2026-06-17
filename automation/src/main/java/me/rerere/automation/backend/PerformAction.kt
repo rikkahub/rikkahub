@@ -16,6 +16,8 @@ sealed interface PerformAction {
         val tid: Int,
         val kind: NodeActionKind,
         val allowedPackages: Set<String>,
+        /** YOLO host policy: when true the replay walk may also match host-package windows. */
+        val includeHost: Boolean = false,
     ) : PerformAction
 
     /** A global navigation action — BACK / HOME / RECENTS. No node target (performGlobalAction). */
@@ -34,6 +36,8 @@ sealed interface PerformAction {
         val tid: Int,
         val text: String,
         val allowedPackages: Set<String>,
+        /** YOLO host policy: when true the replay walk may also match host-package windows. */
+        val includeHost: Boolean = false,
     ) : PerformAction
 }
 

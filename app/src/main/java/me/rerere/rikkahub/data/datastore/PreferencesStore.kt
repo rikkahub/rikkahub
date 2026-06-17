@@ -621,6 +621,11 @@ data class DisplaySetting(
     val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
+    // One-time danger acknowledgement for automation YOLO mode ("bypass all restriction"). Persisted
+    // globally so a YOLO grant on any assistant is honored only after the user has explicitly accepted
+    // the risk once; default false keeps the fail-closed scoped posture until then. Additive default ⇒
+    // no migration.
+    val automationYoloAcknowledged: Boolean = false,
 )
 
 @Serializable

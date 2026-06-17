@@ -23,6 +23,8 @@ import me.rerere.rikkahub.data.ai.runtime.SystemRuntimeClock
 import me.rerere.rikkahub.data.ai.transformers.ChatMessageTransformers
 import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
+import me.rerere.rikkahub.data.InstalledPackageSource
+import me.rerere.rikkahub.data.AndroidInstalledPackageSource
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatService
@@ -155,6 +157,10 @@ val appModule = module {
     // dispatch shared by the overlay and the in-app Stop.
     single { AutomationRuntimeRegistry() }
     single { AutomationKillSwitch() }
+    // Installed-package enumeration for the automation scope PICKER (UI-only; never wired into the
+    // agent-facing list_app). Breadth is flavor-gated by the manifest: full incl. system on sideload
+    // (QUERY_ALL_PACKAGES), launcher-visible only on play.
+    single<InstalledPackageSource> { AndroidInstalledPackageSource(get()) }
 
     // Neutral :ai-runtime contract adapters (issue #243 slice 3). Bound ONLY here in the :app
     // composition root — :ai-runtime has no Koin dependency, so binding there would violate the

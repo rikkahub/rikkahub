@@ -24,6 +24,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 class AndroidManifestQueriesTest {
 
     private val manifestFile = File("src/main/AndroidManifest.xml")
+    private val sideloadManifestFile = File("src/sideload/AndroidManifest.xml")
 
     @Test
     fun queries_block_declares_launcher_intent_for_app_launch_tools() {
@@ -70,8 +71,30 @@ class AndroidManifestQueriesTest {
             (perms.item(it) as Element).getAttribute("android:name")
         }
         assertFalse(
-            "QUERY_ALL_PACKAGES must NOT be requested — the play flavor is Play-policy sensitive; " +
-                "list_app relies on a <queries><intent> LAUNCHER filter only",
+            "QUERY_ALL_PACKAGES must NOT be requested in the MAIN manifest — the play flavor is " +
+                "Play-policy sensitive; the broad permission is sideload-only (declared in the " +
+                "sideload manifest), and list_app relies on a <queries><intent> LAUNCHER filter only",
+            requested.any { it.endsWith("QUERY_ALL_PACKAGES") },
+        )
+    }
+
+    @Test
+    fun sideload_manifest_requests_query_all_packages_for_the_picker() {
+        // The sideload flavor opts into broad package visibility so the automation scope PICKER can
+        // list every installed package incl. system ones. It lives ONLY in the sideload manifest (the
+        // play merge keeps the narrow main visibility), so the two flavors diverge by manifest, not code.
+        assertTrue(
+            "sideload AndroidManifest.xml not found at ${sideloadManifestFile.absolutePath}",
+            sideloadManifestFile.exists(),
+        )
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(sideloadManifestFile)
+        val perms = doc.getElementsByTagName("uses-permission")
+        val requested = (0 until perms.length).map {
+            (perms.item(it) as Element).getAttribute("android:name")
+        }
+        assertTrue(
+            "the sideload flavor must request QUERY_ALL_PACKAGES so the scope picker can enumerate " +
+                "all installed packages (incl. system)",
             requested.any { it.endsWith("QUERY_ALL_PACKAGES") },
         )
     }

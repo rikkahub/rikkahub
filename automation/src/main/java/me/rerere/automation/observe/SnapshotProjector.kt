@@ -24,11 +24,16 @@ import me.rerere.automation.backend.RawWindow
  */
 class SnapshotProjector {
 
-    fun project(tree: RawTree, allowedPackages: Set<String>): UiSnapshot {
-        val foregroundIsHost = tree.foregroundPkg == HOST_PACKAGE
+    /**
+     * @param includeHost when true (YOLO only), the host self-exclusion is lifted: the host may be the
+     *   foreground (no [ScreenState.FOREGROUND_IS_HOST] short-circuit) and host windows are eligible.
+     *   Default false preserves the P2/P12 host exclusion for every scoped (non-YOLO) caller.
+     */
+    fun project(tree: RawTree, allowedPackages: Set<String>, includeHost: Boolean = false): UiSnapshot {
+        val foregroundIsHost = !includeHost && tree.foregroundPkg == HOST_PACKAGE
 
-        // Windows the model may see: never the host, never a secure window's contents.
-        val visibleWindows = tree.windows.filter { isWindowEligible(it.pkg, it.systemWindow, allowedPackages) }
+        // Windows the model may see: never the host (unless includeHost), never a secure window's contents.
+        val visibleWindows = tree.windows.filter { isWindowEligible(it.pkg, it.systemWindow, allowedPackages, includeHost) }
 
         val screenState = when {
             foregroundIsHost -> ScreenState.FOREGROUND_IS_HOST
@@ -122,10 +127,16 @@ class SnapshotProjector {
 
         /**
          * Shared predicate for deciding whether a window is traversable by both projection and act replay.
-         * The host window is never visible to the model. Non-host windows are visible when explicitly
-         * allow-listed or explicitly marked system.
+         * The host window is never visible to the model UNLESS [includeHost] (YOLO). Non-host windows are
+         * visible when explicitly allow-listed or explicitly marked system. [includeHost] defaults false so
+         * every scoped caller keeps the host exclusion.
          */
-        fun isWindowEligible(pkg: String, systemWindow: Boolean, allowedPackages: Set<String>): Boolean =
-            pkg != HOST_PACKAGE && (pkg in allowedPackages || systemWindow)
+        fun isWindowEligible(
+            pkg: String,
+            systemWindow: Boolean,
+            allowedPackages: Set<String>,
+            includeHost: Boolean = false,
+        ): Boolean =
+            (includeHost || pkg != HOST_PACKAGE) && (pkg in allowedPackages || systemWindow)
     }
 }

@@ -180,7 +180,7 @@ fun getUiAutomationTools(
                         cancel = { job?.cancel(CancellationException("automation revoked")) },
                         onAlreadyRevoked = { listOf(UIMessagePart.Text(OBSERVE_DENIED_MESSAGE)) },
                         block = {
-                            val snapshot = core.observe(setOfNotNull(authorizedPkg))
+                            val snapshot = core.observe(setOfNotNull(authorizedPkg), guard.includeHost)
                             // TOCTOU on the authorization target (gate finding): the foreground app
                             // may have switched between the authorize-read above and this capture.
                             // Bind the captured snapshot to the authorized package — if they differ,

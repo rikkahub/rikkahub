@@ -13,11 +13,17 @@ package me.rerere.automation.cap
  * (design I9, property P20).
  */
 class Capability internal constructor(
-    /** App package whitelist. Default-empty = deny-all surface (design I3, property P17, S1). */
-    val surface: Set<String>,
+    /** Package authority. [Surface.Scoped] default-empty = deny-all (design I3, property P17, S1). */
+    val surface: Surface,
     val verbs: Set<Verb>,
     val sinkBudget: Set<Sink>,
     val lease: Lease,
+    /**
+     * Whether the host app ([SnapshotProjector.HOST_PACKAGE]) may itself be observed/acted on. Default
+     * false: the host is excluded from projection and the act path host-pauses on it (design P2/P12).
+     * Only the YOLO grant derivation flips this true (and it can never widen under [attenuate]).
+     */
+    val includeHost: Boolean = false,
     val parent: Capability? = null,
     val depth: Int = 0,
     /** Shared revocation state for this capability subtree (root creates it, children inherit). */
@@ -33,15 +39,19 @@ class Capability internal constructor(
      * also kills the child (property P20). The child is bound to the same [sessionId].
      */
     fun attenuate(
-        surface: Set<String> = this.surface,
+        surface: Surface = this.surface,
         verbs: Set<Verb> = this.verbs,
         sinkBudget: Set<Sink> = this.sinkBudget,
         expiresAt: Long = this.lease.expiresAt,
         maxSteps: Int = this.lease.maxSteps,
         rateLimitPerMinute: Int = this.lease.rateLimitPerMinute,
+        includeHost: Boolean = this.includeHost,
     ): Capability {
-        require(surface.all { it in this.surface }) {
+        require(this.surface.canAttenuateTo(surface)) {
             "attenuate cannot widen surface"
+        }
+        require(!includeHost || this.includeHost) {
+            "attenuate cannot grant host access the parent lacks"
         }
         require(verbs.all { it in this.verbs }) {
             "attenuate cannot widen verbs"
@@ -63,6 +73,7 @@ class Capability internal constructor(
             verbs = verbs,
             sinkBudget = sinkBudget,
             lease = Lease(expiresAt, maxSteps, rateLimitPerMinute),
+            includeHost = includeHost,
             parent = this,
             depth = this.depth + 1,
             revocation = this.revocation,
@@ -81,20 +92,56 @@ class Capability internal constructor(
          */
         fun root(
             sessionId: String,
-            surface: Set<String> = emptySet(),
+            surface: Surface = Surface.Scoped(emptySet()),
             verbs: Set<Verb> = emptySet(),
             sinkBudget: Set<Sink> = emptySet(),
             lease: Lease,
+            includeHost: Boolean = false,
         ): Capability = Capability(
             surface = surface,
             verbs = verbs,
             sinkBudget = sinkBudget,
             lease = lease,
+            includeHost = includeHost,
             parent = null,
             depth = 0,
             revocation = RevocationToken(),
             sessionId = sessionId,
         )
+    }
+}
+
+/**
+ * The package authority axis of a [Capability]. [Scoped] is the default, fail-closed shape: a finite
+ * whitelist (empty = deny-all, design I3/S1/P17). [Unbounded] is the YOLO widening — every package is
+ * in scope — minted ONLY by the YOLO grant derivation; a default/scoped grant never produces it.
+ *
+ * Modelled as a sealed type rather than a `Set<String> + boolean` so the contradictory state
+ * ("unbounded yet carrying a non-empty whitelist") is unrepresentable, and so the attenuation lattice
+ * ([canAttenuateTo]) and the admission predicate ([allows]) live ON the type — the surface owns its
+ * own rules, the guard/derivation never re-implement them (the data structure makes the special cases
+ * vanish, Linus §5).
+ */
+sealed interface Surface {
+    /** True iff [pkg] is within this surface. */
+    fun allows(pkg: String): Boolean
+
+    /** True iff [child] is no wider than this surface — attenuation may only ever SHRINK authority. */
+    fun canAttenuateTo(child: Surface): Boolean
+
+    /** A finite package whitelist. Empty = deny-all. */
+    data class Scoped(val packages: Set<String>) : Surface {
+        override fun allows(pkg: String): Boolean = pkg in packages
+        override fun canAttenuateTo(child: Surface): Boolean = when (child) {
+            is Scoped -> child.packages.all { it in packages }
+            Unbounded -> false // a scoped parent can never widen to unbounded
+        }
+    }
+
+    /** Every package is in scope (YOLO). Only the acknowledged YOLO derivation mints this. */
+    data object Unbounded : Surface {
+        override fun allows(pkg: String): Boolean = true
+        override fun canAttenuateTo(child: Surface): Boolean = true // anything is ⊆ unbounded
     }
 }
 

@@ -68,6 +68,7 @@ import me.rerere.ai.runtime.hooks.HookEvent
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.ai.runtime.mcp.McpTool
+import me.rerere.automation.act.AlwaysConfirm
 import me.rerere.automation.act.AlwaysDeny
 import me.rerere.automation.cap.Capability
 import me.rerere.automation.cap.CapabilityGuard
@@ -102,6 +103,7 @@ import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.getUiAutomationTools
+import me.rerere.rikkahub.service.automation.AUTOMATION_YOLO_SUPPORTED
 import me.rerere.rikkahub.service.automation.AutomationActivationTracker
 import me.rerere.rikkahub.service.automation.AutomationKillSwitch
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
@@ -202,6 +204,7 @@ private fun AutomationGrant.toKernelGrant(): me.rerere.automation.cap.Automation
         sinks = sinks.map { Sink.valueOf(it.name) }.toSet(),
         ttlMinutes = ttlMinutes,
         maxSteps = maxSteps,
+        yolo = yolo,
     )
 
 /**
@@ -227,12 +230,30 @@ internal fun effectiveAutomationCapability(
     masterSwitchEnabled: Boolean,
     sessionId: String,
     now: Long,
+    // YOLO is honored ONLY once the user has acknowledged the danger (a global one-time consent stored
+    // in DisplaySetting). Default false so the fail-closed scoped posture holds unless explicitly set.
+    yoloAcknowledged: Boolean = false,
+    // YOLO availability is also FLAVOR-gated at this derivation chokepoint, not just in the UI: the
+    // Play build passes false so a restored/imported settings.json (carrying yolo=true + acknowledged)
+    // can never mint an Unbounded/host-inclusive capability on Play. Default true preserves the
+    // sideload/kernel-logic behavior for callers/tests that don't thread the flavor policy.
+    yoloSupported: Boolean = true,
 ): Capability? {
     // The master switch gates the whole expression; a pending grant may override the standing grant,
     // but neither branch contributes authority while UI automation is disabled.
     if (!masterSwitchEnabled) return null
-    val effectiveGrant = pendingGrant ?: assistantGrant
-    return effectiveGrant.toKernelGrant().toCapability(sessionId, now)
+    // Per-run precedence with a YOLO floor (codex P0-4): a pending (per-run) grant overrides the
+    // standing scope, but it can NEVER widen to YOLO — strip its yolo flag so a generic pending-grant
+    // path cannot mint Unbounded for a non-YOLO assistant. YOLO comes ONLY from the standing assistant
+    // grant, ONLY when the danger acknowledgement is present, AND only on a flavor that supports it;
+    // otherwise it degrades to scoped.
+    val effectiveGrant = (pendingGrant?.copy(yolo = false)) ?: assistantGrant
+    val gatedGrant = if (effectiveGrant.yolo && (!yoloAcknowledged || !yoloSupported)) {
+        effectiveGrant.copy(yolo = false)
+    } else {
+        effectiveGrant
+    }
+    return gatedGrant.toKernelGrant().toCapability(sessionId, now)
 }
 
 /**
@@ -1436,12 +1457,20 @@ class ChatService(
         // Finding 1: `uiAutomationEnabled` is passed into the derivation as the single master gate
         // for BOTH grant sources. A per-run grant can override the standing grant only after that gate
         // is open; with the switch off, no automation guard is minted.
+        // YOLO ("bypass all restriction") is honored only after the user accepted the danger once: a
+        // global acknowledgement persisted in DisplaySetting. Read it here so the derivation can gate
+        // the standing grant's yolo flag (a pending grant can never widen to YOLO regardless).
+        val yoloAcknowledged = settingsStore.settingsFlow.value.displaySetting.automationYoloAcknowledged
         val capability: Capability? = effectiveAutomationCapability(
             pendingGrant = pendingGrant,
             assistantGrant = assistant.automationGrant,
             masterSwitchEnabled = assistant.uiAutomationEnabled,
             sessionId = conversationId.toString(),
             now = trustClock.now(),
+            yoloAcknowledged = yoloAcknowledged,
+            // Flavor-gate YOLO at the derivation: false on Play, so restored/imported acknowledged+yolo
+            // state can never mint an unrestricted capability there (the empty UI seam is not enough).
+            yoloSupported = AUTOMATION_YOLO_SUPPORTED,
         )
         val automationGuard: CapabilityGuard? = capability?.let { cap ->
             CapabilityGuard(capability = cap, clock = trustClock)
@@ -1601,10 +1630,20 @@ class ChatService(
                                     core = automationCore,
                                     foregroundPkg = { automationRegistry.foregroundPackage() },
                                     // The out-of-band confirm for a dangerous (submit-class) tap (#198 slice
-                                    // 11). Fail closed: if no overlay-backed channel is reachable (a11y
-                                    // service not connected), a dangerous sink can never be confirmed, so it
-                                    // is always denied — never silently auto-confirmed.
-                                    confirm = automationRegistry.confirmChannel() ?: AlwaysDeny,
+                                    // 11). YOLO (`includeHost` on the minted guard) auto-approves it: the
+                                    // user already accepted the danger, so the human confirm step is
+                                    // short-circuited — the SubmitClassifier + guard still run in-path (the
+                                    // SUBMIT sink is still derived and budget-checked) and the kill-switch
+                                    // overlay stays mandatory; only the prompt is skipped. This is gated
+                                    // strictly on the YOLO capability, NOT a fallback for a missing overlay.
+                                    // Scoped mode fails closed: if no overlay-backed channel is reachable
+                                    // (a11y service not connected), a dangerous sink can never be confirmed,
+                                    // so it is always denied — never silently auto-confirmed.
+                                    confirm = if (automationGuard?.includeHost == true) {
+                                        AlwaysConfirm
+                                    } else {
+                                        automationRegistry.confirmChannel() ?: AlwaysDeny
+                                    },
                                 )
                             )
                         }

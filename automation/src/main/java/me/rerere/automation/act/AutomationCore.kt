@@ -49,7 +49,7 @@ class AutomationCore(
      * every prior observe (P10/P11). The snapshot text is the mandatory, self-sufficient channel —
      * :app maps it to a `UIMessagePart.Text` (tool-output images are dropped by most providers).
      */
-    suspend fun observe(allowedPackages: Set<String>): UiSnapshot {
+    suspend fun observe(allowedPackages: Set<String>, includeHost: Boolean = false): UiSnapshot {
         val raw = backend.snapshotRawTree()
         // Capture the TOCTOU token atomically with the tree: the backend computes [RawTree.contentHash]
         // from the SAME capture instant as the nodes (under its capture lock), so the grounding's nodes
@@ -57,7 +57,7 @@ class AutomationCore(
         // let a content change between the two reads make the token describe a different tree than the
         // nodes (gate finding). The projector leaves it "" (a bare projection is not grounded); the core
         // is the one place a snapshot is bound to a live backend, so it stamps the captured hash here.
-        val snapshot = projector.project(raw, allowedPackages)
+        val snapshot = projector.project(raw, allowedPackages, includeHost)
             .copy(windowContentHash = raw.contentHash)
 
         // P11: enforce non-decreasing observed sequence. A backend that hands back a lower seq than
@@ -226,6 +226,7 @@ class AutomationCore(
                 tid = tid!!,
                 kind = request.kind,
                 allowedPackages = setOf(grounded.foregroundPkg),
+                includeHost = guard.includeHost,
             )
 
             is Act.SetText -> PerformAction.SetText(
@@ -233,6 +234,7 @@ class AutomationCore(
                 tid = tid!!,
                 text = request.text,
                 allowedPackages = setOf(grounded.foregroundPkg),
+                includeHost = guard.includeHost,
             )
         }
         val job = currentCoroutineContext()[Job]
@@ -279,8 +281,10 @@ class AutomationCore(
                     ActOutcome.StaleState
                 } else {
                     backend.awaitSettle()
-                    // D4: act success is the fresh re-grounding, not perform()'s boolean.
-                    val resnapshot = observe(setOf(grounded.foregroundPkg))
+                    // D4: act success is the fresh re-grounding, not perform()'s boolean. The re-snapshot
+                    // inherits the capability's host policy so a YOLO act on the host re-grounds on the host
+                    // (a scoped act keeps includeHost=false and host-excludes exactly as before).
+                    val resnapshot = observe(setOf(grounded.foregroundPkg), guard.includeHost)
                     // Surface re-assert (mirrors UiAutomationTools' ui_observe bind): the post-act
                     // re-snapshot must NOT disclose an app the capability never admitted. The act
                     // authorized against `grounded.foregroundPkg`; a global nav (HOME/BACK/RECENTS) can

@@ -37,7 +37,7 @@ class CapabilityGuardPropertyTest {
     ): CapabilityGuard {
         val cap = Capability.root(
             sessionId = "s",
-            surface = surface,
+            surface = Surface.Scoped(surface),
             verbs = verbs,
             sinkBudget = sinkBudget,
             lease = Lease(expiresAt = expiresAt, maxSteps = maxSteps),
@@ -198,7 +198,7 @@ class CapabilityGuardPropertyTest {
     fun `P16 attenuate never widens any axis`() {
         runBlocking {
             checkAll(300, arbRootAndChild()) { (root, child) ->
-                assertTrue(child.surface.all { it in root.surface })
+                assertTrue(root.surface.canAttenuateTo(child.surface))
                 assertTrue(child.verbs.all { it in root.verbs })
                 assertTrue(child.sinkBudget.all { it in root.sinkBudget })
                 assertTrue(child.lease.expiresAt <= root.lease.expiresAt)
@@ -212,13 +212,15 @@ class CapabilityGuardPropertyTest {
         runBlocking {
             val root = Capability.root(
                 sessionId = "s",
-                surface = setOf(ALLOWED),
+                surface = Surface.Scoped(setOf(ALLOWED)),
                 verbs = setOf(Verb.OBSERVE),
                 sinkBudget = emptySet(),
                 lease = Lease(expiresAt = 100, maxSteps = 5),
             )
             // Each of these widens exactly one axis and must throw.
-            assertThrows { root.attenuate(surface = setOf(ALLOWED, "com.bank.app")) }
+            assertThrows { root.attenuate(surface = Surface.Scoped(setOf(ALLOWED, "com.bank.app"))) }
+            assertThrows { root.attenuate(surface = Surface.Unbounded) }
+            assertThrows { root.attenuate(includeHost = true) }
             assertThrows { root.attenuate(verbs = setOf(Verb.OBSERVE, Verb.TAP)) }
             assertThrows { root.attenuate(sinkBudget = setOf(Sink.SUBMIT)) }
             assertThrows { root.attenuate(expiresAt = 101) }
@@ -256,7 +258,7 @@ class CapabilityGuardPropertyTest {
         runBlocking {
             val root = Capability.root(
                 sessionId = "s",
-                surface = setOf(ALLOWED),
+                surface = Surface.Scoped(setOf(ALLOWED)),
                 verbs = setOf(Verb.OBSERVE),
                 sinkBudget = emptySet(),
                 lease = Lease(expiresAt = Long.MAX_VALUE, maxSteps = 1000),
@@ -288,7 +290,7 @@ class CapabilityGuardPropertyTest {
             val gate = backend.armGate() // next snapshotRawTree() parks until released
             val root = Capability.root(
                 sessionId = "s",
-                surface = setOf(ALLOWED),
+                surface = Surface.Scoped(setOf(ALLOWED)),
                 verbs = setOf(Verb.OBSERVE),
                 sinkBudget = emptySet(),
                 lease = Lease(expiresAt = Long.MAX_VALUE, maxSteps = 1000),
@@ -392,7 +394,7 @@ class CapabilityGuardPropertyTest {
                     if (root.isRevoked) return false
                     if (now > root.lease.expiresAt) return false
                     val pkg = req.targetPkg ?: return false
-                    if (pkg !in root.surface) return false
+                    if (!root.surface.allows(pkg)) return false
                     if (req.verb !in root.verbs) return false
                     if (req.sink != null && req.sink !in root.sinkBudget) return false
                     if (req.sensitiveNode || req.systemUiTarget) return false

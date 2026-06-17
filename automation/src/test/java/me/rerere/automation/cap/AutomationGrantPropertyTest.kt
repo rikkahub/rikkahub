@@ -111,11 +111,11 @@ class AutomationGrantPropertyTest {
                 cap!!
                 assertTrue(
                     "derived surface must not reach a package the user did not approve",
-                    cap.surface.all { it in grant.allowedPackages },
+                    (cap.surface as Surface.Scoped).packages.all { it in grant.allowedPackages },
                 )
                 assertEquals(
                     "a live grant's surface is exactly the approved packages",
-                    grant.allowedPackages,
+                    Surface.Scoped(grant.allowedPackages),
                     cap.surface,
                 )
             }
@@ -243,6 +243,79 @@ class AutomationGrantPropertyTest {
                     Decision.DENY,
                     g.authorize(AuthRequest(verb = Verb.OBSERVE, targetPkg = PACKAGES.first())),
                 )
+            }
+        }
+    }
+
+    // ---- YOLO derivation: maximally-permissive capability, no surface requirement ----
+    @Test
+    fun `YOLO grant derives an unbounded host-inclusive all-sink capability`() {
+        runBlocking {
+            checkAll(300, arbSession(), Arb.int(1..240), Arb.int(1..200), Arb.int(0..1_000_000)) { session, ttl, steps, now ->
+                // YOLO needs NO allowedPackages (empty on purpose) — the empty-surface deny must not apply.
+                val grant = AutomationGrant(
+                    enabled = true,
+                    allowedPackages = emptySet(),
+                    ttlMinutes = ttl,
+                    maxSteps = steps,
+                    yolo = true,
+                )
+                val cap = grant.toCapability(session, now.toLong())
+                assertNotNull("a YOLO grant must derive a capability despite an empty surface", cap)
+                cap!!
+                assertEquals("YOLO surface is unbounded", Surface.Unbounded, cap.surface)
+                assertTrue("YOLO includes the host", cap.includeHost)
+                assertTrue("YOLO grants every verb", cap.verbs.containsAll(Verb.entries.toSet()))
+                assertTrue("YOLO grants every sink incl. SUBMIT", cap.sinkBudget.containsAll(Sink.entries.toSet()))
+                // An arbitrary package the user never listed is admitted under YOLO.
+                val g = guardFor(cap, now.toLong())
+                assertEquals(
+                    "YOLO admits an arbitrary, never-listed package",
+                    Decision.ADMIT,
+                    g.authorize(AuthRequest(verb = Verb.OBSERVE, targetPkg = "com.never.listed")),
+                )
+            }
+        }
+    }
+
+    // ---- YOLO still obeys the master enable + lease bounds (kill switch is independent) ----
+    @Test
+    fun `a YOLO grant still requires enabled and a positive lease`() {
+        // Disabled YOLO ⇒ no capability.
+        assertNull(
+            "disabled YOLO derives nothing",
+            AutomationGrant(enabled = false, ttlMinutes = 10, maxSteps = 10, yolo = true)
+                .toCapability("s", now = 0L),
+        )
+        // Zero TTL ⇒ no capability even under YOLO.
+        assertNull(
+            "zero-TTL YOLO derives nothing",
+            AutomationGrant(enabled = true, ttlMinutes = 0, maxSteps = 10, yolo = true)
+                .toCapability("s", now = 0L),
+        )
+        // Zero steps ⇒ no capability even under YOLO.
+        assertNull(
+            "zero-step YOLO derives nothing",
+            AutomationGrant(enabled = true, ttlMinutes = 10, maxSteps = 0, yolo = true)
+                .toCapability("s", now = 0L),
+        )
+    }
+
+    // ---- metamorphic: flipping yolo on only ever WIDENS authority (never narrows) ----
+    @Test
+    fun `enabling YOLO on a live grant only widens authority`() {
+        runBlocking {
+            checkAll(300, arbLiveGrant(), arbSession(), Arb.int(0..1_000_000)) { scoped, session, now ->
+                val scopedCap = scoped.toCapability(session, now.toLong())!!
+                val yoloCap = scoped.copy(yolo = true).toCapability(session, now.toLong())!!
+                // Surface widens: scoped ⊆ unbounded (canAttenuateTo from yolo down to scoped holds).
+                assertTrue(
+                    "YOLO surface must be at least as wide as the scoped surface",
+                    yoloCap.surface.canAttenuateTo(scopedCap.surface),
+                )
+                assertTrue("YOLO verbs ⊇ scoped verbs", yoloCap.verbs.containsAll(scopedCap.verbs))
+                assertTrue("YOLO sinks ⊇ scoped sinks", yoloCap.sinkBudget.containsAll(scopedCap.sinkBudget))
+                assertTrue("YOLO host-inclusion ⊇ scoped", yoloCap.includeHost || !scopedCap.includeHost)
             }
         }
     }

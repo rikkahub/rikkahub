@@ -38,7 +38,7 @@ class AttenuationConservationPropertyTest {
      * the property is not trivially-always-empty.
      */
     private fun admittedSinks(cap: Capability): Set<Sink> {
-        val pkg = cap.surface.firstOrNull() ?: return emptySet()
+        val pkg = (cap.surface as? Surface.Scoped)?.packages?.firstOrNull() ?: return emptySet()
         val verb = cap.verbs.firstOrNull() ?: return emptySet()
         return Sink.entries.filterTo(mutableSetOf()) { sink ->
             // A FRESH guard per sink: step budget cannot accumulate across the probe (P22 is not under
@@ -171,7 +171,7 @@ class AttenuationConservationPropertyTest {
     fun `admittedSinks is non-empty for a permissive cap`() {
         val root = Capability.root(
             sessionId = "s",
-            surface = setOf("com.example.app"),
+            surface = Surface.Scoped(setOf("com.example.app")),
             verbs = setOf(Verb.TAP),
             sinkBudget = setOf(Sink.SUBMIT, Sink.GLOBAL_NAV),
             lease = Lease(expiresAt = Long.MAX_VALUE, maxSteps = 1000),

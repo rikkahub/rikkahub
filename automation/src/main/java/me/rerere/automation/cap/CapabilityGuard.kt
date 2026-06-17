@@ -71,9 +71,11 @@ class CapabilityGuard(
             return Decision.DENY to DenyReason.LEASE_EXPIRED
         }
 
-        // Surface whitelist; default-empty ⇒ deny-all. P17/S1. A null pkg can never match.
+        // Surface whitelist; [Surface.Scoped] default-empty ⇒ deny-all. P17/S1. A null pkg can never
+        // match. [Surface.Unbounded] (YOLO) admits every package — the host self-exclusion is enforced
+        // separately at the projector/act-path layer via [includeHost], not here.
         val pkg = request.targetPkg
-        if (pkg == null || pkg !in capability.surface) {
+        if (pkg == null || !capability.surface.allows(pkg)) {
             return Decision.DENY to DenyReason.SURFACE_NOT_ALLOWED
         }
 
@@ -116,6 +118,14 @@ class CapabilityGuard(
      * backend work registered on the token is cancelled. O(1) cascade — children share the flag.
      */
     fun revoke() = capability.revocation.revoke()
+
+    /**
+     * Whether this capability lets the host app itself be observed/acted on (YOLO `includeHost`). The
+     * tool/act layer reads it to build the [me.rerere.automation.observe.SnapshotProjector]'s
+     * disclosure policy WITHOUT being handed the whole [Capability] (the projector must stay free of
+     * lease/revocation/session concepts — it gets only this disclosure bit + the package set).
+     */
+    val includeHost: Boolean get() = capability.includeHost
 
     /**
      * Run [block] (a coroutine backend call) under this capability's shared [RevocationToken] so that
