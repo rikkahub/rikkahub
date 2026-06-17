@@ -6,6 +6,7 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.ImportedDatabaseReconciler
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.SkillPaths
@@ -31,6 +32,7 @@ class WebDavSync(
     private val json: Json,
     private val context: Context,
     private val httpClient: HttpClient,
+    private val appDatabase: AppDatabase,
 ) {
     private fun getClient(config: WebDavConfig): WebDavClient {
         return WebDavClient(config, httpClient)
@@ -150,6 +152,10 @@ class WebDavSync(
 
             // Backup database files
             if (config.items.contains(WebDavConfig.BackupItem.DATABASE)) {
+                // Flush the WAL into the main db first so the copied rikka_hub.db is a
+                // consistent snapshot instead of a torn read against a live WAL.
+                checkpointDatabase()
+
                 val dbFile = context.getDatabasePath("rikka_hub")
                 if (dbFile.exists()) {
                     addFileToZip(zipOut, dbFile, "rikka_hub.db")
@@ -217,6 +223,25 @@ class WebDavSync(
     private suspend fun restoreFromBackupFile(backupFile: File, config: WebDavConfig) = withContext(Dispatchers.IO) {
         Log.i(TAG, "restoreFromBackupFile: Starting restore from ${backupFile.absolutePath}")
 
+        // Track whether the backup itself shipped a WAL/SHM. If it didn't, any -wal/-shm
+        // left on disk belongs to the PRE-restore database and must be removed before Room
+        // opens the restored db, or SQLite replays those stale frames over fresh data.
+        var restoredWal = false
+        var restoredShm = false
+
+        // Release the live Room WAL connection BEFORE the zip loop overwrites rikka_hub.db.
+        // The DB is opened in WAL mode, so the close()-time checkpoint folds the OLD connection's
+        // cached WAL frames into whatever rikka_hub.db currently is. If we closed AFTER the
+        // overwrite, that checkpoint would replay pre-restore frames over the freshly restored
+        // bytes and corrupt the import — so the close has to come first. The restore caller
+        // restarts the process afterwards, so Room reopens cleanly on the reconciled file.
+        // (Best-effort: a concurrent DAO access could lazily reopen Room mid-restore; that race
+        // is pre-existing and bounded by the user driving a deliberate, near-idle restore.)
+        if (config.items.contains(WebDavConfig.BackupItem.DATABASE)) {
+            runCatching { appDatabase.close() }
+                .onFailure { Log.w(TAG, "restoreFromBackupFile: appDatabase.close() before restore failed", it) }
+        }
+
         ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
             var entry: ZipEntry?
             while (zipIn.nextEntry.also { entry = it } != null) {
@@ -264,6 +289,10 @@ class WebDavSync(
                                     FileOutputStream(targetFile).use { outputStream ->
                                         zipIn.copyTo(outputStream)
                                     }
+                                    when (zipEntry.name) {
+                                        "rikka_hub-wal" -> restoredWal = true
+                                        "rikka_hub-shm" -> restoredShm = true
+                                    }
                                     Log.i(
                                         TAG,
                                         "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
@@ -284,23 +313,29 @@ class WebDavSync(
                                         Log.i(TAG, "restoreFromBackupFile: Created upload directory")
                                     }
 
-                                    val targetFile = File(uploadFolder, fileName)
-                                    Log.i(
-                                        TAG,
-                                        "restoreFromBackupFile: Restoring file ${zipEntry.name} to ${targetFile.absolutePath}"
-                                    )
-
-                                    try {
-                                        FileOutputStream(targetFile).use { outputStream ->
-                                            zipIn.copyTo(outputStream)
-                                        }
+                                    // Guard against zip-slip: reject entries that resolve
+                                    // outside the upload folder (e.g. "../../databases/...").
+                                    val targetFile = SkillPaths.resolveSkillFile(uploadFolder, fileName)
+                                    if (targetFile == null) {
+                                        Log.w(TAG, "restoreFromBackupFile: Rejected unsafe upload entry ${zipEntry.name}")
+                                    } else {
                                         Log.i(
                                             TAG,
-                                            "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
+                                            "restoreFromBackupFile: Restoring file ${zipEntry.name} to ${targetFile.absolutePath}"
                                         )
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "restoreFromBackupFile: Failed to restore file ${zipEntry.name}", e)
-                                        throw Exception("Failed to restore file ${zipEntry.name}: ${e.message}")
+                                        targetFile.parentFile?.mkdirs()
+                                        try {
+                                            FileOutputStream(targetFile).use { outputStream ->
+                                                zipIn.copyTo(outputStream)
+                                            }
+                                            Log.i(
+                                                TAG,
+                                                "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
+                                            )
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "restoreFromBackupFile: Failed to restore file ${zipEntry.name}", e)
+                                            throw Exception("Failed to restore file ${zipEntry.name}: ${e.message}")
+                                        }
                                     }
                                 }
                             } else if (config.items.contains(WebDavConfig.BackupItem.FILES) &&
@@ -336,10 +371,29 @@ class WebDavSync(
         // A backup exported from upstream RikkaHub lacks the fork-only tables; reconcile the
         // restored file before Room opens it so the import doesn't crash on first launch.
         if (config.items.contains(WebDavConfig.BackupItem.DATABASE)) {
+            // appDatabase was already closed before the zip loop (see top of this function), so
+            // the delete + reconcile below run with no live writer attached.
+            val dbDir = context.getDatabasePath("rikka_hub").parentFile
+            if (dbDir != null) {
+                if (!restoredWal) File(dbDir, "rikka_hub-wal").delete()
+                if (!restoredShm) File(dbDir, "rikka_hub-shm").delete()
+            }
             ImportedDatabaseReconciler.reconcile(context)
         }
 
         Log.i(TAG, "restoreFromBackupFile: Restore completed successfully")
+    }
+
+    private fun checkpointDatabase() {
+        try {
+            appDatabase.openHelper.writableDatabase
+                .query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
+            Log.i(TAG, "checkpointDatabase: WAL checkpoint(TRUNCATE) done")
+        } catch (e: Exception) {
+            // Non-fatal: the -wal/-shm files are still copied below, so no committed data
+            // is lost — the snapshot just isn't guaranteed torn-free for this run.
+            Log.w(TAG, "checkpointDatabase: WAL checkpoint failed; copying db+wal+shm as-is", e)
+        }
     }
 
     private fun addFileToZip(zipOut: ZipOutputStream, file: File, entryName: String) {

@@ -196,9 +196,15 @@ val dataSourceModule = module {
             }
             .addNetworkInterceptor(RequestLoggingInterceptor())
             .addInterceptor(AIRequestInterceptor())
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.HEADERS
-            })
+            .apply {
+                // HEADERS-level logging prints Authorization: Bearer <api-key> to logcat.
+                // Debug-only so release builds never leak provider keys to logcat.
+                if (BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.HEADERS
+                    })
+                }
+            }
             .build().also { SearchService.init(it, get()) }
     }
 
@@ -228,7 +234,8 @@ val dataSourceModule = module {
             settingsStore = get(),
             json = get(),
             context = get(),
-            httpClient = get()
+            httpClient = get(),
+            appDatabase = get()
         )
     }
 
@@ -252,7 +259,8 @@ val dataSourceModule = module {
             settingsStore = get(),
             json = get(),
             context = get(),
-            httpClient = get()
+            httpClient = get(),
+            appDatabase = get()
         )
     }
 
