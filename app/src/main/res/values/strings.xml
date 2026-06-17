@@ -339,6 +339,7 @@
   <string name="error_title_send_message">Message send failed</string>
   <string name="error_title_tool_approval">Tool call processing failed</string>
   <string name="error_title_tool_unavailable">Tool unavailable</string>
+  <string name="error_mcp_invalid_server_name">Invalid MCP server name (only alphanumeric characters allowed): %1$s</string>
   <string name="error_title_translate_message">Message translation failed</string>
   <string name="expand_translation">Expand Translation</string>
   <string name="export_cancel">Cancel</string>
