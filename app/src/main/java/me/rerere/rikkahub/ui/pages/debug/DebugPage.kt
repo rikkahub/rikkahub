@@ -138,6 +138,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
 @Composable
 private fun MainPage(vm: DebugVM) {
     val settings = LocalSettings.current
+    val conversationCount by vm.conversationCount.collectAsStateWithLifecycle()
     Column(
         modifier = Modifier
             .padding(8.dp)
@@ -208,6 +209,19 @@ private fun MainPage(vm: DebugVM) {
             }
         ) {
             Text("崩溃")
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Conversation 数量: ${conversationCount?.toString() ?: "..."}",
+                modifier = Modifier.weight(1f),
+            )
+            Button(onClick = { vm.refreshConversationCount() }) {
+                Text("刷新")
+            }
         }
 
         Button(

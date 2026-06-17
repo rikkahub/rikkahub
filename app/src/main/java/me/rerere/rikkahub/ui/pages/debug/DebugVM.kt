@@ -2,8 +2,10 @@ package me.rerere.rikkahub.ui.pages.debug
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
@@ -27,6 +29,19 @@ class DebugVM(
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
+
+    private val _conversationCount = MutableStateFlow<Int?>(null)
+    val conversationCount: StateFlow<Int?> = _conversationCount.asStateFlow()
+
+    init {
+        refreshConversationCount()
+    }
+
+    fun refreshConversationCount() {
+        viewModelScope.launch {
+            _conversationCount.value = conversationRepository.countConversations()
+        }
+    }
 
     fun updateSettings(settings: Settings) {
         viewModelScope.launch {
