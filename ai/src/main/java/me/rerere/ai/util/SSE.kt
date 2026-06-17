@@ -2,6 +2,7 @@ package me.rerere.ai.util
 
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
@@ -84,10 +85,7 @@ class SSEEventSource(
         }
     }
 
-    private fun ResponseBody.isEventStream(): Boolean {
-        val contentType = contentType() ?: return false
-        return contentType.type == "text" && contentType.subtype == "event-stream"
-    }
+    private fun ResponseBody.isEventStream(): Boolean = isEventStreamContentType(contentType())
 
     override fun onFailure(
         call: Call,
@@ -129,4 +127,19 @@ class SSEEventSource(
             }
         }
     }
+}
+
+/**
+ * Whether an already-successful (2xx) response body should be read as a Server-Sent Events stream.
+ *
+ * An ABSENT content-type is accepted. The ChatGPT/Codex Responses backend
+ * (`chatgpt.com/backend-api/codex/responses`) returns a 200 SSE stream with NO `Content-Type` header
+ * at all; OkHttp then reports `contentType() == null`, and the previous "null -> not a stream" rule
+ * rejected that valid stream with `IllegalStateException("Invalid content-type: null")`. Since this is
+ * only consulted after `Response.isSuccessful`, treat a missing content-type as a stream. A PRESENT,
+ * non-event-stream type (e.g. an `application/json` error body returned with 200) is still rejected.
+ */
+internal fun isEventStreamContentType(contentType: MediaType?): Boolean {
+    if (contentType == null) return true
+    return contentType.type == "text" && contentType.subtype == "event-stream"
 }
