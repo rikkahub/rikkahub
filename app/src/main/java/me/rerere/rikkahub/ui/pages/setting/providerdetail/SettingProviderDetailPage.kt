@@ -61,7 +61,7 @@ internal fun mergeConfigKeepingModels(
 ): ProviderSetting = draft.copyProvider(models = persisted.models)
 
 @Composable
-fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
+fun SettingProviderDetailPage(id: Uuid, initialTab: Int = 0, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
@@ -69,7 +69,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     // authenticates with the currently-edited apiKey/baseUrl/headers. Keyed on provider.id
     // (NOT provider) so a model op re-emitting a new provider doesn't wipe unsaved edits.
     var draft by remember(provider.id) { mutableStateOf(provider) }
-    val pager = rememberPagerState { 2 }
+    // initialTab lets "Add & continue" land on the Models tab (1) for a freshly-added provider.
+    val pager = rememberPagerState(initialPage = initialTab.coerceIn(0, 1)) { 2 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val context = LocalContext.current

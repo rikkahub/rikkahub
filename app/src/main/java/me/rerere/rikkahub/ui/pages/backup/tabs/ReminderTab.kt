@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.BackupReminderConfig
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.common.time.toLocalDateTime
 import java.time.Instant
@@ -73,7 +74,7 @@ fun ReminderTab(vm: BackupVM) {
                                     onClick = { updateConfig(config.copy(intervalDays = days)) },
                                     selected = config.intervalDays == days,
                                 ) {
-                                    Text(stringResource(R.string.backup_page_reminder_interval_days, days))
+                                    SegmentedButtonLabel(stringResource(R.string.backup_page_reminder_interval_days, days))
                                 }
                             }
                         }

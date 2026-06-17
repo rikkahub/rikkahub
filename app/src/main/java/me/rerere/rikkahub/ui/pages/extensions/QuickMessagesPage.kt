@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,9 +46,10 @@ import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
-import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.ext.plus
+import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -267,29 +267,13 @@ private fun EditQuickMessageDialog(
         mutableStateOf(initialQuickMessage?.content ?: "")
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = quickMessageTitle,
-                    onValueChange = { quickMessageTitle = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.assistant_page_quick_message_title)) },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = quickMessageContent,
-                    onValueChange = { quickMessageContent = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.assistant_page_quick_message_content)) },
-                    minLines = 4,
-                    maxLines = 8,
-                )
+    FormBottomSheet(
+        title = title,
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
             }
-        },
-        confirmButton = {
             TextButton(
                 onClick = { onConfirm(quickMessageTitle.trim(), quickMessageContent.trim()) },
                 enabled = quickMessageTitle.isNotBlank() && quickMessageContent.isNotBlank(),
@@ -297,10 +281,23 @@ private fun EditQuickMessageDialog(
                 Text(stringResource(R.string.assistant_page_save))
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = quickMessageTitle,
+                onValueChange = { quickMessageTitle = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.assistant_page_quick_message_title)) },
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = quickMessageContent,
+                onValueChange = { quickMessageContent = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.assistant_page_quick_message_content)) },
+                minLines = 4,
+                maxLines = 8,
+            )
+        }
+    }
 }

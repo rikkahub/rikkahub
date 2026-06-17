@@ -60,6 +60,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupOperationState
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
@@ -270,7 +271,7 @@ fun S3Tab(
                                     },
                                     checked = item in s3Config.items
                                 ) {
-                                    Text(
+                                    SegmentedButtonLabel(
                                         when (item) {
                                             S3Config.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
                                             S3Config.BackupItem.FILES -> stringResource(R.string.backup_page_files)

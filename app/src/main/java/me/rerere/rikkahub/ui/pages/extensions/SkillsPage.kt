@@ -29,10 +29,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.rikkahub.R
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
@@ -59,15 +58,17 @@ import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Puzzle
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillMetadata
-import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.ext.plus
+import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -389,37 +390,11 @@ private fun AddSkillDialog(
     }
     val nameError = content.isNotBlank() && name.isBlank()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.skills_page_add_title)) },
-        text = {
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
-                placeholder = {
-                    Text(
-                        "---\nname: my-skill\ndescription: \"...\"\n---\n\n" +
-                            stringResource(R.string.skills_page_skill_content_placeholder),
-                        fontFamily = FontFamily.Monospace,
-                    )
-                },
-                supportingText = {
-                    if (nameError) Text(
-                        stringResource(R.string.skills_page_name_error),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
-                    else Text(stringResource(R.string.skills_page_paste_hint))
-                },
-                isError = nameError,
-                minLines = 8,
-                maxLines = 14,
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
+    FormBottomSheet(
+        title = stringResource(R.string.skills_page_add_title),
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             TextButton(
                 onClick = { onConfirm(name, content) },
                 enabled = name.isNotBlank() && !nameError,
@@ -427,10 +402,33 @@ private fun AddSkillDialog(
                 Text(stringResource(R.string.skills_page_save))
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
+    ) {
+        OutlinedTextField(
+            value = content,
+            onValueChange = { content = it },
+            label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
+            placeholder = {
+                Text(
+                    "---\nname: my-skill\ndescription: \"...\"\n---\n\n" +
+                        stringResource(R.string.skills_page_skill_content_placeholder),
+                    fontFamily = FontFamily.Monospace,
+                )
+            },
+            supportingText = {
+                if (nameError) Text(
+                    stringResource(R.string.skills_page_name_error),
+                    color = MaterialTheme.colorScheme.error
+                )
+                else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
+                else Text(stringResource(R.string.skills_page_paste_hint))
+            },
+            isError = nameError,
+            minLines = 8,
+            maxLines = 14,
+            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 @Composable

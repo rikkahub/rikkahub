@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,7 +39,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
-import me.rerere.rikkahub.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
@@ -51,11 +49,13 @@ import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.ext.plus
+import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -319,27 +319,24 @@ private fun EditFileDialog(
 ) {
     var content by rememberSaveable(skillFile.relativePath) { mutableStateOf(initialContent) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(skillFile.relativePath, fontFamily = FontFamily.Monospace) },
-        text = {
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                label = { Text(stringResource(R.string.skill_detail_page_content)) },
-                minLines = 10,
-                maxLines = 20,
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
+    FormBottomSheet(
+        title = skillFile.relativePath,
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             TextButton(onClick = { onConfirm(content) }) { Text(stringResource(R.string.skill_detail_page_save)) }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
+    ) {
+        OutlinedTextField(
+            value = content,
+            onValueChange = { content = it },
+            label = { Text(stringResource(R.string.skill_detail_page_content)) },
+            minLines = 10,
+            maxLines = 20,
+            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 @Composable
@@ -351,40 +348,11 @@ private fun AddFileDialog(
     var content by rememberSaveable { mutableStateOf("") }
     val fileNameError = fileName.isNotBlank() && (fileName.contains('\\'))
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.skill_detail_page_new_file)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = fileName,
-                    onValueChange = { fileName = it },
-                    label = { Text(stringResource(R.string.skill_detail_page_file_name)) },
-                    placeholder = { Text("examples/basic.md", fontFamily = FontFamily.Monospace) },
-                    supportingText = {
-                        if (fileNameError) Text(
-                            stringResource(R.string.skill_detail_page_file_name_invalid),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    },
-                    isError = fileNameError,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text(stringResource(R.string.skill_detail_page_content)) },
-                    minLines = 6,
-                    maxLines = 14,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
+    FormBottomSheet(
+        title = stringResource(R.string.skill_detail_page_new_file),
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             TextButton(
                 onClick = { onConfirm(fileName.trim(), content) },
                 enabled = fileName.isNotBlank() && !fileNameError,
@@ -392,8 +360,34 @@ private fun AddFileDialog(
                 Text(stringResource(R.string.skill_detail_page_create))
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = fileName,
+                onValueChange = { fileName = it },
+                label = { Text(stringResource(R.string.skill_detail_page_file_name)) },
+                placeholder = { Text("examples/basic.md", fontFamily = FontFamily.Monospace) },
+                supportingText = {
+                    if (fileNameError) Text(
+                        stringResource(R.string.skill_detail_page_file_name_invalid),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                isError = fileNameError,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                label = { Text(stringResource(R.string.skill_detail_page_content)) },
+                minLines = 6,
+                maxLines = 14,
+                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -43,6 +42,7 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.PlayCircle
 import me.rerere.hugeicons.stroke.Task01
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 
 /**
  * The chat-side, read-write work-item board panel (SPEC.md M5, maintainer decision #4). It is fed
@@ -239,36 +239,33 @@ private fun BoardEditDialog(
     var subject by remember { mutableStateOf(existing?.subject ?: "") }
     var description by remember { mutableStateOf(existing?.description ?: "") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "New task" else "Edit task") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = subject,
-                    onValueChange = { subject = it },
-                    label = { Text("Subject") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
+    FormBottomSheet(
+        title = if (existing == null) "New task" else "Edit task",
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
             TextButton(
                 onClick = { onConfirm(subject, description) },
                 enabled = subject.isNotBlank(),
             ) { Text("Save") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = subject,
+                onValueChange = { subject = it },
+                label = { Text("Subject") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Description") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }
 
 /** What the dialog is editing: a brand-new item or an existing one. */

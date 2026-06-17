@@ -60,6 +60,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupOperationState
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
@@ -264,7 +265,7 @@ fun WebDavTab(
                                 },
                                 checked = item in webDavConfig.items
                             ) {
-                                Text(
+                                SegmentedButtonLabel(
                                     when (item) {
                                         WebDavConfig.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
                                         WebDavConfig.BackupItem.FILES -> stringResource(R.string.backup_page_files)

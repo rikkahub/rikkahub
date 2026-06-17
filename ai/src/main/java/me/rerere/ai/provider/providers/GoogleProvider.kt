@@ -32,10 +32,15 @@ import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelListProbe
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.ProbeOutcome
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.jsonObjectHasField
+import me.rerere.ai.provider.runChatProbe
+import me.rerere.ai.provider.runModelListProbe
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.GoogleThoughtMetadata
@@ -129,7 +134,15 @@ class GoogleProvider(
         }
     }
 
+    // listModels and probeModelList share ONE HTTP path (probeModelList) and ONE parser
+    // (parseModels). listModels keeps its historical "empty on any failure" shape (Google folded
+    // every non-success into emptyList before), while probeModelList preserves status/body shape —
+    // which is exactly why Google MUST override the default probe: the swallow-to-empty listModels
+    // can't tell a wrong key from a wrong endpoint.
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
+        probeModelList(providerSetting).models
+
+    override suspend fun probeModelList(providerSetting: ProviderSetting.Google): ModelListProbe =
         withContext(Dispatchers.IO) {
             val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
             val request = transformRequest(
@@ -139,41 +152,66 @@ class GoogleProvider(
                     .get()
                     .build()
             )
-            val response = client.newCall(request).await()
-            if (response.isSuccessful) {
-                val body = response.body.string()
-                val bodyObject = json.parseToJsonElement(body).jsonObject
-                val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
+            runModelListProbe(client, request) { parseModels(it) }
+        }
 
-                models.mapNotNull {
-                    val modelObject = it.jsonObject
-
-                    // 忽略非chat/embedding模型。第三方 Gemini 兼容代理可能省略字段 —
-                    // 跳过缺字段的条目而非用 !! 让整个 listModels NPE（对齐 ClaudeProvider.listModels）。
-                    val supportedGenerationMethods =
-                        modelObject["supportedGenerationMethods"]?.jsonArrayOrNull
-                            ?.mapNotNull { method -> method.jsonPrimitiveOrNull?.contentOrNull }
-                            ?: return@mapNotNull null
-                    if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
-                        return@mapNotNull null
+    override suspend fun probeChat(
+        providerSetting: ProviderSetting.Google,
+        modelId: String,
+    ): ProbeOutcome = withContext(Dispatchers.IO) {
+        val path = if (providerSetting.vertexAI) {
+            "publishers/google/models/$modelId:generateContent"
+        } else {
+            "models/$modelId:generateContent"
+        }
+        val body = buildJsonObject {
+            putJsonArray("contents") {
+                add(buildJsonObject {
+                    putJsonArray("parts") {
+                        add(buildJsonObject { put("text", "hi") })
                     }
-
-                    val name = modelObject["name"]?.jsonPrimitiveOrNull?.contentOrNull
-                        ?: return@mapNotNull null
-                    val modelId = name.substringAfter("/")
-
-                    Model(
-                        modelId = modelId,
-                        // displayName 缺失时回退到 id（有效 id 的模型仍然可用），对齐 Claude。
-                        displayName = modelObject["displayName"]?.jsonPrimitiveOrNull?.contentOrNull
-                            ?: modelId,
-                        type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
-                    )
-                }
-            } else {
-                emptyList()
+                })
             }
         }
+        val request = transformRequest(
+            providerSetting = providerSetting,
+            request = Request.Builder()
+                .url(buildUrl(providerSetting = providerSetting, path = path))
+                .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
+                .build()
+        )
+        runChatProbe(client, request) { jsonObjectHasField(it, "candidates") }
+    }
+
+    private fun parseModels(body: String): List<Model> {
+        val bodyObject = json.parseToJsonElement(body).jsonObject
+        val models = bodyObject["models"]?.jsonArray ?: return emptyList()
+        return models.mapNotNull {
+            val modelObject = it.jsonObject
+
+            // 忽略非chat/embedding模型。第三方 Gemini 兼容代理可能省略字段 —
+            // 跳过缺字段的条目而非用 !! 让整个 listModels NPE（对齐 ClaudeProvider.listModels）。
+            val supportedGenerationMethods =
+                modelObject["supportedGenerationMethods"]?.jsonArrayOrNull
+                    ?.mapNotNull { method -> method.jsonPrimitiveOrNull?.contentOrNull }
+                    ?: return@mapNotNull null
+            if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
+                return@mapNotNull null
+            }
+
+            val name = modelObject["name"]?.jsonPrimitiveOrNull?.contentOrNull
+                ?: return@mapNotNull null
+            val modelId = name.substringAfter("/")
+
+            Model(
+                modelId = modelId,
+                // displayName 缺失时回退到 id（有效 id 的模型仍然可用），对齐 Claude。
+                displayName = modelObject["displayName"]?.jsonPrimitiveOrNull?.contentOrNull
+                    ?: modelId,
+                type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
+            )
+        }
+    }
 
     override suspend fun generateText(
         providerSetting: ProviderSetting.Google,

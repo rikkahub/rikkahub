@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -56,10 +58,10 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
-import kotlin.coroutines.cancellation.CancellationException
 
 // ---------------------------------------------------------------------------------------------
 // Pure editor/trust logic (unit-tested on the JVM; the composables below are a thin shell)
@@ -467,63 +469,11 @@ private fun HookEditDialog(
     var model by remember { mutableStateOf(initialHandler?.model) }
     var failClosed by remember { mutableStateOf(initialHandler?.failClosed ?: false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    HookEvent.entries.forEach { candidate ->
-                        FilterChip(
-                            selected = event == candidate,
-                            onClick = { event = candidate },
-                            label = { Text(candidate.name, style = MaterialTheme.typography.labelSmall) },
-                        )
-                    }
-                }
-                if (event == HookEvent.PreToolUse) {
-                    OutlinedTextField(
-                        value = matcher,
-                        onValueChange = { matcher = it },
-                        label = { Text("Tool matcher (empty = all tools, exact name or regex)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    label = { Text("Hook prompt") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Model",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ModelSelector(
-                        modelId = model ?: settings.fastModelId,
-                        providers = settings.providers,
-                        type = ModelType.CHAT,
-                        onSelect = { model = it.id },
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Fail closed", style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            text = "Errors and timeouts deny the tool instead of allowing it",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(checked = failClosed, onCheckedChange = { failClosed = it })
-                }
-            }
-        },
-        confirmButton = {
+    FormBottomSheet(
+        title = title,
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
             TextButton(
                 enabled = prompt.isNotBlank(),
                 onClick = {
@@ -541,8 +491,60 @@ private fun HookEditDialog(
                 Text("Save")
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                HookEvent.entries.forEach { candidate ->
+                    FilterChip(
+                        selected = event == candidate,
+                        onClick = { event = candidate },
+                        label = { Text(candidate.name, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+            if (event == HookEvent.PreToolUse) {
+                OutlinedTextField(
+                    value = matcher,
+                    onValueChange = { matcher = it },
+                    label = { Text("Tool matcher (empty = all tools, exact name or regex)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            OutlinedTextField(
+                value = prompt,
+                onValueChange = { prompt = it },
+                label = { Text("Hook prompt") },
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Model",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                ModelSelector(
+                    modelId = model ?: settings.fastModelId,
+                    providers = settings.providers,
+                    type = ModelType.CHAT,
+                    onSelect = { model = it.id },
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Fail closed", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = "Errors and timeouts deny the tool instead of allowing it",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = failClosed, onCheckedChange = { failClosed = it })
+            }
+        }
+    }
 }

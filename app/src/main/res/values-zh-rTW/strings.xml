@@ -1048,6 +1048,7 @@
   <string name="theme_name_ocean">海灣藍</string>
   <string name="theme_name_sakura">櫻花粉</string>
   <string name="theme_name_spring">原野綠</string>
+  <string name="theme_name_warm">暖沙色</string>
   <string name="title_activity_safe_mode">安全模式</string>
   <string name="tools_warning">當前模型未開啟工具調用，請在設定內啟用模型的工具能力，再使用搜尋/MCP等功能</string>
   <string name="translate">翻譯</string>

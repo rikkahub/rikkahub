@@ -32,9 +32,14 @@ import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelListProbe
+import me.rerere.ai.provider.ProbeOutcome
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.jsonObjectHasField
+import me.rerere.ai.provider.runChatProbe
+import me.rerere.ai.provider.runModelListProbe
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ClaudeReasoningMetadata
 import me.rerere.ai.ui.ImageGenerationItem
@@ -121,34 +126,64 @@ class ClaudeProvider(
             .header("User-Agent", CLAUDE_CODE_USER_AGENT)
     }
 
-    override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
+    // listModels and probeModelList share ONE HTTP path (probeModelList) and ONE parser
+    // (parseModels); listModels collapses the probe to the throwing contract its caller expects.
+    override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> {
+        val probe = probeModelList(providerSetting)
+        return when (val outcome = probe.outcome) {
+            is ProbeOutcome.Http ->
+                if (outcome.status in 200..299) probe.models
+                else error("Failed to get models: ${outcome.status}")
+
+            is ProbeOutcome.Transport -> error("Failed to get models: ${outcome.error}")
+        }
+    }
+
+    override suspend fun probeModelList(providerSetting: ProviderSetting.Claude): ModelListProbe =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
                 .applyClaudeAuth(providerSetting, model = null)
                 .get()
                 .build()
+            runModelListProbe(client, request) { parseModels(it) }
+        }
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body.string()}")
-            }
-
-            val bodyStr = response.body.string()
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
-
-            data.mapNotNull { modelJson ->
-                val modelObj = modelJson.jsonObject
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
-
-                Model(
-                    modelId = id,
-                    displayName = displayName,
-                )
+    override suspend fun probeChat(
+        providerSetting: ProviderSetting.Claude,
+        modelId: String,
+    ): ProbeOutcome = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("model", modelId)
+            put("max_tokens", 1)
+            putJsonArray("messages") {
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("content", "hi")
+                })
             }
         }
+        val request = Request.Builder()
+            .url("${providerSetting.baseUrl}/messages")
+            .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
+            .applyClaudeAuth(providerSetting, model = null)
+            .build()
+        runChatProbe(client, request) { jsonObjectHasField(it, "content") }
+    }
+
+    private fun parseModels(bodyStr: String): List<Model> {
+        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        val data = bodyJson["data"]?.jsonArray ?: return emptyList()
+        return data.mapNotNull { modelJson ->
+            val modelObj = modelJson.jsonObject
+            val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
+            Model(
+                modelId = id,
+                displayName = displayName,
+            )
+        }
+    }
 
     override suspend fun generateImage(
         providerSetting: ProviderSetting,

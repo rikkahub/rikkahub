@@ -11,7 +11,20 @@ import androidx.compose.ui.unit.sp
 import me.rerere.rikkahub.R
 
 val base = Typography()
-val Typography = Typography()
+
+// Noto Serif for the large display headings only. Body/title/label/headline keep
+// the platform default font: a global swap to Inter changes glyph advances and
+// overflows width-constrained controls (segmented selectors, fixed label columns)
+// that were laid out for the default metrics. Display text is short and large, so
+// the serif there is safe. Inter stays available in AppFonts for opt-in per-call use.
+val Typography = base.copy(
+    displayLarge = base.displayLarge.copy(fontFamily = NotoSerif),
+    displayMedium = base.displayMedium.copy(fontFamily = NotoSerif),
+    displaySmall = base.displaySmall.copy(fontFamily = NotoSerif),
+    displayLargeEmphasized = base.displayLargeEmphasized.copy(fontFamily = NotoSerif),
+    displayMediumEmphasized = base.displayMediumEmphasized.copy(fontFamily = NotoSerif),
+    displaySmallEmphasized = base.displaySmallEmphasized.copy(fontFamily = NotoSerif),
+)
 
 // Set of Material typography styles to start with
 //val Typography = Typography(

@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -66,25 +64,6 @@ import com.composables.icons.lucide.Minus
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.TriangleAlert
-import me.rerere.rikkahub.R
-import me.rerere.ai.runtime.contract.ScheduleDraft
-import me.rerere.ai.runtime.contract.ScheduleKind
-import me.rerere.ai.runtime.contract.ScheduleMutationResult
-import me.rerere.ai.runtime.contract.ScheduleSnapshot
-import me.rerere.ai.runtime.schedule.RecurrenceSpec
-import me.rerere.ai.runtime.schedule.RecurrenceUnit
-import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.FormItem
-import me.rerere.rikkahub.ui.components.ui.UIAvatar
-import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
-import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.ext.plus
-import me.rerere.rikkahub.ui.theme.CustomColors
-import org.koin.androidx.compose.koinViewModel
-import org.koin.compose.koinInject
-import org.koin.core.parameter.parametersOf
 import java.text.DateFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -95,6 +74,27 @@ import java.time.ZonedDateTime
 import java.util.Date
 import java.util.TimeZone
 import kotlin.uuid.Uuid
+import me.rerere.ai.runtime.contract.ScheduleDraft
+import me.rerere.ai.runtime.contract.ScheduleKind
+import me.rerere.ai.runtime.contract.ScheduleMutationResult
+import me.rerere.ai.runtime.contract.ScheduleSnapshot
+import me.rerere.ai.runtime.schedule.RecurrenceSpec
+import me.rerere.ai.runtime.schedule.RecurrenceUnit
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
+import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
+import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.ext.plus
+import me.rerere.rikkahub.ui.theme.CustomColors
+import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
+import org.koin.core.parameter.parametersOf
 
 /**
  * Minimal create / list / delete UI for one conversation's task schedules (SPEC.md M5 / task T10).
@@ -511,16 +511,26 @@ private fun CreateScheduleDialog(
         timeZone = TimeZone.getTimeZone(displayZone)
     }.format(Date(firstFireAt))
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New scheduled task") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+    FormBottomSheet(
+        title = "New scheduled task",
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(
+                // Create is enabled iff the form mirrors every repository gate cleanly (SC3): an empty
+                // validate() == submittable, so the button cannot offer a draft the repository rejects.
+                enabled = validationErrors.isEmpty(),
+                // The dialog projects its live formState through the SAME toDraft() the SC3 invariant
+                // test exercises — one form→draft mapping, no hand-rolled duplicate that could drift.
+                onClick = { onConfirm(formState.toDraft()) },
             ) {
+                Text("Create")
+            }
+        },
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
                 OutlinedTextField(
                     value = prompt,
                     onValueChange = { prompt = it },
@@ -565,7 +575,7 @@ private fun CreateScheduleDialog(
                                 selected = kind == candidate,
                                 onClick = { kind = candidate },
                             ) {
-                                Text(if (candidate == ScheduleKind.ONE_SHOT) "One-shot" else "Recurring")
+                                SegmentedButtonLabel(if (candidate == ScheduleKind.ONE_SHOT) "One-shot" else "Recurring")
                             }
                         }
                     }
@@ -586,7 +596,7 @@ private fun CreateScheduleDialog(
                                         every = maxOf(every, minEveryFor(candidate))
                                     },
                                 ) {
-                                    Text(candidate.name.lowercase())
+                                    SegmentedButtonLabel(candidate.name.lowercase())
                                 }
                             }
                         }
@@ -674,23 +684,7 @@ private fun CreateScheduleDialog(
                         )
                     }
             }
-        },
-        confirmButton = {
-            TextButton(
-                // Create is enabled iff the form mirrors every repository gate cleanly (SC3): an empty
-                // validate() == submittable, so the button cannot offer a draft the repository rejects.
-                enabled = validationErrors.isEmpty(),
-                // The dialog projects its live formState through the SAME toDraft() the SC3 invariant
-                // test exercises — one form→draft mapping, no hand-rolled duplicate that could drift.
-                onClick = { onConfirm(formState.toDraft()) },
-            ) {
-                Text("Create")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
+        }
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(

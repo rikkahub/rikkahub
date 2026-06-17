@@ -1,8 +1,5 @@
 package me.rerere.rikkahub.ui.pages.extensions.prompt
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,13 +8,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -36,9 +29,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 import me.rerere.rikkahub.ui.components.ui.FormItem
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -51,17 +48,23 @@ internal fun RegexInjectionEditDialog(
 ) {
     var newKeyword by remember { mutableStateOf("") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.prompt_page_edit_entry)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+    FormBottomSheet(
+        title = stringResource(R.string.prompt_page_edit_entry),
+        onDismiss = onDismiss,
+        footer = {
+            val canSave = entry.keywords.isNotEmpty() || entry.constantActive
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.prompt_page_cancel))
+            }
+            TextButton(onClick = onConfirm, enabled = canSave) {
+                Text(stringResource(R.string.prompt_page_confirm))
+            }
+        },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
                 OutlinedTextField(
                     value = entry.name,
                     onValueChange = { onEdit(entry.copy(name = it)) },
@@ -222,20 +225,5 @@ internal fun RegexInjectionEditDialog(
                     minLines = 4
                 )
             }
-        },
-        confirmButton = {
-            val canSave = entry.keywords.isNotEmpty() || entry.constantActive
-            TextButton(
-                onClick = onConfirm,
-                enabled = canSave
-            ) {
-                Text(stringResource(R.string.prompt_page_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.prompt_page_cancel))
-            }
         }
-    )
-}
+    }

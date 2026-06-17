@@ -23,4 +23,15 @@ class SettingVM(
             settingsStore.update(settings)
         }
     }
+
+    /**
+     * Atomic read-modify-write: [transform] runs against the CURRENT persisted settings, not a
+     * captured snapshot, so rapid independent edits (e.g. fast model toggles) can't clobber each
+     * other's writes. Prefer this over the snapshot overload for per-item mutations.
+     */
+    fun updateSettings(transform: (Settings) -> Settings) {
+        viewModelScope.launch {
+            settingsStore.update(transform)
+        }
+    }
 }

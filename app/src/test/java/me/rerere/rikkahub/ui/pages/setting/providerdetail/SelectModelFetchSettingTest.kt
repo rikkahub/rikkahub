@@ -1,24 +1,32 @@
 package me.rerere.rikkahub.ui.pages.setting.providerdetail
 
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 
 class SelectModelFetchSettingTest {
     @Test
-    fun `uses draft credentials when draft is the same provider type`() {
+    fun `uses draft credentials but persisted models when draft is the same provider type`() {
         val persisted = ProviderSetting.OpenAI(
             name = "My OpenAI",
             apiKey = "old-key",
-            baseUrl = "https://api.openai.com/v1"
+            baseUrl = "https://api.openai.com/v1",
+            // A model persisted during the session; the draft's snapshot predates it.
+            models = listOf(Model(modelId = "gpt-4o", displayName = "gpt-4o")),
         )
-        // Same type, fresh key just typed in the Config tab (not yet saved).
-        val draft = persisted.copy(apiKey = "just-typed-key")
+        // Same type, fresh key just typed in the Config tab (not yet saved), carrying the STALE
+        // (empty) model snapshot the draft was created with.
+        val draft = persisted.copy(apiKey = "just-typed-key", models = emptyList())
 
-        val result = selectModelFetchSetting(persisted = persisted, draft = draft)
+        val result = selectModelFetchSetting(persisted = persisted, draft = draft) as ProviderSetting.OpenAI
 
-        // The just-typed key must drive the fetch without a Save/restart.
-        assertSame(draft, result)
+        // The just-typed key drives the fetch without a Save/restart...
+        assertEquals("just-typed-key", result.apiKey)
+        // ...but models come from persisted (the draft snapshot is stale), so the chat-probe model
+        // id stays current.
+        assertEquals(listOf("gpt-4o"), result.models.map { it.modelId })
     }
 
     @Test

@@ -15,6 +15,36 @@ import me.rerere.ai.ui.UIMessage
 interface Provider<T : ProviderSetting> {
     suspend fun listModels(providerSetting: T): List<Model>
 
+    /**
+     * Probe the model-list endpoint for connection classification, preserving HTTP status + body
+     * shape (unlike [listModels], which flattens every failure into one thrown error). The default
+     * derives a best-effort outcome from [listModels] — it can only tell success from a transport
+     * failure, losing the status — so key-based providers OVERRIDE this to keep 401 vs 404 vs 5xx
+     * distinct. [CancellationException] propagates.
+     */
+    suspend fun probeModelList(providerSetting: T): ModelListProbe {
+        return try {
+            val models = listModels(providerSetting)
+            ModelListProbe(
+                ProbeOutcome.Http(200, ProbeOutcome.Body.ModelList(models.size)),
+                models,
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            ModelListProbe(ProbeOutcome.Transport(e.toTransportError()), emptyList())
+        }
+    }
+
+    /**
+     * Probe a chat call with [modelId] for connection classification — proves the API is reachable
+     * when /models is unavailable (the [ConnectionResult.ReachableNoModelList] case). The default
+     * returns a transport-OTHER outcome for providers without a lightweight probe; key-based chat
+     * providers override it.
+     */
+    suspend fun probeChat(providerSetting: T, modelId: String): ProbeOutcome =
+        ProbeOutcome.Transport(ProbeOutcome.TransportError.OTHER)
+
     suspend fun getBalance(providerSetting: T): String {
         return "TODO"
     }

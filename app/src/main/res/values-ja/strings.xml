@@ -1050,6 +1050,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="theme_name_ocean">オーシャンブルー</string>
   <string name="theme_name_sakura">サクラピンク</string>
   <string name="theme_name_spring">メドウグリーン</string>
+  <string name="theme_name_warm">ウォームサンド</string>
   <string name="title_activity_safe_mode">セーフモード</string>
   <string name="tools_warning">現在のモデルではツール呼び出しが有効になっていません。設定でモデルのツール機能を有効にしてから、検索/MCPなどの機能を使用してください。</string>
   <string name="translate">翻訳</string>

@@ -37,6 +37,7 @@ import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -64,7 +65,7 @@ fun ProviderConfigure(
                             index = index,
                             count = ProviderSetting.Types.size
                         ),
-                        label = { Text(type.simpleName ?: "") },
+                        label = { SegmentedButtonLabel(type.simpleName ?: "") },
                         selected = provider::class == type,
                         onClick = { onEdit(provider.convertTo(type)) }
                     )
@@ -326,7 +327,7 @@ private fun ProviderConfigureClaude(
             SegmentedButton(
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = authTypes.size),
                 label = {
-                    Text(
+                    SegmentedButtonLabel(
                         when (authType) {
                             ClaudeAuthType.ApiKey -> "API Key"
                             ClaudeAuthType.OAuth -> "OAuth Token"

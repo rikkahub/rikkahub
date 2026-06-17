@@ -23,9 +23,14 @@ import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelListProbe
+import me.rerere.ai.provider.ProbeOutcome
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.jsonObjectHasField
+import me.rerere.ai.provider.runChatProbe
+import me.rerere.ai.provider.runModelListProbe
 import me.rerere.ai.registry.guessModelType
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
@@ -68,7 +73,21 @@ class OpenAIProvider(
     private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette, streamClient = streamClient)
 
 
-    override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
+    // listModels and probeModelList share ONE HTTP path (probeModelList) and ONE parser
+    // (parseModels); listModels just collapses the probe back to the throwing contract its single
+    // caller still expects, while probeModelList keeps the status/shape the connection classifier needs.
+    override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> {
+        val probe = probeModelList(providerSetting)
+        return when (val outcome = probe.outcome) {
+            is ProbeOutcome.Http ->
+                if (outcome.status in 200..299) probe.models
+                else error("Failed to get models: ${outcome.status}")
+
+            is ProbeOutcome.Transport -> error("Failed to get models: ${outcome.error}")
+        }
+    }
+
+    override suspend fun probeModelList(providerSetting: ProviderSetting.OpenAI): ModelListProbe =
         withContext(Dispatchers.IO) {
             val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             val request = Request.Builder()
@@ -76,27 +95,65 @@ class OpenAIProvider(
                 .addHeader("Authorization", "Bearer $key")
                 .get()
                 .build()
-
-            val response = client.newCall(request).await()
-            if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body.string()}")
-            }
-
-            val bodyStr = response.body.string()
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
-
-            data.mapNotNull { modelJson ->
-                val modelObj = modelJson.jsonObject
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-
-                Model(
-                    modelId = id,
-                    displayName = id,
-                    type = guessModelType(id),
-                )
-            }
+            runModelListProbe(client, request) { parseModels(it) }
         }
+
+    override suspend fun probeChat(
+        providerSetting: ProviderSetting.OpenAI,
+        modelId: String,
+    ): ProbeOutcome = withContext(Dispatchers.IO) {
+        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        // Probe whichever generation API this provider actually uses: a Responses-API-only endpoint
+        // has no /chat/completions, so probing chat there would read as unreachable. For the chat
+        // path, honor the configured chatCompletionsPath (proxies remap it).
+        val (url, body, successField) = if (providerSetting.useResponseApi) {
+            Triple(
+                "${providerSetting.baseUrl}/responses",
+                buildJsonObject {
+                    put("model", modelId)
+                    put("input", JsonPrimitive("hi"))
+                    put("max_output_tokens", JsonPrimitive(16))
+                },
+                "output",
+            )
+        } else {
+            Triple(
+                "${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}",
+                buildJsonObject {
+                    put("model", modelId)
+                    putJsonArray("messages") {
+                        add(buildJsonObject {
+                            put("role", JsonPrimitive("user"))
+                            put("content", JsonPrimitive("hi"))
+                        })
+                    }
+                    put("max_tokens", JsonPrimitive(1))
+                },
+                "choices",
+            )
+        }
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $key")
+            .addHeader("Content-Type", "application/json")
+            .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
+            .build()
+        runChatProbe(client, request) { jsonObjectHasField(it, successField) }
+    }
+
+    private fun parseModels(bodyStr: String): List<Model> {
+        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        val data = bodyJson["data"]?.jsonArray ?: return emptyList()
+        return data.mapNotNull { modelJson ->
+            val modelObj = modelJson.jsonObject
+            val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            Model(
+                modelId = id,
+                displayName = id,
+                type = guessModelType(id),
+            )
+        }
+    }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
         val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())

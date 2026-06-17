@@ -37,6 +37,7 @@ import me.rerere.rikkahub.R
 import me.rerere.ai.runtime.mcp.McpServerConfig
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Switch
+import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 
 @Composable
 internal fun McpCommonOptionsConfigure(
@@ -172,7 +173,7 @@ internal fun McpCommonOptionsConfigure(
                         },
                         selected = index == currentTypeIndex
                     ) {
-                        Text(type)
+                        SegmentedButtonLabel(type)
                     }
                 }
             }

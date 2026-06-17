@@ -45,6 +45,7 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -346,7 +347,7 @@ private fun WorkspaceAreaSelector(
                 onClick = { onSelected(area) },
                 shape = SegmentedButtonDefaults.itemShape(index, areas.size),
             ) {
-                Text(label)
+                SegmentedButtonLabel(label)
             }
         }
     }

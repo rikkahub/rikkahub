@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -34,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import kotlin.uuid.Uuid
 import me.rerere.ai.provider.ModelType
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
@@ -45,9 +45,9 @@ import me.rerere.rikkahub.data.rag.RagDocumentPolicy
 import me.rerere.rikkahub.data.rag.RagIngestState
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.androidx.compose.koinViewModel
-import kotlin.uuid.Uuid
 
 @Composable
 fun KnowledgeBasePage(vm: KnowledgeBaseVM = koinViewModel()) {
@@ -229,37 +229,34 @@ private fun CreateKnowledgeBaseDialog(
     var name by remember { mutableStateOf("") }
     var modelId by remember { mutableStateOf<Uuid?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New Knowledge Base") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Embedding model:", style = MaterialTheme.typography.bodyMedium)
-                    ModelSelector(
-                        modelId = modelId,
-                        providers = providers,
-                        type = ModelType.EMBEDDING,
-                        onSelect = { modelId = it.id },
-                    )
-                }
-            }
-        },
-        confirmButton = {
+    FormBottomSheet(
+        title = "New Knowledge Base",
+        onDismiss = onDismiss,
+        footer = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
             TextButton(
                 onClick = { onConfirm(name, modelId) },
                 enabled = name.isNotBlank(),
             ) { Text("Create") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Embedding model:", style = MaterialTheme.typography.bodyMedium)
+                ModelSelector(
+                    modelId = modelId,
+                    providers = providers,
+                    type = ModelType.EMBEDDING,
+                    onSelect = { modelId = it.id },
+                )
+            }
+        }
+    }
 }
