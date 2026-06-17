@@ -15,6 +15,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -283,6 +284,11 @@ class ChatCompletionsAPI(
 
             // open router适配
             if(host == "openrouter.ai") {
+                // Ask OpenRouter to report the real generation cost in the usage object
+                // (surfaced per-message in the UI). Works for both streamed and non-streamed.
+                put("usage", buildJsonObject {
+                    put("include", true)
+                })
                 if(params.model.outputModalities.contains(Modality.IMAGE)) {
                     put("modalities", buildJsonArray {
                         add("image")
@@ -771,7 +777,17 @@ class ChatCompletionsAPI(
         )
 
         // 也许支持其他模态的输出content?
-        val content = jsonObject["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val contentElement = jsonObject["content"]
+        // content可能是字符串, 也可能是block数组(如[{type:"text",text:"..."}]); 数组时拼接text块, 否则文本会丢失
+        val content = contentElement?.jsonPrimitiveOrNull?.contentOrNull
+            ?: (contentElement as? JsonArray)?.mapNotNull { block ->
+                val obj = block.jsonObjectOrNull ?: return@mapNotNull null
+                if (obj["type"]?.jsonPrimitiveOrNull?.contentOrNull == "text") {
+                    obj["text"]?.jsonPrimitiveOrNull?.contentOrNull
+                } else {
+                    null
+                }
+            }?.joinToString("") ?: ""
         val reasoning = jsonObject["reasoning_content"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: jsonObject["reasoning"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: jsonObject["content"]?.takeIf { it is JsonArray }?.let { arr ->
@@ -871,7 +887,10 @@ class ChatCompletionsAPI(
             completionTokens = jsonObject["completion_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             totalTokens = jsonObject["total_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             cachedTokens = jsonObject["prompt_tokens_details"]?.jsonObjectOrNull?.get("cached_tokens")?.jsonPrimitive?.intOrNull
-                ?: 0
+                ?: 0,
+            // OpenRouter reports the generation cost (USD) here when the request asks for it
+            // via usage:{include:true}. Other OpenAI-compatible providers omit it -> null.
+            cost = jsonObject["cost"]?.jsonPrimitive?.doubleOrNull
         )
     }
 
