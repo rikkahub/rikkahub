@@ -47,6 +47,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.HorizontalDivider
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.OpenRouterRouting
@@ -406,7 +408,21 @@ private fun OpenRouterRoutingSection(
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = sortOptions.size),
                 selected = routing.sort == option,
                 onClick = { onChange(routing.copy(sort = option)) },
-                label = { Text(sortLabels[index]) },
+                label = {
+                    // Equal-width segments are ~1/4 of the row, so the longest label
+                    // ("Throughput") would wrap to two lines and break the pill on
+                    // narrow screens. Keep it single-line and shrink to fit instead.
+                    Text(
+                        sortLabels[index],
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 9.sp,
+                            maxFontSize = 14.sp,
+                            stepSize = 1.sp,
+                        ),
+                    )
+                },
             )
         }
     }
