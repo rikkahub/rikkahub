@@ -37,13 +37,18 @@ import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Clipboard
+import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Eraser
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.MagicWand01
+import me.rerere.hugeicons.stroke.Message02
+import me.rerere.hugeicons.stroke.Pin
 import me.rerere.hugeicons.stroke.QuillWrite01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Time02
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.R
@@ -462,5 +467,104 @@ private fun ScrapeWebPreview(content: JsonElement) {
                 }
             }
         }
+    }
+}
+
+// --- Fork tools: per-step icon + readable title ---------------------------------
+// These tools are fully wired and invocable; without a renderer their chat steps
+// fell through to the generic wrench icon + raw tool name. Ported from the fork's
+// pre-merge getToolIcon/title branches so the steps read the same as before.
+
+/** JS skill execution (run_js). */
+object RunJsToolUI : ToolUIRenderer {
+    override val toolName: String = "run_js"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.MagicWand01
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        val skillName = context.arguments.getStringContent("skill_name").orEmpty()
+        return if (skillName.isNotBlank()) "JS skill: $skillName" else "JS skill"
+    }
+}
+
+// System-intent tools fire a system intent the user finalises in the destination
+// app. The title prefers the executed result's `summary` field (e.g. "Calendar
+// event: Lunch") and falls back to an args-derived preview pre-execution.
+
+object CreateCalendarEventToolUI : ToolUIRenderer {
+    override val toolName: String = "create_calendar_event"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Clock02
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        context.content.getStringContent("summary")?.let { return it }
+        val t = context.arguments.getStringContent("title").orEmpty()
+        return if (t.isNotBlank()) "Calendar event: $t" else "Create calendar event"
+    }
+}
+
+object CreateContactToolUI : ToolUIRenderer {
+    override val toolName: String = "create_contact"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        context.content.getStringContent("summary")?.let { return it }
+        val first = context.arguments.getStringContent("first_name").orEmpty()
+        val last = context.arguments.getStringContent("last_name").orEmpty()
+        val name = listOf(first, last).filter { it.isNotBlank() }.joinToString(" ")
+        return if (name.isNotBlank()) "Contact: $name" else "Create contact"
+    }
+}
+
+object SendSmsIntentToolUI : ToolUIRenderer {
+    override val toolName: String = "send_sms_intent"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.SmartPhone01
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        context.content.getStringContent("summary")?.let { return it }
+        val ph = context.arguments.getStringContent("phone_number").orEmpty()
+        return if (ph.isNotBlank()) "SMS to $ph" else "Compose SMS"
+    }
+}
+
+object SendEmailIntentToolUI : ToolUIRenderer {
+    override val toolName: String = "send_email_intent"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Message02
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        context.content.getStringContent("summary")?.let { return it }
+        val to = context.arguments.getStringContent("to").orEmpty()
+        return if (to.isNotBlank()) "Email to $to" else "Compose email"
+    }
+}
+
+object OpenWifiSettingsToolUI : ToolUIRenderer {
+    override val toolName: String = "open_wifi_settings"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Settings03
+
+    @Composable
+    override fun title(context: ToolUIContext): String =
+        context.content.getStringContent("summary") ?: "WiFi Settings"
+}
+
+object ShowLocationOnMapToolUI : ToolUIRenderer {
+    override val toolName: String = "show_location_on_map"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Pin
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        context.content.getStringContent("summary")?.let { return it }
+        val q = context.arguments.getStringContent("query").orEmpty()
+        return if (q.isNotBlank()) "Map: $q" else "Open map"
     }
 }
