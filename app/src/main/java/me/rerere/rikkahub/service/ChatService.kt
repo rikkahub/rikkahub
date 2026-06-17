@@ -893,7 +893,16 @@ class ChatService(
                         )
                     }
                     mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
-                        val mcpToolName = "mcp__" + tool.name
+                        // Namespace MCP tools by a server-id slug so two enabled servers that
+                        // each expose a tool of the same name don't collide (which would 400 or
+                        // mis-route to whichever server registered last). Keep the `mcp__` prefix
+                        // intact: HardlineCommandGuard and ToolApprovalDefaults both branch on
+                        // `startsWith("mcp__")`. The slug is the first 8 hex chars of the id with
+                        // dashes stripped, keeping the name within the 64-char / ^[a-zA-Z0-9_-]+$
+                        // limit. The execute lambda below still calls callTool with the REAL
+                        // tool.name, since the namespacing exists only on the model-facing surface.
+                        val serverSlug = serverId.toString().take(8).replace("-", "")
+                        val mcpToolName = "mcp__" + serverSlug + "__" + tool.name
                         add(
                             Tool(
                                 name = mcpToolName,
@@ -1339,7 +1348,11 @@ class ChatService(
         return when {
             // 正在执行工具
             lastTool != null && !lastTool.isExecuted -> {
-                val toolName = lastTool.toolName.removePrefix("mcp__")
+                // MCP tools are exposed as `mcp__<serverSlug>__<toolName>`; strip both the
+                // prefix and the server-id slug so the notification shows the bare tool name.
+                val toolName = lastTool.toolName
+                    .removePrefix("mcp__")
+                    .substringAfter("__", missingDelimiterValue = lastTool.toolName.removePrefix("mcp__"))
                 Triple(
                     context.getString(R.string.notification_live_update_chip_tool),
                     context.getString(R.string.notification_live_update_tool, toolName),

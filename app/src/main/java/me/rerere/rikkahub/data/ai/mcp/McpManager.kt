@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.ClassDiscriminatorMode
 import kotlinx.serialization.json.Json
@@ -43,6 +45,7 @@ import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.checkDifferent
 import okhttp3.OkHttpClient
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.seconds
@@ -81,10 +84,19 @@ class McpManager(
         install(SSE)
     }
 
-    private val clients: MutableMap<McpServerConfig, Client> = mutableMapOf()
-    private val reconnectJobs: MutableMap<Uuid, Job> = mutableMapOf()
-    private val reconnectAttempts: MutableMap<Uuid, Int> = mutableMapOf()
+    // These maps are mutated from several coroutines at once (the settings collector, the
+    // mcp_add/mcp_update/mcp_set_enabled control tools, the reconnect ladder). Plain
+    // mutableMapOf would throw ConcurrentModificationException on concurrent iterate+mutate,
+    // so they're ConcurrentHashMap. Concurrency-safe maps alone don't prevent two ops for the
+    // SAME id from interleaving (e.g. an add racing a remove, leaking a live Client); the
+    // per-id lifecycleLocks below serialize add/remove/reconnect for a given server.
+    private val clients: ConcurrentHashMap<McpServerConfig, Client> = ConcurrentHashMap()
+    private val reconnectJobs: ConcurrentHashMap<Uuid, Job> = ConcurrentHashMap()
+    private val reconnectAttempts: ConcurrentHashMap<Uuid, Int> = ConcurrentHashMap()
+    private val lifecycleLocks = ConcurrentHashMap<Uuid, Mutex>()
     val syncingStatus = MutableStateFlow<Map<Uuid, McpStatus>>(mapOf())
+
+    private fun lockFor(id: Uuid): Mutex = lifecycleLocks.getOrPut(id) { Mutex() }
 
     init {
         appScope.launch {
@@ -99,8 +111,21 @@ class McpManager(
                             other = newConfigs,
                             eq = { a, b -> a.id == b.id }
                         )
+                        // Enabled servers that already have a live client but whose
+                        // connection-relevant fields (transport kind, url, headers) changed in
+                        // Settings. Without this, editing an enabled server's url/transport/
+                        // headers wouldn't take effect until app restart, since add/remove only
+                        // react to id set membership and enable-only toggles are handled by
+                        // toAdd/toRemove. addClient is removeClient-first, so re-adding swaps the
+                        // live client over to the new config. Enable-only changes never land here
+                        // (their connection fields are identical).
+                        val toReplace = newConfigs.filter { newCfg ->
+                            currentConfigs.firstOrNull { it.id == newCfg.id }
+                                ?.let { connectionFieldsDiffer(it, newCfg) } == true
+                        }
                         Log.i(TAG, "to_add: $toAdd")
                         Log.i(TAG, "to_remove: $toRemove")
+                        Log.i(TAG, "to_replace: $toReplace")
                         toAdd.forEach { cfg ->
                             appScope.launch {
                                 runCatching { addClient(cfg) }
@@ -109,6 +134,12 @@ class McpManager(
                         }
                         toRemove.forEach { cfg ->
                             appScope.launch { removeClient(cfg) }
+                        }
+                        toReplace.forEach { cfg ->
+                            appScope.launch {
+                                runCatching { addClient(cfg) }
+                                    .onFailure { Log.w(TAG, "reconnect-on-edit failed for ${cfg.commonOptions.name}", it) }
+                            }
                         }
                     }.onFailure {
                         Log.w(TAG, "settings collector reconcile failed", it)
@@ -206,7 +237,16 @@ class McpManager(
     }
 
     suspend fun addClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
-        removeClient(config) // Remove first
+        lockFor(config.id).withLock {
+            addClientLocked(config)
+        }
+    }
+
+    // Lock-free body of addClient; callers must already hold lockFor(config.id). Splitting
+    // it out avoids re-entering the (non-reentrant) per-id Mutex when addClient delegates to
+    // the remove step, which would deadlock.
+    private suspend fun addClientLocked(config: McpServerConfig) {
+        removeClientLocked(config) // Remove first
         cancelReconnect(config.id)
         reconnectAttempts[config.id] = 0
 
@@ -237,6 +277,10 @@ class McpManager(
             }
         }
 
+        // Defensive: removeClientLocked above should have cleared any prior entry for this id,
+        // but a stale key (e.g. left by sync()'s remove+put under a different config instance)
+        // would otherwise leak a live Client when we overwrite. Close+drop it explicitly.
+        closeExistingFor(config.id)
         clients[config] = client
         runCatching {
             setStatus(config = config, status = McpStatus.Connecting)
@@ -293,8 +337,12 @@ class McpManager(
                     // 删除不在server内的
                     tools.removeIf { tool -> serverTools.none { it.name == tool.name } }
 
-                    // 更新clients
-                    clients.remove(config)
+                    // 更新clients: rekey the live Client under the freshened config (same id,
+                    // updated tools). Drop ALL keys for this id first — not just the `config`
+                    // instance — so a stale duplicate key can't leave a second entry behind.
+                    // This block runs while the caller (addClient/reconnectClient/syncAll)
+                    // already holds lockFor(id), so it's serialized against other lifecycle ops.
+                    clients.keys.filter { it.id == config.id }.forEach { clients.remove(it) }
                     clients.put(
                         config.clone(
                             commonOptions = common.copy(
@@ -319,7 +367,8 @@ class McpManager(
     suspend fun syncAll() = withContext(Dispatchers.IO) {
         clients.keys.toList().forEach { config ->
             runCatching {
-                sync(config)
+                // sync() rekeys clients for this id; serialize against add/remove/reconnect.
+                lockFor(config.id).withLock { sync(config) }
             }.onFailure {
                 Log.w(TAG, "syncAll: sync failed for ${config.commonOptions.name}", it)
                 setStatus(config, McpStatus.Error(it.message ?: it.javaClass.name))
@@ -349,6 +398,13 @@ class McpManager(
     }
 
     suspend fun removeClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
+        lockFor(config.id).withLock {
+            removeClientLocked(config)
+        }
+    }
+
+    // Lock-free body of removeClient; callers must already hold lockFor(config.id).
+    private suspend fun removeClientLocked(config: McpServerConfig) {
         cancelReconnect(config.id)
         val toRemove = clients.entries.filter { it.key.id == config.id }
         toRemove.forEach { entry ->
@@ -362,6 +418,16 @@ class McpManager(
             Log.i(TAG, "removeClient: ${entry.key} / ${entry.key.commonOptions.name}")
         }
         reconnectAttempts.remove(config.id)
+    }
+
+    // Close and drop any client entry whose key id matches, without touching reconnect state.
+    // Used as a last-line guard before overwriting clients[config] in the add/reconnect paths.
+    private suspend fun closeExistingFor(id: Uuid) {
+        clients.entries.filter { it.key.id == id }.forEach { entry ->
+            runCatching { entry.value.close() }
+                .onFailure { Log.w(TAG, "closeExistingFor: close failed for ${entry.key.commonOptions.name}", it) }
+            clients.remove(entry.key)
+        }
     }
 
     private fun scheduleReconnect(config: McpServerConfig) {
@@ -424,46 +490,45 @@ class McpManager(
     }
 
     private suspend fun reconnectClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
-        // 先关闭旧客户端
-        val oldEntry = clients.entries.find { it.key.id == config.id }
-        if (oldEntry != null) {
-            runCatching { oldEntry.value.close() }
-                .onFailure { Log.w(TAG, "reconnectClient: old client close failed for ${config.commonOptions.name}", it) }
-            clients.remove(oldEntry.key)
-        }
+        // Serialize against add/remove for the same id so a reconnect can't race a user edit
+        // and leave two live Clients registered.
+        lockFor(config.id).withLock {
+            // 先关闭旧客户端
+            closeExistingFor(config.id)
 
-        val transport = getTransport(config)
-        val client = Client(
-            clientInfo = Implementation(
-                name = config.commonOptions.name,
-                version = "1.0",
+            val transport = getTransport(config)
+            val client = Client(
+                clientInfo = Implementation(
+                    name = config.commonOptions.name,
+                    version = "1.0",
+                )
             )
-        )
 
-        // 注册回调
-        transport.onClose {
-            Log.i(TAG, "Transport closed for ${config.commonOptions.name}")
-            val currentStatus = syncingStatus.value[config.id]
-            if (currentStatus == McpStatus.Connected) {
-                scheduleReconnect(config)
+            // 注册回调
+            transport.onClose {
+                Log.i(TAG, "Transport closed for ${config.commonOptions.name}")
+                val currentStatus = syncingStatus.value[config.id]
+                if (currentStatus == McpStatus.Connected) {
+                    scheduleReconnect(config)
+                }
             }
-        }
 
-        transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
-            val currentStatus = syncingStatus.value[config.id]
-            if (currentStatus == McpStatus.Connected) {
-                scheduleReconnect(config)
+            transport.onError { error ->
+                Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+                val currentStatus = syncingStatus.value[config.id]
+                if (currentStatus == McpStatus.Connected) {
+                    scheduleReconnect(config)
+                }
             }
-        }
 
-        clients[config] = client
-        setStatus(config, McpStatus.Connecting)
-        client.connect(transport)
-        sync(config)
-        setStatus(config, McpStatus.Connected)
-        reconnectAttempts[config.id] = 0 // 重置重连计数
-        Log.i(TAG, "Reconnected successfully: ${config.commonOptions.name}")
+            clients[config] = client
+            setStatus(config, McpStatus.Connecting)
+            client.connect(transport)
+            sync(config)
+            setStatus(config, McpStatus.Connected)
+            reconnectAttempts[config.id] = 0 // 重置重连计数
+            Log.i(TAG, "Reconnected successfully: ${config.commonOptions.name}")
+        }
     }
 
     private suspend fun setStatus(config: McpServerConfig, status: McpStatus) {
@@ -483,6 +548,27 @@ class McpManager(
  * (which is what `$mcpServerConfigs` would do) leaks every Authorization / X-Api-Key
  * value verbatim — addressed in the Phase 10 audit pass.
  */
+/**
+ * True when two same-id configs differ in any field that affects the live transport
+ * connection (transport subclass, url, request headers). Tool list / enable / name changes
+ * are deliberately ignored: they don't require tearing down the connection. Drives the
+ * settings collector's reconnect-on-edit path so editing an enabled server's url/transport/
+ * headers takes effect without an app restart.
+ */
+internal fun connectionFieldsDiffer(old: McpServerConfig, new: McpServerConfig): Boolean {
+    if (old::class != new::class) return true
+    val oldUrl = when (old) {
+        is McpServerConfig.SseTransportServer -> old.url
+        is McpServerConfig.StreamableHTTPServer -> old.url
+    }
+    val newUrl = when (new) {
+        is McpServerConfig.SseTransportServer -> new.url
+        is McpServerConfig.StreamableHTTPServer -> new.url
+    }
+    if (oldUrl != newUrl) return true
+    return old.commonOptions.headers != new.commonOptions.headers
+}
+
 private fun redactConfigForLog(config: McpServerConfig): String {
     val transport = when (config) {
         is McpServerConfig.SseTransportServer -> "sse"
