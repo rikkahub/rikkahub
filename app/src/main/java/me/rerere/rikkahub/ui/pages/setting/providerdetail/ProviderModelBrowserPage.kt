@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -13,19 +14,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -35,11 +40,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.Refresh01
@@ -47,7 +54,6 @@ import me.rerere.rikkahub.ui.components.ai.ModelAbilityTag
 import me.rerere.rikkahub.ui.components.ai.ModelModalityTag
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
-import me.rerere.rikkahub.ui.components.ui.FormBottomSheet
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import org.koin.androidx.compose.koinViewModel
@@ -106,9 +112,13 @@ fun ProviderModelBrowserPage(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { manualAdd.open(Model()) }) {
-                Icon(HugeIcons.Add01, contentDescription = "Add model manually")
-            }
+            // Labelled FAB: the per-row "+" enables a catalog model, so a bare "+" here is
+            // ambiguous. The text makes clear this adds a model by typing its id manually.
+            ExtendedFloatingActionButton(
+                onClick = { manualAdd.open(Model()) },
+                icon = { Icon(HugeIcons.Add01, contentDescription = null) },
+                text = { Text("Add manually") },
+            )
         },
     ) { innerPadding ->
         Column(
@@ -198,26 +208,66 @@ fun ProviderModelBrowserPage(
 
     if (manualAdd.isEditing) {
         manualAdd.currentState?.let { modelState ->
-            FormBottomSheet(
-                title = "Add model",
-                onDismiss = { manualAdd.dismiss() },
-                footer = {
-                    TextButton(onClick = { manualAdd.dismiss() }) { Text("Cancel") }
-                    TextButton(
-                        onClick = {
-                            if (modelState.modelId.isNotBlank() && modelState.displayName.isNotBlank()) {
-                                manualAdd.confirm()
-                            }
-                        },
-                    ) { Text("Add") }
+            val sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+            )
+            val scope = rememberCoroutineScope()
+            ModalBottomSheet(
+                onDismissRequest = { manualAdd.dismiss() },
+                sheetState = sheetState,
+                sheetGesturesEnabled = false,
+                dragHandle = {
+                    IconButton(onClick = {
+                        scope.launch {
+                            sheetState.hide()
+                            manualAdd.dismiss()
+                        }
+                    }) {
+                        Icon(HugeIcons.ArrowDown01, null)
+                    }
                 },
             ) {
-                ModelSettingsForm(
-                    model = modelState,
-                    onModelChange = { manualAdd.currentState = it },
-                    isEdit = false,
-                    parentProvider = provider,
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.95f)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(text = "Add model", style = MaterialTheme.typography.titleLarge)
+                    // ModelSettingsForm hosts its own HorizontalPager (each tab a verticalScroll),
+                    // which must be given a BOUNDED height. It therefore sits in a weight(1f) box,
+                    // NOT inside a verticalScroll sheet (FormBottomSheet) — that would hand the pager
+                    // an infinite max height and crash its scroll container.
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ModelSettingsForm(
+                            model = modelState,
+                            onModelChange = { manualAdd.currentState = it },
+                            isEdit = false,
+                            parentProvider = provider,
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    ) {
+                        TextButton(onClick = { manualAdd.dismiss() }) { Text("Cancel") }
+                        TextButton(
+                            onClick = {
+                                if (modelState.modelId.isNotBlank() && modelState.displayName.isNotBlank()) {
+                                    manualAdd.confirm()
+                                }
+                            },
+                        ) { Text("Add") }
+                    }
+                }
             }
         }
     }

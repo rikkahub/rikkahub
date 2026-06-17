@@ -152,13 +152,13 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 providers = listOf(newProvider) + settings.providers
                             )
                         )
-                        // Add & continue: jump straight into the new provider's Models tab so the
-                        // user fetches/picks models instead of hunting for the row they just made.
+                        // Add & continue jumps straight to the lightweight model browser (the
+                        // model-picking surface) instead of the heavier two-page detail pager: the
+                        // pager would compose both the big Config form and the Models list during the
+                        // nav + sheet-dismiss animation, which janks the transition. The browser is
+                        // also exactly where the user picks models next.
                         navController.navigate(
-                            Screen.SettingProviderDetail(
-                                providerId = newProvider.id.toString(),
-                                initialTab = 1,
-                            )
+                            Screen.SettingProviderModelBrowser(providerId = newProvider.id.toString())
                         )
                     }
                 },
