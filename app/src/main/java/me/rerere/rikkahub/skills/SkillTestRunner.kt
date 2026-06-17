@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
+import java.io.IOException
 import kotlin.uuid.Uuid
 
 /**
@@ -151,7 +152,19 @@ class SkillTestRunner(
      * [TestRunState.Error]). The flow terminates after the terminal state is emitted.
      */
     fun runOnce(skillName: String, prompt: String): Flow<TestRunState> = flow {
-        val skillBody = skillBodyReader(skillName)
+        // readSkillBody now enforces a size cap and throws SkillFileTooLargeException (an
+        // IOException) for oversized files; reads can also fail with a plain IOException.
+        // Catch both here so the body read surfaces a clean terminal Error instead of an
+        // unhandled exception escaping the flow.
+        val skillBody = try {
+            skillBodyReader(skillName)
+        } catch (e: SkillManager.SkillFileTooLargeException) {
+            emit(TestRunState.Error("skill_too_large", "skill body exceeds the size cap (${e.lengthBytes} bytes)"))
+            return@flow
+        } catch (e: IOException) {
+            emit(TestRunState.Error("read_failed", e.message ?: "skill body could not be read"))
+            return@flow
+        }
         if (skillBody.isNullOrBlank()) {
             emit(TestRunState.Error("missing_skill", "skill body could not be read"))
             return@flow

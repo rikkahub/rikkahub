@@ -117,6 +117,19 @@ fun createSkillTools(
                         }.toString()
                     )
                 )
+                // Refuse oversized skill files before reading them whole. SkillManager
+                // enforces the same cap on its cached reads (readCached); this is the
+                // model-facing envelope so the LLM gets a clean error instead of a
+                // failed/empty read.
+                fun tooLargeErr(file: java.io.File): List<UIMessagePart> = listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("error", "skill_file_too_large")
+                            put("max_bytes", SkillManager.MAX_SKILL_FILE_BYTES)
+                            put("size_bytes", file.length())
+                        }.toString()
+                    )
+                )
                 val name = it.jsonObject["name"]?.jsonPrimitive?.content
                     ?: return@Tool err(
                         "missing_required_arg",
@@ -130,6 +143,10 @@ fun createSkillTools(
                 }
                 val path = it.jsonObject["path"]?.jsonPrimitive?.content
                 if (path.isNullOrBlank()) {
+                    val skillMd = skillManager.getSkillDir(name)?.resolve("SKILL.md")
+                    if (skillMd != null && skillMd.length() > SkillManager.MAX_SKILL_FILE_BYTES) {
+                        return@Tool tooLargeErr(skillMd)
+                    }
                     val content = skillManager.readSkillBody(name)
                         ?: return@Tool err(
                             "skill_body_not_found",
@@ -147,6 +164,9 @@ fun createSkillTools(
                         "skill_file_not_found",
                         "File '$path' does not exist in skill '$name'. Use only paths from Markdown links inside SKILL.md.",
                     )
+                }
+                if (target.length() > SkillManager.MAX_SKILL_FILE_BYTES) {
+                    return@Tool tooLargeErr(target)
                 }
                 listOf(UIMessagePart.Text(target.readText()))
             }

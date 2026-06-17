@@ -47,6 +47,7 @@ reorderable = "3.1.0"
 mcp = "0.12.0"
 pebble = "4.1.1"
 browser = "1.10.0"
+webkit = "1.16.0"
 appcompat = "1.7.1"
 material = "1.14.0"
 ucrop = "2.2.11-native"
@@ -136,6 +137,7 @@ commons-text = { module = "org.apache.commons:commons-text", version.ref = "comm
 modelcontextprotocol-kotlin-sdk = { module = "io.modelcontextprotocol:kotlin-sdk", version.ref = "mcp" }
 pebble = { module = "io.pebbletemplates:pebble", version.ref = "pebble" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }

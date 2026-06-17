@@ -92,7 +92,7 @@ fun runJsTool(
             return@Tool err("script_not_found", "no file at '${scriptName}' inside skill '$skillName'")
         }
 
-        val outcome = runner.runScript(scriptFile = scriptFile, data = data, secret = secret)
+        val outcome = runner.runScript(scriptFile = scriptFile, skillRootDir = skillDir, data = data, secret = secret)
         when (outcome) {
             is JsSkillRunner.Result.Err -> err(outcome.code, outcome.detail)
             is JsSkillRunner.Result.Ok -> {

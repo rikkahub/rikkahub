@@ -29,7 +29,6 @@ internal class TempDirSkillSaver : SkillSaver {
             name = parsedName,
             description = description,
             compatibility = frontmatter["compatibility"],
-            allowedTools = frontmatter["allowed-tools"]?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
             skillDir = skillDir,
         )
     }

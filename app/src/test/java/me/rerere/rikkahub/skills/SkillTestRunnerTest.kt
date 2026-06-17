@@ -4,10 +4,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.model.Conversation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 import kotlin.uuid.Uuid
 
 /**
@@ -134,6 +136,38 @@ class SkillTestRunnerTest {
         assertEquals(1, states.size)
         val err = states[0] as SkillTestRunner.TestRunState.Error
         assertEquals("empty_prompt", err.error)
+    }
+
+    // Oversized skill body: readSkillBody now enforces a size cap. The runner must surface a
+    // clean terminal Error rather than let the exception escape the flow.
+    @Test
+    fun `oversized skill body emits skill_too_large error and never touches the driver`() = runBlocking {
+        val driver = FakeDriver()
+        val runner = SkillTestRunner(
+            driver = driver,
+            skillBodyReader = { throw SkillManager.SkillFileTooLargeException(999_999L) },
+        )
+        val states = runner.runOnce("huge", "anything").toList()
+        assertEquals(1, states.size)
+        val err = states[0] as SkillTestRunner.TestRunState.Error
+        assertEquals("skill_too_large", err.error)
+        assertTrue("driver should never have been called", !driver.startCalled)
+    }
+
+    // A plain IOException from the body read (not the size cap) must also short-circuit cleanly.
+    @Test
+    fun `io error reading skill body emits read_failed error`() = runBlocking {
+        val driver = FakeDriver()
+        val runner = SkillTestRunner(
+            driver = driver,
+            skillBodyReader = { throw IOException("disk gone") },
+        )
+        val states = runner.runOnce("broken", "anything").toList()
+        assertEquals(1, states.size)
+        val err = states[0] as SkillTestRunner.TestRunState.Error
+        assertEquals("read_failed", err.error)
+        assertEquals("disk gone", err.detail)
+        assertTrue("driver should never have been called", !driver.startCalled)
     }
 
     @Test

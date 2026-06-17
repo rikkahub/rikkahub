@@ -154,6 +154,44 @@ class SkillUrlImporterTest {
         assertEquals("renamed", (r as SkillUrlImporter.Result.Ok).metadata.name)
     }
 
+    @Test fun `native skill body with tool words in prose is stored verbatim`() {
+        // A native skill (has frontmatter `name:`) must never be run through the transcoder.
+        // Its prose mentions Read / Edit / Bash as ordinary words and must survive untouched.
+        val saver = TempDirSkillSaver()
+        val localImporter = SkillUrlImporter(skillManager = saver)
+        val md = """
+            ---
+            name: verbatim-skill
+            description: x
+            ---
+
+            First Read the docs, then Edit the file, then run Bash.
+        """.trimIndent()
+        val r = localImporter.importFromText(md, sourceLabel = "test://native")
+        assertTrue("expected Ok, got $r", r is SkillUrlImporter.Result.Ok)
+        assertEquals(SkillUrlImporter.SkillFormat.NATIVE,
+            (r as SkillUrlImporter.Result.Ok).format)
+        val written = saver.tmpDir.resolve("verbatim-skill/SKILL.md").readText()
+        assertTrue("prose must be preserved, got: $written",
+            written.contains("First Read the docs, then Edit the file, then run Bash."))
+        assertFalse(written.contains("read_file"))
+        assertFalse(written.contains("write_text_file"))
+    }
+
+    @Test fun `unclassifiable markdown without name is not silently transcoded`() {
+        // Plain markdown with no frontmatter name and no openclaw marker used to default to
+        // OPENCLAW (synthesising a name from the H1 and transcoding the body). It must now be
+        // treated as NATIVE and surface an honest missing_name error.
+        val md = """
+            # Some Notes
+
+            Then Read the config and Edit it.
+        """.trimIndent()
+        val r = importer.importFromText(md, sourceLabel = null)
+        assertTrue("expected Err, got $r", r is SkillUrlImporter.Result.Err)
+        assertEquals("missing_name", (r as SkillUrlImporter.Result.Err).code)
+    }
+
     @Test fun `invalid skill name rejected`() {
         val md = """
             ---
@@ -170,25 +208,52 @@ class SkillUrlImporterTest {
 
 class ToolNameTranscoderTest {
 
-    @Test fun `openclaw tool names mapped`() {
-        val input = "First call Bash to install. Then Read the config. Then Notify the user."
+    @Test fun `tool names mapped inside inline code spans`() {
+        // Tool references in a skill body live in code spans, not prose. Only those map.
+        val input = "First call `Bash` to install. Then `Read` the config. Then `Notify` the user."
         val out = ToolNameTranscoder.transcode(input)
         assertTrue(out.contains("termux_run_command"))
         assertTrue(out.contains("read_file"))
         assertTrue(out.contains("post_notification"))
-        assertFalse(out.contains("Bash"))
+        assertFalse(out.contains("`Bash`"))
     }
 
-    @Test fun `word-bounded — partial matches not rewritten`() {
-        val input = "BashScripts and ReadOnly and notification_action_click are unaffected."
+    @Test fun `tool names mapped inside fenced code blocks`() {
+        val input = "```\nRead the file then Edit it with Write.\n```"
+        val out = ToolNameTranscoder.transcode(input)
+        assertTrue(out.contains("read_file"))
+        assertTrue(out.contains("write_text_file"))
+        assertFalse(out.contains("Read "))
+    }
+
+    @Test fun `prose outside code regions is left untouched`() {
+        // Regression: the transcoder used to rewrite tool names everywhere, corrupting
+        // ordinary sentences that happen to use the English words Read / Edit / Bash. Prose
+        // must survive import verbatim — only code regions are eligible for substitution.
+        val input = "Then Read the config and Edit it, then run Bash and Notify the user."
         val out = ToolNameTranscoder.transcode(input)
         assertEquals(input, out)
     }
 
-    @Test fun `Hermes-style names mapped`() {
-        val input = "Use send_message to ping mom. Use shell to check disk."
+    @Test fun `mixed prose and code maps only the code`() {
+        val input = "Read the docs, then run `Read` on the path."
+        val out = ToolNameTranscoder.transcode(input)
+        // Prose "Read the docs" preserved; only the `Read` span is mapped.
+        assertTrue(out.startsWith("Read the docs"))
+        assertTrue(out.contains("read_file"))
+        assertFalse(out.contains("`Read`"))
+    }
+
+    @Test fun `word-bounded — partial matches in code not rewritten`() {
+        val input = "`BashScripts` and `ReadOnly` and `notification_action_click` are unaffected."
+        val out = ToolNameTranscoder.transcode(input)
+        assertEquals(input, out)
+    }
+
+    @Test fun `Hermes-style names mapped inside code spans`() {
+        val input = "Use `send_message` to ping mom. Use `open_app` to launch."
         val out = ToolNameTranscoder.transcode(input)
         assertTrue(out.contains("telegram_send_message"))
-        assertTrue(out.contains("termux_run_command"))
+        assertTrue(out.contains("launch_app"))
     }
 }

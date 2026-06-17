@@ -175,9 +175,21 @@ class SkillUrlImporter(
             val frontmatter = SkillFrontmatterParser.parse(trimmed)
             if (frontmatter["name"]?.isNotBlank() == true) return SkillFormat.NATIVE
         }
-        // openclaw — has at least one of the known section markers in plain markdown form.
-        return SkillFormat.OPENCLAW
+        // openclaw — only when the body actually carries an openclaw section marker. We used
+        // to default *all* unrecognized markdown to OPENCLAW, which ran the tool-name
+        // transcoder over it and silently mutated native skills that simply lacked
+        // frontmatter. Require a positive signal before transcoding.
+        if (OpenclawMarker.containsMatchIn(trimmed)) return SkillFormat.OPENCLAW
+        // Unclassifiable markdown — store verbatim as NATIVE. If it has no parseable
+        // `name:` the import surfaces an honest `missing_name` error instead of inventing
+        // one from prose and rewriting the body.
+        return SkillFormat.NATIVE
     }
+
+    // openclaw section markers: the `## When to use` / `## Steps` / `## Tools used` headings
+    // that distinguish an openclaw skill from arbitrary markdown.
+    private val OpenclawMarker =
+        Regex("""(?im)^#{1,6}\s+(when to use|steps|tools used)\b""")
 
     private fun transcodeFromOpenclaw(raw: String, sourceUrl: String, override: String?): String? {
         // Pull the first H1 as name (if missing, fall back to first non-blank line).
@@ -332,19 +344,29 @@ fun SkillManager.asSaver(): SkillSaver = object : SkillSaver {
  * Phase 16 — best-effort tool-name remapper.
  *
  * openclaw uses some tool names that have RikkaHub equivalents but different spellings;
- * Hermes uses an entirely different set. Anywhere we see one of the source names in a
- * skill body, replace it with the RikkaHub equivalent. False positives are rare since
- * skill bodies use these names in monospace / step-list contexts, but the replacements
- * are deliberately conservative — we only rewrite `\b<name>\b` (word-bounded).
+ * Hermes uses an entirely different set. We map those source names to the RikkaHub
+ * equivalent — but ONLY where the name appears as a code token, never in free prose.
+ *
+ * Why: the source names are ordinary English words (Read, Write, Edit, Task, Bash, Grep,
+ * screenshot, …). A global word-bounded replace over the whole body corrupted natural
+ * language — "Then Read the config" became "Then read_file the config". Skill bodies that
+ * genuinely reference a tool do so as a code token: inside a fenced block (```…```), an
+ * inline code span (`…`), or an explicit tool-list / allowed-tools line. We rewrite only
+ * those regions and leave prose untouched.
+ *
+ * The mapping keys are case-sensitive and the match inside a code region is still
+ * word-bounded, so `bash`-the-word in a sentence is never rewritten even if it slipped into
+ * a code span by mistake — only the exact documented tool names map.
  *
  * This is "best effort" — the user is expected to edit the skill markdown post-import if
  * the transcoder missed something.
  */
 object ToolNameTranscoder {
     private val Mappings: List<Pair<String, String>> = listOf(
-        // openclaw → RikkaHub
+        // openclaw → RikkaHub. Keys are case-sensitive; the lowercase common-English
+        // duplicates (bash/shell/ssh/notify/send_message-in-prose) were dropped because
+        // they collide with ordinary words.
         "Bash" to "termux_run_command",
-        "bash" to "termux_run_command",
         "Read" to "read_file",
         "Write" to "write_text_file",
         "Edit" to "write_text_file",
@@ -356,18 +378,27 @@ object ToolNameTranscoder {
         "TodoWrite" to "telegram_send_message",
         "WebFetch" to "ssh_exec",          // closest analogue if user has an SSH proxy
         "Notify" to "post_notification",
-        "notify" to "post_notification",
-        // Hermes-style → RikkaHub
+        // Hermes-style → RikkaHub. These are snake_case identifiers that don't occur as
+        // English words, so they're safe within code regions.
         "send_message" to "telegram_send_message",
-        "shell" to "termux_run_command",
-        "ssh" to "ssh_exec",
         "open_app" to "launch_app",
         "screenshot" to "take_screenshot",
         "vibrate_phone" to "vibrate",
     )
 
-    fun transcode(body: String): String {
-        var out = body
+    // Fenced code block (```…```) or inline code span (`…`). Fenced is matched first (and
+    // greedily across newlines) so a multi-line block isn't shredded into stray backticks.
+    private val CodeRegion = Regex("""```[\s\S]*?```|`[^`\n]+`""")
+
+    /**
+     * Rewrite tool names ONLY inside code regions of [body]; prose between regions is
+     * returned verbatim. Each matched region has its inner tokens mapped, word-bounded.
+     */
+    fun transcode(body: String): String =
+        CodeRegion.replace(body) { match -> mapTokens(match.value) }
+
+    private fun mapTokens(region: String): String {
+        var out = region
         for ((from, to) in Mappings) {
             out = out.replace(Regex("""\b${Regex.escape(from)}\b"""), to)
         }

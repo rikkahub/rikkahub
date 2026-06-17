@@ -7,10 +7,12 @@ import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.core.net.toUri
+import androidx.webkit.WebViewAssetLoader
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -86,6 +88,7 @@ class JsSkillRunner(private val context: Context) {
      */
     suspend fun runScript(
         scriptFile: File,
+        skillRootDir: File? = null,
         data: String,
         secret: String = "",
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
@@ -97,24 +100,70 @@ class JsSkillRunner(private val context: Context) {
             val deferred = CompletableDeferred<String>()
             var webView: WebView? = null
             try {
+                // Root the asset loader at the SKILL ROOT (not the script's immediate parent) so a
+                // script in a subdirectory (e.g. scripts/index.html) can still fetch sibling
+                // resources elsewhere in the skill (../assets/x, ../lib/y) — matching the skill
+                // format. Falls back to the script's parent when the caller didn't supply a root.
+                val rootDir = (skillRootDir ?: scriptFile.parentFile)
+                    ?: return@withContext Result.Err("script_not_found", "skill script has no parent directory")
+                // Path of the script relative to the skill root → the rest of the served URL, so
+                // the WebView loads the same file regardless of how deep the script sits. Guard
+                // against a script that doesn't resolve under the root (falls back to its name).
+                val relPath = runCatching { scriptFile.relativeTo(rootDir).invariantSeparatorsPath }
+                    .getOrNull()?.takeIf { it.isNotBlank() && !it.startsWith("..") }
+                    ?: scriptFile.name
+                // Serve the skill directory over a virtual https origin via WebViewAssetLoader
+                // instead of loading it from file://. The asset loader confines reads to THIS
+                // skill's subtree, so a malicious skill can no longer fetch arbitrary app-private
+                // files (databases/, datastore) the way a file:// page with universal access could.
+                //
+                // InternalStoragePathHandler derives the response MIME from the file name, so an
+                // entry document whose name isn't *.html (e.g. "index.htm" or extensionless) is
+                // served as application/octet-stream and the WebView never parses it as HTML;
+                // ai_edge_gallery_get_result is then never defined and the run dies with
+                // script_timeout. Wrap the handler so ONLY the top-level entry relPath has its
+                // response rewritten to text/html; every other resource/subresource keeps the
+                // MIME the handler inferred (so scripts, images, CSS still load correctly).
+                val storageHandler = WebViewAssetLoader.InternalStoragePathHandler(context, rootDir)
+                val htmlEntryHandler = WebViewAssetLoader.PathHandler { path ->
+                    val response = storageHandler.handle(path) ?: return@PathHandler null
+                    if (path == relPath && response.mimeType != "text/html") {
+                        WebResourceResponse(
+                            "text/html",
+                            response.encoding,
+                            response.statusCode,
+                            response.reasonPhrase,
+                            response.responseHeaders,
+                            response.data,
+                        )
+                    } else {
+                        response
+                    }
+                }
+                val assetLoader = WebViewAssetLoader.Builder()
+                    .addPathHandler(SKILL_PATH, htmlEntryHandler)
+                    .build()
                 val wv = WebView(context.applicationContext).apply {
-                    @Suppress("SetJavaScriptEnabled", "DEPRECATION")
+                    @Suppress("SetJavaScriptEnabled")
                     settings.javaScriptEnabled = true
+                    // File access is OFF: the page is now served from https via the asset loader,
+                    // not file://, so these flags are no longer needed and would only re-open the
+                    // app-private-file exfiltration path.
                     @Suppress("DEPRECATION")
-                    settings.allowFileAccess = true                       // file:// load of skill dir
+                    settings.allowFileAccess = false
                     @Suppress("DEPRECATION")
-                    settings.allowFileAccessFromFileURLs = true           // file:// can fetch siblings
+                    settings.allowFileAccessFromFileURLs = false
                     @Suppress("DEPRECATION")
-                    settings.allowUniversalAccessFromFileURLs = true      // so cross-origin XHR works for Wikipedia etc
+                    settings.allowUniversalAccessFromFileURLs = false
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
                     settings.domStorageEnabled = true           // localStorage for skills that store state
                     settings.javaScriptCanOpenWindowsAutomatically = false
-                    // Skills run in a hidden 1×1 sandboxed WebView. ALWAYS_ALLOW lets skills
-                    // that load CDN libraries (e.g. qr-code → qrcodejs) or reach external APIs
-                    // (query-wikipedia → fetch) work without CORS/mixed-content errors while
-                    // the page is served from file://. This WebView never navigates freely, so
-                    // the security trade-off is narrow and deliberate.
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    // COMPATIBILITY (not ALWAYS_ALLOW): on the virtual https origin the WebView
+                    // applies standard mixed-content rules. Skills hitting genuinely cross-origin
+                    // https APIs (query-wikipedia → fetch) or CDN libs (qr-code → qrcodejs) still
+                    // work via normal CORS; skills that relied on universal-access to bypass CORS
+                    // must use a CORS-enabled endpoint.
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                     layoutParams = ViewGroup.LayoutParams(1, 1)
                 }
                 wv.addJavascriptInterface(BridgeImpl(deferred), JS_INTERFACE_NAME)
@@ -127,6 +176,11 @@ class JsSkillRunner(private val context: Context) {
                     }
                 }
                 wv.webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: WebView?,
+                        request: WebResourceRequest,
+                    ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
                         Log.d(TAG, "page finished, evaluating trigger script: $url")
@@ -159,9 +213,11 @@ class JsSkillRunner(private val context: Context) {
                     }
                 }
                 webView = wv
-                val fileUrl = scriptFile.toUri().toString()  // file://...
-                Log.d(TAG, "loading: $fileUrl (data=${data.take(80)}, secret=${if (secret.isNotEmpty()) "<set>" else "<empty>"})")
-                wv.loadUrl(fileUrl)
+                // https://appassets.androidplatform.net/skill/<relPath> — intercepted by the
+                // asset loader and served from the skill root; never touches the network.
+                val skillUrl = "https://$ASSET_DOMAIN$SKILL_PATH$relPath"
+                Log.d(TAG, "loading: $skillUrl (data=${data.take(80)}, secret=${if (secret.isNotEmpty()) "<set>" else "<empty>"})")
+                wv.loadUrl(skillUrl)
 
                 // Suspend the calling coroutine until the bridge fires or timeout. We let the
                 // 10s within-script wait above handle "page loaded but JS missing"; the outer
@@ -219,6 +275,9 @@ class JsSkillRunner(private val context: Context) {
 
     companion object {
         private const val JS_INTERFACE_NAME = "AiEdgeGallery"
+        // WebViewAssetLoader's default reserved domain; never resolves on the real network.
+        private const val ASSET_DOMAIN = "appassets.androidplatform.net"
+        private const val SKILL_PATH = "/skill/"
         const val DEFAULT_TIMEOUT_MS = 60_000L
         const val MAX_TIMEOUT_MS = 5 * 60_000L
         const val MAX_DATA_LENGTH = 64 * 1024  // 64KB cap on the data payload

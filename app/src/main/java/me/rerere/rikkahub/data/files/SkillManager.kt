@@ -13,7 +13,20 @@ class SkillManager(
 ) {
     companion object {
         private const val TAG = "SkillManager"
+
+        /**
+         * Upper bound on the size of a skill file we will read whole into memory and
+         * cache. Skill bodies are prose/markdown meant to be inlined into the prompt;
+         * a multi-megabyte file is either a mistake or an attempt to blow up the
+         * context window / cache. Reads above this cap are refused (see [readCached]
+         * and the `use_skill` read paths in SkillsTools) rather than silently loaded.
+         */
+        const val MAX_SKILL_FILE_BYTES: Long = 512L * 1024L
     }
+
+    /** Thrown by [readCached] when a skill file exceeds [MAX_SKILL_FILE_BYTES]. */
+    class SkillFileTooLargeException(val lengthBytes: Long) :
+        java.io.IOException("Skill file is $lengthBytes bytes, over the ${MAX_SKILL_FILE_BYTES}-byte cap")
 
     fun getSkillsDir(): File {
         val dir = context.filesDir.resolve(FileFolders.SKILLS)
@@ -112,6 +125,14 @@ class SkillManager(
         val key = file.absolutePath
         val mtime = file.lastModified()
         val len = file.length()
+        // Refuse oversized files before reading or caching them so a huge skill file
+        // can never be loaded whole into memory or pinned in bodyCache. Checked on
+        // every call (not just cache misses) so a file that grows past the cap after
+        // a small initial read is caught on the next access.
+        if (len > MAX_SKILL_FILE_BYTES) {
+            bodyCache.remove(key)
+            throw SkillFileTooLargeException(len)
+        }
         val hit = bodyCache[key]
         if (hit != null && hit.lastModifiedMs == mtime && hit.length == len) {
             return hit.text
@@ -385,7 +406,6 @@ class SkillManager(
                 name = name,
                 description = description,
                 compatibility = frontmatter["compatibility"],
-                allowedTools = frontmatter["allowed-tools"]?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
                 autoLoad = frontmatter["auto_load"]?.equals("true", ignoreCase = true) == true,
                 autoLoadPath = frontmatter["auto_load_path"]?.takeIf { it.isNotBlank() },
                 skillDir = skillDir,
@@ -410,7 +430,12 @@ data class SkillMetadata(
     val name: String,
     val description: String,
     val compatibility: String? = null,
-    val allowedTools: List<String> = emptyList(),
+    // NOTE: the `allowed-tools:` frontmatter key is intentionally NOT parsed. It was
+    // never enforced anywhere (the tool set offered to the model is built from the
+    // assistant's enabled tools/skills in ChatService, with no per-skill filtering),
+    // so surfacing it as a field implied a sandbox boundary that did not exist. There
+    // is no clean seam to enforce it: skills are loaded lazily mid-turn via use_skill,
+    // while the tool list is fixed for the whole turn. Dropped rather than faked.
     val autoLoad: Boolean = false,
     val autoLoadPath: String? = null,
     val skillDir: File,
