@@ -394,15 +394,21 @@ private fun MarkdownNode(
                 ?: ""
             val linkDest =
                 node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_DESTINATION)?.getTextInNode(content) ?: ""
+            val safeLinkDest = sanitizeLinkUri(linkDest)
             val context = LocalContext.current
-            Text(
-                text = linkText,
-                color = MaterialTheme.colorScheme.primary,
-                textDecoration = TextDecoration.Underline,
-                modifier = modifier.clickable {
-                    val intent = Intent(Intent.ACTION_VIEW, linkDest.toUri())
-                    context.startActivity(intent)
-                })
+            if (safeLinkDest == null) {
+                Text(text = linkText, color = MaterialTheme.colorScheme.onSurface)
+            } else {
+                Text(
+                    text = linkText,
+                    color = MaterialTheme.colorScheme.primary,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = modifier.clickable {
+                        val intent = Intent(Intent.ACTION_VIEW, safeLinkDest.toUri())
+                        context.startActivity(intent)
+                    },
+                )
+            }
         }
 
         // 加粗和斜体
@@ -450,18 +456,23 @@ private fun MarkdownNode(
             val altText = node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_TEXT)?.getTextInNode(content) ?: ""
             val imageUrl =
                 node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_DESTINATION)?.getTextInNode(content) ?: ""
+            val safeImageUrl = sanitizeLinkUri(imageUrl)
             Column(
                 modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 这里可以使用Coil等图片加载库加载图片
-                ZoomableAsyncImage(
-                    model = imageUrl,
-                    contentDescription = altText,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .widthIn(min = 120.dp)
-                        .heightIn(min = 120.dp),
-                )
+                if (safeImageUrl != null && isAllowedImageUri(safeImageUrl)) {
+                    ZoomableAsyncImage(
+                        model = safeImageUrl,
+                        contentDescription = altText,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .widthIn(min = 120.dp)
+                            .heightIn(min = 120.dp),
+                    )
+                } else if (altText.isNotBlank()) {
+                    Text(text = altText)
+                }
             }
         }
 
@@ -763,26 +774,34 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
     val rowNodes = node.children.filter { it.type == GFMElementTypes.ROW }
 
     // 计算列数（从标题行获取）
-    val columnCount = headerNode?.children?.count { it.type == GFMTokenTypes.CELL } ?: 0
+    val rawColumnCount = headerNode?.children?.count { it.type == GFMTokenTypes.CELL } ?: 0
+    val (clampedRows, columnCount) = clampTableDimensions(rowNodes.size, rawColumnCount)
 
     // 检查是否有足够的列来显示表格
     if (columnCount == 0) return
 
     // 提取表头单元格文本
-    val headerCells =
-        headerNode?.children?.filter { it.type == GFMTokenTypes.CELL }?.map { it.getTextInNode(content).trim() }
-            ?: emptyList()
+    val headerCells = headerNode?.children
+        ?.filter { it.type == GFMTokenTypes.CELL }
+        ?.take(columnCount)
+        ?.map { it.getTextInNode(content).trim().take(RenderLimits.MAX_CELL_CHARS) } ?: emptyList()
 
     // 提取所有行的数据
-    val rows = rowNodes.map { rowNode ->
-        rowNode.children.filter { it.type == GFMTokenTypes.CELL }.map { it.getTextInNode(content).trim() }
+    val rows = rowNodes.take(clampedRows).map { rowNode ->
+        rowNode.children.filter { it.type == GFMTokenTypes.CELL }
+            .take(columnCount)
+            .map { it.getTextInNode(content).trim().take(RenderLimits.MAX_CELL_CHARS) }
     }
 
     // 创建表头composable列表
     val headers = List(columnCount) { columnIndex ->
         @Composable {
             MarkdownBlock(
-                content = if (columnIndex < headerCells.size) headerCells[columnIndex] else "",
+                content = if (columnIndex < headerCells.size) {
+                    headerCells[columnIndex].take(RenderLimits.MAX_CELL_CHARS)
+                } else {
+                    ""
+                },
             )
         }
     }
@@ -792,7 +811,11 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
         List(columnCount) { columnIndex ->
             @Composable {
                 MarkdownBlock(
-                    content = if (columnIndex < rowData.size) rowData[columnIndex] else "",
+                    content = if (columnIndex < rowData.size) {
+                        rowData[columnIndex].take(RenderLimits.MAX_CELL_CHARS)
+                    } else {
+                        ""
+                    },
                 )
             }
         }
@@ -887,6 +910,15 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
                 )
             }
         }
+        val truncatedRows = rowNodes.size - rows.size
+        if (truncatedRows > 0) {
+            Text(
+                text = "… table truncated (${truncatedRows} more rows)",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+
         DataTable(
             headers = headers,
             rows = rowComposables,
@@ -898,21 +930,36 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
 }
 
 // 构建CSV内容，对包含逗号/引号/换行的字段进行转义
-private fun buildTableCsv(headerCells: List<String>, rows: List<List<String>>): String {
-    fun escape(field: String): String {
-        return if (field.any { it == ',' || it == '"' || it == '\n' }) {
-            "\"${field.replace("\"", "\"\"")}\""
-        } else {
-            field
-        }
-    }
+internal fun buildTableCsv(headerCells: List<String>, rows: List<List<String>>): String {
     return buildString {
-        appendLine(headerCells.joinToString(",") { escape(it) })
+        appendLine(headerCells.joinToString(",") { escapeCsvField(it) })
         rows.forEach { row ->
-            appendLine(row.joinToString(",") { escape(it) })
+            appendLine(row.joinToString(",") { escapeCsvField(it) })
         }
     }
 }
+
+/**
+ * The cell content is model-emitted untrusted text. A spreadsheet app (Excel,
+ * Sheets, LibreOffice) treats any field whose first character is `= + - @` or a
+ * leading tab/CR/LF as a live formula on open, so a table cell like
+ * `=HYPERLINK("http://evil","x")` or `=cmd|'/c calc'!A1` becomes code execution
+ * /data exfil at the recipient — CSV formula injection. Neutralize by prefixing a
+ * single quote so the value renders as text (the standard OWASP mitigation; a
+ * legitimate negative number is shown verbatim with a leading apostrophe, an
+ * accepted trade-off for untrusted export). RFC-4180 quoting is applied after.
+ */
+internal fun escapeCsvField(field: String): String {
+    val neutralized = if (field.firstOrNull() in CSV_FORMULA_TRIGGERS) "'$field" else field
+    return if (neutralized.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+        "\"${neutralized.replace("\"", "\"\"")}\""
+    } else {
+        neutralized
+    }
+}
+
+// OWASP CSV-injection lead triggers: =, +, -, @, plus the control chars TAB/CR/LF.
+private val CSV_FORMULA_TRIGGERS = setOf('=', '+', '-', '@', '\t', '\r', '\n')
 
 private fun AnnotatedString.Builder.appendMarkdownNodeContent(
     node: ASTNode,
@@ -931,9 +978,14 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
 
         node.type == GFMTokenTypes.GFM_AUTOLINK -> {
             val link = node.getTextInNode(content)
-            withLink(LinkAnnotation.Url(link)) {
-                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+            val safeLink = sanitizeLinkUri(link)
+            withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                if (safeLink == null) {
                     append(link)
+                } else {
+                    withLink(LinkAnnotation.Url(safeLink)) {
+                        append(link)
+                    }
                 }
             }
         }
@@ -1048,13 +1100,18 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     appendInlineContent("citation:$linkDest")
                 }
             } else {
-                withLink(LinkAnnotation.Url(linkDest)) {
-                    withStyle(
-                        SpanStyle(
-                            color = colorScheme.primary, textDecoration = TextDecoration.Underline
-                        )
-                    ) {
-                        append(linkText)
+                val safeLink = sanitizeLinkUri(linkDest)
+                if (safeLink == null) {
+                    append(linkText)
+                } else {
+                    withLink(LinkAnnotation.Url(safeLink)) {
+                        withStyle(
+                            SpanStyle(
+                                color = colorScheme.primary, textDecoration = TextDecoration.Underline
+                            )
+                        ) {
+                            append(linkText)
+                        }
                     }
                 }
             }
@@ -1063,9 +1120,17 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
         node.type == MarkdownElementTypes.AUTOLINK -> {
             val links = node.children.trim(MarkdownTokenTypes.LT, 1).trim(MarkdownTokenTypes.GT, 1)
             links.fastForEach { link ->
-                withLink(LinkAnnotation.Url(link.getTextInNode(content))) {
+                val href = link.getTextInNode(content)
+                val safeLink = sanitizeLinkUri(href)
+                if (safeLink == null) {
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                        append(link.getTextInNode(content))
+                        append(href)
+                    }
+                } else {
+                    withLink(LinkAnnotation.Url(safeLink)) {
+                        withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                            append(href)
+                        }
                     }
                 }
             }

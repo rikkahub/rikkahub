@@ -8,6 +8,11 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.FileVisitResult
 import java.util.Locale
 import java.util.zip.GZIPInputStream
 
@@ -46,11 +51,11 @@ class RootfsInstaller(
         manager.ensureWorkspace(root)
         val stagingDir = File(manager.tempDir(root), "rootfs-staging")
         val linuxDir = manager.linuxDir(root)
-        stagingDir.deleteRecursively()
+        deleteRecursivelyNoFollow(stagingDir, stagingDir)
         stagingDir.mkdirs()
         try {
             extractTarGz(archive, stagingDir, onProgress)
-            linuxDir.deleteRecursively()
+            deleteRecursivelyNoFollow(linuxDir, linuxDir)
             require(stagingDir.renameTo(linuxDir)) {
                 "Failed to move rootfs into workspace"
             }
@@ -58,7 +63,7 @@ class RootfsInstaller(
             onProgress(RootfsInstallProgress(stage = RootfsInstallStage.INSTALLED))
         } finally {
             archive.delete()
-            stagingDir.deleteRecursively()
+            deleteRecursivelyNoFollow(stagingDir, stagingDir)
         }
     }
 
@@ -171,6 +176,7 @@ class RootfsInstaller(
                     continue
                 }
                 val target = targetDir.safeResolve(header.name)
+                requireNotRoot(target, targetDir)
                 target.parentFile?.mkdirs()
                 when (header.type) {
                     TarEntryType.DIRECTORY -> target.mkdirs()
@@ -216,16 +222,16 @@ class RootfsInstaller(
 
     private fun createSymlink(root: File, target: File, linkName: String) {
         if (linkName.isBlank()) return
-        val linkTarget = if (File(linkName).isAbsolute) {
-            File(linkName)
-        } else {
-            val resolved = File(target.parentFile ?: root, linkName).canonicalFile
-            val rootFile = root.canonicalFile
-            require(resolved.path == rootFile.path || resolved.path.startsWith(rootFile.path + File.separator)) {
-                "Symlink escapes rootfs: ${target.name}"
-            }
-            (target.parentFile ?: root).toPath().relativize(resolved.toPath()).toFile()
+        require(!linkName.contains('\u0000')) { "Symlink target contains invalid character" }
+        require(!File(linkName).isAbsolute) { "Symlink target must be relative: $linkName" }
+        val linkTargetPath = (target.parentFile ?: root).toPath().resolve(linkName).normalize()
+        val rootPath = root.canonicalFile.toPath()
+        val targetPath = runCatching { linkTargetPath.toRealPath(LinkOption.NOFOLLOW_LINKS) }
+            .getOrElse { linkTargetPath.toAbsolutePath() }
+        require(targetPath == rootPath || targetPath.startsWith(rootPath)) {
+            "Symlink escapes rootfs: ${target.name}"
         }
+        val linkTarget = (target.parentFile ?: root).toPath().relativize(linkTargetPath).toFile()
         target.delete()
         Files.createSymbolicLink(target.toPath(), linkTarget.toPath())
     }
@@ -365,10 +371,52 @@ class RootfsInstaller(
             .trim()
             .trimStart('/')
             .removePrefix("./")
-        require(normalized.isNotBlank()) { "Rootfs entry path is blank" }
+        require(normalized.isNotBlank() && normalized != ".") { "Rootfs entry path is blank" }
         require(!normalized.contains('\u0000')) { "Rootfs entry path contains invalid character" }
         require(normalized.split('/').none { it == ".." }) { "Rootfs entry escapes target directory: $path" }
         return normalized
+    }
+
+    private fun deleteRecursivelyNoFollow(root: File, target: File) {
+        if (!target.exists()) return
+        val rootPath = root.canonicalFile.toPath()
+        Files.walkFileTree(
+            target.toPath(),
+            object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    requirePathUnderRoot(dir, rootPath)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    requirePathUnderRoot(file, rootPath)
+                    Files.delete(file)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
+                    exc?.let { throw it }
+                    requirePathUnderRoot(dir, rootPath)
+                    Files.delete(dir)
+                    return FileVisitResult.CONTINUE
+                }
+            },
+        )
+    }
+
+    private fun requirePathUnderRoot(candidate: Path, rootPath: Path) {
+        val realPath = candidate.toRealPath(LinkOption.NOFOLLOW_LINKS)
+        require(realPath == rootPath || realPath.startsWith(rootPath)) {
+            "Rootfs path escapes target directory: $candidate"
+        }
+    }
+
+    private fun requireNotRoot(resolved: File, root: File) {
+        val resolvedPath = resolved.canonicalFile
+        val rootPath = root.canonicalFile
+        require(resolvedPath != rootPath) {
+            "Rootfs entry resolves to target directory: ${resolved.name}"
+        }
     }
 
     private fun ByteArray.string(offset: Int, length: Int): String {

@@ -109,6 +109,50 @@ class UiAutomationToolsTest {
         ),
     )
 
+    private fun mixedWindowTree(stateSeq: Long = 0L): RawTree = RawTree(
+        stateSeq = stateSeq,
+        foregroundPkg = target,
+        windows = listOf(
+            RawWindow(
+                pkg = target,
+                root = RawNode(
+                    text = "granted-text",
+                    contentDescription = "grant-key",
+                    resourceId = "com.example.target:id/granted",
+                    className = "android.widget.EditText",
+                    editable = true,
+                    visible = true,
+                    hasArea = true,
+                ),
+            ),
+            RawWindow(
+                pkg = "com.example.foreign-allowed",
+                root = RawNode(
+                    text = "FORBIDDEN_TEXT",
+                    contentDescription = "forbidden-key",
+                    resourceId = "com.example.foreign-allowed:id/forbidden",
+                    className = "android.widget.EditText",
+                    editable = true,
+                    visible = true,
+                    hasArea = true,
+                ),
+            ),
+            RawWindow(
+                pkg = "com.example.foreign",
+                systemWindow = true,
+                root = RawNode(
+                    text = "SYSTEM_DIALOG_TEXT",
+                    contentDescription = "system-key",
+                    resourceId = "com.android.packageinstaller:id/system_dialog",
+                    className = "android.widget.EditText",
+                    editable = true,
+                    visible = true,
+                    hasArea = true,
+                ),
+            ),
+        ),
+    )
+
     /**
      * The full tool list the factory exposes (ui_observe + the act tools when a guard is present).
      * Activation is now a function of the guard alone — `ChatService` mints one only for an active,
@@ -261,6 +305,31 @@ class UiAutomationToolsTest {
             text.contains("me.rerere.rikkahub"),
         )
         assertTrue("no part may be an image", parts.none { it is UIMessagePart.Image })
+    }
+
+    @Test
+    fun `ui_observe drops foreign app content but keeps a system dialog in rendered output`() {
+        val backend = FakeBackend(mixedWindowTree(stateSeq = 12L))
+        val text = runBlocking {
+            allTools(healthyGuard(surface = setOf(target)), backend)
+                .first { it.name == UI_OBSERVE_TOOL_NAME }
+                .execute(buildJsonObject { })
+                .let { it.single() as UIMessagePart.Text }
+                .text
+        }
+
+        assertTrue("granted text must remain visible", text.contains("granted-text"))
+        assertTrue("granted form key must remain visible", text.contains("form=com.example.target:id/granted"))
+
+        assertFalse("foreign text must never render", text.contains("FORBIDDEN_TEXT"))
+        assertFalse("foreign semantic key must never render", text.contains("forbidden-key"))
+        assertFalse("foreign form key must never render", text.contains("form=com.example.foreign-allowed:id/forbidden"))
+        assertFalse("foreign view id must never render", text.contains("com.example.foreign-allowed:id/forbidden"))
+
+        assertTrue("system dialog text must remain visible", text.contains("SYSTEM_DIALOG_TEXT"))
+        assertTrue("system dialog semantic key must remain visible", text.contains("system-key"))
+        assertTrue("system dialog form key must remain visible", text.contains("form=com.android.packageinstaller:id/system_dialog"))
+        assertTrue("system dialog view id must remain visible", text.contains("com.android.packageinstaller:id/system_dialog"))
     }
 
     @Test
@@ -602,7 +671,12 @@ class UiAutomationToolsTest {
         assertEquals("exactly one perform", 1, backend.performed.size)
         assertEquals(
             "the dispatched action must be a node scroll-forward on the grounded (stateSeq=5, tid=0)",
-            PerformAction.Node(stateSeq = 5L, tid = 0, kind = NodeActionKind.SCROLL_FORWARD),
+            PerformAction.Node(
+                stateSeq = 5L,
+                tid = 0,
+                kind = NodeActionKind.SCROLL_FORWARD,
+                allowedPackages = setOf(target),
+            ),
             backend.performed.single(),
         )
         assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)
@@ -621,7 +695,12 @@ class UiAutomationToolsTest {
         runBlocking { tools.byName(UI_SCROLL_TOOL_NAME).execute(scrollArgs(0, "backward")) }
 
         assertEquals(
-            PerformAction.Node(stateSeq = 2L, tid = 0, kind = NodeActionKind.SCROLL_BACKWARD),
+            PerformAction.Node(
+                stateSeq = 2L,
+                tid = 0,
+                kind = NodeActionKind.SCROLL_BACKWARD,
+                allowedPackages = setOf(target),
+            ),
             backend.performed.single(),
         )
     }
@@ -941,7 +1020,7 @@ class UiAutomationToolsTest {
         assertEquals("exactly one perform", 1, backend.performed.size)
         assertEquals(
             "the dispatched action must be a node set-text on the grounded (stateSeq=5, tid=0)",
-            PerformAction.SetText(stateSeq = 5L, tid = 0, text = "world"),
+            PerformAction.SetText(stateSeq = 5L, tid = 0, text = "world", allowedPackages = setOf(target)),
             backend.performed.single(),
         )
         assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)
@@ -987,7 +1066,7 @@ class UiAutomationToolsTest {
 
         assertEquals(
             "a by-formKey set_text must dispatch the keyed field (tid 0)",
-            PerformAction.SetText(stateSeq = 1L, tid = 0, text = "new"),
+            PerformAction.SetText(stateSeq = 1L, tid = 0, text = "new", allowedPackages = setOf(target)),
             backend.performed.single(),
         )
     }
@@ -1171,7 +1250,7 @@ class UiAutomationToolsTest {
 
         assertEquals(
             "an empty-string text is a legitimate clear-the-field set_text, not a malformed arg",
-            PerformAction.SetText(stateSeq = 5L, tid = 0, text = ""),
+            PerformAction.SetText(stateSeq = 5L, tid = 0, text = "", allowedPackages = setOf(target)),
             backend.performed.single(),
         )
     }
@@ -1214,7 +1293,12 @@ class UiAutomationToolsTest {
         assertEquals("exactly one perform", 1, backend.performed.size)
         assertEquals(
             "the dispatched action must be a node CLICK on the grounded (stateSeq=5, tid=0)",
-            PerformAction.Node(stateSeq = 5L, tid = 0, kind = NodeActionKind.CLICK),
+            PerformAction.Node(
+                stateSeq = 5L,
+                tid = 0,
+                kind = NodeActionKind.CLICK,
+                allowedPackages = setOf(target),
+            ),
             backend.performed.single(),
         )
         assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)

@@ -13,7 +13,6 @@ import me.rerere.ai.runtime.schedule.RecurrenceUnit
 import me.rerere.rikkahub.data.db.dao.TaskScheduleDAO
 import me.rerere.rikkahub.data.db.entity.TaskScheduleEntity
 import me.rerere.rikkahub.data.model.Assistant
-import java.time.LocalTime
 import java.time.ZoneId
 import kotlin.uuid.Uuid
 
@@ -121,21 +120,18 @@ class TaskScheduleRepository(
         }
 
         if (draft.kind == ScheduleKind.RECURRING) {
-            val spec = parseRecurrenceSpec(draft.recurrenceSpec)
-                ?: return ScheduleMutationResult.Rejected(
-                    "recurring schedule requires a valid recurrenceSpec"
-                )
+            val rawRecurrenceSpec = draft.recurrenceSpec
+                ?: return ScheduleMutationResult.Rejected("recurring schedule requires a valid recurrenceSpec")
+            val spec = runCatching {
+                json.decodeFromString<RecurrenceSpec>(rawRecurrenceSpec)
+            }.getOrElse {
+                return ScheduleMutationResult.Rejected("invalid recurrenceSpec: ${it.message}")
+            }
             val intervalMillis = spec.intervalMillis()
             if (intervalMillis < MIN_RECURRENCE_INTERVAL_MILLIS) {
                 return ScheduleMutationResult.Rejected(
                     "recurring interval $intervalMillis ms is below the minimum $MIN_RECURRENCE_INTERVAL_MILLIS ms"
                 )
-            }
-            // A DAYS recurrence's optional `timeOfDay` is parsed with `LocalTime.parse` at fire time
-            // (Recurrence.nextDailyOccurrence); a bad "HH:mm" must be rejected upfront, same reason.
-            val timeOfDay = spec.timeOfDay
-            if (spec.unit == RecurrenceUnit.DAYS && timeOfDay != null && !isValidLocalTime(timeOfDay)) {
-                return ScheduleMutationResult.Rejected("invalid daily timeOfDay: $timeOfDay")
             }
         }
 
@@ -321,17 +317,18 @@ class TaskScheduleRepository(
         val advancedNextFire: Long? = when (ScheduleKind.valueOf(row.kind)) {
             ScheduleKind.ONE_SHOT -> null // a one-shot fires once: disable after this claim.
             ScheduleKind.RECURRING -> {
-                // A row that passed the create gate always carries a valid recurrence_spec; if it is
-                // somehow absent we cannot advance, so we disable rather than spin in place.
-                parseRecurrenceSpec(row.recurrenceSpec)?.let { spec ->
-                    Recurrence.nextOccurrenceAfter(
-                        spec = spec,
-                        firstFireAt = row.firstFireAt,
-                        lastFiredAt = row.lastFiredAt,
-                        zone = ZoneId.of(row.timeZoneId),
-                        now = now,
-                    )
+                val spec = parseRecurrenceSpec(row.recurrenceSpec)
+                if (spec == null) {
+                    dao.update(row.copy(enabled = false, updatedAt = now))
+                    return@inTransaction null
                 }
+                Recurrence.nextOccurrenceAfter(
+                    spec = spec,
+                    firstFireAt = row.firstFireAt,
+                    lastFiredAt = row.lastFiredAt,
+                    zone = ZoneId.of(row.timeZoneId),
+                    now = now,
+                )
             }
         }
 
@@ -424,9 +421,6 @@ class TaskScheduleRepository(
 
     private fun isValidZoneId(id: String): Boolean =
         runCatching { ZoneId.of(id) }.isSuccess
-
-    private fun isValidLocalTime(value: String): Boolean =
-        runCatching { LocalTime.parse(value) }.isSuccess
 
     private fun RecurrenceSpec.intervalMillis(): Long = when (unit) {
         RecurrenceUnit.MINUTES -> every.toLong() * MILLIS_PER_MINUTE

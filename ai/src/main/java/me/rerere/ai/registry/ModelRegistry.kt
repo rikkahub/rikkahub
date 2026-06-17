@@ -276,6 +276,23 @@ object ModelRegistry {
         )
     }
 
+    private val CLAUDE_1M_CONTEXT_SERIES = defineGroup {
+        add(
+            defineModel {
+                tokens("claude", "sonnet")
+                notTokens("haiku")
+            },
+            defineModel {
+                tokens("claude", "opus")
+                notTokens("haiku")
+            },
+            defineModel {
+                tokens("claude", "fable")
+                notTokens("haiku")
+            }
+        )
+    }
+
     private val DEEPSEEK_V3_MODEL = defineModel {
         tokens("deepseek", "v", "3")
         toolAbility()
@@ -573,6 +590,8 @@ object ModelRegistry {
         resolveModels(modelId)
             .firstNotNullOfOrNull { it.contextWindow }
     }
+
+    fun supportsClaude1MContext(modelId: String): Boolean = CLAUDE_1M_CONTEXT_SERIES.match(modelId)
 
     /**
      * Single source of truth for a model's usable context window (tokens), resolved in priority

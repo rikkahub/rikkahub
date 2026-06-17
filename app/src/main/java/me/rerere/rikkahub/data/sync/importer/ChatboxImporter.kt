@@ -99,6 +99,7 @@ object ChatboxImporter {
         file: File,
         assistantId: Uuid,
         providers: List<ProviderSetting>,
+        onProvidersImported: suspend (List<ProviderSetting>) -> Unit = {},
         onConversation: suspend (Conversation) -> Unit,
     ): ChatboxStreamingImportResult {
         val importedProviders = importProviders(file)
@@ -107,6 +108,8 @@ object ChatboxImporter {
         var skippedImageParts = 0
         var skippedEmptyMessages = 0
         var hasConversationSystemPrompt = false
+
+        onProvidersImported(importedProviders)
 
         file.bufferedReader(StandardCharsets.UTF_8).use { reader ->
             forEachSession(reader) { session ->

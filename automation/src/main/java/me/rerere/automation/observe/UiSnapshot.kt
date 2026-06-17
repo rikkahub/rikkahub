@@ -104,6 +104,8 @@ data class UiTarget(
      * which is the same id but exposed (as `form=`) ONLY for editable inputs.
      */
     val viewId: String? = null,
+    /** Internal provenance: the window package this target came from. */
+    val sourcePackage: String = "",
 )
 
 @Serializable

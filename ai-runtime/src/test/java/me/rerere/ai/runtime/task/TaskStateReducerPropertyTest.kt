@@ -24,7 +24,8 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * TASK_STATE_LEGAL (SPEC.md M1): the pure task-lifecycle reducer only ever takes legal
  * transitions, terminal states are absorbing (replaying any event stream on a terminal is
- * idempotent), and `Interrupted -> Resuming` is the ONLY edge out of `Interrupted`
+ * idempotent), and `Interrupted -> Resuming` and `Interrupted -> Cancelled` are the only
+ * state exits from `Interrupted`
  * (maintainer decisions #1/#3 — resume is explicit, never automatic).
  */
 class TaskStateReducerPropertyTest {
@@ -98,11 +99,11 @@ class TaskStateReducerPropertyTest {
     private fun legalTargets(state: TaskState): Set<KClass<out TaskState>> = when (state) {
         TaskState.Created -> failureTargets + TaskState.Queued::class
         TaskState.Queued -> failureTargets + TaskState.Starting::class
-        TaskState.Starting -> failureTargets + TaskState.Running::class
+        TaskState.Starting -> failureTargets + TaskState.Running::class + TaskState.Succeeded::class
         TaskState.Running -> failureTargets + TaskState.WaitingApproval::class + TaskState.Succeeded::class
         is TaskState.WaitingApproval -> failureTargets + TaskState.Resuming::class
-        TaskState.Resuming -> failureTargets + TaskState.Running::class
-        is TaskState.Interrupted -> setOf(TaskState.Resuming::class)
+        TaskState.Resuming -> failureTargets + TaskState.Running::class + TaskState.Succeeded::class
+        is TaskState.Interrupted -> setOf(TaskState.Resuming::class, TaskState.Cancelled::class)
         is TaskState.Succeeded, is TaskState.Failed, TaskState.Cancelled, is TaskState.BudgetExhausted -> emptySet()
     }
 
@@ -132,13 +133,15 @@ class TaskStateReducerPropertyTest {
     }
 
     @Test
-    fun `ResumeRequested is the only event that leaves Interrupted and it lands in Resuming`() {
+    fun `Interrupted leaves only on resume or cancel requests`() {
         runBlocking {
             checkAll(1_000, arbText, arbEvent) { summary, event ->
                 val interrupted = TaskState.Interrupted(progressSummary = summary)
                 val next = TaskStateReducer.reduce(interrupted, event)
                 if (event == TaskEvent.ResumeRequested) {
                     assertEquals(TaskState.Resuming, next)
+                } else if (event == TaskEvent.CancelRequested) {
+                    assertEquals(TaskState.Cancelled, next)
                 } else {
                     assertEquals(interrupted, next)
                 }
@@ -215,15 +218,71 @@ class TaskStateReducerPropertyTest {
     }
 
     @Test
-    fun `FinalResult is honored only in Running`() {
+    fun `FinalResult terminates execution-active states into Succeeded`() {
         runBlocking {
-            checkAll(1_000, arbState, arbText) { state, summary ->
-                val next = TaskStateReducer.reduce(state, TaskEvent.FinalResult(summary = summary))
-                if (state == TaskState.Running) {
-                    assertEquals(TaskState.Succeeded(summary = summary), next)
-                } else {
-                    assertEquals(state, next)
+            checkAll(1_000, arbText) { summary ->
+                assertEquals(
+                    TaskState.Succeeded(summary = summary),
+                    TaskStateReducer.reduce(TaskState.Starting, TaskEvent.FinalResult(summary = summary)),
+                )
+                assertEquals(
+                    TaskState.Succeeded(summary = summary),
+                    TaskStateReducer.reduce(TaskState.Running, TaskEvent.FinalResult(summary = summary)),
+                )
+                assertEquals(
+                    TaskState.Succeeded(summary = summary),
+                    TaskStateReducer.reduce(TaskState.Resuming, TaskEvent.FinalResult(summary = summary)),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `FinalResult terminal event is consistent across execution-active states`() {
+        runBlocking {
+            checkAll(1_000, arbText, arbBreach) { summary, breach ->
+                val events = listOf(
+                    TaskEvent.FinalResult(summary = summary),
+                    TaskEvent.ExecutionFailed(error = summary),
+                    TaskEvent.CancelRequested,
+                    TaskEvent.BudgetExceeded(breach),
+                )
+
+                events.forEach { event ->
+                    val fromStarting = TaskStateReducer.reduce(TaskState.Starting, event)
+                    val fromRunning = TaskStateReducer.reduce(TaskState.Running, event)
+                    val fromResuming = TaskStateReducer.reduce(TaskState.Resuming, event)
+
+                    assertEquals(fromStarting, fromRunning)
+                    assertEquals(fromStarting, fromResuming)
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `CancelRequested moves active states to Cancelled`() {
+        runBlocking {
+            checkAll(1_000, arbText) { summary ->
+                assertEquals(
+                    TaskState.Cancelled,
+                    TaskStateReducer.reduce(TaskState.Starting, TaskEvent.CancelRequested),
+                )
+                assertEquals(
+                    TaskState.Cancelled,
+                    TaskStateReducer.reduce(TaskState.Running, TaskEvent.CancelRequested),
+                )
+                assertEquals(
+                    TaskState.Cancelled,
+                    TaskStateReducer.reduce(TaskState.Resuming, TaskEvent.CancelRequested),
+                )
+                assertEquals(
+                    TaskState.Cancelled,
+                    TaskStateReducer.reduce(
+                        TaskState.Interrupted(progressSummary = summary),
+                        TaskEvent.CancelRequested,
+                    ),
+                )
             }
         }
     }

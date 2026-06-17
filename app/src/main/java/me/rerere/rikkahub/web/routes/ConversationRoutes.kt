@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.isPendingToolApprovalFor
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -64,6 +65,13 @@ internal suspend fun resolveRegenerateTarget(
     val node = conversation.getMessageNodeByMessageId(messageId)
     return node?.messages?.find { it.id == messageId }
 }
+
+internal fun isPendingToolApproval(conversation: Conversation, toolCallId: String): Boolean =
+    conversation.currentMessages.any { message ->
+        message.parts.any { part ->
+            part.isPendingToolApprovalFor(toolCallId)
+        }
+    }
 
 fun Route.conversationRoutes(
     chatService: ChatService,
@@ -377,7 +385,17 @@ fun Route.conversationRoutes(
         post("/{id}/tool-approval") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<ToolApprovalRequest>()
-            chatService.handleToolApproval(uuid, request.toolCallId, request.approved, request.reason, request.answer)
+            val conversation = chatService.getConversationFlow(uuid).first()
+            if (!isPendingToolApproval(conversation, request.toolCallId)) {
+                throw BadRequestException("tool call is not pending: ${request.toolCallId}")
+            }
+            chatService.handleToolApproval(
+                uuid,
+                request.toolCallId,
+                request.approved,
+                request.reason,
+                request.answer,
+            )
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 

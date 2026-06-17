@@ -15,9 +15,9 @@ import kotlin.uuid.Uuid
  * binds the matching field's red `supportingText` to the message keyed here. Distinct from
  * [CreateScheduleField] (which maps a *repository* rejection back to a field): this enum keys the
  * *pre-submit* guards the form computes itself, so it carries the extra fields the form owns
- * ([UNIT], [TIME_OF_DAY]) that a repository reason never names.
+ * ([ASSISTANT], [UNIT], [TIME_OF_DAY]) that a repository reason never names.
  */
-enum class ScheduleField { PROMPT, EVERY, UNIT, TIMEZONE, TIME_OF_DAY }
+enum class ScheduleField { ASSISTANT, PROMPT, EVERY, UNIT, TIMEZONE, TIME_OF_DAY }
 
 /**
  * Pure form-state holder for the create-schedule dialog (SPEC.md M4 / task T7, SC3). Plain JVM data
@@ -31,6 +31,7 @@ enum class ScheduleField { PROMPT, EVERY, UNIT, TIMEZONE, TIME_OF_DAY }
  *
  *  - prompt non-blank AND trimmed `length <= ` [TaskScheduleRepository.MAX_PROMPT_CHARS] (the repo
  *    counts the stored, trimmed prompt, so this guard counts `prompt.trim().length` to match),
+ *  - delegation target id is non-NIL (guarded in form, with full spawnability validation in repository),
  *  - a RECURRING effective interval `>= ` [TaskScheduleRepository.MIN_RECURRENCE_INTERVAL_MILLIS]
  *    (so MINUTES requires `every >= 15`; `every = 1, MINUTES` is unsubmittable),
  *  - a valid IANA [timeZoneId] (`ZoneId.of`),
@@ -51,12 +52,17 @@ data class ScheduleFormState(
     val every: Int = 1,
     val unit: RecurrenceUnit = RecurrenceUnit.HOURS,
     val firstFireAt: Long,
+    val targetAssistantId: Uuid,
     val timeOfDay: String? = null,
     val timeZoneId: String,
 ) {
     /** Field-keyed errors; an empty map == submittable. Mirrors [TaskScheduleRepository] gates. */
     fun validate(now: Long): Map<ScheduleField, String> {
         val errors = mutableMapOf<ScheduleField, String>()
+
+        if (targetAssistantId == Uuid.NIL) {
+            errors[ScheduleField.ASSISTANT] = "Target assistant is required"
+        }
 
         // Mirror the value the repository judges: it counts the STORED prompt, which toDraft() trims
         // (this.toDraft() -> draft.prompt = prompt.trim(); TaskScheduleRepository counts
@@ -99,8 +105,7 @@ data class ScheduleFormState(
      * test both call it, so the value the repository judges is exactly the value the test proves
      * acceptable — there is no second hand-rolled projection that could drift from the validated form.
      *
-     * - [ScheduleDraft.targetAssistantId] is [Uuid.NIL]; the VM stamps the screen's bound assistant
-     *   before the draft reaches the repository (the UI never aims at a foreign assistant).
+     * - [ScheduleDraft.targetAssistantId] is the selected delegation target from this form.
      * - The prompt is trimmed (matching the create gate, which counts the stored prompt's length).
      * - [recurrenceSpec] is the JSON-encoded [RecurrenceSpec] for RECURRING, null for ONE_SHOT;
      *   [timeOfDay] is carried only when [unit] is DAYS (it is meaningless off the DAYS path —
@@ -117,7 +122,7 @@ data class ScheduleFormState(
             null
         }
         return ScheduleDraft(
-            targetAssistantId = Uuid.NIL,
+            targetAssistantId = targetAssistantId,
             prompt = prompt.trim(),
             kind = kind,
             firstFireAt = firstFireAt,

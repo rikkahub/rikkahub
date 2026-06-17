@@ -1,14 +1,23 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.provider.BuiltInTools
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.TextGenerationParams
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +49,16 @@ class GoogleProviderMessageTest {
         )
         method.isAccessible = true
         return method.invoke(provider, messages) as JsonArray
+    }
+
+    private fun invokeBuildCompletionRequestBody(params: TextGenerationParams): JsonObject {
+        val method = GoogleProvider::class.java.getDeclaredMethod(
+            "buildCompletionRequestBody",
+            List::class.java,
+            TextGenerationParams::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(provider, listOf(UIMessage.user("hello")), params) as JsonObject
     }
 
     @Test
@@ -415,6 +434,83 @@ class GoogleProviderMessageTest {
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
     }
 
+    @Test
+    fun `gemini 3 should serialize function declarations and google search together`() {
+        val requestBody = invokeBuildCompletionRequestBody(
+            TextGenerationParams(
+                model = Model(
+                    modelId = "gemini-3-flash",
+                    abilities = listOf(ModelAbility.TOOL),
+                    tools = setOf(BuiltInTools.Search)
+                ),
+                tools = listOf(createFunctionTool("search"), createFunctionTool("calculator"))
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(2, tools?.size)
+        assertNotNull(tools?.find { it.jsonObject.containsKey("functionDeclarations") })
+        assertNotNull(tools?.find { it.jsonObject.containsKey("googleSearch") })
+    }
+
+    @Test
+    fun `non-gemini-3 should prefer function tools and drop builtins when both are configured`() {
+        val requestBody = invokeBuildCompletionRequestBody(
+            TextGenerationParams(
+                model = Model(
+                    modelId = "gemini-2.5-pro",
+                    abilities = listOf(ModelAbility.TOOL),
+                    tools = setOf(BuiltInTools.Search)
+                ),
+                tools = listOf(createFunctionTool("search"))
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(1, tools?.size)
+        assertNotNull(tools?.find { it.jsonObject.containsKey("functionDeclarations") })
+        assertFalse(tools?.any { it.jsonObject.containsKey("googleSearch") } == true)
+
+        val decision = decideGeminiBuiltins(
+            modelId = "gemini-2.5-pro",
+            hasFunctionTools = true,
+            builtIns = setOf(BuiltInTools.Search)
+        )
+        assertNotNull(decision.warning)
+    }
+
+    @Test
+    fun `gemini builtin-only request should only include builtins`() {
+        val requestBody = invokeBuildCompletionRequestBody(
+            TextGenerationParams(
+                model = Model(
+                    modelId = "gemini-2.5-pro",
+                    tools = setOf(BuiltInTools.Search)
+                )
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(1, tools?.size)
+        assertNotNull(tools?.find { it.jsonObject.containsKey("googleSearch") })
+        assertTrue(tools?.none { it.jsonObject.containsKey("functionDeclarations") } == true)
+    }
+
+    @Test
+    fun `gemini function-only request should only include function declarations`() {
+        val requestBody = invokeBuildCompletionRequestBody(
+            TextGenerationParams(
+                model = Model(modelId = "gemini-2.5-pro", abilities = listOf(ModelAbility.TOOL)),
+                tools = listOf(createFunctionTool("search"))
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(1, tools?.size)
+        assertNotNull(tools?.find { it.jsonObject.containsKey("functionDeclarations") })
+        assertTrue(tools?.none { it.jsonObject.containsKey("googleSearch") } == true)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(
@@ -430,4 +526,12 @@ class GoogleProviderMessageTest {
             output = listOf(UIMessagePart.Text(output))
         )
     }
+
+    private fun createFunctionTool(name: String): Tool =
+        Tool(
+            name = name,
+            description = "test function tool",
+            parameters = { InputSchema.Obj(properties = JsonObject(emptyMap())) },
+            execute = { emptyList() }
+        )
 }

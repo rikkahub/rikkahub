@@ -146,7 +146,10 @@ class ResponseAPI(
         // dispatcher threads, the retry coroutine, and awaitClose cannot race on it (visibility +
         // leak-on-cancel). Once the first SSE event lands the gate disarms permanently — retrying
         // then would duplicate already-delivered content. See StreamRetryPolicy / StreamRetryController.
-        val controller = StreamRetryController(STREAM_MAX_RETRIES) {
+        val controller = StreamRetryController(
+            maxRetries = STREAM_MAX_RETRIES,
+            replaySafety = StreamRetryController.ReplaySafety.NonIdempotent,
+        ) {
             StreamRetryController.Cancellable(factory.newEventSource(request, listener)::cancel)
         }
 
@@ -212,12 +215,13 @@ class ResponseAPI(
                     return
                 }
 
-                var exception = t
+                val terminalOutcome = outcome as StreamRetryController.Outcome.Terminate
+                var exception = terminalOutcome.error
 
                 AiLog.failure(TAG, t, response?.code)
 
-                val bodyRaw = response?.body?.stringSafe()
                 try {
+                    val bodyRaw = response?.body?.stringSafe()
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
                         exception = bodyElement.parseErrorDetail()
@@ -230,15 +234,13 @@ class ResponseAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                // A clean EOF before the first frame is still a pre-first-frame death: retry it if
-                // budget remains, otherwise complete normally.
-                val outcome = controller.onClosed(
+                // A clean EOF before the first frame is still a pre-first-frame terminal:
+                // retry it if budget remains, otherwise propagate the terminal synthetic error.
+                when (val outcome = controller.onClosed(
                     backoffFor = { attempt -> jitteredBackoffMillis(attempt - 1, null) },
-                )
-                if (outcome is StreamRetryController.Outcome.Retry) {
-                    scheduleRetry(outcome.attempt, outcome.backoffMillis)
-                } else {
-                    close()
+                )) {
+                    is StreamRetryController.Outcome.Retry -> scheduleRetry(outcome.attempt, outcome.backoffMillis)
+                    is StreamRetryController.Outcome.Terminate -> close(outcome.error)
                 }
             }
         }
@@ -300,8 +302,9 @@ class ResponseAPI(
             }
 
             // tools
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
-                putJsonArray("tools") {
+            val hasFunctionTools = params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+            val tools = buildJsonArray {
+                if (hasFunctionTools) {
                     params.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("type", "function")
@@ -316,29 +319,28 @@ class ResponseAPI(
                         })
                     }
                 }
-            }
-            // built-in tools
-            if (params.model.tools.isNotEmpty()) {
-                putJsonArray("tools") {
-                    params.model.tools.forEach { builtInTool ->
-                        when (builtInTool) {
-                            BuiltInTools.Search -> {
-                                add(buildJsonObject {
-                                    put("type", "web_search")
-                                })
-                            }
 
-                            BuiltInTools.UrlContext -> {} // not supported
+                params.model.tools.forEach { builtInTool ->
+                    when (builtInTool) {
+                        BuiltInTools.Search -> {
+                            add(buildJsonObject {
+                                put("type", "web_search")
+                            })
+                        }
 
-                            BuiltInTools.ImageGeneration -> {
-                                add(buildJsonObject {
-                                    put("type", "image_generation")
-                                    put("model", "gpt-image-2")
-                                })
-                            }
+                        BuiltInTools.UrlContext -> {} // not supported
+
+                        BuiltInTools.ImageGeneration -> {
+                            add(buildJsonObject {
+                                put("type", "image_generation")
+                                put("model", "gpt-image-2")
+                            })
                         }
                     }
                 }
+            }
+            if (tools.isNotEmpty()) {
+                put("tools", tools)
             }
         }.mergeCustomBody(params.customBody)
     }
@@ -397,13 +399,15 @@ class ResponseAPI(
                                 })
                             }
 
-                            is UIMessagePart.Image -> {
-                                if (contentBuffer.isNotEmpty()) {
-                                    addContentItem(MessageRole.ASSISTANT, contentBuffer)
-                                    contentBuffer.clear()
-                                }
-                                addContentItem(MessageRole.USER, listOf(part))
-                            }
+                            // An assistant-generated image (from image_generation) must NOT be replayed
+                            // into Responses history: it was previously emitted as a USER input_image,
+                            // attributing the model's own output to the user and corrupting multi-turn
+                            // history. The Responses API represents a prior generated image as an
+                            // image_generation_call item (id + result), which the stored Image part does
+                            // not carry — so the correct minimal behavior is to omit it from replay
+                            // rather than re-attribute it. Surrounding assistant text still flushes
+                            // normally as one assistant item.
+                            is UIMessagePart.Image -> {}
 
                             is UIMessagePart.Text -> {
                                 contentBuffer.add(part)
@@ -902,4 +906,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
-

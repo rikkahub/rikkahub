@@ -52,7 +52,7 @@ internal fun parseDiffStats(diff: String): DiffStats {
 fun DiffView(
     diff: String,
     modifier: Modifier = Modifier,
-    maxLines: Int = Int.MAX_VALUE,
+    maxLines: Int = RenderLimits.MAX_DIFF_LINES,
     showFileHeader: Boolean = true,
 ) {
     val allLines = remember(diff, showFileHeader) {
@@ -65,8 +65,7 @@ fun DiffView(
             lines
         }
     }
-    val lines = remember(allLines, maxLines) { allLines.take(maxLines) }
-    val truncated = allLines.size - lines.size
+    val (lines, truncated) = remember(allLines, maxLines) { diffVisibleLines(allLines, maxLines) }
 
     Column(
         modifier = modifier
@@ -111,7 +110,7 @@ private fun DiffLine(line: String) {
             MaterialTheme.colorScheme.onSurface to Color.Transparent
     }
     Text(
-        text = line.ifEmpty { " " },
+        text = line.take(RenderLimits.MAX_DIFF_LINE_CHARS).ifEmpty { " " },
         color = textColor,
         fontFamily = FontFamily.Monospace,
         fontSize = 11.sp,
@@ -122,4 +121,10 @@ private fun DiffLine(line: String) {
             .background(background)
             .padding(horizontal = 8.dp),
     )
+}
+
+internal fun diffVisibleLines(allLines: List<String>, maxLines: Int): Pair<List<String>, Int> {
+    val lines = if (maxLines >= 0) allLines.take(maxLines) else emptyList()
+    val truncated = (allLines.size - lines.size).coerceAtLeast(0)
+    return lines to truncated
 }

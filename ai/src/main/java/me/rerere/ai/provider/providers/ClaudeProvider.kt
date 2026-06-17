@@ -35,6 +35,7 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ClaudeReasoningMetadata
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
@@ -85,6 +86,13 @@ private const val CLAUDE_FP_BILLING =
     "x-anthropic-billing-header: cc_version=2.1.126.88c; cc_entrypoint=cli; cch=00000;"
 private const val CLAUDE_FP_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
 
+internal fun buildClaudeOAuthBetaHeader(oauthContext1M: Boolean, model: Model?): String =
+    if (oauthContext1M && model != null && ModelRegistry.supportsClaude1MContext(model.modelId)) {
+        "$CLAUDE_OAUTH_BETAS,$CLAUDE_OAUTH_CONTEXT_1M_BETA"
+    } else {
+        CLAUDE_OAUTH_BETAS
+    }
+
 class ClaudeProvider(
     private val client: OkHttpClient,
     context: Context? = null,
@@ -95,7 +103,10 @@ class ClaudeProvider(
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
     // OAuth token is used verbatim (not via KeyRoulette, which splits on whitespace/commas).
-    private fun Request.Builder.applyClaudeAuth(p: ProviderSetting.Claude): Request.Builder = when (p.authType) {
+    private fun Request.Builder.applyClaudeAuth(
+        p: ProviderSetting.Claude,
+        model: Model? = null
+    ): Request.Builder = when (p.authType) {
         ClaudeAuthType.ApiKey -> this
             .addHeader("x-api-key", keyRoulette.next(p.apiKey, p.id.toString()))
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
@@ -105,7 +116,7 @@ class ClaudeProvider(
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .addHeader(
                 "anthropic-beta",
-                if (p.oauthContext1M) "$CLAUDE_OAUTH_BETAS,$CLAUDE_OAUTH_CONTEXT_1M_BETA" else CLAUDE_OAUTH_BETAS
+                buildClaudeOAuthBetaHeader(p.oauthContext1M, model)
             )
             .header("User-Agent", CLAUDE_CODE_USER_AGENT)
     }
@@ -114,7 +125,7 @@ class ClaudeProvider(
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .applyClaudeAuth(providerSetting)
+                .applyClaudeAuth(providerSetting, model = null)
                 .get()
                 .build()
 
@@ -156,7 +167,7 @@ class ClaudeProvider(
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .applyClaudeAuth(providerSetting)
+            .applyClaudeAuth(providerSetting, params.model)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -206,7 +217,7 @@ class ClaudeProvider(
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .applyClaudeAuth(providerSetting)
+            .applyClaudeAuth(providerSetting, params.model)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -225,7 +236,10 @@ class ClaudeProvider(
         // leak-on-cancel). Once the first SSE event lands the gate disarms permanently — retrying
         // then would duplicate already-delivered (interleaved-thinking) content. See
         // StreamRetryPolicy / StreamRetryController.
-        val controller = StreamRetryController(STREAM_MAX_RETRIES) {
+        val controller = StreamRetryController(
+            maxRetries = STREAM_MAX_RETRIES,
+            replaySafety = StreamRetryController.ReplaySafety.NonIdempotent,
+        ) {
             StreamRetryController.Cancellable(factory.newEventSource(request, listener)::cancel)
         }
 
@@ -375,12 +389,13 @@ class ClaudeProvider(
                     return
                 }
 
-                var exception = t
+                val terminalOutcome = outcome as StreamRetryController.Outcome.Terminate
+                var exception = terminalOutcome.error
 
                 AiLog.failure(TAG, t, response?.code)
 
-                val bodyRaw = response?.body?.stringSafe()
                 try {
+                    val bodyRaw = response?.body?.stringSafe()
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
                         exception = bodyElement.parseErrorDetail()
@@ -393,15 +408,13 @@ class ClaudeProvider(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                // A clean EOF before the first frame is still a pre-first-frame death: retry it if
-                // budget remains, otherwise complete normally.
-                val outcome = controller.onClosed(
+                // A clean EOF before the first frame is still a pre-first-frame terminal:
+                // retry it if budget remains, otherwise propagate the terminal synthetic error.
+                when (val outcome = controller.onClosed(
                     backoffFor = { attempt -> jitteredBackoffMillis(attempt - 1, null) },
-                )
-                if (outcome is StreamRetryController.Outcome.Retry) {
-                    scheduleRetry(outcome.attempt, outcome.backoffMillis)
-                } else {
-                    close()
+                )) {
+                    is StreamRetryController.Outcome.Retry -> scheduleRetry(outcome.attempt, outcome.backoffMillis)
+                    is StreamRetryController.Outcome.Terminate -> close(outcome.error)
                 }
             }
         }

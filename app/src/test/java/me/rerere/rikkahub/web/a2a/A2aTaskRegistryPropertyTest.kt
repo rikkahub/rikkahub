@@ -142,5 +142,30 @@ class A2aTaskRegistryPropertyTest {
         assertTrue(registry.admit(contextId, assistantId, "m-2") is A2aAdmission.Duplicate)
     }
 
+    @Test
+    fun `active task cap enforces limits and keeps duplicate admission`() {
+        val registry = A2aTaskRegistry(maxActiveTasks = 3)
+
+        val contexts = List(3) { Uuid.random() }
+        val entries = contexts.map { contextId ->
+            registry.admit(contextId, Uuid.random(), "m-${contextId}")
+                as A2aAdmission.Accepted
+        }
+
+        assertEquals(A2aAdmission.CapacityExceeded(3), registry.admit(Uuid.random(), Uuid.random(), "m-over"))
+
+        assertEquals(
+            A2aAdmission.Duplicate(entries[0].entry),
+            registry.admit(contexts[0], Uuid.random(), "m-${contexts[0]}")
+        )
+
+        val fullTransitioned = registry.transition(entries[0].entry.taskId, A2aTaskState.COMPLETED, terminal = true)
+        assertEquals(A2aTaskState.COMPLETED, fullTransitioned?.state)
+        assertTrue(registry.admit(Uuid.random(), Uuid.random(), "m-new") is A2aAdmission.Accepted)
+
+        registry.rollbackAdmission(entries[1].entry.taskId)
+        assertTrue(registry.admit(Uuid.random(), Uuid.random(), "m-rollback") is A2aAdmission.Accepted)
+    }
+
     private var increment = 1
 }

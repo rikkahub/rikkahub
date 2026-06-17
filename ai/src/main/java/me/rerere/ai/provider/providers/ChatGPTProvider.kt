@@ -181,7 +181,10 @@ class ChatGPTProvider(
 
         // Pre-first-frame retry state lives behind the controller's lock — the proven structure
         // shared with ResponseAPI/ClaudeProvider; do not invent a new teardown path.
-        val controller = StreamRetryController(STREAM_MAX_RETRIES) {
+        val controller = StreamRetryController(
+            maxRetries = STREAM_MAX_RETRIES,
+            replaySafety = StreamRetryController.ReplaySafety.NonIdempotent,
+        ) {
             StreamRetryController.Cancellable(factory.newEventSource(request, listener)::cancel)
         }
 
@@ -244,10 +247,14 @@ class ChatGPTProvider(
 
                 // A 401 here is the expired/invalid-token case requireNonExpired could not prove
                 // (opaque token, clock skew): surface the clear expiry message as a backstop.
-                var exception: Throwable? = if (httpCode == 401) HttpException(EXPIRED_TOKEN_MESSAGE) else t
+                val terminalOutcome = outcome as StreamRetryController.Outcome.Terminate
+                var exception: Throwable? = terminalOutcome.error
+                if (httpCode == 401) {
+                    exception = HttpException(EXPIRED_TOKEN_MESSAGE)
+                }
 
-                val bodyRaw = response?.body?.stringSafe()
                 try {
+                    val bodyRaw = response?.body?.stringSafe()
                     if (httpCode != 401 && !bodyRaw.isNullOrBlank()) {
                         exception = Json.parseToJsonElement(bodyRaw).parseErrorDetail()
                     }
@@ -259,13 +266,11 @@ class ChatGPTProvider(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                val outcome = controller.onClosed(
+                when (val outcome = controller.onClosed(
                     backoffFor = { attempt -> jitteredBackoffMillis(attempt - 1, null) },
-                )
-                if (outcome is StreamRetryController.Outcome.Retry) {
-                    scheduleRetry(outcome.attempt, outcome.backoffMillis)
-                } else {
-                    close()
+                )) {
+                    is StreamRetryController.Outcome.Retry -> scheduleRetry(outcome.attempt, outcome.backoffMillis)
+                    is StreamRetryController.Outcome.Terminate -> close(outcome.error)
                 }
             }
         }

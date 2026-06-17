@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.ai.shellrun.RoomShellRunStore
 import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 import me.rerere.rikkahub.data.db.entity.ShellRunStatus
 import me.rerere.rikkahub.data.repository.BoardTransactionRunner
+import me.rerere.rikkahub.data.repository.fakes.FakeAgentEventDAO
 import me.rerere.rikkahub.data.repository.fakes.FakeShellRunDAO
 import me.rerere.rikkahub.data.repository.resolveTailFile
 import org.junit.After
@@ -73,7 +74,12 @@ class WorkspaceTailScopingTest {
     /** Two rows: taskA in ws-A/conv-A, taskB in ws-B/conv-B, each with its own real output file. */
     private fun fixture(): Triple<RoomShellRunStore, FakeShellRunDAO, Pair<Uuid, Uuid>> = runBlocking {
         val dao = FakeShellRunDAO()
-        val store = RoomShellRunStore(dao = dao, transactions = FakeTransactions(), now = { 1L })
+        val store = RoomShellRunStore(
+            dao = dao,
+            agentEventDao = FakeAgentEventDAO(),
+            transactions = FakeTransactions(),
+            now = { 1L },
+        )
         val taskA = Uuid.random()
         val taskB = Uuid.random()
         dao.insert(row(taskA, wsA, convA, tempOutput("AAA-output")))

@@ -102,7 +102,7 @@ class AutomationCoreActPropertyTest {
             checkAll(300, Arb.int(1..1000)) { advance ->
                 val backend = backend()
                 val core = AutomationCore(backend)
-                val grounded = core.observe() // grounded @ seq 1
+                val grounded = core.observe(setOf(backend.rawTree.foregroundPkg)) // grounded @ seq 1
                 repeat(advance) { backend.injectTransition() } // the screen moved under the model
                 val outcome = core.act(guard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.SCROLL_FORWARD))
                 assertEquals(ActOutcome.StaleState, outcome)
@@ -117,7 +117,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             backend.injectTransition() // a new state arrived; the grounded tids are now invalid
             val outcome = core.act(guard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.SCROLL_FORWARD))
             assertEquals(ActOutcome.StaleState, outcome)
@@ -131,7 +131,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val outcome = core.act(guard(), grounded, Act.Targeted(Selector.ByTid(999), NodeActionKind.SCROLL_FORWARD))
             assertEquals(ActOutcome.StaleState, outcome)
             assertTrue(backend.performed.isEmpty())
@@ -145,7 +145,7 @@ class AutomationCoreActPropertyTest {
             checkAll(200, Arb.string(1..12)) { newHash ->
                 val backend = backend()
                 val core = AutomationCore(backend)
-                val grounded = core.observe() // captures windowContentHash for seq 1
+                val grounded = core.observe(setOf(backend.rawTree.foregroundPkg)) // captures windowContentHash for seq 1
                 // A dropped WINDOW_STATE event: content changed but the seq stayed equal.
                 if (newHash != grounded.windowContentHash) {
                     backend.setContentHash(grounded.stateSeq, newHash)
@@ -163,7 +163,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = guard(verbs = setOf(Verb.OBSERVE)) // OBSERVE only — no SCROLL authority
             val outcome = core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.SCROLL_FORWARD))
             assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
@@ -177,7 +177,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = guard(verbs = setOf(Verb.GLOBAL), sinks = emptySet()) // verb ok, budget empty
             val outcome = core.act(g, grounded, Act.Global(GlobalNav.BACK))
             assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
@@ -191,7 +191,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = guard(now = 100, expiresAt = 50) // now > expiresAt
             val outcome = core.act(g, grounded, Act.Global(GlobalNav.HOME))
             assertEquals(ActOutcome.Denied(ActDenyReason.GUARD), outcome)
@@ -210,7 +210,7 @@ class AutomationCoreActPropertyTest {
             val host = me.rerere.automation.observe.SnapshotProjector.HOST_PACKAGE
             val backend = backend(pkg = host)
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             assertEquals(
                 "fixture must be a host-foreground grounding",
                 me.rerere.automation.observe.ScreenState.FOREGROUND_IS_HOST,
@@ -235,7 +235,7 @@ class AutomationCoreActPropertyTest {
             val host = me.rerere.automation.observe.SnapshotProjector.HOST_PACKAGE
             val backend = backend(pkg = host)
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = guard(pkg = host)
             val outcome = core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.SCROLL_FORWARD))
             assertEquals(ActOutcome.StaleState, outcome)
@@ -267,7 +267,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(ambiguousBackend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(ambiguousBackend.rawTree.foregroundPkg))
             assertEquals("fixture should project two same-text targets", 2, grounded.targets.size)
             val outcome = core.act(guard(), grounded, Act.Targeted(Selector.ByText("Same"), NodeActionKind.SCROLL_FORWARD))
             assertEquals(ActOutcome.Denied(ActDenyReason.AMBIGUOUS), outcome)
@@ -281,14 +281,14 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val outcome = core.act(guard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.SCROLL_FORWARD))
             assertTrue(outcome is ActOutcome.Acted)
             val snap = (outcome as ActOutcome.Acted).snapshot
             assertTrue("act success is the re-grounding postcondition", snap.stateSeq > grounded.stateSeq)
             assertEquals(1, backend.performed.size)
             assertEquals(
-                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.SCROLL_FORWARD),
+                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.SCROLL_FORWARD, allowedPackages = setOf(grounded.foregroundPkg)),
                 backend.performed.single(),
             )
             assertEquals("settle runs exactly once per act", 1, backend.settleCount)
@@ -301,7 +301,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val outcome = core.act(guard(), grounded, Act.Global(GlobalNav.BACK))
             assertTrue(outcome is ActOutcome.Acted)
             assertEquals(PerformAction.Global(GlobalNav.BACK), backend.performed.single())
@@ -314,7 +314,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = guard()
             backend.armGate() // the next perform() parks until the owning coroutine is cancelled
             val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
@@ -335,7 +335,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = guard()
             g.revoke()
             val outcome = core.act(g, grounded, Act.Global(GlobalNav.BACK))
@@ -358,7 +358,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe() // grounded @ seq 1
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg)) // grounded @ seq 1
             val g = guard()
             backend.armGate() // the next perform() parks until released
             val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
@@ -394,7 +394,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe() // grounded @ APP
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg)) // grounded @ APP
             val g = guard() // surface = {APP} only
             backend.armGate()
             val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
@@ -467,7 +467,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "hello")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             assertEquals("fixture must project the field's text", "hello", grounded.targets.first().text)
             val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "hello"))
             assertTrue("an idempotent set_text still succeeds", outcome is ActOutcome.Acted)
@@ -511,7 +511,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val field = grounded.targets.first()
             assertEquals("the display projection falls back to the hint", "Email", field.text)
             assertEquals("the editable value of a blank field is null (not the hint)", null, field.editableText)
@@ -520,7 +520,7 @@ class AutomationCoreActPropertyTest {
             assertTrue("writing the hint text into the blank field must dispatch", outcome is ActOutcome.Acted)
             assertEquals(
                 "the blank field must receive exactly one SetText (not a silent no-op)",
-                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = "Email"),
+                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = "Email", allowedPackages = setOf(grounded.foregroundPkg)),
                 backend.performed.single(),
             )
             assertEquals("a real write settles exactly once", 1, backend.settleCount)
@@ -535,12 +535,12 @@ class AutomationCoreActPropertyTest {
                 if (newText != "hello") {
                     val backend = editableBackend(text = "hello")
                     val core = AutomationCore(backend)
-                    val grounded = core.observe()
+                    val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
                     val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), newText))
                     assertTrue("a changing set_text dispatches", outcome is ActOutcome.Acted)
                     assertEquals(
                         "exactly one PerformAction.SetText on the grounded (stateSeq, tid)",
-                        PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = newText),
+                        PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = newText, allowedPackages = setOf(grounded.foregroundPkg)),
                         backend.performed.single(),
                     )
                     assertEquals("settle runs exactly once per dispatched act", 1, backend.settleCount)
@@ -595,9 +595,9 @@ class AutomationCoreActPropertyTest {
             // Ground with the target as tid 0, then reflow so the target is now tid 1 at a new seq.
             val backend = FakeBackend(twoFieldTree(seq = 1L, targetFirst = true))
             val core = AutomationCore(backend)
-            core.observe() // monotonic seq bookkeeping; grounded below is the reflowed one
+            core.observe(setOf(backend.rawTree.foregroundPkg)) // monotonic seq bookkeeping; grounded below is the reflowed one
             backend.rawTree = twoFieldTree(seq = 2L, targetFirst = false)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val targetTid = grounded.targets.first { it.formKey == "com.example.app:id/target" }.tid
             assertEquals("the reflow must have moved the target off tid 0", 1, targetTid)
 
@@ -609,7 +609,12 @@ class AutomationCoreActPropertyTest {
             assertTrue(byForm is ActOutcome.Acted)
             assertEquals(
                 "ByFormKey must dispatch the keyed element's CURRENT tid (self-heal)",
-                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = targetTid, text = "new"),
+                PerformAction.SetText(
+                    stateSeq = grounded.stateSeq,
+                    tid = targetTid,
+                    text = "new",
+                    allowedPackages = setOf(grounded.foregroundPkg),
+                ),
                 backend.performed.single(),
             )
         }
@@ -620,14 +625,14 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "old", contentDescription = "name-field")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val outcome = core.act(
                 setTextGuard(), grounded,
                 Act.SetText(Selector.BySemanticKey("name-field"), "new"),
             )
             assertTrue(outcome is ActOutcome.Acted)
             assertEquals(
-                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = "new"),
+                PerformAction.SetText(stateSeq = grounded.stateSeq, tid = 0, text = "new", allowedPackages = setOf(grounded.foregroundPkg)),
                 backend.performed.single(),
             )
         }
@@ -664,7 +669,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(ambiguous)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(ambiguous.rawTree.foregroundPkg))
             assertEquals("fixture should project two same-formKey fields", 2, grounded.targets.size)
             val outcome = core.act(
                 setTextGuard(), grounded,
@@ -681,7 +686,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "old")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             // Verb omitted (only SCROLL granted), but TYPE_INTO sink IS in budget — so the ONLY thing
             // that can refuse is the verb branch, proving the verb gate is reached before dispatch.
             val g = guard(verbs = setOf(Verb.SCROLL), sinks = setOf(Sink.TYPE_INTO))
@@ -697,7 +702,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "old")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             // SET_TEXT verb granted, but the TYPE_INTO sink budget is empty: the sink-in-budget branch
             // must DENY (a write verb laundering a sink that was never budgeted).
             val g = guard(verbs = setOf(Verb.SET_TEXT), sinks = emptySet())
@@ -731,7 +736,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(passwordBackend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(passwordBackend.rawTree.foregroundPkg))
             val pw = grounded.targets.first()
             assertTrue("fixture must project a password field", pw.flags.contains(UiFlag.PASSWORD))
             // Surface admits APP, SET_TEXT verb + TYPE_INTO sink are granted: the ONLY refusal source
@@ -763,7 +768,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(systemBackend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(systemBackend.rawTree.foregroundPkg))
             assertTrue(
                 "the projected target must carry its system-window provenance",
                 grounded.targets.first().systemWindow,
@@ -782,7 +787,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "old")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             backend.injectTransition() // the screen moved under the model
             val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "new"))
             assertEquals(ActOutcome.StaleState, outcome)
@@ -798,7 +803,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "old")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = setTextGuard()
             backend.armGate()
             val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
@@ -827,7 +832,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "old")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = setTextGuard()
             backend.armGate()
             val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
@@ -869,7 +874,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(systemBackend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(systemBackend.rawTree.foregroundPkg))
             assertTrue("fixture should project a system-window target", grounded.targets.isNotEmpty())
             assertTrue(
                 "the projected target must carry its system-window provenance",
@@ -947,7 +952,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(systemBackend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(systemBackend.rawTree.foregroundPkg))
             // STILL observable: the system-window target IS projected (the model must see the dialog to
             // reason about it — observation is never blocked, only the action is).
             assertTrue("a system-window target must remain observable", grounded.targets.isNotEmpty())
@@ -969,7 +974,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = clickableBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             // SCROLL granted but NOT TAP — the ONLY refusal source is the verb branch.
             val g = guard(verbs = setOf(Verb.SCROLL))
             val outcome = core.act(g, grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
@@ -1002,7 +1007,7 @@ class AutomationCoreActPropertyTest {
                 ),
             )
             val core = AutomationCore(passwordBackend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(passwordBackend.rawTree.foregroundPkg))
             assertTrue("fixture must project a password field", grounded.targets.first().flags.contains(UiFlag.PASSWORD))
             // Surface admits APP, TAP verb granted: the ONLY refusal source is the sensitive-node DENY.
             val outcome = core.act(tapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
@@ -1017,14 +1022,14 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = clickableBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val outcome = core.act(tapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
             assertTrue(outcome is ActOutcome.Acted)
             val snap = (outcome as ActOutcome.Acted).snapshot
             assertTrue("act success is the re-grounding postcondition", snap.stateSeq > grounded.stateSeq)
             assertEquals(
                 "exactly one PerformAction.Node CLICK on the grounded (stateSeq, tid)",
-                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK),
+                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK, allowedPackages = setOf(grounded.foregroundPkg)),
                 backend.performed.single(),
             )
             assertEquals("settle runs exactly once per tap", 1, backend.settleCount)
@@ -1040,7 +1045,7 @@ class AutomationCoreActPropertyTest {
             checkAll(200, Arb.int(1..1000)) { advance ->
                 val backend = clickableBackend()
                 val core = AutomationCore(backend)
-                val grounded = core.observe()
+                val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
                 repeat(advance) { backend.injectTransition() } // the screen moved under the model
                 val outcome = core.act(tapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK))
                 assertEquals(ActOutcome.StaleState, outcome)
@@ -1058,7 +1063,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = clickableBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = tapGuard()
             backend.armGate() // the next perform() parks until released
             val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
@@ -1087,7 +1092,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = clickableBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = tapGuard()
             backend.armGate()
             val entered = CompletableDeferred<Unit>().also { backend.performEntered = it }
@@ -1180,14 +1185,14 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = submitButtonBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val confirm = FakeConfirmChannel(nextResult = true)
             val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
             assertTrue("a confirmed submit-class tap succeeds", outcome is ActOutcome.Acted)
             assertEquals("the dangerous-sink gate must consult the confirm exactly once", 1, confirm.confirmCount)
             assertEquals(
                 "exactly one CLICK on the grounded (stateSeq, tid)",
-                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK),
+                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK, allowedPackages = setOf(grounded.foregroundPkg)),
                 backend.performed.single(),
             )
             assertEquals("settle runs exactly once per dispatched act", 1, backend.settleCount)
@@ -1202,7 +1207,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = submitButtonBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val confirm = FakeConfirmChannel(nextResult = false)
             val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
             assertEquals(
@@ -1223,7 +1228,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = submitButtonBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             // The channel returns false to model a fail-closed timeout (withTimeoutOrNull → false in prod).
             val confirm = FakeConfirmChannel(nextResult = false)
             val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), confirm)
@@ -1241,7 +1246,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = submitButtonBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val throwing = ConfirmChannel { _, _, _ -> throw RuntimeException("overlay could not attach") }
             val outcome = core.act(submitTapGuard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK), throwing)
             assertEquals(
@@ -1262,7 +1267,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend() // scrollable list, tid 0
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val confirm = FakeConfirmChannel(nextResult = true)
             val outcome = core.act(guard(), grounded, Act.Targeted(Selector.ByTid(0), NodeActionKind.SCROLL_FORWARD), confirm)
             assertTrue(outcome is ActOutcome.Acted)
@@ -1276,7 +1281,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = backend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val confirm = FakeConfirmChannel(nextResult = true)
             val outcome = core.act(guard(), grounded, Act.Global(GlobalNav.BACK), confirm)
             assertTrue(outcome is ActOutcome.Acted)
@@ -1289,7 +1294,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = editableBackend(text = "old")
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val confirm = FakeConfirmChannel(nextResult = true)
             val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "new"), confirm)
             assertTrue(outcome is ActOutcome.Acted)
@@ -1304,7 +1309,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = clickableBackend() // "OK" button, tid 0
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val confirm = FakeConfirmChannel(nextResult = true)
             // submitTapGuard grants SUBMIT in budget, so if the classifier WRONGLY flagged "OK" as
             // submit-class the gate WOULD fire — confirmCount==0 proves "OK" is correctly non-submit.
@@ -1312,7 +1317,7 @@ class AutomationCoreActPropertyTest {
             assertTrue(outcome is ActOutcome.Acted)
             assertEquals("a benign tap is not submit-class ⇒ the confirm must NEVER fire", 0, confirm.confirmCount)
             assertEquals(
-                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK),
+                PerformAction.Node(stateSeq = grounded.stateSeq, tid = 0, kind = NodeActionKind.CLICK, allowedPackages = setOf(grounded.foregroundPkg)),
                 backend.performed.single(),
             )
         }
@@ -1329,7 +1334,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = submitButtonBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             val g = submitTapGuard()
             val confirm = FakeConfirmChannel(nextResult = true, park = true)
             val job: Job = launch(Dispatchers.Default) {
@@ -1353,7 +1358,7 @@ class AutomationCoreActPropertyTest {
         runBlocking {
             val backend = submitButtonBackend()
             val core = AutomationCore(backend)
-            val grounded = core.observe()
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
             // The DEFAULT-lease shape: TAP granted, but the SUBMIT sink is NOT in budget (only GLOBAL_NAV).
             val g = guard(verbs = setOf(Verb.TAP, Verb.SCROLL, Verb.GLOBAL), sinks = setOf(Sink.GLOBAL_NAV))
             val confirm = FakeConfirmChannel(nextResult = true)

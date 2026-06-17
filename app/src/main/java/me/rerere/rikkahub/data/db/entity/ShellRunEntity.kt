@@ -32,9 +32,12 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "shell_runs",
     indices = [
-        // The cold-start recovery scan filters running rows by (conversation_id, status); the
-        // covering index keeps that scan off a full table walk.
+        // Per-conversation cleanup (deleteByConversationId) filters by conversation_id.
         Index(value = ["conversation_id", "status"]),
+        // The cold-start recovery scan is conversation-agnostic — `WHERE status IN (...)`. The index
+        // above leads with conversation_id, so a status-only predicate full-scans as rows accumulate.
+        // A status-leading index keeps that recovery scan off a full table walk.
+        Index(value = ["status"]),
     ],
 )
 data class ShellRunEntity(

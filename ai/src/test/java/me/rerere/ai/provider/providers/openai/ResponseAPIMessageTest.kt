@@ -1,5 +1,10 @@
 package me.rerere.ai.provider.providers.openai
 
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.string
+import io.kotest.property.checkAll
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -7,8 +12,11 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
@@ -515,7 +523,141 @@ class ResponseAPIMessageTest {
         )
     }
 
+    @Test
+    fun `response api function-only tools should serialize all function entries and omit built-ins`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "gpt-response",
+                    abilities = listOf(ModelAbility.TOOL)
+                ),
+                tools = listOf(createFunctionTool("search"), createFunctionTool("calculator"))
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(2, tools?.size)
+        val functionNames = functionToolNames(requestBody)
+        assertTrue(functionNames.contains("search"))
+        assertTrue(functionNames.contains("calculator"))
+        assertEquals(0, builtInToolCount(requestBody, "web_search"))
+    }
+
+    @Test
+    fun `response api builtin-only search should serialize web_search only`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(modelId = "gpt-response", tools = setOf(BuiltInTools.Search))
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(1, tools?.size)
+        assertEquals("web_search", tools?.get(0)?.jsonObject?.get("type")?.jsonPrimitive?.content)
+        assertEquals(0, functionToolCount(requestBody))
+    }
+
+    @Test
+    fun `response api should not include tools when neither function nor builtin tools exist`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(model = Model(modelId = "gpt-response"))
+        )
+
+        assertEquals(null, requestBody["tools"])
+    }
+
+    @Test
+    fun `response api should combine function tools and builtin web_search in one merged tools array`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "gpt-response",
+                    abilities = listOf(ModelAbility.TOOL),
+                    tools = setOf(BuiltInTools.Search)
+                ),
+                tools = listOf(createFunctionTool("search"), createFunctionTool("calculator"))
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(3, tools?.size)
+        assertEquals(2, functionToolCount(requestBody))
+        assertEquals(1, builtInToolCount(requestBody, "web_search"))
+        assertTrue(functionToolNames(requestBody).containsAll(listOf("search", "calculator")))
+    }
+
+    @Test
+    fun `response api should keep function tool names when builtin search is added`() {
+        runBlocking {
+            checkAll(200, Arb.list(Arb.string(1..8), 1..4)) { names ->
+                val functionNames = names.distinct().filter { it.isNotBlank() }
+                if (functionNames.isEmpty()) return@checkAll
+
+                val baseRequest = invokeBuildRequestBody(
+                    providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+                    params = TextGenerationParams(
+                        model = Model(
+                            modelId = "gpt-response",
+                            abilities = listOf(ModelAbility.TOOL)
+                        ),
+                        tools = functionNames.map { createFunctionTool(it) }
+                    )
+                )
+
+                val requestWithBuiltin = invokeBuildRequestBody(
+                    providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+                    params = TextGenerationParams(
+                        model = Model(
+                            modelId = "gpt-response",
+                            abilities = listOf(ModelAbility.TOOL),
+                            tools = setOf(BuiltInTools.Search)
+                        ),
+                        tools = functionNames.map { createFunctionTool(it) }
+                    )
+                )
+
+                assertEquals(
+                    functionToolNames(baseRequest).sorted(),
+                    functionToolNames(requestWithBuiltin).sorted()
+                )
+                assertEquals(1, builtInToolCount(requestWithBuiltin, "web_search"))
+                assertEquals(
+                    functionToolCount(baseRequest) + 1,
+                    requestWithBuiltin["tools"]?.jsonArray?.size ?: 0
+                )
+            }
+        }
+    }
+
     // ==================== Helper Functions ====================
+
+    private fun functionToolNames(requestBody: JsonObject): List<String> =
+        requestBody["tools"]?.jsonArray
+            ?.filter { it.jsonObject["type"]?.jsonPrimitive?.content == "function" }
+            ?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content }
+            ?: emptyList()
+
+    private fun functionToolCount(requestBody: JsonObject): Int =
+        requestBody["tools"]?.jsonArray
+            ?.count { it.jsonObject["type"]?.jsonPrimitive?.content == "function" }
+            ?: 0
+
+    private fun builtInToolCount(requestBody: JsonObject, type: String): Int =
+        requestBody["tools"]?.jsonArray
+            ?.count { it.jsonObject["type"]?.jsonPrimitive?.content == type }
+            ?: 0
+
+    private fun createFunctionTool(name: String): Tool =
+        Tool(
+            name = name,
+            description = "test function tool",
+            parameters = { InputSchema.Obj(properties = JsonObject(emptyMap())) },
+            execute = { emptyList() }
+        )
 
     private fun parseToJsonObject(raw: String): JsonObject =
         kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonObject
@@ -531,6 +673,40 @@ class ResponseAPIMessageTest {
             toolName = name,
             input = input,
             output = listOf(UIMessagePart.Text(output))
+        )
+    }
+
+    // ---- C25: an assistant-generated image must not be replayed as a USER input_image ----
+
+    @Test
+    fun `assistant generated image is omitted from replay, never re-attributed to user`() {
+        val assistantWithImage = UIMessage.assistant("here is your image").copy(
+            parts = listOf(
+                UIMessagePart.Text("here is your image"),
+                UIMessagePart.Image(url = "https://example.invalid/generated.png"),
+            ),
+        )
+
+        val items = invokeBuildMessages(listOf(assistantWithImage))
+
+        assertFalse(
+            "no user-role item may be synthesized from an assistant image",
+            items.any { it.jsonObject["role"]?.jsonPrimitive?.content == "user" },
+        )
+        assertFalse(
+            "the assistant image must not be replayed as input_image",
+            items.toString().contains("input_image"),
+        )
+        assertTrue("assistant text is preserved", items.toString().contains("here is your image"))
+    }
+
+    @Test
+    fun `a normal user message still produces a user item`() {
+        val items = invokeBuildMessages(listOf(UIMessage.user("look at this")))
+
+        assertTrue(
+            "a normal user message still produces a user item",
+            items.any { it.jsonObject["role"]?.jsonPrimitive?.content == "user" },
         )
     }
 }

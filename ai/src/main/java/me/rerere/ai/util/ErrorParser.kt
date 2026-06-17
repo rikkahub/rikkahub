@@ -14,11 +14,20 @@ class HttpException(
 /**
  * Resolves a non-2xx response body into the typed [HttpException] the streaming paths already
  * produce (their onFailure handlers route the body through [parseErrorDetail]). A non-JSON body
- * (e.g. an HTML proxy error page) falls back to the raw code+body shape so nothing is lost.
+ * (e.g. an HTML proxy error page) falls back to the raw code+body shape so nothing is lost — but
+ * the body is bounded first: a verbose HTML error page or a multi-megabyte upstream dump must not
+ * be copied verbatim into an exception message (and from there into logs / any surfaced error).
  */
 fun parseHttpErrorBody(code: Int, body: String): HttpException =
     runCatching { Json.parseToJsonElement(body).parseErrorDetail() }
-        .getOrElse { HttpException("Failed to get response: $code $body") }
+        .getOrElse { HttpException("Failed to get response: $code ${body.truncateForErrorMessage()}") }
+
+internal const val MAX_ERROR_BODY_CHARS = 2000
+
+/** Cap an untrusted upstream error body so it stays a readable diagnostic, not a memory/log bomb. */
+internal fun String.truncateForErrorMessage(): String =
+    if (length <= MAX_ERROR_BODY_CHARS) this
+    else take(MAX_ERROR_BODY_CHARS) + "… (${length - MAX_ERROR_BODY_CHARS} more chars truncated)"
 
 fun JsonElement.parseErrorDetail(): HttpException {
     return when (this) {
@@ -34,7 +43,7 @@ fun JsonElement.parseErrorDetail(): HttpException {
                 this[foundField]!!.parseErrorDetail()
             } else {
                 // 如果没有找到任何错误字段，序列化整个对象
-                HttpException(Json.encodeToString(JsonElement.serializer(), this))
+                HttpException(Json.encodeToString(JsonElement.serializer(), this).truncateForErrorMessage())
             }
         }
 
@@ -49,7 +58,9 @@ fun JsonElement.parseErrorDetail(): HttpException {
 
         is JsonPrimitive -> {
             // 对于基本类型，直接使用其内容
-            HttpException(this.jsonPrimitive.content)
+            // A non-JSON body (HTML proxy page) parses to a bare string primitive and lands here,
+            // so this is the actual verbatim-copy path — bound it like the other leaves.
+            HttpException(this.jsonPrimitive.content.truncateForErrorMessage())
         }
     }
 }

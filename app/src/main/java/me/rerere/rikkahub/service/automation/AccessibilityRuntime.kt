@@ -2,6 +2,7 @@ package me.rerere.rikkahub.service.automation
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -24,6 +25,7 @@ import me.rerere.automation.backend.PerformAction
 import me.rerere.automation.backend.RawNode
 import me.rerere.automation.backend.RawTree
 import me.rerere.automation.backend.RawWindow
+import me.rerere.automation.observe.SnapshotProjector
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -342,7 +344,10 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                             // (system-UI/password DENY) already ran in the core before this dispatches.
                             NodeActionKind.CLICK -> AccessibilityNodeInfo.ACTION_CLICK
                         }
-                        performOnProjectedNode(action.tid) { it.performAction(actionId) }
+                        performOnProjectedNode(
+                            tid = action.tid,
+                            allowedPackages = action.allowedPackages,
+                        ) { it.performAction(actionId) }
                     }
                 }
 
@@ -360,7 +365,10 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                                 action.text,
                             )
                         }
-                        performOnProjectedNode(action.tid) {
+                        performOnProjectedNode(
+                            tid = action.tid,
+                            allowedPackages = action.allowedPackages,
+                        ) {
                             it.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
                         }
                     }
@@ -390,13 +398,19 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
      * before this walk (atomically under the same lock), so the tree this walks is the one the core
      * asserted. Out-of-range tid ⇒ false (the core treats dispatch as a best-effort ack).
      */
-    private fun performOnProjectedNode(tid: Int, perform: (AccessibilityNodeInfo) -> Boolean): Boolean {
+    private fun performOnProjectedNode(
+        tid: Int,
+        allowedPackages: Set<String>,
+        perform: (AccessibilityNodeInfo) -> Boolean,
+    ): Boolean {
         val cursor = intArrayOf(0) // running projected-node index, mutated across the recursive walk
         for (window in windows.orEmpty()) {
             try {
                 val root = window.root ?: continue // secure/inaccessible window: skip (matches toRawWindow)
                 try {
-                    if (root.packageName?.toString() == HOST_PACKAGE) continue // host excluded (projector P2)
+                    val pkg = root.packageName?.toString() ?: continue
+                    val systemWindow = isSystemWindow(pkg, window.type)
+                    if (!SnapshotProjector.isWindowEligible(pkg, systemWindow, allowedPackages)) continue
                     walkAndPerform(root, tid, cursor, perform)?.let { return it }
                 } finally {
                     @Suppress("DEPRECATION") // recycle() required below API 33 (no-op above); minSdk 26
@@ -487,7 +501,7 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                 // (The projector's window-level `secure` short-circuit is wired for a future backend
                 // that CAN read the flag, e.g. an ADB backend; it is intentionally never true here.)
                 secure = false,
-                systemWindow = type == AccessibilityWindowInfo.TYPE_SYSTEM || pkg.isSystemUiPackage(),
+                systemWindow = isSystemWindow(pkg, type),
                 root = root.toRawNode(),
             )
         } finally {
@@ -531,6 +545,14 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
 
     private fun String.isSystemUiPackage(): Boolean =
         this == "com.android.systemui" || this.endsWith("packageinstaller")
+
+    private fun isSystemWindow(pkg: String, type: Int): Boolean =
+        type == AccessibilityWindowInfo.TYPE_SYSTEM ||
+            (pkg.isSystemUiPackage() && isVerifiedSystemPackage(pkg))
+
+    private fun isVerifiedSystemPackage(pkg: String): Boolean = runCatching {
+        (packageManager.getApplicationInfo(pkg, 0).flags and ApplicationInfo.FLAG_SYSTEM) != 0
+    }.getOrDefault(false)
 
     companion object {
         const val HOST_PACKAGE = "me.rerere.rikkahub"

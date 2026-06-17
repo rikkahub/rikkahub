@@ -61,7 +61,7 @@ class AccessibilityRuntimeContractTest {
                 root = RawNode(text = "host chrome", className = "android.widget.TextView"),
             ),
         )
-        val snapshot = projector.project(backend(withHostWindow).snapshotRawTree())
+        val snapshot = projector.project(backend(withHostWindow).snapshotRawTree(), setOf("com.example.target"))
 
         assertTrue(
             "host package content must never reach the projected targets",
@@ -95,7 +95,7 @@ class AccessibilityRuntimeContractTest {
             foregroundPkg = "me.rerere.rikkahub",
             windows = listOf(RawWindow(pkg = "me.rerere.rikkahub", root = RawNode(text = "chat"))),
         )
-        val snapshot = projector.project(backend(hostForeground).snapshotRawTree())
+        val snapshot = projector.project(backend(hostForeground).snapshotRawTree(), setOf("me.rerere.rikkahub"))
         assertEquals(ScreenState.FOREGROUND_IS_HOST, snapshot.screenState)
         assertTrue(snapshot.targets.isEmpty())
     }

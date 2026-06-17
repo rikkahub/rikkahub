@@ -6,6 +6,8 @@ import me.rerere.automation.backend.FakeBackend
 import me.rerere.automation.backend.RawNode
 import me.rerere.automation.backend.RawTree
 import me.rerere.automation.backend.RawWindow
+import me.rerere.automation.backend.NodeActionKind
+import me.rerere.automation.backend.PerformAction
 import me.rerere.automation.observe.ScreenState
 import me.rerere.automation.observe.SnapshotProjector
 import me.rerere.automation.observe.UiFlag
@@ -54,7 +56,7 @@ class FakeBackendSmokeTest {
             val backend = FakeBackend(tree)
             val core = AutomationCore(backend, SnapshotProjector())
 
-            val snap = core.observe()
+            val snap = core.observe(setOf(backend.rawTree.foregroundPkg))
 
             assertEquals(7L, snap.stateSeq)
             assertEquals("com.example.app", snap.foregroundPkg)
@@ -68,5 +70,43 @@ class FakeBackendSmokeTest {
             // The backend was actually hit exactly once.
             assertEquals(1, backend.snapshotCount)
         }
+    }
+
+    @Test
+    fun `FakeBackendParitySkipsUnallowedLeadingWindow`() {
+        val tree = RawTree(
+            stateSeq = 8L,
+            foregroundPkg = "com.example.app",
+            windows = listOf(
+                RawWindow(
+                    pkg = "com.evil.packageinstaller",
+                    root = RawNode(text = "Foreign", className = "TextView", visible = true, hasArea = true),
+                ),
+                RawWindow(
+                    pkg = "com.example.app",
+                    root = RawNode(text = "Granted", className = "TextView", visible = true, hasArea = true),
+                ),
+            ),
+        )
+        val backend = FakeBackend(tree)
+        val projector = SnapshotProjector()
+        val snap = projector.project(tree, setOf(backend.rawTree.foregroundPkg))
+        val grantedTarget = snap.targets.first { it.sourcePackage == backend.rawTree.foregroundPkg }
+
+        val action = PerformAction.Node(
+            stateSeq = backend.rawTree.stateSeq,
+            tid = grantedTarget.tid,
+            kind = NodeActionKind.SCROLL_FORWARD,
+            allowedPackages = setOf(backend.rawTree.foregroundPkg),
+        )
+        val dispatched = runBlocking {
+            backend.perform(action)
+        }
+
+        assertTrue("a parity-safe backend must actually dispatch the action", dispatched)
+        assertEquals("projection-derived tid must target the granted package", "com.example.app", backend.lastPerformedWindow)
+        assertEquals(1, backend.performed.size)
+        assertEquals(action, backend.performed.first())
+        assertEquals("non-allowed leading window should not steal the granted tid", "Granted", grantedTarget.text)
     }
 }

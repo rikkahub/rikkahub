@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.mcp
 
+import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpError
 import io.modelcontextprotocol.kotlin.sdk.types.McpException
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
@@ -97,6 +98,40 @@ class McpCallToolHealTest {
     @Test
     fun isMcpTransportClosed_rejectsCancellation() {
         assertFalse(isMcpTransportClosed(CancellationException("scope cancelled")))
+    }
+
+    @Test
+    fun isMcpTransportClosed_matchesStreamableHttpPostFailure() {
+        // StreamableHttpClientTransport.performSend on a non-2xx POST — a real transport drop. It is NOT
+        // an IOException, so before the type-partitioned classifier this under-matched (no heal).
+        assertTrue(isMcpTransportClosed(StreamableHttpError(502, "Bad Gateway")))
+    }
+
+    @Test
+    fun isMcpTransportClosed_matchesStreamableHttpNullCodeStreamError() {
+        // A server-sent SSE "error" event surfaces as StreamableHttpError(null, ...) — a dropped stream.
+        assertTrue(isMcpTransportClosed(StreamableHttpError(null, "stream error")))
+    }
+
+    @Test
+    fun isMcpTransportClosed_rejectsStreamableUnexpectedContentType() {
+        // code == -1 is the one non-transport case (server returned 2xx with the wrong content type, a
+        // deterministic protocol mismatch a reconnect cannot fix) — must NOT trigger a heal.
+        assertFalse(isMcpTransportClosed(StreamableHttpError(-1, "Unexpected content type: text/plain")))
+    }
+
+    @Test
+    fun isMcpTransportClosed_rejectsClosedLookingNonTransportRpcError() {
+        // OVER-match guard: a server JSON-RPC error whose message merely contains "is closed" is a real
+        // tool/protocol error (code != -32000), not a dead transport — matching by code keeps it untouched.
+        assertFalse(isMcpTransportClosed(McpException(-32603, "the database is closed")))
+    }
+
+    @Test
+    fun isMcpTransportClosed_rejectsClosedLookingNonIllegalStateError() {
+        // OVER-match guard: only the SDK's transport IllegalStateException signals count; an arbitrary
+        // throwable carrying a closed-looking message must not be misread as a dead transport.
+        assertFalse(isMcpTransportClosed(RuntimeException("Connection closed by peer")))
     }
 
     // ---- callToolWithHeal control flow ----

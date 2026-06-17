@@ -59,6 +59,20 @@ class IncompleteToolCallExecutionTest {
     }
 
     @Test
+    fun `toolExecutionErrorResult redacts the stack trace and package-qualified class name`() {
+        // A throwable whose stack trace and FQCN carry internal file paths / package
+        // layout. The model-facing payload must keep only the actionable summary.
+        val boom = IllegalStateException("disk at /home/user/secret/path failed")
+        val text = (toolExecutionErrorResult(json, boom).single() as UIMessagePart.Text).text
+
+        assertTrue("summary keeps the simple class name", text.contains("IllegalStateException"))
+        assertTrue("summary keeps the message", text.contains("disk at"))
+        assertFalse("must not leak the FQCN", text.contains(IllegalStateException::class.java.name))
+        assertFalse("must not leak stack frames", text.contains("\tat "))
+        assertFalse("must not leak the runtime package path", text.contains("at me.rerere"))
+    }
+
+    @Test
     fun `tool that succeeds with empty output is recorded as executed with an honest success placeholder`() {
         // Regression for the data-loss trigger: a tool whose execute() returns
         // emptyList() left output empty, so isExecuted stayed false. The agentic
@@ -172,15 +186,21 @@ class IncompleteToolCallExecutionTest {
     }
 
     @Test
-    fun `executeTool turns a plain exception into an error JSON naming the throwable class`() = runBlocking {
+    fun `executeTool turns a plain exception into a redacted error JSON without a stack trace`() = runBlocking {
         val executed = toolPart(input = "{}", finished = true, approvalState = ToolApprovalState.Approved)
         val boom = IllegalStateException("boom")
         val tools = listOf<Tool>(toolDef("search") { throw boom })
         val result = executeTool(executed, tools, json, RecordingLogSink())
         val text = (result.output.single() as UIMessagePart.Text).text
         assertTrue(text.contains("error"))
-        assertTrue(text.contains(IllegalStateException::class.java.name))
+        // Actionable summary: simple class name + message, so the model can react.
+        assertTrue(text.contains(IllegalStateException::class.java.simpleName))
         assertTrue(text.contains("boom"))
+        // Redaction: the model-facing payload must NOT leak the package-qualified
+        // class name or any stack frame (internal file paths / package layout).
+        assertFalse(text.contains(IllegalStateException::class.java.name))
+        assertFalse(text.contains("at me.rerere"))
+        assertFalse(text.contains("\tat "))
     }
 
     @Test

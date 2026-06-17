@@ -16,7 +16,6 @@ object ThinkTagTransformer : OutputMessageTransformer {
         messages = messages,
         now = Clock.System.now(),
         zone = TimeZone.currentSystemDefault(),
-        finishUnclosed = false,
     )
 
     override suspend fun onGenerationFinish(
@@ -26,6 +25,5 @@ object ThinkTagTransformer : OutputMessageTransformer {
         messages = messages,
         now = Clock.System.now(),
         zone = TimeZone.currentSystemDefault(),
-        finishUnclosed = true,
     )
 }

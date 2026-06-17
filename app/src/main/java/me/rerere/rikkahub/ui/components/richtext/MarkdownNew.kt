@@ -100,9 +100,17 @@ internal fun HtmlStyledElement(
 }
 
 @Composable
-internal fun HtmlBodyNode(node: Node, onClickCitation: (String) -> Unit) {
+internal fun HtmlBodyNode(
+    node: Node,
+    onClickCitation: (String) -> Unit,
+    depth: Int = 0,
+) {
     when (node) {
-        is Element -> HtmlBlockElement(element = node, onClickCitation = onClickCitation)
+        is Element -> HtmlBlockElement(
+            element = node,
+            onClickCitation = onClickCitation,
+            depth = depth,
+        )
         is TextNode -> {
             val text = node.text().trim()
             if (text.isNotEmpty()) Text(text = text)
@@ -115,7 +123,13 @@ private fun HtmlBlockElement(
     element: Element,
     onClickCitation: (String) -> Unit,
     listLevel: Int = 0,
+    depth: Int = 0,
 ) {
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        Text(text = element.text())
+        return
+    }
+
     when (element.tagName().lowercase()) {
         "p" -> HtmlParagraph(
             element = element,
@@ -135,6 +149,7 @@ private fun HtmlBlockElement(
             ordered = false,
             onClickCitation = onClickCitation,
             level = listLevel,
+            depth = depth + 1,
         )
 
         "ol" -> HtmlList(
@@ -142,12 +157,17 @@ private fun HtmlBlockElement(
             ordered = true,
             onClickCitation = onClickCitation,
             level = listLevel,
+            depth = depth + 1,
         )
 
         "pre" -> HtmlCodeBlock(element = element)
 
         "blockquote" -> HtmlStyledElement(element = element) {
-            HtmlBlockquote(element = element, onClickCitation = onClickCitation)
+            HtmlBlockquote(
+                element = element,
+                onClickCitation = onClickCitation,
+                depth = depth + 1,
+            )
         }
 
         "table" -> HtmlStyledElement(element = element) {
@@ -164,15 +184,20 @@ private fun HtmlBlockElement(
             val src = element.attr("src")
             val alt = element.attr("alt")
             if (src.isNotEmpty()) {
+                val safeSrc = sanitizeLinkUri(src)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    ZoomableAsyncImage(
-                        model = src,
-                        contentDescription = alt.takeIf { it.isNotEmpty() },
-                        modifier = Modifier
+                    if (safeSrc != null && isAllowedImageUri(safeSrc)) {
+                        ZoomableAsyncImage(
+                            model = safeSrc,
+                            contentDescription = alt.takeIf { it.isNotEmpty() },
+                            modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .widthIn(min = 120.dp)
                             .heightIn(min = 120.dp),
-                    )
+                        )
+                    } else if (alt.isNotBlank()) {
+                        Text(text = alt)
+                    }
                 }
             }
         }
@@ -187,20 +212,28 @@ private fun HtmlBlockElement(
         }
 
         "details" -> HtmlStyledElement(element = element) {
-            HtmlDetails(element = element, onClickCitation = onClickCitation)
+            HtmlDetails(
+                element = element,
+                onClickCitation = onClickCitation,
+                depth = depth + 1,
+            )
         }
 
         "progress" -> HtmlProgress(element = element)
 
         "div" -> HtmlStyledElement(element = element) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                element.childNodes().fastForEach { HtmlBodyNode(it, onClickCitation) }
+                element.childNodes().fastForEach {
+                    HtmlBodyNode(node = it, onClickCitation = onClickCitation, depth = depth + 1)
+                }
             }
         }
 
         else -> HtmlStyledElement(element = element) {
             // Generic fallback: recurse into children
-            element.childNodes().forEach { HtmlBodyNode(it, onClickCitation) }
+            element.childNodes().forEach {
+                HtmlBodyNode(node = it, onClickCitation = onClickCitation, depth = depth + 1)
+            }
         }
     }
 }

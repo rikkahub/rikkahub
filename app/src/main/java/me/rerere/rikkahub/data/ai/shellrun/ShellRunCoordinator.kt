@@ -237,15 +237,17 @@ class ShellRunCoordinator(
         result: WorkspaceCommandResult,
     ) {
         val status = terminalStatusOf(result, handle.killReason)
+        // The completion is built lazily inside the store transaction, and ONLY for a detached CAS
+        // winner: building it calls handle.tail(), an uncaught file read, which must never run on the
+        // inline path (an inline run must terminalise even if its tail read would have failed). The
+        // store inserts the durable #290 event in the SAME transaction and hands the built row back.
         val terminal = store.recordTerminal(
             taskId = taskId,
             status = status,
             exitCode = result.exitCode,
             byteCount = handle.byteCount,
             killReason = handle.killReason?.name,
-        )
-        if (terminal.outcome == TerminalOutcome.Won && terminal.wasDetached) {
-            onCompletion(
+            buildCompletion = {
                 ShellCompletion.of(
                     conversationId = request.conversationId,
                     taskId = taskId,
@@ -255,8 +257,9 @@ class ShellRunCoordinator(
                     tail = handle.tail(DETACH_TAIL_BYTES),
                     byteCount = handle.byteCount,
                 )
-            )
-        }
+            },
+        )
+        terminal.completion?.let { onCompletion(it) }
     }
 
     companion object {

@@ -110,14 +110,19 @@ internal fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Uni
                     val src = node.attr("src")
                     val alt = node.attr("alt")
                     if (src.isNotEmpty()) {
-                        ZoomableAsyncImage(
-                            model = src,
-                            contentDescription = alt.takeIf { it.isNotEmpty() },
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                        val safeSrc = sanitizeLinkUri(src)
+                        if (safeSrc != null && isAllowedImageUri(safeSrc)) {
+                            ZoomableAsyncImage(
+                                model = safeSrc,
+                                contentDescription = alt.takeIf { it.isNotEmpty() },
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
                                 .widthIn(min = 120.dp)
                                 .heightIn(min = 120.dp),
-                        )
+                            )
+                        } else if (alt.isNotBlank()) {
+                            Text(text = alt)
+                        }
                     }
                 }
 
@@ -174,6 +179,7 @@ internal fun AnnotatedString.Builder.appendHtmlInlineNode(
     style: TextStyle,
     enableLatexRendering: Boolean,
     onClickCitation: (String) -> Unit,
+    depth: Int = 0,
 ) {
     when (node) {
         is TextNode -> append(node.text())
@@ -185,6 +191,7 @@ internal fun AnnotatedString.Builder.appendHtmlInlineNode(
             style = style,
             enableLatexRendering = enableLatexRendering,
             onClickCitation = onClickCitation,
+            depth = depth,
         )
     }
 }
@@ -197,7 +204,13 @@ internal fun AnnotatedString.Builder.appendHtmlInlineElement(
     style: TextStyle,
     enableLatexRendering: Boolean,
     onClickCitation: (String) -> Unit,
+    depth: Int = 0,
 ) {
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        append(element.text())
+        return
+    }
+
     val cssStyle = element.attr("style").takeIf { it.isNotBlank() }?.let {
         MarkdownCss.parseInlineSpanStyle(
             style = it,
@@ -215,6 +228,7 @@ internal fun AnnotatedString.Builder.appendHtmlInlineElement(
             style = inheritedStyle,
             enableLatexRendering = enableLatexRendering,
             onClickCitation = onClickCitation,
+            depth = depth + 1,
         )
     }
 
@@ -303,9 +317,14 @@ internal fun AnnotatedString.Builder.appendHtmlInlineElement(
                         color = colorScheme.primary,
                         textDecoration = TextDecoration.Underline,
                     ).merge(cssStyle ?: SpanStyle())
-                    withLink(LinkAnnotation.Url(href)) {
-                        withStyle(linkStyle) {
-                            recurseChildren(element, style.merge(linkStyle.asTextStyle()))
+                    val safeHref = sanitizeLinkUri(href)
+                    if (safeHref == null) {
+                        appendElementChildren()
+                    } else {
+                        withLink(LinkAnnotation.Url(safeHref)) {
+                            withStyle(linkStyle) {
+                                recurseChildren(element, style.merge(linkStyle.asTextStyle()))
+                            }
                         }
                     }
                 }
@@ -365,3 +384,5 @@ internal fun AnnotatedString.Builder.appendHtmlInlineElement(
         else -> appendElementChildren()
     }
 }
+
+internal fun shouldStopHtmlDepthRecursion(depth: Int): Boolean = depth >= RenderLimits.MAX_HTML_DEPTH

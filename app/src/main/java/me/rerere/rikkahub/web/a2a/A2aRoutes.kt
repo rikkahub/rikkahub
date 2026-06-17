@@ -2,12 +2,14 @@ package me.rerere.rikkahub.web.a2a
 
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.ApplicationRequest
-import io.ktor.server.request.receive
+import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondOutputStream
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -41,6 +43,8 @@ import me.rerere.rikkahub.web.dto.ConversationDto
 import me.rerere.rikkahub.web.dto.MessageNodeDto
 import me.rerere.rikkahub.web.dto.toDto
 import me.rerere.rikkahub.web.routes.singleNodeDiffOrNull
+import io.ktor.utils.io.readAvailable
+import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 import java.io.Writer
 import java.util.Collections
@@ -252,8 +256,15 @@ fun Route.a2aRpcRoute(
             }
         }
 
-        val request = runCatching { call.receive<JsonRpcRequest>() }
+        val request = runCatching { readBoundedA2aJsonRpcRequest(call) }
             .getOrElse {
+                if (it is A2aRpcRequestBodyTooLargeException) {
+                    call.respondText(
+                        text = it.message ?: "",
+                        status = HttpStatusCode.PayloadTooLarge,
+                    )
+                    return@post
+                }
                 call.respond(jsonRpcFailure(null, -32700, "Parse error", it.message))
                 return@post
             }
@@ -401,6 +412,7 @@ internal suspend fun startOrResumeA2aTask(
 
     return when (val admission = registry.admit(contextId, assistant.id, params.message.messageId)) {
         is A2aAdmission.Duplicate -> admission.existing
+        is A2aAdmission.CapacityExceeded -> throw A2aCapacityExceededException("server at capacity, retry later")
         is A2aAdmission.Conflict -> {
             val existing = registry.get(admission.activeTaskId)
                 ?: throw BadRequestException("conversation has active initializing task")
@@ -853,6 +865,7 @@ private sealed interface JsonRpcValueResult<out T> {
 }
 
 private fun mapJsonRpcError(requestId: JsonElement?, error: Throwable): JsonRpcFailure = when (error) {
+    is A2aCapacityExceededException -> jsonRpcFailure(requestId, -32002, "server at capacity, retry later")
     is BadRequestException,
     is IllegalArgumentException,
     is SerializationException -> jsonRpcFailure(requestId, -32602, "Invalid params", error.message)
@@ -879,12 +892,42 @@ private fun jsonRpcFailure(
 
 private fun decodeMessageSendParams(json: JsonElement?): MessageSendParams =
     JsonInstant.decodeFromJsonElement(MessageSendParams.serializer(), json ?: throw BadRequestException("params is required"))
+        .also(::validateA2aMessageBounds)
 
 private fun decodeTasksGetParams(json: JsonElement?): TasksGetParams =
     JsonInstant.decodeFromJsonElement(TasksGetParams.serializer(), json ?: throw BadRequestException("params is required"))
+        .also(::validateA2aTasksGetParams)
 
 private fun decodeTasksCancelParams(json: JsonElement?): TasksCancelParams =
     JsonInstant.decodeFromJsonElement(TasksCancelParams.serializer(), json ?: throw BadRequestException("params is required"))
+        .also(::validateA2aTasksCancelParams)
+
+private suspend fun readBoundedA2aJsonRpcRequest(call: ApplicationCall): JsonRpcRequest {
+    val body = readBoundedRequestBody(call)
+    return JsonInstant.decodeFromString(JsonRpcRequest.serializer(), body)
+}
+
+private suspend fun readBoundedRequestBody(call: ApplicationCall): String {
+    val channel = call.request.receiveChannel()
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var bytesRead = 0
+
+    while (true) {
+        val read = channel.readAvailable(buffer, 0, buffer.size)
+        if (read <= 0) break
+
+        bytesRead += read
+        validateA2aRpcBody(bytesRead)
+        output.write(buffer, 0, read)
+    }
+
+    // String(ByteArray, Charset) is available since API 1; ByteArrayOutputStream.toString(Charset)
+    // is API 33 (> minSdk 26) and trips the NewApi lint gate.
+    return String(output.toByteArray(), Charsets.UTF_8)
+}
+
+private class A2aCapacityExceededException(message: String) : RuntimeException(message)
 
 private fun extractAssistantTextFromMessageNode(node: MessageNodeDto): String? {
     val message = node.messages.getOrNull(node.selectIndex) ?: return null

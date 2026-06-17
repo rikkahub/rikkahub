@@ -11,7 +11,12 @@ sealed interface PerformAction {
      * A node-targeted action. [stateSeq] + [tid] identify the element within the snapshot the model
      * acted on; the backend re-walks its live tree to the [tid]-th projected node and performs [kind].
      */
-    data class Node(val stateSeq: Long, val tid: Int, val kind: NodeActionKind) : PerformAction
+    data class Node(
+        val stateSeq: Long,
+        val tid: Int,
+        val kind: NodeActionKind,
+        val allowedPackages: Set<String>,
+    ) : PerformAction
 
     /** A global navigation action — BACK / HOME / RECENTS. No node target (performGlobalAction). */
     data class Global(val nav: GlobalNav) : PerformAction
@@ -24,7 +29,12 @@ sealed interface PerformAction {
      * re-walks to the [tid]-th projected node and replaces its text (ACTION_SET_TEXT), and re-verifies
      * [stateSeq] at dispatch exactly as [Node] does (I-act-1 / MR3 — the grounding must not have moved).
      */
-    data class SetText(val stateSeq: Long, val tid: Int, val text: String) : PerformAction
+    data class SetText(
+        val stateSeq: Long,
+        val tid: Int,
+        val text: String,
+        val allowedPackages: Set<String>,
+    ) : PerformAction
 }
 
 /**

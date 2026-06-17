@@ -458,9 +458,18 @@ class GoogleProvider(
             buildContents(messages)
         )
 
-        // Tools
-        if (params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)) {
-            put("tools", buildJsonArray {
+        val hasFunctionTools = params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+        val toolsDecision = decideGeminiBuiltins(
+            modelId = params.model.modelId,
+            hasFunctionTools = hasFunctionTools,
+            builtIns = params.model.tools,
+        )
+        toolsDecision.warning?.let {
+            Log.w(TAG, it)
+        }
+
+        val tools = buildJsonArray {
+            if (hasFunctionTools) {
                 add(buildJsonObject {
                     put("functionDeclarations", buildJsonArray {
                         params.tools.forEach { tool ->
@@ -485,30 +494,28 @@ class GoogleProvider(
                         }
                     })
                 })
-            })
-        }
-        // Model BuiltIn Tools
-        // 目前不能和工具调用兼容
-        if (params.model.tools.isNotEmpty()) {
-            put("tools", buildJsonArray {
-                params.model.tools.forEach { builtInTool ->
-                    when (builtInTool) {
-                        BuiltInTools.Search -> {
-                            add(buildJsonObject {
-                                put("googleSearch", buildJsonObject {})
-                            })
-                        }
+            }
 
-                        BuiltInTools.UrlContext -> {
-                            add(buildJsonObject {
-                                put("urlContext", buildJsonObject {})
-                            })
-                        }
-
-                        else -> {}
+            toolsDecision.effectiveBuiltIns.forEach { builtInTool ->
+                when (builtInTool) {
+                    BuiltInTools.Search -> {
+                        add(buildJsonObject {
+                            put("googleSearch", buildJsonObject {})
+                        })
                     }
+
+                    BuiltInTools.UrlContext -> {
+                        add(buildJsonObject {
+                            put("urlContext", buildJsonObject {})
+                        })
+                    }
+
+                    else -> {}
                 }
-            })
+            }
+        }
+        if (tools.isNotEmpty()) {
+            put("tools", tools)
         }
 
         // Safety Settings
@@ -865,6 +872,28 @@ class GoogleProvider(
 
         items.forEach { emit(it) }
     }
+}
+
+internal data class GeminiToolsDecision(
+    val effectiveBuiltIns: Set<BuiltInTools>,
+    val warning: String? = null,
+)
+
+internal fun decideGeminiBuiltins(
+    modelId: String,
+    hasFunctionTools: Boolean,
+    builtIns: Set<BuiltInTools>,
+): GeminiToolsDecision {
+    if (builtIns.isEmpty()) return GeminiToolsDecision(emptySet())
+
+    if (!ModelRegistry.GEMINI_3_SERIES.match(modelId = modelId) && hasFunctionTools) {
+        return GeminiToolsDecision(
+            effectiveBuiltIns = emptySet(),
+            warning = "Gemini built-in tools are omitted when function tools are configured for model=$modelId"
+        )
+    }
+
+    return GeminiToolsDecision(effectiveBuiltIns = builtIns)
 }
 
 /**

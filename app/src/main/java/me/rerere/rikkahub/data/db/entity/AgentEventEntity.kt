@@ -33,6 +33,11 @@ import androidx.room.PrimaryKey
         // FIFO oldest-pending claim per conversation: filter on (conversation_id, status) and order
         // by enqueue_seq, all from one covering index.
         Index(value = ["conversation_id", "status", "enqueue_seq"]),
+        // The cold-start replay scan is conversation-agnostic — `SELECT DISTINCT conversation_id
+        // WHERE status = 'PENDING'`. The covering index above leads with conversation_id, so SQLite
+        // cannot use it for a status-only predicate and walks the whole table as the queue grows.
+        // A status-leading index makes that scan index-covered.
+        Index(value = ["status", "conversation_id"]),
         // A duplicate enqueue is a no-op (insert-ignore), so the dedupe key is UNIQUE.
         Index(value = ["dedupe_key"], unique = true),
     ],

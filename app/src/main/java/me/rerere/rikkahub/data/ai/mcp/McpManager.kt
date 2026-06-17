@@ -11,12 +11,14 @@ import io.ktor.util.StringValues
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
 import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
+import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpError
 import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.RequestOptions
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
 import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.McpException
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.CancellationException
@@ -48,6 +50,7 @@ import me.rerere.common.json.JsonInstant
 import me.rerere.common.collections.checkDifferent
 import okhttp3.OkHttpClient
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.TimeUnit
 import kotlin.io.encoding.Base64
 import kotlin.time.Duration.Companion.seconds
@@ -63,11 +66,12 @@ private const val TAG = "McpManager"
 // live transport, or ConcurrentModificationException). ConcurrentHashMap makes
 // each op and each weakly-consistent iteration thread-safe; keys/values are
 // always non-null here, so its null prohibition is a non-issue.
-internal fun <K : Any, V : Any> newMcpConcurrentMap(): MutableMap<K, V> = ConcurrentHashMap()
+internal fun <K : Any, V : Any> newMcpConcurrentMap(): ConcurrentMap<K, V> = ConcurrentHashMap()
 
 private const val MAX_RECONNECT_ATTEMPTS = 5
 private const val BASE_RECONNECT_DELAY_MS = 1000L
 private const val MAX_RECONNECT_DELAY_MS = 30000L
+internal fun mcpAutoConnectCandidates(configs: List<McpServerConfig>) = configs.filter { it.commonOptions.enable }
 
 class McpManager(
     private val settingsStore: SettingsStore,
@@ -100,7 +104,7 @@ class McpManager(
     }
 
     private val clients: MutableMap<McpServerConfig, Client> = newMcpConcurrentMap()
-    private val reconnectJobs: MutableMap<Uuid, Job> = newMcpConcurrentMap()
+    private val reconnectJobs: ConcurrentMap<Uuid, Job> = newMcpConcurrentMap()
     private val reconnectAttempts: MutableMap<Uuid, Int> = newMcpConcurrentMap()
     val syncingStatus = MutableStateFlow<Map<Uuid, McpStatus>>(mapOf())
 
@@ -111,7 +115,7 @@ class McpManager(
                 .collect { mcpServerConfigs ->
                     runCatching {
                         Log.i(TAG, "update configs: $mcpServerConfigs")
-                        val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable }
+                        val newConfigs = mcpAutoConnectCandidates(mcpServerConfigs)
                         val currentConfigs = clients.keys.toList()
                         val (toAdd, toRemove) = currentConfigs.checkDifferent(
                             other = newConfigs,
@@ -183,7 +187,9 @@ class McpManager(
             },
             onHealFailed = {
                 Log.e(TAG, "callTool heal failed for ${config.commonOptions.name}", it)
-                listOf(UIMessagePart.Text("Failed to execute tool: ${it.message ?: it.javaClass.name}"))
+                // Model-facing tool output: simple class name only — never the package-qualified
+                // name, matching the tool-execution error redaction policy (no internal layout leak).
+                listOf(UIMessagePart.Text("Failed to execute tool: ${it.message ?: it.javaClass.simpleName}"))
             },
         )
     }
@@ -408,7 +414,7 @@ class McpManager(
         val delayMs = calculateBackoffDelay(currentAttempt)
         Log.i(TAG, "Scheduling reconnect for ${config.commonOptions.name}, attempt $currentAttempt/$MAX_RECONNECT_ATTEMPTS, delay ${delayMs}ms")
 
-        reconnectJobs[configId] = appScope.launch {
+        val job = appScope.launch {
             try {
                 setStatus(config, McpStatus.Reconnecting(currentAttempt, MAX_RECONNECT_ATTEMPTS))
                 delay(delayMs)
@@ -433,11 +439,11 @@ class McpManager(
                 scheduleReconnect(config)
             }
         }
+        trackActiveReconnectJob(reconnectJobs, configId, job)
     }
 
     private fun cancelReconnect(configId: Uuid) {
-        reconnectJobs[configId]?.cancel()
-        reconnectJobs.remove(configId)
+        cancelTrackedReconnectJob(reconnectJobs, configId)
     }
 
     private fun calculateBackoffDelay(attempt: Int): Long {
@@ -494,6 +500,29 @@ class McpManager(
 // by construction. It only reconnects while status is Connected so a deliberate
 // shutdown does not trigger a reconnect. Kept as a pure function (status + reconnect
 // injected) so the attachment behavior is JVM-unit-testable without the Android deps.
+// Store a launched reconnect [job] under [key] and arrange for it to drop ITSELF from [jobs] on
+// completion, so the map only ever holds genuinely-active reconnects. callTool reads jobs[key] as
+// "a reconnect is in flight" and join()s it instead of healing (callToolWithHeal); a stale COMPLETED
+// job left in the map would make that join() return instantly and skip the heal — self-heal silently
+// stops. The value-conditional remove(key, job) never evicts a NEWER job: the failure path reschedules
+// (storing a fresh job) before this one's completion handler runs, so the remove matches zero entries
+// once a newer job is present. Pure (no Android deps) so the lifecycle invariant is JVM-unit-testable,
+// mirroring attachReconnectCallbacks.
+internal fun <K : Any> trackActiveReconnectJob(jobs: ConcurrentMap<K, Job>, key: K, job: Job) {
+    jobs[key] = job
+    job.invokeOnCompletion { jobs.remove(key, job) }
+}
+
+// Teardown counterpart of [trackActiveReconnectJob]: atomically detach and cancel the tracked reconnect
+// for [key]. A non-atomic read-then-cancel-then-key-remove races a concurrent re-track (scheduleReconnect
+// driven from an arbitrary-thread transport callback): a fresh active job stored in the gap would be
+// evicted by the key-only remove WITHOUT being cancelled, orphaning a live reconnect callTool can no
+// longer see. remove(key) takes whatever is mapped NOW and we cancel exactly that one. Pure (no Android
+// deps) so the teardown property is JVM-unit-testable.
+internal fun <K : Any> cancelTrackedReconnectJob(jobs: ConcurrentMap<K, Job>, key: K) {
+    jobs.remove(key)?.cancel()
+}
+
 internal fun <T : AbstractTransport> attachReconnectCallbacks(
     transport: T,
     config: McpServerConfig,
@@ -517,26 +546,34 @@ internal fun <T : AbstractTransport> attachReconnectCallbacks(
 
 // The SDK (kotlin-sdk 0.12.0) exposes no public closed/liveness getter, so a dead transport is
 // recognised from the exact failures its send/request path throws. Verified by decompiling the
-// pinned jars:
+// pinned jars (StreamableHttpError/McpException both extend java.lang.Exception, NOT IOException):
 //   - SseClientTransport.performSend throws plain IllegalStateException with
 //       "SseClientTransport is closed!"  (job null/inactive),
 //       "Not connected!"                 (endpoint deferred uncompleted — the dropped-keepalive case),
 //       "...Error POSTing to endpoint (HTTP <code>)..."  (POST failed).
 //   - Protocol.request throws McpException(-32000, "Connection closed") when onClose fires mid-call,
 //     and IllegalStateException("Not connected") on a pre-send guard.
-//   - StreamableHttpClientTransport.performSend throws StreamableHttpError on POST failure.
+//   - StreamableHttpClientTransport.performSend throws StreamableHttpError on a POST/stream failure;
+//     code == -1 is the one non-transport case ("Unexpected content type" — a deterministic protocol
+//     mismatch a reconnect cannot fix), every other code (an HTTP status, or a null-code SSE error
+//     event) is a genuine transport drop.
 //   - A dead underlying socket surfaces from OkHttp/ktor as an IOException.
-// These are exactly the closed/dropped-stream signals; "Request timed out" (McpException -32001, a
-// slow tool) and any other RPC error response are deliberately NOT matched, so a genuine
-// tool-execution error does not trigger a needless reconnect+retry. (The strings "Transport is not
-// ready" / "Error while sending message" the earlier draft matched do not exist anywhere in 0.12.0.)
+// Match by TYPE+CODE, not broad message substrings. Tool-execution errors come back as a CallToolResult
+// (isError), never thrown, so the only throwables reaching here are protocol/transport — but a server's
+// JSON-RPC error message can still contain "is closed"/"Connection closed" verbatim, and the earlier
+// substring match would have over-matched those into a needless reconnect+retry. McpException is keyed
+// on the reserved -32000 code; the IllegalStateException messages are anchored to the exact SDK strings.
+// "Request timed out" (McpException -32001, a slow tool) and any other RPC error stay unmatched.
 internal fun isMcpTransportClosed(t: Throwable): Boolean {
     if (t is CancellationException) return false
+    if (t is StreamableHttpError) return t.code != -1
+    if (t is McpException) return t.code == -32000
     if (t is java.io.IOException) return true
+    if (t !is IllegalStateException) return false
     val message = t.message ?: return false
-    return message.contains("Connection closed", ignoreCase = true) ||
-        message.contains("Not connected", ignoreCase = true) ||
-        message.contains("is closed", ignoreCase = true) ||
+    return message.equals("Not connected", ignoreCase = true) ||
+        message.equals("Not connected!", ignoreCase = true) ||
+        message.equals("SseClientTransport is closed!", ignoreCase = true) ||
         message.contains("Error POSTing to endpoint", ignoreCase = true)
 }
 

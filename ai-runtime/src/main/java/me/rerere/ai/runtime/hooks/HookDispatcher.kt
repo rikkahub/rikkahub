@@ -13,6 +13,7 @@ private const val TAG = "HookDispatcher"
 data class HookDispatchContext(
     val config: HookConfig,
     val toolName: String? = null,
+    val budget: HookWorkBudget? = null,
 )
 
 /**
@@ -27,12 +28,38 @@ class HookDispatcher(
     private val logSink: RuntimeLogSink,
     private val perHookTimeout: Duration = 30.seconds,
 ) {
+    private val limits = HookDispatchLimits()
     suspend fun dispatch(event: HookEvent, input: String, ctx: HookDispatchContext): AggregatedHookResult {
         // Import-trust gate (H4): untrusted hooks must never run — passthrough, no executor call.
         if (!ctx.config.trusted) return AggregatedHookResult()
-        val outputs = ctx.config.hooks[event].orEmpty()
+        val handlers = ctx.config.hooks[event].orEmpty()
             .filter { matchesIf(it, ctx.toolName) }
-            .flatMap { matcher -> matcher.handlers.map { runHandler(event, it, input) } }
+            .flatMap { it.handlers }
+        val outputs = mutableListOf<HookOutput>()
+        var ranForDispatch = 0
+        for (handler in handlers) {
+            val canRunByDispatch = ranForDispatch < limits.maxHandlersPerDispatch
+            val canRunByBudget = if (!canRunByDispatch) false else ctx.budget?.tryConsume() ?: true
+            if (canRunByDispatch && canRunByBudget) {
+                outputs += runHandler(event, handler, input)
+                ranForDispatch++
+                continue
+            }
+            val reason = when {
+                !canRunByDispatch -> "per-dispatch cap"
+                else -> "per-generation cap"
+            }
+            logSink.warn(
+                TAG,
+                "skipping hook handler '${handler::class.simpleName}' for ${event.name} due to $reason " +
+                    "(dispatch index=${ranForDispatch + 1}, remainingGeneration=${ctx.budget?.remaining ?: "unlimited"})",
+            )
+            if (handler.failClosed) {
+                outputs += HookOutput(
+                    decision = HookDecision.Deny("hook skipped: handler execution was capped"),
+                )
+            }
+        }
         return aggregate(outputs)
     }
 

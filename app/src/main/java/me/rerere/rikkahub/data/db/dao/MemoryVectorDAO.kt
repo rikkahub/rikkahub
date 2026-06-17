@@ -18,4 +18,7 @@ interface MemoryVectorDAO {
 
     @Query("DELETE FROM memory_vector WHERE memory_id = :id")
     suspend fun deleteByMemory(id: Int)
+
+    @Query("DELETE FROM memory_vector WHERE memory_id IN (:ids)")
+    suspend fun deleteByMemoryIds(ids: List<Int>)
 }

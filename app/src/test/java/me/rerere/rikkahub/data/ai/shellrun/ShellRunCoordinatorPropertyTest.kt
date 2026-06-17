@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.data.db.entity.ShellRunStatus
 import me.rerere.rikkahub.data.repository.BoardTransactionRunner
+import me.rerere.rikkahub.data.repository.fakes.FakeAgentEventDAO
 import me.rerere.rikkahub.data.repository.fakes.FakeShellRunDAO
 import me.rerere.workspace.ShellKillReason
 import me.rerere.workspace.ShellRunHandle
@@ -78,8 +79,15 @@ class ShellRunCoordinatorPropertyTest {
         override val pidMeta: String? = "pid=fake"
     }
 
-    private fun store(dao: FakeShellRunDAO = FakeShellRunDAO()): RoomShellRunStore =
-        RoomShellRunStore(dao = dao, transactions = FakeTransactions(), now = { clock++ })
+    private fun store(
+        dao: FakeShellRunDAO = FakeShellRunDAO(),
+        agentEventDao: FakeAgentEventDAO = FakeAgentEventDAO(),
+    ): RoomShellRunStore = RoomShellRunStore(
+        dao = dao,
+        agentEventDao = agentEventDao,
+        transactions = FakeTransactions(),
+        now = { clock++ },
+    )
 
     private var clock = 1L
 

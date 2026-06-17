@@ -1,12 +1,17 @@
 package me.rerere.rikkahub.web.routes
 
+import me.rerere.ai.provider.CustomBody
+import me.rerere.ai.provider.CustomHeader
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.search.SearchServiceOptions
 import me.rerere.tts.provider.TTSProviderSetting
+import kotlinx.serialization.json.JsonPrimitive
 
 // The settings SSE stream serializes the whole Settings object to any web
 // client. Every credential persisted as an ordinary serializable field would
@@ -14,23 +19,59 @@ import me.rerere.tts.provider.TTSProviderSetting
 // event. Strip them here, fail-closed: each secret-bearing sealed type is
 // matched exhaustively (no `else`), so adding a new variant with a credential
 // breaks the build until it is redacted.
+internal object WebSettingsSecretFields {
+    const val REDACTED_STRING = ""
+}
+
 internal fun Settings.sanitizeForWeb(): Settings = copy(
     providers = providers.map { it.redactSecrets() },
+    assistants = assistants.map { it.redactSecrets() },
     searchServices = searchServices.map { it.redactSecrets() },
     ttsProviders = ttsProviders.map { it.redactSecrets() },
     asrProviders = asrProviders.map { it.redactSecrets() },
     webDavConfig = webDavConfig.redactSecrets(),
     s3Config = s3Config.redactSecrets(),
     mcpServers = mcpServers.map { it.redactSecrets() },
-    webServerAccessPassword = "",
+    webServerAccessPassword = WebSettingsSecretFields.REDACTED_STRING,
 )
 
 internal fun ProviderSetting.redactSecrets(): ProviderSetting = when (this) {
-    is ProviderSetting.OpenAI -> copy(apiKey = "")
-    is ProviderSetting.Google -> copy(apiKey = "", privateKey = "")
-    is ProviderSetting.Claude -> copy(apiKey = "", oauthToken = "")
-    is ProviderSetting.ChatGPT -> copy(accessToken = "")
+    is ProviderSetting.OpenAI -> copy(
+        apiKey = WebSettingsSecretFields.REDACTED_STRING,
+        models = models.map { it.redactSecrets() },
+    )
+    is ProviderSetting.Google -> copy(
+        apiKey = WebSettingsSecretFields.REDACTED_STRING,
+        privateKey = WebSettingsSecretFields.REDACTED_STRING,
+        models = models.map { it.redactSecrets() }
+    )
+    is ProviderSetting.Claude -> copy(
+        apiKey = WebSettingsSecretFields.REDACTED_STRING,
+        oauthToken = WebSettingsSecretFields.REDACTED_STRING,
+        models = models.map { it.redactSecrets() }
+    )
+    is ProviderSetting.ChatGPT -> copy(
+        accessToken = WebSettingsSecretFields.REDACTED_STRING,
+        models = models.map { it.redactSecrets() }
+    )
 }
+
+internal fun Assistant.redactSecrets(): Assistant = copy(
+    customHeaders = customHeaders.map { it.redactSecrets() },
+    customBodies = customBodies.map { it.redactSecrets() },
+)
+
+internal fun Model.redactSecrets(): Model = copy(
+    customHeaders = customHeaders.map { it.redactSecrets() },
+    customBodies = customBodies.map { it.redactSecrets() },
+    providerOverwrite = providerOverwrite?.redactSecrets(),
+)
+
+internal fun CustomHeader.redactSecrets(): CustomHeader = copy(value = WebSettingsSecretFields.REDACTED_STRING)
+
+internal fun CustomBody.redactSecrets(): CustomBody = copy(
+    value = JsonPrimitive(WebSettingsSecretFields.REDACTED_STRING),
+)
 
 internal fun SearchServiceOptions.redactSecrets(): SearchServiceOptions = when (this) {
     is SearchServiceOptions.BingLocalOptions -> this

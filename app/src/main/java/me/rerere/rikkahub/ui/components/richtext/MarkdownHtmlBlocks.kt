@@ -162,7 +162,13 @@ internal fun HtmlList(
     ordered: Boolean,
     onClickCitation: (String) -> Unit,
     level: Int,
+    depth: Int = 0,
 ) {
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        Text(text = element.text())
+        return
+    }
+
     HtmlStyledElement(element = element) {
         Column(modifier = Modifier.padding(start = (level * 8).dp, top = 4.dp, bottom = 4.dp)) {
             val bulletBase = when (level % 3) {
@@ -177,6 +183,7 @@ internal fun HtmlList(
                         bulletText = bullet,
                         onClickCitation = onClickCitation,
                         level = level,
+                        depth = depth,
                     )
                 }
             }
@@ -190,10 +197,15 @@ private fun HtmlListItem(
     bulletText: String,
     onClickCitation: (String) -> Unit,
     level: Int,
+    depth: Int = 0,
 ) {
     val isTaskItem = item.hasClass("task-list-item")
     val checkboxInput = item.selectFirst("input[type=checkbox]")
     val isChecked = checkboxInput?.hasAttr("checked") == true
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        Text(text = item.text())
+        return
+    }
 
     HtmlStyledElement(element = item) {
         Column {
@@ -274,6 +286,7 @@ private fun HtmlListItem(
                         ordered = tag == "ol",
                         onClickCitation = onClickCitation,
                         level = level + 1,
+                        depth = depth + 1,
                     )
                 }
             }
@@ -282,7 +295,16 @@ private fun HtmlListItem(
 }
 
 @Composable
-internal fun HtmlBlockquote(element: Element, onClickCitation: (String) -> Unit) {
+internal fun HtmlBlockquote(
+    element: Element,
+    onClickCitation: (String) -> Unit,
+    depth: Int = 0,
+) {
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        Text(text = element.text())
+        return
+    }
+
     ProvideTextStyle(LocalTextStyle.current.copy(fontStyle = FontStyle.Italic)) {
         val borderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
@@ -295,7 +317,13 @@ internal fun HtmlBlockquote(element: Element, onClickCitation: (String) -> Unit)
                 }
                 .padding(8.dp),
         ) {
-            element.childNodes().fastForEach { HtmlBodyNode(it, onClickCitation) }
+            element.childNodes().fastForEach {
+                HtmlBodyNode(
+                    node = it,
+                    onClickCitation = onClickCitation,
+                    depth = depth + 1,
+                )
+            }
         }
     }
 }
@@ -322,7 +350,16 @@ internal fun HtmlMathBlock(formula: String) {
 }
 
 @Composable
-internal fun HtmlDetails(element: Element, onClickCitation: (String) -> Unit) {
+internal fun HtmlDetails(
+    element: Element,
+    onClickCitation: (String) -> Unit,
+    depth: Int = 0,
+) {
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        Text(text = element.text())
+        return
+    }
+
     // Delegate to the existing SimpleHtmlBlock details renderer via a mini-document
     val summaryElement = element.children().find { it.tagName().lowercase() == "summary" }
     val summaryText = summaryElement?.text() ?: "Details"
@@ -344,7 +381,11 @@ internal fun HtmlDetails(element: Element, onClickCitation: (String) -> Unit) {
             Column(modifier = Modifier.padding(start = 16.dp)) {
                 element.childNodes().fastForEach { child ->
                     if (!(child is Element && child.tagName().lowercase() == "summary")) {
-                        HtmlBodyNode(child, onClickCitation)
+                        HtmlBodyNode(
+                            node = child,
+                            onClickCitation = onClickCitation,
+                            depth = depth + 1,
+                        )
                     }
                 }
             }

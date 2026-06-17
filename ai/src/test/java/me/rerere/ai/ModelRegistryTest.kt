@@ -50,6 +50,15 @@ class ModelRegistryTest {
     }
 
     @Test
+    fun testSupportsClaude1MContext() {
+        assertTrue(ModelRegistry.supportsClaude1MContext("claude-sonnet-4.6"))
+        assertTrue(ModelRegistry.supportsClaude1MContext("claude-opus-4.8"))
+        assertTrue(ModelRegistry.supportsClaude1MContext("claude-fable-3.1"))
+        assertFalse(ModelRegistry.supportsClaude1MContext("claude-haiku-3.5"))
+        assertFalse(ModelRegistry.supportsClaude1MContext("deepseek-r1"))
+    }
+
+    @Test
     fun testSpecificityPriority() {
         assertEquals(
             listOf(Modality.TEXT, Modality.IMAGE),

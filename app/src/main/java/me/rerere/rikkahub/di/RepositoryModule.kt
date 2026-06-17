@@ -130,11 +130,8 @@ val repositoryModule = module {
             store = get(),
             appScope = get<me.rerere.rikkahub.AppScope>(),
             onCompletion = { completion ->
-                get<me.rerere.rikkahub.service.ChatService>().enqueueAgentEvent(
+                get<me.rerere.rikkahub.service.ChatService>().maybeDrainAgentEventsWhenIdle(
                     conversationId = completion.conversationId,
-                    kind = completion.kind,
-                    payloadJson = completion.payloadJson,
-                    dedupeKey = completion.dedupeKey,
                 )
             },
             startHandle = { request ->

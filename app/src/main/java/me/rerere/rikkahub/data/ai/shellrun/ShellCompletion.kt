@@ -2,6 +2,8 @@ package me.rerere.rikkahub.data.ai.shellrun
 
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import me.rerere.rikkahub.data.db.entity.AgentEventEntity
+import me.rerere.rikkahub.data.db.entity.AgentEventStatus
 import me.rerere.rikkahub.data.db.entity.ShellRunStatus
 import kotlin.uuid.Uuid
 
@@ -64,4 +66,24 @@ data class ShellCompletion(
             )
         }
     }
+
+    /**
+     * Pure, shared mapping for durable #290 enqueue rows. Reuse this seam from store-level
+     * insertion and any other completion-to-event seam to keep `kind/payload/dedupeKey` atomic.
+     */
+    fun asPendingAgentEventEntity(
+        eventId: String,
+        conversationId: String = this.conversationId.toString(),
+        enqueueSeq: Long,
+        createdAt: Long,
+    ): AgentEventEntity = AgentEventEntity(
+        id = eventId,
+        conversationId = conversationId,
+        dedupeKey = dedupeKey,
+        enqueueSeq = enqueueSeq,
+        kind = kind,
+        payloadJson = payloadJson,
+        status = AgentEventStatus.PENDING.name,
+        createdAt = createdAt,
+    )
 }

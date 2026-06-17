@@ -57,7 +57,7 @@ import me.rerere.common.json.JsonInstant
         AgentEventEntity::class,
         ShellRunEntity::class
     ],
-    version = 29,
+    version = 30,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -86,6 +86,10 @@ import me.rerere.common.json.JsonInstant
         // 28 -> 29 is purely additive (one new table: shell_runs, issue #291); no existing table is
         // altered, so Room derives the migration from the exported schemas without a spec.
         AutoMigration(from = 28, to = 29),
+        // 29 -> 30 adds status-leading indexes on agent_events and shell_runs so the cold-start
+        // replay/recovery scans (status-only predicates) stop full-scanning. Index creation is
+        // auto-migratable, so Room derives the migration from the exported schemas without a spec.
+        AutoMigration(from = 29, to = 30),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)

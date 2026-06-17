@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.repository.ScheduleClaim
 import kotlin.uuid.Uuid
 
@@ -82,15 +85,19 @@ class ScheduleFireRunner(
                 terminalRunId = run(claim, parent) ?: claim.runId
             }
         } finally {
-            finishRun(scheduleId, claim.runId, terminalRunId)
-            // Re-enqueue the next fire ONLY if the row is STILL armed, read fresh — never off the stale
-            // post-claim snapshot. A recurring schedule that advanced is re-armed at its CURRENT
-            // nextFireAt so a thrown run never loses the recurrence; a one-shot (disabled after its
-            // claim) and a schedule the user PAUSED while this fire was in flight both report null and
-            // are not re-armed, so a concurrent pause is never silently undone. The unique name
-            // ("schedule_$id") dedups, so exactly one pending fire ever exists per schedule.
-            nextFireIfStillArmed(scheduleId)?.let { fireAt ->
-                enqueue(scheduleId, fireAt)
+            // NonCancellable: the cleanup writes (finishRun, the fresh nextFireIfStillArmed read) are
+            // suspending. If this fire's coroutine is cancelled AFTER the claim stamped the in-flight
+            // marker (WorkManager stop / structured cancel), a plain suspending finally would itself be
+            // cancelled at its first suspension point and skip finishRun — pinning the schedule
+            // "running" forever so it never fires again (claimDue refuses a non-null marker). Run the
+            // cleanup under NonCancellable so the marker is always cleared and a recurring schedule is
+            // re-armed even on cancellation. Re-enqueue ONLY if the row is STILL armed, read fresh —
+            // never off the stale post-claim snapshot (a concurrent pause must not be silently undone).
+            withContext(NonCancellable) {
+                finishRun(scheduleId, claim.runId, terminalRunId)
+                nextFireIfStillArmed(scheduleId)?.let { fireAt ->
+                    enqueue(scheduleId, fireAt)
+                }
             }
         }
         return true
@@ -124,13 +131,18 @@ class ScheduleWorker(
             Log.w(TAG, "doWork: missing or malformed schedule id in input data, dropping")
             return Result.success()
         }
-        return runCatching { fireRunner.fire(scheduleId) }
-            .fold(
-                onSuccess = { Result.success() },
-                onFailure = { e ->
-                    Log.e(TAG, "doWork: fire failed for schedule $scheduleId", e)
-                    Result.failure()
-                },
-            )
+        return try {
+            fireRunner.fire(scheduleId)
+            Result.success()
+        } catch (cancellation: CancellationException) {
+            // Genuine coroutine cancellation (WorkManager stopped this work / structured cancel) must
+            // NOT be swallowed into Result.failure(): the runner's NonCancellable finally already
+            // cleared the in-flight marker and re-armed a recurring schedule, so let cancellation
+            // propagate for correct worker teardown instead of recording a fake failure.
+            throw cancellation
+        } catch (e: Throwable) {
+            Log.e(TAG, "doWork: fire failed for schedule $scheduleId", e)
+            Result.failure()
+        }
     }
 }

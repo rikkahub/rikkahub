@@ -1,6 +1,7 @@
 package me.rerere.automation.backend
 
 import kotlinx.coroutines.CompletableDeferred
+import me.rerere.automation.observe.SnapshotProjector
 
 /**
  * Deterministic, in-memory [AutomationBackend] for unit/PBT (design §8, the FakeBackend that
@@ -61,6 +62,11 @@ class FakeBackend(
     var settleCount: Int = 0
         private set
 
+    /** Last window that matched during the projected-node walk in {@link perform}. */
+    @Volatile
+    var lastPerformedWindow: String? = null
+        private set
+
     override suspend fun snapshotRawTree(): RawTree {
         snapshotEntered?.complete(Unit) // signal "parked in snapshotRawTree" before the gate (deterministic in-flight tests)
         gate?.await()
@@ -95,15 +101,83 @@ class FakeBackend(
             is PerformAction.Global -> false
         }
         if (carriedStaleSeq) {
+            lastPerformedWindow = null
             return false
         }
-        performed.add(action)
+
+        val dispatched = when (action) {
+            is PerformAction.Global -> {
+                performed.add(action)
+                true
+            }
+            is PerformAction.Node -> {
+                performOnProjectedNode(action.tid, action.allowedPackages) { true }.also { dispatched ->
+                    if (dispatched) {
+                        performed.add(action)
+                    }
+                }
+            }
+            is PerformAction.SetText -> {
+                performOnProjectedNode(action.tid, action.allowedPackages) { true }.also { dispatched ->
+                    if (dispatched) {
+                        performed.add(action)
+                    }
+                }
+            }
+        }
+        if (!dispatched) {
+            lastPerformedWindow = null
+            return false
+        }
+
         // A real act changes the screen ⇒ the backend's sequence advances. Modelling that here keeps
         // tids turn-scoped (the post-act re-snapshot sees a fresh seq, so the old grounding is stale
         // for the NEXT act) without a test having to inject the transition by hand.
         rawTree = rawTree.copy(stateSeq = rawTree.stateSeq + 1)
         return true
     }
+
+    private fun performOnProjectedNode(
+        tid: Int,
+        allowedPackages: Set<String>,
+        perform: (RawNode) -> Boolean,
+    ): Boolean {
+        val cursor = intArrayOf(0)
+        for (window in rawTree.windows) {
+            if (!isWindowAllowed(window.pkg, window.systemWindow, allowedPackages)) continue
+            if (window.secure || window.root == null) continue
+            if (walkAndPerform(window.root, tid, cursor, perform) == true) {
+                lastPerformedWindow = window.pkg
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun walkAndPerform(
+        node: RawNode,
+        tid: Int,
+        cursor: IntArray,
+        perform: (RawNode) -> Boolean,
+    ): Boolean? {
+        if (isProjectedTarget(node)) {
+            if (cursor[0] == tid) {
+                cursor[0]++
+                return perform(node)
+            }
+            cursor[0]++
+        }
+        for (child in node.children) {
+            walkAndPerform(child, tid, cursor, perform)?.let { return it }
+        }
+        return null
+    }
+
+    private fun isProjectedTarget(node: RawNode): Boolean =
+        (node.visible && node.hasArea) || node.hasId || node.hasText
+
+    private fun isWindowAllowed(pkg: String, systemWindow: Boolean, allowedPackages: Set<String>): Boolean =
+        SnapshotProjector.isWindowEligible(pkg, systemWindow, allowedPackages)
 
     override suspend fun awaitSettle() {
         settleCount++

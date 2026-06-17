@@ -9,18 +9,46 @@ import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
-import me.rerere.rikkahub.service.GenerationForegroundService
 import me.rerere.rikkahub.utils.lifecycle.sendNotification
+import me.rerere.rikkahub.utils.lifecycle.cancelNotification
 import kotlin.uuid.Uuid
 
 /**
  * 聊天通知发送器：封装"生成完成"与"Live Update"两类通知的构建，从 ChatService 搬出以分离通知关注点。
  * 不持有会话状态——所需内容由调用方传入，使发送器只负责把内容翻译成系统通知。
  */
+private const val LIVE_UPDATE_NOTIFICATION_ID = 2003
+
+internal data class LiveUpdateNotificationIdentity(val tag: String, val id: Int)
+
+internal data class LiveUpdateIntentSpec(
+    val action: String,
+    val requestCode: Int,
+    val conversationId: String,
+)
+
+internal fun getLiveUpdateNotificationIdentity(conversationId: Uuid): LiveUpdateNotificationIdentity {
+    return LiveUpdateNotificationIdentity(
+        tag = conversationId.toString(),
+        id = LIVE_UPDATE_NOTIFICATION_ID
+    )
+}
+
+internal fun getLiveUpdateIntentSpec(conversationId: Uuid): LiveUpdateIntentSpec {
+    val idString = conversationId.toString()
+    return LiveUpdateIntentSpec(
+        action = "me.rerere.rikkahub.route.CONVERSATION_NOTIFICATION.$idString",
+        requestCode = idString.hashCode(),
+        conversationId = idString,
+    )
+}
+
 class ChatNotificationSender(private val context: Context) {
 
     fun sendGenerationDone(conversationId: Uuid, senderName: String, contentPreview: String) {
-        // 不在此取消 Live Update 通知：它现在是前台服务持有的同一条常驻通知，由 FGS 在 1->0 边移除。
+        // The per-conversation Live Update notification is cancelled separately by the generation
+        // completion path (ChatService -> cancelLiveUpdate), keyed by this conversation's (tag, id);
+        // this "done" notification is a distinct one-off, so nothing to cancel here.
         context.sendNotification(
             channelId = CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,
             notificationId = 1
@@ -47,10 +75,12 @@ class ChatNotificationSender(private val context: Context) {
 
         // 确定当前状态
         val (chipText, statusText, contentText) = determineNotificationContent(parts, strings)
+        val identity = getLiveUpdateNotificationIdentity(conversationId)
 
         context.sendNotification(
             channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
-            notificationId = getLiveUpdateNotificationId()
+            notificationTag = identity.tag,
+            notificationId = identity.id
         ) {
             title = senderName
             content = contentText
@@ -65,22 +95,21 @@ class ChatNotificationSender(private val context: Context) {
         }
     }
 
-    // 单一常驻通知：复用前台服务的通知 ID，让 Live Update 富文本就地更新 GenerationForegroundService
-    // 启动时占位的同一条通知，而不是再发一条 per-conversation 的常驻通知（否则后台生成时会出现两条
-    // 常驻通知）。通知的取消由前台服务在 1->0 边 stopForeground(STOP_FOREGROUND_REMOVE) 唯一负责，
-    // 因此多会话并发时单个会话结束不会误删这条共享通知。
-    private fun getLiveUpdateNotificationId(): Int {
-        return GenerationForegroundService.NOTIFICATION_ID
+    fun cancelLiveUpdate(conversationId: Uuid) {
+        val identity = getLiveUpdateNotificationIdentity(conversationId)
+        context.cancelNotification(identity.tag, identity.id)
     }
 
     private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {
+        val spec = getLiveUpdateIntentSpec(conversationId)
         val intent = Intent(context, RouteActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("conversationId", conversationId.toString())
+            action = spec.action
+            putExtra(RouteActivity.EXTRA_CONVERSATION_ID, spec.conversationId)
         }
         return PendingIntent.getActivity(
             context,
-            conversationId.hashCode(),
+            spec.requestCode,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )

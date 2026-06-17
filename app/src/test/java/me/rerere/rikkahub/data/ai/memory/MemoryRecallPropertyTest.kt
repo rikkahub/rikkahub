@@ -412,6 +412,27 @@ class MemoryRecallPropertyTest {
         assertEquals(listOf(m), recaller.recall("q", "a", 5))
     }
 
+    // ---- P13: a throwing query-embed degrades recall to recency, never aborts the turn --------
+
+    @Test
+    fun `P13 - a transient query-embed failure falls back to recency instead of throwing`(): Unit = runBlocking {
+        // Read path: the recaller has a usable embedding context, but embed(query) throws (transient
+        // network/API error). recall must NOT propagate — it degrades to the recency fallback so the
+        // chat turn proceeds. Regression for the audit finding (embed failure aborted the whole chat).
+        val m1 = memory(1, content = "alpha", updatedAt = 100)
+        val m2 = memory(2, content = "beta", updatedAt = 200)
+        val recaller = EmbeddingMemoryRecaller(
+            loadCandidates = { listOf(unembeddedCandidate(m1), unembeddedCandidate(m2)) },
+            resolveContext = { EmbeddingMemoryRecaller.EmbeddingContext(ThrowingEmbedder(), SPACE) },
+            fallback = RecencyMemoryRecaller(loadMemories = { listOf(m1, m2) }),
+        )
+
+        val result = recaller.recall("q", "a", 5)
+
+        // Recency order: newest first.
+        assertEquals(listOf(m2, m1), result)
+    }
+
     // ---- Extra: cosine tier precedes the recency tail -----------------------------------------
 
     @Test

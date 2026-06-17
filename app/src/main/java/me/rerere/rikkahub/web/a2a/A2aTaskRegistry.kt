@@ -13,6 +13,7 @@ import kotlin.uuid.Uuid
 class A2aTaskRegistry(
     private val now: () -> Long = System::currentTimeMillis,
     private val terminalRetentionMs: Long = 30 * 60 * 1000L,
+    private val maxActiveTasks: Int = 64,
     private val maxTasks: Int = 1000,
 ) {
     val tasks = ConcurrentHashMap<String, A2aTaskEntry>()
@@ -23,6 +24,12 @@ class A2aTaskRegistry(
     private val seenMessageTask = ConcurrentHashMap<Uuid, ConcurrentHashMap<String, String>>()
     private val collectorJobs = ConcurrentHashMap<String, Job>()
 
+    // Synchronized so the active-task capacity check and the activeByContext write are atomic with
+    // respect to other admits — otherwise concurrent distinct-context requests could each pass the
+    // size check before any one increments the map and overshoot maxActiveTasks. admit is a
+    // per-web-request entry point (not a hot path), so serializing it is cheap; it also closes the
+    // pre-existing duplicate/per-context check-then-act race on the shared maps.
+    @Synchronized
     fun admit(contextId: Uuid, assistantId: Uuid, sourceMessageId: String): A2aAdmission {
         evictExpiredAndOverflow()
 
@@ -36,6 +43,10 @@ class A2aTaskRegistry(
 
             contextMessageTasks.remove(sourceMessageId)
             seenMessageIds[contextId]?.remove(sourceMessageId)
+        }
+
+        if (activeByContext.size >= maxActiveTasks) {
+            return A2aAdmission.CapacityExceeded(maxActiveTasks)
         }
 
         val taskId = Uuid.random().toString()
@@ -266,4 +277,5 @@ sealed interface A2aAdmission {
     data class Accepted(val entry: A2aTaskEntry) : A2aAdmission
     data class Duplicate(val existing: A2aTaskEntry) : A2aAdmission
     data class Conflict(val activeTaskId: String) : A2aAdmission
+    data class CapacityExceeded(val maxActiveTasks: Int) : A2aAdmission
 }

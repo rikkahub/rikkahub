@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.shellrun
 
+import me.rerere.rikkahub.data.db.dao.AgentEventDAO
 import me.rerere.rikkahub.data.db.dao.ShellRunDAO
 import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 import me.rerere.rikkahub.data.db.entity.ShellRunStatus
@@ -48,6 +49,11 @@ interface ShellRunStore {
      * BACKGROUND_RUNNING when the terminal landed — the ATOMIC arbiter of whether a completion event
      * is owed (the agent already received a `Detached` handle), read inside the SAME transaction so it
      * never races the inline-vs-detach decision.
+     *
+     * [buildCompletion] is invoked LAZILY — only when this write wins the CAS for a detached run — so
+     * building the completion (which reads the run's output tail off disk and can throw) never runs on
+     * the inline path. The built completion is inserted as the durable #290 event in THIS transaction
+     * and returned in [TerminalResult.completion] so the caller delivers exactly the row it persisted.
      */
     suspend fun recordTerminal(
         taskId: Uuid,
@@ -55,6 +61,7 @@ interface ShellRunStore {
         exitCode: Int?,
         byteCount: Long,
         killReason: String?,
+        buildCompletion: (() -> ShellCompletion)? = null,
     ): TerminalResult
 
     /**
@@ -94,6 +101,13 @@ enum class TerminalOutcome {
 data class TerminalResult(
     val outcome: TerminalOutcome,
     val wasDetached: Boolean,
+    /**
+     * The completion the store built AND persisted as the durable #290 event in the terminal
+     * transaction — non-null IFF this write won the CAS for a detached run and a [buildCompletion]
+     * was supplied. The caller delivers exactly this row (a post-commit drain trigger); a CAS loss or
+     * an inline run leaves it null and nothing is delivered.
+     */
+    val completion: ShellCompletion? = null,
 )
 
 /**
@@ -104,6 +118,7 @@ data class TerminalResult(
  */
 class RoomShellRunStore(
     private val dao: ShellRunDAO,
+    private val agentEventDao: AgentEventDAO,
     private val transactions: BoardTransactionRunner,
     private val now: () -> Long = System::currentTimeMillis,
 ) : ShellRunStore {
@@ -153,6 +168,7 @@ class RoomShellRunStore(
         exitCode: Int?,
         byteCount: Long,
         killReason: String?,
+        buildCompletion: (() -> ShellCompletion)?,
     ): TerminalResult = transactions.inTransaction {
         // Read the prior status in the same transaction as the CAS, so "was this run detached (and is
         // owed a completion)" is decided atomically with "did this write win the terminal".
@@ -167,9 +183,24 @@ class RoomShellRunStore(
             killReason = killReason,
             completedAt = now(),
         )
+        // Build the completion ONLY for the detached CAS winner: building it reads the output tail off
+        // disk (can throw) and is meaningless for an inline run or a CAS loser. An exception here rolls
+        // back the terminal CAS too (atomic) — a detached run then stays running and is recovered honest
+        // on the next cold start, never half-terminalised with a lost completion.
+        val completion = if (won == 1 && wasDetached) buildCompletion?.invoke() else null
+        if (completion != null) {
+            val event = completion.asPendingAgentEventEntity(
+                eventId = Uuid.random().toString(),
+                conversationId = completion.conversationId.toString(),
+                enqueueSeq = agentEventDao.nextEnqueueSeq(completion.conversationId.toString()),
+                createdAt = now(),
+            )
+            agentEventDao.insertIgnore(event)
+        }
         TerminalResult(
             outcome = if (won == 1) TerminalOutcome.Won else TerminalOutcome.Lost,
             wasDetached = wasDetached,
+            completion = completion,
         )
     }
 

@@ -37,9 +37,11 @@ import me.rerere.ai.runtime.contract.RuntimeLogSink
 import me.rerere.ai.runtime.contract.TurnConfig
 import me.rerere.ai.runtime.contract.TurnMessageTransforms
 import me.rerere.ai.runtime.hooks.HookDecision
+import me.rerere.ai.runtime.hooks.HookDispatchLimits
 import me.rerere.ai.runtime.hooks.HookDispatchContext
 import me.rerere.ai.runtime.hooks.HookDispatcher
 import me.rerere.ai.runtime.hooks.HookEvent
+import me.rerere.ai.runtime.hooks.HookWorkBudget
 import me.rerere.ai.runtime.hooks.markDeniedByHook
 import me.rerere.ai.runtime.knowledge.KnowledgeBudget
 import me.rerere.ai.runtime.knowledge.KnowledgeContextAssembler
@@ -127,6 +129,7 @@ class ChatTurnRuntime(
         // type — the same cast the app's ProviderManager.getProviderByType already performs; the runtime
         // only ever calls it with the [provider] just resolved for [model], so the cast is sound.
         val providerImpl = resolver.provider(provider) as Provider<ProviderSetting>
+        val hookWorkBudget = HookWorkBudget(HookDispatchLimits())
 
         var messages: List<UIMessage> = messages
 
@@ -199,7 +202,11 @@ class ChatTurnRuntime(
                 // the needsApproval gate below. Approval resolves by toolCallId, not input, so a
                 // post-gate rewrite would let the user approve stale input. Decisions map onto the
                 // EXISTING approval states — no new execution path.
-                val hookedTools = applyPreToolUseHooks(tools, assistant)
+                val hookedTools = applyPreToolUseHooks(
+                    tools = tools,
+                    assistant = assistant,
+                    budget = hookWorkBudget,
+                )
 
                 // Check for tools that need approval
                 var hasPendingApproval = false
@@ -288,6 +295,7 @@ class ChatTurnRuntime(
     private suspend fun applyPreToolUseHooks(
         tools: List<UIMessagePart.Tool>,
         assistant: AssistantConfig,
+        budget: HookWorkBudget,
     ): List<UIMessagePart.Tool> {
         val dispatcher = hookDispatcher ?: return tools
         // No PreToolUse hooks configured: skip the per-tool payload encode + dispatch entirely.
@@ -303,7 +311,11 @@ class ChatTurnRuntime(
                         put("toolInput", tool.input)
                     }
                 ),
-                ctx = HookDispatchContext(config = assistant.hooks, toolName = tool.toolName),
+                ctx = HookDispatchContext(
+                    config = assistant.hooks,
+                    toolName = tool.toolName,
+                    budget = budget,
+                ),
             )
             val rewritten = result.updatedInput?.let { tool.copy(input = it) } ?: tool
             when (val decision = result.decision) {
@@ -662,23 +674,7 @@ internal suspend fun executeTool(
                 // cancellation must propagate; otherwise stop-generation is misreported as a tool execution error
                 if (it is CancellationException) throw it
                 logSink.warn(TAG, "generateText: tool execution failed for ${tool.toolName}", it)
-                tool.copy(
-                    output = listOf(
-                        UIMessagePart.Text(
-                            json.encodeToString(
-                                buildJsonObject {
-                                    put(
-                                        "error",
-                                        JsonPrimitive(buildString {
-                                            append("[${it.javaClass.name}] ${it.message}")
-                                            append("\n${it.stackTraceToString()}")
-                                        })
-                                    )
-                                }
-                            )
-                        )
-                    )
-                )
+                tool.copy(output = toolExecutionErrorResult(json, it))
             }
         }
     }
@@ -711,6 +707,24 @@ internal fun emptyToolResultPlaceholder(json: Json): List<UIMessagePart> = listO
             buildJsonObject {
                 put("status", JsonPrimitive("ok"))
                 put("result", JsonPrimitive(""))
+            }
+        )
+    )
+)
+
+/**
+ * The model-facing tool_result for a tool that threw during execution. The full
+ * throwable (with stack trace) is logged separately for local debugging; this
+ * payload carries only an actionable summary — exception simple name + message —
+ * and deliberately omits [Throwable.stackTraceToString], which would leak internal
+ * file paths, package layout, and line numbers into the conversation and any
+ * web/A2A surface. Extracted as a pure function so the redaction is unit-testable.
+ */
+internal fun toolExecutionErrorResult(json: Json, error: Throwable): List<UIMessagePart> = listOf(
+    UIMessagePart.Text(
+        json.encodeToString(
+            buildJsonObject {
+                put("error", JsonPrimitive("[${error.javaClass.simpleName}] ${error.message}"))
             }
         )
     )

@@ -7,13 +7,13 @@ package me.rerere.ai.runtime.task
  * Created -> Queued -> Starting -> Running -> Succeeded
  *                                  Running -> WaitingApproval -> Resuming -> Running
  * any active state -> Failed | Cancelled | BudgetExhausted | Interrupted
- * Interrupted -> Resuming            (the ONLY edge out, explicit user resume)
+ * Interrupted -> Resuming | Cancelled (user/parent cancel or explicit user resume)
  * ```
  *
  * [Succeeded], [Failed], [Cancelled], and [BudgetExhausted] are absorbing terminals: replaying
  * any event on them is the identity (recovery / event redelivery is idempotent). [Interrupted]
- * is NOT terminal but only [TaskEvent.ResumeRequested] leaves it — resume is user-explicit,
- * never automatic on startup (maintainer decisions #1/#3).
+ * is NOT terminal, but can leave via explicit [TaskEvent.ResumeRequested] or
+ * terminal [TaskEvent.CancelRequested].
  */
 sealed interface TaskState {
     /** True for the absorbing states; [Interrupted] is resumable, hence NOT terminal. */
@@ -150,42 +150,43 @@ object TaskStateReducer {
     fun reduce(state: TaskState, event: TaskEvent): TaskState = when (state) {
         TaskState.Created -> when (event) {
             TaskEvent.Enqueued -> TaskState.Queued
-            else -> failOrIgnore(state, event)
+            else -> sharedTerminalOrIdentity(state, event)
         }
 
         TaskState.Queued -> when (event) {
             TaskEvent.SlotClaimed -> TaskState.Starting
-            else -> failOrIgnore(state, event)
+            else -> sharedTerminalOrIdentity(state, event)
         }
 
         TaskState.Starting -> when (event) {
             TaskEvent.ChildProgressed -> TaskState.Running
-            else -> failOrIgnore(state, event)
+            is TaskEvent.FinalResult -> TaskState.Succeeded(event.summary)
+            else -> sharedTerminalOrIdentity(state, event)
         }
 
         TaskState.Running -> when (event) {
             is TaskEvent.ApprovalRequested -> TaskState.WaitingApproval(event.request)
             is TaskEvent.FinalResult -> TaskState.Succeeded(event.summary)
-            else -> failOrIgnore(state, event)
+            else -> sharedTerminalOrIdentity(state, event)
         }
 
         is TaskState.WaitingApproval -> when (event) {
             // Approve and deny both resume the child; the decision payload travels to the
             // child as the tool result, not into the lifecycle state.
             is TaskEvent.ApprovalResolved -> TaskState.Resuming
-            else -> failOrIgnore(state, event)
+            else -> sharedTerminalOrIdentity(state, event)
         }
 
         TaskState.Resuming -> when (event) {
             TaskEvent.ChildProgressed -> TaskState.Running
-            else -> failOrIgnore(state, event)
+            is TaskEvent.FinalResult -> TaskState.Succeeded(event.summary)
+            else -> sharedTerminalOrIdentity(state, event)
         }
 
-        // The ONLY edge out of Interrupted (decisions #1/#3): explicit user resume. Failure /
-        // cancel / budget events on an interrupted run are stale echoes of the dead handle and
-        // must not destroy resumability.
+        // The only edge out of Interrupted is an explicit resume, or cancellation by user/parent.
         is TaskState.Interrupted -> when (event) {
             TaskEvent.ResumeRequested -> TaskState.Resuming
+            TaskEvent.CancelRequested -> TaskState.Cancelled
             else -> state
         }
 
@@ -198,7 +199,8 @@ object TaskStateReducer {
      * BudgetExhausted | Interrupted`); anything else is an illegal edge for the caller's state
      * and is ignored.
      */
-    private fun failOrIgnore(state: TaskState, event: TaskEvent): TaskState = when (event) {
+    // Shared terminal transitions used by every active state.
+    private fun sharedTerminalOrIdentity(state: TaskState, event: TaskEvent): TaskState = when (event) {
         is TaskEvent.ExecutionFailed -> TaskState.Failed(event.error)
         TaskEvent.CancelRequested -> TaskState.Cancelled
         is TaskEvent.BudgetExceeded -> TaskState.BudgetExhausted(event.breach)

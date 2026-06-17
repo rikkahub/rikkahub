@@ -106,15 +106,7 @@ import me.rerere.rikkahub.service.automation.AutomationActivationTracker
 import me.rerere.rikkahub.service.automation.AutomationKillSwitch
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
 import me.rerere.rikkahub.data.files.SkillManager
-import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
-import me.rerere.rikkahub.data.ai.transformers.KnowledgeContextTransformer
-import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
-import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
-import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
-import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
-import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
-import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
-import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.ChatMessageTransformers
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -570,28 +562,6 @@ enum class ChatErrorSolution {
     CheckTitleModelSettings,
 }
 
-private val inputTransformers by lazy {
-    listOf(
-        TimeReminderTransformer,
-        PromptInjectionTransformer,
-        PlaceholderTransformer,
-        OcrTransformer,
-        // Single message-surface knowledge assembly point (issue #141): replaces both
-        // DocumentAsPromptTransformer and KnowledgeRetrievalTransformer. Placed AFTER OcrTransformer
-        // so RAG's query basis stays identical to today (post-OCR text); attachments are Document
-        // parts OcrTransformer ignores, so document injection is unaffected by the position.
-        KnowledgeContextTransformer,
-    )
-}
-
-private val outputTransformers by lazy {
-    listOf(
-        ThinkTagTransformer,
-        Base64ImageToLocalFileTransformer,
-        RegexOutputTransformer,
-    )
-}
-
 class ChatService(
     private val context: Application,
     private val appScope: AppScope,
@@ -601,7 +571,7 @@ class ChatService(
     private val memoryRecaller: MemoryRecaller,
     private val generationHandler: GenerationHandler,
     private val taskCoordinator: TaskCoordinator,
-    private val templateTransformer: TemplateTransformer,
+    private val chatMessageTransformers: ChatMessageTransformers,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
     val mcpManager: McpManager,
@@ -705,6 +675,10 @@ class ChatService(
         }
     }
 
+    // Handle for the kill-switch revoke action registered in init, released in cleanup so a
+    // recreated ChatService does not leak a stale handler that captures dead `sessions`.
+    private var killSwitchHandle: Any? = null
+
     init {
         // 添加生命周期观察者
         ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
@@ -714,7 +688,7 @@ class ChatService(
         // generation job. Cancelling the job tears down that session's in-flight capture by
         // structured concurrency (the capture is a child of the generation coroutine), so this is
         // the global kill-switch that legitimately stops ALL automation sessions at once.
-        automationKillSwitch.register {
+        killSwitchHandle = automationKillSwitch.register {
             sessions.values.forEach { session ->
                 if (session.activeAutomationGuard != null) {
                     session.revokeAutomation()
@@ -726,6 +700,8 @@ class ChatService(
 
     fun cleanup() = runCatching {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
+        killSwitchHandle?.let { automationKillSwitch.unregister(it) }
+        killSwitchHandle = null
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
     }
@@ -1798,11 +1774,8 @@ class ChatService(
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 memories = recalledMemories,
-                inputTransformers = buildList {
-                    addAll(inputTransformers)
-                    add(templateTransformer)
-                },
-                outputTransformers = outputTransformers,
+                inputTransformers = chatMessageTransformers.input,
+                outputTransformers = chatMessageTransformers.output,
                 tools = appToolCatalog.tools(
                     ToolAssemblyContext(
                         mode = TurnMode.Main,
@@ -1845,9 +1818,8 @@ class ChatService(
                 // outer finally (covers the eager-arg throw before this onCompletion is even
                 // attached), not here. The lease itself is also self-expiring (TTL) as a backstop.
 
-                // Live Update 通知的移除由 GenerationForegroundService 在 1->0 边
-                // stopForeground(STOP_FOREGROUND_REMOVE) 唯一负责，这里不再 per-conversation 取消，
-                // 否则多会话并发时单个会话结束会误删其它会话仍在使用的共享常驻通知。
+                // Live Update 通知使用 per-conversation 的 (tag,id) 键，当前会话结束后即时移除，避免并发会话互相覆盖。
+                notificationSender.cancelLiveUpdate(conversationId)
 
                 // UI 末帧强制刷新由上游 coalesce 的 onCompletion 负责，已先于此处执行——下面读
                 // getConversationFlow().value 的定型保存与通知预览都已看到刷新后的精确最终状态。这里只负责与
@@ -1878,7 +1850,7 @@ class ChatService(
 
             }
         }.onFailure {
-            // Live Update 通知的移除由 GenerationForegroundService 在 1->0 边负责（见 onCompletion 注释）。
+            // Live Update 通知为 per-conversation 生命周期，已在 onCompletion 统一取消。
             if (it !is CancellationException) Log.e(TAG, "handleMessageComplete: generation failed", it)
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $it")

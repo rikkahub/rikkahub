@@ -541,6 +541,12 @@ sealed class UIMessagePart {
     }
 }
 
+fun UIMessagePart.isPendingToolApprovalFor(toolCallId: String): Boolean {
+    return this is UIMessagePart.Tool &&
+        this.toolCallId == toolCallId &&
+        approvalState is ToolApprovalState.Pending
+}
+
 /**
  * Execution state of a streamed tool call.
  *

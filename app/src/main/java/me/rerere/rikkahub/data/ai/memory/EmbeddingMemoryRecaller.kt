@@ -2,6 +2,8 @@ package me.rerere.rikkahub.data.ai.memory
 
 import ai.koog.embeddings.base.Embedder
 import ai.koog.embeddings.base.Vector
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.ai.runtime.contract.RecalledMemory
@@ -58,7 +60,17 @@ class EmbeddingMemoryRecaller(
 
         val currentSpace = context.embeddingSpace
         val currentHashByMemory = candidates.associate { it.memory.id to memoryContentHash(it.memory.content) }
-        val queryVector = withContext(Dispatchers.IO) { context.embedder.embed(query) }
+        // A transient query-embed failure (network/API/corrupt response) must degrade recall to the
+        // recency fallback, never abort the chat turn. The write path already self-heals by lazily
+        // re-embedding on the next write (see MemoryVectorWriter), so a temporary failure is recoverable.
+        val queryVector = try {
+            withContext(Dispatchers.IO) { context.embedder.embed(query) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.w(TAG, "recall: query embed failed; falling back to recency", e)
+            return fallback.recall(query, assistantId, k)
+        }
 
         return rankRecall(
             query = queryVector,
@@ -71,6 +83,8 @@ class EmbeddingMemoryRecaller(
     }
 
     companion object {
+        private const val TAG = "EmbeddingMemoryRecaller"
+
         /**
          * Pure ranking core (no IO). Returns the top-[k] memories: cosine-ranked usable vectors above
          * [minScore] first, then recency fills the remaining slots from memories WITHOUT a usable

@@ -1,5 +1,11 @@
 package me.rerere.ai.util
 
+import java.io.IOException
+
+class StreamEndedBeforeFirstFrameException(
+    override val message: String,
+) : IOException(message)
+
 /**
  * Thread-safe orchestrator for pre-first-frame SSE retry. Owns ALL mutable retry state
  * (first-frame gate, attempt counter, the live connection handle, the closed flag) behind
@@ -23,8 +29,13 @@ package me.rerere.ai.util
  */
 class StreamRetryController(
     private val maxRetries: Int,
+    private val replaySafety: ReplaySafety = ReplaySafety.NonIdempotent,
     private val open: () -> Cancellable,
 ) {
+    enum class ReplaySafety {
+        NonIdempotent,
+        IdempotentOrResumable
+    }
     fun interface Cancellable {
         fun cancel()
     }
@@ -43,6 +54,9 @@ class StreamRetryController(
     private var firstFrameReceived = false
     private var attempt = 0
     private var closed = false
+
+    private fun preFrameTerminalError(rawError: Throwable?): Throwable = rawError
+        ?: StreamEndedBeforeFirstFrameException("stream ended before first SSE frame")
 
     /** Open the initial connection. No-op (and cancels nothing) if already closed. */
     fun start() {
@@ -74,8 +88,14 @@ class StreamRetryController(
         backoffFor: (attempt: Int) -> Long,
         error: Throwable?,
     ): Outcome = synchronized(lock) {
-        if (closed || firstFrameReceived || !transient || attempt >= maxRetries) {
-            return Outcome.Terminate(error)
+        if (
+            closed ||
+            firstFrameReceived ||
+            !transient ||
+            attempt >= maxRetries ||
+            replaySafety != ReplaySafety.IdempotentOrResumable
+        ) {
+            return Outcome.Terminate(preFrameTerminalError(error))
         }
         current?.cancel()
         current = null
@@ -85,15 +105,22 @@ class StreamRetryController(
 
     /**
      * The connection closed cleanly (okhttp onClosed). Before the first frame this is still a
-     * pre-first-frame death and is retried like a transient failure if budget remains; otherwise
-     * it terminates normally. The retry path cancels [current] (it's a dead handle we're replacing);
-     * the terminal path leaves it for [close] — a clean EOF carries no error body to preserve, but
-     * keeping the cancel in one place keeps the ownership model uniform.
+     * pre-first-frame death and is retried like a transient failure if budget remains; otherwise it
+     * terminates with the non-idempotent terminal error. The retry path cancels [current] (it's a dead
+     * handle we're replacing); the terminal path leaves it for [close] — a clean EOF carries no
+     * error body to preserve, but keeping cancel ownership in one place stays uniform.
      */
     fun onClosed(backoffFor: (attempt: Int) -> Long): Outcome =
         synchronized(lock) {
-            if (closed || firstFrameReceived || attempt >= maxRetries) {
+            if (firstFrameReceived) {
                 return Outcome.Terminate(null)
+            }
+            if (
+                closed ||
+                attempt >= maxRetries ||
+                replaySafety != ReplaySafety.IdempotentOrResumable
+            ) {
+                return Outcome.Terminate(preFrameTerminalError(null))
             }
             current?.cancel()
             current = null

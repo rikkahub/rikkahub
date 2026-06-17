@@ -183,7 +183,10 @@ class WorkspaceRepository(
                 true
             },
             onFailure = {
-                Log.e(TAG, "installRootfs failed: workspace=$id, url=$url", it)
+                // Log the host only — the full URL may carry a `?key=`/token query the operator
+                // pasted; the host is enough to diagnose a failed install without leaking it.
+                val host = runCatching { java.net.URI(url).host }.getOrNull() ?: "?"
+                Log.e(TAG, "installRootfs failed: workspace=$id, host=$host", it)
                 applyShellStatus(id, WorkspaceShellStatus.BROKEN.name)
                 throw it
             },

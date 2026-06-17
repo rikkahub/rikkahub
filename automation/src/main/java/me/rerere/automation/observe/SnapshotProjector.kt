@@ -24,11 +24,11 @@ import me.rerere.automation.backend.RawWindow
  */
 class SnapshotProjector {
 
-    fun project(tree: RawTree): UiSnapshot {
+    fun project(tree: RawTree, allowedPackages: Set<String>): UiSnapshot {
         val foregroundIsHost = tree.foregroundPkg == HOST_PACKAGE
 
         // Windows the model may see: never the host, never a secure window's contents.
-        val visibleWindows = tree.windows.filter { it.pkg != HOST_PACKAGE }
+        val visibleWindows = tree.windows.filter { isWindowEligible(it.pkg, it.systemWindow, allowedPackages) }
 
         val screenState = when {
             foregroundIsHost -> ScreenState.FOREGROUND_IS_HOST
@@ -52,9 +52,9 @@ class SnapshotProjector {
             val collected = ArrayList<CollectedNode>()
             for (window in visibleWindows) {
                 if (window.secure) continue
-                window.root?.let { collect(it, window.systemWindow, collected) }
+                window.root?.let { collect(it, window.systemWindow, window.pkg, collected) }
             }
-            collected.mapIndexed { index, it -> toTarget(index, it.node, it.systemWindow) }
+            collected.mapIndexed { index, it -> toTarget(index, it.node, it.systemWindow, it.sourcePackage) }
         }
 
         return UiSnapshot(
@@ -67,19 +67,19 @@ class SnapshotProjector {
 
     /** A projected node paired with its owning window's system-UI provenance (carried so the act
      * path can enforce I-act-3; window identity is otherwise lost once nodes are flattened). */
-    private data class CollectedNode(val node: RawNode, val systemWindow: Boolean)
+    private data class CollectedNode(val node: RawNode, val systemWindow: Boolean, val sourcePackage: String)
 
     /** Pre-order collection: a node is emitted iff it passes the projection rule; recursion always
      * continues into children (incl. invisible containers) so passing descendants survive (P4). */
-    private fun collect(node: RawNode, systemWindow: Boolean, out: MutableList<CollectedNode>) {
-        if (isTarget(node)) out.add(CollectedNode(node, systemWindow))
-        for (child in node.children) collect(child, systemWindow, out)
+    private fun collect(node: RawNode, systemWindow: Boolean, sourcePackage: String, out: MutableList<CollectedNode>) {
+        if (isTarget(node)) out.add(CollectedNode(node, systemWindow, sourcePackage))
+        for (child in node.children) collect(child, systemWindow, sourcePackage, out)
     }
 
     private fun isTarget(node: RawNode): Boolean =
         (node.visible && node.hasArea) || node.hasId || node.hasText
 
-    private fun toTarget(tid: Int, node: RawNode, systemWindow: Boolean): UiTarget {
+    private fun toTarget(tid: Int, node: RawNode, systemWindow: Boolean, sourcePackage: String): UiTarget {
         val flags = buildSet {
             if (node.clickable) add(UiFlag.CLICK)
             if (node.editable) add(UiFlag.EDIT)
@@ -112,11 +112,20 @@ class SnapshotProjector {
             // is still gated behind confirmation (#198 slice 11). formKey above stays editable-only.
             viewId = node.resourceId?.takeIf { it.isNotEmpty() },
             systemWindow = systemWindow,
+            sourcePackage = sourcePackage,
         )
     }
 
     companion object {
         const val HOST_PACKAGE = "me.rerere.rikkahub"
         private const val MAX_MASK_LENGTH = 32
+
+        /**
+         * Shared predicate for deciding whether a window is traversable by both projection and act replay.
+         * The host window is never visible to the model. Non-host windows are visible when explicitly
+         * allow-listed or explicitly marked system.
+         */
+        fun isWindowEligible(pkg: String, systemWindow: Boolean, allowedPackages: Set<String>): Boolean =
+            pkg != HOST_PACKAGE && (pkg in allowedPackages || systemWindow)
     }
 }

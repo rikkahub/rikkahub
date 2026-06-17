@@ -94,18 +94,14 @@ class ScheduleVM(
 
     /**
      * Create a schedule through the shared repository path, binding (or creating) the parent first.
-     * The screen's [targetAssistantId] is stamped onto the draft here — the UI never chooses a target
-     * other than the assistant the screen is bound to, so a UI create can never aim at a foreign or
-     * unset assistant id.
+     * The parent conversation is still created from the screen assistant id for this screen when needed.
+     * The schedule's delegation target now comes from the draft (user picker), so this method never
+     * rewrites [ScheduleDraft.targetAssistantId] anymore.
      */
     suspend fun createSchedule(draft: ScheduleDraft): ScheduleMutationResult = createMutex.withLock {
         val wasUnbound = _conversationId.value == null
         val conversationId = requireConversationId()
-        val result = repository.create(
-            conversationId,
-            ScheduleOwner.USER,
-            draft.copy(targetAssistantId = targetAssistantId),
-        )
+        val result = repository.create(conversationId, ScheduleOwner.USER, draft)
         when (result) {
             is ScheduleMutationResult.Accepted -> refresh(conversationId)
             // A create this very call materialized must leave NO orphan when the repository rejects it:

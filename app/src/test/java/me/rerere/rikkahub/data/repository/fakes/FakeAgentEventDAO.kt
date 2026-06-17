@@ -80,4 +80,13 @@ class FakeAgentEventDAO : AgentEventDAO {
         ids.forEach { events.remove(it) }
         ids.size
     }
+
+    fun snapshot(): StateSnapshot = synchronized(lock) { StateSnapshot(events.toMap()) }
+
+    fun restore(snapshot: StateSnapshot) = synchronized(lock) {
+        events.clear()
+        events.putAll(snapshot.events)
+    }
+
+    data class StateSnapshot(val events: Map<String, AgentEventEntity>)
 }

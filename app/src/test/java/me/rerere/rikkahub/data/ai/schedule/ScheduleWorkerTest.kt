@@ -1,6 +1,11 @@
 package me.rerere.rikkahub.data.ai.schedule
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import me.rerere.ai.runtime.contract.MisfirePolicy
 import me.rerere.ai.runtime.contract.ScheduleKind
 import me.rerere.ai.runtime.contract.ScheduleOwner
@@ -264,5 +269,52 @@ class ScheduleWorkerTest {
         // The run is skipped (no parent), but finishRun STILL runs so the claim's running marker is
         // cleared — a killed/orphaned fire must never pin the schedule "running" forever.
         assertEquals(listOf("claim", "finish"), trace.steps)
+    }
+
+    @Test
+    fun `a fire cancelled mid-run still clears the marker via NonCancellable cleanup`() = runBlocking {
+        // Regression for C19: if the fire's coroutine is cancelled AFTER the claim stamped the
+        // in-flight marker but before finishRun ran, a plain suspending finally would be cancelled at
+        // its first suspension point and skip finishRun — pinning the schedule "running" forever. The
+        // NonCancellable cleanup must clear the marker even on cancellation.
+        val trace = Trace()
+        val scheduleId = Uuid.random()
+        val parent = Uuid.random()
+        val claim = ScheduleClaim(
+            runId = Uuid.random(),
+            snapshot = snapshot(ScheduleKind.ONE_SHOT, enabled = false, nextFireAt = 10_000L),
+        )
+        val runStarted = CompletableDeferred<Unit>()
+        val finishCalled = CompletableDeferred<Unit>()
+        val runner = ScheduleFireRunner(
+            claimDue = { _, _ -> trace.steps += "claim"; claim },
+            resolveParentConversation = { parent },
+            run = { _, _ ->
+                trace.steps += "run"
+                runStarted.complete(Unit)
+                awaitCancellation() // suspend until the fire coroutine is cancelled
+            },
+            finishRun = { _, _, _ ->
+                trace.steps += "finish"
+                // A CANCELLABLE suspension before signalling: this is what makes the test genuinely
+                // prove NonCancellable. Under withContext(NonCancellable) the job is never cancelled so
+                // yield() returns and we signal; WITHOUT NonCancellable the cancelled fire coroutine
+                // would throw here, finishCalled would never complete, and the timeout below fails.
+                yield()
+                finishCalled.complete(Unit)
+            },
+            nextFireIfStillArmed = { null }, // one-shot: no re-enqueue
+            enqueue = { _, _ -> trace.steps += "enqueue" },
+            now = { 5_000L },
+        )
+
+        val job = launch { runner.fire(scheduleId) }
+        runStarted.await()       // run() is now suspended holding the in-flight marker
+        job.cancel()             // cancel the fire mid-run
+        // Fail fast if the NonCancellable cleanup regressed (finishRun cancelled => never signals).
+        withTimeout(5_000) { finishCalled.await() }
+        job.join()
+
+        assertTrue("finishRun must run on the cancellation path", trace.steps.contains("finish"))
     }
 }

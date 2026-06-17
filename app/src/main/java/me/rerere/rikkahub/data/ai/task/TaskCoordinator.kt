@@ -3,10 +3,12 @@ package me.rerere.rikkahub.data.ai.task
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
@@ -23,6 +25,7 @@ import me.rerere.ai.runtime.task.TaskSpec
 import me.rerere.ai.runtime.task.TaskState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.transformers.ChatMessageTransformers
 import me.rerere.rikkahub.data.ai.runtime.MonotonicTaskBudgetClock
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.ai.subagent.SubagentGenerate
@@ -32,6 +35,7 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
 /**
@@ -118,6 +122,7 @@ class TaskCoordinator(
         store: TaskRunStore,
         clock: TaskBudgetClock,
         defaultBudget: TaskBudget = TaskBudget(),
+        transformers: ChatMessageTransformers,
     ) : this(
         generate = { settings, model, messages, assistant, tools, maxSteps, processingStatus ->
             generationHandler.generateText(
@@ -128,6 +133,8 @@ class TaskCoordinator(
                 tools = tools,
                 maxSteps = maxSteps,
                 processingStatus = processingStatus,
+                inputTransformers = transformers.input,
+                outputTransformers = transformers.output,
             )
         },
         store = store,
@@ -445,6 +452,7 @@ class TaskCoordinator(
         val startedAt = monotonicNow()
         var finalMessages: List<UIMessage> = messages
         var progressed = false
+        val wallTime = budget.effectiveWallTime
         // Track the latest folded usage locally so the terminal result carries the run's final
         // counters for the renderer's budget row (review finding #1) without a second store read.
         var lastUsage = TaskBudgetUsage()
@@ -456,44 +464,60 @@ class TaskCoordinator(
             // neither closure outside would catch it.
             store.applyEvent(taskId, TaskEvent.SlotClaimed)
             try {
-                generate(settings, model, messages, ephemeralSub, childTools, maxSteps, processingStatus).collect { chunk ->
-                    when (chunk) {
-                        is GenerationChunk.Messages -> {
-                            finalMessages = chunk.messages
-                            if (!progressed) {
-                                // First child event: Starting -> Running.
-                                store.applyEvent(taskId, TaskEvent.ChildProgressed)
-                                progressed = true
-                            }
-                            // Persist the child's latest progress as an event summary (review
-                            // finding #4). recoverInterruptedRuns() seeds a resume from the LAST
-                            // persisted summary; without this the history is always empty, so a
-                            // process-death recovery re-spawns from the bare prompt and repeats any
-                            // side effects the child already performed. The summary is the latest
-                            // assistant text — the same projection the terminal result extracts — so
-                            // a resumed child sees what it had already done. A progress chunk with no
-                            // assistant text yet (blank) is skipped: an empty marker would teach
-                            // recovery nothing and only churn the sequence cursor.
-                            val progressText = extractFinalAssistantText(chunk.messages)
-                            if (progressText.isNotBlank()) {
-                                store.appendEventSummary(taskId, progressText)
-                            }
-                            // Fold the child's CUMULATIVE usage (steps from assistant turns, tokens
-                            // from the message usage counters, elapsed from the monotonic clock) and
-                            // STOP the run on the first cap breach. A bare `return@collect` only
-                            // skips one chunk and lets the child keep producing chunks / running
-                            // tools past the cap (review finding #3); throwing the sentinel out of
-                            // collect cancels the upstream child flow's coroutine so it actually
-                            // stops, then is absorbed just below.
-                            lastUsage = usageOf(chunk.messages, startedAt)
-                            val breach = store.recordUsage(taskId, lastUsage, budget)
-                            if (breach != null) {
-                                val terminal = store.applyEvent(taskId, TaskEvent.BudgetExceeded(breach))
-                                throw BudgetStop(terminal)
+                withTimeout(wallTime) {
+                    generate(settings, model, messages, ephemeralSub, childTools, maxSteps, processingStatus).collect { chunk ->
+                        when (chunk) {
+                            is GenerationChunk.Messages -> {
+                                finalMessages = chunk.messages
+                                if (!progressed) {
+                                    // First child event: Starting -> Running.
+                                    store.applyEvent(taskId, TaskEvent.ChildProgressed)
+                                    progressed = true
+                                }
+                                // Persist the child's latest progress as an event summary (review
+                                // finding #4). recoverInterruptedRuns() seeds a resume from the LAST
+                                // persisted summary; without this the history is always empty, so a
+                                // process-death recovery re-spawns from the bare prompt and repeats any
+                                // side effects the child already performed. The summary is the latest
+                                // assistant text — the same projection the terminal result extracts — so
+                                // a resumed child sees what it had already done. A progress chunk with no
+                                // assistant text yet (blank) is skipped: an empty marker would teach
+                                // recovery nothing and only churn the sequence cursor.
+                                val progressText = extractFinalAssistantText(chunk.messages)
+                                if (progressText.isNotBlank()) {
+                                    store.appendEventSummary(taskId, progressText)
+                                }
+                                // Fold the child's CUMULATIVE usage (steps from assistant turns, tokens
+                                // from the message usage counters, elapsed from the monotonic clock) and
+                                // STOP the run on the first cap breach. A bare `return@collect` only
+                                // skips one chunk and lets the child keep producing chunks / running
+                                // tools past the cap (review finding #3); throwing the sentinel out of
+                                // collect cancels the upstream child flow's coroutine so it actually
+                                // stops, then is absorbed just below.
+                                lastUsage = usageOf(chunk.messages, startedAt)
+                                val breach = store.recordUsage(taskId, lastUsage, budget)
+                                if (breach != null) {
+                                    val terminal = store.applyEvent(taskId, TaskEvent.BudgetExceeded(breach))
+                                    throw BudgetStop(terminal)
+                                }
                             }
                         }
                     }
                 }
+            } catch (timeout: TimeoutCancellationException) {
+                // withTimeout hit before any chunk or before natural completion: force a tiny wall-breach
+                // so persisted usage is consistent with strict '> effectiveWallTime' semantics.
+                lastUsage = usageOf(finalMessages, startedAt).copy(elapsed = wallTime + 1.milliseconds)
+                val breach = checkNotNull(store.recordUsage(taskId, lastUsage, budget)) {
+                    "timeout must exceed wall-time budget and produce a breach"
+                }
+                val terminal = store.applyEvent(taskId, TaskEvent.BudgetExceeded(breach))
+                return resultOf(
+                    text = extractFinalAssistantText(finalMessages),
+                    terminal = terminal,
+                    usage = lastUsage,
+                    maxSteps = maxSteps,
+                )
             } catch (stop: BudgetStop) {
                 // The breach already fired TaskEvent.BudgetExceeded and the collection unwound,
                 // cancelling the child flow. The run is BudgetExhausted; surface the partial text.

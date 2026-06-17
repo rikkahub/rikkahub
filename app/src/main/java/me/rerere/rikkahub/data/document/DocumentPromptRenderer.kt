@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.document
 
+import me.rerere.common.text.UntrustedContentFraming
+
 /**
  * Renders the prompt text for one chat attachment from its typed [DocumentExtractionResult]
  * (issue #102). The bug this replaces: the old chat path wrapped whatever string the reader returned
@@ -17,25 +19,43 @@ package me.rerere.rikkahub.data.document
  * Pure function over the result so it is JVM unit-testable without Android URI / disk IO.
  */
 object DocumentPromptRenderer {
+    private val controlCharacters = Regex("[\\p{Cc}\\p{Cf}]+")
+    private val repeatedSpaces = Regex(" +")
 
-    fun render(fileName: String, result: DocumentExtractionResult): String = when (result) {
-        is DocumentExtractionResult.Success -> contentPrompt(fileName, result.text)
-        DocumentExtractionResult.UnsupportedType -> note(fileName, "unsupported file type")
-        DocumentExtractionResult.Empty -> note(fileName, "no extractable text")
-        is DocumentExtractionResult.ParseFailed -> note(fileName, "could not be read")
-        is DocumentExtractionResult.Rejected -> note(fileName, "too large to include")
+    fun render(fileName: String, result: DocumentExtractionResult): String {
+        val safeFileName = sanitizePromptSafeFileName(fileName)
+
+        return when (result) {
+            is DocumentExtractionResult.Success -> contentPrompt(safeFileName, result.text)
+            DocumentExtractionResult.UnsupportedType -> note(safeFileName, "unsupported file type")
+            DocumentExtractionResult.Empty -> note(safeFileName, "no extractable text")
+            is DocumentExtractionResult.ParseFailed -> note(safeFileName, "could not be read")
+            is DocumentExtractionResult.Rejected -> note(safeFileName, "too large to include")
+        }
     }
 
     private fun contentPrompt(fileName: String, text: String): String =
-        """
-        ## user sent a file: $fileName
-        <content>
-        ```
-        $text
-        ```
-        </content>
-        """.trimIndent()
+        if (text.isBlank()) {
+            note(fileName, "no extractable text")
+        } else {
+            """
+            ## user sent a file: $fileName
+            <content>
+            ```
+            ${UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE}
+            ${UntrustedContentFraming.escape(text)}
+            ```
+            </content>
+            """.trimIndent()
+        }
 
     private fun note(fileName: String, reason: String): String =
         "## user attached a file: $fileName ($reason)"
+
+    private fun sanitizePromptSafeFileName(fileName: String): String =
+        UntrustedContentFraming.escape(fileName
+            .replace(controlCharacters, " ")
+            .trim()
+            .replace(repeatedSpaces, " "),
+        )
 }

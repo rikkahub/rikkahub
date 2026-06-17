@@ -79,10 +79,9 @@ class ScheduleVMTest {
             rollbackConversation = rollback.rollback,
         )
 
-        // The dialog never supplies a target — Uuid.NIL stands in, and the VM must stamp the
-        // screen's bound assistant before the draft reaches the repository.
+        // The delegation target is now supplied by the draft selected in the dialog.
         fun oneShotDraft() = ScheduleDraft(
-            targetAssistantId = Uuid.NIL,
+            targetAssistantId = target.id,
             prompt = "remind me",
             kind = ScheduleKind.ONE_SHOT,
             firstFireAt = 10_000L,
@@ -273,34 +272,38 @@ class ScheduleVMTest {
             unit: RecurrenceUnit = RecurrenceUnit.HOURS,
             timeOfDay: String? = null,
             timeZoneId: String = "UTC",
+            targetAssistantId: Uuid,
         ) = ScheduleFormState(
             prompt = prompt,
             kind = kind,
             every = every,
             unit = unit,
             firstFireAt = futureFire,
+            targetAssistantId = targetAssistantId,
             timeOfDay = timeOfDay,
             timeZoneId = timeZoneId,
         )
 
-        val submittable = listOf(
-            form(),
-            form(kind = ScheduleKind.RECURRING, every = 15, unit = RecurrenceUnit.MINUTES),
-            form(kind = ScheduleKind.RECURRING, every = 1, unit = RecurrenceUnit.HOURS),
-            form(kind = ScheduleKind.RECURRING, every = 1, unit = RecurrenceUnit.DAYS, timeOfDay = "09:00"),
-            form(kind = ScheduleKind.RECURRING, every = 2, unit = RecurrenceUnit.DAYS, timeOfDay = null),
-            form(timeZoneId = "Asia/Jakarta"),
-            form(prompt = "a".repeat(TaskScheduleRepository.MAX_PROMPT_CHARS)),
+        val submittableTemplates = listOf(
+            form(targetAssistantId = Uuid.random()),
+            form(kind = ScheduleKind.RECURRING, every = 15, unit = RecurrenceUnit.MINUTES, targetAssistantId = Uuid.random()),
+            form(kind = ScheduleKind.RECURRING, every = 1, unit = RecurrenceUnit.HOURS, targetAssistantId = Uuid.random()),
+            form(kind = ScheduleKind.RECURRING, every = 1, unit = RecurrenceUnit.DAYS, timeOfDay = "09:00", targetAssistantId = Uuid.random()),
+            form(kind = ScheduleKind.RECURRING, every = 2, unit = RecurrenceUnit.DAYS, timeOfDay = null, targetAssistantId = Uuid.random()),
+            form(timeZoneId = "Asia/Jakarta", targetAssistantId = Uuid.random()),
+            form(prompt = "a".repeat(TaskScheduleRepository.MAX_PROMPT_CHARS), targetAssistantId = Uuid.random()),
         )
 
-        for (state in submittable) {
+        for (stateTemplate in submittableTemplates) {
+            val f = Fixture(boundConversationId = Uuid.random())
+            val state = stateTemplate.copy(targetAssistantId = f.target.id)
+
             assertTrue(
                 "fixture invariant: this form must validate as submittable: ${state.validate(now)}",
                 state.validate(now).isEmpty(),
             )
             // Each create runs on its own bound conversation so the per-conversation active cap (20)
             // cannot reject a later draft for a reason unrelated to the form's own legality.
-            val f = Fixture(boundConversationId = Uuid.random())
             val result = f.vm.createSchedule(state.toDraft())
             assertTrue(
                 "a submittable form must be Accepted, got $result for $state",

@@ -76,6 +76,35 @@ object NotificationUtil {
     }
 
     /**
+     * 使用 DSL 风格创建并发送通知（带 tag）
+     *
+     * @param context 上下文
+     * @param channelId 通知渠道 ID
+     * @param notificationTag 通知 tag（与 {@link NotificationManagerCompat.notify} 一致）
+     * @param notificationId 通知 ID
+     * @param config 通知配置 lambda
+     * @return 是否成功发送
+     */
+    @SuppressLint("MissingPermission")
+    fun notify(
+        context: Context,
+        channelId: String,
+        notificationTag: String,
+        notificationId: Int,
+        config: NotificationConfig.() -> Unit
+    ): Boolean {
+        if (!hasNotificationPermission(context)) {
+            return false
+        }
+
+        val notificationConfig = NotificationConfig().apply(config)
+        val notification = buildNotification(context, channelId, notificationConfig)
+
+        NotificationManagerCompat.from(context).notify(notificationTag, notificationId, notification.build())
+        return true
+    }
+
+    /**
      * 构建通知
      */
     fun buildNotification(
@@ -124,6 +153,13 @@ object NotificationUtil {
     }
 
     /**
+     * 取消已发送的通知（带 tag）
+     */
+    fun cancel(context: Context, notificationTag: String, notificationId: Int) {
+        NotificationManagerCompat.from(context).cancel(notificationTag, notificationId)
+    }
+
+    /**
      * 取消所有通知
      */
     fun cancelAll(context: Context) {
@@ -141,8 +177,25 @@ fun Context.sendNotification(
 ): Boolean = NotificationUtil.notify(this, channelId, notificationId, config)
 
 /**
+ * Context 扩展函数，按 tag 发送通知
+ */
+fun Context.sendNotification(
+    channelId: String,
+    notificationTag: String,
+    notificationId: Int,
+    config: NotificationConfig.() -> Unit
+): Boolean = NotificationUtil.notify(this, channelId, notificationTag, notificationId, config)
+
+/**
  * Context 扩展函数，取消通知
  */
 fun Context.cancelNotification(notificationId: Int) {
     NotificationUtil.cancel(this, notificationId)
+}
+
+/**
+ * Context 扩展函数，按 tag 取消通知
+ */
+fun Context.cancelNotification(notificationTag: String, notificationId: Int) {
+    NotificationUtil.cancel(this, notificationTag, notificationId)
 }

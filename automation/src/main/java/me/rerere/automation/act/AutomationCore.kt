@@ -49,7 +49,7 @@ class AutomationCore(
      * every prior observe (P10/P11). The snapshot text is the mandatory, self-sufficient channel —
      * :app maps it to a `UIMessagePart.Text` (tool-output images are dropped by most providers).
      */
-    suspend fun observe(): UiSnapshot {
+    suspend fun observe(allowedPackages: Set<String>): UiSnapshot {
         val raw = backend.snapshotRawTree()
         // Capture the TOCTOU token atomically with the tree: the backend computes [RawTree.contentHash]
         // from the SAME capture instant as the nodes (under its capture lock), so the grounding's nodes
@@ -57,7 +57,7 @@ class AutomationCore(
         // let a content change between the two reads make the token describe a different tree than the
         // nodes (gate finding). The projector leaves it "" (a bare projection is not grounded); the core
         // is the one place a snapshot is bound to a live backend, so it stamps the captured hash here.
-        val snapshot = projector.project(raw)
+        val snapshot = projector.project(raw, allowedPackages)
             .copy(windowContentHash = raw.contentHash)
 
         // P11: enforce non-decreasing observed sequence. A backend that hands back a lower seq than
@@ -221,8 +221,19 @@ class AutomationCore(
         // 4. perform → settle → re-snapshot under the revocation token (revoke cancels in-flight).
         val performAction = when (request) {
             is Act.Global -> PerformAction.Global(request.nav)
-            is Act.Targeted -> PerformAction.Node(grounded.stateSeq, tid!!, request.kind)
-            is Act.SetText -> PerformAction.SetText(grounded.stateSeq, tid!!, request.text)
+            is Act.Targeted -> PerformAction.Node(
+                stateSeq = grounded.stateSeq,
+                tid = tid!!,
+                kind = request.kind,
+                allowedPackages = setOf(grounded.foregroundPkg),
+            )
+
+            is Act.SetText -> PerformAction.SetText(
+                stateSeq = grounded.stateSeq,
+                tid = tid!!,
+                text = request.text,
+                allowedPackages = setOf(grounded.foregroundPkg),
+            )
         }
         val job = currentCoroutineContext()[Job]
         return guard.guardInFlight(
@@ -269,7 +280,7 @@ class AutomationCore(
                 } else {
                     backend.awaitSettle()
                     // D4: act success is the fresh re-grounding, not perform()'s boolean.
-                    val resnapshot = observe()
+                    val resnapshot = observe(setOf(grounded.foregroundPkg))
                     // Surface re-assert (mirrors UiAutomationTools' ui_observe bind): the post-act
                     // re-snapshot must NOT disclose an app the capability never admitted. The act
                     // authorized against `grounded.foregroundPkg`; a global nav (HOME/BACK/RECENTS) can

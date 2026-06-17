@@ -36,11 +36,23 @@ class GenerationForegroundCoordinator(
     // 异常会逃逸并崩溃进程——恰好是本 PR 要修的后台发消息场景。runCatching 兜住启动失败：生成本身
     // 仍在 appScope 继续，只是失去前台保活/锁（降级而非崩溃）。启动成功才置位标志，使后续停止只对
     // 真正启动过的服务发 ACTION_STOP。
+    // @Synchronized so the running-flag check, controller.start(), and the flag update are atomic
+    // across concurrent starts (multiple conversations share this process-global coordinator). Without
+    // it, a non-STARTED retry could observe running==false, enter start() concurrently with the
+    // STARTED edge's start(), and its onFailure set(false) could clobber the other's success.
+    @Synchronized
     fun onGenerationStart() {
-        if (generationTracker.acquire() != GenerationActivityTracker.Transition.STARTED) return
+        val transition = generationTracker.acquire()
+        // Attempt the start on the 0->1 edge, OR whenever the service is not yet running. A transient
+        // start failure (ForegroundServiceStartNotAllowedException) used to latch: the active count
+        // stays >0 so every later generation returned here at the non-STARTED edge and never retried,
+        // leaving the whole active window unprotected. Suppress a retry only when the service IS
+        // already running; otherwise re-attempt so a later generation can recover the keepalive.
+        if (transition != GenerationActivityTracker.Transition.STARTED && foregroundServiceRunning.get()) return
         runCatching { controller.start() }
             .onSuccess { foregroundServiceRunning.set(true) }
             .onFailure {
+                foregroundServiceRunning.set(false)
                 Log.w(TAG, "onGenerationStart: foreground service start failed, degraded", it)
             }
     }
@@ -48,6 +60,7 @@ class GenerationForegroundCoordinator(
     // 由 job.invokeOnCompletion 触发（成功/失败/取消三条终止路径都会经过）。仅 1->0 边停止前台
     // 服务，且仅当启动确实成功过时才发 ACTION_STOP（startService 在后台对未启动的服务也可能抛
     // IllegalStateException）。服务在 ACTION_STOP / onDestroy 释放锁。
+    @Synchronized
     fun onGenerationStop() {
         if (generationTracker.release() != GenerationActivityTracker.Transition.STOPPED) return
         if (foregroundServiceRunning.compareAndSet(true, false)) {

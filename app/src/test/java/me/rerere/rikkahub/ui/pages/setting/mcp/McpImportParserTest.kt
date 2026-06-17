@@ -1,7 +1,13 @@
 package me.rerere.rikkahub.ui.pages.setting.mcp
 
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.element
+import io.kotest.property.checkAll
 import me.rerere.ai.runtime.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.mcp.mcpAutoConnectCandidates
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -116,5 +122,99 @@ class McpImportParserTest {
 
         assertEquals(1, result.size)
         assertTrue(result[0].commonOptions.headers.isEmpty())
+    }
+
+    @Test
+    fun `invariant imported servers are always disabled`() {
+        runBlocking {
+            checkAll(
+                Arb.element(listOf("sse", "streamable_http")),
+                Arb.element(listOf("http://", "https://")),
+                Arb.element(listOf(true, false)),
+            ) { transportType, scheme, enabled ->
+                val json = """
+                    {
+                      "mcpServers": {
+                        "node": {
+                          "type": "$transportType",
+                          "url": "${scheme}example.com/$transportType",
+                          "enable": $enabled
+                        }
+                      }
+                    }
+                """.trimIndent()
+
+                val result = parseMcpServersFromJson(json)
+
+                assertEquals(1, result.size)
+                assertFalse(result[0].commonOptions.enable)
+            }
+        }
+    }
+
+    @Test
+    fun `boundary only valid http(s) entries stay and are disabled`() {
+        val json = """
+            {
+              "mcpServers": {
+                "enabledValid": { "type": "sse", "url": "https://good.example.com/mcp", "enable": true },
+                "blank": { "type": "sse", "url": "   " },
+                "fileScheme": { "type": "streamable_http", "url": "file:///tmp/mcp" },
+                "wsScheme": { "type": "sse", "url": "ws://bad.example.com/mcp" }
+              }
+            }
+        """.trimIndent()
+
+        val result = parseMcpServersFromJson(json)
+
+        assertEquals(1, result.size)
+        assertTrue(result[0] is McpServerConfig.SseTransportServer)
+        val server = result[0] as McpServerConfig.SseTransportServer
+        assertFalse(server.commonOptions.enable)
+        assertEquals("https://good.example.com/mcp", server.url)
+    }
+
+    @Test
+    fun `invariant imported json never produces auto-connect candidates`() {
+        runBlocking {
+            checkAll(
+                Arb.element(listOf("http://", "https://")),
+                Arb.element(listOf("sse", "streamable_http")),
+                Arb.element(listOf(true, false)),
+            ) { scheme, transportType, enabled ->
+                val json = """
+                    {
+                      "mcpServers": {
+                        "node": {
+                          "type": "$transportType",
+                          "url": "${scheme}example.com/$transportType",
+                          "enable": $enabled
+                        }
+                      }
+                    }
+                """.trimIndent()
+
+                val result = parseMcpServersFromJson(json)
+
+                assertTrue(mcpAutoConnectCandidates(result).isEmpty())
+                assertFalse(result[0].commonOptions.enable)
+            }
+        }
+    }
+
+    @Test
+    fun `metamorphic import concat stays non-connectable`() {
+        val json = """
+            {
+              "mcpServers": {
+                "imported": { "type": "streamable_http", "url": "https://example.com/mcp", "enable": true }
+              }
+            }
+        """.trimIndent()
+
+        val first = parseMcpServersFromJson(json)
+        val second = parseMcpServersFromJson(json)
+
+        assertTrue(mcpAutoConnectCandidates(first + second).isEmpty())
     }
 }

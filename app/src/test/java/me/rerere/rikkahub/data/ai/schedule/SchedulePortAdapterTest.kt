@@ -1,14 +1,22 @@
 package me.rerere.rikkahub.data.ai.schedule
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.runtime.contract.ScheduleDraft
 import me.rerere.ai.runtime.contract.ScheduleKind
 import me.rerere.ai.runtime.contract.ScheduleMutationResult
 import me.rerere.ai.runtime.contract.ScheduleOwner
+import me.rerere.ai.runtime.schedule.buildScheduleTools
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.TaskScheduleRepository
 import me.rerere.rikkahub.data.repository.fakes.FakeBoardTransactions
 import me.rerere.rikkahub.data.repository.fakes.FakeTaskScheduleDAO
+import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,6 +35,7 @@ import kotlin.uuid.Uuid
  */
 class SchedulePortAdapterTest {
 
+    private val json = Json
     private class MutableClock {
         private var t = 1_000L
         fun current(): Long = ++t
@@ -55,6 +64,16 @@ class SchedulePortAdapterTest {
             firstFireAt = 10_000L,
             timeZoneId = "UTC",
         )
+    }
+
+    private fun execute(
+        port: SchedulePortAdapter,
+        name: String,
+        args: JsonObject,
+    ): JsonObject = runBlocking {
+        val tool = buildScheduleTools(port).single { it.name == name }
+        val parts = tool.execute(args)
+        json.parseToJsonElement((parts.single() as UIMessagePart.Text).text).jsonObject
     }
 
     @Test
@@ -119,5 +138,33 @@ class SchedulePortAdapterTest {
 
         assertEquals(1, f.adapter(conversationA).list().size)
         assertTrue(f.adapter(conversationB).list().isEmpty())
+    }
+
+    @Test
+    fun create_rejects_invalid_recurring_time_of_day_and_stores_no_schedule() = runBlocking {
+        val f = Fixture()
+        val conversationId = Uuid.random()
+        val port = f.adapter(conversationId)
+        val output = execute(
+            port,
+            "schedule_create",
+            buildJsonObject {
+                put("targetAssistant", f.spawnable.id.toString())
+                put("prompt", "daily briefing")
+                put("kind", "recurring")
+                put("firstFireAt", 10_000L)
+                put("timeZoneId", "UTC")
+                put(
+                    "recurrenceSpec",
+                    buildJsonObject {
+                        put("every", 1)
+                        put("unit", "DAYS")
+                        put("timeOfDay", "25:99")
+                    },
+                )
+            },
+        )
+        assertEquals(false, output["ok"]!!.jsonPrimitive.content.toBoolean())
+        assertTrue(f.repository.list(conversationId).isEmpty())
     }
 }

@@ -1,11 +1,16 @@
 package me.rerere.workspace
 
 import java.io.File
+import java.io.IOException
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.LinkOption
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.FileVisitResult
 import kotlin.io.path.name
 
 class WorkspaceFileSystem(
@@ -53,11 +58,14 @@ class WorkspaceFileSystem(
 
     fun delete(root: File, path: String, recursive: Boolean = false): Boolean {
         require(path.isNotBlank() && path != ".") { "Refusing to delete workspace root" }
+        val rootFile = root.canonicalFile
         val file = resolvePath(root, path)
+        requireNotRoot(file, rootFile)
         if (!file.exists()) return false
         return if (file.isDirectory) {
             require(recursive) { "Directory delete requires recursive = true" }
-            file.deleteRecursively()
+            deleteRecursivelyNoFollow(rootFile, file)
+            true
         } else {
             file.delete()
         }
@@ -65,13 +73,16 @@ class WorkspaceFileSystem(
 
     fun move(root: File, source: String, target: String, overwrite: Boolean = false): WorkspaceFileEntry {
         require(source.isNotBlank() && source != ".") { "Refusing to move workspace root" }
+        val rootFile = root.canonicalFile
         val sourceFile = resolvePath(root, source)
         val targetFile = resolvePath(root, target)
+        requireNotRoot(sourceFile, rootFile)
+        requireNotRoot(targetFile, rootFile)
         require(sourceFile.exists()) { "Source does not exist: $source" }
         if (targetFile.exists()) {
             require(overwrite) { "Target already exists: $target" }
             if (targetFile.isDirectory) {
-                targetFile.deleteRecursively()
+                deleteRecursivelyNoFollow(rootFile, targetFile)
             } else {
                 targetFile.delete()
             }
@@ -149,6 +160,45 @@ class WorkspaceFileSystem(
         Files.walk(start.toPath()).use { stream ->
             block(stream.iterator().asSequence())
         }
+
+    private fun requireNotRoot(resolved: File, root: File) {
+        require(resolved.canonicalFile != root.canonicalFile) { "Refusing to operate on workspace root" }
+    }
+
+    private fun deleteRecursivelyNoFollow(root: File, target: File): Boolean {
+        if (!target.exists()) return false
+        val rootPath = root.canonicalFile.toPath()
+        Files.walkFileTree(
+            target.toPath(),
+            object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    requirePathUnderRoot(dir, rootPath)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    requirePathUnderRoot(file, rootPath)
+                    Files.delete(file)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
+                    exc?.let { throw it }
+                    requirePathUnderRoot(dir, rootPath)
+                    Files.delete(dir)
+                    return FileVisitResult.CONTINUE
+                }
+            },
+        )
+        return true
+    }
+
+    private fun requirePathUnderRoot(candidate: Path, rootPath: Path) {
+        val realPath = candidate.toRealPath(LinkOption.NOFOLLOW_LINKS)
+        require(realPath == rootPath || realPath.startsWith(rootPath)) {
+            "Path escapes workspace root: $candidate"
+        }
+    }
 
     private fun resolvePath(root: File, path: String): File {
         root.mkdirs()

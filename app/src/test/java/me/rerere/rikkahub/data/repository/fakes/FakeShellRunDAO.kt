@@ -97,4 +97,13 @@ class FakeShellRunDAO : ShellRunDAO {
         ids.forEach { rows.remove(it) }
         ids.size
     }
+
+    fun snapshot(): StateSnapshot = synchronized(lock) { StateSnapshot(rows.toMap()) }
+
+    fun restore(snapshot: StateSnapshot) = synchronized(lock) {
+        rows.clear()
+        rows.putAll(snapshot.rows)
+    }
+
+    data class StateSnapshot(val rows: Map<String, ShellRunEntity>)
 }

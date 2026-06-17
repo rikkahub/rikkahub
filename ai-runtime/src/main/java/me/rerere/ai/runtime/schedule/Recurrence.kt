@@ -2,6 +2,7 @@ package me.rerere.ai.runtime.schedule
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
@@ -47,8 +48,18 @@ data class RecurrenceSpec(
     val unit: RecurrenceUnit,
     val timeOfDay: String? = null,
 ) {
+    @Transient
+    val localTimeOfDay: LocalTime? = timeOfDay?.let(::parseTimeOfDay)
+
     init {
         require(every >= 1) { "recurrence interval `every` must be >= 1, was $every" }
+    }
+
+    private fun parseTimeOfDay(value: String): LocalTime {
+        require(value.matches(Regex("^\\d{2}:\\d{2}$"))) {
+            "timeOfDay must be HH:mm in range 00:00..23:59, was '$value'"
+        }
+        return LocalTime.parse(value)
     }
 }
 
@@ -109,7 +120,7 @@ object Recurrence {
      */
     private fun nextDailyOccurrence(spec: RecurrenceSpec, firstFireAt: Long, zone: ZoneId, now: Long): Long {
         val anchorZdt = Instant.ofEpochMilli(firstFireAt).atZone(zone)
-        val fireTime: LocalTime = spec.timeOfDay?.let { LocalTime.parse(it) } ?: anchorZdt.toLocalTime()
+        val fireTime: LocalTime = spec.localTimeOfDay ?: anchorZdt.toLocalTime()
         val stepDays = spec.every.toLong()
         // First candidate: the anchor's date at the fire time, in zone.
         var candidate: ZonedDateTime = anchorZdt.toLocalDate().atTime(fireTime).atZone(zone)

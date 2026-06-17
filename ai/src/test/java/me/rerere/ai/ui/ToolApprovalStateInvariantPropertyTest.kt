@@ -100,4 +100,23 @@ class ToolApprovalStateInvariantPropertyTest {
             }
         }
     }
+
+    @Test
+    fun `isPendingToolApprovalFor matches only pending tools with the same call id`() {
+        runBlocking {
+            checkAll(200, arbApprovalState, Arb.string(0..8), Arb.string(0..8)) { state, toolCallId, noise ->
+                val tool = UIMessagePart.Tool(
+                    toolCallId = toolCallId,
+                    toolName = "tool",
+                    input = "{}",
+                    approvalState = state,
+                )
+                val expected = state is ToolApprovalState.Pending
+                assertEquals(expected, tool.isPendingToolApprovalFor(toolCallId))
+                val mismatchedToolCallId = if (noise == toolCallId) "$noise-" else noise
+                assertFalse(tool.isPendingToolApprovalFor(mismatchedToolCallId))
+                assertFalse(UIMessagePart.Text("not a tool").isPendingToolApprovalFor(toolCallId))
+            }
+        }
+    }
 }

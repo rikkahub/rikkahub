@@ -1,14 +1,13 @@
 package me.rerere.ai.runtime.knowledge
 
+import me.rerere.common.text.UntrustedContentFraming
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Locks invariant 4 (issue #141): each knowledge source renders with a visually distinct label so
- * memory insight can never masquerade as document evidence — and the RAG wrapper reproduces the
- * legacy `KnowledgeRetrievalTransformer.buildContextBlock` text exactly (no-regression, PBT P7).
+ * Locks source-labeled rendering invariants for each knowledge source.
  */
 class KnowledgeContextRendererTest {
 
@@ -22,7 +21,7 @@ class KnowledgeContextRendererTest {
     )
 
     @Test
-    fun `RAG block is wrapped in knowledge_base_context with the preserved guidance and chunk text`() {
+    fun `RAG block is wrapped in knowledge_base_context with the preserved guidance and escaped payload`() {
         val out = KnowledgeContextRenderer.render(block(KnowledgeSource.RAG, "chunk-one\n\n---\n\nchunk-two"))
 
         assertTrue(out.contains("<knowledge_base_context>"))
@@ -31,24 +30,8 @@ class KnowledgeContextRendererTest {
             "guidance sentence preserved",
             out.contains("The following excerpts were retrieved from the user's attached knowledge base"),
         )
-        assertTrue("chunk text present", out.contains("chunk-one"))
-        assertTrue("chunk text present", out.contains("chunk-two"))
-    }
-
-    @Test
-    fun `RAG rendering is byte-identical to the legacy buildContextBlock format`() {
-        // The exact string the old KnowledgeRetrievalTransformer produced for the same joined chunks.
-        val joined = "alpha\n\n---\n\nbeta"
-        val legacy = """
-            <knowledge_base_context>
-            The following excerpts were retrieved from the user's attached knowledge base and may be
-            relevant to the request. Use them when helpful; ignore them when not.
-
-            $joined
-            </knowledge_base_context>
-        """.trimIndent()
-
-        assertEquals(legacy, KnowledgeContextRenderer.render(block(KnowledgeSource.RAG, joined)))
+        assertTrue("directive sentence present", out.contains(UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE))
+        assertTrue("escaped payload still present", out.contains("chunk-one"))
     }
 
     @Test
@@ -63,11 +46,12 @@ class KnowledgeContextRendererTest {
     }
 
     @Test
-    fun `MEMORY block is wrapped in a distinct memory label`() {
+    fun `MEMORY block is wrapped in a distinct memory label with a directive`() {
         val out = KnowledgeContextRenderer.render(block(KnowledgeSource.MEMORY, "user prefers metric units"))
 
         assertTrue(out.contains("<memory>"))
         assertTrue(out.contains("</memory>"))
+        assertTrue(out.contains(UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE))
         assertTrue(out.contains("user prefers metric units"))
         // Distinct from the other two sources.
         assertFalse(out.contains("<knowledge_base_context>"))

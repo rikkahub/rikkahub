@@ -5,6 +5,7 @@ import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.long
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,6 +41,84 @@ class RecurrencePropertyTest {
         val next = Recurrence.nextOccurrenceAfter(spec, first, lastFiredAt = onBoundary, utc, now = onBoundary)
         assertEquals(first + 4 * 30 * minute, next)
         assertTrue("result must be strictly after now", next > onBoundary)
+    }
+
+    @Test
+    fun `timeOfDay validates strict HHmm and range`() {
+        assertTrue(
+            listOf("00:00", "23:59", null).all {
+                runCatching { RecurrenceSpec(every = 1, unit = RecurrenceUnit.DAYS, timeOfDay = it).timeOfDay }
+                    .isSuccess
+            }
+        )
+        assertTrue(
+            listOf("24:00", "25:99", "9:5", "", "abc", "09:00:30").all {
+                runCatching { RecurrenceSpec(every = 1, unit = RecurrenceUnit.DAYS, timeOfDay = it) }
+                    .isFailure
+            }
+        )
+    }
+
+    @Test
+    fun `every must be at least one`() {
+        assertTrue(runCatching { RecurrenceSpec(every = 0, unit = RecurrenceUnit.MINUTES) }.isFailure)
+    }
+
+    @Test
+    fun `accepted specs never throw when computing next occurrence`() {
+        runBlocking {
+            checkAll(
+                500,
+                Arb.int(1..240),
+                Arb.long(0L..10_000_000_000L),
+                Arb.long(0L..10_000_000_000L),
+            ) { every, first, now ->
+                for (unit in RecurrenceUnit.entries) {
+                    val spec = if (unit == RecurrenceUnit.DAYS) {
+                        RecurrenceSpec(every = every, unit = unit, timeOfDay = "09:00")
+                    } else {
+                        RecurrenceSpec(every = every, unit = unit)
+                    }
+                    assertTrue("$unit/$every: next occurrence must not throw",
+                        runCatching {
+                            Recurrence.nextOccurrenceAfter(spec, first, lastFiredAt = null, utc, now)
+                        }.isSuccess)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `json roundtrip equals original and still computes next occurrence`() {
+        runBlocking {
+            checkAll(
+                500,
+                Arb.int(1..120),
+                Arb.long(0L..5_000_000_000L),
+                Arb.long(0L..5_000_000_000L),
+            ) { every, first, now ->
+                for (unit in RecurrenceUnit.entries) {
+                    val spec = if (unit == RecurrenceUnit.DAYS) {
+                        RecurrenceSpec(every = every, unit = unit, timeOfDay = "09:00")
+                    } else {
+                        RecurrenceSpec(every = every, unit = unit)
+                    }
+                    val encoded = Json.encodeToString(spec)
+                    val decoded = Json.decodeFromString<RecurrenceSpec>(encoded)
+                    assertEquals(spec, decoded)
+                    assertTrue("$unit/$every: decoded spec should compute next occurrence",
+                        runCatching {
+                            Recurrence.nextOccurrenceAfter(
+                                spec = decoded,
+                                firstFireAt = first,
+                                lastFiredAt = null,
+                                zone = utc,
+                                now = now,
+                            )
+                        }.isSuccess)
+                }
+            }
+        }
     }
 
     // ---- BOUNDARY: now just before an occurrence ⇒ that occurrence ----
@@ -184,7 +263,7 @@ class RecurrencePropertyTest {
             }
             RecurrenceUnit.DAYS -> {
                 val anchorZdt = java.time.Instant.ofEpochMilli(first).atZone(zone)
-                val fireTime = spec.timeOfDay?.let { java.time.LocalTime.parse(it) } ?: anchorZdt.toLocalTime()
+                val fireTime = spec.localTimeOfDay ?: anchorZdt.toLocalTime()
                 val stepDays = spec.every.toLong()
                 var candidate = anchorZdt.toLocalDate().atTime(fireTime).atZone(zone)
                 while (candidate.toInstant().toEpochMilli() <= now) {

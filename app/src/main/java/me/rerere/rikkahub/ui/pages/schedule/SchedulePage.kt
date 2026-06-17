@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,10 +18,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,19 +66,24 @@ import com.composables.icons.lucide.Minus
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.TriangleAlert
+import me.rerere.rikkahub.R
 import me.rerere.ai.runtime.contract.ScheduleDraft
 import me.rerere.ai.runtime.contract.ScheduleKind
 import me.rerere.ai.runtime.contract.ScheduleMutationResult
 import me.rerere.ai.runtime.contract.ScheduleSnapshot
 import me.rerere.ai.runtime.schedule.RecurrenceSpec
 import me.rerere.ai.runtime.schedule.RecurrenceUnit
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.ext.plus
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import java.text.DateFormat
 import java.time.Instant
@@ -99,6 +109,9 @@ fun SchedulePage(
     vm: ScheduleVM = koinViewModel { parametersOf(targetAssistantId, conversationId) },
 ) {
     val toaster = LocalToaster.current
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val spawnableAssistants = settings.assistants.filter { it.spawnable }
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
@@ -171,6 +184,8 @@ fun SchedulePage(
     if (showCreateDialog) {
         CreateScheduleDialog(
             error = createError,
+            assistants = spawnableAssistants,
+            defaultAssistantId = targetAssistantId,
             onDismiss = {
                 showCreateDialog = false
                 createError = null
@@ -427,6 +442,8 @@ private fun scheduleSubtitle(snapshot: ScheduleSnapshot): String {
 @Composable
 private fun CreateScheduleDialog(
     error: CreateScheduleError?,
+    assistants: List<Assistant>,
+    defaultAssistantId: Uuid,
     onDismiss: () -> Unit,
     onConfirm: (ScheduleDraft) -> Unit,
 ) {
@@ -438,11 +455,31 @@ private fun CreateScheduleDialog(
     var firstFireAt by rememberSaveable { mutableLongStateOf(System.currentTimeMillis() + 60 * 60 * 1000) }
     var timeOfDay by rememberSaveable { mutableStateOf<String?>(null) }
     var timeZoneId by rememberSaveable { mutableStateOf(TimeZone.getDefault().id) }
+    val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
+    var targetAssistantId by rememberSaveable {
+        mutableStateOf(resolveScheduleTarget(assistants, defaultAssistantId))
+    }
+    // The spawnable list arrives asynchronously (settingsFlow seeds with dummy/empty first), and an
+    // assistant can lose `spawnable` while the dialog is open. Re-seed whenever the current target is
+    // unset or no longer in the spawnable list, so an untouched picker resolves to a valid default
+    // instead of sticking at Uuid.NIL (which would keep Create permanently disabled). A target the
+    // user explicitly picked that is still spawnable is preserved (it stays in `assistants`).
+    LaunchedEffect(assistants) {
+        if (targetAssistantId == Uuid.NIL || assistants.none { it.id == targetAssistantId }) {
+            targetAssistantId = resolveScheduleTarget(assistants, defaultAssistantId)
+        }
+    }
+    val selectedTargetName = assistants
+        .firstOrNull { it.id == targetAssistantId }
+        ?.name
+        ?.ifEmpty { defaultAssistantName }
+        ?: defaultAssistantName
 
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
     var showTimeOfDayPicker by rememberSaveable { mutableStateOf(false) }
     var showTimeZonePicker by rememberSaveable { mutableStateOf(false) }
+    var showAssistantPicker by remember { mutableStateOf(false) }
 
     val now = System.currentTimeMillis()
     val formState = ScheduleFormState(
@@ -451,6 +488,7 @@ private fun CreateScheduleDialog(
         every = every,
         unit = unit,
         firstFireAt = firstFireAt,
+        targetAssistantId = targetAssistantId,
         timeOfDay = timeOfDay.takeIf { kind == ScheduleKind.RECURRING && unit == RecurrenceUnit.DAYS },
         timeZoneId = timeZoneId,
     )
@@ -497,6 +535,26 @@ private fun CreateScheduleDialog(
                         validationError = validationErrors[ScheduleField.PROMPT],
                     ),
                 )
+
+                FormItem(
+                    label = { Text("Assistant") },
+                    description = {
+                        if (assistants.isEmpty()) {
+                            Text("No spawnable assistant — enable 'spawnable' on an assistant")
+                        }
+                    },
+                ) {
+                    OutlinedButton(onClick = { showAssistantPicker = true }, enabled = assistants.isNotEmpty()) {
+                        Text(selectedTargetName)
+                    }
+                    validationErrors[ScheduleField.ASSISTANT]?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
 
                 FormItem(label = { Text("Repeat") }) {
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -703,6 +761,97 @@ private fun CreateScheduleDialog(
             onPick = { timeZoneId = it; showTimeZonePicker = false },
             onDismiss = { showTimeZonePicker = false },
         )
+    }
+
+    if (showAssistantPicker) {
+        ScheduleAssistantPickerSheet(
+            assistants = assistants,
+            selectedId = targetAssistantId,
+            onSelected = {
+                targetAssistantId = it.id
+                showAssistantPicker = false
+            },
+            onDismiss = {
+                showAssistantPicker = false
+            },
+        )
+    }
+}
+
+/**
+ * The delegation target an untouched picker should resolve to: the screen's assistant when it is
+ * spawnable, else the first spawnable assistant, else [Uuid.NIL] (no spawnable assistant exists,
+ * which the form surfaces as a blocking validation error).
+ */
+private fun resolveScheduleTarget(assistants: List<Assistant>, defaultAssistantId: Uuid): Uuid = when {
+    assistants.isEmpty() -> Uuid.NIL
+    assistants.any { it.id == defaultAssistantId } -> defaultAssistantId
+    else -> assistants.firstOrNull()?.id ?: defaultAssistantId
+}
+
+/** Assistant picker used only for schedule delegation; intentionally side-effect free. */
+@Composable
+private fun ScheduleAssistantPickerSheet(
+    assistants: List<Assistant>,
+    selectedId: Uuid,
+    onSelected: (Assistant) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.8f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Select assistant", style = MaterialTheme.typography.titleLarge)
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(assistants, key = { it.id }) { assistant ->
+                    val checked = assistant.id == selectedId
+                    Card(
+                        onClick = { onSelected(assistant) },
+                        shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (checked) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            },
+                            contentColor = if (checked) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        ),
+                    ) {
+                        ListItem(
+                            leadingContent = {
+                                UIAvatar(
+                                    name = assistant.name.ifEmpty { defaultAssistantName },
+                                    value = assistant.avatar,
+                                    modifier = Modifier.size(32.dp),
+                                )
+                            },
+                            headlineContent = {
+                                Text(
+                                    text = assistant.name.ifEmpty { defaultAssistantName },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            supportingContent = { if (checked) Text("Selected") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

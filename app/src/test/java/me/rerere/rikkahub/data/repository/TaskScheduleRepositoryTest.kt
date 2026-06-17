@@ -8,6 +8,7 @@ import me.rerere.ai.runtime.contract.ScheduleMutationResult
 import me.rerere.ai.runtime.contract.ScheduleOwner
 import me.rerere.ai.runtime.schedule.RecurrenceSpec
 import me.rerere.ai.runtime.schedule.RecurrenceUnit
+import me.rerere.rikkahub.data.db.entity.TaskScheduleEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.fakes.FakeBoardTransactions
 import me.rerere.rikkahub.data.repository.fakes.FakeTaskScheduleDAO
@@ -221,15 +222,36 @@ class TaskScheduleRepositoryTest {
     @Test
     fun create_rejects_a_daily_recurrence_with_a_bad_time_of_day() = runBlocking {
         val f = Fixture()
-        // Recurrence.nextDailyOccurrence calls LocalTime.parse(spec.timeOfDay); a bad "HH:mm" must
-        // be rejected upfront, not crash the worker every fire.
+        val badRecurrenceSpec = """{"every":1,"unit":"DAYS","timeOfDay":"25:99"}"""
         val draft = recurringDraft(f.spawnable.id, every = 1, unit = RecurrenceUnit.DAYS).copy(
-            recurrenceSpec = Json.encodeToString(
-                RecurrenceSpec(every = 1, unit = RecurrenceUnit.DAYS, timeOfDay = "25:99"),
-            ),
+            recurrenceSpec = badRecurrenceSpec,
         )
         val result = f.repository.create(Uuid.random(), ScheduleOwner.USER, draft)
         assertTrue("expected Rejected, got $result", result is ScheduleMutationResult.Rejected)
+
+        val conversationId = Uuid.random()
+        val badRowId = Uuid.random()
+        f.dao.insert(
+            TaskScheduleEntity(
+                id = badRowId.toString(),
+                conversationId = conversationId.toString(),
+                targetAssistantId = f.spawnable.id.toString(),
+                prompt = "morning briefing",
+                owner = ScheduleOwner.USER.name,
+                kind = ScheduleKind.RECURRING.name,
+                recurrenceSpec = badRecurrenceSpec,
+                timeZoneId = zone,
+                firstFireAt = 10_000L,
+                nextFireAt = 10_000L,
+                enabled = true,
+                createdAt = 10_000L,
+                updatedAt = 10_000L,
+            )
+        )
+        val claim = f.repository.claimDue(badRowId, now = 20_000L)
+        assertNull(claim)
+        val claimedRow = f.dao.getById(badRowId.toString())!!
+        assertTrue(!claimedRow.enabled)
     }
 
     @Test

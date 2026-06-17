@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.runtime.mcp.McpCommonOptions
 import me.rerere.ai.runtime.mcp.McpServerConfig
+import java.net.URI
 
 /**
  * Pure, JVM-testable MCP import JSON parser extracted out of SettingMcpPage.kt (issue #106).
@@ -18,14 +19,23 @@ internal fun parseMcpServersFromJson(json: String): List<McpServerConfig> {
     return mcpServers.entries.mapNotNull { (name, element) ->
         val obj = element.jsonObject
         val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: "streamable_http"
-        val url = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+        val url = obj["url"]?.jsonPrimitive?.contentOrNull?.trim()
+            ?.takeIf { it.isNotBlank() && isHttpMcpImportUrl(it) } ?: return@mapNotNull null
         val headers = obj["headers"]?.jsonObject?.entries?.map { (k, v) ->
             k to (v.jsonPrimitive.contentOrNull ?: "")
         } ?: emptyList()
-        val commonOptions = McpCommonOptions(name = name, headers = headers)
+        val commonOptions = McpCommonOptions(enable = false, name = name, headers = headers)
         when (type) {
             "sse" -> McpServerConfig.SseTransportServer(commonOptions = commonOptions, url = url)
             else -> McpServerConfig.StreamableHTTPServer(commonOptions = commonOptions, url = url)
         }
     }
+}
+
+private fun isHttpMcpImportUrl(url: String): Boolean {
+    return runCatching {
+        val uri = URI(url)
+        val scheme = uri.scheme?.lowercase()
+        (scheme == "http" || scheme == "https") && !uri.host.isNullOrBlank()
+    }.getOrDefault(false)
 }

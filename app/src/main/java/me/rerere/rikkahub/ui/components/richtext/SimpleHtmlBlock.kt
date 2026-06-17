@@ -73,8 +73,14 @@ fun SimpleHtmlBlock(
 @Composable
 private fun RenderNode(
     node: Node,
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    depth: Int = 0,
 ) {
+    if (node is Element && shouldStopHtmlDepthRecursion(depth)) {
+        Text(text = node.text().take(RenderLimits.MAX_CELL_CHARS))
+        return
+    }
+
     when (node) {
         is TextNode -> {
             if (node.text().isNotBlank()) {
@@ -140,7 +146,7 @@ private fun RenderNode(
                 }
 
                 "details" -> {
-                    RenderDetails(node, onLinkClick)
+                    RenderDetails(node, onLinkClick, depth)
                 }
 
                 "img" -> {
@@ -162,7 +168,7 @@ private fun RenderNode(
                 "div" -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         node.childNodes().forEach { childNode ->
-                            RenderNode(childNode, onLinkClick)
+                            RenderNode(childNode, onLinkClick, depth + 1)
                         }
                     }
                 }
@@ -226,8 +232,14 @@ private fun RenderList(
 @Composable
 private fun RenderDetails(
     detailsElement: Element,
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    depth: Int = 0,
 ) {
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        Text(text = detailsElement.text().take(RenderLimits.MAX_CELL_CHARS))
+        return
+    }
+
     val isOpenByDefault = detailsElement.hasAttr("open")
     var isExpanded by remember { mutableStateOf(isOpenByDefault) }
 
@@ -276,7 +288,7 @@ private fun RenderDetails(
             ) {
                 detailsElement.children().forEach { child ->
                     if (child.tagName().lowercase() != "summary") {
-                        RenderNode(child, onLinkClick)
+                        RenderNode(child, onLinkClick, depth + 1)
                     }
                 }
             }
@@ -291,21 +303,26 @@ private fun RenderImage(
     val src = imgElement.attr("src")
     val alt = imgElement.attr("alt")
     if (src.isNotEmpty()) {
+        val safeSrc = sanitizeLinkUri(src)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
-            ZoomableAsyncImage(
-                model = src,
-                contentDescription = alt.takeIf { it.isNotEmpty() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Fit,
-            )
+            if (safeSrc != null && isAllowedImageUri(safeSrc)) {
+                ZoomableAsyncImage(
+                    model = safeSrc,
+                    contentDescription = alt.takeIf { it.isNotEmpty() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Fit,
+                )
+            } else if (alt.isNotBlank()) {
+                Text(text = alt)
+            }
         }
     }
 }
@@ -322,8 +339,14 @@ private fun buildAnnotatedStringFromElement(
 private fun processElementNodes(
     element: Element,
     builder: AnnotatedString.Builder,
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    depth: Int = 0,
 ) {
+    if (shouldStopHtmlDepthRecursion(depth)) {
+        builder.append(element.text())
+        return
+    }
+
     element.childNodes().forEach { node ->
         when (node) {
             is TextNode -> {
@@ -334,7 +357,7 @@ private fun processElementNodes(
                 when (node.tagName().lowercase()) {
                     "b", "strong" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
                         builder.addStyle(
                             SpanStyle(fontWeight = FontWeight.Bold),
                             start,
@@ -344,7 +367,7 @@ private fun processElementNodes(
 
                     "i", "em" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
                         builder.addStyle(
                             SpanStyle(fontStyle = FontStyle.Italic),
                             start,
@@ -354,7 +377,7 @@ private fun processElementNodes(
 
                     "u" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
                         builder.addStyle(
                             SpanStyle(textDecoration = TextDecoration.Underline),
                             start,
@@ -365,7 +388,7 @@ private fun processElementNodes(
                     "a" -> {
                         val href = node.attr("href")
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
                         if (href.isNotEmpty()) {
                             builder.addStyle(
                                 SpanStyle(
@@ -386,7 +409,7 @@ private fun processElementNodes(
 
                     "code" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
                         builder.addStyle(
                             SpanStyle(
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -403,7 +426,7 @@ private fun processElementNodes(
 
                     "span" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
 
                         // Handle inline styles
                         val style = node.attr("style")
@@ -421,7 +444,7 @@ private fun processElementNodes(
 
                     "font" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
 
                         // Handle font color attribute
                         val color = node.attr("color")
@@ -438,7 +461,7 @@ private fun processElementNodes(
                     }
 
                     else -> {
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder, onLinkClick, depth + 1)
                     }
                 }
             }
@@ -635,29 +658,42 @@ private fun RenderTable(
     tableElement: Element,
     onLinkClick: (String) -> Unit
 ) {
+    val trElements = tableElement.select("tr")
+    val rawColumnCount = trElements.maxOfOrNull { it.select("th, td").size } ?: 0
+    val (clampedRows, columnCount) = clampTableDimensions(trElements.size, rawColumnCount)
+    if (columnCount == 0) return
+
+    val truncatedRows = trElements.size - clampedRows
+    val truncatedCols = rawColumnCount - columnCount
+
     val rows = mutableListOf<List<@Composable () -> Unit>>()
     var headers = emptyList<@Composable () -> Unit>()
 
-    // Extract table headers and rows
-    tableElement.select("tr").forEach { tr ->
-        val cells = mutableListOf<@Composable () -> Unit>()
-
-        tr.select("th, td").forEach { cell ->
-            cells.add {
-                val annotatedString = buildAnnotatedStringFromElement(cell, onLinkClick)
-                if (annotatedString.text.isNotBlank()) {
-                    Text(
-                        text = annotatedString,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = LocalContentColor.current
-                        )
-                    )
+    trElements.take(clampedRows).forEach { tr ->
+        val cells = List(columnCount) { col ->
+            @Composable {
+                val cellElements = tr.select("th, td")
+                if (col < cellElements.size) {
+                    val cellElement = cellElements[col]
+                    val cellText = cellElement.text()
+                    if (cellText.length > RenderLimits.MAX_CELL_CHARS) {
+                        Text(text = "${cellText.take(RenderLimits.MAX_CELL_CHARS)}…")
+                    } else {
+                        val annotatedString = buildAnnotatedStringFromElement(cellElement, onLinkClick)
+                        if (annotatedString.text.isNotBlank()) {
+                            Text(
+                                text = annotatedString,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = LocalContentColor.current
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
 
         if (cells.isNotEmpty()) {
-            // Check if this row contains header cells (th)
             val isHeaderRow = tr.select("th").isNotEmpty()
             if (isHeaderRow && headers.isEmpty()) {
                 headers = cells
@@ -684,5 +720,21 @@ private fun RenderTable(
                 zebraStriping = false
             )
         }
+    }
+
+    if (truncatedRows > 0 || truncatedCols > 0) {
+        val truncatedParts = mutableListOf<String>()
+        if (truncatedRows > 0) {
+            truncatedParts.add("${truncatedRows} more rows")
+        }
+        if (truncatedCols > 0) {
+            truncatedParts.add("${truncatedCols} more cols")
+        }
+
+        Text(
+            text = "… table truncated (${truncatedParts.joinToString(", ")})",
+            color = Color.Gray,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }

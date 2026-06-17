@@ -72,7 +72,12 @@ class MemoryRepository(
     }
 
     suspend fun deleteMemoriesOfAssistant(assistantId: String) {
-        memoryDAO.deleteMemoriesOfAssistant(assistantId)
+        // memory_vector has no FK to memoryentity, so Room's cascade never reaches it; delete the
+        // vector rows explicitly in the same transaction (mirrors [deleteMemory]). Without this, a
+        // bulk assistant-memory delete (e.g. removing an assistant) orphans every one of its vectors.
+        database.withTransaction {
+            deleteAssistantMemoryArtifacts(memoryDAO, memoryVectorDAO, assistantId)
+        }
     }
 
     suspend fun updateContent(id: Int, content: String): AssistantMemory {
@@ -136,3 +141,21 @@ private fun MemoryEntity.toRecalledMemory(): RecalledMemory = RecalledMemory(
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
+
+/**
+ * Explicit cascade for an assistant's memories: deletes the content rows AND their `memory_vector`
+ * rows. Extracted as a pure-over-DAOs function (no DB/transaction dependency) so the cascade is
+ * unit-testable with fake DAOs; the caller wraps it in [AppDatabase.withTransaction]. Mirrors the
+ * `deleteConversationTaskArtifacts` precedent — the two tables have no FK, so Room never cascades.
+ */
+internal suspend fun deleteAssistantMemoryArtifacts(
+    memoryDAO: MemoryDAO,
+    memoryVectorDAO: MemoryVectorDAO,
+    assistantId: String,
+) {
+    val memoryIds = memoryDAO.getMemoriesOfAssistant(assistantId).map { it.id }
+    memoryDAO.deleteMemoriesOfAssistant(assistantId)
+    if (memoryIds.isNotEmpty()) {
+        memoryVectorDAO.deleteByMemoryIds(memoryIds)
+    }
+}

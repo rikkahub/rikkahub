@@ -1,5 +1,7 @@
 package me.rerere.ai.runtime.knowledge
 
+import me.rerere.common.text.UntrustedContentFraming
+
 /**
  * Materializes a selected [KnowledgeContextBlock] into the source-labeled text injected into the
  * prompt (issue #141). Source labeling is what makes invariant 4 — "memory insight must not
@@ -33,21 +35,32 @@ object KnowledgeContextRenderer {
     }
 
     // Exact reproduction of the legacy KnowledgeRetrievalTransformer.buildContextBlock wrapper so the
-    // generous-budget path is byte-identical to today's RAG injection.
+    // generous-budget path is byte-identical to today's RAG injection, with deterministic escaping for
+    // untrusted payloads.
     private fun knowledgeBaseContext(joinedChunks: String): String =
-        """
-            <knowledge_base_context>
-            The following excerpts were retrieved from the user's attached knowledge base and may be
-            relevant to the request. Use them when helpful; ignore them when not.
+        if (joinedChunks.isBlank()) {
+            ""
+        } else {
+            """
+                <knowledge_base_context>
+                The following excerpts were retrieved from the user's attached knowledge base and may be
+                relevant to the request. Use them when helpful; ignore them when not.
+                ${UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE}
 
-            $joinedChunks
-            </knowledge_base_context>
-        """.trimIndent()
+                ${UntrustedContentFraming.escape(joinedChunks)}
+                </knowledge_base_context>
+            """.trimIndent()
+        }
 
     private fun memoryContext(content: String): String =
-        """
-            <memory>
-            $content
-            </memory>
-        """.trimIndent()
+        if (content.isBlank()) {
+            ""
+        } else {
+            """
+                <memory>
+                ${UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE}
+                ${UntrustedContentFraming.escape(content)}
+                </memory>
+            """.trimIndent()
+        }
 }

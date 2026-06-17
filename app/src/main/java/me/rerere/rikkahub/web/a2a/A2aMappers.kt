@@ -3,6 +3,7 @@ package me.rerere.rikkahub.web.a2a
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.isPendingToolApprovalFor
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Assistant
@@ -120,11 +121,7 @@ fun validateSpawnableSkill(settings: Settings, skillId: String): Assistant {
 fun validatePendingApproval(conversation: Conversation, approval: A2aToolApproval) {
     val isPending = conversation.currentMessages
         .flatMap { it.parts }
-        .any {
-            it is UIMessagePart.Tool &&
-                it.toolCallId == approval.toolCallId &&
-                it.approvalState is ToolApprovalState.Pending
-        }
+        .any { it.isPendingToolApprovalFor(approval.toolCallId) }
 
     if (!isPending) {
         throw IllegalArgumentException("tool call is not pending: ${approval.toolCallId}")

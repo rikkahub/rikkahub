@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.ai.runtime.FilesManagerRuntimeFileStore
 import me.rerere.rikkahub.data.ai.runtime.MonotonicTaskBudgetClock
 import me.rerere.rikkahub.data.ai.runtime.SettingsStoreRuntimeAdapter
 import me.rerere.rikkahub.data.ai.runtime.SystemRuntimeClock
+import me.rerere.rikkahub.data.ai.transformers.ChatMessageTransformers
 import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -101,8 +102,11 @@ val appModule = module {
             generationHandler = get(),
             store = get(),
             clock = get(),
+            transformers = get(),
         )
     }
+
+    single { ChatMessageTransformers(get()) }
 
     // The chat-side board panel's view model (SPEC.md M5, decision #4). The conversation id is a
     // runtime parameter (the panel lives inside one conversation); it WRITES through the same
@@ -173,7 +177,7 @@ val appModule = module {
             memoryRecaller = get(),
             generationHandler = get(),
             taskCoordinator = get(),
-            templateTransformer = get(),
+            chatMessageTransformers = get(),
             providerManager = get(),
             localTools = get(),
             mcpManager = get(),

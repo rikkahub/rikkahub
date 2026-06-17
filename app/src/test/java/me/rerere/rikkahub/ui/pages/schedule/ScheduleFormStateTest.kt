@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.uuid.Uuid
 import java.util.TimeZone
 
 /**
@@ -27,6 +28,7 @@ import java.util.TimeZone
 class ScheduleFormStateTest {
 
     private val now = 1_700_000_000_000L
+    private val targetAssistantId = Uuid.random()
     private val defaultZone: String = TimeZone.getDefault().id
     private val futureFire = now + 60 * 60 * 1000L // now + 1h
 
@@ -34,6 +36,7 @@ class ScheduleFormStateTest {
         prompt = prompt,
         kind = ScheduleKind.ONE_SHOT,
         firstFireAt = futureFire,
+        targetAssistantId = targetAssistantId,
         timeZoneId = defaultZone,
     )
 
@@ -50,6 +53,7 @@ class ScheduleFormStateTest {
         unit = unit,
         firstFireAt = futureFire,
         timeOfDay = timeOfDay,
+        targetAssistantId = targetAssistantId,
         timeZoneId = timeZoneId,
     )
 

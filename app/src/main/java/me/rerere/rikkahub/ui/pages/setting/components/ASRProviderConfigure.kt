@@ -5,12 +5,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -73,11 +84,18 @@ private fun OpenAIRealtimeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_openai_api_key_desc)) }
     ) {
+        var keyVisible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = setting.apiKey,
             onValueChange = { onValueChange(setting.copy(apiKey = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("sk-...") }
+            placeholder = { Text("sk-...") },
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
     }
 
@@ -188,11 +206,18 @@ private fun DashScopeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_dashscope_api_key_desc)) }
     ) {
+        var keyVisible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = setting.apiKey,
             onValueChange = { onValueChange(setting.copy(apiKey = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("sk-...") }
+            placeholder = { Text("sk-...") },
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
     }
 
@@ -274,11 +299,18 @@ private fun VolcengineASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_volcengine_api_key_desc)) }
     ) {
+        var keyVisible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = setting.apiKey,
             onValueChange = { onValueChange(setting.copy(apiKey = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("your-api-key") }
+            placeholder = { Text("your-api-key") },
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
     }
 
@@ -328,11 +360,18 @@ private fun AnthropicVoiceASRConfiguration(
         label = { Text("OAuth Token") },
         description = { Text("Claude Code OAuth access token. Leave blank to reuse the token from the first OAuth Claude provider.") }
     ) {
+        var tokenVisible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = setting.oauthToken,
             onValueChange = { onValueChange(setting.copy(oauthToken = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("sk-ant-oat...") }
+            placeholder = { Text("sk-ant-oat...") },
+            visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                    Icon(if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
     }
 

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.MessageRole
@@ -38,6 +39,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
 /**
@@ -360,6 +362,67 @@ class TaskCoordinatorTest {
         val taskId = store.created.single().taskId
         assertTrue("a step-cap breach must terminate as BudgetExhausted", store.states[taskId] is TaskState.BudgetExhausted)
         assertEquals("collection must stop at the first breaching chunk, not drain the child flow", 1, collected.get())
+    }
+
+    @Test
+    fun `a silent provider is terminated by wall-time budget`() {
+        val store = FakeStore()
+        val neverEmit: SubagentGenerate = { _, _, _, _, _, _, _ ->
+            flow {
+                awaitCancellation()
+            }
+        }
+        val budget = TaskBudget(wallTime = 5.milliseconds)
+        val coordinator = coordinator(neverEmit, store = store, budget = budget)
+
+        val result = runBlocking {
+            coordinator.run(sub = Assistant(name = "Sub", chatModelId = subModel.id), prompt = "go", parentModelId = null, settings = settingsWith(subModel))
+        }
+
+        val taskId = store.created.single().taskId
+        val terminal = store.states[taskId]
+        val events = store.events.getValue(taskId)
+        val budgetExceeded = events.filterIsInstance<TaskEvent.BudgetExceeded>().singleOrNull()
+        val persistedUsage = store.usage.getValue(taskId)
+        assertTrue("silent provider must terminate as BudgetExhausted", terminal is TaskState.BudgetExhausted)
+        assertTrue("result state must also be BudgetExhausted", result.state is TaskState.BudgetExhausted)
+        assertEquals(TaskBudgetCap.WallTime, budgetExceeded?.breach?.cap)
+        assertEquals(TaskBudgetCap.WallTime, (terminal as TaskState.BudgetExhausted).breach.cap)
+        assertEquals("wall-time timeout must persist usage with wall-time breach", persistedUsage, budgetExceeded?.breach?.usage)
+        assertEquals(
+            "timeout usage must exceed the strict wall-time cap",
+            true,
+            persistedUsage.elapsed > budget.effectiveWallTime,
+        )
+        assertTrue("timeout must emit BudgetExceeded", events.any { it is TaskEvent.BudgetExceeded })
+        assertFalse("timeout must not emit CancelRequested", events.any { it is TaskEvent.CancelRequested })
+        assertFalse("timeout must not emit ExecutionFailed", events.any { it is TaskEvent.ExecutionFailed })
+    }
+
+    @Test
+    fun `a fast provider completes as Succeeded without emitting BudgetExceeded`() {
+        val store = FakeStore()
+        val budget = TaskBudget(wallTime = 5.minutes)
+        val coordinator = coordinator(
+            capturingGenerate(Captured(), listOf(GenerationChunk.Messages(listOf(assistantMsg("final"))))),
+            store = store,
+            budget = budget,
+        )
+
+        runBlocking {
+            coordinator.run(
+                sub = Assistant(name = "Sub", chatModelId = subModel.id),
+                prompt = "go",
+                parentModelId = null,
+                settings = settingsWith(subModel),
+            )
+        }
+
+        val taskId = store.created.single().taskId
+        val terminal = store.states[taskId]
+        val events = store.events.getValue(taskId)
+        assertTrue("fast run must be Succeeded", terminal is TaskState.Succeeded)
+        assertFalse("fast run must not emit wall-time BudgetExceeded", events.any { it is TaskEvent.BudgetExceeded })
     }
 
     @Test

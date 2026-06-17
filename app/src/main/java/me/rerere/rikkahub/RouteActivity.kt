@@ -137,7 +137,15 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
 
+internal fun resolveConversationIdFromExtra(conversationIdExtra: String?): String? {
+    return conversationIdExtra
+}
+
 class RouteActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_CONVERSATION_ID = "conversationId"
+    }
+
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
@@ -230,9 +238,10 @@ class RouteActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // Navigate to the chat screen if a conversation ID is provided
-        intent.getStringExtra("conversationId")?.let { text ->
+        resolveConversationIdFromExtra(intent.getStringExtra(EXTRA_CONVERSATION_ID))?.let { text ->
             navStack?.add(Screen.Chat(text))
-        }    }
+        }
+    }
 
     @Composable
     fun AppRoutes() {
@@ -240,6 +249,7 @@ class RouteActivity : ComponentActivity() {
         val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
         val tts = rememberCustomTtsState()
         val asr = rememberCustomAsrState()
+        val launchConversationId = resolveConversationIdFromExtra(intent?.getStringExtra(EXTRA_CONVERSATION_ID))
         val eventBus = koinInject<AppEventBus>()
         LaunchedEffect(tts) {
             eventBus.events.collect { event ->
@@ -251,15 +261,17 @@ class RouteActivity : ComponentActivity() {
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
 
         val startScreen = remember {
-            Screen.Chat(
-                id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
+            val resolvedConversationId = launchConversationId
+            val fallbackConversationId = if (readBooleanPreference("create_new_conversation_on_start", true)) {
+                Uuid.random().toString()
+            } else {
+                readStringPreference(
+                    "lastConversationId",
                     Uuid.random().toString()
-                } else {
-                    readStringPreference(
-                        "lastConversationId",
-                        Uuid.random().toString()
-                    ) ?: Uuid.random().toString()
-                }
+                ) ?: Uuid.random().toString()
+            }
+            Screen.Chat(
+                id = resolvedConversationId ?: fallbackConversationId
             )
         }
 

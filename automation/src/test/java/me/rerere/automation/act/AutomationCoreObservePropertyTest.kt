@@ -42,14 +42,14 @@ class AutomationCoreObservePropertyTest {
                 var last = Long.MIN_VALUE
                 var current = 0L
                 // First observe at seq 0.
-                val first = core.observe()
+                val first = core.observe(setOf(backend.rawTree.foregroundPkg))
                 assertTrue(first.stateSeq >= last)
                 last = first.stateSeq
                 for (d in deltas) {
                     // Advance the backend by a non-negative delta (monotone), then observe.
                     repeat(d) { backend.injectTransition() }
                     current += d
-                    val snap = core.observe()
+                    val snap = core.observe(setOf(backend.rawTree.foregroundPkg))
                     // P11: never decreases.
                     assertTrue("stateSeq decreased: ${snap.stateSeq} < $last", snap.stateSeq >= last)
                     // P10: result ≥ the seq at entry (which equals `last`).
@@ -69,11 +69,11 @@ class AutomationCoreObservePropertyTest {
                 RawTree(stateSeq = 5L, foregroundPkg = "com.example.app", windows = listOf(appWindow())),
             )
             val core = AutomationCore(backend)
-            core.observe() // observes seq 5
+            core.observe(setOf(backend.rawTree.foregroundPkg)) // observes seq 5
             // Force the backend backwards (a bug a real a11y backend must never do).
             backend.rawTree = backend.rawTree.copy(stateSeq = 2L)
             try {
-                core.observe()
+                core.observe(setOf(backend.rawTree.foregroundPkg))
                 throw AssertionError("expected the core to reject a regressing stateSeq")
             } catch (e: IllegalStateException) {
                 // expected: monotonicity is enforced, not papered over.
@@ -90,7 +90,7 @@ class AutomationCoreObservePropertyTest {
                     RawTree(stateSeq = 1L, foregroundPkg = foreground, windows = listOf(appWindow())),
                 )
                 val core = AutomationCore(backend)
-                val snap = core.observe()
+                val snap = core.observe(setOf(backend.rawTree.foregroundPkg))
                 if (foreground == HOST) {
                     assertEquals(ScreenState.FOREGROUND_IS_HOST, snap.screenState)
                     assertTrue("host foreground must yield no targets", snap.targets.isEmpty())
@@ -116,7 +116,7 @@ class AutomationCoreObservePropertyTest {
                 for (cmd in commands) {
                     when (cmd) {
                         MbtCmd.OBSERVE -> {
-                            val snap = core.observe()
+                            val snap = core.observe(setOf(backend.rawTree.foregroundPkg))
                             // Invariant 1: stateSeq monotonic across every observe.
                             assertTrue("stateSeq regressed in SM", snap.stateSeq >= lastObserved)
                             lastObserved = snap.stateSeq

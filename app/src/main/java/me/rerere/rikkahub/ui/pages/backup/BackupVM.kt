@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
+import me.rerere.rikkahub.data.sync.importer.ChatboxStreamingImportResult
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
@@ -20,9 +21,86 @@ import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.S3Sync
 import me.rerere.common.state.UiState
 import me.rerere.rikkahub.utils.shouldRethrowVmError
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.rikkahub.data.model.Conversation
+import kotlin.uuid.Uuid
 import java.io.File
 
 private const val TAG = "BackupVM"
+
+internal interface ChatboxImportRunner {
+    suspend fun importStreaming(
+        file: File,
+        assistantId: Uuid,
+        providers: List<ProviderSetting>,
+        onProvidersImported: suspend (List<ProviderSetting>) -> Unit,
+        onConversation: suspend (Conversation) -> Unit,
+    ): ChatboxStreamingImportResult
+}
+
+internal class BackupChatboxImportRunner : ChatboxImportRunner {
+    override suspend fun importStreaming(
+        file: File,
+        assistantId: Uuid,
+        providers: List<ProviderSetting>,
+        onProvidersImported: suspend (List<ProviderSetting>) -> Unit,
+        onConversation: suspend (Conversation) -> Unit,
+    ): ChatboxStreamingImportResult {
+        return ChatboxImporter.importStreaming(
+            file = file,
+            assistantId = assistantId,
+            providers = providers,
+            onProvidersImported = onProvidersImported,
+            onConversation = onConversation,
+        )
+    }
+}
+
+internal suspend fun runChatboxImport(
+    importer: ChatboxImportRunner,
+    file: File,
+    assistantId: Uuid,
+    providers: List<ProviderSetting>,
+    persistProviders: suspend (List<ProviderSetting>) -> Unit,
+    enableSystemPromptGate: suspend () -> Unit,
+    insertConversation: suspend (Conversation) -> Unit,
+    conversationExists: suspend (Uuid) -> Boolean,
+    isSystemPromptEnabled: Boolean,
+): ChatboxRestoreResult {
+    var importedConversations = 0
+    var skippedExistingConversations = 0
+    var isSystemPromptEnabledNow = isSystemPromptEnabled
+
+    val result = importer.importStreaming(
+        file = file,
+        assistantId = assistantId,
+        providers = providers,
+        onProvidersImported = { importedProviders ->
+            persistProviders(importedProviders)
+        },
+        onConversation = { conversation ->
+            if (conversationExists(conversation.id)) {
+                skippedExistingConversations++
+            } else {
+                if (!isSystemPromptEnabledNow && !conversation.customSystemPrompt.isNullOrBlank()) {
+                    enableSystemPromptGate()
+                    isSystemPromptEnabledNow = true
+                }
+
+                insertConversation(conversation)
+                importedConversations++
+            }
+        },
+    )
+
+    return ChatboxRestoreResult(
+        importedProviders = result.providers.size,
+        importedConversations = importedConversations,
+        skippedExistingConversations = skippedExistingConversations,
+        skippedImageParts = result.skippedImageParts,
+        skippedEmptyMessages = result.skippedEmptyMessages,
+    )
+}
 
 class BackupVM(
     private val settingsStore: SettingsStore,
@@ -171,49 +249,53 @@ class BackupVM(
     }
 
     suspend fun restoreFromChatBox(file: File): ChatboxRestoreResult {
-        var importedConversations = 0
-        var skippedExistingConversations = 0
-        val result = ChatboxImporter.importStreaming(
-            file = file,
-            assistantId = settings.value.assistantId,
-            providers = settings.value.providers,
-            onConversation = { conversation ->
-                if (conversationRepository.existsConversationById(conversation.id)) {
-                    skippedExistingConversations++
-                } else {
-                    conversationRepository.insertConversation(conversation)
-                    importedConversations++
-                }
-            }
-        )
-
         val targetAssistantId = settings.value.assistantId
-        settingsStore.update(
-            settings.value.copy(
-                providers = result.providers + settings.value.providers,
-                assistants = settings.value.assistants.map { assistant ->
-                    if (result.hasConversationSystemPrompt && assistant.id == targetAssistantId) {
-                        assistant.copy(allowConversationSystemPrompt = true)
-                    } else {
-                        assistant
-                    }
+        val isSystemPromptEnabled = settings.value.assistants
+            .firstOrNull { it.id == targetAssistantId }
+            ?.allowConversationSystemPrompt ?: false
+
+        val result = runChatboxImport(
+            importer = BackupChatboxImportRunner(),
+            file = file,
+            assistantId = targetAssistantId,
+            providers = settings.value.providers,
+            persistProviders = { importedProviders ->
+                settingsStore.update { current ->
+                    current.copy(
+                        providers = importedProviders + current.providers,
+                    )
                 }
-            )
+            },
+            enableSystemPromptGate = {
+                settingsStore.update { current ->
+                    current.copy(
+                        assistants = current.assistants.map { assistant ->
+                            if (assistant.id == targetAssistantId) {
+                                assistant.copy(allowConversationSystemPrompt = true)
+                            } else {
+                                assistant
+                            }
+                        },
+                    )
+                }
+            },
+            insertConversation = { conversation ->
+                conversationRepository.insertConversation(conversation)
+            },
+            conversationExists = { conversationId ->
+                conversationRepository.existsConversationById(conversationId)
+            },
+            isSystemPromptEnabled = isSystemPromptEnabled,
         )
 
-        Log.i(
-            TAG,
-            "restoreFromChatBox: import ${result.providers.size} providers, " +
-                "$importedConversations conversations, skip $skippedExistingConversations existing, " +
-                "drop ${result.skippedImageParts} images"
-        )
-        return ChatboxRestoreResult(
-            importedProviders = result.providers.size,
-            importedConversations = importedConversations,
-            skippedExistingConversations = skippedExistingConversations,
-            skippedImageParts = result.skippedImageParts,
-            skippedEmptyMessages = result.skippedEmptyMessages,
-        )
+        return result.also {
+            Log.i(
+                TAG,
+                "restoreFromChatBox: import ${it.importedProviders} providers, " +
+                    "${it.importedConversations} conversations, skip ${it.skippedExistingConversations} existing, " +
+                    "drop ${it.skippedImageParts} images"
+            )
+        }
     }
 
     fun restoreFromCherryStudio(file: File) {
