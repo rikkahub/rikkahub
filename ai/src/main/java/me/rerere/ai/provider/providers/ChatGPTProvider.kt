@@ -58,25 +58,33 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatGPTProvider"
 
 // codex_cli_rs is the originator the ChatGPT (Codex) backend gates on; a plain OpenAI-compatible
-// client (without it) is rejected. Pinned to the open-source openai/codex wire contract.
+// client (without it) is rejected. The client_version must be RECENT — an old value makes the models
+// endpoint return an EMPTY list (verified live: client_version=0.20.0 -> {"models":[]}). Keep it
+// aligned with a current codex CLI release.
 private const val CHATGPT_ORIGINATOR = "codex_cli_rs"
-private const val CHATGPT_CLIENT_VERSION = "0.20.0"
+private const val CHATGPT_CLIENT_VERSION = "0.139.0"
+
+// User-Agent mirroring the codex CLI (`codex_cli_rs/<version>`), aligned with the `originator` header
+// so the request presents as codex end-to-end (instead of the default OkHttp UA).
+private const val CHATGPT_USER_AGENT = "codex_cli_rs/$CHATGPT_CLIENT_VERSION"
 
 private const val EXPIRED_TOKEN_MESSAGE =
     "ChatGPT access token expired — paste a new one in provider settings."
 
-// The Codex base instructions, sent as the Responses `instructions` field. The backend expects the
-// official Codex system prompt; this is the gate fingerprint (mirrors how ClaudeProvider pins
-// CLAUDE_FP_*). Sourced from openai/codex codex-rs/protocol/src/prompts/base_instructions/default.md.
-private const val CODEX_INSTRUCTIONS =
-    "You are a coding agent running in the Codex CLI, a terminal-based coding assistant. Codex CLI is an open source project led by OpenAI. You are expected to be precise, safe, and helpful."
+// The backend REQUIRES a non-empty Responses `instructions` field (a request without it -> 400
+// "Instructions are required") but does NOT gate on its content (verified live: arbitrary instructions
+// -> 200). Unlike the Claude backend, the Codex backend needs no system-prompt fingerprint, so the
+// caller's system prompt is sent verbatim; this neutral default is used ONLY when the assistant has
+// none, purely to satisfy the non-empty requirement.
+private const val DEFAULT_INSTRUCTIONS = "You are a helpful assistant."
 
 /**
  * ChatGPT subscription provider over the Codex backend (`https://chatgpt.com/backend-api/codex`).
  *
  * Paste-only access token (a JWT) — no OAuth/device-code login or refresh (issue #285). Uses the
  * OpenAI Responses-API wire shape (SSE), with `stream:true` and `store:false` forced (both required
- * by the backend) and the Codex `instructions` prepended. The token is used verbatim (NOT via
+ * by the backend) and the assistant's `instructions` passed through (the backend requires a non-empty
+ * value but, unlike Claude, no specific fingerprint). The token is used verbatim (NOT via
  * KeyRoulette, which splits on whitespace/commas and would corrupt a JWT), exactly like
  * ClaudeProvider's OAuth path. Request body assembly and SSE delta parsing are reused from
  * [ResponseAPI] (same wire format) to avoid duplicating ~400 lines of Responses logic.
@@ -94,6 +102,7 @@ class ChatGPTProvider(
     private fun Request.Builder.applyChatGptHeaders(p: ProviderSetting.ChatGPT): Request.Builder = this
         .addHeader("Authorization", "Bearer ${p.accessToken}")
         .addHeader("originator", CHATGPT_ORIGINATOR)
+        .addHeader("User-Agent", CHATGPT_USER_AGENT)
         .addHeader("session_id", Uuid.random().toString())
 
     // Fail closed on a token we can PROVE is expired: throw the typed expiry message before any
@@ -120,15 +129,7 @@ class ChatGPTProvider(
                 error("Failed to get models: ${response.code} ${response.body.string()}")
             }
 
-            val bodyStr = response.body.string()
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
-
-            data.mapNotNull { modelJson ->
-                val modelObj = modelJson.jsonObject
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                Model(modelId = id, displayName = id)
-            }
+            parseChatGptModels(response.body.string())
         }
 
     override suspend fun generateImage(
@@ -316,19 +317,32 @@ class ChatGPTProvider(
             params = params,
             stream = true,
         )
+        // Pass the assistant's system prompt through verbatim — the backend does NOT require its own
+        // Codex fingerprint, only that `instructions` is non-empty. Fall back to a neutral default
+        // ONLY when the assistant has no system prompt, so a personaless chat still satisfies the
+        // backend without imposing a coding-agent persona.
         val callerInstructions = (base["instructions"] as? JsonPrimitive)?.contentOrNull
-        val mergedInstructions = if (callerInstructions.isNullOrBlank()) {
-            CODEX_INSTRUCTIONS
-        } else {
-            "$CODEX_INSTRUCTIONS\n\n$callerInstructions"
-        }
+        val instructions = callerInstructions?.takeIf { it.isNotBlank() } ?: DEFAULT_INSTRUCTIONS
         // store:false is already set by buildRequestBody; re-assert stream:true and the instructions.
         return JsonObject(
             base + buildJsonObject {
                 put("stream", true)
                 put("store", false)
-                put("instructions", mergedInstructions)
+                put("instructions", instructions)
             }
         )
+    }
+}
+
+// The Codex models endpoint returns {"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5",...}]} — NOT
+// the OpenAI /v1/models {"data":[{"id":...}]} shape, so the model id is `slug` under `models` (the old
+// data/id read silently produced an empty list). Pure + internal so the shape is unit-testable.
+internal fun parseChatGptModels(body: String): List<Model> {
+    val models = json.parseToJsonElement(body).jsonObject["models"]?.jsonArray ?: return emptyList()
+    return models.mapNotNull { element ->
+        val obj = element.jsonObject
+        val slug = obj["slug"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+        val displayName = obj["display_name"]?.jsonPrimitive?.contentOrNull ?: slug
+        Model(modelId = slug, displayName = displayName)
     }
 }
