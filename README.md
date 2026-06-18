@@ -190,7 +190,8 @@ Plus: passwords and API keys never make it into log files. The Telegram bot igno
 ## 🚀 Quick Start
 
 1. **Install**: download the latest **`*-release.apk`** from [Releases](https://github.com/ExTV/rikkahub-agent/releases/latest). Allow install from unknown sources, then open. (One-time note: if you still have an old debug build of RikkaHub Agent installed, uninstall it first — the release build is signed differently and won't upgrade over it.)
-2. **Add an LLM provider**: Settings, then Providers, pick one, paste your API key. For fully on-device inference with no key and no network, open the **Local · LiteRT** provider and download a local model (Gemma, Qwen) — it runs on any device and uses the GPU automatically where supported. Multimodal Gemma builds can also read images you attach, decoded on-device where the device's vision encoder is supported (otherwise the model replies from text only). Pixel 8/9/10 users can also flip on the built-in **AICore** card for Gemini Nano.
+   - **Upgrading from a build before `2.3.1-agent.0`?** The app id changed to `excp.rikkahub` so the fork installs alongside upstream RikkaHub instead of clashing with it. Android treats the new id as a separate app, so it won't update over an older agent build automatically. To carry your data across: open the old app, make a backup (Settings → Backup), install this release, then restore that backup. Once you've confirmed everything moved over, uninstall the old build.
+2. **Add an LLM provider**: Settings, then Providers, pick one, paste your API key. **OpenRouter** is first-class (auto-detected model capabilities and pricing, provider routing controls), and you can sign in to **Codex** with your ChatGPT account to use your OpenAI plan through OAuth instead of an API key. For fully on-device inference with no key and no network, open the **Local · LiteRT** provider and download a local model (Gemma, Qwen) — it runs on any device and uses the GPU automatically where supported. Multimodal Gemma builds can also read images you attach, decoded on-device where the device's vision encoder is supported (otherwise the model replies from text only). Pixel 8/9/10 users can also flip on the built-in **AICore** card for Gemini Nano.
 3. **Turn on what you want**: Settings, then Assistants, tap your assistant, then **Local Tools**, and flip the categories you want enabled.
 4. **(Optional) Telegram bot**: message [@BotFather](https://t.me/BotFather) with `/newbot` to get a bot token, then [@userinfobot](https://t.me/userinfobot) with `/start` to get your numeric Telegram user id. Then just say to the assistant in chat: *"Set up the Telegram bot. Token is `<your token>`. My user id is `<your id>`. Set me as the default chat. Enable it."* It'll handle the rest.
 
@@ -205,7 +206,7 @@ If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.
 | Architecture | arm64 or x86_64                                              |
 | Android      | 8.0+ (API 26), targets API 37                                |
 | Storage      | ~80 MB app                                                   |
-| LLM provider | OpenAI, Google, Anthropic, Ollama, or any OpenAI-compatible endpoint. OR Gemini Nano via AICore on Pixel 8/9/10+ |
+| LLM provider | OpenAI, Google, Anthropic, OpenRouter, Codex (ChatGPT OAuth), Ollama, or any OpenAI-compatible endpoint. OR Gemini Nano via AICore on Pixel 8/9/10+ |
 
 ---
 
