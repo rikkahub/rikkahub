@@ -31,7 +31,7 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
     dependsOn(installWebUiDeps)
 
     workingDir = webUiDir.asFile
-    commandLine("zsh", "-ic", "pnpm run build")
+    commandLine("pnpm", "run", "build")
 
     inputs.files(
         webUiDir.file("package.json"),
