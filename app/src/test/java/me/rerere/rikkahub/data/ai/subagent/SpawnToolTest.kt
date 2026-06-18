@@ -17,6 +17,7 @@ import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -170,6 +171,71 @@ class SpawnToolTest {
         progressLabel = { "Running $it" },
         parentConversationId = Uuid.random(),
     )
+
+    private fun denyGate() = object : me.rerere.ai.runtime.contract.TaskApprovalGate {
+        override suspend fun await(
+            taskId: kotlin.uuid.Uuid,
+            request: me.rerere.ai.runtime.task.TaskApprovalRequest,
+        ): me.rerere.ai.runtime.task.TaskApprovalDecision =
+            me.rerere.ai.runtime.task.TaskApprovalDecision.Denied()
+    }
+
+    @Test
+    fun `automation lease tools are added to the subagent pool and the lease wraps the run`() {
+        // Option B seam: a supplied SubagentAutomationLease wraps the child run and contributes the
+        // ui_* tools to the pool the engine sees, alongside the sub's own tools.
+        val captured = mutableListOf<Tool>()
+        val sub = Assistant(name = "UI", chatModelId = subModel.id, spawnable = true)
+        var opened = false
+        val spawn = buildSpawnTool(
+            spawnableAssistants = listOf(sub),
+            coordinator = fakeCoordinator(captured),
+            parentModelId = null,
+            settings = settingsWith(subModel),
+            registry = ExecutionHandleRegistry(),
+            buildSubagentTools = { _, _ -> listOf(tool("local_tool")) },
+            releaseOrphanedClaims = {},
+            approvalGateFor = { denyGate() },
+            processingStatus = MutableStateFlow(null),
+            progressLabel = { "Running $it" },
+            parentConversationId = Uuid.random(),
+            automationLease = { _, block ->
+                opened = true
+                block(listOf(tool("ui_observe")))
+            },
+        )
+
+        runBlocking { spawn.execute(spawnArgs("UI")) }
+
+        assertTrue("the lease must wrap the run", opened)
+        assertTrue("the lease's ui_* tools must reach the child pool", captured.any { it.name == "ui_observe" })
+        assertTrue("the sub's own tools must remain", captured.any { it.name == "local_tool" })
+    }
+
+    @Test
+    fun `without an automation lease the subagent pool has no automation tools`() {
+        val captured = mutableListOf<Tool>()
+        val sub = Assistant(name = "UI", chatModelId = subModel.id, spawnable = true)
+        val spawn = buildSpawnTool(
+            spawnableAssistants = listOf(sub),
+            coordinator = fakeCoordinator(captured),
+            parentModelId = null,
+            settings = settingsWith(subModel),
+            registry = ExecutionHandleRegistry(),
+            buildSubagentTools = { _, _ -> listOf(tool("local_tool")) },
+            releaseOrphanedClaims = {},
+            approvalGateFor = { denyGate() },
+            processingStatus = MutableStateFlow(null),
+            progressLabel = { "Running $it" },
+            parentConversationId = Uuid.random(),
+            // no automationLease (legacy behavior)
+        )
+
+        runBlocking { spawn.execute(spawnArgs("UI")) }
+
+        assertTrue("the sub's own tools must remain", captured.any { it.name == "local_tool" })
+        assertFalse("no automation tools without a lease", captured.any { it.name == "ui_observe" })
+    }
 
     @Test
     fun `buildSpawnTool advertises the spawn tool under the model-facing name agent`() {

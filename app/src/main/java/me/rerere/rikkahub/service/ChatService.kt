@@ -93,9 +93,11 @@ import me.rerere.rikkahub.data.ai.task.ParentApprovalSurface
 import me.rerere.rikkahub.data.ai.task.PendingChildApprovals
 import me.rerere.rikkahub.data.ai.task.TaskApprovalRouter
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
+import me.rerere.rikkahub.data.ai.task.TaskRunResult
 import me.rerere.rikkahub.data.ai.task.TaskRunStore
 import me.rerere.rikkahub.data.ai.task.injectChildApprovalPart
 import me.rerere.rikkahub.data.ai.task.resolveChildApprovalPart
+import me.rerere.rikkahub.data.ai.subagent.SubagentAutomationLease
 import me.rerere.rikkahub.data.ai.subagent.buildSpawnTool
 import me.rerere.rikkahub.data.ai.subagent.subagentBoardTools
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -265,6 +267,47 @@ internal fun effectiveAutomationCapability(
  * in the conversation is exactly "still open". PURE so the boundary is JVM-testable without the
  * service. (Mirrors the inline Pending checks the approval-resume + Stop-hook paths already use.)
  */
+/**
+ * The ordering-sensitive core of a SUBAGENT automation lease (Option B). Extracted + generic in [R] so
+ * the guard-before-overlay invariant is JVM-testable without a real `TaskRunResult`.
+ *
+ * INVARIANT (codex P1): the guard MUST be registered on [session] BEFORE the STOP overlay is exposed
+ * via [activation].activate. The kill-switch sweep acts only when [ConversationSession.hasActiveAutomation]
+ * is true, so a tap in the gap between "overlay is tappable" and "guard registered" would otherwise
+ * revoke nothing for a no-automation parent and the subagent would proceed with the kill switch already
+ * pressed. This mirrors the main lease's guard-before-activate order.
+ *
+ * Fail-closed: when no STOP overlay can be activated, the guard is deregistered + revoked and
+ * [onNoKillSwitch] runs (the subagent without automation tools — `ui_*` is never exposed without a
+ * reachable kill switch). On the active path [onActive] runs with the lease held; on EVERY exit
+ * (normal, error, cancellation) the guard is deregistered, the overlay deactivated, and the guard
+ * revoked exactly once.
+ */
+internal suspend fun <R> openSubagentAutomationLeaseOnSession(
+    session: ConversationSession,
+    guard: CapabilityGuard,
+    leaseKey: Uuid,
+    activation: AutomationActivationTracker,
+    onNoKillSwitch: suspend () -> R,
+    onActive: suspend () -> R,
+): R {
+    // Register BEFORE exposing the overlay so a kill-switch tap in the activation window sees the guard.
+    session.addSubagentAutomationGuard(guard)
+    if (!activation.activate(leaseKey)) {
+        session.removeSubagentAutomationGuard(guard)
+        guard.revoke()
+        return onNoKillSwitch()
+    }
+    return try {
+        onActive()
+    } finally {
+        session.removeSubagentAutomationGuard(guard)
+        activation.deactivate(leaseKey)
+        // Revoke on release so no lingering reference to the guard can authorize after the lease.
+        guard.revoke()
+    }
+}
+
 internal fun conversationHasPendingToolApproval(conversation: Conversation): Boolean =
     conversation.currentMessages.any { message ->
         message.parts.any { it is UIMessagePart.Tool && it.isPending }
@@ -711,7 +754,10 @@ class ChatService(
         // the global kill-switch that legitimately stops ALL automation sessions at once.
         killSwitchHandle = automationKillSwitch.register {
             sessions.values.forEach { session ->
-                if (session.activeAutomationGuard != null) {
+                // Fire when the session has ANY live automation guard — the main lease OR a subagent
+                // lease (Option B): a no-automation parent can still own a spawned automation subagent,
+                // whose guard must be revoked and whose (child) coroutine must be cancelled via the job.
+                if (session.hasActiveAutomation()) {
                     session.revokeAutomation()
                     session.getJob()?.cancel()
                 }
@@ -1509,6 +1555,72 @@ class ChatService(
         }
     }
 
+    /**
+     * Open a UI-automation lease for a SPAWNED SUBAGENT (Option B — subagent UI automation). Unlike
+     * the main lease, the capability is derived from the SUBAGENT assistant's OWN grant (not the
+     * parent's and not attenuated from it), so a parent with no automation can delegate device work to
+     * an automation specialist subagent. Authority is still fully gated: the same one-time danger
+     * acknowledgement + flavor support ([effectiveAutomationCapability]'s yolo gates), the ttl/step
+     * lease, the kill switch, and the submit-class confirm all apply.
+     *
+     * Lifecycle (mirrors [withAutomationLease] but keyed by a per-spawn lease id, and the guard lives
+     * in the session's SUBAGENT-guard set so the kill-switch sweep reaches it even when the parent has
+     * no main lease):
+     *  - derive the capability from `sub`'s grant; if none usable ⇒ run with NO automation tools.
+     *  - require a live a11y backend ([AutomationRuntimeRegistry.core]); absent ⇒ no automation tools.
+     *  - FAIL CLOSED: if the STOP overlay cannot be activated, do NOT expose automation tools (the
+     *    subagent must never observe/act without a reachable kill switch) — it runs without them.
+     *  - register the guard on [session] (kill-switch reach), supply `ui_*` tools, and on EVERY exit
+     *    (normal, error, cancellation) deregister + deactivate the overlay + revoke the guard.
+     */
+    private suspend fun openSubagentAutomationLease(
+        sub: Assistant,
+        session: ConversationSession,
+        block: suspend (autoTools: List<Tool>) -> TaskRunResult,
+    ): TaskRunResult {
+        val settings = settingsStore.settingsFlow.value
+        val leaseKey = Uuid.random()
+        val capability = effectiveAutomationCapability(
+            // A subagent has no per-run/pending grant; its authority is its own STANDING grant only.
+            pendingGrant = null,
+            assistantGrant = sub.automationGrant,
+            masterSwitchEnabled = sub.uiAutomationEnabled,
+            sessionId = leaseKey.toString(),
+            now = trustClock.now(),
+            yoloAcknowledged = settings.displaySetting.automationYoloAcknowledged,
+            yoloSupported = AUTOMATION_YOLO_SUPPORTED,
+        ) ?: return block(emptyList())
+
+        // No live a11y backend ⇒ ui_observe/act cannot run; the subagent proceeds without automation.
+        val core = automationRegistry.core() ?: return block(emptyList())
+
+        val guard = CapabilityGuard(capability = capability, clock = trustClock)
+        // The ordering-sensitive lease (register-before-activate, fail-closed, release-on-every-exit)
+        // is [openSubagentAutomationLeaseOnSession] so the guard-before-overlay invariant is testable.
+        return openSubagentAutomationLeaseOnSession(
+            session = session,
+            guard = guard,
+            leaseKey = leaseKey,
+            activation = automationActivation,
+            onNoKillSwitch = { block(emptyList()) },
+            onActive = {
+                val autoTools = getUiAutomationTools(
+                    guard = guard,
+                    core = core,
+                    foregroundPkg = { automationRegistry.foregroundPackage() },
+                    // Same rule as the main turn: YOLO (includeHost) auto-approves the submit-class
+                    // confirm; otherwise the overlay channel, or fail-closed AlwaysDeny if none.
+                    confirm = if (guard.includeHost) {
+                        AlwaysConfirm
+                    } else {
+                        automationRegistry.confirmChannel() ?: AlwaysDeny
+                    },
+                )
+                block(autoTools)
+            },
+        )
+    }
+
     // ---- 处理消息补全 ----
 
     // Returns whether the completion ran to success — the sendMessage path needs it to decide
@@ -1743,6 +1855,12 @@ class ChatService(
                             // panel / retention / cleanup find it (review finding #2). Same id the
                             // board port binds below.
                             parentConversationId = conversationId,
+                            // Subagent UI automation (Option B): the lease mints a guard from the
+                            // SUBAGENT's own grant and registers it on THIS session so the kill switch
+                            // covers it, even when the parent has no automation of its own.
+                            automationLease = SubagentAutomationLease { sub, block ->
+                                openSubagentAutomationLease(sub, session, block)
+                            },
                         )
                     }
                 },

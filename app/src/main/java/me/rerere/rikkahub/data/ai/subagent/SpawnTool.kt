@@ -21,6 +21,7 @@ import me.rerere.ai.runtime.task.TaskState
 import me.rerere.rikkahub.data.ai.task.ExecutionHandle
 import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
+import me.rerere.rikkahub.data.ai.task.TaskRunResult
 import me.rerere.rikkahub.data.ai.task.buildTaskEnvelope
 import me.rerere.rikkahub.data.ai.task.gateSubagentTools
 import me.rerere.rikkahub.data.datastore.Settings
@@ -132,6 +133,12 @@ fun buildSpawnTool(
     processingStatus: MutableStateFlow<String?>,
     progressLabel: (subName: String) -> String,
     parentConversationId: Uuid,
+    // Optional UI-automation lease for the spawned subagent (Option B). When supplied, it wraps the
+    // child run: it mints a CapabilityGuard from the SUBAGENT's own automation grant, registers it
+    // with the kill switch + STOP overlay, and supplies the ui_* tools to add to the child pool (an
+    // EMPTY list when the sub has no usable grant / no reachable kill switch). Null = the legacy
+    // behavior (subagents get no automation tools).
+    automationLease: SubagentAutomationLease? = null,
 ): Tool = Tool(
     name = SPAWN_TOOL_MODEL_NAME,
     description = "Delegate a self-contained sub-task to a specialized subagent and return its result.",
@@ -203,37 +210,49 @@ fun buildSpawnTool(
             // needsApproval=false tools (its approval UI is unreachable mid-subagent), and the gate
             // forwards allowlisted calls to the parent while auto-denying the rest (decision #2).
             // The spawn tool is additionally stripped inside TaskCoordinator.run (recursion guard,
-            // TASK_DEPTH_ONE).
-            val subTools = gateSubagentTools(
-                tools = buildSubagentTools(sub, handle),
-                taskId = taskId,
-                gate = approvalGateFor(sub),
-            )
+            // TASK_DEPTH_ONE). [autoTools] are the subagent's UI-automation tools supplied by the
+            // automation lease (empty when the sub has no usable grant) — gated alongside the rest
+            // (the ui_* tools are needsApproval=false, so the gate passes them through unchanged).
+            suspend fun runChild(autoTools: List<Tool>): TaskRunResult {
+                val subTools = gateSubagentTools(
+                    tools = buildSubagentTools(sub, handle) + autoTools,
+                    taskId = taskId,
+                    gate = approvalGateFor(sub),
+                )
 
-            processingStatus.value = progressLabel(sub.name)
-            registry.markRunning(handle.id)
-            coordinator.run(
-                sub = sub,
-                prompt = prompt,
-                parentModelId = parentModelId,
-                settings = settings,
-                tools = subTools,
-                processingStatus = processingStatus,
-                parentConversationId = parentConversationId,
-                taskId = taskId,
-                // parentToolCallId is intentionally NOT passed: the spawn tool call id is not
-                // reachable inside Tool.execute (its signature is `suspend (JsonElement) -> …`,
-                // engine-wide). Plumbing it would require an ABI change to the shared Tool type and
-                // the spawn-path tool assembly this spec marks Ask-first — tracked as a follow-up
-                // gap (review finding #2, parentToolCallId half). Until then per-parent concurrency
-                // grouping falls back to the global cap, which is still enforced.
-            ).also { run ->
-                // Mirror the run's terminal into the handle state machine; the coordinator already
-                // absorbs child failures into the result (it rethrows only cancellation).
-                when (val terminal = run.state) {
-                    is TaskState.Failed -> registry.markFailed(handle.id, terminal.error)
-                    else -> registry.markCompleted(handle.id, run.text)
+                processingStatus.value = progressLabel(sub.name)
+                registry.markRunning(handle.id)
+                return coordinator.run(
+                    sub = sub,
+                    prompt = prompt,
+                    parentModelId = parentModelId,
+                    settings = settings,
+                    tools = subTools,
+                    processingStatus = processingStatus,
+                    parentConversationId = parentConversationId,
+                    taskId = taskId,
+                    // parentToolCallId is intentionally NOT passed: the spawn tool call id is not
+                    // reachable inside Tool.execute (its signature is `suspend (JsonElement) -> …`,
+                    // engine-wide). Plumbing it would require an ABI change to the shared Tool type and
+                    // the spawn-path tool assembly this spec marks Ask-first — tracked as a follow-up
+                    // gap (review finding #2, parentToolCallId half). Until then per-parent concurrency
+                    // grouping falls back to the global cap, which is still enforced.
+                ).also { run ->
+                    // Mirror the run's terminal into the handle state machine; the coordinator already
+                    // absorbs child failures into the result (it rethrows only cancellation).
+                    when (val terminal = run.state) {
+                        is TaskState.Failed -> registry.markFailed(handle.id, terminal.error)
+                        else -> registry.markCompleted(handle.id, run.text)
+                    }
                 }
+            }
+            // The automation lease (Option B) wraps the WHOLE child run so the kill switch can revoke
+            // the subagent's guard for its duration; it supplies the ui_* tools (or none). Without a
+            // lease the subagent runs with no automation tools (legacy behavior).
+            if (automationLease != null) {
+                automationLease.open(sub) { autoTools -> runChild(autoTools) }
+            } else {
+                runChild(emptyList())
             }
         } catch (cancellation: CancellationException) {
             registry.stop(handle.id)
@@ -291,3 +310,20 @@ private fun JsonElement.subagentArg(): String =
 
 private fun JsonElement.promptArg(): String =
     jsonObject["prompt"]?.jsonPrimitive?.content.orEmpty()
+
+/**
+ * Opens a UI-automation lease for a spawned subagent (Option B — subagent UI automation). The
+ * implementation (in :app/ChatService) mints a [me.rerere.automation.cap.CapabilityGuard] from the
+ * SUBAGENT assistant's OWN automation grant, activates the floating STOP overlay + registers the guard
+ * with the kill switch, supplies the `ui_*` tools to add to the child pool, and tears the lease down
+ * when [block] returns (on every path, including cancellation). It supplies an EMPTY tool list — i.e.
+ * the subagent runs WITHOUT automation — when the subagent has no usable automation grant, the flavor
+ * does not support it, or no kill switch is reachable (fail-closed). The lease spans the entire child
+ * run so the kill switch can revoke the subagent's guard for its full duration.
+ */
+fun interface SubagentAutomationLease {
+    suspend fun open(
+        sub: Assistant,
+        block: suspend (autoTools: List<Tool>) -> TaskRunResult,
+    ): TaskRunResult
+}

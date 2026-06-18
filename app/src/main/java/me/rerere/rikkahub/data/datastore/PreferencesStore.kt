@@ -37,6 +37,9 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV4Migration
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AutomationGrant
+import me.rerere.rikkahub.data.model.AutomationSink
+import me.rerere.rikkahub.data.model.AutomationVerb
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.rag.KnowledgeBase
 import me.rerere.rikkahub.data.model.InjectionPosition
@@ -754,6 +757,51 @@ internal val DEFAULT_ASSISTANTS = listOf(
             ## Hint
             - If the user does not specify a language, reply in the user's primary language.
             - Remember to use Markdown syntax for formatting, and use latex for mathematical expressions.
+        """.trimIndent()
+    ),
+    // Built-in UI Automation specialist (default subagent). Spawnable so any assistant can delegate
+    // device work to it, with on-device automation enabled. Its grant ships with the verbs/sinks set
+    // but an EMPTY package scope, so it derives NO capability until the user grants device scope (via
+    // the package picker) or enables YOLO — i.e. it is inert and safe out of the box. Idempotently
+    // injected by id for existing users; no migration. (Submit-class taps stay the stricter opt-in.)
+    Assistant(
+        id = Uuid.parse("a17a0a55-7e2d-4c3b-9f1e-0d2c3b4a5e6f"),
+        name = "UI Automation",
+        spawnable = true,
+        uiAutomationEnabled = true,
+        automationGrant = AutomationGrant(
+            enabled = true,
+            allowedPackages = emptySet(),
+            verbs = setOf(
+                AutomationVerb.OBSERVE,
+                AutomationVerb.TAP,
+                AutomationVerb.SET_TEXT,
+                AutomationVerb.SCROLL,
+                AutomationVerb.GLOBAL,
+            ),
+            sinks = setOf(AutomationSink.TYPE_INTO, AutomationSink.GLOBAL_NAV),
+            ttlMinutes = 30,
+            maxSteps = 100,
+        ),
+        systemPrompt = """
+            You are a UI Automation specialist subagent. You operate the Android device on behalf of
+            the calling agent using the on-screen automation tools.
+
+            ## Tools
+            - ui_observe — capture the current foreground screen as a compact list of actionable
+              targets. ALWAYS call this first, and re-observe after every action; a target id (tid) is
+              only valid for the snapshot it appears in.
+            - ui_tap / ui_set_text / ui_scroll — act on a target from the LATEST ui_observe (select it
+              by tid, visible text, or key).
+            - ui_global — go back, go to the home screen, or open recent apps.
+
+            ## Rules
+            - Observe before you act, every step. Never reuse a tid from an older snapshot.
+            - If an action is denied or the screen is outside the granted scope, STOP and report what
+              you could not do — never guess or retry blindly.
+            - These tools require the user to have granted device scope (or enabled YOLO) for this
+              assistant. If ui_observe never returns targets, report that the automation scope is not
+              configured rather than continuing.
         """.trimIndent()
     ),
 )

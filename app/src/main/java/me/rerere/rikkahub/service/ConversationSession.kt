@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import me.rerere.automation.cap.CapabilityGuard
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.Conversation
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
@@ -71,9 +72,37 @@ class ConversationSession(
     @Volatile
     var pendingAutomationGrant: AutomationGrant? = null
 
-    /** Kill-switch (design I9): revoke the active automation grant — future authorize ⇒ DENY. */
+    // Subagent automation guards (Option B): a no-automation PARENT can spawn a subagent that mints
+    // its OWN automation lease from the subagent assistant's own grant. That guard is NOT this
+    // session's [activeAutomationGuard], but it MUST still be reached by the kill-switch — otherwise a
+    // parent with no automation of its own would leave the session looking "inactive" and the
+    // floating STOP could neither revoke the subagent's guard nor cancel its (child) coroutine. The
+    // subagent run is a structural child of this session's generation job, so revoking the guard +
+    // cancelling that job tears the subagent down. Thread-safe: the generation coroutine adds/removes
+    // while the kill-switch thread iterates.
+    private val subagentAutomationGuards: MutableSet<CapabilityGuard> = ConcurrentHashMap.newKeySet()
+
+    fun addSubagentAutomationGuard(guard: CapabilityGuard) {
+        subagentAutomationGuards.add(guard)
+    }
+
+    fun removeSubagentAutomationGuard(guard: CapabilityGuard) {
+        subagentAutomationGuards.remove(guard)
+    }
+
+    /** True iff this session has ANY live automation guard — the main lease OR a subagent lease. */
+    fun hasActiveAutomation(): Boolean =
+        activeAutomationGuard != null || subagentAutomationGuards.isNotEmpty()
+
+    /**
+     * Kill-switch (design I9): revoke EVERY active automation grant on this session — the main lease
+     * guard AND every live subagent lease guard — so a future authorize ⇒ DENY on all of them. The
+     * caller also cancels the generation job, which tears down the in-flight captures (the subagent
+     * runs as a structural child, so it is cancelled too).
+     */
     fun revokeAutomation() {
         activeAutomationGuard?.revoke()
+        subagentAutomationGuards.forEach { it.revoke() }
     }
 
     /**
