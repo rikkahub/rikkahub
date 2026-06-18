@@ -791,6 +791,7 @@ class DoctorChecks(
                     // been loaded/downloaded. A disabled provider with no models is the factory
                     // default — don't count it.
                     is me.rerere.ai.provider.ProviderSetting.LiteRtLocal -> p.enabled && p.models.isNotEmpty()
+                    is me.rerere.ai.provider.ProviderSetting.Codex -> p.enabled  // OAuth, no API key
                 }
             }
             add(

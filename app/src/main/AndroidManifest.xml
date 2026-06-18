@@ -191,6 +191,22 @@
       </intent-filter>
     </activity>
     <activity
+      android:name=".ui.activity.CodexOAuthRedirectActivity"
+      android:exported="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+
+        <data
+          android:host="codex"
+          android:path="/oauth"
+          android:scheme="rikkahub" />
+      </intent-filter>
+    </activity>
+    <activity
       android:name="com.yalantis.ucrop.UCropActivity"
       android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
     <activity

@@ -1767,5 +1767,32 @@
   <string name="setting_mcp_page_name_invalid">Name can only contain English letters and numbers</string>
   <string name="log_page_record_requests">Record requests</string>
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
+  <string name="codex_provider_description">Uses the OpenAI Codex OAuth and Responses API flow. This integration depends on Codex service compatibility.</string>
+  <string name="codex_sign_in">Sign in with OpenAI OAuth</string>
+  <string name="codex_enable">Enable Codex</string>
+  <string name="codex_round_robin_description">Use enabled accounts in round-robin order.</string>
+  <string name="codex_sign_in_required">Sign in with at least one available account first.</string>
+  <string name="codex_accounts_count">Accounts (%1$d)</string>
+  <string name="codex_check_status">Check status</string>
+  <string name="codex_no_accounts">No Codex accounts are signed in.</string>
+  <string name="codex_oauth_success">OpenAI OAuth sign-in completed</string>
+  <string name="codex_refresh_failed">Failed to refresh account</string>
+  <string name="codex_remove_account_title">Remove Codex account?</string>
+  <string name="codex_remove_account_message">You will need to sign in again to use this account.</string>
+  <string name="codex_remove">Remove</string>
+  <string name="codex_token_available">Token available</string>
+  <string name="codex_token_expired">Token expired</string>
+  <string name="codex_token_unavailable">Token unavailable</string>
+  <string name="codex_token_not_checked">Token status not checked</string>
+  <string name="codex_five_hour_limit">5-hour limit</string>
+  <string name="codex_weekly_limit">Weekly limit</string>
+  <string name="codex_minute_limit">%1$d minute limit</string>
+  <string name="codex_percent_remaining">%1$d%% remaining</string>
+  <string name="codex_resets_at">Resets %1$s</string>
+  <string name="codex_refresh">Refresh</string>
+  <string name="codex_reauthenticate">Re-auth</string>
+  <string name="codex_reasoning_auto_unsupported">Codex does not support automatic reasoning effort. Select Low, Medium, High, or Extra High.</string>
+  <string name="codex_response_failed">The Codex response failed.</string>
+  <string name="codex_monthly_limit">Monthly limit</string>
+  <string name="codex_oauth_ports_unavailable">Codex sign-in cannot start because the local callback ports are in use. Close the app using them and try again.</string>
 </resources>
-

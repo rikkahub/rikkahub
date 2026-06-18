@@ -61,6 +61,7 @@ import kotlinx.serialization.Serializable
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.DEFAULT_CODEX_PROVIDER_ID
 import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.data.db.MigrationState
 import me.rerere.rikkahub.data.event.AppEvent
@@ -142,6 +143,10 @@ import kotlin.uuid.Uuid
 private const val TAG = "RouteActivity"
 
 class RouteActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_OPEN_CODEX_SETTINGS = "open_codex_settings"
+    }
+
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
@@ -232,10 +237,19 @@ class RouteActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_OPEN_CODEX_SETTINGS, false)) {
+            val destination = Screen.SettingProviderDetail(DEFAULT_CODEX_PROVIDER_ID.toString())
+            navStack?.let { stack ->
+                if (stack.lastOrNull() != destination) stack.add(destination)
+            }
+            intent.removeExtra(EXTRA_OPEN_CODEX_SETTINGS)
+        }
         // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->
             navStack?.add(Screen.Chat(text))
-        }    }
+        }
+    }
 
     @OptIn(ExperimentalComposeUiApi::class)
     @Composable
@@ -267,6 +281,14 @@ class RouteActivity : ComponentActivity() {
 
         val backStack = rememberNavBackStack(startScreen)
         SideEffect { this@RouteActivity.navStack = backStack }
+
+        LaunchedEffect(backStack) {
+            if (intent.getBooleanExtra(EXTRA_OPEN_CODEX_SETTINGS, false)) {
+                val destination = Screen.SettingProviderDetail(DEFAULT_CODEX_PROVIDER_ID.toString())
+                if (backStack.lastOrNull() != destination) backStack.add(destination)
+                intent.removeExtra(EXTRA_OPEN_CODEX_SETTINGS)
+            }
+        }
 
         ShareHandler(backStack)
 

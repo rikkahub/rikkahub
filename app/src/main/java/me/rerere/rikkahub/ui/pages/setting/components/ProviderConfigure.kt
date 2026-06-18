@@ -125,6 +125,8 @@ fun ProviderConfigure(
             is ProviderSetting.LiteRtLocal -> {
                 ProviderConfigureLiteRT(provider, onEdit)
             }
+
+            is ProviderSetting.Codex -> Unit
         }
     }
 }
@@ -138,6 +140,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Claude -> this.apiKey
         is ProviderSetting.AICore -> "" // on-device, no API key
         is ProviderSetting.LiteRtLocal -> "" // on-device, no API key
+        is ProviderSetting.Codex -> "" // OAuth, no API key
     }
     val sourceBaseUrl = when (this) {
         is ProviderSetting.OpenAI -> this.baseUrl
@@ -145,6 +148,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Claude -> this.baseUrl
         is ProviderSetting.AICore -> "" // on-device, no base URL
         is ProviderSetting.LiteRtLocal -> "" // on-device, no base URL
+        is ProviderSetting.Codex -> "" // OAuth, no base URL
     }
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
@@ -199,6 +203,7 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
             is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
             is ProviderSetting.AICore -> return "" // on-device, no base URL
             is ProviderSetting.LiteRtLocal -> return "" // on-device, no base URL
+            is ProviderSetting.Codex -> return "" // OAuth, no base URL
         }
     }
     return when (this) {
@@ -207,6 +212,7 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
         is ProviderSetting.AICore -> ""
         is ProviderSetting.LiteRtLocal -> ""
+        is ProviderSetting.Codex -> ""
     }
 }
 
@@ -218,6 +224,7 @@ internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
         is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.AICore -> this // no base URL to reset
         is ProviderSetting.LiteRtLocal -> this // no base URL to reset
+        is ProviderSetting.Codex -> this // no base URL to reset
     }
 }
 
@@ -228,6 +235,7 @@ internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
         is ProviderSetting.Claude -> this.baseUrl
         is ProviderSetting.AICore -> return true // no base URL concept
         is ProviderSetting.LiteRtLocal -> return true // no base URL concept
+        is ProviderSetting.Codex -> return true // no base URL concept
     }
     return baseUrl == defaultBaseUrlForReset()
 }

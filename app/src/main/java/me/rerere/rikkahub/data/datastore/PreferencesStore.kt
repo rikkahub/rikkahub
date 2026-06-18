@@ -408,6 +408,10 @@ class SettingsStore(
                         is ProviderSetting.LiteRtLocal -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
+
+                        is ProviderSetting.Codex -> provider.copy(
+                            models = provider.models.distinctBy { model -> model.id }
+                        )
                     }
                 },
                 assistants = settings.assistants.distinctBy { it.id }.map { assistant ->

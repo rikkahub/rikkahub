@@ -1689,5 +1689,32 @@
   <string name="error_mcp_invalid_server_name">無效的MCP伺服器名稱（僅允許英數字元）：%1$s</string>
   <string name="log_page_record_requests">記錄請求</string>
   <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
+  <string name="codex_provider_description">使用 OpenAI Codex OAuth 和 Responses API。此整合依賴 Codex 服務相容性。</string>
+  <string name="codex_sign_in">使用 OpenAI OAuth 登入</string>
+  <string name="codex_enable">啟用 Codex</string>
+  <string name="codex_round_robin_description">以輪詢方式使用已啟用的帳號。</string>
+  <string name="codex_sign_in_required">請先登入至少一個可用帳號。</string>
+  <string name="codex_accounts_count">帳號（%1$d）</string>
+  <string name="codex_check_status">檢查狀態</string>
+  <string name="codex_no_accounts">尚未登入 Codex 帳號。</string>
+  <string name="codex_oauth_success">OpenAI OAuth 登入完成</string>
+  <string name="codex_refresh_failed">重新整理帳號失敗</string>
+  <string name="codex_remove_account_title">移除 Codex 帳號？</string>
+  <string name="codex_remove_account_message">若要再次使用此帳號，需要重新登入。</string>
+  <string name="codex_remove">移除</string>
+  <string name="codex_token_available">權杖可用</string>
+  <string name="codex_token_expired">權杖已過期</string>
+  <string name="codex_token_unavailable">權杖不可用</string>
+  <string name="codex_token_not_checked">尚未檢查權杖狀態</string>
+  <string name="codex_five_hour_limit">5 小時限額</string>
+  <string name="codex_weekly_limit">每週限額</string>
+  <string name="codex_minute_limit">%1$d 分鐘限額</string>
+  <string name="codex_percent_remaining">剩餘 %1$d%%</string>
+  <string name="codex_resets_at">重設時間：%1$s</string>
+  <string name="codex_refresh">重新整理</string>
+  <string name="codex_reauthenticate">重新驗證</string>
+  <string name="codex_reasoning_auto_unsupported">Codex 不支援自動思考強度。請選擇低、中、高或超高。</string>
+  <string name="codex_response_failed">Codex 回應失敗。</string>
+  <string name="codex_monthly_limit">每月限額</string>
+  <string name="codex_oauth_ports_unavailable">本機回呼連接埠已被占用，無法啟動 Codex 登入。請關閉占用連接埠的應用程式後重試。</string>
 </resources>
-
