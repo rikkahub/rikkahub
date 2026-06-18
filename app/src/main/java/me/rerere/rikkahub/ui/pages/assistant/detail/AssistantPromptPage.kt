@@ -33,7 +33,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -79,6 +78,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -278,8 +278,9 @@ private fun AssistantPromptContent(
                 },
                 content = {
                     val missingMessage = "{{ message }}" !in assistant.messageTemplate
-                    OutlinedTextField(
+                    FormTextField(
                         value = assistant.messageTemplate,
+                        externalKey = "${assistant.id}:messageTemplate",
                         onValueChange = {
                             onUpdate(
                                 assistant.copy(
@@ -451,8 +452,9 @@ private fun AssistantPromptContent(
                                 Icon(HugeIcons.Cancel01, null)
                             }
                         }
-                        OutlinedTextField(
+                        FormTextField(
                             value = presetMessage.toText(),
+                            externalKey = "${assistant.id}:preset:${presetMessage.id}:parts",
                             onValueChange = { text ->
                                 onUpdate(
                                     assistant.copy(
@@ -599,8 +601,9 @@ private fun AssistantRegexCard(
 
             if (expanded) {
 
-                OutlinedTextField(
+                FormTextField(
                     value = regex.name,
+                    externalKey = "${assistant.id}:regex:${regex.id}:name",
                     onValueChange = { name ->
                         onUpdate(
                             assistant.copy(
@@ -618,8 +621,9 @@ private fun AssistantRegexCard(
                     label = { Text(stringResource(R.string.assistant_page_regex_name)) }
                 )
 
-                OutlinedTextField(
+                FormTextField(
                     value = regex.findRegex,
+                    externalKey = "${assistant.id}:regex:${regex.id}:findRegex",
                     onValueChange = { findRegex ->
                         onUpdate(
                             assistant.copy(
@@ -638,8 +642,9 @@ private fun AssistantRegexCard(
                     placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
                 )
 
-                OutlinedTextField(
+                FormTextField(
                     value = regex.replaceString,
+                    externalKey = "${assistant.id}:regex:${regex.id}:replaceString",
                     onValueChange = { replaceString ->
                         onUpdate(
                             assistant.copy(

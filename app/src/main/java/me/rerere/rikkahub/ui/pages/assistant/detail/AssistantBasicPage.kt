@@ -47,6 +47,7 @@ import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
@@ -148,8 +149,9 @@ internal fun AssistantBasicContent(
                 modifier = Modifier.padding(8.dp),
 
             ) {
-                OutlinedTextField(
+                FormTextField(
                     value = assistant.name,
+                    externalKey = "${assistant.id}:name",
                     onValueChange = {
                         onUpdate(
                             assistant.copy(
@@ -486,8 +488,9 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_max_tokens_desc))
                 }
             ) {
-                OutlinedTextField(
+                FormTextField(
                     value = assistant.maxTokens?.toString() ?: "",
+                    externalKey = "${assistant.id}:maxTokens",
                     onValueChange = { text ->
                         val tokens = if (text.isBlank()) {
                             null
@@ -544,8 +547,9 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_subagent_description_desc))
                 }
             ) {
-                OutlinedTextField(
+                FormTextField(
                     value = assistant.description,
+                    externalKey = "${assistant.id}:description",
                     onValueChange = {
                         onUpdate(
                             assistant.copy(
@@ -592,8 +596,9 @@ internal fun AssistantBasicContent(
                         Text(stringResource(R.string.assistant_page_subagent_max_steps_desc))
                     }
                 ) {
-                    OutlinedTextField(
+                    FormTextField(
                         value = assistant.maxSteps?.toString() ?: "",
+                        externalKey = "${assistant.id}:maxSteps",
                         onValueChange = { text ->
                             val steps = if (text.isBlank()) {
                                 null

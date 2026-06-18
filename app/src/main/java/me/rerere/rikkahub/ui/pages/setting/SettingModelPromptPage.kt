@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +34,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import me.rerere.rikkahub.ui.ext.plus
 
 @Composable
@@ -49,6 +49,7 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_translation),
                 promptDescription = stringResource(R.string.setting_model_page_translate_prompt_vars),
                 promptValue = settings.translatePrompt,
+                externalKey = "translatePrompt",
                 onPromptChange = { vm.updateSettings(settings.copy(translatePrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(translatePrompt = DEFAULT_TRANSLATION_PROMPT)) },
                 reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
@@ -60,6 +61,7 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_title),
                 promptDescription = stringResource(R.string.setting_model_page_suggestion_prompt_vars),
                 promptValue = settings.titlePrompt,
+                externalKey = "titlePrompt",
                 onPromptChange = { vm.updateSettings(settings.copy(titlePrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(titlePrompt = DEFAULT_TITLE_PROMPT)) },
             )
@@ -69,6 +71,7 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_suggestion),
                 promptDescription = stringResource(R.string.setting_model_page_suggestion_prompt_vars),
                 promptValue = settings.suggestionPrompt,
+                externalKey = "suggestionPrompt",
                 onPromptChange = { vm.updateSettings(settings.copy(suggestionPrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(suggestionPrompt = DEFAULT_SUGGESTION_PROMPT)) },
             )
@@ -78,6 +81,7 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_ocr),
                 promptDescription = stringResource(R.string.setting_model_page_ocr_prompt_vars),
                 promptValue = settings.ocrPrompt,
+                externalKey = "ocrPrompt",
                 onPromptChange = { vm.updateSettings(settings.copy(ocrPrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(ocrPrompt = DEFAULT_OCR_PROMPT)) },
             )
@@ -87,6 +91,7 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_compress),
                 promptDescription = stringResource(R.string.setting_model_page_compress_prompt_vars),
                 promptValue = settings.compressPrompt,
+                externalKey = "compressPrompt",
                 onPromptChange = { vm.updateSettings(settings.copy(compressPrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(compressPrompt = DEFAULT_COMPRESS_PROMPT)) },
             )
@@ -99,6 +104,7 @@ private fun PromptSettingItem(
     title: String,
     promptDescription: String,
     promptValue: String,
+    externalKey: Any,
     onPromptChange: (String) -> Unit,
     onResetPrompt: () -> Unit,
     reasoningLevel: ReasoningLevel? = null,
@@ -151,8 +157,9 @@ private fun PromptSettingItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
+                FormTextField(
                     value = promptValue,
+                    externalKey = externalKey,
                     onValueChange = onPromptChange,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 15,

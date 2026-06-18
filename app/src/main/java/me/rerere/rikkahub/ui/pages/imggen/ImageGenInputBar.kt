@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +39,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ImageUtils
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import java.io.File
 import kotlin.uuid.Uuid
 
@@ -88,8 +88,9 @@ internal fun ImageGenInputBar(
             )
         }
 
-        OutlinedTextField(
+        FormTextField(
             value = prompt,
+            externalKey = "imggen:prompt",
             onValueChange = vm::updatePrompt,
             placeholder = { Text(stringResource(R.string.imggen_page_prompt_placeholder)) },
             modifier = Modifier

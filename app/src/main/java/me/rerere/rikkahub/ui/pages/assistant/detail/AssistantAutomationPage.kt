@@ -73,6 +73,7 @@ import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -254,6 +255,7 @@ fun AssistantAutomationPage(id: String) {
             hooks = assistant.hooks,
             a11yEnabled = a11yEnabled,
             yoloAcknowledged = yoloAcknowledged,
+            externalKey = assistant.id,
             onUpdate = { vm.update(assistant.copy(automationGrant = it)) },
             onUpdateHooks = { vm.update(assistant.copy(hooks = it)) },
             onAcknowledgeYolo = { vm.setAutomationYoloAcknowledged(true) },
@@ -268,6 +270,7 @@ private fun AutomationScopeContent(
     hooks: HookConfig,
     a11yEnabled: Boolean,
     yoloAcknowledged: Boolean,
+    externalKey: Any,
     onUpdate: (AutomationGrant) -> Unit,
     onUpdateHooks: (HookConfig) -> Unit,
     onAcknowledgeYolo: () -> Unit,
@@ -305,7 +308,7 @@ private fun AutomationScopeContent(
 
         AllowedPackagesEditor(grant = grant, onUpdate = onUpdate)
 
-        LeaseLimitsEditor(grant = grant, onUpdate = onUpdate)
+        LeaseLimitsEditor(grant = grant, externalKey = externalKey, onUpdate = onUpdate)
 
         GuardrailEditor(hooks = hooks, onUpdate = onUpdateHooks)
 
@@ -743,7 +746,7 @@ private fun PackagePickerSheet(
 }
 
 @Composable
-private fun LeaseLimitsEditor(grant: AutomationGrant, onUpdate: (AutomationGrant) -> Unit) {
+private fun LeaseLimitsEditor(grant: AutomationGrant, externalKey: Any, onUpdate: (AutomationGrant) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = stringResource(R.string.assistant_page_automation_limits_title),
@@ -751,8 +754,9 @@ private fun LeaseLimitsEditor(grant: AutomationGrant, onUpdate: (AutomationGrant
             color = MaterialTheme.colorScheme.primary,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
+            FormTextField(
                 value = grant.ttlMinutes.toString(),
+                externalKey = "$externalKey:automationGrant:ttlMinutes",
                 onValueChange = { raw ->
                     parsePositiveIntOrNull(raw)?.let { onUpdate(grant.copy(ttlMinutes = it)) }
                 },
@@ -761,8 +765,9 @@ private fun LeaseLimitsEditor(grant: AutomationGrant, onUpdate: (AutomationGrant
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
-            OutlinedTextField(
+            FormTextField(
                 value = grant.maxSteps.toString(),
+                externalKey = "$externalKey:automationGrant:maxSteps",
                 onValueChange = { raw ->
                     parsePositiveIntOrNull(raw)?.let { onUpdate(grant.copy(maxSteps = it)) }
                 },

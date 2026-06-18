@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -32,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
@@ -50,8 +50,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
@@ -60,6 +58,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupOperationState
@@ -73,6 +72,9 @@ import me.rerere.common.time.toLocalDateTime
 import java.time.Instant
 
 private const val TAG = "S3Tab"
+private val passwordOutputTransformation = OutputTransformation {
+    replace(0, length, "\u2022".repeat(length))
+}
 
 @Composable
 fun S3Tab(
@@ -179,9 +181,10 @@ fun S3Tab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_endpoint)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.endpoint,
+                            externalKey = "s3:endpoint",
                             onValueChange = { updateS3Config(s3Config.copy(endpoint = it.trim())) },
                             placeholder = { Text("https://s3.amazonaws.com") },
                             singleLine = true
@@ -191,9 +194,10 @@ fun S3Tab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_access_key_id)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.accessKeyId,
+                            externalKey = "s3:accessKeyId",
                             onValueChange = { updateS3Config(s3Config.copy(accessKeyId = it.trim())) },
                             singleLine = true
                         )
@@ -203,11 +207,12 @@ fun S3Tab(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_secret_access_key)) },
                     supportingContent = {
                         var passwordVisible by remember { mutableStateOf(false) }
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.secretAccessKey,
+                            externalKey = "s3:secretAccessKey",
                             onValueChange = { updateS3Config(s3Config.copy(secretAccessKey = it.trim())) },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            outputTransformation = if (passwordVisible) null else passwordOutputTransformation,
                             trailingIcon = {
                                 val image = if (passwordVisible) {
                                     HugeIcons.ViewOff
@@ -225,9 +230,10 @@ fun S3Tab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_bucket)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.bucket,
+                            externalKey = "s3:bucket",
                             onValueChange = { updateS3Config(s3Config.copy(bucket = it.trim())) },
                             placeholder = { Text("my-bucket") },
                             singleLine = true
@@ -237,9 +243,10 @@ fun S3Tab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_region)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.region,
+                            externalKey = "s3:region",
                             onValueChange = { updateS3Config(s3Config.copy(region = it.trim())) },
                             placeholder = { Text("auto") },
                             singleLine = true

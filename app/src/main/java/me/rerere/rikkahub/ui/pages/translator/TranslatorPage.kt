@@ -56,6 +56,7 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.ext.getText
 import org.koin.androidx.compose.koinViewModel
@@ -128,8 +129,9 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
         ) {
             // 输入区域
             Column {
-                OutlinedTextField(
+                FormTextField(
                     value = inputText,
+                    externalKey = "translator:inputText",
                     onValueChange = { vm.updateInputText(it) },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text(stringResource(R.string.translator_page_input_placeholder)) },

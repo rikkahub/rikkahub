@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -32,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
@@ -50,8 +50,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
@@ -60,6 +58,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.FormTextField
 import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupOperationState
@@ -73,6 +72,9 @@ import me.rerere.common.time.toLocalDateTime
 import java.time.Instant
 
 private const val TAG = "WebDavTab"
+private val passwordOutputTransformation = OutputTransformation {
+    replace(0, length, "\u2022".repeat(length))
+}
 
 @Composable
 fun WebDavTab(
@@ -180,9 +182,10 @@ fun WebDavTab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_webdav_server_address)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = webDavConfig.url,
+                            externalKey = "webdav:url",
                             onValueChange = { updateWebDavConfig(webDavConfig.copy(url = it.trim())) },
                             placeholder = { Text("https://example.com/dav") },
                             singleLine = true
@@ -192,9 +195,10 @@ fun WebDavTab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_username)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = webDavConfig.username,
+                            externalKey = "webdav:username",
                             onValueChange = {
                                 updateWebDavConfig(
                                     webDavConfig.copy(
@@ -210,11 +214,12 @@ fun WebDavTab(
                     headlineContent = { Text(stringResource(R.string.backup_page_password)) },
                     supportingContent = {
                         var passwordVisible by remember { mutableStateOf(false) }
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = webDavConfig.password,
+                            externalKey = "webdav:password",
                             onValueChange = { updateWebDavConfig(webDavConfig.copy(password = it.trim())) },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            outputTransformation = if (passwordVisible) null else passwordOutputTransformation,
                             trailingIcon = {
                                 val image = if (passwordVisible) {
                                     HugeIcons.ViewOff
@@ -232,9 +237,10 @@ fun WebDavTab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_path)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        FormTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = webDavConfig.path,
+                            externalKey = "webdav:path",
                             onValueChange = { updateWebDavConfig(webDavConfig.copy(path = it.trim())) },
                             singleLine = true
                         )
