@@ -390,7 +390,8 @@ fun ChatInput(
                             modifier = Modifier
                                 .weight(1f)
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Assistant Picker — disabled while a turn is generating so an in-flight
                             // turn (which re-reads the live assistant at completion) cannot be rebound

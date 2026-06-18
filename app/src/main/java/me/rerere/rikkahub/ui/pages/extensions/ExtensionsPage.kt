@@ -18,9 +18,10 @@ import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.stroke.Book03
-import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.Folder01
+import me.rerere.hugeicons.stroke.Message01
 import me.rerere.hugeicons.stroke.Puzzle
-import me.rerere.hugeicons.stroke.Zap
+import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -57,7 +58,7 @@ fun ExtensionsPage() {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.QuickMessages) },
-                        leadingContent = { Icon(HugeIcons.Zap, null) },
+                        leadingContent = { Icon(HugeIcons.Message01, null) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_quick_messages)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_quick_messages_desc)) },
                     )
@@ -75,13 +76,13 @@ fun ExtensionsPage() {
                     )
                     item(
                         onClick = { navController.navigate(Screen.Workspaces) },
-                        leadingContent = { Icon(HugeIcons.File02, null) },
+                        leadingContent = { Icon(HugeIcons.Folder01, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_workspaces)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_workspaces_desc)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.A2aServer) },
-                        leadingContent = { Icon(HugeIcons.Zap, null) },
+                        leadingContent = { Icon(HugeIcons.ServerStack01, null) },
                         headlineContent = { Text("A2A server") },
                         supportingContent = { Text("Expose spawnable assistants through a standalone A2A endpoint.") },
                     )

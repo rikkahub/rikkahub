@@ -191,11 +191,12 @@ fun TextArea(
 }
 
 @Composable
-private fun FullScreenTextEditor(
+internal fun FullScreenTextEditor(
     state: TextFieldState,
     label: String,
     placeholder: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSave: () -> Unit = {},
 ) {
     var editingText by remember(state.text.toString()) {
         mutableStateOf(state.text.toString())
@@ -228,6 +229,7 @@ private fun FullScreenTextEditor(
                         TextButton(
                             onClick = {
                                 state.setTextAndPlaceCursorAtEnd(editingText)
+                                onSave()
                                 onDismiss()
                             }
                         ) {

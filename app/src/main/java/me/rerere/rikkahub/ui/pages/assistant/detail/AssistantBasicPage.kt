@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -48,6 +47,7 @@ import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormTextField
+import me.rerere.rikkahub.ui.components.ui.FormSwitch
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
@@ -219,7 +219,7 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_use_assistant_avatar_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.useAssistantAvatar,
                         onCheckedChange = {
                             onUpdate(
@@ -273,7 +273,7 @@ internal fun AssistantBasicContent(
                     )
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.temperature != null,
                         onCheckedChange = { enabled ->
                             onUpdate(
@@ -326,7 +326,7 @@ internal fun AssistantBasicContent(
                     )
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.topP != null,
                         onCheckedChange = { enabled ->
                             onUpdate(
@@ -410,7 +410,7 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_auto_compact_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.autoCompactEnabled,
                         onCheckedChange = {
                             onUpdate(assistant.copy(autoCompactEnabled = it))
@@ -452,7 +452,7 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_stream_output_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.streamOutput,
                         onCheckedChange = {
                             onUpdate(
@@ -557,7 +557,8 @@ internal fun AssistantBasicContent(
                             )
                         )
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    enableFullscreen = true,
                 )
             }
 
@@ -572,7 +573,7 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_spawnable_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.spawnable,
                         onCheckedChange = {
                             onUpdate(
@@ -629,7 +630,7 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_ui_automation_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.uiAutomationEnabled,
                         onCheckedChange = {
                             onUpdate(
@@ -655,7 +656,7 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_gradient_background_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.useGradientBackground,
                         onCheckedChange = {
                             onUpdate(

@@ -62,7 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Zap
+import com.composables.icons.lucide.Activity
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -765,7 +765,7 @@ private fun TopBar(
                     }
                 ) {
                     Icon(
-                        imageVector = Lucide.Zap,
+                        imageVector = Lucide.Activity,
                         contentDescription = "Background jobs",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.graphicsLayer { this.alpha = alpha },

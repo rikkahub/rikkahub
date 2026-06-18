@@ -21,6 +21,12 @@ class FormTextFieldReconciliationTest {
     }
 
     @Test
+    fun blur_commit_only_emits_when_local_text_changed_since_last_emit() {
+        assertTrue(shouldCommitFormTextField(localText = "edited", lastEmitted = "seed"))
+        assertFalse(shouldCommitFormTextField(localText = "seed", lastEmitted = "seed"))
+    }
+
+    @Test
     fun stale_echo_while_focused_does_not_reset_local_text() {
         val result = reconcileFormTextField(
             localText = "abcd",

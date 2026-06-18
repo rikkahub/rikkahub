@@ -79,6 +79,7 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormTextField
+import me.rerere.rikkahub.ui.components.ui.FormSwitch
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -212,7 +213,7 @@ private fun AssistantPromptContent(
                     Text(stringResource(R.string.assistant_page_allow_conversation_system_prompt_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.allowConversationSystemPrompt,
                         onCheckedChange = {
                             onUpdate(
@@ -238,7 +239,7 @@ private fun AssistantPromptContent(
                     Text(stringResource(R.string.assistant_page_allow_conversation_prompt_injection_desc))
                 },
                 tail = {
-                    Switch(
+                    FormSwitch(
                         checked = assistant.allowConversationPromptInjection,
                         onCheckedChange = {
                             onUpdate(
@@ -299,7 +300,8 @@ private fun AssistantPromptContent(
                             fontSize = 12.sp,
                             fontFamily = JetbrainsMono,
                             lineHeight = 16.sp
-                        )
+                        ),
+                        enableFullscreen = true,
                     )
                 },
                 description = {
@@ -469,7 +471,11 @@ private fun AssistantPromptContent(
                                 )
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 6
+                            maxLines = 6,
+                            enableFullscreen = true,
+                            // List row: commit live so deleting this row can't be undone by a
+                            // dispose-time commit replaying a stale assistant copy that still has it.
+                            liveUpdate = true,
                         )
                     }
                 }
@@ -618,7 +624,9 @@ private fun AssistantRegexCard(
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.assistant_page_regex_name)) }
+                    label = { Text(stringResource(R.string.assistant_page_regex_name)) },
+                    // List row: commit live so a row delete can't be undone by a stale dispose commit.
+                    liveUpdate = true,
                 )
 
                 FormTextField(
@@ -640,6 +648,9 @@ private fun AssistantRegexCard(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.assistant_page_regex_find_regex)) },
                     placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
+                    enableFullscreen = true,
+                    // List row: commit live so a row delete can't be undone by a stale dispose commit.
+                    liveUpdate = true,
                 )
 
                 FormTextField(
@@ -660,7 +671,10 @@ private fun AssistantRegexCard(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.assistant_page_regex_replace_string)) },
-                    placeholder = { Text("e.g., [EMAIL]") }
+                    placeholder = { Text("e.g., [EMAIL]") },
+                    enableFullscreen = true,
+                    // List row: commit live so a row delete can't be undone by a stale dispose commit.
+                    liveUpdate = true,
                 )
 
                 Column {

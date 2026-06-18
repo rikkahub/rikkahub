@@ -100,6 +100,10 @@ internal fun ImageGenInputBar(
             maxLines = 5,
             shape = MaterialTheme.shapes.large,
             textStyle = MaterialTheme.typography.bodySmall,
+            enableFullscreen = true,
+            // The Generate FAB reads the prompt synchronously, so commit on every edit (this page is
+            // light — no heavy per-keystroke recompose like the settings pages).
+            liveUpdate = true,
         )
 
         Row(

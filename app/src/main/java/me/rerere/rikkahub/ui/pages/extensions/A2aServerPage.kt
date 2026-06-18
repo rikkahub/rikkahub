@@ -20,7 +20,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -53,6 +52,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.A2aServerService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.FormSwitch
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionLocalNetwork
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
@@ -224,7 +224,7 @@ fun A2aServerPage() {
                         headlineContent = { Text("Localhost only") },
                         supportingContent = { Text("Bind to 127.0.0.1. Turning this off exposes the A2A server on the LAN.") },
                         trailingContent = {
-                            Switch(
+                            FormSwitch(
                                 checked = settings.a2aServerLocalhostOnly,
                                 onCheckedChange = { checked ->
                                     scope.launch {

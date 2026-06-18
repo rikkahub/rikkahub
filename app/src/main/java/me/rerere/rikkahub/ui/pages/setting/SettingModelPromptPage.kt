@@ -163,6 +163,7 @@ private fun PromptSettingItem(
                     onValueChange = onPromptChange,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 15,
+                    enableFullscreen = true,
                 )
                 TextButton(onClick = onResetPrompt) {
                     Text(stringResource(R.string.setting_model_page_reset_to_default))

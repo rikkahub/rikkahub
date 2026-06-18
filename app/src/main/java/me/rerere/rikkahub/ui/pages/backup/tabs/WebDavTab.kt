@@ -188,7 +188,9 @@ fun WebDavTab(
                             externalKey = "webdav:url",
                             onValueChange = { updateWebDavConfig(webDavConfig.copy(url = it.trim())) },
                             placeholder = { Text("https://example.com/dav") },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
@@ -206,7 +208,9 @@ fun WebDavTab(
                                     )
                                 )
                             },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
@@ -230,7 +234,9 @@ fun WebDavTab(
                                     Icon(imageVector = image, contentDescription = null)
                                 }
                             },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
@@ -242,7 +248,9 @@ fun WebDavTab(
                             value = webDavConfig.path,
                             externalKey = "webdav:path",
                             onValueChange = { updateWebDavConfig(webDavConfig.copy(path = it.trim())) },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )

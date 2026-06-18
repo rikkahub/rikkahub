@@ -187,7 +187,9 @@ fun S3Tab(
                             externalKey = "s3:endpoint",
                             onValueChange = { updateS3Config(s3Config.copy(endpoint = it.trim())) },
                             placeholder = { Text("https://s3.amazonaws.com") },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
@@ -199,7 +201,9 @@ fun S3Tab(
                             value = s3Config.accessKeyId,
                             externalKey = "s3:accessKeyId",
                             onValueChange = { updateS3Config(s3Config.copy(accessKeyId = it.trim())) },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
@@ -223,7 +227,9 @@ fun S3Tab(
                                     Icon(imageVector = image, contentDescription = null)
                                 }
                             },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
@@ -236,7 +242,9 @@ fun S3Tab(
                             externalKey = "s3:bucket",
                             onValueChange = { updateS3Config(s3Config.copy(bucket = it.trim())) },
                             placeholder = { Text("my-bucket") },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
@@ -249,7 +257,9 @@ fun S3Tab(
                             externalKey = "s3:region",
                             onValueChange = { updateS3Config(s3Config.copy(region = it.trim())) },
                             placeholder = { Text("auto") },
-                            singleLine = true
+                            singleLine = true,
+                            // Test/Backup/Restore read these creds synchronously, so commit live.
+                            liveUpdate = true,
                         )
                     },
                 )
