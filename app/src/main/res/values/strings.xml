@@ -630,6 +630,15 @@
   <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine API key (X-Api-Key)</string>
   <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine streaming ASR endpoint</string>
   <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
+  <string name="setting_asr_configure_base_url">Base URL</string>
+  <string name="setting_asr_configure_sample_rate">Sample Rate</string>
+  <string name="setting_asr_configure_segment_duration">Segment Duration</string>
+  <string name="setting_asr_configure_mimo_api_key_desc">Xiaomi MiMo API key (sk-xxx for pay-as-you-go, tp-xxx for token plan)</string>
+  <string name="setting_asr_configure_mimo_base_url_desc">MiMo OpenAI-compatible base URL. Use https://api.xiaomimimo.com/v1 for sk- keys, https://token-plan-cn.xiaomimimo.com/v1 for tp- keys</string>
+  <string name="setting_asr_configure_mimo_model_desc">MiMo ASR model name, e.g. mimo-v2.5-asr</string>
+  <string name="setting_asr_configure_mimo_language_desc">Optional language hint: auto, zh, or en. Leave empty to use server default (auto)</string>
+  <string name="setting_asr_configure_mimo_sample_rate_desc">PCM recording sample rate in Hz, 16000 is recommended for ASR</string>
+  <string name="setting_asr_configure_mimo_segment_desc">Auto-flush buffered audio every N seconds during recording. 0 disables auto-segmentation (single request on stop, max ~3.9 min at 16kHz)</string>
   <string name="setting_asr_page_add_provider">Add ASR Provider</string>
   <string name="setting_asr_page_default_name">ASR</string>
   <string name="setting_asr_page_edit_provider">Edit ASR Provider</string>
