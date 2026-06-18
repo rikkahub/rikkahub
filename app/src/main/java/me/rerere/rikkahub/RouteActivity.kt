@@ -91,6 +91,7 @@ import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
+import me.rerere.rikkahub.ui.pages.extensions.A2aServerPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.prompt.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
@@ -509,6 +510,10 @@ class RouteActivity : ComponentActivity() {
                                 ExtensionsPage()
                             }
 
+                            entry<Screen.A2aServer> {
+                                A2aServerPage()
+                            }
+
                             entry<Screen.QuickMessages> {
                                 QuickMessagesPage()
                             }
@@ -734,6 +739,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Extensions : Screen
+
+    @Serializable
+    data object A2aServer : Screen
 
     @Serializable
     data object QuickMessages : Screen

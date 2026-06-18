@@ -36,6 +36,7 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV4Migration
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV5Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.AutomationSink
@@ -68,7 +69,8 @@ private val Context.settingsStore by preferencesDataStore(
             PreferenceStoreV1Migration(),
             PreferenceStoreV2Migration(),
             PreferenceStoreV3Migration(),
-            PreferenceStoreV4Migration()
+            PreferenceStoreV4Migration(),
+            PreferenceStoreV5Migration(),
         )
     }
 )
@@ -145,6 +147,9 @@ class SettingsStore(
         val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
         val WEB_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("web_server_localhost_only")
         val A2A_ENABLED = booleanPreferencesKey("a2a_enabled")
+        val A2A_SERVER_PORT = intPreferencesKey("a2a_server_port")
+        val A2A_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("a2a_server_localhost_only")
+        val A2A_SERVER_TOKEN = stringPreferencesKey("a2a_server_token")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -243,6 +248,9 @@ class SettingsStore(
             webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
             webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
             a2aEnabled = preferences[A2A_ENABLED] == true,
+            a2aServerPort = preferences[A2A_SERVER_PORT] ?: 9000,
+            a2aServerLocalhostOnly = preferences[A2A_SERVER_LOCALHOST_ONLY] != false,
+            a2aServerToken = preferences[A2A_SERVER_TOKEN] ?: "",
             backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                 JsonInstant.decodeFromString(it)
             } ?: BackupReminderConfig(),
@@ -430,6 +438,9 @@ class SettingsStore(
             preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
             preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
             preferences[A2A_ENABLED] = settings.a2aEnabled
+            preferences[A2A_SERVER_PORT] = settings.a2aServerPort
+            preferences[A2A_SERVER_LOCALHOST_ONLY] = settings.a2aServerLocalhostOnly
+            preferences[A2A_SERVER_TOKEN] = settings.a2aServerToken
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
@@ -563,6 +574,9 @@ data class Settings(
     val webServerAccessPassword: String = "",
     val webServerLocalhostOnly: Boolean = false,
     val a2aEnabled: Boolean = false,
+    val a2aServerPort: Int = 9000,
+    val a2aServerLocalhostOnly: Boolean = true,
+    val a2aServerToken: String = "",
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,

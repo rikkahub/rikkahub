@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.web.a2a
 
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
@@ -47,6 +48,7 @@ import io.ktor.utils.io.readAvailable
 import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 import java.io.Writer
+import java.security.MessageDigest
 import java.util.Collections
 import java.util.IdentityHashMap
 import kotlin.time.Duration.Companion.seconds
@@ -63,12 +65,20 @@ internal enum class A2aAccessResult {
 
 internal fun evaluateA2aAccess(
     enabled: Boolean,
-    jwtProtectedAtStartup: Boolean,
     serverLocalhostOnly: Boolean,
+    tokenBlank: Boolean,
+    bearerMatch: Boolean,
 ): A2aAccessResult = when {
     !enabled -> A2aAccessResult.DISABLED
-    !jwtProtectedAtStartup && !serverLocalhostOnly -> A2aAccessResult.FORBIDDEN
-    else -> A2aAccessResult.ALLOWED
+    serverLocalhostOnly && tokenBlank -> A2aAccessResult.ALLOWED
+    tokenBlank -> A2aAccessResult.FORBIDDEN
+    bearerMatch -> A2aAccessResult.ALLOWED
+    else -> A2aAccessResult.FORBIDDEN
+}
+
+internal fun a2aBearerMatches(authorizationHeader: String?, expectedToken: String): Boolean {
+    val token = extractA2aBearerToken(authorizationHeader) ?: return false
+    return secureA2aEquals(token, expectedToken)
 }
 
 internal fun classifyA2aTransition(
@@ -207,11 +217,19 @@ internal fun classifyA2aArtifactDelta(
 
 fun Route.a2aAgentCardRoute(
     settingsStore: SettingsStore,
-    jwtRequired: Boolean,
-    serverLocalhostOnly: Boolean,
 ) {
     get("/.well-known/agent-card.json") {
-        when (evaluateA2aAccess(settingsStore.settingsFlow.value.a2aEnabled, jwtRequired, serverLocalhostOnly)) {
+        val settings = settingsStore.settingsFlow.value
+        val tokenBlank = settings.a2aServerToken.isBlank()
+        val bearerMatch = a2aBearerMatches(call.request.headers[HttpHeaders.Authorization], settings.a2aServerToken)
+        when (
+            evaluateA2aAccess(
+                enabled = settings.a2aEnabled,
+                serverLocalhostOnly = settings.a2aServerLocalhostOnly,
+                tokenBlank = tokenBlank,
+                bearerMatch = bearerMatch,
+            )
+        ) {
             A2aAccessResult.DISABLED -> {
                 call.respond(HttpStatusCode.NotFound)
                 return@get
@@ -223,9 +241,8 @@ fun Route.a2aAgentCardRoute(
             }
 
             A2aAccessResult.ALLOWED -> {
-                val settings = settingsStore.settingsFlow.value
                 val baseUrl = buildA2aBaseUrl(call.request)
-                call.respond(settings.toA2aAgentCard(baseUrl = baseUrl, jwtRequired = jwtRequired))
+                call.respond(settings.toA2aAgentCard(baseUrl = baseUrl, bearerRequired = !tokenBlank))
             }
         }
     }
@@ -236,11 +253,19 @@ fun Route.a2aRpcRoute(
     chatService: ChatService,
     settingsStore: SettingsStore,
     registry: A2aTaskRegistry,
-    serverLocalhostOnly: Boolean,
-    jwtProtectedAtStartup: Boolean,
 ) {
     post("/a2a") {
-        when (evaluateA2aAccess(settingsStore.settingsFlow.value.a2aEnabled, jwtProtectedAtStartup, serverLocalhostOnly)) {
+        val settings = settingsStore.settingsFlow.value
+        val tokenBlank = settings.a2aServerToken.isBlank()
+        val bearerMatch = a2aBearerMatches(call.request.headers[HttpHeaders.Authorization], settings.a2aServerToken)
+        when (
+            evaluateA2aAccess(
+                enabled = settings.a2aEnabled,
+                serverLocalhostOnly = settings.a2aServerLocalhostOnly,
+                tokenBlank = tokenBlank,
+                bearerMatch = bearerMatch,
+            )
+        ) {
             A2aAccessResult.DISABLED -> {
                 call.respond(HttpStatusCode.NotFound)
                 return@post
@@ -974,3 +999,13 @@ private fun buildA2aBaseUrl(request: ApplicationRequest): String {
     val port = request.origin.serverPort
     return "$scheme://$host:$port"
 }
+
+private fun extractA2aBearerToken(authorizationHeader: String?): String? {
+    if (authorizationHeader.isNullOrBlank()) return null
+    val prefix = "Bearer "
+    if (!authorizationHeader.startsWith(prefix, ignoreCase = true)) return null
+    return authorizationHeader.substring(prefix.length).trim().takeIf { it.isNotEmpty() }
+}
+
+private fun secureA2aEquals(left: String, right: String): Boolean =
+    MessageDigest.isEqual(left.toByteArray(Charsets.UTF_8), right.toByteArray(Charsets.UTF_8))

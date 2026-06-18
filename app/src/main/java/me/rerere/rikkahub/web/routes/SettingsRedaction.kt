@@ -33,6 +33,7 @@ internal fun Settings.sanitizeForWeb(): Settings = copy(
     s3Config = s3Config.redactSecrets(),
     mcpServers = mcpServers.map { it.redactSecrets() },
     webServerAccessPassword = WebSettingsSecretFields.REDACTED_STRING,
+    a2aServerToken = WebSettingsSecretFields.REDACTED_STRING,
 )
 
 internal fun ProviderSetting.redactSecrets(): ProviderSetting = when (this) {

@@ -32,6 +32,7 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.ai.task.StartupRecoveryRunner
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.service.A2aServerService
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.lifecycle.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
@@ -46,6 +47,7 @@ private const val TAG = "RikkaHubApp"
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
+const val A2A_SERVER_NOTIFICATION_CHANNEL_ID = "a2a_server"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -88,6 +90,7 @@ class RikkaHubApp : Application() {
 
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
+        startA2aServerIfEnabled()
 
         // Increment launch count
         incrementLaunchCount()
@@ -187,6 +190,44 @@ class RikkaHubApp : Application() {
         }
     }
 
+    private fun startA2aServerIfEnabled() {
+        get<AppScope>().launch {
+            runCatching {
+                delay(500)
+                val settings = get<SettingsStore>().settingsFlowRaw.first()
+                if (settings.a2aEnabled) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(
+                            this@RikkaHubApp,
+                            android.Manifest.permission.POST_NOTIFICATIONS
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.w(TAG, "startA2aServerIfEnabled: notification permission not granted, skipping")
+                        return@launch
+                    }
+                    if (Build.VERSION.SDK_INT >= 37 &&
+                        !settings.a2aServerLocalhostOnly &&
+                        ContextCompat.checkSelfPermission(
+                            this@RikkaHubApp,
+                            android.Manifest.permission.ACCESS_LOCAL_NETWORK
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.w(TAG, "startA2aServerIfEnabled: local network permission not granted, skipping")
+                        return@launch
+                    }
+                    val intent = Intent(this@RikkaHubApp, A2aServerService::class.java).apply {
+                        action = A2aServerService.ACTION_START
+                        putExtra(A2aServerService.EXTRA_PORT, settings.a2aServerPort)
+                        putExtra(A2aServerService.EXTRA_LOCALHOST_ONLY, settings.a2aServerLocalhostOnly)
+                    }
+                    startForegroundService(intent)
+                }
+            }.onFailure {
+                Log.e(TAG, "startA2aServerIfEnabled failed", it)
+            }
+        }
+    }
+
     private fun createNotificationChannel() {
         val notificationManager = NotificationManagerCompat.from(this)
         val chatCompletedChannel = NotificationChannelCompat
@@ -216,12 +257,21 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(webServerChannel)
+
+        val a2aServerChannel = NotificationChannelCompat
+            .Builder(A2A_SERVER_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName("A2A server")
+            .setVibrationEnabled(false)
+            .setShowBadge(false)
+            .build()
+        notificationManager.createNotificationChannel(a2aServerChannel)
     }
 
     override fun onTerminate() {
         super.onTerminate()
         get<AppScope>().cancel()
         stopService(Intent(this, WebServerService::class.java))
+        stopService(Intent(this, A2aServerService::class.java))
     }
 }
 

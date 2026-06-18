@@ -36,6 +36,7 @@ import me.rerere.common.json.JsonInstant
 import me.rerere.rikkahub.ui.components.ai.chatinput.SoundEffectPlayer
 import me.rerere.rikkahub.ui.pages.chat.board.BoardViewModel
 import me.rerere.rikkahub.ui.pages.schedule.ScheduleVM
+import me.rerere.rikkahub.web.A2aServerManager
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.rikkahub.web.a2a.A2aTaskRegistry
 import me.rerere.tts.provider.TTSManager
@@ -212,7 +213,16 @@ val appModule = module {
             conversationRepo = get(),
             settingsStore = get(),
             filesManager = get(),
-            a2aTaskRegistry = get()
+        )
+    }
+
+    single {
+        A2aServerManager(
+            appScope = get(),
+            chatService = get(),
+            settingsStore = get(),
+            a2aTaskRegistry = get(),
+            webServerManager = get(),
         )
     }
 }

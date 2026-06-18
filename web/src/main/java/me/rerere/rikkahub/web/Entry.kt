@@ -15,7 +15,7 @@ import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.routing.routing
 import io.ktor.server.sse.SSE
 
-fun startWebServer(
+fun startKtorServerNoSpa(
     port: Int = 8080,
     host: String = "0.0.0.0",
     module: suspend Application.() -> Unit
@@ -32,6 +32,16 @@ fun startWebServer(
         install(SSE)
         install(DefaultHeaders)
         module()
+    })
+}
+
+fun startWebServer(
+    port: Int = 8080,
+    host: String = "0.0.0.0",
+    module: suspend Application.() -> Unit
+): EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration> {
+    return startKtorServerNoSpa(port = port, host = host) {
+        module()
         routing {
             staticResources("/", "static") {
                 default("index.html")
@@ -39,5 +49,5 @@ fun startWebServer(
                 singlePageApplication()
             }
         }
-    })
+    }
 }

@@ -1,14 +1,8 @@
-package me.rerere.rikkahub.ui.pages.setting
+package me.rerere.rikkahub.ui.pages.extensions
 
 import android.content.ClipData
 import android.content.Intent
 import android.os.Build
-
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.View
-import me.rerere.hugeicons.stroke.ViewOff
-import me.rerere.hugeicons.stroke.Play
-import me.rerere.hugeicons.stroke.StopCircle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,17 +38,19 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Play
 import me.rerere.hugeicons.stroke.Stop
-import me.rerere.rikkahub.R
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.service.WebServerService
+import me.rerere.rikkahub.service.A2aServerService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionLocalNetwork
@@ -63,39 +59,36 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.ext.plus
-import me.rerere.rikkahub.web.WebServerManager
+import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.web.A2aServerManager
 import org.koin.compose.koinInject
 
 @Composable
-fun SettingWebPage() {
-    val webServerManager: WebServerManager = koinInject()
+fun A2aServerPage() {
+    val a2aServerManager: A2aServerManager = koinInject()
     val settingsStore: SettingsStore = koinInject()
     val settings = LocalSettings.current
-    val serverState by webServerManager.state.collectAsStateWithLifecycle()
+    val serverState by a2aServerManager.state.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val toaster = LocalToaster.current
-    val copiedText = stringResource(R.string.copied)
-    var portText by remember(settings.webServerPort) {
-        mutableStateOf(settings.webServerPort.toString())
+    var portText by remember(settings.a2aServerPort) {
+        mutableStateOf(settings.a2aServerPort.toString())
     }
-    var accessPasswordText by remember(settings.webServerAccessPassword) {
-        mutableStateOf(settings.webServerAccessPassword)
+    var tokenText by remember(settings.a2aServerToken) {
+        mutableStateOf(settings.a2aServerToken)
     }
-    var passwordVisible by remember {
-        mutableStateOf(false)
-    }
+    var tokenVisible by remember { mutableStateOf(false) }
 
     val permissionState = rememberPermissionState(
         permissions = buildSet {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(PermissionNotification)
             }
-            if (Build.VERSION.SDK_INT >= 37 && !settings.webServerLocalhostOnly) {
+            if (Build.VERSION.SDK_INT >= 37 && !settings.a2aServerLocalhostOnly) {
                 add(PermissionLocalNetwork)
             }
         },
@@ -104,36 +97,44 @@ fun SettingWebPage() {
 
     var pendingStart by remember { mutableStateOf(false) }
 
-    fun startWebServer() {
-        val intent = Intent(context, WebServerService::class.java).apply {
-            action = WebServerService.ACTION_START
-            putExtra(WebServerService.EXTRA_PORT, settings.webServerPort)
-            putExtra(WebServerService.EXTRA_LOCALHOST_ONLY, settings.webServerLocalhostOnly)
+    // The service is the SINGLE writer of a2aEnabled: it persists true only once the server is
+    // confirmed running and false on a failed start or stop. The page must NOT optimistically write
+    // a2aEnabled=true here — that raced the service's failure-disable and could leave a doomed
+    // autostart persisted across launches.
+    fun startA2aServer() {
+        val intent = Intent(context, A2aServerService::class.java).apply {
+            action = A2aServerService.ACTION_START
+            putExtra(A2aServerService.EXTRA_PORT, settings.a2aServerPort)
+            putExtra(A2aServerService.EXTRA_LOCALHOST_ONLY, settings.a2aServerLocalhostOnly)
         }
         context.startForegroundService(intent)
-        scope.launch {
-            settingsStore.update { it.copy(webServerEnabled = true) }
+    }
+
+    fun stopA2aServer() {
+        val intent = Intent(context, A2aServerService::class.java).apply {
+            action = A2aServerService.ACTION_STOP
         }
+        context.startService(intent)
     }
 
     LaunchedEffect(permissionState.allPermissionsGranted) {
         if (pendingStart && permissionState.allPermissionsGranted) {
             pendingStart = false
-            startWebServer()
+            startA2aServer()
         }
     }
 
     fun copyUrl(url: String) {
         scope.launch {
-            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("url", url)))
-            toaster.show(copiedText)
+            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("a2a-url", url)))
+            toaster.show("Copied")
         }
     }
 
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.setting_page_web_server)) },
+                title = { Text("A2A server") },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -143,21 +144,13 @@ fun SettingWebPage() {
             ExtendedFloatingActionButton(
                 onClick = {
                     if (serverState.isLoading) return@ExtendedFloatingActionButton
-                    if (!serverState.isRunning) {
-                        if (permissionState.allPermissionsGranted) {
-                            startWebServer()
-                        } else {
-                            pendingStart = true
-                            permissionState.requestPermissions()
-                        }
+                    if (serverState.isRunning) {
+                        stopA2aServer()
+                    } else if (permissionState.allPermissionsGranted) {
+                        startA2aServer()
                     } else {
-                        val intent = Intent(context, WebServerService::class.java).apply {
-                            action = WebServerService.ACTION_STOP
-                        }
-                        context.startService(intent)
-                        scope.launch {
-                            settingsStore.update { it.copy(webServerEnabled = false) }
-                        }
+                        pendingStart = true
+                        permissionState.requestPermissions()
                     }
                 },
                 icon = {
@@ -174,13 +167,7 @@ fun SettingWebPage() {
                     }
                 },
                 text = {
-                    Text(
-                        if (serverState.isRunning) {
-                            stringResource(R.string.setting_page_web_server_stop)
-                        } else {
-                            stringResource(R.string.setting_page_web_server_start)
-                        }
-                    )
+                    Text(if (serverState.isRunning) "Stop" else "Start")
                 },
                 containerColor = if (serverState.isRunning) {
                     MaterialTheme.colorScheme.errorContainer
@@ -204,8 +191,8 @@ fun SettingWebPage() {
                         .padding(horizontal = 8.dp),
                 ) {
                     item(
-                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_port)) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_port_desc)) },
+                        headlineContent = { Text("Port") },
+                        supportingContent = { Text("The standalone A2A server listens on this port.") },
                         trailingContent = {
                             TextField(
                                 value = portText,
@@ -214,7 +201,7 @@ fun SettingWebPage() {
                                     val port = portText.toIntOrNull()
                                     if (port != null && port in 1024..65535) {
                                         scope.launch {
-                                            settingsStore.update { it.copy(webServerPort = port) }
+                                            settingsStore.update { it.copy(a2aServerPort = port) }
                                         }
                                     }
                                 },
@@ -228,128 +215,87 @@ fun SettingWebPage() {
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent,
                                     errorIndicatorColor = Color.Transparent,
-                                    disabledIndicatorColor = Color.Transparent
-                                )
+                                    disabledIndicatorColor = Color.Transparent,
+                                ),
                             )
                         },
                     )
                     item(
-                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_localhost_only)) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_localhost_only_desc)) },
+                        headlineContent = { Text("Localhost only") },
+                        supportingContent = { Text("Bind to 127.0.0.1. Turning this off exposes the A2A server on the LAN.") },
                         trailingContent = {
                             Switch(
-                                checked = settings.webServerLocalhostOnly,
+                                checked = settings.a2aServerLocalhostOnly,
                                 onCheckedChange = { checked ->
                                     scope.launch {
                                         settingsStore.update {
-                                            it.copy(webServerLocalhostOnly = checked)
+                                            it.copy(a2aServerLocalhostOnly = checked)
                                         }
                                     }
                                 },
-                                // 运行中不允许切换 需重启服务生效
                                 enabled = !serverState.isRunning,
                             )
                         },
                     )
                     item(
-                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable)) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable_desc)) },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.webServerJwtEnabled,
-                                onCheckedChange = { checked ->
-                                    scope.launch {
-                                        settingsStore.update {
-                                            it.copy(webServerJwtEnabled = checked)
-                                        }
-                                    }
-                                },
-                                enabled = settings.webServerJwtEnabled || accessPasswordText.isNotBlank(),
-                            )
-                        },
-                    )
-                    item(
-                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_password)) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_password_desc)) },
+                        headlineContent = { Text("Bearer token") },
+                        supportingContent = { Text("Required for LAN binding. Optional for localhost compatibility.") },
                         trailingContent = {
                             TextField(
-                                value = accessPasswordText,
+                                value = tokenText,
                                 onValueChange = { value ->
-                                    accessPasswordText = value
+                                    tokenText = value
                                     scope.launch {
-                                        settingsStore.update {
-                                            it.copy(
-                                                webServerAccessPassword = value,
-                                                webServerJwtEnabled = it.webServerJwtEnabled && value.isNotBlank()
-                                            )
-                                        }
+                                        settingsStore.update { it.copy(a2aServerToken = value) }
                                     }
                                 },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                                visualTransformation = if (passwordVisible) {
+                                visualTransformation = if (tokenVisible) {
                                     VisualTransformation.None
                                 } else {
                                     PasswordVisualTransformation()
                                 },
                                 trailingIcon = {
-                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    IconButton(onClick = { tokenVisible = !tokenVisible }) {
                                         Icon(
-                                            imageVector = if (passwordVisible) HugeIcons.ViewOff else HugeIcons.View,
-                                            contentDescription = null
+                                            imageVector = if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View,
+                                            contentDescription = null,
                                         )
                                     }
                                 },
                                 singleLine = true,
-                                isError = settings.webServerJwtEnabled && accessPasswordText.isBlank(),
+                                isError = !settings.a2aServerLocalhostOnly && tokenText.isBlank(),
                                 modifier = Modifier.width(180.dp),
+                                enabled = !serverState.isRunning,
                                 shape = CircleShape,
                                 colors = TextFieldDefaults.colors(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent,
                                     errorIndicatorColor = Color.Transparent,
-                                    disabledIndicatorColor = Color.Transparent
-                                )
+                                    disabledIndicatorColor = Color.Transparent,
+                                ),
                             )
                         },
                     )
                     if (serverState.isRunning) {
-                        val port = serverState.port
-                        if (!serverState.localhostOnly) {
-                            val lanUrl = "http://${serverState.address ?: "localhost"}:$port"
-                            item(
-                                onClick = { copyUrl(lanUrl) },
-                                headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
-                                supportingContent = { Text(lanUrl) },
-                            )
-
-                            if (serverState.hostname != null) {
-                                val mdnsUrl = "http://${serverState.hostname}:$port"
-                                item(
-                                    onClick = { copyUrl(mdnsUrl) },
-                                    headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
-                                    supportingContent = { Text(mdnsUrl) },
-                                )
-                            }
-                        }
-
-                        val localUrl = "http://localhost:$port"
+                        val rpcUrl = "${serverState.url ?: "http://localhost:${serverState.port}"}/a2a"
                         item(
-                            onClick = { copyUrl(localUrl) },
-                            headlineContent = { Text(stringResource(R.string.setting_page_web_server_local_address)) },
-                            supportingContent = { Text(localUrl) },
+                            onClick = { copyUrl(rpcUrl) },
+                            headlineContent = { Text("A2A endpoint") },
+                            supportingContent = { Text(rpcUrl) },
                         )
                     }
                     item(
                         headlineContent = {
                             Text(
-                                text = stringResource(R.string.setting_page_web_server_address_note),
+                                text = "Security policy",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         },
                         supportingContent = {
                             Text(
-                                text = stringResource(R.string.setting_page_web_server_address_note_desc),
+                                text = "LAN requests without a non-blank bearer token are rejected before JSON-RPC dispatch.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -359,14 +305,14 @@ fun SettingWebPage() {
                         item(
                             headlineContent = {
                                 Text(
-                                    text = stringResource(R.string.setting_page_web_server_error),
-                                    color = MaterialTheme.colorScheme.error
+                                    text = "Error",
+                                    color = MaterialTheme.colorScheme.error,
                                 )
                             },
                             supportingContent = {
                                 Text(
                                     text = serverState.error ?: "",
-                                    color = MaterialTheme.colorScheme.error
+                                    color = MaterialTheme.colorScheme.error,
                                 )
                             },
                         )

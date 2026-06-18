@@ -79,6 +79,12 @@ fun ExtensionsPage() {
                         headlineContent = { Text(stringResource(R.string.extensions_page_workspaces)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_workspaces_desc)) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.A2aServer) },
+                        leadingContent = { Icon(HugeIcons.Zap, null) },
+                        headlineContent = { Text("A2A server") },
+                        supportingContent = { Text("Expose spawnable assistants through a standalone A2A endpoint.") },
+                    )
                 }
             }
         }

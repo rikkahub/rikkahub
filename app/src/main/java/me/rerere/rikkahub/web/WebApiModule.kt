@@ -21,15 +21,11 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.CoroutineScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.common.json.JsonInstant
-import me.rerere.rikkahub.web.a2a.A2aTaskRegistry
-import me.rerere.rikkahub.web.a2a.a2aAgentCardRoute
-import me.rerere.rikkahub.web.a2a.a2aRpcRoute
 import me.rerere.rikkahub.web.dto.ErrorResponse
 import me.rerere.rikkahub.web.dto.WebAuthTokenRequest
 import me.rerere.rikkahub.web.dto.WebAuthTokenResponse
@@ -75,13 +71,10 @@ internal fun mapThrowableToErrorResponse(cause: Throwable): Pair<HttpStatusCode,
  */
 fun Application.configureWebApi(
     context: Context,
-    appScope: CoroutineScope,
     chatService: ChatService,
     conversationRepo: ConversationRepository,
     settingsStore: SettingsStore,
     filesManager: FilesManager,
-    a2aTaskRegistry: A2aTaskRegistry,
-    localhostOnly: Boolean,
 ) {
     val jwtEnabled = settingsStore.settingsFlow.value.webServerJwtEnabled
 
@@ -155,12 +148,6 @@ fun Application.configureWebApi(
     }
 
     routing {
-        a2aAgentCardRoute(
-            settingsStore = settingsStore,
-            jwtRequired = jwtEnabled,
-            serverLocalhostOnly = localhostOnly,
-        )
-
         route("/api") {
             post("/auth/token") {
                 val settings = settingsStore.settingsFlow.value
@@ -192,28 +179,12 @@ fun Application.configureWebApi(
 
             if (jwtEnabled) {
                 authenticate("auth-jwt") {
-                    a2aRpcRoute(
-                        appScope = appScope,
-                        chatService = chatService,
-                        settingsStore = settingsStore,
-                        registry = a2aTaskRegistry,
-                        serverLocalhostOnly = localhostOnly,
-                        jwtProtectedAtStartup = true,
-                    )
                     conversationRoutes(chatService, conversationRepo, settingsStore)
                     settingsRoutes(settingsStore)
                     filesRoutes(filesManager, context)
                     assetsRoutes(context)
                 }
             } else {
-                a2aRpcRoute(
-                    appScope = appScope,
-                    chatService = chatService,
-                    settingsStore = settingsStore,
-                    registry = a2aTaskRegistry,
-                    serverLocalhostOnly = localhostOnly,
-                    jwtProtectedAtStartup = false,
-                )
                 conversationRoutes(chatService, conversationRepo, settingsStore)
                 settingsRoutes(settingsStore)
                 filesRoutes(filesManager, context)

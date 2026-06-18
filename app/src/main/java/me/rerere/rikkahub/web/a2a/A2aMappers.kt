@@ -12,20 +12,20 @@ import kotlin.uuid.Uuid
 
 internal val A2A_FINAL_ARTIFACT_NODE_ID: Uuid = Uuid.parse("00000000-0000-0000-0000-000000000000")
 
-fun Settings.toA2aAgentCard(baseUrl: String, jwtRequired: Boolean): AgentCard = AgentCard(
+fun Settings.toA2aAgentCard(baseUrl: String, bearerRequired: Boolean): AgentCard = AgentCard(
     name = "RikkaHub A2A Agent",
     description = "RikkaHub assistant card",
-    url = baseUrl,
+    url = "$baseUrl/a2a",
     capabilities = AgentCapabilities(),
     skills = assistants
         .filter { it.spawnable }
         .map { it.toA2aSkill() },
-    securitySchemes = if (jwtRequired) {
+    securitySchemes = if (bearerRequired) {
         mapOf("bearerAuth" to AgentSecurityScheme())
     } else {
         emptyMap()
     },
-    security = if (jwtRequired) {
+    security = if (bearerRequired) {
         listOf(mapOf("bearerAuth" to listOf("write:agent")))
     } else {
         emptyList()

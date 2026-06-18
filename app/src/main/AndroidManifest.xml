@@ -121,6 +121,15 @@
         android:value="local web server for LLM chat UI" />
     </service>
 
+    <service
+      android:name=".service.A2aServerService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="local A2A JSON-RPC server for assistant access" />
+    </service>
+
     <!--
       dataSync (not specialUse): an LLM SSE stream is semantically a network data-sync task, which
       is exactly what dataSync documents. It needs no PROPERTY_SPECIAL_USE_FGS_SUBTYPE justification

@@ -11,6 +11,7 @@ import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.common.json.JsonInstant
 import me.rerere.search.SearchServiceOptions
 import me.rerere.tts.provider.TTSProviderSetting
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -111,6 +112,7 @@ class SettingsRoutesRedactionTest {
             ),
         ),
         webServerAccessPassword = "webserver-pass-secret",
+        a2aServerToken = "a2a-token-secret",
     )
 
     @Test
@@ -129,6 +131,15 @@ class SettingsRoutesRedactionTest {
         assertFalse("s3 secretAccessKey leaked", json.contains("s3-secret-secret"))
         assertFalse("mcp header token leaked", json.contains("mcp-token-secret"))
         assertFalse("web server access password leaked", json.contains("webserver-pass-secret"))
+        assertFalse("a2a server token leaked", json.contains("a2a-token-secret"))
+    }
+
+    @Test
+    fun `sanitized settings redaction is idempotent`() {
+        val once = settingsWithEverySecret.sanitizeForWeb()
+        val twice = once.sanitizeForWeb()
+
+        assertEquals(JsonInstant.encodeToString(once), JsonInstant.encodeToString(twice))
     }
 
     @Test

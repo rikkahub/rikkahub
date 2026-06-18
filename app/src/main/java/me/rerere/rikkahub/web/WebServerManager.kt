@@ -15,7 +15,6 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
-import me.rerere.rikkahub.web.a2a.A2aTaskRegistry
 import me.rerere.rikkahub.web.startWebServer
 import java.net.ServerSocket
 
@@ -41,7 +40,6 @@ class WebServerManager(
     private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore,
     private val filesManager: FilesManager,
-    private val a2aTaskRegistry: A2aTaskRegistry,
 ) {
     private val lifecycle =
         WebServerLifecycle<EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>>()
@@ -76,13 +74,10 @@ class WebServerManager(
                     startWebServer(port = port, host = host) {
                         configureWebApi(
                             context = context,
-                            appScope = appScope,
                             chatService = chatService,
                             conversationRepo = conversationRepo,
                             settingsStore = settingsStore,
                             filesManager = filesManager,
-                            a2aTaskRegistry = a2aTaskRegistry,
-                            localhostOnly = localhostOnly,
                         )
                     }.start(wait = false)
                 }
@@ -150,13 +145,10 @@ class WebServerManager(
                         startWebServer(port = port, host = host) {
                             configureWebApi(
                                 context = context,
-                                appScope = appScope,
                                 chatService = chatService,
                                 conversationRepo = conversationRepo,
                                 settingsStore = settingsStore,
                                 filesManager = filesManager,
-                                a2aTaskRegistry = a2aTaskRegistry,
-                                localhostOnly = localhostOnly,
                             )
                         }.start(wait = false)
                     }

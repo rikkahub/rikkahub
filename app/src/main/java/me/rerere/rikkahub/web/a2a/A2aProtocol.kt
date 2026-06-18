@@ -67,7 +67,7 @@ data class AgentSkill(
 data class AgentSecurityScheme(
     val type: String = "http",
     val scheme: String = "bearer",
-    val bearerFormat: String = "JWT",
+    val bearerFormat: String = "static",
 )
 
 @Serializable

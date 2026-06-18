@@ -35,4 +35,28 @@ class SettingsDecodeDeterminismTest {
         assertEquals(imageModelId, decoded.imageGenerationModelId)
         assertEquals(ocrModelId, decoded.ocrModelId)
     }
+
+    @Test
+    fun `old preferences decode new a2a server fields with safe defaults`() {
+        val decoded = SettingsStore.decodeSettings(emptyPreferences())
+
+        assertEquals(9000, decoded.a2aServerPort)
+        assertEquals(true, decoded.a2aServerLocalhostOnly)
+        assertEquals("", decoded.a2aServerToken)
+    }
+
+    @Test
+    fun `configured a2a server fields decode to persisted values`() {
+        val preferences = preferencesOf(
+            SettingsStore.A2A_SERVER_PORT to 9100,
+            SettingsStore.A2A_SERVER_LOCALHOST_ONLY to false,
+            SettingsStore.A2A_SERVER_TOKEN to "static-token",
+        )
+
+        val decoded = SettingsStore.decodeSettings(preferences)
+
+        assertEquals(9100, decoded.a2aServerPort)
+        assertEquals(false, decoded.a2aServerLocalhostOnly)
+        assertEquals("static-token", decoded.a2aServerToken)
+    }
 }
