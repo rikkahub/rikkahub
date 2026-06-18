@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent.voicelab
 
 import kotlinx.coroutines.runBlocking
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
@@ -132,6 +133,125 @@ class VoiceLabMobileApiTest {
         api.askHermes(callId = "call-1", prompt = "status", profileId = "research")
 
         assertTrue(seenBody.contains("\"profileId\":\"research\""))
+    }
+
+    @Test
+    fun `requests include voice trace headers when configured`() = runBlocking {
+        var seenRequest: Request? = null
+        val transport = transportFor { request ->
+            seenRequest = request
+            responseFor(
+                request = request,
+                body = """
+                {
+                  "callId":"call-1",
+                  "answer":"done",
+                  "model":"ms-agent",
+                  "profileId":"default",
+                  "profileLabel":"Default"
+                }
+                """.trimIndent(),
+            )
+        }
+
+        val api = VoiceLabMobileApi(
+            baseUrl = "https://voice-lab.example.test",
+            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            transport = transport,
+            traceHeaders = VoiceLabTraceHeaders.from(
+                VoiceTraceContext(
+                    traceId = "trace-123",
+                    voiceSessionId = "session-456",
+                    sentryTrace = "0123456789abcdef0123456789abcdef-0123456789abcdef-1",
+                    sentryBaggage = "sentry-trace_id=0123456789abcdef0123456789abcdef,sentry-sampled=true",
+                )
+            ),
+        )
+
+        api.askHermes(callId = "call-1", prompt = "status")
+
+        val request = requireNotNull(seenRequest)
+        assertEquals("trace-123", request.header("X-Voice-Trace-Id"))
+        assertEquals("session-456", request.header("X-Voice-Session-Id"))
+        assertEquals(
+            "0123456789abcdef0123456789abcdef-0123456789abcdef-1",
+            request.header("sentry-trace"),
+        )
+        assertEquals(
+            "sentry-trace_id=0123456789abcdef0123456789abcdef,sentry-sampled=true",
+            request.header("baggage"),
+        )
+    }
+
+    @Test
+    fun `trace headers reject invalid Sentry propagation values`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            VoiceLabTraceHeaders(
+                traceId = "trace-123",
+                voiceSessionId = "session-456",
+                sentryTrace = "0123456789abcdef0123456789abcdef\n0123456789abcdef-1",
+            )
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            VoiceLabTraceHeaders(
+                traceId = "trace-123",
+                voiceSessionId = "session-456",
+                sentryBaggage = "x".repeat(8193),
+            )
+        }
+
+        listOf(
+            "baggage\u0000bad",
+            "baggage\u007fbad",
+            "baggage\u00e9bad",
+        ).forEach { invalidBaggage ->
+            assertThrows(IllegalArgumentException::class.java) {
+                VoiceLabTraceHeaders(
+                    traceId = "trace-123",
+                    voiceSessionId = "session-456",
+                    sentryBaggage = invalidBaggage,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `trace headers reject invalid custom voice values before request building`() {
+        listOf(
+            "\t",
+            "trace id",
+            "trace/id",
+            "trace\tid",
+            "trace\u0000bad",
+            "trace\u007fbad",
+            "trace\u00e9bad",
+            "x".repeat(129),
+        ).forEach { invalidTraceId ->
+            assertThrows(IllegalArgumentException::class.java) {
+                VoiceLabTraceHeaders(
+                    traceId = invalidTraceId,
+                    voiceSessionId = "session-456",
+                )
+            }
+        }
+
+        listOf(
+            "session id",
+            "session/id",
+            "session\tid",
+            "session\u0000bad",
+            "session\u007fbad",
+            "session\u00e9bad",
+            "x".repeat(129),
+        ).forEach { invalidVoiceSessionId ->
+            assertThrows(IllegalArgumentException::class.java) {
+                VoiceLabTraceHeaders(
+                    traceId = "trace-123",
+                    voiceSessionId = invalidVoiceSessionId,
+                )
+            }
+        }
     }
 
     @Test

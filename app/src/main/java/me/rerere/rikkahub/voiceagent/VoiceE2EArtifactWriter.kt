@@ -22,6 +22,7 @@ enum class VoiceE2EArtifact(
 class VoiceE2EArtifactWriter private constructor(
     enabled: Boolean,
     rootDirectory: File,
+    traceId: String?,
     scope: CoroutineScope?,
 ) {
     private val commands = if (enabled) {
@@ -29,7 +30,12 @@ class VoiceE2EArtifactWriter private constructor(
     } else {
         null
     }
-    private val directory = File(rootDirectory, "voice-e2e")
+    private val activeTraceId = traceId?.takeIf { it.isSafeTraceDirectoryName() }
+    private val baseDirectory = File(rootDirectory, "voice-e2e")
+    private val directory = activeTraceId
+        ?.let { File(baseDirectory, it) }
+        ?: baseDirectory
+    private val latestTraceFile = activeTraceId?.let { File(baseDirectory, "latest-trace-id.txt") }
     private val pendingLock = Any()
     private val pendingWrites = LinkedHashMap<VoiceE2EArtifact, String>()
     private val pendingAppends = mutableListOf<PendingAppend>()
@@ -41,6 +47,7 @@ class VoiceE2EArtifactWriter private constructor(
             scope.launch(Dispatchers.IO) {
                 for (command in queue) {
                     when (command) {
+                        WriteCommand.CleanOldTraceDirectories -> cleanOldTraceDirectories()
                         WriteCommand.ClearAppendOnlyArtifacts -> clearAppendOnlyArtifacts()
                         WriteCommand.Flush -> flushPendingWrites()
                         is WriteCommand.Drain -> {
@@ -49,6 +56,9 @@ class VoiceE2EArtifactWriter private constructor(
                         }
                     }
                 }
+            }
+            if (activeTraceId != null && queue.trySend(WriteCommand.CleanOldTraceDirectories).isFailure) {
+                VoiceAgentLog.w(TAG, "artifact trace retention cleanup queue rejected")
             }
             if (queue.trySend(WriteCommand.ClearAppendOnlyArtifacts).isFailure) {
                 VoiceAgentLog.w(TAG, "artifact append cleanup queue rejected")
@@ -99,9 +109,39 @@ class VoiceE2EArtifactWriter private constructor(
         }
     }
 
+    private fun cleanOldTraceDirectories() {
+        val traceId = activeTraceId ?: return
+        runCatching {
+            directory.mkdirs()
+            val traceDirectories = baseDirectory.listFiles()
+                .orEmpty()
+                .filter { child ->
+                    child.isDirectory &&
+                        !Files.isSymbolicLink(child.toPath()) &&
+                        child.name.isSafeTraceDirectoryName()
+                }
+                .sortedWith(
+                    compareByDescending<File> { if (it.name == traceId) 1 else 0 }
+                        .thenByDescending { it.lastModified() }
+                        .thenByDescending { it.name },
+                )
+
+            traceDirectories
+                .drop(MAX_TRACE_ARTIFACT_DIRECTORIES)
+                .forEach { it.deleteRecursively() }
+        }.onFailure { error ->
+            val message = (error.message ?: error.javaClass.simpleName).redactForVoiceAgentLog()
+            VoiceAgentLog.w(TAG, "artifact trace retention cleanup failed message=$message")
+        }
+    }
+
     private fun writeArtifact(artifact: VoiceE2EArtifact, content: String, append: Boolean) {
         runCatching {
             directory.mkdirs()
+            latestTraceFile?.let { file ->
+                requireNotNull(file.parentFile).mkdirs()
+                file.writeText(requireNotNull(activeTraceId))
+            }
             val file = File(directory, artifact.fileName)
             if (append) {
                 file.appendText("$content\n")
@@ -142,6 +182,7 @@ class VoiceE2EArtifactWriter private constructor(
     )
 
     private sealed interface WriteCommand {
+        object CleanOldTraceDirectories : WriteCommand
         object ClearAppendOnlyArtifacts : WriteCommand
         object Flush : WriteCommand
         data class Drain(val completed: CompletableDeferred<Unit>) : WriteCommand
@@ -151,16 +192,19 @@ class VoiceE2EArtifactWriter private constructor(
         fun disabled(): VoiceE2EArtifactWriter = VoiceE2EArtifactWriter(
             enabled = false,
             rootDirectory = File(""),
+            traceId = null,
             scope = null,
         )
 
         fun create(
             enabled: Boolean,
             rootDirectory: File,
+            traceId: String? = null,
             scope: CoroutineScope,
         ): VoiceE2EArtifactWriter = VoiceE2EArtifactWriter(
             enabled = enabled,
             rootDirectory = rootDirectory,
+            traceId = traceId,
             scope = scope,
         )
     }
@@ -168,4 +212,14 @@ class VoiceE2EArtifactWriter private constructor(
 
 private fun String.containsLineBreak(): Boolean = contains('\n') || contains('\r')
 
+private fun String.isSafeTraceDirectoryName(): Boolean =
+    isNotBlank() &&
+        this != "." &&
+        this != ".." &&
+        this != LATEST_TRACE_ID_FILE_NAME &&
+        SAFE_TRACE_DIRECTORY_NAME.matches(this)
+
+private val SAFE_TRACE_DIRECTORY_NAME = Regex("[A-Za-z0-9._-]+")
+private const val LATEST_TRACE_ID_FILE_NAME = "latest-trace-id.txt"
+private const val MAX_TRACE_ARTIFACT_DIRECTORIES = 3
 private const val TAG = "VoiceE2EArtifactWriter"

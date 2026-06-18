@@ -107,6 +107,11 @@ assert_no_report_temp_files() {
   fi
 }
 
+count_report_artifact_pulls() {
+  grep -c -E 'exec-out run-as me\.rerere\.rikkahub\.debug cat no_backup/voice-e2e/([A-Za-z0-9._-]+/)?(input-transcript|hermes-call|output-transcript)\.txt' \
+    "$FAKE_ADB_ARGS_LOG" || true
+}
+
 write_fake_readiness_script() {
   cat > "$TMP_DIR/adb-ready.sh" <<'FAKE_READY'
 #!/usr/bin/env bash
@@ -283,6 +288,16 @@ LOGS
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/hermes-call.txt")
     ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/latest-trace-id.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-gbrain/hermes-answer.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-gbrain/input-transcript.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-gbrain/output-transcript.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-gbrain/hermes-call.txt")
+    ;;
   "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1 --ez enableVoiceE2EArtifacts true")
     rm -f "${FAKE_ADB_END_MARKER:?}"
     ;;
@@ -299,8 +314,109 @@ LOGS
     ;;
   "-s RZ shell am broadcast "*)
     ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/latest-trace-id.txt")
+    case "${FAKE_ADB_LATEST_TRACE_ID:-trace-gbrain}" in
+      missing)
+        exit 1
+        ;;
+      late)
+        counter_file="${FAKE_ADB_LATE_TRACE_COUNTER:?}"
+        counter=0
+        if [[ -f "$counter_file" ]]; then
+          counter="$(cat "$counter_file")"
+        fi
+        counter=$((counter + 1))
+        printf '%s' "$counter" > "$counter_file"
+        if (( counter <= ${FAKE_ADB_LATE_TRACE_MISSING_COUNT:-1} )); then
+          exit 1
+        fi
+        printf 'trace-gbrain'
+        ;;
+      *)
+        printf '%s' "${FAKE_ADB_LATEST_TRACE_ID:-trace-gbrain}"
+        ;;
+    esac
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/hermes-answer.txt")
+    if [[ "${FAKE_ADB_MISSING_ANSWER:-0}" == "1" ]]; then
+      exit 1
+    fi
+    printf 'manual answer from Hermes'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/input-transcript.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact
+      exit 0
+    fi
+    printf 'Please ask Hermes if he is connected to G-Brain.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/hermes-call.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact
+      exit 0
+    fi
+    printf 'Is Hermes connected to G-Brain? Answer yes or no.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/output-transcript.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact
+      exit 0
+    fi
+    printf 'Yes, Hermes is connected to G-Brain.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-gbrain/input-transcript.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ -n "${FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS:-}" ]]; then
+      sleep "$FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS"
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact_preview
+      exit 0
+    fi
+    printf 'Please ask Hermes if he is connected to G-Brain.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-gbrain/hermes-call.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ -n "${FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS:-}" ]]; then
+      sleep "$FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS"
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact_preview
+      exit 0
+    fi
+    printf 'Is Hermes connected to G-Brain? Answer yes or no.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-gbrain/output-transcript.txt")
+    if [[ "${FAKE_ADB_MISSING_REPORT_ARTIFACTS:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ -n "${FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS:-}" ]]; then
+      sleep "$FAKE_ADB_DIAGNOSTIC_DELAY_SECONDS"
+    fi
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      print_large_artifact_preview
+      exit 0
+    fi
+    printf 'Yes, Hermes is connected to G-Brain.'
+    ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-answer.txt")
     if [[ "${FAKE_ADB_MISSING_ANSWER:-0}" == "1" ]]; then
+      exit 1
+    fi
+    if [[ "${FAKE_ADB_MISSING_BASE_ANSWER:-0}" == "1" ]]; then
       exit 1
     fi
     printf 'manual answer from Hermes'
@@ -456,21 +572,109 @@ assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-answ
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/input-transcript.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/output-transcript.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-call.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/latest-trace-id.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/trace-gbrain/hermes-answer.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/trace-gbrain/input-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/trace-gbrain/output-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/trace-gbrain/hermes-call.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/latest-trace-id.txt"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-answer.txt" \
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/hermes-answer.txt" \
   "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "rm -f no_backup/voice-e2e/hermes-answer.txt"
+  "rm -f no_backup/voice-e2e/trace-gbrain/hermes-answer.txt"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "rm -f no_backup/voice-e2e/input-transcript.txt"
+  "rm -f no_backup/voice-e2e/trace-gbrain/input-transcript.txt"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "rm -f no_backup/voice-e2e/output-transcript.txt"
+  "rm -f no_backup/voice-e2e/trace-gbrain/output-transcript.txt"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "rm -f no_backup/voice-e2e/hermes-call.txt"
+  "rm -f no_backup/voice-e2e/trace-gbrain/hermes-call.txt"
+assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
+  "rm -f no_backup/voice-e2e/trace-gbrain/hermes-call.txt" \
+  "rm -f no_backup/voice-e2e/latest-trace-id.txt"
+
+fallback_manual_log_dir="$TMP_DIR/manual-fallback-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+fallback_manual_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_LATEST_TRACE_ID=missing \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_EXPECTED_HASH="$expected_hash" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$fallback_manual_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+fallback_manual_status=$?
+set -e
+
+if [[ "$fallback_manual_status" -ne 0 ]]; then
+  printf 'Expected missing latest trace manual fallback to pass, got status %s.\n' "$fallback_manual_status" >&2
+  printf 'Actual output:\n%s\n' "$fallback_manual_output" >&2
+  exit 1
+fi
+assert_contains "$fallback_manual_output" "Manual review answer artifact: $fallback_manual_log_dir/manual-hermes-answer.txt"
+assert_contains "$fallback_manual_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
+assert_file_contains_exactly "$fallback_manual_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
+assert_file_contains "$fallback_manual_log_dir/report.txt" "Please ask Hermes if he is connected to G-Brain."
+assert_file_contains "$fallback_manual_log_dir/report.txt" "Is Hermes connected to G-Brain? Answer yes or no."
+assert_file_contains "$fallback_manual_log_dir/report.txt" "Yes, Hermes is connected to G-Brain."
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/latest-trace-id.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-answer.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/input-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-call.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/output-transcript.txt"
+if grep -F -- "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected missing latest trace fallback not to pull trace-keyed GBrain artifacts.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
+
+unsafe_fallback_manual_log_dir="$TMP_DIR/manual-unsafe-fallback-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+unsafe_fallback_manual_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_LATEST_TRACE_ID='../trace-gbrain' \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_EXPECTED_HASH="$expected_hash" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$unsafe_fallback_manual_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+unsafe_fallback_manual_status=$?
+set -e
+
+if [[ "$unsafe_fallback_manual_status" -ne 0 ]]; then
+  printf 'Expected unsafe latest trace manual fallback to pass, got status %s.\n' "$unsafe_fallback_manual_status" >&2
+  printf 'Actual output:\n%s\n' "$unsafe_fallback_manual_output" >&2
+  exit 1
+fi
+assert_contains "$unsafe_fallback_manual_output" "Manual review answer artifact: $unsafe_fallback_manual_log_dir/manual-hermes-answer.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/latest-trace-id.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-answer.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/input-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-call.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/output-transcript.txt"
+if grep -F -- "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
+  printf 'Expected unsafe latest trace fallback not to pull trace-keyed GBrain artifacts.\n' >&2
+  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
+  exit 1
+fi
 
 manual_no_hash_log_dir="$TMP_DIR/manual-no-hash-log"
 set +e
@@ -829,13 +1033,13 @@ assert_contains "$report_contents" "Gemini response to user:"
 assert_contains "$report_contents" "Yes, Hermes is connected to G-Brain."
 assert_contains "$generated_output" "Voice Agent E2E report: $report_path"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/input-transcript.txt" \
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/input-transcript.txt" \
   "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-call.txt" \
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/hermes-call.txt" \
   "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
-  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/output-transcript.txt" \
+  "exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-gbrain/output-transcript.txt" \
   "-a me.rerere.rikkahub.voiceagent.action.END"
 assert_no_report_temp_files "$generated_log_dir"
 report_mode="$(stat -c '%a' "$report_path")"
@@ -1052,15 +1256,50 @@ if [[ "$manual_missing_answer_status" -eq 0 ]]; then
   exit 1
 fi
 assert_contains "$manual_missing_answer_output" \
-  "Failed to pull app-private Hermes answer artifact: no_backup/voice-e2e/hermes-answer.txt"
+  "Failed to pull app-private Hermes answer artifact: no_backup/voice-e2e/trace-gbrain/hermes-answer.txt"
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "rm -f no_backup/voice-e2e/hermes-answer.txt"
+  "rm -f no_backup/voice-e2e/trace-gbrain/hermes-answer.txt"
 if grep -F -- "databases/rikka_hub" "$FAKE_ADB_ARGS_LOG" >/dev/null; then
   printf 'Expected no database fallback when answer artifact is missing.\n' >&2
   printf 'Actual ADB log:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
   exit 1
 fi
+
+late_trace_answer_log_dir="$TMP_DIR/late-trace-answer-log"
+late_trace_adb_log="$TMP_DIR/late-trace-adb-args.log"
+late_trace_counter="$TMP_DIR/late-trace-counter"
+set +e
+late_trace_answer_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_ARGS_LOG="$late_trace_adb_log" \
+  FAKE_ADB_LATEST_TRACE_ID=late \
+  FAKE_ADB_LATE_TRACE_COUNTER="$late_trace_counter" \
+  FAKE_ADB_LATE_TRACE_MISSING_COUNT=2 \
+  FAKE_ADB_MISSING_BASE_ANSWER=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$late_trace_answer_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_MANUAL_ANSWER_TIMEOUT_SECONDS=3 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+late_trace_answer_status=$?
+set -e
+
+if [[ "$late_trace_answer_status" -ne 0 ]]; then
+  printf 'Expected manual mode to re-resolve a late trace id and pull the answer.\n' >&2
+  printf 'Actual output:\n%s\n' "$late_trace_answer_output" >&2
+  exit 1
+fi
+assert_contains "$late_trace_answer_output" "Manual review answer artifact:"
+assert_file_contains_exactly "$late_trace_answer_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
+assert_file_contains "$late_trace_adb_log" "cat no_backup/voice-e2e/hermes-answer.txt"
+assert_file_contains "$late_trace_adb_log" "cat no_backup/voice-e2e/trace-gbrain/hermes-answer.txt"
 
 missing_tool_call_log_dir="$TMP_DIR/missing-tool-call-log"
 set +e
@@ -1148,7 +1387,7 @@ if [[ "$(cat "$large_diagnostic_file")" == *"diagnostic-tail"* ]]; then
   exit 1
 fi
 assert_file_contains "$FAKE_ADB_ARGS_LOG" \
-  "exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/input-transcript.txt"
+  "exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-gbrain/input-transcript.txt"
 
 tool_wait_forbidden_log_dir="$TMP_DIR/tool-wait-forbidden-log"
 set +e
@@ -1246,7 +1485,7 @@ if [[ "$forbidden_marker_output" == *"Voice Agent E2E diagnostic artifact:"* ]];
 fi
 assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
   "-a me.rerere.rikkahub.voiceagent.action.END" \
-  "rm -f no_backup/voice-e2e/hermes-answer.txt"
+  "rm -f no_backup/voice-e2e/trace-gbrain/hermes-answer.txt"
 
 strict_log_dir="$TMP_DIR/strict-log"
 strict_success_log_dir="$TMP_DIR/strict-success-log"
@@ -1255,8 +1494,7 @@ before_strict_success_e2e_artifact_enables="$(
   grep -c -F -- "--ez enableVoiceE2EArtifacts true" "$FAKE_ADB_ARGS_LOG" || true
 )"
 before_strict_success_report_pulls="$(
-  grep -c -E 'exec-out run-as me\.rerere\.rikkahub\.debug cat no_backup/voice-e2e/(input-transcript|hermes-call|output-transcript)\.txt' \
-    "$FAKE_ADB_ARGS_LOG" || true
+  count_report_artifact_pulls
 )"
 set +e
 strict_success_output="$(
@@ -1286,8 +1524,7 @@ if [[ -e "$strict_success_report_path" ]]; then
   exit 1
 fi
 after_strict_success_report_pulls="$(
-  grep -c -E 'exec-out run-as me\.rerere\.rikkahub\.debug cat no_backup/voice-e2e/(input-transcript|hermes-call|output-transcript)\.txt' \
-    "$FAKE_ADB_ARGS_LOG" || true
+  count_report_artifact_pulls
 )"
 if [[ "$after_strict_success_report_pulls" != "$before_strict_success_report_pulls" ]]; then
   printf 'Expected strict success mode not to pull report artifacts.\n' >&2

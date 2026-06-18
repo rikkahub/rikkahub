@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE="${VOICE_AGENT_E2E_PACKAGE:-me.rerere.rikkahub.debug}"
 SERVICE_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.VoiceAgentCallService"
 INJECT_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.debug.VoiceAudioDebugInjectionReceiver"
@@ -8,11 +9,13 @@ INJECT_ACTION="me.rerere.rikkahub.debug.voiceagent.INJECT_PCM"
 CALL_START_ACTION="me.rerere.rikkahub.voiceagent.action.START"
 CALL_END_ACTION="me.rerere.rikkahub.voiceagent.action.END"
 APP_PCM_PATH="voice-e2e/queue-prompt.pcm"
-APP_HERMES_EVENTS_PATH="no_backup/voice-e2e/hermes-events.ndjson"
-APP_INPUT_TRANSCRIPT_PATH="no_backup/voice-e2e/input-transcript.txt"
-APP_OUTPUT_TRANSCRIPT_PATH="no_backup/voice-e2e/output-transcript.txt"
-APP_HERMES_CALL_PATH="no_backup/voice-e2e/hermes-call.txt"
-APP_HERMES_ANSWER_PATH="no_backup/voice-e2e/hermes-answer.txt"
+APP_ARTIFACT_BASE_DIR="no_backup/voice-e2e"
+APP_LATEST_TRACE_ID_PATH="$APP_ARTIFACT_BASE_DIR/latest-trace-id.txt"
+APP_HERMES_EVENTS_ARTIFACT="hermes-events.ndjson"
+APP_INPUT_TRANSCRIPT_ARTIFACT="input-transcript.txt"
+APP_OUTPUT_TRANSCRIPT_ARTIFACT="output-transcript.txt"
+APP_HERMES_CALL_ARTIFACT="hermes-call.txt"
+APP_HERMES_ANSWER_ARTIFACT="hermes-answer.txt"
 DEVICE_TMP_PCM="/data/local/tmp/rikkahub-voice-agent-queue-e2e-prompt.pcm"
 LOG_DIR="${VOICE_AGENT_QUEUE_E2E_LOG_DIR:-build/voice-agent-queue-e2e}"
 LOG_FILE="$LOG_DIR/logcat.txt"
@@ -47,6 +50,8 @@ GENERATED_PCM_FROM_PROMPT=0
 FFMPEG_PROMPT_TEXT_CLEANUP_PATH=""
 REPORT_TEMP_CLEANUP_PATHS=()
 COMMON_FORBIDDEN_PATTERN='VoiceAgentE2E.*hermes_tool_failed|Voice Lab request failed (403|524)|Cloudflare|cf-error|Access denied|FATAL EXCEPTION|Voice playback write failed|AudioTrack write failed|AudioTrack write error|HTTP[ /]524|status=524|code=524|Hermes job polling timed out|Hermes job was no longer available'
+
+. "$SCRIPT_DIR/voice-agent-e2e-artifacts.sh"
 
 if [[ ! "$PACKAGE" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$ ]]; then
   printf 'VOICE_AGENT_E2E_PACKAGE must be an Android package name: %s\n' "$PACKAGE" >&2
@@ -309,39 +314,21 @@ register_report_temp_file() {
   REPORT_TEMP_CLEANUP_PATHS+=("$1")
 }
 
-pull_optional_app_artifact() {
-  local app_path="$1"
-  local local_path="$2"
-  umask 077
-  mkdir -p "$(dirname "$local_path")"
-  local temp_path
-  temp_path="$(mktemp "$LOG_DIR/report-artifact.XXXXXX")"
-  register_report_temp_file "$temp_path"
-  chmod 600 "$temp_path"
-  if adb_exec_out_to_file "$temp_path" run-as "$PACKAGE" cat "$app_path" &&
-    [[ -s "$temp_path" ]]; then
-    mv -f "$temp_path" "$local_path"
-    chmod 600 "$local_path"
-    return 0
-  fi
-  printf 'missing' > "$temp_path"
-  mv -f "$temp_path" "$local_path"
-  chmod 600 "$local_path"
-}
-
 write_e2e_report() {
   umask 077
   mkdir -p "$LOG_DIR" "$(dirname "$REPORT_FILE")"
   local report_temp_file
+  local artifact_dir
   report_temp_file="$(mktemp "$LOG_DIR/report.XXXXXX")"
   register_report_temp_file "$report_temp_file"
   chmod 600 "$report_temp_file"
+  artifact_dir="$(resolve_app_artifact_dir)"
 
-  pull_optional_app_artifact "$APP_HERMES_EVENTS_PATH" "$HERMES_EVENTS_FILE"
-  pull_optional_app_artifact "$APP_INPUT_TRANSCRIPT_PATH" "$INPUT_TRANSCRIPT_FILE"
-  pull_optional_app_artifact "$APP_OUTPUT_TRANSCRIPT_PATH" "$OUTPUT_TRANSCRIPT_FILE"
-  pull_optional_app_artifact "$APP_HERMES_CALL_PATH" "$HERMES_CALL_FILE"
-  pull_optional_app_artifact "$APP_HERMES_ANSWER_PATH" "$HERMES_ANSWER_FILE"
+  pull_optional_app_artifact "$artifact_dir" "$APP_HERMES_EVENTS_ARTIFACT" "$HERMES_EVENTS_FILE"
+  pull_optional_app_artifact "$artifact_dir" "$APP_INPUT_TRANSCRIPT_ARTIFACT" "$INPUT_TRANSCRIPT_FILE"
+  pull_optional_app_artifact "$artifact_dir" "$APP_OUTPUT_TRANSCRIPT_ARTIFACT" "$OUTPUT_TRANSCRIPT_FILE"
+  pull_optional_app_artifact "$artifact_dir" "$APP_HERMES_CALL_ARTIFACT" "$HERMES_CALL_FILE"
+  pull_optional_app_artifact "$artifact_dir" "$APP_HERMES_ANSWER_ARTIFACT" "$HERMES_ANSWER_FILE"
 
   if [[ ! -s "$PROMPT_SOURCE_TEXT_FILE" ]]; then
     printf 'missing' > "$PROMPT_SOURCE_TEXT_FILE"
@@ -403,14 +390,12 @@ generate_pcm_prompt() {
 }
 
 clear_app_artifacts() {
-  for app_path in \
-    "$APP_HERMES_EVENTS_PATH" \
-    "$APP_INPUT_TRANSCRIPT_PATH" \
-    "$APP_OUTPUT_TRANSCRIPT_PATH" \
-    "$APP_HERMES_CALL_PATH" \
-    "$APP_HERMES_ANSWER_PATH"; do
-    adb_cmd shell "run-as $PACKAGE rm -f $app_path" >/dev/null 2>&1 || true
-  done
+  clear_app_artifact_files \
+    "$APP_HERMES_EVENTS_ARTIFACT" \
+    "$APP_INPUT_TRANSCRIPT_ARTIFACT" \
+    "$APP_OUTPUT_TRANSCRIPT_ARTIFACT" \
+    "$APP_HERMES_CALL_ARTIFACT" \
+    "$APP_HERMES_ANSWER_ARTIFACT"
 }
 
 end_voice_agent_call_and_wait() {

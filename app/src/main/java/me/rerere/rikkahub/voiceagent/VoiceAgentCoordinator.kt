@@ -36,8 +36,13 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnosticEvent
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
+import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
+import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
 
@@ -56,6 +61,8 @@ class VoiceAgentCoordinator(
     private val toolApi: VoiceToolApi,
     private val audio: VoiceAudioEngine,
     private val diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
+    private val observability: VoiceObservability = NoOpVoiceObservability,
+    private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
     private val hermesResponseExpectedHash: String? = BuildConfig.VOICE_AGENT_HERMES_E2E_EXPECTED_HASH,
     private val logHermesRequestHash: (String) -> Unit = { detail ->
         Log.i(E2E_TAG, "hermes_tool_request_hash $detail")
@@ -109,6 +116,8 @@ class VoiceAgentCoordinator(
         onJobCompleted = ::recordHermesJobCompletion,
         onJobFailed = ::recordHermesJobFailure,
         onPollFailed = ::recordHermesPollFailure,
+        observability = observability,
+        traceContext = traceContext,
     )
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
     private val persistenceJobs = mutableSetOf<Job>()
@@ -131,7 +140,7 @@ class VoiceAgentCoordinator(
     private val voiceArtifactSessionId = Uuid.random().toString()
     private val removeDiagnosticsListener: () -> Unit
 
-    private val _state = MutableStateFlow(VoiceAgentUiState())
+    private val _state = MutableStateFlow(VoiceAgentUiState(traceId = traceContext.traceId))
     val state: StateFlow<VoiceAgentUiState> = _state.asStateFlow()
 
     init {
@@ -491,6 +500,10 @@ class VoiceAgentCoordinator(
             activeTranscriptSpeaker = TranscriptSpeaker.User
             inputTurnTranscript += text
             diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, text=$text")
+            recordEventSafely(
+                name = "voicelab.mobile.transcript.input_delta",
+                attributes = mapOf("turnId" to inputTurnId) + voiceTextPayload(key = "text", text = text),
+            )
             clearOutputAudioSuppressionForNewTurn()
             _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
             val transcript = inputTurnTranscript
@@ -520,6 +533,10 @@ class VoiceAgentCoordinator(
             activeTranscriptSpeaker = TranscriptSpeaker.Assistant
             outputTurnTranscript += text
             diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, text=$text")
+            recordEventSafely(
+                name = "voicelab.mobile.transcript.output_delta",
+                attributes = mapOf("turnId" to outputTurnId) + voiceTextPayload(key = "text", text = text),
+            )
             _state.update { it.copy(outputTranscript = it.outputTranscript + text) }
             persistAssistantTranscript()
             outputTurnTranscript
@@ -854,6 +871,12 @@ class VoiceAgentCoordinator(
                 "voice_e2e_artifact_write_failed",
                 "name=${artifact.fileName}$callDetail, message=$message",
             )
+        }
+    }
+
+    private fun recordEventSafely(name: String, attributes: Map<String, Any?> = emptyMap()) {
+        runCatching {
+            observability.recordEvent(name = name, trace = traceContext, attributes = attributes)
         }
     }
 

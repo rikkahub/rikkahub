@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -76,6 +77,38 @@ private val ERROR_SECRET_PATTERNS = listOf(
     ),
 )
 
+data class VoiceLabTraceHeaders(
+    val traceId: String,
+    val voiceSessionId: String,
+    val sentryTrace: String? = null,
+    val sentryBaggage: String? = null,
+) {
+    init {
+        require(traceId.isValidVoiceTraceHeader()) {
+            "Voice trace id must be non-blank, at most 128 characters, and must be safe for HTTP headers"
+        }
+        require(voiceSessionId.isValidVoiceTraceHeader()) {
+            "Voice session id must be non-blank, at most 128 characters, and must be safe for HTTP headers"
+        }
+        require(sentryTrace == null || sentryTrace.isValidSentryPropagationHeader()) {
+            "Sentry trace header must be non-blank, at most 8192 characters, and must be safe for HTTP headers"
+        }
+        require(sentryBaggage == null || sentryBaggage.isValidSentryPropagationHeader()) {
+            "Sentry baggage header must be non-blank, at most 8192 characters, and must be safe for HTTP headers"
+        }
+    }
+
+    companion object {
+        fun from(trace: VoiceTraceContext): VoiceLabTraceHeaders =
+            VoiceLabTraceHeaders(
+                traceId = trace.traceId,
+                voiceSessionId = trace.voiceSessionId,
+                sentryTrace = trace.sentryTrace,
+                sentryBaggage = trace.sentryBaggage,
+            )
+    }
+}
+
 internal fun interface VoiceLabHttpTransport {
     suspend fun execute(request: Request): Response
 }
@@ -110,16 +143,51 @@ class VoiceLabMobileApi internal constructor(
     private val baseUrl: String,
     private val credentials: VoiceLabMobileCredentials,
     private val transport: VoiceLabHttpTransport,
+    private val traceHeaders: VoiceLabTraceHeaders? = null,
     private val json: Json = JsonInstant,
 ) {
     constructor(
         baseUrl: String,
         credentials: VoiceLabMobileCredentials,
-        json: Json = JsonInstant,
+    ) : this(
+        baseUrl = baseUrl,
+        credentials = credentials,
+        json = JsonInstant,
+        traceHeaders = null,
+    )
+
+    constructor(
+        baseUrl: String,
+        credentials: VoiceLabMobileCredentials,
+        json: Json,
+    ) : this(
+        baseUrl = baseUrl,
+        credentials = credentials,
+        json = json,
+        traceHeaders = null,
+    )
+
+    constructor(
+        baseUrl: String,
+        credentials: VoiceLabMobileCredentials,
+        traceHeaders: VoiceLabTraceHeaders?,
+    ) : this(
+        baseUrl = baseUrl,
+        credentials = credentials,
+        json = JsonInstant,
+        traceHeaders = traceHeaders,
+    )
+
+    constructor(
+        baseUrl: String,
+        credentials: VoiceLabMobileCredentials,
+        json: Json,
+        traceHeaders: VoiceLabTraceHeaders?,
     ) : this(
         baseUrl = baseUrl,
         credentials = credentials,
         transport = OkHttpVoiceLabTransport(DEFAULT_HTTP_CLIENT),
+        traceHeaders = traceHeaders,
         json = json,
     )
 
@@ -209,6 +277,12 @@ class VoiceLabMobileApi internal constructor(
             .apply {
                 credentials.cloudflareClientId?.let { addHeader("CF-Access-Client-Id", it) }
                 credentials.cloudflareClientSecret?.let { addHeader("CF-Access-Client-Secret", it) }
+                traceHeaders?.let {
+                    addHeader("X-Voice-Trace-Id", it.traceId)
+                    addHeader("X-Voice-Session-Id", it.voiceSessionId)
+                    it.sentryTrace?.let { sentryTrace -> addHeader("sentry-trace", sentryTrace) }
+                    it.sentryBaggage?.let { sentryBaggage -> addHeader("baggage", sentryBaggage) }
+                }
             }
 
     private suspend inline fun <reified Res> executeJson(request: Request): Res =
@@ -231,6 +305,19 @@ class VoiceLabMobileApi internal constructor(
             }
         }
 }
+
+private fun String.isValidVoiceTraceHeader(): Boolean =
+    isNotBlank() &&
+        length <= 128 &&
+        all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '.' || it == '_' || it == ':' || it == '-' }
+
+private fun String.isValidSentryPropagationHeader(): Boolean =
+    isValidHttpHeaderValue(maxLength = 8192)
+
+private fun String.isValidHttpHeaderValue(maxLength: Int): Boolean =
+    isNotBlank() &&
+        length <= maxLength &&
+        all { it == '\t' || it in ' '..'~' }
 
 private fun String.isDevHttpHost(): Boolean =
     this in DEV_HTTP_HOSTS || isTailscaleIpv4()

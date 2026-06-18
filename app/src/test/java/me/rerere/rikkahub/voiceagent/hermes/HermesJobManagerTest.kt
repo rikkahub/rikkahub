@@ -21,6 +21,10 @@ import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
@@ -79,6 +83,43 @@ class HermesJobManagerTest {
         conversationStore.awaitHermesRecord("call-pending-first") {
             it.status == HermesQueueStatus.Queued && it.jobId != null
         }
+    }
+
+    @Test
+    fun `submitted job records prompt and answer observability events`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val observability = RecordingVoiceObservability()
+        val trace = VoiceTraceContext(traceId = "trace-123", voiceSessionId = "session-456")
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            observability = observability,
+            traceContext = trace,
+        )
+
+        manager.submit(callId = "call-1", prompt = "private prompt")
+        assertEquals("call-1" to "private prompt", toolApi.awaitRequest("call-1"))
+        toolApi.complete(response(callId = "call-1", answer = "private answer"))
+        conversationStore.awaitHermesRecord("call-1") {
+            it.status == HermesQueueStatus.Complete && it.answer == "private answer"
+        }
+
+        val submitted = observability.events.single { it.name == "voicelab.mobile.hermes_tool.submitted" }
+        assertEquals(trace, submitted.trace)
+        assertEquals("call-1", submitted.attributes["callId"])
+        assertEquals("private prompt", submitted.attributes["prompt"])
+        assertEquals(14, submitted.attributes["prompt.chars"])
+        assertEquals(false, submitted.attributes["prompt.truncated"])
+
+        val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
+        assertEquals(trace, completed.trace)
+        assertEquals("call-1", completed.attributes["callId"])
+        assertEquals("job-1", completed.attributes["jobId"])
+        assertEquals("private answer", completed.attributes["answer"])
+        assertEquals(14, completed.attributes["answer.chars"])
+        assertEquals(false, completed.attributes["answer.truncated"])
     }
 
     @Test
@@ -1564,6 +1605,11 @@ class HermesJobManagerTest {
         maxElapsedMs: Long = 1_000L,
         remoteCancelTimeoutMs: Long = 50L,
         bridgeSendTimeoutMs: Long = 200L,
+        observability: VoiceObservability = NoOpVoiceObservability,
+        traceContext: VoiceTraceContext = VoiceTraceContext(
+            traceId = "trace-test",
+            voiceSessionId = "session-test",
+        ),
     ) = HermesJobManager(
         toolApi = toolApi,
         conversationStore = conversationStore,
@@ -1579,6 +1625,8 @@ class HermesJobManagerTest {
         recordDiagnostic = recordDiagnostic,
         writeQueueEvent = writeQueueEvent,
         writeHermesAnswer = writeHermesAnswer,
+        observability = observability,
+        traceContext = traceContext,
     )
 
     private fun response(callId: String, answer: String) = MobileHermesResponse(

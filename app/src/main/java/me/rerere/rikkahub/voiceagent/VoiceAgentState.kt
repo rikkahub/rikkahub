@@ -53,6 +53,7 @@ data class VoiceAgentUiState(
     val persistence: VoicePersistenceStatus = VoicePersistenceStatus.Idle,
     val inputTranscript: String = "",
     val outputTranscript: String = "",
+    val traceId: String = "",
     val error: String? = null,
     val diagnostics: List<VoiceDiagnosticLine> = emptyList(),
 )

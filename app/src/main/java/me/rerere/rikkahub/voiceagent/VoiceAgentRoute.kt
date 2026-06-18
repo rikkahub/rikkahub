@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
@@ -118,6 +120,7 @@ private fun VoiceAgentScreen(
     onEnd: () -> Unit,
 ) {
     val state by stateProvider().collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val muted = state.audio == VoiceAudioStatus.Muted
     val microphonePermission = rememberPermissionState(PermissionRecordAudio)
     val notificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -197,11 +200,10 @@ private fun VoiceAgentScreen(
             null
         },
         content = {
-            StateCard(label = "Call", value = state.callStatusText())
-            StateCard(label = "Session", value = state.session.statusLabel())
-            StateCard(label = "Audio", value = state.audio.statusLabel())
-            StateCard(label = "Hermes/MS-agent", value = state.tool.visibleStatusLabel())
-            StateCard(label = "History", value = state.persistence.statusLabel())
+            VoiceAgentStatusCards(
+                state = state,
+                onCopyTraceId = { traceId -> context.writeClipboardText(traceId) },
+            )
             if (startGate == VoiceAgentStartGate.NeedsMicrophonePermission) {
                 MicrophonePermissionCard(
                     onRequestPermission = {
@@ -239,6 +241,24 @@ private fun VoiceAgentScreen(
             DiagnosticsCard(diagnostics = state.diagnostics)
         },
     )
+}
+
+@Composable
+internal fun VoiceAgentStatusCards(
+    state: VoiceAgentUiState,
+    onCopyTraceId: (String) -> Unit,
+) {
+    StateCard(label = "Call", value = state.callStatusText())
+    StateCard(label = "Session", value = state.session.statusLabel())
+    state.traceIdCardState(onCopyTraceId)?.let { traceIdCard ->
+        TraceIdCard(
+            traceId = traceIdCard.traceId,
+            onCopyTraceId = traceIdCard.onCopyTraceId,
+        )
+    }
+    StateCard(label = "Audio", value = state.audio.statusLabel())
+    StateCard(label = "Hermes/MS-agent", value = state.tool.visibleStatusLabel())
+    StateCard(label = "History", value = state.persistence.statusLabel())
 }
 
 @Composable
@@ -491,6 +511,44 @@ private fun StateCard(label: String, value: String) {
 }
 
 @Composable
+private fun TraceIdCard(
+    traceId: String,
+    onCopyTraceId: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(14.dp),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    "Trace ID",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Text(
+                    text = traceId,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            TextButton(onClick = onCopyTraceId) {
+                Text("Copy")
+            }
+        }
+    }
+}
+
+@Composable
 private fun TranscriptCard(
     inputTranscript: String,
     outputTranscript: String,
@@ -651,6 +709,22 @@ private fun String.withJob(jobId: String): String = "$this / $jobId"
 
 private fun String.withElapsed(elapsedMs: Long): String =
     if (elapsedMs > 0L) "$this, ${elapsedMs}ms" else this
+
+internal class VoiceTraceIdCardState(
+    val traceId: String,
+    val onCopyTraceId: () -> Unit,
+)
+
+internal fun VoiceAgentUiState.traceIdCardState(
+    copyTraceId: (String) -> Unit,
+): VoiceTraceIdCardState? = traceId
+    .takeIf { it.isNotBlank() }
+    ?.let { activeTraceId ->
+        VoiceTraceIdCardState(
+            traceId = activeTraceId,
+            onCopyTraceId = { copyTraceId(activeTraceId) },
+        )
+    }
 
 private fun VoicePersistenceStatus.statusLabel(): String = when (this) {
     VoicePersistenceStatus.Idle -> "Idle"

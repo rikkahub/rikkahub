@@ -44,6 +44,10 @@
     android:theme="@style/Theme.Rikkahub"
     android:usesCleartextTraffic="true"
     tools:targetApi="33">
+    <meta-data
+      android:name="io.sentry.auto-init"
+      android:value="false" />
+
     <activity
       android:name=".ui.activity.SafeModeActivity"
       android:exported="false"

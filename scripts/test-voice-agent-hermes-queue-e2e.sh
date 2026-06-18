@@ -247,6 +247,18 @@ LOGS
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/hermes-answer.txt")
     ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/latest-trace-id.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-queue/hermes-events.ndjson")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-queue/input-transcript.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-queue/output-transcript.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-queue/hermes-call.txt")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-queue/hermes-answer.txt")
+    ;;
   "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1 --ez enableVoiceE2EArtifacts true")
     rm -f "${FAKE_ADB_END_MARKER:?}"
     rm -f "${FAKE_ADB_DRAINED_MARKER:?}"
@@ -255,6 +267,43 @@ LOGS
     : > "${FAKE_ADB_END_MARKER:?}"
     ;;
   "-s RZ shell am broadcast "*)
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/latest-trace-id.txt")
+    case "${FAKE_ADB_LATEST_TRACE_ID:-trace-queue}" in
+      missing)
+        exit 1
+        ;;
+      *)
+        printf '%s' "${FAKE_ADB_LATEST_TRACE_ID:-trace-queue}"
+        ;;
+    esac
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-queue/hermes-events.ndjson")
+    require_drain_before_artifact_pull "$args"
+    cat <<'EVENTS'
+{"type":"job_created","callId":"call-a","jobId":"job-a","status":"queued"}
+{"type":"job_created","callId":"call-b","jobId":"job-b","status":"queued"}
+{"type":"job_completed","callId":"call-a","jobId":"job-a","status":"succeeded","hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","elapsedMs":1000,"serverElapsedMs":900,"answerChars":18}
+{"type":"late_text_turn_sent","callId":"call-a","jobId":"job-a","sent":true}
+{"type":"job_completed","callId":"call-b","jobId":"job-b","status":"succeeded","hash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","elapsedMs":2000,"serverElapsedMs":1900,"answerChars":18}
+{"type":"late_text_turn_sent","callId":"call-b","jobId":"job-b","sent":true}
+EVENTS
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-queue/input-transcript.txt")
+    require_drain_before_artifact_pull "$args"
+    printf 'Ask Hermes three separate questions now.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-queue/output-transcript.txt")
+    require_drain_before_artifact_pull "$args"
+    printf 'I queued the Hermes work and now have two answers.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-queue/hermes-call.txt")
+    require_drain_before_artifact_pull "$args"
+    printf 'latest Hermes prompt snapshot'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-queue/hermes-answer.txt")
+    require_drain_before_artifact_pull "$args"
+    printf 'latest Hermes answer snapshot'
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-events.ndjson")
     require_drain_before_artifact_pull "$args"
@@ -339,12 +388,23 @@ assert_not_contains "$(cat "$pass_log_dir/report.txt")" "private answer one"
 assert_not_contains "$(cat "$pass_log_dir/report.txt")" "private answer two"
 assert_file_contains "$pass_log_dir/hermes-events.ndjson" "\"jobId\":\"job-a\""
 assert_not_contains "$(cat "$pass_log_dir/hermes-events.ndjson")" "\"answer\""
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/latest-trace-id.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/trace-queue/hermes-events.ndjson"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/trace-queue/input-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/trace-queue/output-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/trace-queue/hermes-call.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/trace-queue/hermes-answer.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-events.ndjson"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/trace-queue/hermes-events.ndjson"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/latest-trace-id.txt"
 
 delayed_markers_log_dir="$TMP_DIR/delayed-markers-log"
+: > "$FAKE_ADB_ARGS_LOG"
 set +e
 delayed_markers_output="$(
   PATH="$TMP_DIR:$PATH" \
   FAKE_QUEUE_SCENARIO=delayed-markers \
+  FAKE_ADB_LATEST_TRACE_ID=missing \
   VOICE_AGENT_E2E_SERIAL=RZ \
   VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
   VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
@@ -363,6 +423,49 @@ if [[ "$delayed_markers_status" -ne 0 ]]; then
 fi
 assert_contains "$delayed_markers_output" "PASS marker: at least 2 ask_hermes tool calls"
 assert_contains "$delayed_markers_output" "Voice Agent Hermes queue E2E reached manual review gate."
+assert_file_contains "$delayed_markers_log_dir/report.txt" "Ask Hermes three separate questions now."
+assert_file_contains "$delayed_markers_log_dir/report.txt" "\"jobId\":\"job-a\""
+assert_file_contains "$delayed_markers_log_dir/report.txt" "latest Hermes prompt snapshot"
+assert_file_contains "$delayed_markers_log_dir/report.txt" "latest Hermes answer snapshot"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/latest-trace-id.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-events.ndjson"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/input-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/output-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-call.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-answer.txt"
+assert_not_contains "$(cat "$FAKE_ADB_ARGS_LOG")" "cat no_backup/voice-e2e/trace-queue"
+
+unsafe_markers_log_dir="$TMP_DIR/unsafe-markers-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+unsafe_markers_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_LATEST_TRACE_ID='../trace-queue' \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$unsafe_markers_log_dir" \
+  VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_QUEUE_E2E_COMPLETION_TIMEOUT_SECONDS=5 \
+  "$SCRIPT" 2>&1
+)"
+unsafe_markers_status=$?
+set -e
+if [[ "$unsafe_markers_status" -ne 0 ]]; then
+  printf 'Expected unsafe-markers scenario to pass, got %s.\n' "$unsafe_markers_status" >&2
+  printf 'Actual output:\n%s\n' "$unsafe_markers_output" >&2
+  exit 1
+fi
+assert_contains "$unsafe_markers_output" "Voice Agent Hermes queue E2E reached manual review gate."
+assert_file_contains "$unsafe_markers_log_dir/report.txt" "Gemini understood from voice:"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/latest-trace-id.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-events.ndjson"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/input-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/output-transcript.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-call.txt"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-answer.txt"
+assert_not_contains "$(cat "$FAKE_ADB_ARGS_LOG")" "cat no_backup/voice-e2e/trace-queue"
 
 one_complete_log_dir="$TMP_DIR/one-complete-log"
 set +e

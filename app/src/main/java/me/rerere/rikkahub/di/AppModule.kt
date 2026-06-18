@@ -7,6 +7,7 @@ import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -22,6 +23,9 @@ import me.rerere.rikkahub.voiceagent.VoiceAgentCallManager
 import me.rerere.rikkahub.voiceagent.VoiceAgentNotificationFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomAdapter
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomCallRegistry
+import me.rerere.rikkahub.voiceagent.telemetry.SentryVoiceObservabilityConfig
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.createSentryVoiceObservability
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
@@ -100,6 +104,21 @@ val appModule = module {
             chatService = get(),
             settingsStore = get(),
             okHttpClient = get(),
+            observability = get(),
+        )
+    }
+
+    single<VoiceObservability> {
+        createSentryVoiceObservability(
+            context = get(),
+            config = SentryVoiceObservabilityConfig(
+                dsn = BuildConfig.VOICE_AGENT_SENTRY_DSN,
+                environment = BuildConfig.VOICE_AGENT_SENTRY_ENVIRONMENT.ifBlank { "development" },
+                tracesSampleRate = BuildConfig.VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE
+                    .toDoubleOrNull()
+                    ?.coerceIn(0.0, 1.0)
+                    ?: 0.0,
+            ),
         )
     }
 

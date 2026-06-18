@@ -20,6 +20,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
@@ -34,6 +35,20 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class VoiceAgentRuntimeTest {
+    @Test
+    fun `coordinator publishes trace id in UI state`() = runTest {
+        val trace = VoiceTraceContext(traceId = "trace-123", voiceSessionId = "session-456")
+        val coordinator = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = FakeVoiceToolApi(),
+            audio = FakeVoiceAudioEngine(),
+            traceContext = trace,
+            scope = this,
+        )
+
+        assertEquals("trace-123", coordinator.state.value.traceId)
+    }
+
     @Test
     fun `batched Hermes tool call continues after interruption and sends response to Gemini`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()

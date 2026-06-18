@@ -14,7 +14,11 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
+import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import java.util.Base64
 
 class VoiceAgentCallSession(
@@ -26,14 +30,44 @@ class VoiceAgentCallSession(
     private val conversationStore: VoiceConversationStore,
     private val contextProvider: VoiceAgentContextProvider,
     diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
+    private val observability: VoiceObservability = NoOpVoiceObservability,
+    private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
     private val voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
     private val scope: CoroutineScope,
 ) : ManagedVoiceCallSession {
+    constructor(
+        modelId: String,
+        sessionApi: VoiceSessionApi,
+        toolApi: VoiceToolApi,
+        gemini: GeminiLiveVoiceClient,
+        audio: VoiceAudioEngine,
+        conversationStore: VoiceConversationStore,
+        contextProvider: VoiceAgentContextProvider,
+        diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
+        voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
+        scope: CoroutineScope,
+    ) : this(
+        modelId = modelId,
+        sessionApi = sessionApi,
+        toolApi = toolApi,
+        gemini = gemini,
+        audio = audio,
+        conversationStore = conversationStore,
+        contextProvider = contextProvider,
+        diagnostics = diagnostics,
+        observability = NoOpVoiceObservability,
+        traceContext = newVoiceTraceContext(),
+        voiceE2EArtifacts = voiceE2EArtifacts,
+        scope = scope,
+    )
+
     private val coordinator = VoiceAgentCoordinator(
         gemini = gemini,
         toolApi = toolApi,
         audio = audio,
         diagnostics = diagnostics,
+        observability = observability,
+        traceContext = traceContext,
         conversationStore = conversationStore,
         writeVoiceE2EArtifact = voiceE2EArtifacts::write,
         scope = scope,
@@ -42,6 +76,7 @@ class VoiceAgentCallSession(
     private var muted = false
     private var sessionId = 0L
     private var ended = false
+    private var sessionEndedRecorded = false
     private var hermesBridge: HermesSessionBridge? = null
 
     override val state: StateFlow<VoiceAgentUiState> = coordinator.state
@@ -52,6 +87,13 @@ class VoiceAgentCallSession(
         val currentSessionId = coordinator.nextSessionId()
         sessionId = currentSessionId
         VoiceAgentLog.d(TAG, "start sessionId=$currentSessionId modelId=$modelId")
+        recordEventSafely(
+            name = "voicelab.mobile.session.started",
+            attributes = mapOf(
+                "sessionId" to currentSessionId,
+                "modelId" to modelId,
+            ),
+        )
         val job = scope.launch {
             runSession(currentSessionId)
         }
@@ -115,6 +157,14 @@ class VoiceAgentCallSession(
             }
             coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
             VoiceAgentLog.d(TAG, "session connected sessionId=$currentSessionId")
+            recordEventSafely(
+                name = "voicelab.mobile.session.connected",
+                attributes = mapOf(
+                    "sessionId" to currentSessionId,
+                    "modelId" to modelId,
+                    "providerModel" to session.providerModel,
+                ),
+            )
             gemini.activateOutboundSession(currentSessionId)
             val bridge = coordinator.createHermesSessionBridge(currentSessionId)
             hermesBridge = bridge
@@ -251,9 +301,13 @@ class VoiceAgentCallSession(
     }
 
     private suspend fun finishEnd(previousJob: Job?, visibleReason: String?) {
-        previousJob?.cancelAndJoin()
-        coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
-        coordinator.close()
+        try {
+            previousJob?.cancelAndJoin()
+            coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
+            coordinator.close()
+        } finally {
+            recordSessionEndedSafely()
+        }
         visibleReason?.let(coordinator::setVisibleError)
         coordinator.awaitPersistenceJobs()
         voiceE2EArtifacts.drain()
@@ -261,7 +315,8 @@ class VoiceAgentCallSession(
     }
 
     override fun closeNow() {
-        if (!ended) {
+        val shouldRecordEnd = !ended
+        if (shouldRecordEnd) {
             ended = true
         }
         startJob?.cancel()
@@ -272,6 +327,7 @@ class VoiceAgentCallSession(
         audio.suppressPlayback()
         coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
         coordinator.close(waitForStartedSends = false)
+        recordSessionEndedSafely()
         coordinator.launchPersistenceDrain()
     }
 
@@ -319,6 +375,24 @@ class VoiceAgentCallSession(
     private data class EndPreparation(
         val previousJob: Job?,
     )
+
+    private fun recordEventSafely(name: String, attributes: Map<String, Any?> = emptyMap()) {
+        runCatching {
+            observability.recordEvent(name = name, trace = traceContext, attributes = attributes)
+        }
+    }
+
+    private fun recordSessionEndedSafely() {
+        if (sessionEndedRecorded) return
+        sessionEndedRecorded = true
+        recordEventSafely(
+            name = "voicelab.mobile.session.ended",
+            attributes = mapOf(
+                "sessionId" to sessionId,
+                "modelId" to modelId,
+            ),
+        )
+    }
 
     private companion object {
         const val TAG = "VoiceAgentCallSession"

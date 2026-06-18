@@ -22,6 +22,11 @@ import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
+import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
+import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
 import java.time.Instant
 
 interface HermesSessionBridge {
@@ -77,6 +82,8 @@ class HermesJobManager(
     private val onJobCompleted: (HermesJobCompletion) -> Unit = {},
     private val onJobFailed: (HermesJobFailure) -> Unit = {},
     private val onPollFailed: (HermesPollFailure) -> Unit = {},
+    private val observability: VoiceObservability = NoOpVoiceObservability,
+    private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
 ) {
     private val lock = Any()
     private val conversationUpdateMutex = Mutex()
@@ -286,6 +293,11 @@ class HermesJobManager(
                 shouldPersist = { !managedJob.explicitlyCanceled },
             )
             if (!pendingPersisted) return
+            recordEventSafely(
+                name = "voicelab.mobile.hermes_tool.submitted",
+                attributes = mapOf("callId" to managedJob.callId) +
+                    voiceTextPayload(key = "prompt", text = managedJob.prompt),
+            )
             if (managedJob.explicitlyCanceled) return
             val submitted = withTimeoutOrNull(managedJob.remainingMs(maxElapsedMs)) {
                 toolApi.submitHermesJob(callId = managedJob.callId, prompt = managedJob.prompt)
@@ -457,6 +469,15 @@ class HermesJobManager(
                             elapsedMs = elapsedMs,
                             serverElapsedMs = poll.elapsedMs,
                         )
+                    )
+                    recordEventSafely(
+                        name = "voicelab.mobile.hermes_tool.completed",
+                        attributes = mapOf(
+                            "callId" to managedJob.callId,
+                            "jobId" to jobId,
+                            "elapsedMs" to elapsedMs,
+                            "serverElapsedMs" to poll.elapsedMs,
+                        ) + voiceTextPayload(key = "answer", text = answer),
                     )
                     safeRecordDiagnostic(
                         "hermes_job_completed",
@@ -649,6 +670,15 @@ class HermesJobManager(
             shouldPersist = shouldPersist,
         )
         if (!persisted) return false
+        recordEventSafely(
+            name = "voicelab.mobile.hermes_tool.failed",
+            attributes = mapOf(
+                "callId" to callId,
+                "jobId" to jobId,
+                "status" to status.queueEventStatus(),
+                "message" to visibleMessage,
+            ),
+        )
         safeRecordDiagnostic(
             "hermes_job_failed",
             "callId=$callId${jobId?.let { ", jobId=$it" }.orEmpty()}, message=$visibleMessage",
@@ -880,6 +910,12 @@ class HermesJobManager(
     private fun safeOnPollFailed(failure: HermesPollFailure) {
         runCatching {
             onPollFailed(failure)
+        }
+    }
+
+    private fun recordEventSafely(name: String, attributes: Map<String, Any?> = emptyMap()) {
+        runCatching {
+            observability.recordEvent(name = name, trace = traceContext, attributes = attributes)
         }
     }
 
