@@ -1239,5 +1239,18 @@
   <string name="setting_asr_configure_step_hotwords_desc">以逗號分隔的熱詞清單，用於提升專有名詞／領域術語的辨識準確率</string>
   <string name="log_page_record_requests">記錄請求</string>
   <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
+
+  <!-- Ta的来信 -->
+  <string name="assistant_page_tab_ta_message">Ta的來信</string>
+  <string name="assistant_detail_ta_message_desc">配置Ta的來信相關設定</string>
+  <string name="ta_message_enable_label">Ta的來信</string>
+  <string name="ta_message_enable_desc">開啟後，助手可在設定時間主動向使用者發送訊息</string>
+  <string name="ta_message_next_time_label">下次助手主動發送訊息時間</string>
+  <string name="ta_message_next_time_not_set">未設定</string>
+  <string name="ta_message_select_date">選擇日期</string>
+  <string name="ta_message_select_time">選擇時間</string>
+  <string name="ta_message_clear_time">清除已設定的時間</string>
+  <string name="ta_message_prompt_label">Ta的來信提示詞</string>
+  <string name="ta_message_decision_prompt_label">決策時間功能說明提示詞</string>
 </resources>
 

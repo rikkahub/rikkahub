@@ -1241,5 +1241,18 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_asr_configure_step_hotwords_desc">固有名詞や専門用語の認識精度を高める、カンマ区切りのホットワード一覧</string>
   <string name="log_page_record_requests">リクエスト記録</string>
   <string name="log_page_record_requests_desc">リクエストヘッダー、ボディ、レスポンスメタデータをキャプチャします</string>
+
+  <!-- Taの来信 -->
+  <string name="assistant_page_tab_ta_message">Taからのメッセージ</string>
+  <string name="assistant_detail_ta_message_desc">Taからのメッセージ関連の設定</string>
+  <string name="ta_message_enable_label">Taからのメッセージ</string>
+  <string name="ta_message_enable_desc">有効にすると、アシスタントが設定した時間にユーザーにメッセージを送信できます</string>
+  <string name="ta_message_next_time_label">次回の自発的メッセージ送信時間</string>
+  <string name="ta_message_next_time_not_set">未設定</string>
+  <string name="ta_message_select_date">日付選択</string>
+  <string name="ta_message_select_time">時間選択</string>
+  <string name="ta_message_clear_time">設定時間をクリア</string>
+  <string name="ta_message_prompt_label">Taからのメッセージプロンプト</string>
+  <string name="ta_message_decision_prompt_label">決定時間機能説明プロンプト</string>
 </resources>
 
