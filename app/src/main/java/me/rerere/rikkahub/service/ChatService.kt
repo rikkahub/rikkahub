@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -39,6 +41,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.Json
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -84,8 +87,14 @@ import me.rerere.ai.runtime.contract.TurnMode
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventQueueReducer
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventStore
 import me.rerere.rikkahub.data.ai.agentevent.ClaimOutcome
+import me.rerere.rikkahub.data.ai.agentevent.ClaimAppendAction
+import me.rerere.rikkahub.data.db.entity.AgentEventEntity
+import me.rerere.rikkahub.data.ai.agentevent.AgentEventTerminalStatus
 import me.rerere.rikkahub.data.ai.agentevent.SyntheticAppendResult
 import me.rerere.rikkahub.data.ai.agentevent.TurnGateState
+import me.rerere.rikkahub.data.ai.shellrun.ShellCompletion
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunToolAnchor
 import me.rerere.rikkahub.data.ai.runtime.AppToolCatalog
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
@@ -116,8 +125,10 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
+import me.rerere.rikkahub.data.datastore.getAssistantByIdOrCurrent
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getChatModelForAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.AGENT_EVENT_ID_METADATA_KEY
 import me.rerere.rikkahub.data.model.AGENT_EVENT_KIND_METADATA_KEY
@@ -126,6 +137,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.SYNTHETIC_KIND_METADATA_KEY
+import me.rerere.rikkahub.data.model.syntheticAgentEventMarker
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.SHELL_BACKGROUNDED_MARKER
@@ -162,6 +174,17 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+
+private const val SYNTHETIC_TOOL_NAME_MAX_LENGTH = 64
+private const val SYNTHETIC_TOOL_NAME_FALLBACK = "agent_event"
+private val SYNTHETIC_TOOL_NAME_INVALID_CHARS = Regex("[^a-zA-Z0-9_-]")
+
+// Total over any kind: a kind that is empty or all-invalid (sanitizes to "") would violate the
+// provider tool-name contract ^[a-zA-Z0-9_-]{1,64}$ (min length 1), so fall back to a valid default.
+internal fun sanitizeSyntheticToolName(kind: String): String =
+    SYNTHETIC_TOOL_NAME_INVALID_CHARS.replace(kind, "_")
+        .take(SYNTHETIC_TOOL_NAME_MAX_LENGTH)
+        .ifEmpty { SYNTHETIC_TOOL_NAME_FALLBACK }
 
 // Turn-end sequencing for the sendMessage path (review mustFix #2). The invariant it pins: the
 // Stop-hook continuation strictly precedes ONE turn-end job launch, so title/suggestion jobs are
@@ -312,6 +335,128 @@ internal fun conversationHasPendingToolApproval(conversation: Conversation): Boo
     conversation.currentMessages.any { message ->
         message.parts.any { it is UIMessagePart.Tool && it.isPending }
     }
+
+internal data class DeferredShellToolAnchorCandidate(
+    val taskId: Uuid,
+    val anchor: ShellRunToolAnchor,
+)
+
+internal data class DeferredShellCompletionResolution(
+    val conversation: Conversation,
+    val node: MessageNode,
+    val messageId: Uuid,
+    val continueGeneration: Boolean,
+)
+
+internal fun shellCompletionTaskId(payloadJson: String): Uuid? =
+    runCatching {
+        Json.parseToJsonElement(payloadJson)
+            .jsonObject["taskId"]
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.let { Uuid.parse(it) }
+    }.getOrNull()
+
+internal fun findDeferredShellToolAnchors(conversation: Conversation): List<DeferredShellToolAnchorCandidate> =
+    conversation.messageNodes.flatMap { node ->
+        val message = runCatching { node.currentMessage }.getOrNull() ?: return@flatMap emptyList()
+        message.parts.mapNotNull { part ->
+            val tool = part as? UIMessagePart.Tool ?: return@mapNotNull null
+            if (tool.toolName != "workspace_shell" || !tool.isDeferred) return@mapNotNull null
+            val taskId = deferredShellTaskId(tool) ?: return@mapNotNull null
+            DeferredShellToolAnchorCandidate(
+                taskId = taskId,
+                anchor = ShellRunToolAnchor(
+                    toolCallId = tool.toolCallId,
+                    toolNodeId = node.id,
+                    toolMessageId = message.id,
+                ),
+            )
+        }
+    }
+
+internal fun buildSyntheticAgentEventMessage(event: AgentEventEntity): UIMessage =
+    UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(
+            UIMessagePart.Tool(
+                toolCallId = event.id,
+                toolName = sanitizeSyntheticToolName(event.kind),
+                input = "",
+                metadata = buildJsonObject {
+                    put(SYNTHETIC_KIND_METADATA_KEY, AGENT_EVENT_SYNTHETIC_KIND)
+                    put(AGENT_EVENT_ID_METADATA_KEY, event.id)
+                    put(AGENT_EVENT_KIND_METADATA_KEY, event.kind)
+                },
+                output = listOf(
+                    UIMessagePart.Text(
+                        text = event.payloadJson,
+                    )
+                ),
+            ),
+        ),
+    )
+
+internal fun resolveDeferredShellCompletion(
+    conversation: Conversation,
+    anchor: ShellRunToolAnchor,
+    payloadJson: String,
+): DeferredShellCompletionResolution? {
+    var resolvedNode: MessageNode? = null
+    var shouldContinue = false
+    var foundAnchor = false
+    val updatedNodes = conversation.messageNodes.map { node ->
+        if (node.id != anchor.toolNodeId) return@map node
+        // Only auto-continue when the anchored tool lives in the node's CURRENTLY SELECTED branch.
+        // A deferred shell may sit in a branch alternative the user has since switched away from; we
+        // still resolve its output for history correctness, but generation reads currentMessages
+        // (the selected branch), so continuing on a completion from a non-selected branch would
+        // spuriously generate on the wrong branch.
+        val anchoredMessageIsSelected =
+            node.messages.getOrNull(node.selectIndex)?.id == anchor.toolMessageId
+        val updatedMessages = node.messages.map { message ->
+            if (message.id != anchor.toolMessageId) return@map message
+            var matchedTool = false
+            val updatedParts = message.parts.map { part ->
+                val tool = part as? UIMessagePart.Tool ?: return@map part
+                if (tool.toolCallId != anchor.toolCallId) return@map part
+                matchedTool = true
+                val currentText = (tool.output.singleOrNull() as? UIMessagePart.Text)?.text
+                if (tool.isDeferred) {
+                    shouldContinue = anchoredMessageIsSelected
+                    tool.copy(output = listOf(UIMessagePart.Text(payloadJson))).asResolved()
+                } else if (currentText == payloadJson) {
+                    tool.asResolved()
+                } else {
+                    tool
+                }
+            }
+            if (matchedTool) foundAnchor = true
+            if (matchedTool) message.copy(parts = updatedParts) else message
+        }
+        val updatedNode = node.copy(messages = updatedMessages)
+        if (foundAnchor) resolvedNode = updatedNode
+        updatedNode
+    }
+    val node = resolvedNode ?: return null
+    return DeferredShellCompletionResolution(
+        conversation = conversation.copy(messageNodes = updatedNodes, updateAt = Instant.now()),
+        node = node,
+        messageId = anchor.toolMessageId,
+        continueGeneration = shouldContinue,
+    )
+}
+
+private fun deferredShellTaskId(tool: UIMessagePart.Tool): Uuid? {
+    val text = (tool.output.singleOrNull() as? UIMessagePart.Text)?.text ?: return null
+    return runCatching {
+        Json.parseToJsonElement(text)
+            .jsonObject["taskId"]
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.let { Uuid.parse(it) }
+    }.getOrNull()
+}
 
 /**
  * Whether `withAutomationLease`'s teardown must PRESERVE the per-run grant for an approval-resume
@@ -658,6 +803,7 @@ class ChatService(
     // conversation at an idle turn-end. ChatService owns the drain seam; the store is persistence
     // only.
     private val agentEventStore: AgentEventStore,
+    private val shellRunStore: ShellRunStore,
     // On-device UI automation (#187 v1, read-only). Registry hands out the live, system-instantiated
     // AccessibilityRuntime as a pure backend; the kill-switch dispatches STOP to the active guard(s).
     private val automationRegistry: AutomationRuntimeRegistry,
@@ -673,6 +819,7 @@ class ChatService(
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
+    private val tombstonedConversations = ConcurrentHashMap<Uuid, Unit>()
 
     // In-flight forwarded CHILD approvals (SPEC.md M4 / Gap A), keyed taskId/childToolCallId.
     // The waiter suspends inside the live generation; handleToolApproval resolves it IN PLACE —
@@ -795,9 +942,9 @@ class ChatService(
         }
     }
 
-    private fun removeSession(conversationId: Uuid) {
+    private fun removeSession(conversationId: Uuid, force: Boolean = false) {
         val session = sessions[conversationId] ?: return
-        if (session.isInUse) {
+        if (!force && session.isInUse) {
             Log.d(TAG, "removeSession: skipped $conversationId (still in use)")
             return
         }
@@ -967,8 +1114,7 @@ class ChatService(
 
             val currentConversation = session.state.value
             val settings = settingsStore.settingsFlow.first()
-            val assistant = settings.getAssistantById(currentConversation.assistantId)
-                ?: settings.getCurrentAssistant()
+            val assistant = settings.getAssistantByIdOrCurrent(currentConversation.assistantId)
             val processedContent = preprocessUserInputParts(content, assistant)
 
             // UserPromptSubmit hooks (#200 T8): the send seam. Injected additionalContext is
@@ -1161,7 +1307,7 @@ class ChatService(
 
     /**
      * Drain ONE pending agent-event at a turn-end seam (issue #290). Claims the oldest PENDING event,
-     * appends its visible synthetic [MessageRole.USER] message (carrying the SYNTHETIC_DISTINCTNESS
+     * appends its visible synthetic [MessageRole.ASSISTANT] message (carrying the SYNTHETIC_DISTINCTNESS
      * part metadata so later FTS/stats/sanitizer filters have a stable hook), and marks it CONSUMED —
      * all in ONE store transaction, so a second drain or a startup replay racing the same row is a
      * no-op (AT_MOST_ONCE). Then continues the model via [handleMessageComplete] with
@@ -1178,39 +1324,106 @@ class ChatService(
         if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return
 
         val outcome = agentEventStore.claimAndAppendAndConsume(conversationId) { event ->
-            val syntheticMessage = UIMessage(
-                role = MessageRole.USER,
-                parts = listOf(
-                    UIMessagePart.Text(
-                        text = event.payloadJson,
-                        metadata = buildJsonObject {
-                            put(SYNTHETIC_KIND_METADATA_KEY, AGENT_EVENT_SYNTHETIC_KIND)
-                            put(AGENT_EVENT_ID_METADATA_KEY, event.id)
-                            put(AGENT_EVENT_KIND_METADATA_KEY, event.kind)
-                        },
+            val persistedConversation = conversationRepo.getConversationById(conversationId)
+            if (isConversationTombstoned(conversationId) || persistedConversation == null) {
+                return@claimAndAppendAndConsume ClaimAppendAction.Terminalize(
+                    AgentEventTerminalStatus.CANCELLED,
+                )
+            }
+
+            if (runCatching { Json.parseToJsonElement(event.payloadJson) }.isFailure) {
+                return@claimAndAppendAndConsume ClaimAppendAction.Terminalize(
+                    AgentEventTerminalStatus.FAILED,
+                )
+            }
+
+            val alreadyVisible = findSyntheticNodeAndMessageIds(persistedConversation, event)
+            if (alreadyVisible != null) {
+                val (nodeId, messageId) = alreadyVisible
+                return@claimAndAppendAndConsume ClaimAppendAction.Append(
+                    synthetic = SyntheticAppendResult(
+                        syntheticNodeId = nodeId.toString(),
+                        syntheticMessageId = messageId.toString(),
+                    ),
+                    continueGeneration = false,
+                )
+            }
+
+            if (event.kind == ShellCompletion.KIND) {
+                val taskId = shellCompletionTaskId(event.payloadJson)
+                val anchor = taskId?.let { id ->
+                    shellRunStore.getToolAnchor(id)
+                        ?: findDeferredShellToolAnchors(persistedConversation).firstOrNull { it.taskId == id }?.anchor
+                }
+                val resolution = anchor?.let {
+                    resolveDeferredShellCompletion(
+                        conversation = persistedConversation,
+                        anchor = it,
+                        payloadJson = event.payloadJson,
                     )
+                }
+                if (resolution != null) {
+                    conversationRepo.updateMessageNode(resolution.conversation, resolution.node)
+                    return@claimAndAppendAndConsume ClaimAppendAction.Append(
+                        synthetic = SyntheticAppendResult(
+                            syntheticNodeId = resolution.node.id.toString(),
+                            syntheticMessageId = resolution.messageId.toString(),
+                        ),
+                        continueGeneration = resolution.continueGeneration,
+                    )
+                }
+            }
+
+            val syntheticMessage = buildSyntheticAgentEventMessage(event)
+            val syntheticNode = syntheticMessage.toMessageNode()
+            conversationRepo.appendMessageNode(
+                persistedConversation.copy(messageNodes = persistedConversation.messageNodes + syntheticNode),
+                syntheticNode,
+            )
+            ClaimAppendAction.Append(
+                synthetic = SyntheticAppendResult(
+                    syntheticNodeId = syntheticNode.id.toString(),
+                    syntheticMessageId = syntheticMessage.id.toString(),
                 ),
-            )
-            val node = syntheticMessage.toMessageNode()
-            saveConversation(
-                conversationId,
-                getConversationFlow(conversationId).value.let { current ->
-                    current.copy(messageNodes = current.messageNodes + node)
-                },
-            )
-            SyntheticAppendResult(
-                syntheticNodeId = node.id.toString(),
-                syntheticMessageId = syntheticMessage.id.toString(),
             )
         }
 
         if (outcome is ClaimOutcome.Delivered) {
+            refreshSessionAndFts(conversationId)
             // Continue the model on the just-appended synthetic message. runTurnEndJobs = false: the
             // continuation does not own the turn-end-job launch here, and — crucially — does not
             // recurse into another drain (one event per continuation, productDecision #5).
-            handleMessageComplete(conversationId, runTurnEndJobs = false)
+            if (outcome.continueGeneration) {
+                handleMessageComplete(conversationId, runTurnEndJobs = false)
+            }
         }
     }
+
+    private suspend fun refreshSessionAndFts(conversationId: Uuid) {
+        val persistedConversation = conversationRepo.getConversationById(conversationId) ?: return
+        updateConversationStateOnly(conversationId, persistedConversation)
+        conversationRepo.indexConversationById(conversationId)
+    }
+
+    private fun findSyntheticNodeAndMessageIds(
+        conversation: Conversation,
+        event: AgentEventEntity,
+    ): Pair<Uuid, Uuid>? =
+        conversation.messageNodes
+            .asSequence()
+            .flatMap { node ->
+                node.messages
+                    .asSequence()
+                    .mapNotNull { message ->
+                        val marker = message.syntheticAgentEventMarker()
+                        if (marker?.first == event.kind && marker.second == event.id) {
+                            node.id to message.id
+                        } else {
+                            null
+                        }
+                    }
+            }
+            .firstOrNull()
 
     // 自动压缩历史的触发与执行（design #193 Stage 1：token 触发器 + 熔断器）。
     //
@@ -1235,7 +1448,7 @@ class ChatService(
         val conversation = session.state.value
         val settings = settingsStore.settingsFlow.first()
         // 即将接收下一次请求的对话模型——其窗口才是触发判定的依据（压缩模型可能不同，与触发无关）。
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+        val model = settings.getChatModelForAssistant(assistant) ?: return
 
         val window = getContextWindowForModel(model)
         val messages = conversation.currentMessages
@@ -1632,9 +1845,8 @@ class ChatService(
     ): Boolean {
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
-        val assistant = settings.getAssistantById(initialConversation.assistantId)
-            ?: settings.getCurrentAssistant()
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return false
+        val assistant = settings.getAssistantByIdOrCurrent(initialConversation.assistantId)
+        val model = settings.getChatModelForAssistant(assistant) ?: return false
 
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
@@ -2353,6 +2565,12 @@ class ChatService(
     }
 
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
+        // A tombstoned id never saves here: during delete the row still EXISTS until the repo delete
+        // commits, so an in-flight finalizer (generation onCompletion, title/suggestion job) must be
+        // blocked unconditionally — keying off row-existence would race the delete and resurrect the
+        // chat. The tombstone is cleared ONLY by the explicit restore path ([restoreConversation]).
+        if (isConversationTombstoned(conversation.id)) return
+
         val exists = conversationRepo.existsConversationById(conversation.id)
         if (!exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
             return // 新会话且为空时不保存
@@ -2365,6 +2583,54 @@ class ChatService(
         } else {
             conversationRepo.updateConversation(conversation)
         }
+        attachDeferredShellToolAnchors(conversation)
+    }
+
+    private suspend fun attachDeferredShellToolAnchors(conversation: Conversation) {
+        findDeferredShellToolAnchors(conversation).forEach { candidate ->
+            val attached = shellRunStore.attachToolAnchor(candidate.taskId, candidate.anchor)
+            if (!attached) {
+                Log.w(
+                    TAG,
+                    "attachDeferredShellToolAnchors: failed to attach anchor for task ${candidate.taskId}"
+                )
+            }
+        }
+    }
+
+    private fun isConversationTombstoned(conversationId: Uuid): Boolean {
+        return tombstonedConversations.containsKey(conversationId)
+    }
+
+    // Serializes delete vs restore so an Undo cannot interleave with an in-flight delete: History
+    // fires delete fire-and-forget and offers Undo immediately, and deleteConversation SUSPENDS (it
+    // joins the generation job before the repo delete). Without this lock, a restore in that window
+    // could clear the tombstone + re-insert and then the still-running delete would remove the
+    // restored row (or vice versa). The lock guarantees restore observes a fully-committed delete.
+    private val conversationDeleteRestoreMutex = Mutex()
+
+    suspend fun deleteConversation(conversation: Conversation) = conversationDeleteRestoreMutex.withLock {
+        tombstonedConversations[conversation.id] = Unit
+        stopGeneration(conversation.id)
+        removeSession(conversation.id, force = true)
+        conversationRepo.deleteConversation(conversation)
+    }
+
+    /**
+     * Restore a previously-deleted conversation (History "Undo"). Runs under the same mutex as
+     * [deleteConversation], so a restore that races an in-flight delete waits for the delete to fully
+     * commit first.
+     *
+     * Invariant: the tombstone is cleared ONLY AFTER the restored row is durably re-inserted. Order
+     * matters — insert first, then clear. While the insert is in flight the id is still tombstoned, so
+     * a stale app-scope save (e.g. a post-turn suggestion job holding pre-delete state) is blocked by
+     * [saveConversation]'s guard instead of racing in an insert; once the tombstone is cleared the row
+     * already exists, so any later save takes the update path and can never resurrect via insert. This
+     * removes the save/restore window without dragging the hot-path [saveConversation] under the mutex.
+     */
+    suspend fun restoreConversation(conversation: Conversation) = conversationDeleteRestoreMutex.withLock {
+        conversationRepo.insertConversation(conversation)
+        tombstonedConversations.remove(conversation.id)
     }
 
     // ---- 翻译消息 ----
@@ -2430,8 +2696,7 @@ class ChatService(
 
         val currentConversation = getConversationFlow(conversationId).value
         val settings = settingsStore.settingsFlow.first()
-        val assistant = settings.getAssistantById(currentConversation.assistantId)
-            ?: settings.getCurrentAssistant()
+        val assistant = settings.getAssistantByIdOrCurrent(currentConversation.assistantId)
         val processedParts = preprocessUserInputParts(parts, assistant)
 
         // role 占位：ConversationMutations.editMessage 会对每个命中节点用 node.role 重新落款，

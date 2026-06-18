@@ -4,6 +4,7 @@ import me.rerere.rikkahub.data.db.dao.AgentEventDAO
 import me.rerere.rikkahub.data.db.entity.AgentEventEntity
 import me.rerere.rikkahub.data.db.entity.AgentEventStatus
 import me.rerere.rikkahub.data.repository.BoardTransactionRunner
+import kotlinx.coroutines.CancellationException
 import kotlin.uuid.Uuid
 
 /**
@@ -43,7 +44,7 @@ interface AgentEventStore {
      */
     suspend fun claimAndAppendAndConsume(
         conversationId: Uuid,
-        append: suspend (AgentEventEntity) -> SyntheticAppendResult,
+        append: suspend (AgentEventEntity) -> ClaimAppendAction,
     ): ClaimOutcome
 
     /** The PENDING events for a conversation, oldest first (replay/inspection scan). */
@@ -62,6 +63,24 @@ data class SyntheticAppendResult(
     val syntheticMessageId: String,
 )
 
+/** Terminalization outcome for a pending event. */
+enum class AgentEventTerminalStatus {
+    CANCELLED,
+    FAILED,
+}
+
+private class ClaimLostWithinTransactionException : RuntimeException()
+
+/** What the store should do with a claimed pending event. */
+sealed interface ClaimAppendAction {
+    data class Append(
+        val synthetic: SyntheticAppendResult,
+        val continueGeneration: Boolean = true,
+    ) : ClaimAppendAction
+
+    data class Terminalize(val terminalStatus: AgentEventTerminalStatus) : ClaimAppendAction
+}
+
 /** The outcome of one [AgentEventStore.claimAndAppendAndConsume] attempt. */
 sealed interface ClaimOutcome {
     /** No PENDING event to claim — an empty-queue drain is a no-op. */
@@ -73,6 +92,7 @@ sealed interface ClaimOutcome {
     data class Delivered(
         val event: AgentEventEntity,
         val synthetic: SyntheticAppendResult,
+        val continueGeneration: Boolean = true,
     ) : ClaimOutcome
 
     /**
@@ -80,6 +100,11 @@ sealed interface ClaimOutcome {
      * zero rows). The append was rolled back with the transaction; nothing was delivered.
      */
     data object Lost : ClaimOutcome
+
+    data class Terminalized(
+        val event: AgentEventEntity,
+        val terminalStatus: AgentEventTerminalStatus,
+    ) : ClaimOutcome
 }
 
 /**
@@ -121,26 +146,55 @@ class RoomAgentEventStore(
 
     override suspend fun claimAndAppendAndConsume(
         conversationId: Uuid,
-        append: suspend (AgentEventEntity) -> SyntheticAppendResult,
-    ): ClaimOutcome = transactions.inTransaction {
-        val claimed = dao.oldestPending(conversationId.toString())
-            ?: return@inTransaction ClaimOutcome.Empty
-        val synthetic = append(claimed)
-        val won = dao.markConsumed(
-            id = claimed.id,
-            syntheticNodeId = synthetic.syntheticNodeId,
-            syntheticMessageId = synthetic.syntheticMessageId,
-            consumedAt = now(),
-        )
-        if (won == 1) {
-            ClaimOutcome.Delivered(event = claimed, synthetic = synthetic)
-        } else {
-            // A concurrent drain flipped the row first. The runner serializes transactions, so this
-            // is the defensive branch for a non-serializing runner; the append rolls back with the
-            // transaction. Surfacing Lost lets the caller drop the (now-rolled-back) synthetic
-            // append instead of treating it as delivered.
-            ClaimOutcome.Lost
+        append: suspend (AgentEventEntity) -> ClaimAppendAction,
+    ): ClaimOutcome = try {
+        transactions.inTransaction {
+            val claimed = dao.oldestPending(conversationId.toString())
+                ?: return@inTransaction ClaimOutcome.Empty
+            val appendAction = try {
+                append(claimed)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                ClaimAppendAction.Terminalize(AgentEventTerminalStatus.FAILED)
+            }
+            when (appendAction) {
+                is ClaimAppendAction.Append -> {
+                    val won = dao.markConsumed(
+                        id = claimed.id,
+                        syntheticNodeId = appendAction.synthetic.syntheticNodeId,
+                        syntheticMessageId = appendAction.synthetic.syntheticMessageId,
+                        consumedAt = now(),
+                    )
+                    if (won == 1) {
+                        ClaimOutcome.Delivered(
+                            event = claimed,
+                            synthetic = appendAction.synthetic,
+                            continueGeneration = appendAction.continueGeneration,
+                        )
+                    } else {
+                        throw ClaimLostWithinTransactionException()
+                    }
+                }
+
+                is ClaimAppendAction.Terminalize -> {
+                    val won = when (appendAction.terminalStatus) {
+                        AgentEventTerminalStatus.CANCELLED -> dao.markCancelled(
+                            id = claimed.id,
+                            cancelledAt = now(),
+                        )
+
+                        AgentEventTerminalStatus.FAILED -> dao.markFailed(
+                            id = claimed.id,
+                            cancelledAt = now(),
+                        )
+                    }
+                    if (won == 1) ClaimOutcome.Terminalized(claimed, appendAction.terminalStatus) else ClaimOutcome.Lost
+                }
+            }
         }
+    } catch (_: ClaimLostWithinTransactionException) {
+        ClaimOutcome.Lost
     }
 
     override suspend fun listPending(conversationId: Uuid): List<AgentEventEntity> =

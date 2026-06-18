@@ -357,6 +357,7 @@ class ConversationSanitizeTest {
             shellOutputText(sanitized).contains("cancelled"),
         )
         assertTrue("the shell is made executed (balanced) by the running marker", shell.isExecuted)
+        assertFalse("taskId-less finalizer markers are not anchor-resolvable and must not be deferred", shell.isDeferred)
         assertEquals(
             "the marker is the honest {status:running}",
             SHELL_BACKGROUNDED_MARKER,

@@ -3,6 +3,9 @@ package me.rerere.rikkahub.data.repository.fakes
 import me.rerere.rikkahub.data.db.dao.ShellRunDAO
 import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 import me.rerere.rikkahub.data.db.entity.ShellRunStatus
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 
 /**
  * In-memory [ShellRunDAO] for JVM tests (issue #291; CI runs no instrumented tests, so the shell-run
@@ -19,8 +22,10 @@ import me.rerere.rikkahub.data.db.entity.ShellRunStatus
 class FakeShellRunDAO : ShellRunDAO {
     private val lock = Any()
     private val rows = LinkedHashMap<String, ShellRunEntity>()
+    private val rowsState = MutableStateFlow<Map<String, ShellRunEntity>>(emptyMap())
 
     private val runningNames = ShellRunStatus.RUNNING.map { it.name }.toSet()
+    private val backgroundNames = setOf(ShellRunStatus.DETACHED.name, ShellRunStatus.BACKGROUND_RUNNING.name)
 
     override suspend fun insert(entity: ShellRunEntity) {
         synchronized(lock) {
@@ -28,10 +33,38 @@ class FakeShellRunDAO : ShellRunDAO {
             // so a collision here is a test bug worth surfacing rather than silently ignoring.
             require(!rows.containsKey(entity.taskId)) { "duplicate taskId ${entity.taskId}" }
             rows[entity.taskId] = entity
+            publishLocked()
         }
     }
 
     override suspend fun getById(taskId: String): ShellRunEntity? = synchronized(lock) { rows[taskId] }
+
+    override suspend fun attachToolAnchor(
+        taskId: String,
+        toolCallId: String,
+        toolNodeId: String,
+        toolMessageId: String,
+    ): Int = synchronized(lock) {
+        val existing = rows[taskId] ?: return 0
+        val isEmpty = existing.toolCallId == null && existing.toolNodeId == null && existing.toolMessageId == null
+        val isSame = existing.toolCallId == toolCallId &&
+            existing.toolNodeId == toolNodeId &&
+            existing.toolMessageId == toolMessageId
+        if (!isEmpty && !isSame) return 0
+        rows[taskId] = existing.copy(
+            toolCallId = toolCallId,
+            toolNodeId = toolNodeId,
+            toolMessageId = toolMessageId,
+        )
+        publishLocked()
+        1
+    }
+
+    override suspend fun getAnchoredByTaskId(taskId: String): ShellRunEntity? = synchronized(lock) {
+        rows[taskId]?.takeIf {
+            it.toolCallId != null && it.toolNodeId != null && it.toolMessageId != null
+        }
+    }
 
     override suspend fun markForegroundWaiting(taskId: String, startedAt: Long, pidMeta: String?): Int =
         synchronized(lock) {
@@ -42,6 +75,7 @@ class FakeShellRunDAO : ShellRunDAO {
                 startedAt = startedAt,
                 pidMeta = pidMeta,
             )
+            publishLocked()
             1
         }
 
@@ -56,6 +90,7 @@ class FakeShellRunDAO : ShellRunDAO {
                 detachedAt = detachedAt,
                 pidMeta = pidMeta,
             )
+            publishLocked()
             1
         }
 
@@ -63,6 +98,7 @@ class FakeShellRunDAO : ShellRunDAO {
         val existing = rows[taskId] ?: return 0
         if (existing.status != ShellRunStatus.DETACHED.name) return 0
         rows[taskId] = existing.copy(status = ShellRunStatus.BACKGROUND_RUNNING.name)
+        publishLocked()
         1
     }
 
@@ -85,6 +121,7 @@ class FakeShellRunDAO : ShellRunDAO {
             killReason = killReason,
             completedAt = completedAt,
         )
+        publishLocked()
         1
     }
 
@@ -92,9 +129,17 @@ class FakeShellRunDAO : ShellRunDAO {
         rows.values.filter { it.status in runningNames }.toList()
     }
 
+    override fun observeBackgroundJobs(conversationId: String): Flow<List<ShellRunEntity>> =
+        rowsState.map { snapshot ->
+            snapshot.values
+                .filter { it.conversationId == conversationId && it.status in backgroundNames }
+                .sortedByDescending { it.detachedAt ?: it.startedAt ?: it.createdAt }
+        }
+
     override suspend fun deleteByConversationId(conversationId: String): Int = synchronized(lock) {
         val ids = rows.values.filter { it.conversationId == conversationId }.map { it.taskId }
         ids.forEach { rows.remove(it) }
+        publishLocked()
         ids.size
     }
 
@@ -103,7 +148,12 @@ class FakeShellRunDAO : ShellRunDAO {
     fun restore(snapshot: StateSnapshot) = synchronized(lock) {
         rows.clear()
         rows.putAll(snapshot.rows)
+        publishLocked()
     }
 
     data class StateSnapshot(val rows: Map<String, ShellRunEntity>)
+
+    private fun publishLocked() {
+        rowsState.value = rows.toMap()
+    }
 }

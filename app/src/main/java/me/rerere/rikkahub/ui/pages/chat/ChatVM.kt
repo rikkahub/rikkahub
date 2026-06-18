@@ -25,6 +25,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -39,8 +40,10 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.mutation.ConversationMutations
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.common.state.UiState
@@ -59,6 +62,8 @@ class ChatVM(
     private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
+    private val shellRunStore: ShellRunStore,
+    private val workspaceRepository: WorkspaceRepository,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -90,6 +95,16 @@ class ChatVM(
             emit(emptyMap())
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    val backgroundJobs: StateFlow<List<UiBackgroundJob>> = shellRunStore
+        .observeBackgroundJobs(_conversationId)
+        .map { rows -> mapBackgroundShellJobs(rows, _conversationId.toString()) }
+        .catch { e ->
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+            android.util.Log.e(TAG, "backgroundJobs flow failed; degrading to empty list", e)
+            emit(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
         // 添加对话引用
@@ -274,6 +289,14 @@ class ChatVM(
         chatService.setPendingAutomationGrant(_conversationId, grant)
     }
 
+    suspend fun tailBackgroundJob(job: UiBackgroundJob): String =
+        workspaceRepository.tailShellRun(
+            id = job.workspaceId,
+            conversationId = _conversationId,
+            taskId = job.taskId,
+            maxBytes = BACKGROUND_JOB_TAIL_MAX_BYTES,
+        )
+
     fun saveConversationAsync() {
         launchVm(onError = { reportOperationError(it) }) {
             chatService.saveConversation(_conversationId, conversation.value)
@@ -289,7 +312,7 @@ class ChatVM(
 
     fun deleteConversation(conversation: Conversation) {
         launchVm(onError = { reportOperationError(it) }) {
-            conversationRepo.deleteConversation(conversation)
+            chatService.deleteConversation(conversation)
         }
     }
 
@@ -299,15 +322,23 @@ class ChatVM(
         }
     }
 
-    fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
+    fun moveConversationToAssistant(target: Conversation, targetAssistantId: Uuid) {
         launchVm(onError = { reportOperationError(it) }) {
-            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launchVm
-            val updatedConversation = conversationFull.copy(assistantId = targetAssistantId)
-            if (conversation.id == _conversationId) {
-                chatService.saveConversation(_conversationId, updatedConversation)
+            if (target.id == _conversationId) {
+                // CAS-fold the assistant rebind onto the LATEST live state so a concurrent streaming
+                // publish can't be clobbered (no session.state reassignment from a stale DB snapshot),
+                // then persist the folded result. Switching mid-turn is safe: the in-flight turn already
+                // captured its assistant/model, so it finishes unchanged and only the NEXT turn rebinds.
+                chatService.updateConversationState(_conversationId) {
+                    ConversationMutations.moveToAssistant(it, targetAssistantId)
+                }
+                conversationRepo.updateConversation(conversation.value)
                 settingsStore.updateAssistant(targetAssistantId)
             } else {
-                conversationRepo.updateConversation(updatedConversation)
+                val conversationFull = conversationRepo.getConversationById(target.id) ?: return@launchVm
+                conversationRepo.updateConversation(
+                    ConversationMutations.moveToAssistant(conversationFull, targetAssistantId)
+                )
             }
         }
     }
@@ -394,6 +425,8 @@ class ChatVM(
     }
 
 }
+
+private const val BACKGROUND_JOB_TAIL_MAX_BYTES = 4096
 
 /**
  * The sinks a selected verb requires in the grant's budget, mirroring the kernel's verb→sink

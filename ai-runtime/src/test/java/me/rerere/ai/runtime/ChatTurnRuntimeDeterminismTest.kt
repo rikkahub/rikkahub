@@ -339,6 +339,34 @@ class ChatTurnRuntimeDeterminismTest {
     }
 
     @Test
+    fun `deferred tool in a non-last message pauses before provider send`() = runBlocking {
+        val taskId = Uuid.random()
+        val deferredShell = UIMessagePart.Tool(
+            toolCallId = "call-shell",
+            toolName = "workspace_shell",
+            input = """{"command":"sleep 5","detachAfterSeconds":1}""",
+            output = listOf(UIMessagePart.Text("""{"taskId":"$taskId","status":"running"}""")),
+        ).asDeferred()
+        val messages = listOf(
+            UIMessage.user("run it"),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(deferredShell)),
+            UIMessage.user("new user prompt while shell is still running"),
+        )
+        val fake = FakeProvider(listOf(chunk(UIMessagePart.Text("should not send"))))
+
+        val chunks = runtime(fake, emptyConversationReader()).run(
+            turn = TurnConfig(defaultModelId = model.id, providers = listOf(provider), assistants = emptyList()),
+            model = model,
+            messages = messages,
+            assistant = assistant(),
+            transforms = identityTransforms,
+        ).toList().filterIsInstance<GenerationChunk.Messages>()
+
+        assertTrue("no provider update should be emitted while any deferred tool is unresolved", chunks.isEmpty())
+        assertNull("provider must not receive the non-terminal running tool", fake.sentMessages)
+    }
+
+    @Test
     fun `knowledge source framing appears in the provider prompt with and without tools`() {
         runBlocking {
             checkAll(100, Arb.string(1..240), Arb.boolean()) { payload, hasTools ->

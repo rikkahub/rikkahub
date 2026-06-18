@@ -131,6 +131,7 @@ val appModule = module {
     // default (spec assumption 5).
     viewModel { params ->
         val conversationRepo = get<me.rerere.rikkahub.data.repository.ConversationRepository>()
+        val chatService = get<ChatService>()
         ScheduleVM(
             targetAssistantId = params.get<Uuid>(0),
             initialConversationId = params.get<Uuid?>(1),
@@ -145,7 +146,7 @@ val appModule = module {
                 conversation.id
             },
             rollbackConversation = { id ->
-                conversationRepo.getConversationById(id)?.let { conversationRepo.deleteConversation(it) }
+                conversationRepo.getConversationById(id)?.let { chatService.deleteConversation(it) }
             },
         )
     }
@@ -194,6 +195,7 @@ val appModule = module {
             executionHandles = get(),
             taskRunStore = get(),
             agentEventStore = get(),
+            shellRunStore = get(),
             automationRegistry = get(),
             automationKillSwitch = get(),
             hookDispatcher = get()

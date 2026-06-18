@@ -12,6 +12,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.ai.core.computeAllowedTokens
@@ -160,6 +163,11 @@ class ChatTurnRuntime(
                 addAll(tools)
             }
 
+            if (messages.any { it.getTools().any { tool -> tool.isDeferred } }) {
+                logSink.info(TAG, "generateText: waiting for deferred tool output")
+                break
+            }
+
             // Check if we have tool calls ready to continue after user interaction.
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
                 it.canResumeExecution
@@ -278,6 +286,10 @@ class ChatTurnRuntime(
             }
             messages = messages.dropLast(1) + lastMessage.copy(parts = updatedParts)
             emit(GenerationChunk.Messages(transforms.transformOutput(messages)))
+            if (executedTools.any { it.isDeferred }) {
+                logSink.info(TAG, "generateText: paused for deferred tool output")
+                break
+            }
         }
 
     }.flowOn(Dispatchers.IO)
@@ -669,7 +681,12 @@ internal suspend fun executeTool(
                 // and sanitizeForUpload misclassifies it as an orphan tool_use
                 // and drops the branch (data loss).
                 val output = result.ifEmpty { emptyToolResultPlaceholder(json) }
-                tool.copy(output = output)
+                val executedTool = tool.copy(output = output)
+                if (isDeferredWorkspaceShellOutput(tool, output, json)) {
+                    executedTool.asDeferred()
+                } else {
+                    executedTool
+                }
             }.getOrElse {
                 // cancellation must propagate; otherwise stop-generation is misreported as a tool execution error
                 if (it is CancellationException) throw it
@@ -678,6 +695,18 @@ internal suspend fun executeTool(
             }
         }
     }
+}
+
+internal fun isDeferredWorkspaceShellOutput(
+    tool: UIMessagePart.Tool,
+    output: List<UIMessagePart>,
+    json: Json,
+): Boolean {
+    if (tool.toolName != "workspace_shell") return false
+    val text = (output.singleOrNull() as? UIMessagePart.Text)?.text ?: return false
+    val payload = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return false
+    return payload["status"]?.jsonPrimitive?.contentOrNull == "running" &&
+        payload["taskId"]?.jsonPrimitive?.contentOrNull?.isNotBlank() == true
 }
 
 /**

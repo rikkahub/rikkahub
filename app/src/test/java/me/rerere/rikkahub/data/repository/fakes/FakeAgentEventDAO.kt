@@ -67,8 +67,32 @@ class FakeAgentEventDAO : AgentEventDAO {
             syntheticNodeId = syntheticNodeId,
             syntheticMessageId = syntheticMessageId,
             consumedAt = consumedAt,
+            cancelledAt = null,
         )
         1
+    }
+
+    override suspend fun markCancelled(
+        id: String,
+        cancelledAt: Long,
+    ): Int = markTerminal(id, AgentEventStatus.CANCELLED.name, cancelledAt)
+
+    override suspend fun markFailed(
+        id: String,
+        cancelledAt: Long,
+    ): Int = markTerminal(id, AgentEventStatus.FAILED.name, cancelledAt)
+
+    private fun markTerminal(id: String, status: String, cancelledAt: Long): Int {
+        val existing = events[id] ?: return 0
+        if (existing.status != AgentEventStatus.PENDING.name) return 0
+        events[id] = existing.copy(
+            status = status,
+            syntheticNodeId = null,
+            syntheticMessageId = null,
+            cancelledAt = cancelledAt,
+            consumedAt = null,
+        )
+        return 1
     }
 
     override suspend fun nextEnqueueSeq(conversationId: String): Long = synchronized(lock) {

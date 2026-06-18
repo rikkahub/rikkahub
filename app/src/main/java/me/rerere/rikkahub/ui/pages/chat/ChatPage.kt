@@ -2,6 +2,11 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -46,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -55,12 +61,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Zap
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
@@ -74,8 +81,8 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.AutomationVerb
 import me.rerere.rikkahub.ui.pages.assistant.detail.DEFAULT_MAX_STEPS
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getAssistantByIdOrCurrent
+import me.rerere.rikkahub.data.datastore.getChatModelForAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
@@ -110,9 +117,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
-    val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
+    val backgroundJobs by vm.backgroundJobs.collectAsStateWithLifecycle()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -205,9 +212,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     vm = vm,
                     chatListState = chatListState,
                     enableWebSearch = enableWebSearch,
-                    currentChatModel = currentChatModel,
                     bigScreen = true,
                     errors = errors,
+                    backgroundJobs = backgroundJobs,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
                 )
@@ -237,9 +244,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     vm = vm,
                     chatListState = chatListState,
                     enableWebSearch = enableWebSearch,
-                    currentChatModel = currentChatModel,
                     bigScreen = false,
                     errors = errors,
+                    backgroundJobs = backgroundJobs,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
                 )
@@ -268,8 +275,8 @@ private fun ChatPageContent(
     vm: ChatVM,
     chatListState: LazyListState,
     enableWebSearch: Boolean,
-    currentChatModel: Model?,
     errors: List<ChatError>,
+    backgroundJobs: List<UiBackgroundJob>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
 ) {
@@ -278,14 +285,17 @@ private fun ChatPageContent(
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var showBoard by rememberSaveable { mutableStateOf(false) }
     var showAutomationGrant by rememberSaveable { mutableStateOf(false) }
+    var showBackgroundJobs by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     val selectModelFirstMessage = stringResource(R.string.chat_page_select_model_first)
+    val activeAssistant = setting.getAssistantByIdOrCurrent(conversation.assistantId)
+    val activeChatModel = setting.getChatModelForAssistant(activeAssistant)
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     // Single submit path for tap and long-press send; only the answer flag differs.
     fun submitInput(answer: Boolean) {
-        if (shouldBlockSubmitForMissingModel(answer = answer, hasChatModel = currentChatModel != null)) {
+        if (shouldBlockSubmitForMissingModel(answer = answer, hasChatModel = activeChatModel != null)) {
             toaster.show(selectModelFirstMessage, type = ToastType.Error)
             return
         }
@@ -328,6 +338,10 @@ private fun ChatPageContent(
                     onOpenAutomationGrant = {
                         showAutomationGrant = true
                     },
+                    backgroundJobs = backgroundJobs,
+                    onOpenBackgroundJobs = {
+                        showBackgroundJobs = true
+                    },
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     }
@@ -355,7 +369,7 @@ private fun ChatPageContent(
                         submitInput(answer = false)
                     },
                     onUpdateChatModel = {
-                        vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
+                        vm.setChatModel(assistant = activeAssistant, model = it)
                     },
                     onUpdateAssistant = {
                         vm.updateSettings(
@@ -369,6 +383,9 @@ private fun ChatPageContent(
                                 }
                             )
                         )
+                    },
+                    onSwitchAssistant = {
+                        vm.moveConversationToAssistant(conversation, it.id)
                     },
                     onUpdateConversation = {
                         vm.updateConversation(it)
@@ -484,6 +501,14 @@ private fun ChatPageContent(
             AutomationGrantSheet(
                 vm = vm,
                 onDismiss = { showAutomationGrant = false },
+            )
+        }
+
+        if (showBackgroundJobs) {
+            BackgroundShellJobsSheet(
+                jobs = backgroundJobs,
+                onDismiss = { showBackgroundJobs = false },
+                loadTail = { vm.tailBackgroundJob(it) },
             )
         }
     }
@@ -662,6 +687,8 @@ private fun TopBar(
     onClickMenu: () -> Unit,
     onOpenBoard: () -> Unit,
     onOpenAutomationGrant: () -> Unit,
+    backgroundJobs: List<UiBackgroundJob>,
+    onOpenBackgroundJobs: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -697,8 +724,8 @@ private fun TopBar(
                 color = Color.Transparent,
             ) {
                 Column {
-                    val assistant = settings.getCurrentAssistant()
-                    val model = settings.getCurrentChatModel()
+                    val assistant = settings.getAssistantByIdOrCurrent(conversation.assistantId)
+                    val model = settings.getChatModelForAssistant(assistant)
                     val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
                     Text(
                         text = conversation.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
@@ -721,6 +748,31 @@ private fun TopBar(
             }
         },
         actions = {
+            if (isBackgroundShellJobIndicatorVisible(backgroundJobs)) {
+                val transition = rememberInfiniteTransition(label = "Background jobs pulse")
+                val alpha by transition.animateFloat(
+                    initialValue = 0.45f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 700),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                    label = "Background jobs alpha",
+                )
+                IconButton(
+                    onClick = {
+                        onOpenBackgroundJobs()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Lucide.Zap,
+                        contentDescription = "Background jobs",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.graphicsLayer { this.alpha = alpha },
+                    )
+                }
+            }
+
             IconButton(
                 onClick = {
                     onOpenBoard()

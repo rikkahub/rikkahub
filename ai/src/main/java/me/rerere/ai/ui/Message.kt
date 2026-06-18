@@ -10,6 +10,9 @@ import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
@@ -19,6 +22,8 @@ import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
 private const val TAG = "UIMessage"
+private const val TOOL_OUTPUT_STATE_METADATA_KEY = "toolOutputState"
+private const val TOOL_OUTPUT_STATE_DEFERRED = "deferred"
 
 // 公共消息抽象, 具体的Provider实现会转换为API接口需要的DTO
 @Serializable
@@ -509,6 +514,13 @@ sealed class UIMessagePart {
         /** Whether the tool has been executed (has output) */
         val isExecuted: Boolean get() = output.isNotEmpty()
 
+        /** Whether the output is a non-terminal deferred result that must pause provider continuation. */
+        val isDeferred: Boolean
+            get() = metadata
+                ?.get(TOOL_OUTPUT_STATE_METADATA_KEY)
+                ?.jsonPrimitive
+                ?.contentOrNull == TOOL_OUTPUT_STATE_DEFERRED
+
         /** Whether the tool is pending user approval */
         val isPending: Boolean get() = approvalState is ToolApprovalState.Pending
 
@@ -538,6 +550,18 @@ sealed class UIMessagePart {
                 it.finished = this.finished || other.finished
             }
         }
+
+        fun asDeferred(): Tool = copy(
+            metadata = (metadata ?: JsonObject(emptyMap())).let { current ->
+                JsonObject(current + (TOOL_OUTPUT_STATE_METADATA_KEY to JsonPrimitive(TOOL_OUTPUT_STATE_DEFERRED)))
+            }
+        )
+
+        fun asResolved(): Tool = copy(
+            metadata = metadata
+                ?.filterKeys { it != TOOL_OUTPUT_STATE_METADATA_KEY }
+                ?.let(::JsonObject)
+        )
     }
 }
 

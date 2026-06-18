@@ -5,6 +5,7 @@ import me.rerere.rikkahub.data.db.dao.ShellRunDAO
 import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 import me.rerere.rikkahub.data.db.entity.ShellRunStatus
 import me.rerere.rikkahub.data.repository.BoardTransactionRunner
+import kotlinx.coroutines.flow.Flow
 import kotlin.uuid.Uuid
 
 /**
@@ -79,9 +80,24 @@ interface ShellRunStore {
      */
     suspend fun getByTaskId(taskId: Uuid): ShellRunEntity?
 
+    /** Attach the persisted detached tool anchor after the transcript node/message has been saved. */
+    suspend fun attachToolAnchor(taskId: Uuid, anchor: ShellRunToolAnchor): Boolean
+
+    /** Read the persisted detached tool anchor by task id, if one was attached. */
+    suspend fun getToolAnchor(taskId: Uuid): ShellRunToolAnchor?
+
     /** Cleanup hook for a deleted conversation (explicit delete, no FK cascade). */
     suspend fun deleteByConversationId(conversationId: Uuid): Int
+
+    /** Observe genuinely-backgrounded, non-terminal shell jobs for one conversation. */
+    fun observeBackgroundJobs(conversationId: Uuid): Flow<List<ShellRunEntity>>
 }
+
+data class ShellRunToolAnchor(
+    val toolCallId: String,
+    val toolNodeId: Uuid,
+    val toolMessageId: Uuid,
+)
 
 /** The outcome of a [ShellRunStore.recordTerminal] attempt (the SINGLE_TERMINAL race result). */
 enum class TerminalOutcome {
@@ -222,6 +238,33 @@ class RoomShellRunStore(
     override suspend fun getByTaskId(taskId: Uuid): ShellRunEntity? =
         transactions.inTransaction { dao.getById(taskId.toString()) }
 
+    override suspend fun attachToolAnchor(taskId: Uuid, anchor: ShellRunToolAnchor): Boolean =
+        transactions.inTransaction {
+            dao.attachToolAnchor(
+                taskId = taskId.toString(),
+                toolCallId = anchor.toolCallId,
+                toolNodeId = anchor.toolNodeId.toString(),
+                toolMessageId = anchor.toolMessageId.toString(),
+            ) == 1
+        }
+
+    override suspend fun getToolAnchor(taskId: Uuid): ShellRunToolAnchor? =
+        transactions.inTransaction {
+            dao.getAnchoredByTaskId(taskId.toString())?.let { row ->
+                val toolCallId = row.toolCallId ?: return@let null
+                val toolNodeId = row.toolNodeId ?: return@let null
+                val toolMessageId = row.toolMessageId ?: return@let null
+                ShellRunToolAnchor(
+                    toolCallId = toolCallId,
+                    toolNodeId = Uuid.parse(toolNodeId),
+                    toolMessageId = Uuid.parse(toolMessageId),
+                )
+            }
+        }
+
     override suspend fun deleteByConversationId(conversationId: Uuid): Int =
         transactions.inTransaction { dao.deleteByConversationId(conversationId.toString()) }
+
+    override fun observeBackgroundJobs(conversationId: Uuid): Flow<List<ShellRunEntity>> =
+        dao.observeBackgroundJobs(conversationId.toString())
 }

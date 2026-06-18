@@ -144,15 +144,22 @@ class ConversationInitializationAgentEventRaceTest {
         createdAt: LocalDateTime = afterSnapshot,
     ): MessageNode =
         UIMessage(
-            role = MessageRole.USER,
+            role = MessageRole.ASSISTANT,
             parts = listOf(
-                UIMessagePart.Text(
-                    text = """{"ok":true}""",
+                UIMessagePart.Tool(
+                    toolCallId = "tool-$eventId",
+                    toolName = "test",
+                    input = "",
                     metadata = buildJsonObject {
                         put(SYNTHETIC_KIND_METADATA_KEY, AGENT_EVENT_SYNTHETIC_KIND)
                         put(AGENT_EVENT_ID_METADATA_KEY, eventId)
                         put(AGENT_EVENT_KIND_METADATA_KEY, "test")
                     },
+                    output = listOf(
+                        UIMessagePart.Text(
+                            text = """{"ok":true}""",
+                        )
+                    ),
                 )
             ),
             createdAt = createdAt,

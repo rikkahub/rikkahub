@@ -19,6 +19,25 @@ class MessageTest {
     }
 
     @Test
+    fun `tool deferred state is explicit and resolvable`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "call1",
+            toolName = "workspace_shell",
+            input = "{}",
+            output = listOf(UIMessagePart.Text("""{"status":"running","taskId":"t"}""")),
+        ).asDeferred()
+
+        assertTrue(tool.isExecuted)
+        assertTrue(tool.isDeferred)
+        assertFalse(tool.canResumeExecution)
+
+        val resolved = tool.copy(output = listOf(UIMessagePart.Text("""{"status":"SUCCEEDED"}"""))).asResolved()
+        assertTrue(resolved.isExecuted)
+        assertFalse(resolved.isDeferred)
+        assertFalse(resolved.canResumeExecution)
+    }
+
+    @Test
     fun `limitContext with negative size should return original list`() {
         val messages = createTestMessages(5)
         val result = messages.limitContext(-1)

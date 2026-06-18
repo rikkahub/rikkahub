@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.Lucide
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.blurEffect
@@ -69,12 +71,13 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getAssistantByIdOrCurrent
+import me.rerere.rikkahub.data.datastore.getChatModelForAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ai.AsrButton
+import me.rerere.rikkahub.ui.components.ai.AssistantPickerSheet
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
 import me.rerere.rikkahub.ui.components.ai.MediaFileInputRow
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -109,6 +112,7 @@ fun ChatInput(
     modifier: Modifier = Modifier,
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
+    onSwitchAssistant: (Assistant) -> Unit,
     onUpdateConversation: (Conversation) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
@@ -117,7 +121,7 @@ fun ChatInput(
     onLongSendClick: () -> Unit,
 ) {
     val toaster = LocalToaster.current
-    val assistant = settings.getCurrentAssistant()
+    val assistant = settings.getAssistantByIdOrCurrent(conversation.assistantId)
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
 
@@ -138,6 +142,7 @@ fun ChatInput(
 
     var showFilesSheet by remember { mutableStateOf(false) }
     var showInjectionSheet by remember { mutableStateOf(false) }
+    var showAssistantSheet by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
     fun dismissExpand() {
         showFilesSheet = false
@@ -387,6 +392,21 @@ fun ChatInput(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
+                            // Assistant Picker — disabled while a turn is generating so an in-flight
+                            // turn (which re-reads the live assistant at completion) cannot be rebound
+                            // mid-flight; switch only between turns.
+                            ActionIconButton(
+                                onClick = {
+                                    if (!loading) showAssistantSheet = true
+                                },
+                                enabled = !loading,
+                            ) {
+                                Icon(
+                                    imageVector = Lucide.Bot,
+                                    contentDescription = "Switch assistant"
+                                )
+                            }
+
                             // Model Picker
                             ModelSelector(
                                 modelId = assistant.chatModelId ?: settings.chatModelId,
@@ -403,7 +423,7 @@ fun ChatInput(
                             // Search
                             val enableSearchMsg = stringResource(R.string.web_search_enabled)
                             val disableSearchMsg = stringResource(R.string.web_search_disabled)
-                            val chatModel = settings.getCurrentChatModel()
+                            val chatModel = settings.getChatModelForAssistant(assistant)
                             SearchPickerButton(
                                 enableSearch = enableSearch,
                                 settings = settings,
@@ -424,7 +444,7 @@ fun ChatInput(
                             )
 
                             // Reasoning
-                            val model = settings.getCurrentChatModel()
+                            val model = settings.getChatModelForAssistant(assistant)
                             if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
                                 ReasoningButton(
                                     reasoningLevel = assistant.reasoningLevel,
@@ -557,5 +577,19 @@ fun ChatInput(
                 onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
             )
         }
+    }
+
+    if (showAssistantSheet) {
+        AssistantPickerSheet(
+            settings = settings,
+            currentAssistant = assistant,
+            onAssistantSelected = {
+                showAssistantSheet = false
+                onSwitchAssistant(it)
+            },
+            onDismiss = {
+                showAssistantSheet = false
+            },
+        )
     }
 }

@@ -63,6 +63,16 @@ class RoomShellRunStoreAtomicityTest {
             consumedAt: Long,
         ) = delegate.markConsumed(id, syntheticNodeId, syntheticMessageId, consumedAt)
 
+        override suspend fun markCancelled(
+            id: String,
+            cancelledAt: Long,
+        ) = delegate.markCancelled(id, cancelledAt)
+
+        override suspend fun markFailed(
+            id: String,
+            cancelledAt: Long,
+        ) = delegate.markFailed(id, cancelledAt)
+
         override suspend fun nextEnqueueSeq(conversationId: String): Long = delegate.nextEnqueueSeq(conversationId)
 
         override suspend fun deleteByConversationId(conversationId: String): Int =
@@ -291,5 +301,34 @@ class RoomShellRunStoreAtomicityTest {
             ShellRunStatus.SUCCEEDED.name,
             dao.getById(taskId.toString())!!.status,
         )
+    }
+
+    @Test
+    fun `tool anchor attach is idempotent and rejects conflicting anchors`(): Unit = runBlocking {
+        val dao = FakeShellRunDAO()
+        val eventDao = FakeAgentEventDAO()
+        val st = RoomShellRunStore(
+            dao = dao,
+            agentEventDao = eventDao,
+            transactions = FakeTransactions(dao, eventDao),
+            now = { clock++ },
+        )
+        val conversationId = Uuid.random()
+        val taskId = Uuid.random()
+        val anchor = ShellRunToolAnchor(
+            toolCallId = "call-shell",
+            toolNodeId = Uuid.random(),
+            toolMessageId = Uuid.random(),
+        )
+        st.create(taskId, conversationId, "ws", "cmd", "", "/tmp/out")
+        st.detach(taskId, "pid")
+
+        assertTrue(st.attachToolAnchor(taskId, anchor))
+        assertTrue(st.attachToolAnchor(taskId, anchor))
+        assertEquals(anchor, st.getToolAnchor(taskId))
+
+        val conflicting = anchor.copy(toolCallId = "other-call")
+        assertEquals(false, st.attachToolAnchor(taskId, conflicting))
+        assertEquals("original anchor remains the single anchor", anchor, st.getToolAnchor(taskId))
     }
 }

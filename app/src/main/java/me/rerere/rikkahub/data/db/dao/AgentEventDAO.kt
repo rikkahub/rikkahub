@@ -65,6 +65,33 @@ interface AgentEventDAO {
         consumedAt: Long,
     ): Int
 
+    /**
+     * Terminalize an unconsumed pending event as cancelled. This is used when the host conversation
+     * is missing, deleted, or otherwise no longer safe to attach a synthetic completion.
+     * The `AND status = 'PENDING'` predicate makes terminalization idempotent under races.
+     */
+    @Query(
+        "UPDATE agent_events SET status = 'CANCELLED', synthetic_node_id = NULL, synthetic_message_id = NULL, " +
+            "cancelled_at = :cancelledAt WHERE id = :id AND status = 'PENDING'"
+    )
+    suspend fun markCancelled(
+        id: String,
+        cancelledAt: Long,
+    ): Int
+
+    /**
+     * Terminalize an unconsumed pending event as failed. This marks payload/serialization terminal
+     * failures and still uses the pending-guarded update to avoid accidental late writes.
+     */
+    @Query(
+        "UPDATE agent_events SET status = 'FAILED', synthetic_node_id = NULL, synthetic_message_id = NULL, " +
+            "cancelled_at = :cancelledAt WHERE id = :id AND status = 'PENDING'"
+    )
+    suspend fun markFailed(
+        id: String,
+        cancelledAt: Long,
+    ): Int
+
     /** Next FIFO cursor for a conversation: one past the current max, or 1 for an empty queue. */
     @Query("SELECT COALESCE(MAX(enqueue_seq), 0) + 1 FROM agent_events WHERE conversation_id = :conversationId")
     suspend fun nextEnqueueSeq(conversationId: String): Long

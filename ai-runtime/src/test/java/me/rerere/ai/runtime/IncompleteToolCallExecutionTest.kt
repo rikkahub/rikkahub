@@ -165,6 +165,38 @@ class IncompleteToolCallExecutionTest {
     }
 
     @Test
+    fun `executeTool marks detached workspace shell output as deferred`() = runBlocking {
+        val executed = toolPart(
+            toolName = "workspace_shell",
+            input = "{\"command\":\"sleep 5\",\"detachAfterSeconds\":1}",
+            finished = true,
+            approvalState = ToolApprovalState.Approved,
+        )
+        val out = listOf<UIMessagePart>(
+            UIMessagePart.Text("""{"taskId":"7b6bd31b-d1da-48f7-a7b1-f0b04a8a1f2b","status":"running"}""")
+        )
+
+        val result = executeTool(executed, listOf(toolDef("workspace_shell") { out }), json, RecordingLogSink())
+
+        assertTrue(result.isExecuted)
+        assertTrue(result.isDeferred)
+        assertFalse(result.canResumeExecution)
+    }
+
+    @Test
+    fun `deferred shell detector rejects terminal output`() {
+        val tool = toolPart(
+            toolName = "workspace_shell",
+            input = "{}",
+            finished = true,
+            approvalState = ToolApprovalState.Approved,
+        )
+        val direct = listOf<UIMessagePart>(UIMessagePart.Text("""{"exitCode":0,"stdout":"ok","stderr":""}"""))
+
+        assertFalse(isDeferredWorkspaceShellOutput(tool, direct, json))
+    }
+
+    @Test
     fun `executeTool IncompleteTruncated routes to the clean retry message`() = runBlocking {
         val truncated = toolPart(input = "{\"city\":\"S", finished = false, approvalState = ToolApprovalState.Auto)
         // Sanity: this input IS classified truncated, so the branch under test is the one exercised.

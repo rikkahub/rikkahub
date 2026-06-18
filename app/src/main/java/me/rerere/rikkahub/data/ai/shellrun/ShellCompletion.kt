@@ -9,9 +9,9 @@ import kotlin.uuid.Uuid
 
 /**
  * The #290 completion event a detached shell run enqueues when it reaches a terminal status (issue
- * #291). It is ALWAYS a NEW synthetic agent-event, never a mutation of the historical tool part:
- * `Tool.execute` gets only args (no `toolCallId`), so the original `workspace_shell` tool call cannot
- * be correlated — the same ABI gap the design proposal calls out.
+ * #291). It is always a durable agent-event. Feature 3 resolves it back into the original
+ * `workspace_shell` tool output when a persisted taskId -> tool anchor exists, and keeps the synthetic
+ * assistant-tool delivery as the fallback when no anchor can be correlated.
  *
  * [dedupeKey] is the run's [taskId], so AT_MOST_ONCE_COMPLETION is inherited from #290's unique
  * enqueue + claim/consume transaction: a replayed terminal (the detached awaiter's win and a

@@ -109,7 +109,7 @@ fun AssistantPicker(
 }
 
 @Composable
-private fun AssistantPickerSheet(
+fun AssistantPickerSheet(
     settings: Settings,
     currentAssistant: Assistant,
     onAssistantSelected: (Assistant) -> Unit,

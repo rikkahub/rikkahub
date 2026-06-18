@@ -78,6 +78,12 @@ data class ShellRunEntity(
     val detachedAt: Long? = null,
     @ColumnInfo("completed_at")
     val completedAt: Long? = null,
+    @ColumnInfo("tool_call_id")
+    val toolCallId: String? = null,
+    @ColumnInfo("tool_node_id")
+    val toolNodeId: String? = null,
+    @ColumnInfo("tool_message_id")
+    val toolMessageId: String? = null,
 )
 
 /**

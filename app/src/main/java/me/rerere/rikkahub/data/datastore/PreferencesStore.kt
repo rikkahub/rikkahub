@@ -682,12 +682,20 @@ fun Settings.getCurrentChatModel(): Model? {
     return findModelById(this.getCurrentAssistant().chatModelId ?: this.chatModelId)
 }
 
+fun Settings.getChatModelForAssistant(assistant: Assistant): Model? {
+    return findModelById(assistant.chatModelId ?: this.chatModelId)
+}
+
 fun Settings.getCurrentAssistant(): Assistant {
     return this.assistants.find { it.id == assistantId } ?: this.assistants.first()
 }
 
 fun Settings.getAssistantById(id: Uuid): Assistant? {
     return this.assistants.find { it.id == id }
+}
+
+fun Settings.getAssistantByIdOrCurrent(id: Uuid): Assistant {
+    return getAssistantById(id) ?: getCurrentAssistant()
 }
 
 fun Settings.findKnowledgeBase(id: Uuid?): KnowledgeBase? {

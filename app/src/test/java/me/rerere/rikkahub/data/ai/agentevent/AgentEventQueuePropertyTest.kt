@@ -7,14 +7,17 @@ import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import me.rerere.rikkahub.data.db.dao.AgentEventDAO
 import me.rerere.rikkahub.data.db.entity.AgentEventStatus
 import me.rerere.rikkahub.data.repository.BoardTransactionRunner
 import me.rerere.rikkahub.data.repository.fakes.FakeAgentEventDAO
+import me.rerere.rikkahub.data.ai.agentevent.ClaimAppendAction
+import me.rerere.rikkahub.data.ai.agentevent.AgentEventTerminalStatus
+import kotlin.uuid.Uuid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.uuid.Uuid
 
 /**
  * Property suite for the durable agent-event queue (issue #290). Each property maps 1:1 to an
@@ -62,13 +65,15 @@ class AgentEventQueuePropertyTest {
         suspend fun drainOnce(): Boolean {
             if (!AgentEventQueueReducer.canDrain(turnState)) return false
             val outcome = store.claimAndAppendAndConsume(conversationId) { event ->
-                appendedMessages[event.id] = event.payloadJson
-                SyntheticAppendResult(
-                    syntheticNodeId = "node-${event.id}",
-                    syntheticMessageId = "msg-${event.id}",
+                ClaimAppendAction.Append(
+                    synthetic = SyntheticAppendResult(
+                        syntheticNodeId = "node-${event.id}",
+                        syntheticMessageId = "msg-${event.id}",
+                    ),
                 )
             }
             return if (outcome is ClaimOutcome.Delivered) {
+                appendedMessages[outcome.event.id] = outcome.event.payloadJson
                 deliveryLog += outcome.event.id
                 true
             } else {
@@ -80,6 +85,17 @@ class AgentEventQueuePropertyTest {
         suspend fun drainAll() {
             while (drainOnce()) { /* claim until empty */ }
         }
+    }
+
+    private class LostConsumeAgentEventDAO(
+        private val delegate: FakeAgentEventDAO = FakeAgentEventDAO(),
+    ) : AgentEventDAO by delegate {
+        override suspend fun markConsumed(
+            id: String,
+            syntheticNodeId: String,
+            syntheticMessageId: String,
+            consumedAt: Long,
+        ): Int = 0
     }
 
     // --- 1. AT_MOST_ONCE (Boundary) -----------------------------------------------------------
@@ -103,6 +119,36 @@ class AgentEventQueuePropertyTest {
             )
             assertEquals("every enqueued event delivered exactly once", eventCount, model.deliveryLog.size)
         }
+    }
+
+    // --- 1b. LOST_CONSUME_ROLLBACK ----------------------------------------------------------
+    // If the conditional CONSUME update is raced and wins 0 rows, the store must return Lost and
+    // persist no consumed marker, so there is no committed synthetic append for that event.
+    @Test
+    fun `lost consume leaves no synthetic append markers`(): Unit = runBlocking {
+        val dao = LostConsumeAgentEventDAO()
+        val store = RoomAgentEventStore(dao = dao, transactions = FakeTransactions(), now = { 1L })
+        val conversationId = Uuid.random()
+
+        store.enqueue(conversationId, "shell", "{\"done\":true}", "lost")
+        val pending = dao.listPending(conversationId.toString())
+        require(pending.size == 1)
+        val eventId = pending.single().id
+
+        val outcome = store.claimAndAppendAndConsume(conversationId) { event ->
+            ClaimAppendAction.Append(
+                synthetic = SyntheticAppendResult(
+                    syntheticNodeId = "node-${event.id}",
+                    syntheticMessageId = "msg-${event.id}",
+                ),
+            )
+        }
+
+        assertTrue("a row that loses claim must return Lost", outcome is ClaimOutcome.Lost)
+        val row = requireNotNull(dao.getById(eventId))
+        assertEquals("pending event must stay consumable", AgentEventStatus.PENDING.name, row.status)
+        assertEquals("orphan append should not be recorded", null, row.syntheticNodeId)
+        assertEquals("orphan append should not be recorded", null, row.syntheticMessageId)
     }
 
     // --- 2. NO_DOUBLE_GENERATION / IDLE_GATING (Invariant) -------------------------------------
@@ -228,14 +274,24 @@ class AgentEventQueuePropertyTest {
         val after = RoomAgentEventStore(dao = dao, transactions = transactions, now = { 2L })
         val delivered = mutableListOf<String>()
         val outcome = after.claimAndAppendAndConsume(conversationId) { event ->
-            SyntheticAppendResult("node-${event.id}", "msg-${event.id}")
+            ClaimAppendAction.Append(
+                synthetic = SyntheticAppendResult(
+                    syntheticNodeId = "node-${event.id}",
+                    syntheticMessageId = "msg-${event.id}",
+                ),
+            )
         }
         if (outcome is ClaimOutcome.Delivered) delivered += outcome.event.id
 
         assertEquals("delivered once after restart", 1, delivered.size)
         // A second replay after restart is a no-op.
         val second = after.claimAndAppendAndConsume(conversationId) { event ->
-            SyntheticAppendResult("node-${event.id}", "msg-${event.id}")
+            ClaimAppendAction.Append(
+                synthetic = SyntheticAppendResult(
+                    syntheticNodeId = "node-${event.id}",
+                    syntheticMessageId = "msg-${event.id}",
+                ),
+            )
         }
         assertTrue("second replay is empty", second is ClaimOutcome.Empty)
     }
@@ -288,6 +344,61 @@ class AgentEventQueuePropertyTest {
         assertEquals("msg-$id", row.syntheticMessageId)
     }
 
+    // --- terminal status boundary ------------------------------------------------------------
+    // Terminal updates are guarded to exactly one pending row: one terminalization call flips one row,
+    // and a second call against the same id is a no-op.
+    @Test
+    fun `terminalize only transitions one pending row`(): Unit = runBlocking {
+        val model = QueueModel()
+        model.enqueue("e1")
+
+        val event = model.dao.oldestPending(model.conversationId.toString())
+        requireNotNull(event)
+
+        assertEquals("first terminalization claims the pending row", 1, model.dao.markCancelled(event.id, 100L))
+        assertEquals("second terminalization on same row is no-op", 0, model.dao.markCancelled(event.id, 101L))
+    }
+
+    // --- terminalized visibility invariant ----------------------------------------------------
+    // Terminalized rows must never be visible to PENDING scans — the replay path only sees rows that are
+    // still eligible for delivery.
+    @Test
+    fun `terminalized events are never reported pending`(): Unit = runBlocking {
+        val model = QueueModel()
+        model.enqueue("e1")
+        model.enqueue("e2")
+
+        val rows = model.dao.listPending(model.conversationId.toString())
+        assertEquals("start has two pending rows", 2, rows.size)
+
+        rows.forEach { row ->
+            assertEquals("terminalize consumes each row", 1, model.dao.markCancelled(row.id, 200L + row.enqueueSeq))
+            assertEquals("row status is terminal", AgentEventStatus.CANCELLED.name, model.dao.getById(row.id)!!.status)
+        }
+
+        assertEquals("no pending rows remain", 0, model.dao.listPending(model.conversationId.toString()).size)
+    }
+
+    // --- terminalization is idempotent under duplicate drain/replay ---------------------------
+    // Calling the terminal branch repeatedly is a safe metamorphic replay: first call terminalizes, later
+    // calls see no PENDING row and produce an empty outcome.
+    @Test
+    fun `replayed terminalization is no-op after first win`(): Unit = runBlocking {
+        val dao = FakeAgentEventDAO()
+        val store = RoomAgentEventStore(dao = dao, transactions = FakeTransactions(), now = { 1L })
+
+        val conversationId = Uuid.random()
+        val inserted = store.enqueue(conversationId, "workspace_shell", "{}", "replay-terminal")
+        assertTrue("event inserted", inserted)
+
+        val first = store.claimAndAppendAndConsume(conversationId) { ClaimAppendAction.Terminalize(AgentEventTerminalStatus.CANCELLED) }
+        assertTrue("first call terminalizes", first is ClaimOutcome.Terminalized)
+
+        val second = store.claimAndAppendAndConsume(conversationId) { ClaimAppendAction.Terminalize(AgentEventTerminalStatus.CANCELLED) }
+        assertTrue("second replay is empty", second is ClaimOutcome.Empty)
+        assertEquals("no pending rows remain", 0, dao.conversationsWithPending().size)
+    }
+
     // --- 8. RECOVERY RUNNER actively replays on restart (not observe-only) ---------------------
     // The cold-start [AgentEventRecoveryRunner] must DRIVE the drain for every conversation holding
     // pending events through the same claim path (driving delivery, not just scanning), and a second
@@ -313,7 +424,12 @@ class AgentEventQueuePropertyTest {
             drainIfIdle = { id ->
                 runBlocking {
                     val outcome = store.claimAndAppendAndConsume(id) { e ->
-                        SyntheticAppendResult("node-${e.id}", "msg-${e.id}")
+                        ClaimAppendAction.Append(
+                            synthetic = SyntheticAppendResult(
+                                syntheticNodeId = "node-${e.id}",
+                                syntheticMessageId = "msg-${e.id}",
+                            ),
+                        )
                     }
                     if (outcome is ClaimOutcome.Delivered) delivered += outcome.event.id
                 }

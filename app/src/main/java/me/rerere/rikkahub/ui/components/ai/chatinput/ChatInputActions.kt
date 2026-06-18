@@ -14,10 +14,12 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun ActionIconButton(
     onClick: () -> Unit,
+    enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.size(30.dp),
         shape = CircleShape,
         tonalElevation = 0.dp,

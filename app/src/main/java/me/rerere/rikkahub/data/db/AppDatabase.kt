@@ -57,7 +57,7 @@ import me.rerere.common.json.JsonInstant
         AgentEventEntity::class,
         ShellRunEntity::class
     ],
-    version = 30,
+    version = 31,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -90,6 +90,9 @@ import me.rerere.common.json.JsonInstant
         // replay/recovery scans (status-only predicates) stop full-scanning. Index creation is
         // auto-migratable, so Room derives the migration from the exported schemas without a spec.
         AutoMigration(from = 29, to = 30),
+        // 30 -> 31 adds nullable tool-anchor columns to shell_runs so detached shell completions can
+        // mutate the original tool output. Nullable additive columns are auto-migratable.
+        AutoMigration(from = 30, to = 31),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.db.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 
 /**
@@ -23,6 +24,29 @@ interface ShellRunDAO {
 
     @Query("SELECT * FROM shell_runs WHERE task_id = :taskId")
     suspend fun getById(taskId: String): ShellRunEntity?
+
+    /**
+     * Idempotently attaches the visible tool anchor for a detached run. A repeated write of the same
+     * anchor matches; a conflicting anchor matches zero rows and is rejected by the store.
+     */
+    @Query(
+        "UPDATE shell_runs SET tool_call_id = :toolCallId, tool_node_id = :toolNodeId, " +
+            "tool_message_id = :toolMessageId WHERE task_id = :taskId AND " +
+            "((tool_call_id IS NULL AND tool_node_id IS NULL AND tool_message_id IS NULL) OR " +
+            "(tool_call_id = :toolCallId AND tool_node_id = :toolNodeId AND tool_message_id = :toolMessageId))"
+    )
+    suspend fun attachToolAnchor(
+        taskId: String,
+        toolCallId: String,
+        toolNodeId: String,
+        toolMessageId: String,
+    ): Int
+
+    @Query(
+        "SELECT * FROM shell_runs WHERE task_id = :taskId AND tool_call_id IS NOT NULL " +
+            "AND tool_node_id IS NOT NULL AND tool_message_id IS NOT NULL"
+    )
+    suspend fun getAnchoredByTaskId(taskId: String): ShellRunEntity?
 
     /** STARTED -> FOREGROUND_WAITING once the handle is held; only a STARTED row flips. */
     @Query(
@@ -82,6 +106,17 @@ interface ShellRunDAO {
             "('STARTED', 'FOREGROUND_WAITING', 'DETACHED', 'BACKGROUND_RUNNING')"
     )
     suspend fun runningRows(): List<ShellRunEntity>
+
+    /**
+     * Rows that have genuinely left the foreground turn and are still running for one conversation.
+     * STARTED / FOREGROUND_WAITING are still foreground work; terminal rows are already complete.
+     */
+    @Query(
+        "SELECT * FROM shell_runs WHERE conversation_id = :conversationId " +
+            "AND status IN ('DETACHED', 'BACKGROUND_RUNNING') " +
+            "ORDER BY COALESCE(detached_at, started_at, created_at) DESC"
+    )
+    fun observeBackgroundJobs(conversationId: String): Flow<List<ShellRunEntity>>
 
     /** Cleanup hook for a deleted conversation (no FK cascade, mirroring [AgentEventDAO]). */
     @Query("DELETE FROM shell_runs WHERE conversation_id = :conversationId")

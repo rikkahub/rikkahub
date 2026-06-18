@@ -90,6 +90,9 @@ enum class AgentEventStatus {
 
     /** Abandoned without delivery (e.g. the conversation was deleted). */
     CANCELLED,
+
+    /** Terminalized by a failed append/replay; no synthetic message was committed. */
+    FAILED,
     ;
 
     companion object {

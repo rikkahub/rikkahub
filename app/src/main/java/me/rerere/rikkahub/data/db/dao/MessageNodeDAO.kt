@@ -27,6 +27,11 @@ interface MessageNodeDAO {
         offset: Int
     ): List<MessageNodeEntity>
 
+    @Query(
+        "SELECT COALESCE(MAX(node_index), -1) + 1 FROM message_node WHERE conversation_id = :conversationId",
+    )
+    suspend fun nextNodeIndex(conversationId: String): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(nodes: List<MessageNodeEntity>)
 
@@ -99,4 +104,3 @@ suspend fun MessageNodeDAO.getMessageCountPerDay(startDate: String): List<Messag
             arrayOf(startDate)
         )
     )
-

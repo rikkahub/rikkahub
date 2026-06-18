@@ -225,6 +225,37 @@ class ConversationRepository(
         messageFtsManager.indexConversation(conversation)
     }
 
+    /**
+     * Append exactly one message node and persist the conversation row in one DB write sequence.
+     * Used by background drains that already run inside a caller-owned transaction: the append and any
+     * status update of the triggering event remain atomically linked there.
+     */
+    suspend fun appendMessageNode(conversation: Conversation, node: MessageNode) {
+        val conversationId = conversation.id.toString()
+        conversationDAO.update(conversationToConversationEntity(conversation))
+        messageNodeDAO.insert(
+            buildMessageNodeEntity(
+                node = node,
+                conversationId = conversationId,
+                index = messageNodeDAO.nextNodeIndex(conversationId),
+            )
+        )
+    }
+
+    suspend fun updateMessageNode(conversation: Conversation, node: MessageNode) {
+        val conversationId = conversation.id.toString()
+        val index = conversation.messageNodes.indexOfFirst { it.id == node.id }
+        require(index >= 0) { "message node ${node.id} is not part of conversation ${conversation.id}" }
+        conversationDAO.update(conversationToConversationEntity(conversation))
+        messageNodeDAO.update(
+            buildMessageNodeEntity(
+                node = node,
+                conversationId = conversationId,
+                index = index,
+            )
+        )
+    }
+
     suspend fun updateConversation(conversation: Conversation) {
         database.withTransaction {
             conversationDAO.update(
@@ -235,6 +266,23 @@ class ConversationRepository(
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
+    }
+
+    /**
+     * Reindex a single conversation in FTS without mutating message/node payloads.
+     */
+    suspend fun indexConversation(conversation: Conversation) {
+        messageFtsManager.indexConversation(conversation)
+    }
+
+    /**
+     * Re-load a conversation from DB and index it into message FTS.
+     * Used by flows that mutate DB state outside `insertConversation` / `updateConversation`.
+     */
+    suspend fun indexConversationById(conversationId: Uuid) {
+        val entity = conversationDAO.getConversationById(conversationId.toString()) ?: return
+        val nodes = loadMessageNodes(entity.id)
+        indexConversation(conversationEntityToConversation(entity, nodes))
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -406,17 +454,28 @@ class ConversationRepository(
     }
 
     private suspend fun saveMessageNodes(conversationId: String, nodes: List<MessageNode>) {
-        val entities = nodes.mapIndexed { index, node ->
-            MessageNodeEntity(
-                id = node.id.toString(),
+        val startIndex = messageNodeDAO.nextNodeIndex(conversationId)
+        val entities = nodes.mapIndexed { offset, node ->
+            buildMessageNodeEntity(
+                node = node,
                 conversationId = conversationId,
-                nodeIndex = index,
-                messages = JsonInstant.encodeToString(node.messages),
-                selectIndex = node.selectIndex
+                index = startIndex + offset,
             )
         }
         messageNodeDAO.insertAll(entities)
     }
+
+    private suspend fun buildMessageNodeEntity(
+        node: MessageNode,
+        conversationId: String,
+        index: Int,
+    ): MessageNodeEntity = MessageNodeEntity(
+        id = node.id.toString(),
+        conversationId = conversationId,
+        nodeIndex = index,
+        messages = JsonInstant.encodeToString(node.messages),
+        selectIndex = node.selectIndex,
+    )
 }
 
 /**

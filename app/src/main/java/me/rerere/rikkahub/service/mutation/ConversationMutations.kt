@@ -20,6 +20,11 @@ import kotlin.uuid.Uuid
  */
 object ConversationMutations {
 
+    fun moveToAssistant(conversation: Conversation, targetAssistantId: Uuid): Conversation {
+        if (conversation.assistantId == targetAssistantId) return conversation
+        return conversation.copy(assistantId = targetAssistantId)
+    }
+
     /**
      * 删除指定 message：若所在节点删空则连节点一并移除，并把 selectIndex 收敛到剩余消息的 lastIndex。
      * 找不到 messageId 时返回 null（调用方据此决定是否抛 NotFoundException）。
