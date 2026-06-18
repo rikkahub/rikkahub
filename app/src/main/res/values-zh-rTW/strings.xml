@@ -1216,5 +1216,7 @@
   <string name="workspace_page_name_duplicate">名稱已存在</string>
   <string name="setting_mcp_page_name_invalid">名稱只能包含英文字母和數字</string>
   <string name="error_mcp_invalid_server_name">無效的MCP伺服器名稱（僅允許英數字元）：%1$s</string>
+  <string name="log_page_record_requests">記錄請求</string>
+  <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
 </resources>
 

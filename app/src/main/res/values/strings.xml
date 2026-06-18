@@ -1217,5 +1217,7 @@
   <string name="tool_ui_file">file</string>
   <string name="workspace_page_name_duplicate">Name already exists</string>
   <string name="setting_mcp_page_name_invalid">Name can only contain English letters and numbers</string>
+  <string name="log_page_record_requests">Record requests</string>
+  <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
 </resources>
 
