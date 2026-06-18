@@ -35,6 +35,7 @@ fun ASRProviderConfigure(
                     is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
                     is ASRProviderSetting.DashScope -> "DashScope"
                     is ASRProviderSetting.Volcengine -> "Volcengine"
+                    is ASRProviderSetting.MiMo -> "MiMo"
                 },
                 onValueChange = {},
                 readOnly = true,
@@ -58,6 +59,7 @@ fun ASRProviderConfigure(
             is ASRProviderSetting.OpenAIRealtime -> OpenAIRealtimeASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.DashScope -> DashScopeASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.Volcengine -> VolcengineASRConfiguration(setting, onValueChange)
+            is ASRProviderSetting.MiMo -> MiMoASRConfiguration(setting, onValueChange)
         }
     }
 }
@@ -313,6 +315,92 @@ private fun VolcengineASRConfiguration(
             onValueChange = { onValueChange(setting.copy(language = it)) },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("auto") }
+        )
+    }
+}
+
+@Composable
+private fun MiMoASRConfiguration(
+    setting: ASRProviderSetting.MiMo,
+    onValueChange: (ASRProviderSetting) -> Unit
+) {
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_mimo_api_key_desc)) }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("sk-... or tp-...") }
+        )
+    }
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_base_url)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_mimo_base_url_desc)) }
+    ) {
+        OutlinedTextField(
+            value = setting.baseUrl,
+            onValueChange = { onValueChange(setting.copy(baseUrl = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("https://api.xiaomimimo.com/v1") }
+        )
+    }
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_model)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_mimo_model_desc)) }
+    ) {
+        OutlinedTextField(
+            value = setting.model,
+            onValueChange = { onValueChange(setting.copy(model = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("mimo-v2.5-asr") }
+        )
+    }
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_language)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_mimo_language_desc)) }
+    ) {
+        OutlinedTextField(
+            value = setting.language,
+            onValueChange = { onValueChange(setting.copy(language = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("auto") }
+        )
+    }
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_sample_rate)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_mimo_sample_rate_desc)) }
+    ) {
+        OutlinedNumberInput(
+            value = setting.sampleRate,
+            onValueChange = { value ->
+                if (value in 8000..48000) {
+                    onValueChange(setting.copy(sampleRate = value))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = "Sample Rate"
+        )
+    }
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_asr_configure_segment_duration)) },
+        description = { Text(stringResource(R.string.setting_asr_configure_mimo_segment_desc)) }
+    ) {
+        OutlinedNumberInput(
+            value = setting.segmentDurationSec,
+            onValueChange = { value ->
+                if (value in 0..300) {
+                    onValueChange(setting.copy(segmentDurationSec = value))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = "Segment Duration (s)"
         )
     }
 }

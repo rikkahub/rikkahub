@@ -628,6 +628,15 @@
   <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine API密钥（X-Api-Key）</string>
   <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine 流式 ASR 端点</string>
   <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
+  <string name="setting_asr_configure_base_url">Base URL</string>
+  <string name="setting_asr_configure_sample_rate">采样率</string>
+  <string name="setting_asr_configure_segment_duration">分段时长</string>
+  <string name="setting_asr_configure_mimo_api_key_desc">小米 MiMo API Key（按量计费用 sk- 开头，Token 套餐用 tp- 开头）</string>
+  <string name="setting_asr_configure_mimo_base_url_desc">MiMo OpenAI 兼容 Base URL。sk- 密钥使用 https://api.xiaomimimo.com/v1，tp- 密钥使用 https://token-plan-cn.xiaomimimo.com/v1</string>
+  <string name="setting_asr_configure_mimo_model_desc">MiMo ASR 模型名，例如 mimo-v2.5-asr</string>
+  <string name="setting_asr_configure_mimo_language_desc">可选语言提示：auto / zh / en。留空则使用服务端默认（auto）</string>
+  <string name="setting_asr_configure_mimo_sample_rate_desc">PCM 录音采样率（Hz），ASR 推荐 16000</string>
+  <string name="setting_asr_configure_mimo_segment_desc">录音期间每 N 秒自动上传一段音频识别一次，0 表示禁用自动分段（仅 stop 时整体上传，16kHz 下最长约 3.9 分钟）</string>
   <string name="setting_asr_page_add_provider">添加ASR提供商</string>
   <string name="setting_asr_page_default_name">ASR</string>
   <string name="setting_asr_page_edit_provider">编辑ASR提供商</string>
