@@ -135,7 +135,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 navigationIcon = {
                     BackButton()
                 },
-                scrollBehavior = scrollBehavior,
                 actions = {
                     if(settings.developerMode) {
                         IconButton(
@@ -147,6 +146,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         }
                     }
                 },
+                scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors
             )
         },
