@@ -115,7 +115,11 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
                 .url("https://api.firecrawl.dev/v2/search")
                 .post(body.toString().toRequestBody())
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .apply {
+                    if (serviceOptions.apiKey.isNotBlank()) {
+                        addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                    }
+                }
                 .build()
 
             val response = httpClient.newCall(request).await()
@@ -174,7 +178,11 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
                 .url("https://api.firecrawl.dev/v2/scrape")
                 .post(body.toString().toRequestBody())
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .apply {
+                    if (serviceOptions.apiKey.isNotBlank()) {
+                        addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                    }
+                }
                 .build()
 
             val response = httpClient.newCall(request).await()
