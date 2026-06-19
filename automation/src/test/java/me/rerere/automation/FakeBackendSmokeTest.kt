@@ -8,9 +8,11 @@ import me.rerere.automation.backend.RawTree
 import me.rerere.automation.backend.RawWindow
 import me.rerere.automation.backend.NodeActionKind
 import me.rerere.automation.backend.PerformAction
+import me.rerere.automation.backend.PerformResult
 import me.rerere.automation.observe.ScreenState
 import me.rerere.automation.observe.SnapshotProjector
 import me.rerere.automation.observe.UiFlag
+import me.rerere.automation.observe.toTargetBinding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -94,17 +96,18 @@ class FakeBackendSmokeTest {
         val grantedTarget = snap.targets.first { it.sourcePackage == backend.rawTree.foregroundPkg }
 
         val action = PerformAction.Node(
-            stateSeq = backend.rawTree.stateSeq,
-            tid = grantedTarget.tid,
+            // A scroll binding never requires the visible-text axis (the core sets it true only for a
+            // CLICK), so mirror production fidelity here.
+            binding = grantedTarget.toTargetBinding(requireVisibleTextMatch = false),
             kind = NodeActionKind.SCROLL_FORWARD,
             allowedPackages = setOf(backend.rawTree.foregroundPkg),
         )
-        val dispatched = runBlocking {
+        val result = runBlocking {
             backend.perform(action)
         }
 
-        assertTrue("a parity-safe backend must actually dispatch the action", dispatched)
-        assertEquals("projection-derived tid must target the granted package", "com.example.app", backend.lastPerformedWindow)
+        assertTrue("a parity-safe backend must actually dispatch the action", result is PerformResult.Dispatched)
+        assertEquals("projection-derived binding must target the granted package", "com.example.app", backend.lastPerformedWindow)
         assertEquals(1, backend.performed.size)
         assertEquals(action, backend.performed.first())
         assertEquals("non-allowed leading window should not steal the granted tid", "Granted", grantedTarget.text)

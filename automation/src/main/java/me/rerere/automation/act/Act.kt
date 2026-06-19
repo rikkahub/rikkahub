@@ -44,13 +44,18 @@ sealed interface Act {
  *  - [Acted]: dispatched; [snapshot] is the fresh re-grounding — success is THIS postcondition, not
  *    the backend's dispatch boolean (design D4).
  *  - [Denied]: the capability refused, or the selector was ambiguous — a policy stop, not a retry.
- *  - [StaleState]: the grounding moved under the act (seq/hash mismatch) or the tid no longer
- *    resolves — the model must re-observe and re-decide (re-resolve), NEVER replay the stale act.
+ *  - [StaleState]: the grounding moved under the act (the bound target no longer resolves to exactly
+ *    one live node) or the tid no longer resolves — the model must re-observe and re-decide
+ *    (re-resolve), NEVER replay the stale act. When the backend captured a FRESH snapshot at the
+ *    mismatch, [snapshot] carries it so the tool layer can re-ground the model on the current screen
+ *    and steer a re-decide instead of a blind re-observe; it is `null` when no fresh capture is
+ *    available (host-foreground pause, foreground switched off the authorized surface, or a missing
+ *    tid) — in every case the model must re-observe.
  */
 sealed interface ActOutcome {
     data class Acted(val snapshot: UiSnapshot) : ActOutcome
     data class Denied(val reason: ActDenyReason) : ActOutcome
-    object StaleState : ActOutcome
+    data class StaleState(val snapshot: UiSnapshot? = null) : ActOutcome
 }
 
 /** Why an act was denied. Kept coarse — the deny reason is internal, never leaked to the model. */

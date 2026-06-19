@@ -305,6 +305,13 @@ class UiAutomationToolsTest {
             "host package must never appear in the projection",
             text.contains("me.rerere.rikkahub"),
         )
+        // The eyes-open binding internals (windowId / structuralPath / structuralFingerprint) are NEVER
+        // model-facing — the renderer emits only tid/role/flags/text/form/key. The structural
+        // fingerprint is a 64-char lowercase-hex SHA-256, so its absence is the unambiguous proof that
+        // no binding internal leaked into the rendered table (review round 3 should-fix).
+        assertFalse("the structural fingerprint must never render", Regex("[0-9a-f]{64}").containsMatchIn(text))
+        assertFalse("the windowId axis label must never render", text.contains("windowId"))
+        assertFalse("the structuralPath axis must never render", text.contains("structuralPath"))
         assertTrue("no part may be an image", parts.none { it is UIMessagePart.Image })
     }
 
@@ -319,7 +326,11 @@ class UiAutomationToolsTest {
                 .text
         }
 
-        assertTrue("granted text must remain visible", text.contains("granted-text"))
+        // The granted window's editable field stays ADDRESSABLE (its form key + hint render) but its
+        // current VALUE never reaches the model — an editable value can hold a secret the app never
+        // flagged as password, so only the label/hint is surfaced.
+        assertFalse("an editable field's current value must never render", text.contains("granted-text"))
+        assertTrue("granted field hint must remain visible", text.contains("grant-key"))
         assertTrue("granted form key must remain visible", text.contains("form=com.example.target:id/granted"))
 
         assertFalse("foreign text must never render", text.contains("FORBIDDEN_TEXT"))
@@ -327,10 +338,13 @@ class UiAutomationToolsTest {
         assertFalse("foreign form key must never render", text.contains("form=com.example.foreign-allowed:id/forbidden"))
         assertFalse("foreign view id must never render", text.contains("com.example.foreign-allowed:id/forbidden"))
 
-        assertTrue("system dialog text must remain visible", text.contains("SYSTEM_DIALOG_TEXT"))
+        // The system dialog stays observable + addressable (hint + form key render), but — being an
+        // editable node — its current value is withheld from the model just like any other editable field.
+        assertFalse("the system dialog editable value must never render", text.contains("SYSTEM_DIALOG_TEXT"))
         assertTrue("system dialog semantic key must remain visible", text.contains("system-key"))
+        // The resourceId reaches the model ONLY through the form= key — the raw viewId axis is internal
+        // and is never rendered, so asserting the form= prefix (not the bare id) is the correct contract.
         assertTrue("system dialog form key must remain visible", text.contains("form=com.android.packageinstaller:id/system_dialog"))
-        assertTrue("system dialog view id must remain visible", text.contains("com.android.packageinstaller:id/system_dialog"))
     }
 
     @Test
@@ -670,17 +684,11 @@ class UiAutomationToolsTest {
         val parts = runBlocking { scroll.execute(scrollArgs(0, "forward")) }
 
         assertEquals("exactly one perform", 1, backend.performed.size)
-        assertEquals(
-            "the dispatched action must be a node scroll-forward on the grounded (stateSeq=5, tid=0)",
-            PerformAction.Node(
-                stateSeq = 5L,
-                tid = 0,
-                kind = NodeActionKind.SCROLL_FORWARD,
-                allowedPackages = setOf(target),
-            ),
-            backend.performed.single(),
-        )
-        assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)
+        val action = backend.performed.single() as PerformAction.Node
+        assertEquals("the dispatched verb must be a scroll-forward", NodeActionKind.SCROLL_FORWARD, action.kind)
+        assertEquals("the dispatch is scoped to the foreground app", setOf(target), action.allowedPackages)
+        assertTrue("the dispatch must be bound to a structural fingerprint, not a tid", action.binding.structuralFingerprint.isNotEmpty())
+        assertEquals("pre-dispatch settle + post-dispatch settle (spec §6 step 8)", settleBefore + 2, backend.settleCount)
         // ActOutcome.Acted re-grounds: the returned Text is the FRESH re-rendered snapshot (FakeBackend
         // bumps stateSeq on perform, so the re-snapshot reads stateSeq=6).
         val text = (parts.single() as UIMessagePart.Text).text
@@ -695,15 +703,10 @@ class UiAutomationToolsTest {
 
         runBlocking { tools.byName(UI_SCROLL_TOOL_NAME).execute(scrollArgs(0, "backward")) }
 
-        assertEquals(
-            PerformAction.Node(
-                stateSeq = 2L,
-                tid = 0,
-                kind = NodeActionKind.SCROLL_BACKWARD,
-                allowedPackages = setOf(target),
-            ),
-            backend.performed.single(),
-        )
+        val back = backend.performed.single() as PerformAction.Node
+        assertEquals(NodeActionKind.SCROLL_BACKWARD, back.kind)
+        assertEquals(setOf(target), back.allowedPackages)
+        assertTrue("dispatch must be bound to a structural fingerprint", back.binding.structuralFingerprint.isNotEmpty())
     }
 
     @Test
@@ -769,20 +772,21 @@ class UiAutomationToolsTest {
     // --- 7e. STALE — grounding moved under the act (seq bump) ⇒ StaleState ⇒ vague re-observe text ---
 
     @Test
-    fun `a stateSeq bump after grounding makes ui_scroll stale and never performs`() {
+    fun `benign stateSeq churn after grounding still dispatches ui_scroll`() {
         val backend = FakeBackend(scrollableTree(stateSeq = 0L))
         val tools = actTools(actGuard(), backend)
         runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
 
-        // The screen changed under us (a window-content event) AFTER the grounding snapshot — the act
-        // assert must reject the now-stale grounding (seq mismatch) and never dispatch.
+        // A stateSeq bump that leaves the structural tree unchanged is BENIGN churn (e.g. non-active
+        // SystemUI noise). The eyes-open binding still matches exactly one node, so the scroll must
+        // DISPATCH (the old seq+hash gate would have stale-refused it — the regression this fixes).
         backend.injectTransition()
         val parts = runBlocking { tools.byName(UI_SCROLL_TOOL_NAME).execute(scrollArgs(0, "forward")) }
 
-        assertTrue("a stale grounding must never perform", backend.performed.isEmpty())
+        assertEquals("benign churn must still dispatch the scroll", 1, backend.performed.size)
         val text = (parts.single() as UIMessagePart.Text).text
-        assertTrue("stale result must steer the model to re-observe", text.contains("observe", ignoreCase = true))
-        assertFalse("must not leak the deny reason", text.contains("STALE"))
+        assertTrue("the result must be the fresh re-rendered snapshot", text.contains("stateSeq="))
+        assertTrue("the result must still name the foreground app", text.contains(target))
     }
 
     // --- 7f. MALFORMED — non-object args fail closed, never building an Act, never performing ---
@@ -1019,12 +1023,12 @@ class UiAutomationToolsTest {
         }
 
         assertEquals("exactly one perform", 1, backend.performed.size)
-        assertEquals(
-            "the dispatched action must be a node set-text on the grounded (stateSeq=5, tid=0)",
-            PerformAction.SetText(stateSeq = 5L, tid = 0, text = "world", allowedPackages = setOf(target)),
-            backend.performed.single(),
-        )
-        assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)
+        val action = backend.performed.single() as PerformAction.SetText
+        assertEquals("the dispatched payload is the requested text", "world", action.text)
+        assertEquals(setOf(target), action.allowedPackages)
+        assertTrue("dispatch must be bound to a structural fingerprint", action.binding.structuralFingerprint.isNotEmpty())
+        assertFalse("a set_text binding must not require a visible-text match", action.binding.requireVisibleTextMatch)
+        assertEquals("pre-resolve settle + post-dispatch settle (spec §6 step 9)", settleBefore + 2, backend.settleCount)
         // Acted re-grounds: FakeBackend bumps stateSeq on perform, so the re-snapshot reads stateSeq=6.
         assertTrue(
             "the result must be the fresh re-rendered snapshot",
@@ -1045,7 +1049,9 @@ class UiAutomationToolsTest {
         }
 
         assertTrue("a no-op set_text must never perform", backend.performed.isEmpty())
-        assertEquals("a no-op set_text must not settle", settleBefore, backend.settleCount)
+        // The pre-resolve settle (spec §6 step 9) still runs before the P9 check; the no-op then skips
+        // dispatch, so exactly one settle ran for the act.
+        assertEquals("P9 no-op runs the pre-resolve settle only", settleBefore + 1, backend.settleCount)
         // The no-op returns the UNCHANGED grounding re-rendered (stateSeq stays 3, not bumped).
         assertTrue(
             "the result must be the unchanged grounding",
@@ -1065,11 +1071,10 @@ class UiAutomationToolsTest {
             )
         }
 
-        assertEquals(
-            "a by-formKey set_text must dispatch the keyed field (tid 0)",
-            PerformAction.SetText(stateSeq = 1L, tid = 0, text = "new", allowedPackages = setOf(target)),
-            backend.performed.single(),
-        )
+        val byForm = backend.performed.single() as PerformAction.SetText
+        assertEquals("a by-formKey set_text dispatches the requested text", "new", byForm.text)
+        assertEquals(setOf(target), byForm.allowedPackages)
+        assertTrue("dispatch must be bound to a structural fingerprint", byForm.binding.structuralFingerprint.isNotEmpty())
     }
 
     // The by-formKey set_text above only works if the model can LEARN a field's formKey from the
@@ -1112,19 +1117,20 @@ class UiAutomationToolsTest {
     }
 
     @Test
-    fun `a stateSeq bump after grounding makes ui_set_text stale and never performs`() {
+    fun `benign stateSeq churn after grounding still dispatches ui_set_text`() {
         val backend = FakeBackend(editableTree(stateSeq = 0L, text = "old"))
         val tools = actTools(actGuard(), backend)
         runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
 
+        // Benign churn (seq bump, same field): the binding still matches ⇒ the set_text dispatches.
         backend.injectTransition()
         val parts = runBlocking {
             tools.byName("ui_set_text").execute(setTextArgs(buildJsonObject { put("tid", 0) }, "new"))
         }
 
-        assertTrue("a stale grounding must never perform", backend.performed.isEmpty())
+        assertEquals("benign churn must still dispatch the set_text", 1, backend.performed.size)
         val text = (parts.single() as UIMessagePart.Text).text
-        assertTrue("stale result must steer the model to re-observe", text.contains("observe", ignoreCase = true))
+        assertTrue("the result must be the fresh re-rendered snapshot", text.contains("stateSeq="))
     }
 
     @Test
@@ -1249,11 +1255,10 @@ class UiAutomationToolsTest {
             tools.byName("ui_set_text").execute(setTextArgs(buildJsonObject { put("tid", 0) }, ""))
         }
 
-        assertEquals(
-            "an empty-string text is a legitimate clear-the-field set_text, not a malformed arg",
-            PerformAction.SetText(stateSeq = 5L, tid = 0, text = "", allowedPackages = setOf(target)),
-            backend.performed.single(),
-        )
+        val clear = backend.performed.single() as PerformAction.SetText
+        assertEquals("an empty-string text clears the field", "", clear.text)
+        assertEquals(setOf(target), clear.allowedPackages)
+        assertTrue("dispatch must be bound to a structural fingerprint", clear.binding.structuralFingerprint.isNotEmpty())
     }
 
     // --- 9. ui_tap (#198 slice 10): the general tap (Verb.TAP, no sink — Act.Targeted + CLICK) over
@@ -1292,17 +1297,12 @@ class UiAutomationToolsTest {
         }
 
         assertEquals("exactly one perform", 1, backend.performed.size)
-        assertEquals(
-            "the dispatched action must be a node CLICK on the grounded (stateSeq=5, tid=0)",
-            PerformAction.Node(
-                stateSeq = 5L,
-                tid = 0,
-                kind = NodeActionKind.CLICK,
-                allowedPackages = setOf(target),
-            ),
-            backend.performed.single(),
-        )
-        assertEquals("settle must run exactly once for the act", settleBefore + 1, backend.settleCount)
+        val action = backend.performed.single() as PerformAction.Node
+        assertEquals("the dispatched verb must be a CLICK", NodeActionKind.CLICK, action.kind)
+        assertEquals(setOf(target), action.allowedPackages)
+        assertTrue("dispatch must be bound to a structural fingerprint, not a tid", action.binding.structuralFingerprint.isNotEmpty())
+        assertTrue("a tap binding requires the visible-text match", action.binding.requireVisibleTextMatch)
+        assertEquals("pre-dispatch settle + post-dispatch settle (spec §6 step 8)", settleBefore + 2, backend.settleCount)
         // Acted re-grounds: FakeBackend bumps stateSeq on perform, so the re-snapshot reads stateSeq=6.
         assertTrue(
             "the result must be the fresh re-rendered snapshot",
@@ -1331,19 +1331,20 @@ class UiAutomationToolsTest {
     }
 
     @Test
-    fun `a stateSeq bump after grounding makes ui_tap stale and never performs`() {
+    fun `benign stateSeq churn after grounding still dispatches ui_tap`() {
         val backend = FakeBackend(clickableTree(stateSeq = 0L))
         val tools = actTools(actGuard(), backend)
         runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
 
+        // Benign churn (seq bump, same button): the binding still matches ⇒ the tap dispatches.
         backend.injectTransition()
         val parts = runBlocking {
             tools.byName("ui_tap").execute(tapArgs(buildJsonObject { put("tid", 0) }))
         }
 
-        assertTrue("a stale grounding must never perform", backend.performed.isEmpty())
+        assertEquals("benign churn must still dispatch the tap", 1, backend.performed.size)
         val text = (parts.single() as UIMessagePart.Text).text
-        assertTrue("stale result must steer the model to re-observe", text.contains("observe", ignoreCase = true))
+        assertTrue("the result must be the fresh re-rendered snapshot", text.contains("stateSeq="))
     }
 
     @Test

@@ -2,12 +2,21 @@ package me.rerere.automation.backend
 
 import kotlinx.coroutines.CompletableDeferred
 import me.rerere.automation.observe.SnapshotProjector
+import me.rerere.automation.observe.UiSnapshot
 
 /**
  * Deterministic, in-memory [AutomationBackend] for unit/PBT (design §8, the FakeBackend that
  * every P1–P25 / S1 / S2 / MBT property runs over). No threads, no Android — the tree, stateSeq,
- * foreground package and content hashes are all settable, so a property generator drives exactly
- * the topology it wants and asserts on the projection/decision with no flakiness.
+ * and foreground package are all settable, so a property generator drives exactly the topology it
+ * wants and asserts on the projection/decision with no flakiness.
+ *
+ * The eyes-open hybrid tap design: [resolveBinding] / [perform] re-project the current [rawTree]
+ * with the same [SnapshotProjector] the grounding observe used and match the decision-time
+ * [TargetBinding] STRICTLY (exactly one match ⇒ resolve/dispatch; zero/multiple ⇒ [BindingResolution.Mismatch] /
+ * [PerformResult.BindingMismatch] with the fresh snapshot, no mutation). This mirrors the real
+ * [me.rerere.automation.backend.AutomationBackend] contract exactly — a binding that re-resolves
+ * to one node here re-resolves to one node there too — so the property suite proves the same
+ * "exactly one strict match" invariant the live dispatch relies on.
  *
  * It also supports asserting in-flight cancellation (design I9 / P20): [snapshotRawTree] can be
  * made to suspend until [releaseGate] is called, so a test can launch an observe, revoke the
@@ -18,6 +27,8 @@ class FakeBackend(
 ) : AutomationBackend {
     @Volatile
     var rawTree: RawTree = rawTree
+
+    private val projector = SnapshotProjector()
 
     /** Per-stateSeq content hash; defaults to the stateSeq string when not explicitly set. */
     private val contentHashes = HashMap<Long, String>()
@@ -37,10 +48,10 @@ class FakeBackend(
 
     /**
      * Completes the instant [perform] is ENTERED — BEFORE it parks on [gate]. Lets an in-flight test
-     * wait deterministically until the act is parked in [perform], then revoke / advance the seq /
-     * switch the foreground, instead of racing on a fixed `yield()` count (the latter is scheduler-
-     * dependent and flaked the P20 act test in CI — the coroutine on Dispatchers.Default had not yet
-     * reached the park when the fixed yields elapsed).
+     * wait deterministically until the act is parked in [perform], then revoke / mutate the tree,
+     * instead of racing on a fixed `yield()` count (the latter is scheduler-dependent and flaked the
+     * P20 act test in CI — the coroutine on Dispatchers.Default had not yet reached the park when the
+     * fixed yields elapsed).
      */
     @Volatile
     var performEntered: CompletableDeferred<Unit>? = null
@@ -72,9 +83,8 @@ class FakeBackend(
         gate?.await()
         snapshotCount++
         // Stamp the TOCTOU token atomically with the tree (the real backend computes it inside its
-        // capture lock). It mirrors windowContentHash so the act-assert's live re-read compares
-        // like-for-like: a later setContentHash for this seq (a dropped-event case) then diverges from
-        // this captured value and the assert catches it (the assert-both property).
+        // capture lock). Retained for the observe grounding stamp; the eyes-open act path no longer
+        // asserts it (a strict TargetBinding re-resolve replaces the seq+hash TOCTOU close).
         val t = rawTree
         return t.copy(contentHash = windowContentHash(t.stateSeq))
     }
@@ -84,106 +94,79 @@ class FakeBackend(
 
     override fun currentStateSeq(): Long = rawTree.stateSeq
 
-    override suspend fun perform(action: PerformAction): Boolean {
+    override suspend fun resolveBinding(request: BindingRequest): BindingResolution {
+        val snapshot = projectFresh(request.allowedPackages, request.includeHost)
+        val matches = snapshot.targets.filter { request.binding.matches(it) }
+        return when (matches.size) {
+            1 -> BindingResolution.Unique(snapshot, matches.single())
+            else -> BindingResolution.Mismatch(snapshot)
+        }
+    }
+
+    override suspend fun perform(action: PerformAction): PerformResult {
         performEntered?.complete(Unit) // signal "parked in perform" before the gate (deterministic in-flight tests)
         gate?.await()
-        // Mirror the real backend's dispatch-time freshness re-check (AccessibilityRuntime.perform):
-        // a node action carries the stateSeq the core asserted; if the live seq advanced AFTER that
-        // assert but BEFORE this dispatch (a WINDOW_STATE/CONTENT event in the gap — the gate lets a
-        // test inject exactly that race), the grounding moved under us, so do NOT dispatch — return
-        // false (best-effort no-op ack; the core's re-snapshot is ground truth, D4 / I-act-1 / MR3).
-        // Both node-targeted variants (scroll Node + slice-9 SetText) carry the asserted stateSeq; an
-        // event in the assert→dispatch gap makes the carried seq stale, so refuse rather than write the
-        // wrong tree (I-act-1 / MR3 / D4). Global nav has no node target and is exempt.
-        val carriedStaleSeq = when (action) {
-            is PerformAction.Node -> action.stateSeq != rawTree.stateSeq
-            is PerformAction.SetText -> action.stateSeq != rawTree.stateSeq
-            is PerformAction.Global -> false
-        }
-        if (carriedStaleSeq) {
-            lastPerformedWindow = null
-            return false
-        }
-
-        val dispatched = when (action) {
+        return when (action) {
             is PerformAction.Global -> {
                 performed.add(action)
-                true
+                // A real act changes the screen ⇒ the backend's sequence advances. Modelling that here
+                // keeps tids turn-scoped (the post-act re-snapshot sees a fresh seq) without a test
+                // having to inject the transition by hand.
+                rawTree = rawTree.copy(stateSeq = rawTree.stateSeq + 1)
+                lastPerformedWindow = null
+                PerformResult.Dispatched
             }
-            is PerformAction.Node -> {
-                performOnProjectedNode(action.tid, action.allowedPackages, action.includeHost) { true }.also { dispatched ->
-                    if (dispatched) {
-                        performed.add(action)
-                    }
-                }
-            }
-            is PerformAction.SetText -> {
-                performOnProjectedNode(action.tid, action.allowedPackages, action.includeHost) { true }.also { dispatched ->
-                    if (dispatched) {
-                        performed.add(action)
-                    }
-                }
-            }
+
+            is PerformAction.Node -> dispatchBound(
+                binding = action.binding,
+                allowedPackages = action.allowedPackages,
+                includeHost = action.includeHost,
+                record = { performed.add(action) },
+            )
+
+            is PerformAction.SetText -> dispatchBound(
+                binding = action.binding,
+                allowedPackages = action.allowedPackages,
+                includeHost = action.includeHost,
+                record = { performed.add(action) },
+            )
         }
-        if (!dispatched) {
+    }
+
+    /**
+     * Strict fresh re-resolve + dispatch: project the current [rawTree] with the SAME policy the
+     * grounding observe used, find targets whose [TargetBinding] strictly matches, and dispatch ONLY
+     * when exactly one matches. Zero/multiple matches ⇒ [PerformResult.BindingMismatch] with the fresh
+     * snapshot and NO mutation (the model must re-observe, never replay) — the load-bearing invariant
+     * the live dispatch also enforces. A unique match advances the seq (a real act changes the screen)
+     * so the post-act re-snapshot sees a fresh seq.
+     */
+    private fun dispatchBound(
+        binding: me.rerere.automation.observe.TargetBinding,
+        allowedPackages: Set<String>,
+        includeHost: Boolean,
+        record: () -> Unit,
+    ): PerformResult {
+        val snapshot = projectFresh(allowedPackages, includeHost)
+        val matches = snapshot.targets.filter { binding.matches(it) }
+        if (matches.size != 1) {
             lastPerformedWindow = null
-            return false
+            return PerformResult.BindingMismatch(snapshot)
         }
-
-        // A real act changes the screen ⇒ the backend's sequence advances. Modelling that here keeps
-        // tids turn-scoped (the post-act re-snapshot sees a fresh seq, so the old grounding is stale
-        // for the NEXT act) without a test having to inject the transition by hand.
+        record()
+        lastPerformedWindow = matches.single().sourcePackage
         rawTree = rawTree.copy(stateSeq = rawTree.stateSeq + 1)
-        return true
+        return PerformResult.Dispatched
     }
 
-    private fun performOnProjectedNode(
-        tid: Int,
-        allowedPackages: Set<String>,
-        includeHost: Boolean,
-        perform: (RawNode) -> Boolean,
-    ): Boolean {
-        val cursor = intArrayOf(0)
-        for (window in rawTree.windows) {
-            if (!isWindowAllowed(window.pkg, window.systemWindow, allowedPackages, includeHost)) continue
-            if (window.secure || window.root == null) continue
-            if (walkAndPerform(window.root, tid, cursor, perform) == true) {
-                lastPerformedWindow = window.pkg
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun walkAndPerform(
-        node: RawNode,
-        tid: Int,
-        cursor: IntArray,
-        perform: (RawNode) -> Boolean,
-    ): Boolean? {
-        if (isProjectedTarget(node)) {
-            if (cursor[0] == tid) {
-                cursor[0]++
-                return perform(node)
-            }
-            cursor[0]++
-        }
-        for (child in node.children) {
-            walkAndPerform(child, tid, cursor, perform)?.let { return it }
-        }
-        return null
-    }
-
-    private fun isProjectedTarget(node: RawNode): Boolean =
-        (node.visible && node.hasArea) || node.hasId || node.hasText
-
-    private fun isWindowAllowed(
-        pkg: String,
-        systemWindow: Boolean,
-        allowedPackages: Set<String>,
-        includeHost: Boolean,
-    ): Boolean =
-        SnapshotProjector.isWindowEligible(pkg, systemWindow, allowedPackages, includeHost)
+    /**
+     * Project the current [rawTree] into a fresh [UiSnapshot] under the given disclosure policy,
+     * stamping [windowContentHash] exactly as [snapshotRawTree] and the real Android backend do — so a
+     * mismatch / P9 fresh snapshot is byte-identical in shape to a grounding capture (parity).
+     */
+    private fun projectFresh(allowedPackages: Set<String>, includeHost: Boolean): UiSnapshot =
+        projector.project(rawTree, allowedPackages, includeHost)
+            .copy(windowContentHash = windowContentHash(rawTree.stateSeq))
 
     override suspend fun awaitSettle() {
         settleCount++

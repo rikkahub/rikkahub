@@ -3,6 +3,16 @@ package me.rerere.automation.observe
 import kotlinx.serialization.Serializable
 
 /**
+ * Sentinel for a window id the backend could not supply. Real Android window ids are non-negative
+ * ([android.view.accessibility.AccessibilityWindowInfo.getId]), so [Int.MIN_VALUE] is unambiguous.
+ *
+ * When a target's [UiTarget.windowId] is [UNKNOWN_WINDOW_ID], strict [TargetBinding] matching can
+ * only succeed against another unknown-window target — the common (unknown, unknown) case — which
+ * preserves the fail-closed default rather than fabricating a window identity.
+ */
+const val UNKNOWN_WINDOW_ID: Int = Int.MIN_VALUE
+
+/**
  * Pure, backend-agnostic observation domain types (#187 v1, read-only).
  *
  * These are the *projected* model the LLM is allowed to see — the compact "action table"
@@ -25,12 +35,14 @@ data class UiSnapshot(
     val screenState: ScreenState,
     val targets: List<UiTarget>,
     /**
-     * The backend content hash at capture time — the TOCTOU token for the v2 act path (design §5 /
-     * #198 §1 step 2). Populated by [me.rerere.automation.act.AutomationCore.observe]; the projector
-     * leaves it `""` (a bare projection is not grounded against a live backend). An act re-checks
-     * `windowContentHash(stateSeq)` against this value so a dropped `AccessibilityEvent` that leaves
-     * `stateSeq` stale-but-equal is still caught. NOT model-facing — :app's snapshot renderer never
-     * surfaces it; it is internal plumbing carried on the snapshot so the act can verify the grounding.
+     * The backend content hash at capture time. Populated by [me.rerere.automation.act.AutomationCore.observe]
+     * (the projector leaves it `""` — a bare projection is not grounded against a live backend). LEGACY:
+     * the old v2 act path re-checked this whole-snapshot hash as a TOCTOU gate; the eyes-open redesign
+     * REMOVED that gate (a targeted act now carries a decision-time [TargetBinding] that the backend
+     * fresh-resolves and dispatches atomically, so benign background churn no longer stales an act). The
+     * field is retained as the capture-instant token a backend may still surface and as the adversarial
+     * input the "a hash change no longer stales an act" regression asserts. NOT model-facing — :app's
+     * snapshot renderer never surfaces it.
      */
     val windowContentHash: String = "",
 )
@@ -106,6 +118,123 @@ data class UiTarget(
     val viewId: String? = null,
     /** Internal provenance: the window package this target came from. */
     val sourcePackage: String = "",
+    /**
+     * The owning window's backend id (e.g. [android.view.accessibility.AccessibilityWindowInfo.getId]).
+     * Internal-only (NOT model-facing — the renderer never surfaces it): the first axis of strict
+     * [TargetBinding] matching so a fresh re-resolve dispatches only to the SAME window the grounding
+     * named, never a same-shaped node that re-flowed into a different window. [UNKNOWN_WINDOW_ID] when
+     * the backend could not supply it; the binding still fails closed (a known-id binding cannot match
+     * an unknown-id live target and vice versa).
+     */
+    val windowId: Int = UNKNOWN_WINDOW_ID,
+    /**
+     * The node's zero-based raw child-index path from its window root (`[]` for the root, `[0]` for the
+     * first child, `[0,1]` for the second child of the first child). Internal-only (NOT model-facing):
+     * the structural-position axis of strict [TargetBinding] matching. Raw child indices (NOT projected
+     * tid) so the path is stable across re-projections that renumber tids (a benign reflow shifts tids
+     * but a keyed/bound target still resolves to the same structural node). Computed in raw child order
+     * BEFORE the projection rule filters, so a non-projected container between the root and a target
+     * still contributes a path slot — the live dispatch walk re-creates the same indices.
+     */
+    val structuralPath: List<Int> = emptyList(),
+    /**
+     * A SHA-256 digest of the target's structural shape (window id + package + system flag + path +
+     * node class/id/desc/flags/text-length + immediate children's shape — see
+     * [SnapshotProjector.computeStructuralFingerprint]). Internal-only (NOT model-facing): the
+     * content axis of strict [TargetBinding] matching so a fresh re-resolve refuses a node that re-flowed
+     * into the same path but with a different shape (the same-label-replacement false positive the
+     * name-only re-resolve rejects). Deliberately excludes raw text BYTES (only length) so a value the
+     * model never sees cannot leak through the binding, and so a same-shape text edit does not by itself
+     * stale a bound dispatch.
+     */
+    val structuralFingerprint: String = "",
+)
+
+/**
+ * The eyes-open decision-time binding for a targeted act (the hybrid tap design). Built from a
+ * grounded [UiTarget] at act-decision time; the backend re-resolves it against a FRESH capture and
+ * dispatches only when exactly one live node strictly matches. This replaces the old blind
+ * `(stateSeq, tid)` dispatch token: a binding carries the target's structural identity (window id +
+ * package + system flag + role + flags + stable keys + view id + structural path + fingerprint) so a
+ * same-shaped node that re-flowed into a different window/path, or a same-label replacement, is
+ * refused — while benign status-bar/SystemUI churn (which never matches any app binding) no longer
+ * stale a targeted dispatch.
+ *
+ * Match semantics (spec §4 — STRICT):
+ *  - Every targeted action matches on [windowId], [sourcePackage], [systemWindow], [role], [flags],
+ *    [semanticKey], [formKey], [viewId], [structuralPath], and [structuralFingerprint].
+ *  - For a tap ([requireVisibleTextMatch] == true) the [visibleText] must ALSO match exactly,
+ *    including `null` (so two same-shape buttons differing only by label do not collide, and an
+ *    icon-only target cannot be tapped by a binding that expected a label).
+ *  - For `set_text` ([requireVisibleTextMatch] == false) the visible text is NOT part of the match
+ *    (the field's value is about to change), and the requested text / [UiTarget.editableText] are
+ *    NEVER carried here — a binding is a structural identity, never a payload.
+ *
+ * NOT model-facing by construction: none of its fields are rendered, and it is built in the pure
+ * :automation core from a grounded target + a single boolean, never from model-supplied args.
+ */
+@Serializable
+data class TargetBinding(
+    val windowId: Int,
+    val sourcePackage: String,
+    val systemWindow: Boolean,
+    val role: String,
+    val flags: Set<UiFlag>,
+    /** When true, [visibleText] is part of the strict match (taps only). */
+    val requireVisibleTextMatch: Boolean,
+    /** The grounded target's visible [UiTarget.text]; matched only when [requireVisibleTextMatch]. */
+    val visibleText: String?,
+    val semanticKey: String?,
+    val formKey: String?,
+    val viewId: String?,
+    val structuralPath: List<Int>,
+    val structuralFingerprint: String,
+) {
+    /**
+     * Strict structural-identity match against a fresh [target] (spec §4). See the class kdoc for the
+     * per-field rules; the load-bearing rule is that EVERY identity field is checked (no advisory
+     * subset) and the visible-text axis is gated on [requireVisibleTextMatch]. Total & pure.
+     */
+    fun matches(target: UiTarget): Boolean {
+        if (windowId != target.windowId) return false
+        if (sourcePackage != target.sourcePackage) return false
+        if (systemWindow != target.systemWindow) return false
+        if (role != target.role) return false
+        if (flags != target.flags) return false
+        if (semanticKey != target.semanticKey) return false
+        if (formKey != target.formKey) return false
+        if (viewId != target.viewId) return false
+        if (structuralPath != target.structuralPath) return false
+        if (structuralFingerprint != target.structuralFingerprint) return false
+        // Taps require an exact visible-text match (incl. null); set_text ignores the axis entirely.
+        if (requireVisibleTextMatch && visibleText != target.text) return false
+        return true
+    }
+}
+
+/**
+ * Build a decision-time [TargetBinding] from this grounded target. [requireVisibleTextMatch] is true
+ * for a CLICK (a tap names a specific labeled element) and false for scroll / `set_text` (a scroll
+ * target's label is incidental; a set_text target's value is about to change). The editable value
+ * and any requested text are NEVER carried — a binding is structural identity only.
+ */
+fun UiTarget.toTargetBinding(requireVisibleTextMatch: Boolean): TargetBinding = TargetBinding(
+    windowId = windowId,
+    sourcePackage = sourcePackage,
+    systemWindow = systemWindow,
+    role = role,
+    flags = flags,
+    requireVisibleTextMatch = requireVisibleTextMatch,
+    // Carried ONLY for a tap (requireVisibleTextMatch): a tap binds to a specific labeled element, so
+    // its visible label is part of the identity. A scroll / set_text binding is structural identity
+    // only — carrying [text] here would leak the field's current editable value (and for set_text that
+    // value is about to change), so the axis is null and `matches` ignores it (spec §4 / §10).
+    visibleText = if (requireVisibleTextMatch) text else null,
+    semanticKey = semanticKey,
+    formKey = formKey,
+    viewId = viewId,
+    structuralPath = structuralPath,
+    structuralFingerprint = structuralFingerprint,
 )
 
 @Serializable

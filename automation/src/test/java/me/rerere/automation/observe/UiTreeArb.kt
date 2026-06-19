@@ -55,6 +55,9 @@ fun arbAppWindow(maxDepth: Int): Arb<RawWindow> = arbitrary {
         secure = false,
         systemWindow = Arb.boolean().bind(),
         root = arbRawNode(maxDepth).bind(),
+        // A stable per-window id so the binding's windowId axis is exercised: two targets in the same
+        // window share an id, two in different windows differ (the strict match must distinguish them).
+        windowId = Arb.int(0..10).bind(),
     )
 }
 

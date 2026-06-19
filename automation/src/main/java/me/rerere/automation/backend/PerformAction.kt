@@ -1,19 +1,29 @@
 package me.rerere.automation.backend
 
+import me.rerere.automation.observe.TargetBinding
+
 /**
- * What [AutomationBackend.perform] dispatches — the backend-facing act vocabulary (#198 slice 8/9).
- * Deliberately coordinate-free: a node action names a `(stateSeq, tid)` the core already resolved and
- * asserted, never a screen point (design D1 — `performAction`, not `dispatchGesture`). A real backend
- * maps `(stateSeq, tid)` to its live node by replaying the SAME projection order the snapshot used.
+ * What [AutomationBackend.perform] dispatches — the backend-facing act vocabulary. Deliberately
+ * coordinate-free AND stateSeq-free: a node action names a decision-time [TargetBinding] (the
+ * "eyes-open" hybrid tap design), never a screen point and never a blind `(stateSeq, tid)` token.
+ *
+ * The backend re-resolves the [TargetBinding] against a FRESH live capture and dispatches ONLY when
+ * exactly one node strictly matches it — atomically, under the same capture/dispatch lock. This is
+ * the load-bearing change from the old `(stateSeq, tid)` dispatch: a same-shaped node that re-flowed
+ * into a different window/path, or a same-label replacement, is refused (the binding's strict match
+ * fails), while benign status-bar/SystemUI churn (which never matches an app binding) no longer stale
+ * a targeted dispatch. The model never sees the binding or any of its fields (the renderer emits the
+ * compact text table only); it is built in the pure core from the grounded target.
  */
 sealed interface PerformAction {
     /**
-     * A node-targeted action. [stateSeq] + [tid] identify the element within the snapshot the model
-     * acted on; the backend re-walks its live tree to the [tid]-th projected node and performs [kind].
+     * A node-targeted action. [binding] is the strict structural identity the backend re-resolves
+     * against a fresh capture; [kind] is the verb (a scroll or CLICK). The backend walks its live tree,
+     * re-projects each candidate, and dispatches [kind] on the unique node whose [TargetBinding] is
+     * equal — or refuses (zero/multiple matches) without mutating anything.
      */
     data class Node(
-        val stateSeq: Long,
-        val tid: Int,
+        val binding: TargetBinding,
         val kind: NodeActionKind,
         val allowedPackages: Set<String>,
         /** YOLO host policy: when true the replay walk may also match host-package windows. */
@@ -24,16 +34,14 @@ sealed interface PerformAction {
     data class Global(val nav: GlobalNav) : PerformAction
 
     /**
-     * Set the text of an editable node (#198 slice 9, the input sink). A SEPARATE variant rather than
-     * a [NodeActionKind] because it carries a String [text] payload a bare action enum cannot, and
-     * keeping it off [Node] leaves the slice-8 scroll dispatch (and its byte-for-byte equality tests)
-     * untouched. [stateSeq] + [tid] are the same coordinate-free addressing as [Node]: the backend
-     * re-walks to the [tid]-th projected node and replaces its text (ACTION_SET_TEXT), and re-verifies
-     * [stateSeq] at dispatch exactly as [Node] does (I-act-1 / MR3 — the grounding must not have moved).
+     * Set the text of an editable node (the input sink). A SEPARATE variant rather than a
+     * [NodeActionKind] because it carries a String [text] payload a bare action enum cannot. [binding]
+     * is the SAME strict structural identity as [Node]'s (never carrying the requested text or the
+     * field's editable value — a binding is identity, not payload); the backend re-resolves it against
+     * a fresh capture and dispatches ACTION_SET_TEXT on the unique matching node.
      */
     data class SetText(
-        val stateSeq: Long,
-        val tid: Int,
+        val binding: TargetBinding,
         val text: String,
         val allowedPackages: Set<String>,
         /** YOLO host policy: when true the replay walk may also match host-package windows. */
@@ -42,12 +50,11 @@ sealed interface PerformAction {
 }
 
 /**
- * Node action kinds. Slice 8 wired the lowest-risk nav (the two scrolls); slice 10 lands `CLICK` as a
- * payload-less node action on the existing [PerformAction.Node] variant — UNLIKE set_text, a general
- * tap carries no String payload, so it rides [Node] exactly like a scroll (no separate variant, no
- * second dispatch path). Slice 9's set_text still travels on the dedicated [PerformAction.SetText]
- * variant (it needs a String payload). The vocabulary grows additively, no kernel change (the
- * verb/sink mapping lives in the core: CLICK ⇒ Verb.TAP with no sink, derived from this kind).
+ * Node action kinds. SCROLL_FORWARD/SCROLL_BACKWARD ride [PerformAction.Node] as a payload-less verb;
+ * CLICK rides the SAME variant (a general tap carries no String payload). set_text still travels on
+ * the dedicated [PerformAction.SetText] variant (it needs a String payload). The vocabulary grows
+ * additively, no kernel change (the verb/sink mapping lives in the core: CLICK ⇒ Verb.TAP with a sink
+ * only when the resolved target is submit-class, derived from this kind).
  */
 enum class NodeActionKind {
     SCROLL_FORWARD,

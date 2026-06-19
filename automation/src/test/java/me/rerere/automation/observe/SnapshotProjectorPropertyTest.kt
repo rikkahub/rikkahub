@@ -296,6 +296,266 @@ class SnapshotProjectorPropertyTest {
         }
     }
 
+    // ---- eyes-open binding fields (windowId / structuralPath / structuralFingerprint) are populated
+    // and deterministic, so a strict TargetBinding re-resolve matches byte-for-byte between the
+    // grounding projection and a live dispatch walk. The path is dense (0..n-1 per parent in raw
+    // child order) and the fingerprint is a stable hex SHA-256.
+    @Test
+    fun `binding fields are populated and deterministic`() {
+        runBlocking {
+            checkAll(300, arbRawTree(maxDepth = 4)) { tree ->
+                val a = project(tree)
+                val b = project(tree)
+                a.targets.forEachIndexed { idx, t ->
+                    // windowId mirrors the owning window's id (UNKNOWN_WINDOW_ID when absent). When the
+                    // target carries a known window id, it must belong to a window with this package.
+                    if (t.windowId != UNKNOWN_WINDOW_ID) {
+                        assertTrue(
+                            "windowId must belong to a window with this package",
+                            tree.windows.any { it.windowId == t.windowId && it.pkg == t.sourcePackage },
+                        )
+                    }
+                    // structuralPath is a raw child-index chain (each entry >= 0).
+                    assertTrue("path entries must be non-negative", t.structuralPath.all { it >= 0 })
+                    // fingerprint is a non-empty hex string of identical length across re-projections.
+                    assertTrue("fingerprint must be populated", t.structuralFingerprint.isNotEmpty())
+                    assertTrue(
+                        "fingerprint must be hex",
+                        t.structuralFingerprint.all { it in '0'..'9' || it in 'a'..'f' },
+                    )
+                    assertEquals(
+                        "the same target must re-project a stable fingerprint",
+                        b.targets[idx].structuralFingerprint,
+                        t.structuralFingerprint,
+                    )
+                    assertEquals(
+                        "the same target must re-project a stable path",
+                        b.targets[idx].structuralPath,
+                        t.structuralPath,
+                    )
+                }
+            }
+        }
+    }
+
+    // ---- fingerprint excludes raw text BYTES (only length): editing a value never changes the
+    // fingerprint, so a same-shape text edit does not by itself stale a bound dispatch; but a
+    // STRUCTURAL edit (class/child-count/flags) DOES change it, so a re-flowed node is refused.
+    @Test
+    fun `fingerprint ignores text bytes but captures structural shape`() {
+        val base = RawTree(
+            stateSeq = 1L,
+            foregroundPkg = grantedPkg,
+            windows = listOf(
+                RawWindow(
+                    pkg = grantedPkg,
+                    windowId = 7,
+                    root = RawNode(
+                        text = "hello",
+                        className = "EditText",
+                        resourceId = "com.example.app:id/field",
+                        visible = true, hasArea = true, editable = true,
+                    ),
+                ),
+            ),
+        )
+        val baseFp = project(base).targets.first().structuralFingerprint
+
+        // Editing ONLY the text value keeps the same length ⇒ same fingerprint (length-only digest).
+        val sameLengthValue = base.copy(
+            windows = base.windows.map { it.copy(root = it.root!!.copy(text = "world")) },
+        )
+        assertEquals(
+            "a same-length text edit must NOT change the fingerprint (no raw bytes digested)",
+            baseFp,
+            project(sameLengthValue).targets.first().structuralFingerprint,
+        )
+
+        // A DIFFERENT text length changes the fingerprint (length is part of the shape).
+        val diffLengthValue = base.copy(
+            windows = base.windows.map { it.copy(root = it.root!!.copy(text = "hi")) },
+        )
+        assertTrue(
+            "a different text length must change the fingerprint",
+            baseFp != project(diffLengthValue).targets.first().structuralFingerprint,
+        )
+
+        // A STRUCTURAL change (adding a child) changes the fingerprint even with identical text. The
+        // root (tid 0) gains a child ⇒ its childCount + childrenShapeDigest change.
+        val addedChild = base.copy(
+            windows = base.windows.map {
+                it.copy(root = it.root!!.copy(children = listOf(RawNode(text = "child", className = "TextView", visible = true, hasArea = true))))
+            },
+        )
+        assertTrue(
+            "a structural change (added child) must change the fingerprint",
+            baseFp != project(addedChild).targets.first().structuralFingerprint,
+        )
+    }
+
+    // ---- the fingerprint is RECURSIVE over the full subtree (review round 3 #1): a DEEP descendant
+    // structural mutation must change the ancestor target's fingerprint, so a clickable container whose
+    // inner content was swapped (same shell, different guts) is refused by a strict binding. ----
+    @Test
+    fun `a deep descendant structural change alters the ancestor fingerprint`() {
+        // A clickable container (the target) with a child that itself has ONE grandchild.
+        fun tree(grandchildren: List<RawNode>) = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(
+                RawWindow(
+                    pkg = grantedPkg, windowId = 3,
+                    root = RawNode(
+                        className = "FrameLayout", visible = true, hasArea = true, clickable = true,
+                        children = listOf(
+                            RawNode(
+                                className = "LinearLayout", visible = true, hasArea = true,
+                                children = grandchildren,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val base = tree(listOf(RawNode(text = "Cancel", className = "Button", visible = true, hasArea = true, clickable = true)))
+        // Same immediate-child shape (one LinearLayout child), but the GRANDCHILD subtree gains a node.
+        val deepChange = tree(
+            listOf(
+                RawNode(text = "Cancel", className = "Button", visible = true, hasArea = true, clickable = true),
+                RawNode(text = "Confirm", className = "Button", visible = true, hasArea = true, clickable = true),
+            ),
+        )
+        val baseFp = project(base).targets.first { it.role == "FrameLayout" }.structuralFingerprint
+        val changedFp = project(deepChange).targets.first { it.role == "FrameLayout" }.structuralFingerprint
+        assertTrue(
+            "a deep descendant structural change must change the ancestor container's fingerprint",
+            baseFp != changedFp,
+        )
+    }
+
+    // ---- fingerprint field framing is unambiguous (review round 5 #1): adjacent variable-length
+    // fields whose concatenation is equal but whose boundaries differ MUST yield different
+    // fingerprints. Without length-prefix framing, className="ab"+resourceId="c" and
+    // className="a"+resourceId="bc" would serialize to the same preimage and let an in-place
+    // replacement keep the binding. ----
+    @Test
+    fun `fingerprint framing disambiguates adjacent field boundaries`() {
+        fun fp(className: String, resourceId: String): String {
+            val tree = RawTree(
+                stateSeq = 1L, foregroundPkg = grantedPkg,
+                windows = listOf(
+                    RawWindow(
+                        pkg = grantedPkg, windowId = 1,
+                        // resourceId implies hasId ⇒ the node projects regardless of text/visibility.
+                        root = RawNode(className = className, resourceId = resourceId, visible = true, hasArea = true),
+                    ),
+                ),
+            )
+            return project(tree).targets.single().structuralFingerprint
+        }
+        assertTrue(
+            "className/resourceId boundary must be unambiguous in the fingerprint",
+            fp("ab", "c") != fp("a", "bc"),
+        )
+        // The same boundary ambiguity across the package axis must also be framed.
+        fun fpPkgPath(pkg: String, secondSegment: Int): String {
+            val tree = RawTree(
+                stateSeq = 1L, foregroundPkg = grantedPkg,
+                windows = listOf(
+                    RawWindow(
+                        pkg = pkg, windowId = 1,
+                        root = RawNode(
+                            className = "Root", visible = true, hasArea = true,
+                            children = List(secondSegment + 1) { idx ->
+                                RawNode(className = "C$idx", resourceId = "id$idx", visible = true, hasArea = true)
+                            },
+                        ),
+                    ),
+                ),
+            )
+            // Project and read the LAST child's fingerprint (its structuralPath ends in secondSegment).
+            return project(tree).targets.last().structuralFingerprint
+        }
+        assertTrue(
+            "package + path framing must be unambiguous",
+            fpPkgPath(grantedPkg, 1) != fpPkgPath(grantedPkg, 2),
+        )
+    }
+
+    // ---- distinct windows with the same shape produce distinct fingerprints (windowId axis), so a
+    // same-shape node re-flowed into a different window is refused by a strict binding.
+    @Test
+    fun `same shape in different windows yields different fingerprints`() {
+        val node = RawNode(text = "X", className = "Button", visible = true, hasArea = true, clickable = true)
+        val treeA = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(RawWindow(pkg = grantedPkg, windowId = 1, root = node)),
+        )
+        val treeB = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(RawWindow(pkg = grantedPkg, windowId = 2, root = node)),
+        )
+        assertTrue(
+            "the windowId axis must distinguish same-shape nodes in different windows",
+            project(treeA).targets.single().structuralFingerprint !=
+                project(treeB).targets.single().structuralFingerprint,
+        )
+    }
+
+    // ---- windowId fallback (review round 2 #3): when the window-level id is UNKNOWN but the node
+    // carries its own window id, the projector must fall back to node.windowId for BOTH the
+    // UiTarget.windowId axis and the fingerprint — otherwise the binding collapses to
+    // UNKNOWN_WINDOW_ID and a same-shape node in a different window could match it.
+    @Test
+    fun `windowId falls back to the node id when the window-level id is unknown`() {
+        val node = RawNode(
+            text = "X", className = "Button", visible = true, hasArea = true, clickable = true,
+            windowId = 5,
+        )
+        // Window-level id UNKNOWN, but the node knows it is in window 5.
+        val unknownWindow = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(RawWindow(pkg = grantedPkg, windowId = UNKNOWN_WINDOW_ID, root = node)),
+        )
+        // The same node shape in a window whose WINDOW-level id is the known 5 (node id irrelevant here).
+        val knownWindow = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(RawWindow(pkg = grantedPkg, windowId = 5, root = node.copy(windowId = UNKNOWN_WINDOW_ID))),
+        )
+        val fallback = project(unknownWindow).targets.single()
+        assertEquals("the target must adopt the node's window id when the window id is unknown", 5, fallback.windowId)
+        assertEquals(
+            "the node-id fallback must flow into the fingerprint identically to a window-level id 5",
+            project(knownWindow).targets.single().structuralFingerprint,
+            fallback.structuralFingerprint,
+        )
+
+        // The window-level id wins when BOTH are known and differ (window id is preferred, node id is fallback-only).
+        val bothKnown = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(RawWindow(pkg = grantedPkg, windowId = 9, root = node.copy(windowId = 5))),
+        )
+        assertEquals("the window-level id must win over a differing node id", 9, project(bothKnown).targets.single().windowId)
+
+        // A NEGATIVE window-level id (the framework's -1 "unknown" sentinel) must be treated as unknown,
+        // not as a real matchable id, and trigger the node fallback (review round 7 #1).
+        val negativeWindow = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(RawWindow(pkg = grantedPkg, windowId = -1, root = node.copy(windowId = 5))),
+        )
+        assertEquals("a negative window id must fall back to the node id", 5, project(negativeWindow).targets.single().windowId)
+
+        // Both negative ⇒ canonical UNKNOWN_WINDOW_ID (never a -1 that two unknown windows would share).
+        val bothNegative = RawTree(
+            stateSeq = 1L, foregroundPkg = grantedPkg,
+            windows = listOf(RawWindow(pkg = grantedPkg, windowId = -1, root = node.copy(windowId = -1))),
+        )
+        assertEquals(
+            "both ids negative must canonicalize to UNKNOWN_WINDOW_ID",
+            UNKNOWN_WINDOW_ID,
+            project(bothNegative).targets.single().windowId,
+        )
+    }
+
     // ---- P6: adding empty noise containers does not change the targets ----
     @Test
     fun `P6 noise nodes do not change projection`() {
@@ -458,8 +718,11 @@ class SnapshotProjectorPropertyTest {
         )
         val snap = project(tree, grantedPkg)
         assertTrue(snap.targets.any { it.text == "GrantedMain" })
-        val dialog = snap.targets.firstOrNull { it.text == "ForeignDialog" }
+        // The dialog node is editable, so its display text is the hint (not the value "ForeignDialog");
+        // address it by its stable semantic key instead.
+        val dialog = snap.targets.firstOrNull { it.semanticKey == "foreign-key" }
         assertEquals("system-window targets should be projected", foreignPkg, dialog?.sourcePackage)
+        assertEquals("an editable system node's VALUE must not be projected as display text", "foreign-key", dialog?.text)
         assertEquals("system-window provenance carries semantic key", "foreign-key", dialog?.semanticKey)
         assertEquals(
             "system-window provenance carries view/form id",

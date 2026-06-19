@@ -66,9 +66,13 @@ import me.rerere.automation.observe.UiSnapshot
  *    the same `guardInFlight` (within `core.act`), so a kill-switch `revoke()` cancels parked work via
  *    the owning [Job] and a revoke between authorize and dispatch denies instead of acting (P20).
  *  - **Captured target bound to the authorized target (TOCTOU):** for `ui_observe` the foreground
- *    package is re-asserted after capture; for the act path `core.act` re-asserts BOTH the grounded
- *    `stateSeq` and `windowContentHash` before dispatch, so a screen change since the grounding
- *    ui_observe yields a stale-state stop, never an act on a moved target.
+ *    package is re-asserted after capture; for the act path `core.act` carries a decision-time
+ *    `TargetBinding` (window identity + structural fingerprint) and the backend FRESH-resolves that
+ *    binding and dispatches atomically (resolve + perform on the same live node under one capture
+ *    lock). A target that moved / was replaced since the grounding ui_observe fails the strict binding
+ *    match, yielding a stale-state stop (with the fresh snapshot to re-decide), never an act on a moved
+ *    target. (The old whole-snapshot `stateSeq + windowContentHash` freshness gate is gone — benign
+ *    background churn no longer stales an act; the binding match is the freshness signal.)
  *  - **Turn-scoped tids:** the act tools resolve against the snapshot the latest `ui_observe`
  *    grounded this turn; an act before any observe refuses (a tid is only valid for its snapshot).
  *  - **Authority is closed over, never model-supplied (I2):** the guard is captured here; the model's
@@ -191,8 +195,10 @@ fun getUiAutomationTools(
                                 listOf(UIMessagePart.Text(OBSERVE_DENIED_MESSAGE))
                             } else {
                                 // Ground the act tools on this authorized, freshly-captured snapshot:
-                                // ui_scroll/ui_global resolve their selector against it and re-assert
-                                // its (stateSeq, windowContentHash) before any dispatch (#198 slice 8).
+                                // the act tools resolve their selector against it into a decision-time
+                                // TargetBinding; the backend then fresh-resolves that binding and
+                                // dispatches atomically (no whole-snapshot seq/hash gate — #198 slice 8
+                                // superseded by the eyes-open binding redesign).
                                 grounded = snapshot
                                 listOf(UIMessagePart.Text(renderCompactSnapshot(snapshot)))
                             }
@@ -266,7 +272,13 @@ fun getUiAutomationTools(
                     }
                     // Both stops are vague and re-observe-oriented; the deny reason is NEVER leaked.
                     is ActOutcome.Denied -> listOf(UIMessagePart.Text(ACT_DENIED_MESSAGE))
-                    ActOutcome.StaleState -> listOf(UIMessagePart.Text(ACT_STALE_MESSAGE))
+                    is ActOutcome.StaleState -> {
+                        // Re-ground on the fresh snapshot the backend captured at the binding mismatch,
+                        // so the model can re-decide from the live screen (and the next act this turn
+                        // resolves against the current screen, not the stale grounding).
+                        if (outcome.snapshot != null) grounded = outcome.snapshot
+                        renderStaleState(outcome.snapshot)
+                    }
                 }
             },
         ),
@@ -317,7 +329,10 @@ fun getUiAutomationTools(
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))
                     }
                     is ActOutcome.Denied -> listOf(UIMessagePart.Text(ACT_DENIED_MESSAGE))
-                    ActOutcome.StaleState -> listOf(UIMessagePart.Text(ACT_STALE_MESSAGE))
+                    is ActOutcome.StaleState -> {
+                        if (outcome.snapshot != null) grounded = outcome.snapshot
+                        renderStaleState(outcome.snapshot)
+                    }
                 }
             },
         ),
@@ -390,7 +405,10 @@ fun getUiAutomationTools(
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))
                     }
                     is ActOutcome.Denied -> listOf(UIMessagePart.Text(ACT_DENIED_MESSAGE))
-                    ActOutcome.StaleState -> listOf(UIMessagePart.Text(ACT_STALE_MESSAGE))
+                    is ActOutcome.StaleState -> {
+                        if (outcome.snapshot != null) grounded = outcome.snapshot
+                        renderStaleState(outcome.snapshot)
+                    }
                 }
             },
         ),
@@ -448,7 +466,10 @@ fun getUiAutomationTools(
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))
                     }
                     is ActOutcome.Denied -> listOf(UIMessagePart.Text(ACT_DENIED_MESSAGE))
-                    ActOutcome.StaleState -> listOf(UIMessagePart.Text(ACT_STALE_MESSAGE))
+                    is ActOutcome.StaleState -> {
+                        if (outcome.snapshot != null) grounded = outcome.snapshot
+                        renderStaleState(outcome.snapshot)
+                    }
                 }
             },
         ),
@@ -509,12 +530,45 @@ internal const val ACT_DENIED_MESSAGE =
         "either pick a clearer target or stop the automation."
 
 /**
- * The grounding moved under the act (the screen changed since the last ui_observe). The model must
- * re-observe and re-decide — NEVER replay the stale act. Vague (no internal reason leaked).
+ * The grounding moved under the act (the screen changed since the last ui_observe, or the bound
+ * target did not re-resolve to exactly one live node). The model must re-observe and re-decide —
+ * NEVER replay the stale act. Vague (no internal reason leaked). Used when [ActOutcome.StaleState]
+ * carried NO fresh snapshot; when it did, [renderStaleState] surfaces the fresh table instead.
  */
 internal const val ACT_STALE_MESSAGE =
     "The screen changed since your last ui_observe, so that action was not applied. Call ui_observe " +
         "again to get a fresh snapshot, then decide the next step from the current screen."
+
+/**
+ * Render a stale-state outcome to tool parts. When the backend captured a FRESH snapshot at the
+ * binding mismatch ([snapshot] != null) the tool layer emits a vague re-decide preamble followed by
+ * the rendered current screen, so the model can re-decide from the live screen instead of a blind
+ * re-observe. The caller is responsible for re-grounding (closing over `grounded`) on a non-null
+ * snapshot; this helper only renders.
+ *
+ * When [snapshot] is null (host-foreground pause, surface switch off the authorized target, missing
+ * tid, or the framework refused the verb) the renderer emits only the vague re-observe text — there
+ * is no informative current screen to render.
+ */
+internal fun renderStaleState(snapshot: UiSnapshot?): List<UIMessagePart.Text> {
+    val current = snapshot ?: return listOf(UIMessagePart.Text(ACT_STALE_MESSAGE))
+    return listOf(
+        UIMessagePart.Text(
+            ACT_STALE_REDECIDE_MESSAGE + "\n\n" + renderCompactSnapshot(current),
+        ),
+    )
+}
+
+/**
+ * A stale-state outcome that CARRIES a fresh snapshot: the bound target did not re-resolve to
+ * exactly one live node, but the backend captured the current screen. Vague about the reason (never
+ * leaks the binding-mismatch internals), self-sufficient (the rendered fresh table follows), and
+ * steers the model to re-decide from the current screen rather than replay the stale act.
+ */
+internal const val ACT_STALE_REDECIDE_MESSAGE =
+    "The element you tried to act on did not match exactly one live element on the current screen, " +
+        "so that action was not applied. A fresh snapshot of the current screen follows — re-decide " +
+        "the next step from it (do not replay the previous action)."
 
 /**
  * Why a `ui_observe` call returned nothing. Self-sufficient text (the model never sees the
