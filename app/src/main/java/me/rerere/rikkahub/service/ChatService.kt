@@ -90,6 +90,7 @@ import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
+import me.rerere.rikkahub.service.alarm.TaMessageDecisionHelper
 import me.rerere.workspace.WorkspaceShellStatus
 import java.time.Instant
 import java.util.Locale
@@ -646,6 +647,18 @@ class ChatService(
             }
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
+            }
+
+            // ===== [新增] Ta 的来信：静默决策时间 =====
+            if (assistant.taMessageEnabled) {
+                launchWithConversationReference(conversationId) {
+                    TaMessageDecisionHelper.onAfterReply(
+                        context = context,
+                        assistant = assistant,
+                        conversation = finalConversation,
+                        settings = settings,
+                    )
+                }
             }
         }
     }
