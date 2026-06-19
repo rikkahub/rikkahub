@@ -4,6 +4,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.ArrowRight01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -21,6 +23,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -44,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.ai.tools.DEFAULT_MEMORY_TOOL_USER_PROMPT
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
@@ -110,6 +115,7 @@ private fun AssistantMemoryContent(
         }
     }
     var pendingDeleteMemory by remember { mutableStateOf<AssistantMemory?>(null) }
+    var showMemoryToolPromptEditor by remember { mutableStateOf(false) }
 
     // 记忆对话框
     memoryDialogState.EditStateContent { memory, update ->
@@ -246,6 +252,26 @@ private fun AssistantMemoryContent(
             )
         }
 
+        CardGroup(title = { Text(stringResource(R.string.assistant_page_memory_tool_prompt)) }) {
+            item(
+                onClick = {
+                    // 旧数据兼容迁移：如果 memoryToolPrompt 为空，自动填充默认文本
+                    if (assistant.memoryToolPrompt.isBlank()) {
+                        onUpdateAssistant(assistant.copy(memoryToolPrompt = DEFAULT_MEMORY_TOOL_USER_PROMPT))
+                    }
+                    showMemoryToolPromptEditor = true
+                },
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_tool_prompt_desc)) },
+                trailingContent = {
+                    Icon(
+                        HugeIcons.ArrowRight01,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+            )
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -305,6 +331,18 @@ private fun AssistantMemoryContent(
             )
         }
     )
+
+    MemoryToolPromptEditor(
+        currentPrompt = assistant.memoryToolPrompt,
+        onPromptChange = { newPrompt ->
+            onUpdateAssistant(assistant.copy(memoryToolPrompt = newPrompt))
+        },
+        onResetPrompt = {
+            onUpdateAssistant(assistant.copy(memoryToolPrompt = DEFAULT_MEMORY_TOOL_USER_PROMPT))
+        },
+        show = showMemoryToolPromptEditor,
+        onDismiss = { showMemoryToolPromptEditor = false },
+    )
 }
 
 @Composable
@@ -352,6 +390,50 @@ private fun MemoryItem(
                     HugeIcons.Delete01,
                     stringResource(R.string.assistant_page_delete)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryToolPromptEditor(
+    currentPrompt: String,
+    onPromptChange: (String) -> Unit,
+    onResetPrompt: () -> Unit,
+    show: Boolean,
+    onDismiss: () -> Unit,
+) {
+    if (show) {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp)
+                    .imePadding(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.assistant_page_memory_tool_prompt),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.assistant_page_memory_tool_prompt_vars),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = currentPrompt,
+                    onValueChange = onPromptChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 15,
+                )
+                TextButton(onClick = {
+                    onResetPrompt()
+                }) {
+                    Text(stringResource(R.string.setting_model_page_reset_to_default))
+                }
             }
         }
     }
