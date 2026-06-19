@@ -123,6 +123,52 @@ sealed class ASRProviderSetting {
         }
     }
 
+    /**
+     * 阶跃星辰 Step ASR (stepaudio-2.5-asr)。
+     *
+     * 与 MiMo 类似也是 HTTP 一次性提交 + 分段上传, 但有两个差异:
+     * 1) 鉴权用标准 `Authorization: Bearer` 而非 `api-key` 头
+     * 2) 服务端以 SSE 流式返回 (text/event-stream), 事件类型包括
+     *    transcript.text.delta / transcript.text.done / error
+     * 3) 直接接受 PCM base64, 不需要 WAV 头封装
+     *
+     * 客户端按 [segmentDurationSec] 切段, 每段 PCM base64 后 POST 到
+     * {baseUrl}/v1/audio/asr/sse, 流式接收 delta 拼到 partial transcript,
+     * done 时把完整段文本 append 到 completedTranscripts。
+     *
+     * 官方文档: https://platform.stepfun.com/docs/zh/api-reference/audio/asr-sse
+     */
+    @Serializable
+    @SerialName("step")
+    data class Step(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "Step ASR",
+        val apiKey: String = "",
+        val baseUrl: String = "https://api.stepfun.com",
+        val model: String = "stepaudio-2.5-asr",
+        // auto | zh | en; 留空时不下发 language 字段, 服务端默认 auto
+        val language: String = "auto",
+        val sampleRate: Int = 16000,
+        // 每多少秒自动 flush 一次 (上传识别)。0 = 仅 stop() 时整体上传
+        val segmentDurationSec: Int = 30,
+        // 逆文本归一化 (Inverse Text Normalization): 把 "三百" -> "300" 等
+        val enableItn: Boolean = true,
+        // 是否返回词级时间戳 (rikkahub 当前不消费时间戳, 默认关闭节省 token)
+        val enableTimestamp: Boolean = false,
+        // 热词列表, 提升专有名词/术语识别准确率
+        val hotwords: List<String> = emptyList(),
+    ) : ASRProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): ASRProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -130,6 +176,7 @@ sealed class ASRProviderSetting {
                 DashScope::class,
                 Volcengine::class,
                 MiMo::class,
+                Step::class,
             )
         }
     }
