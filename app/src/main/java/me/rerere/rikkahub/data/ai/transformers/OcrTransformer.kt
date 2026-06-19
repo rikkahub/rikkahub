@@ -101,6 +101,8 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
             ),
             params = TextGenerationParams(
                 model = model,
+                customHeaders = model.customHeaders,
+                customBody = model.customBodies,
             ),
         )
         val content = result.choices[0].message?.toText() ?: "[ERROR, OCR failed]"
