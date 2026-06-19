@@ -7,6 +7,7 @@ import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.rikkahub.data.ai.tools.DEFAULT_MEMORY_TOOL_USER_PROMPT
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import kotlin.uuid.Uuid
 
@@ -44,6 +45,7 @@ data class Assistant(
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
+    val memoryToolPrompt: String = DEFAULT_MEMORY_TOOL_USER_PROMPT,  // 自定义记忆工具提示词（行为规则部分）
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
 )

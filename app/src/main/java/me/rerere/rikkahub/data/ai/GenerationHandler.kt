@@ -104,6 +104,7 @@ class GenerationHandler(
                     }
                     buildMemoryTools(
                         json = json,
+                        customMemoryPrompt = assistant?.memoryToolPrompt ?: "",
                         onCreation = { content ->
                             memoryRepo.addMemory(memoryAssistantId, content)
                         },
