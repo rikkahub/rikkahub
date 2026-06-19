@@ -11,6 +11,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
+
+      - name: Install zsh and pnpm
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zsh
+          npm install -g pnpm
 
       - name: Set up JDK
         uses: actions/setup-java@v4
