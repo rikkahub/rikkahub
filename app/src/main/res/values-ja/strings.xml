@@ -1218,5 +1218,26 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_page_name_duplicate">名前は既に存在します</string>
   <string name="setting_mcp_page_name_invalid">名前は英数字のみ使用可能です。</string>
   <string name="error_mcp_invalid_server_name">無効なMCPサーバー名です（英数字のみ使用可能）：%1$s</string>
+  <string name="setting_asr_configure_base_url">Base URL</string>
+  <string name="setting_asr_configure_sample_rate">サンプルレート</string>
+  <string name="setting_asr_configure_segment_duration">セグメント長</string>
+  <string name="setting_asr_configure_mimo_api_key_desc">Xiaomi MiMo API キー（従量課金は sk-、Token プランは tp- で始まります）</string>
+  <string name="setting_asr_configure_mimo_base_url_desc">MiMo の OpenAI 互換 Base URL。sk- キーは https://api.xiaomimimo.com/v1、tp- キーは https://token-plan-cn.xiaomimimo.com/v1 を使用します</string>
+  <string name="setting_asr_configure_mimo_model_desc">MiMo ASR モデル名。例: mimo-v2.5-asr</string>
+  <string name="setting_asr_configure_mimo_language_desc">任意の言語ヒント: auto、zh、en。空欄の場合はサーバー既定値（auto）を使用します</string>
+  <string name="setting_asr_configure_mimo_sample_rate_desc">PCM 録音のサンプルレート（Hz）。ASR には 16000 を推奨します</string>
+  <string name="setting_asr_configure_mimo_segment_desc">録音中に N 秒ごとにバッファ済み音声を自動アップロードして認識します。0 にすると自動分割を無効化します（stop 時に一括送信、16kHz で最大約 3.9 分）</string>
+  <string name="setting_asr_configure_step_api_key_desc">StepFun（階躍星辰）API キー。https://platform.stepfun.com/interface-key から取得します</string>
+  <string name="setting_asr_configure_step_base_url_desc">Step ASR の Base URL。中国では https://api.stepfun.com、海外では https://api.stepfun.ai を使用します</string>
+  <string name="setting_asr_configure_step_model_desc">Step ASR モデル名。例: stepaudio-2.5-asr（フラッグシップ、最安）または step-asr</string>
+  <string name="setting_asr_configure_step_language_desc">任意の言語ヒント: auto、zh、en。空欄の場合はサーバー既定値（auto）を使用します</string>
+  <string name="setting_asr_configure_step_sample_rate_desc">PCM 録音のサンプルレート（Hz）。ASR には 16000 を推奨します</string>
+  <string name="setting_asr_configure_step_segment_desc">録音中に N 秒ごとにバッファ済み音声を自動アップロードして認識します。0 にすると自動分割を無効化します（stop 時に一括送信）</string>
+  <string name="setting_asr_configure_step_itn">ITN を有効化</string>
+  <string name="setting_asr_configure_step_itn_desc">逆テキスト正規化: 話し言葉の数字を数字表記に変換します（例: 三百 → 300）</string>
+  <string name="setting_asr_configure_step_timestamp">タイムスタンプを有効化</string>
+  <string name="setting_asr_configure_step_timestamp_desc">単語単位のタイムスタンプを返します。rikkahub では現在使用していないため、token 節約のため既定では無効です</string>
+  <string name="setting_asr_configure_step_hotwords">ホットワード</string>
+  <string name="setting_asr_configure_step_hotwords_desc">固有名詞や専門用語の認識精度を高める、カンマ区切りのホットワード一覧</string>
 </resources>
 
