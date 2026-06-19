@@ -149,6 +149,9 @@
   <string name="assistant_page_thinking_budget">Thinking Budget</string>
   <string name="assistant_page_time_reminder">Time Reminder</string>
   <string name="assistant_page_time_reminder_desc">Automatically inject time reminders before messages with large time gaps to help AI understand conversation intervals</string>
+  <string name="assistant_page_memory_tool_prompt">Memory Tool Prompt</string>
+  <string name="assistant_page_memory_tool_prompt_desc">Customize the behavioral instructions for the memory tool</string>
+  <string name="assistant_page_memory_tool_prompt_vars">Variables: {当前日期} (dynamically filled with today\'s date at runtime)</string>
   <string name="assistant_page_title">Assistant Settings</string>
   <string name="assistant_page_top_p">Top P</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>

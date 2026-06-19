@@ -149,6 +149,9 @@
   <string name="assistant_page_thinking_budget">思考预算</string>
   <string name="assistant_page_time_reminder">时间提醒</string>
   <string name="assistant_page_time_reminder_desc">在间隔较大的消息前自动插入时间提醒，帮助 AI 理解对话间隔</string>
+  <string name="assistant_page_memory_tool_prompt">记忆工具提示词</string>
+  <string name="assistant_page_memory_tool_prompt_desc">自定义记忆工具的行为指令</string>
+  <string name="assistant_page_memory_tool_prompt_vars">变量: {当前日期}（运行时会动态填充为当天日期）</string>
   <string name="assistant_page_title">助手设置</string>
   <string name="assistant_page_top_p">Top P</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>
