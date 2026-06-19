@@ -13,6 +13,12 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
+  <!-- 「Ta 的来信」到点唤醒所需权限 -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" tools:ignore="ProtectedPermissions" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
   <uses-feature
     android:name="android.hardware.camera"
     android:required="false" />
@@ -102,6 +108,25 @@
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="local web server for LLM chat UI" />
     </service>
+
+    <!-- 「Ta 的来信」到点唤醒接收器: 仅由系统闹钟投递触发, exported=false -->
+    <receiver
+      android:name=".receiver.TaMessageAlarmReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.action.TA_MESSAGE_FIRE" />
+      </intent-filter>
+    </receiver>
+
+    <!-- 重启后恢复闹钟: 需接收系统广播, exported=true (Android 12+ 要求显式 exported) -->
+    <receiver
+      android:name=".receiver.RebootAlarmReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+      </intent-filter>
+    </receiver>
 
     <provider
       android:name="androidx.core.content.FileProvider"

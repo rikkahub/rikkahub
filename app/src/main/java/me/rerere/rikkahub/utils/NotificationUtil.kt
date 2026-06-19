@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
@@ -20,6 +21,7 @@ class NotificationConfig {
     var content: String = ""
     var subText: String? = null
     var smallIcon: Int = R.drawable.small_icon
+    var largeIcon: Bitmap? = null
     var autoCancel: Boolean = false
     var ongoing: Boolean = false
     var onlyAlertOnce: Boolean = false
@@ -87,6 +89,7 @@ object NotificationUtil {
             setContentTitle(config.title)
             setContentText(config.content)
             setSmallIcon(config.smallIcon)
+            config.largeIcon?.let { setLargeIcon(it) }
             setAutoCancel(config.autoCancel)
             setOngoing(config.ongoing)
             setOnlyAlertOnce(config.onlyAlertOnce)

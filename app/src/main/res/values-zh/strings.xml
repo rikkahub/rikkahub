@@ -438,6 +438,7 @@
   <string name="notification_channel_chat_completed">聊天完成</string>
   <string name="notification_channel_chat_live_update">聊天生成进度</string>
   <string name="notification_channel_web_server">Web服务器</string>
+  <string name="notification_channel_ta_message">Ta 的来信</string>
   <string name="notification_live_update_chip_thinking">思考中</string>
   <string name="notification_live_update_chip_tool">工具</string>
   <string name="notification_live_update_chip_writing">正在书写</string>

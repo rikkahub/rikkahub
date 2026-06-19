@@ -439,6 +439,7 @@
   <string name="notification_channel_chat_completed">Chat Completed</string>
   <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
   <string name="notification_channel_web_server">Web Server</string>
+  <string name="notification_channel_ta_message">Ta\'s Message</string>
   <string name="notification_live_update_chip_thinking">Thinking</string>
   <string name="notification_live_update_chip_tool">Tool</string>
   <string name="notification_live_update_chip_writing">Writing</string>
