@@ -146,7 +146,7 @@ object TaMessageDecisionHelper : KoinComponent {
         Logging.log(TAG, "请求 LLM 决策时间: 共 ${messages.size} 条消息\n$messagesSummary")
 
         // ===== 获取模型（与标题/建议生成模型一致） =====
-        val model = settings.findModelById(settings.titleModelId, fallback = settings.fastModelId)
+        val model = settings.findModelById(settings.taMessageModelId, fallback = settings.fastModelId)
             ?: return null
         val provider = model.findProvider(settings.providers)
             ?: return null

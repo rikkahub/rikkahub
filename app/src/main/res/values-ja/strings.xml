@@ -752,6 +752,8 @@
   <string name="setting_model_page_reset_to_default">デフォルトにリセット</string>
   <string name="setting_model_page_suggestion_model">チャット提案モデル</string>
   <string name="setting_model_page_suggestion_model_desc">会話の提案を生成するモデル。設定されていない場合は高速モデルを使用します</string>
+  <string name="setting_model_page_ta_message_model">Taの手紙 時間決定モデル</string>
+  <string name="setting_model_page_ta_message_model_desc">Taの手紙の時間決定に使用するモデル。未設定の場合は高速モデルを使用します</string>
   <string name="setting_model_page_suggestion_prompt_vars">変数: 会話内容: {content}, 言語: {locale}</string>
   <string name="setting_model_page_title">モデル設定</string>
   <string name="setting_model_page_title_model">タイトル要約モデル</string>
@@ -1110,6 +1112,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_prompt_suggestion">チャット返信の提案</string>
   <string name="setting_model_page_prompt_ocr">OCR認識</string>
   <string name="setting_model_page_prompt_compress">コンテキスト圧縮</string>
+  <string name="setting_model_page_ta_message_prompt_note">Taの手紙の時間決定プロンプトは、各アシスタントの詳細ページで設定できます。</string>
   <string name="setting_display_page_bubble_opacity_title">吹き出しの不透明度</string>
   <string name="setting_provider_page_include_history_reasoning">履歴の思考過程を送信</string>
   <string name="setting_model_page_fast_model">高速モデル</string>

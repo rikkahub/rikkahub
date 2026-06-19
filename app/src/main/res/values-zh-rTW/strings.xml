@@ -752,6 +752,8 @@
   <string name="setting_model_page_reset_to_default">重置為預設值</string>
   <string name="setting_model_page_suggestion_model">聊天建議模型</string>
   <string name="setting_model_page_suggestion_model_desc">用於生成聊天建議的模型。未設置時使用快速模型</string>
+  <string name="setting_model_page_ta_message_model">Ta的來信 時間決策模型</string>
+  <string name="setting_model_page_ta_message_model_desc">用於Ta的來信時間決策的模型。未設定時使用快速模型</string>
   <string name="setting_model_page_suggestion_prompt_vars">變數: 對話內容: {content}, 語言: {locale}</string>
   <string name="setting_model_page_title">模型設定</string>
   <string name="setting_model_page_title_model">標題摘要模型</string>
@@ -1108,6 +1110,7 @@
   <string name="setting_model_page_prompt_suggestion">聊天回覆建議</string>
   <string name="setting_model_page_prompt_ocr">OCR 辨識</string>
   <string name="setting_model_page_prompt_compress">上下文壓縮</string>
+  <string name="setting_model_page_ta_message_prompt_note">Ta的來信時間決策提示詞可在每個助手的詳情頁中單獨設定。</string>
   <string name="setting_display_page_bubble_opacity_title">氣泡透明度</string>
   <string name="setting_provider_page_include_history_reasoning">回傳歷史思考過程</string>
   <string name="setting_model_page_fast_model">快速模型</string>
