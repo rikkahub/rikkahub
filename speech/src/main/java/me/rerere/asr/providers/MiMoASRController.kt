@@ -114,6 +114,8 @@ class MiMoASRController(
         // 把剩余 PCM 做最后一次 flush, 完成后切回 Idle
         scope.launch(Dispatchers.IO) {
             try {
+                // 等当前正在跑的 flushJob 完成, 避免并发 flush 导致结果乱序
+                flushJob?.join()
                 flushSegment()
             } catch (e: Exception) {
                 Log.e(TAG, "Final flush failed", e)

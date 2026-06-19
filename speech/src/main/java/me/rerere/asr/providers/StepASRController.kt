@@ -8,6 +8,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.SystemClock
+import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -29,20 +30,19 @@ import me.rerere.asr.ASRStatus
 import me.rerere.asr.appendAmplitude
 import me.rerere.asr.calculateRmsAmplitude
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import okio.BufferedSource
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.Collections
 
 private const val TAG = "StepASR"
 
-// /v1/audio/transcriptions 端点要求上传文件, 官方 SDK 限制 100MB. 我们提前在 6MB
-// 触发分段, 与 MiMo 一致, 避免单段过大导致网络传输失败.
+// 提前在 6MB 触发分段, 与 MiMo 一致, 避免单段过大导致网络传输失败.
 private const val MAX_SEGMENT_BYTES = 6 * 1024 * 1024
 
 // 最小段长度: 16kHz/16bit/mono 下 100ms = 3200 字节。短于这个长度直接丢弃,
@@ -55,17 +55,12 @@ private const val MAX_RETRY = 3
 /**
  * 阶跃星辰 Step ASR Controller。
  *
- * 与 MiMo 类似也是 HTTP 一次性提交 + 分段上传, 走 OpenAI 兼容的
- * `POST /v1/audio/transcriptions` 端点 (官方 Android SDK 也用这个端点):
- * - multipart form: model / response_format=json / file=<wav> / hotwords (可选)
+ * 与 MiMo 类似也是 HTTP 一次性提交 + 分段上传, 走 Step ASR SSE 端点:
+ * - JSON body: audio.data=<pcm base64> / audio.input.transcription / audio.input.format
  * - 鉴权: `Authorization: Bearer sk-xxx`
- * - 响应: `{"text": "..."}` 简单 JSON
- *
- * 注意 transcriptions 端点只接受 WAV/MP3/OGG/m4a 等容器格式, 不直接收 PCM,
- * 所以跟 MiMo 一样要把 PCM 包成 WAV 再上传。
+ * - 响应: text/event-stream, 事件类型包括 transcript.text.delta / transcript.text.done / error
  *
  * 官方文档: https://platform.stepfun.com/docs/zh/api-reference/audio/asr-sse
- * 官方 SDK: https://github.com/stepfun-ai/stepfunApi-audio-sdk
  */
 class StepASRController(
     private val context: Context,
@@ -215,8 +210,8 @@ class StepASRController(
     }
 
     /**
-     * 取出当前缓冲区里的 PCM, 包成 WAV, 用 multipart 上传到 Step /v1/audio/transcriptions。
-     * 响应是简单 JSON: {"text": "..."}, 把识别结果加到 completedTranscripts。
+     * 取出当前缓冲区里的 PCM, base64 后用 JSON 上传到 Step /v1/audio/asr/sse。
+     * 响应是 SSE, 把 delta/done 事件拼成识别结果后加到 completedTranscripts。
      *
      * 在 bufferLock 内拷贝出 PCM 并立刻重置缓冲区, 不持有锁等待网络, 避免阻塞录音写。
      */
@@ -236,58 +231,66 @@ class StepASRController(
             return
         }
 
-        // Step transcriptions 端点只接受 WAV/MP3 等容器, 不收 raw PCM,
-        // 跟 MiMo 一样包 44 字节 WAV 头
-        val wavBytes = pcm16ToWav(
-            pcm = pcmBytes,
-            sampleRate = provider.sampleRate,
-            channels = 1,
-            bitsPerSample = 16
-        )
-
-        val bodyBuilder = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("model", provider.model)
-            .addFormDataPart("response_format", "json")
-            .addFormDataPart(
-                "file",
-                "audio.wav",
-                wavBytes.toRequestBody(WAV_MEDIA_TYPE)
-            )
-
+        val transcription = JSONObject()
+            .put("model", provider.model)
+            .put("enable_itn", provider.enableItn)
+            .put("enable_timestamp", provider.enableTimestamp)
+        if (provider.language.isNotBlank()) {
+            transcription.put("language", provider.language)
+        }
         if (provider.hotwords.isNotEmpty()) {
-            bodyBuilder.addFormDataPart(
-                "hotwords",
-                JSONArray(provider.hotwords).toString()
-            )
+            transcription.put("hotwords", JSONArray(provider.hotwords))
         }
 
+        val body = JSONObject()
+            .put(
+                "audio",
+                JSONObject()
+                    .put("data", Base64.encodeToString(pcmBytes, Base64.NO_WRAP))
+                    .put(
+                        "input",
+                        JSONObject()
+                            .put("transcription", transcription)
+                            .put(
+                                "format",
+                                JSONObject()
+                                    .put("type", "pcm")
+                                    .put("codec", "pcm_s16le")
+                                    .put("rate", provider.sampleRate)
+                                    .put("bits", 16)
+                                    .put("channel", 1)
+                            )
+                    )
+            )
+
         val request = Request.Builder()
-            .url("${provider.baseUrl.trimEnd('/')}/v1/audio/transcriptions")
+            .url("${provider.baseUrl.trimEnd('/')}/v1/audio/asr/sse")
             .addHeader("Authorization", "Bearer ${provider.apiKey}")
-            .post(bodyBuilder.build())
+            .addHeader("Accept", "text/event-stream")
+            .addHeader("Content-Type", "application/json")
+            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
-        // 偶发 400 (服务端解析异常) / 网络抖动时自动重试, 避免用户感知到失败.
-        // 实测同样语音重说一次就能成功, 说明大部分 400 是临时性的, 重试可以解决.
+        val text = executeWithRetry(request).trim()
+
+        if (text.isNotEmpty()) {
+            completedTranscripts.add(text)
+            publishTranscript()
+        }
+    }
+
+    private suspend fun executeWithRetry(request: Request): String {
         var lastError: IOException? = null
-        var text = ""
         for (attempt in 1..MAX_RETRY) {
             try {
-                text = withContext(Dispatchers.IO) {
+                return withContext(Dispatchers.IO) {
                     httpClient.newCall(request).execute().use { resp ->
-                        val respBody = resp.body?.string().orEmpty()
                         if (!resp.isSuccessful) {
-                            throw IOException("Step ASR HTTP ${resp.code}: $respBody")
+                            throw IOException("Step ASR HTTP ${resp.code}: ${resp.body.string()}")
                         }
-                        val json = runCatching { JSONObject(respBody) }.getOrElse {
-                            throw IOException("Step ASR response is not valid JSON: $respBody")
-                        }
-                        json.optString("text").trim()
+                        parseSseTranscript(resp.body.source())
                     }
                 }
-                lastError = null
-                break
             } catch (e: IOException) {
                 lastError = e
                 Log.w(TAG, "flushSegment attempt $attempt/$MAX_RETRY failed: ${e.message}")
@@ -296,12 +299,119 @@ class StepASRController(
                 }
             }
         }
-        if (lastError != null) throw lastError
+        throw lastError ?: IOException("Step ASR request failed")
+    }
 
-        if (text.isNotEmpty()) {
-            completedTranscripts.add(text)
-            publishTranscript()
+    private fun parseSseTranscript(source: BufferedSource): String {
+        val transcript = StringBuilder()
+        var eventType: String? = null
+        val dataLines = mutableListOf<String>()
+
+        fun dispatchEvent(): Boolean {
+            if (eventType == null && dataLines.isEmpty()) return false
+            val data = dataLines.joinToString("\n")
+            val shouldStop = handleSseEvent(eventType, data, transcript)
+            eventType = null
+            dataLines.clear()
+            return shouldStop
         }
+
+        while (true) {
+            val line = source.readUtf8Line() ?: break
+            if (line.isEmpty()) {
+                if (dispatchEvent()) break
+                continue
+            }
+            if (line.startsWith(":")) continue
+
+            val separatorIndex = line.indexOf(':')
+            val field = if (separatorIndex == -1) line else line.substring(0, separatorIndex)
+            val value = if (separatorIndex == -1) {
+                ""
+            } else {
+                line.substring(separatorIndex + 1).removePrefix(" ")
+            }
+            when (field) {
+                "event" -> eventType = value
+                "data" -> dataLines.add(value)
+            }
+        }
+        dispatchEvent()
+        return transcript.toString().trim()
+    }
+
+    private fun handleSseEvent(
+        eventType: String?,
+        data: String,
+        transcript: StringBuilder
+    ): Boolean {
+        if (data == "[DONE]") return true
+
+        val json = runCatching { JSONObject(data) }.getOrNull()
+        val type = eventType
+            ?.takeIf { it.isNotBlank() }
+            ?: json?.optString("type")?.takeIf { it.isNotBlank() }
+
+        return when (type) {
+            "transcript.text.delta" -> {
+                transcript.append(extractTranscriptText(json, if (json == null) data else ""))
+                false
+            }
+
+            "transcript.text.done" -> {
+                val finalText = extractTranscriptText(json, "")
+                if (finalText.isNotBlank()) {
+                    transcript.clear()
+                    transcript.append(finalText)
+                }
+                true
+            }
+
+            "error" -> {
+                throw IOException("Step ASR error: ${extractErrorMessage(json, data)}")
+            }
+
+            else -> {
+                val text = extractTranscriptText(json, "")
+                if (text.isNotBlank()) {
+                    transcript.append(text)
+                }
+                false
+            }
+        }
+    }
+
+    private fun extractTranscriptText(json: JSONObject?, fallback: String): String {
+        if (json == null) return fallback
+        val directKeys = listOf("delta", "text", "content", "transcript")
+        for (key in directKeys) {
+            val value = json.opt(key) ?: continue
+            if (value is JSONObject) {
+                val nestedValue = extractTranscriptText(value, "")
+                if (nestedValue.isNotBlank()) return nestedValue
+            } else {
+                val text = value.toString()
+                if (text.isNotBlank()) return text
+            }
+        }
+
+        val nestedKeys = listOf("data", "result", "transcript")
+        for (key in nestedKeys) {
+            val nested = json.optJSONObject(key) ?: continue
+            val value = extractTranscriptText(nested, "")
+            if (value.isNotBlank()) return value
+        }
+        return fallback
+    }
+
+    private fun extractErrorMessage(json: JSONObject?, fallback: String): String {
+        if (json == null) return fallback
+        val error = json.optJSONObject("error")
+        if (error != null) {
+            val message = error.optString("message", "")
+            if (message.isNotBlank()) return message
+        }
+        return json.optString("message", fallback)
     }
 
     private fun publishTranscript() {
@@ -329,53 +439,6 @@ class StepASRController(
     }
 
     companion object {
-        private val WAV_MEDIA_TYPE = "audio/wav".toMediaType()
-
-        /**
-         * 把 raw PCM16 little-endian 数据封装成最小 WAV (RIFF/WAVE/fmt/data)。
-         * transcriptions 端点只接受容器格式, 不收 raw PCM。
-         */
-        private fun pcm16ToWav(
-            pcm: ByteArray,
-            sampleRate: Int,
-            channels: Int,
-            bitsPerSample: Int
-        ): ByteArray {
-            val byteRate = sampleRate * channels * bitsPerSample / 8
-            val blockAlign = channels * bitsPerSample / 8
-            val dataSize = pcm.size
-            val out = ByteArrayOutputStream(44 + dataSize)
-
-            // RIFF header
-            out.write("RIFF".toByteArray(Charsets.US_ASCII))
-            writeIntLE(out, 36 + dataSize) // chunk size = file size - 8
-            out.write("WAVE".toByteArray(Charsets.US_ASCII))
-            // fmt chunk
-            out.write("fmt ".toByteArray(Charsets.US_ASCII))
-            writeIntLE(out, 16)            // PCM fmt chunk size
-            writeShortLE(out, 1)           // audio format = PCM
-            writeShortLE(out, channels)
-            writeIntLE(out, sampleRate)
-            writeIntLE(out, byteRate)
-            writeShortLE(out, blockAlign)
-            writeShortLE(out, bitsPerSample)
-            // data chunk
-            out.write("data".toByteArray(Charsets.US_ASCII))
-            writeIntLE(out, dataSize)
-            out.write(pcm)
-            return out.toByteArray()
-        }
-
-        private fun writeIntLE(out: ByteArrayOutputStream, value: Int) {
-            out.write(value and 0xFF)
-            out.write((value shr 8) and 0xFF)
-            out.write((value shr 16) and 0xFF)
-            out.write((value shr 24) and 0xFF)
-        }
-
-        private fun writeShortLE(out: ByteArrayOutputStream, value: Int) {
-            out.write(value and 0xFF)
-            out.write((value shr 8) and 0xFF)
-        }
+        private val JSON_MEDIA_TYPE = "application/json".toMediaType()
     }
 }
