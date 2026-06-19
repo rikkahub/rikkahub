@@ -42,6 +42,11 @@ data class WorkspaceShellContext(
     val tempDir: File,
     val workingDir: File,
     val timeoutMillis: Long,
+    // When non-null/non-empty, [ProotShellRunner] runs a postlude OUTSIDE the eval'd user command that
+    // prints this token + the physical pwd as a trailing stdout marker, so the caller can recover the
+    // command's final cwd (the project-jailed drifting-cwd feature). Null/empty => no capture (the
+    // default for the detached path and the interactive terminal).
+    val cwdCaptureToken: String? = null,
 )
 
 /**

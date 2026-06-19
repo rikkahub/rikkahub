@@ -271,6 +271,7 @@ private fun createShellTool(
     description = """
         Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace.
         Use cwd for a path relative to the project working directory (an absolute /workspace/... path addresses the files root). Requires Rootfs to be installed and ready.
+        The working directory PERSISTS across blocking commands within the project directory: a `cd` deeper into the project subtree carries to the next command, while a `cd` outside it reverts after the command. Each blocking result reports `cwd` (where the next command will run) and `cwdStatus` (persisted/unchanged/reverted/unknown).
         Set detachAfterSeconds to auto-background a long-running command after that many seconds: the tool then
         returns {taskId, status: running, outputRef, tail} immediately, keeps running, and notifies you when it
         completes; read its output later with workspace_shell_tail. Omit detachAfterSeconds for the default blocking run.
@@ -323,7 +324,10 @@ private fun createShellTool(
             ?.takeIf { secs -> secs > 0 }
             ?.coerceAtMost(SHELL_TIMEOUT_MAX_SECONDS.toInt())
         if (detachAfterSeconds == null) {
-            val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
+            // Blocking path: the project-jailed DRIFTING cwd (per-conversation). cwd persists within the
+            // project dir and reverts on escape; the result carries the resulting cwd + its status.
+            val outcome = workspaceRepository.executeTrackedCommand(workspaceId, conversationId, command, cwd, timeoutMillis)
+            val result = outcome.result
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
@@ -332,6 +336,8 @@ private fun createShellTool(
                         put("stderr", result.stderr)
                         put("timedOut", result.timedOut)
                         if (result.truncated) put("truncated", true)
+                        put("cwd", outcome.cwd)
+                        put("cwdStatus", outcome.status.name.lowercase())
                     }.toString()
                 )
             )

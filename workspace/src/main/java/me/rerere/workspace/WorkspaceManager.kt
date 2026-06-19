@@ -40,6 +40,15 @@ class WorkspaceManager(
 
     fun hasRootfs(root: String): Boolean = linuxDir(root).listFiles()?.isNotEmpty() == true
 
+    /**
+     * Whether [path] (a files-relative path) resolves to an existing directory under the files root.
+     * Goes through [WorkspaceFileSystem.resolve] so the same canonical-containment check applies; a
+     * caller uses this to avoid handing a stale/deleted cwd to [executeCommand] (whose buildShellContext
+     * `require`s the resolved working directory to exist).
+     */
+    fun isDirectory(root: String, path: String): Boolean =
+        fileSystem.resolve(filesDir(root), path).isDirectory
+
     fun deleteWorkspace(root: String): Boolean = workspaceDir(root).deleteRecursively()
 
     fun listFiles(
@@ -103,8 +112,11 @@ class WorkspaceManager(
         cwd: String? = null,
         workingDir: String = "",
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
+        // When set, the runner emits a `<token><physical pwd>` trailing stdout marker so the caller can
+        // recover the command's final cwd (the drifting-cwd feature). Null => no capture.
+        cwdCaptureToken: String? = null,
     ): WorkspaceCommandResult =
-        shellRunner.execute(buildShellContext(root, command, cwd, workingDir, timeoutMillis))
+        shellRunner.execute(buildShellContext(root, command, cwd, workingDir, timeoutMillis, cwdCaptureToken))
 
     /**
      * Start [command] WITHOUT blocking on its result and hand back the [ShellRunHandle] that owns the
@@ -148,6 +160,7 @@ class WorkspaceManager(
         cwd: String?,
         workingDir: String,
         timeoutMillis: Long,
+        cwdCaptureToken: String? = null,
     ): WorkspaceShellContext {
         require(command.isNotBlank()) { "Command is required" }
         val files = filesDir(root)
@@ -170,6 +183,7 @@ class WorkspaceManager(
             tempDir = tempDir(root),
             workingDir = workingDirFile,
             timeoutMillis = timeoutMillis,
+            cwdCaptureToken = cwdCaptureToken,
         )
     }
 

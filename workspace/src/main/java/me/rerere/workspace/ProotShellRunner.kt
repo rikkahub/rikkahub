@@ -105,18 +105,53 @@ class ProotShellRunner(
             "LANG=C.UTF-8",
             "LC_ALL=C.UTF-8",
             "/bin/bash",
-            "-l",
+            // --noprofile --norc, NOT -l: this is a PROGRAMMATIC shell, not the interactive terminal
+            // (which keeps login startup). A login shell sources the rootfs profile/rc BEFORE the -c
+            // script, and the rootfs is shell-mutable — a poisoned profile (`cd(){ exit 0; }`,
+            // `trap(){ exit 0; }`) could shadow the wrapper's own verbs and corrupt the reported exit
+            // code before the command even runs. Starting startup-free means the -c script runs in a
+            // pristine shell (the fixed env above is the whole environment), so the cwd-capture trap is
+            // registered, and the command's exit code is reported, deterministically.
+            "--noprofile",
+            "--norc",
             "-c",
             // The command is passed as a positional arg ($2) to avoid any escaping; `eval "$2"`
             // evaluates the command text exactly once, equivalent to `bash -c "$cmd"`. Inlining the
             // command into this -c script (the old form) let bash expand $ and backticks at parse
             // time, before eval — corrupting commands with shell metacharacters.
-            "cd -- \"\$1\" && eval \"\$2\"",
+            cScript(context),
             "rikkahub",
             context.prootCwd(),
             context.command,
         )
         return command
+    }
+
+    // The `-c` script body. The base form runs the user command (raw, eval'd exactly once) at the
+    // resolved cwd. When a [WorkspaceShellContext.cwdCaptureToken] is set, the final cwd is captured
+    // from an EXIT trap installed BEFORE the user command — and the exit code is NEVER rewritten.
+    //
+    // Why an INLINE EXIT trap and no exit rewrite: any capture running in the same shell after
+    // `eval "$2"` is exposed to whatever the user command set up — `exit()`/`printf()`/`pwd()`/`builtin()`
+    // functions, `enable -n`, a replaced `trap ... EXIT`, `set -e`. The process therefore exits with the
+    // user command's NATURAL status (the last statement is `cd -- "$1" && eval "$2"`); nothing in this
+    // script ever calls `exit`, so there is no exit code for any of those to corrupt — a command that
+    // genuinely exits N (incl. via its own `trap`) truthfully reports N. The combined invocation is also
+    // startup-free (`--noprofile --norc`, see buildCommand), so no rootfs profile can shadow the
+    // wrapper's verbs BEFORE this script runs. The cwd marker is BEST-EFFORT only.
+    internal fun cScript(context: WorkspaceShellContext): String {
+        val base = "cd -- \"\$1\" && eval \"\$2\""
+        val token = context.cwdCaptureToken
+        if (token.isNullOrEmpty()) return base
+        // The EXIT trap is INLINE (no named handler the user command could redefine) and is wrapped in
+        // `! { ...; }`: the `!` reserved word — which cannot be shadowed by a function or alias —
+        // SUPPRESSES `errexit` for the group, so a failing capture verb (e.g. `enable -n printf` under
+        // `set -e`, or a shadowed `builtin`) can NEVER flip the process exit code; it just yields no
+        // marker (=> keep the prior cwd). `builtin` bypasses user-defined printf/pwd; `2>/dev/null`
+        // suppresses any "not a builtin" stderr. Single-quoted so the body runs at trap-FIRE time
+        // (capturing the final pwd); inner double quotes avoid single-quote nesting; the token is safe.
+        return "trap '! { builtin printf \"%s%s\\n\" \"$token\" \"\$(builtin pwd -P)\"; } 2>/dev/null' EXIT" +
+            "\n$base"
     }
 
     // The cwd -> PRoot `-w` mapping is NOT a private copy here: it delegates to the ONE central policy

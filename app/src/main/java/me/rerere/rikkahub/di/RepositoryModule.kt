@@ -11,6 +11,7 @@ import me.rerere.rikkahub.data.ai.memory.RecencyMemoryRecaller
 import me.rerere.rikkahub.data.ai.runtime.AppConversationReader
 import me.rerere.rikkahub.data.ai.runtime.AppMemoryReader
 import me.rerere.rikkahub.data.ai.runtime.AppMemoryWriter
+import me.rerere.rikkahub.data.ai.shellrun.ShellCwdTracker
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunCoordinator
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
@@ -148,6 +149,9 @@ val repositoryModule = module {
         )
     }
 
+    // Per-conversation, in-memory drifting shell cwd for the LLM workspace_shell (project-jailed).
+    single { ShellCwdTracker() }
+
     single {
         val context: Context = get()
         WorkspaceRepository(
@@ -160,6 +164,7 @@ val repositoryModule = module {
             shellRunStore = get(),
             // App-private output dir for backgrounded shell runs (productDecision #3).
             shellTasksDir = File(context.cacheDir, "workspace-shell-tasks"),
+            shellCwdTracker = get(),
         )
     }
 

@@ -407,6 +407,29 @@ class WorkspaceCwdPolicyTest {
         }
     }
 
+    // ---- isWithin: the project-jail containment for the drifting shell cwd ----
+    @Test
+    fun `isWithin contains the floor and its descendants only`() {
+        // A blank floor (the files root) contains every files-relative path.
+        assertTrue(WorkspaceCwdPolicy.isWithin("", ""))
+        assertTrue(WorkspaceCwdPolicy.isWithin("", "anything/deep"))
+        // A set floor contains itself and its descendants.
+        assertTrue(WorkspaceCwdPolicy.isWithin("test", "test"))
+        assertTrue(WorkspaceCwdPolicy.isWithin("test", "test/subdir"))
+        assertTrue(WorkspaceCwdPolicy.isWithin("test", "test/a/b/c"))
+        // ...but NOT the files root (ancestor), a sibling, an ancestor of the floor, or a prefix-not-subdir.
+        assertFalse(WorkspaceCwdPolicy.isWithin("test", ""))             // /workspace, above the floor
+        assertFalse(WorkspaceCwdPolicy.isWithin("test", "non-subdir"))   // sibling subtree
+        assertFalse(WorkspaceCwdPolicy.isWithin("test/subdir", "test"))  // ancestor of the floor
+        assertFalse(WorkspaceCwdPolicy.isWithin("test", "testify"))      // shared prefix, not a subdir
+        runBlocking {
+            checkAll(200, arbRelativePath(), arbRelativePath()) { floor, rel ->
+                assertTrue("a floor always contains itself", WorkspaceCwdPolicy.isWithin(floor, floor))
+                assertTrue("a floor contains its descendants", WorkspaceCwdPolicy.isWithin(floor, "$floor/$rel"))
+            }
+        }
+    }
+
     // ---- constants pinned ----
     @Test
     fun `policy constants are pinned`() {

@@ -6,10 +6,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.ai.shellrun.ShellCwdDecision
+import me.rerere.rikkahub.data.ai.shellrun.ShellCwdOutcome
+import me.rerere.rikkahub.data.ai.shellrun.ShellCwdStatus
+import me.rerere.rikkahub.data.ai.shellrun.ShellCwdTracker
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunCoordinator
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunRequest
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunResult
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
+import me.rerere.rikkahub.data.ai.shellrun.decideTrackedCwd
+import me.rerere.rikkahub.data.ai.shellrun.extractFinalCwd
+import me.rerere.rikkahub.data.ai.shellrun.newCwdCaptureToken
 import me.rerere.rikkahub.data.db.entity.ShellRunEntity
 import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -44,6 +51,9 @@ class WorkspaceRepository(
     // <cacheDir>/workspace-shell-tasks/<taskId>.output — chosen over /workspace/.rikkahub/tasks
     // because the latter is shell-mutable). Read back only via the workspace_shell_tail tool.
     private val shellTasksDir: File,
+    // Per-conversation, in-memory drifting shell cwd (project-jailed). Used only by the blocking
+    // [executeTrackedCommand] LLM-shell path; the detached path and the interactive terminal are unaffected.
+    private val shellCwdTracker: ShellCwdTracker,
 ) {
     fun listFlow(): Flow<List<WorkspaceEntity>> = dao.listFlow()
 
@@ -306,6 +316,89 @@ class WorkspaceRepository(
             // Pass the persisted working_dir SEED so the central policy resolves override > working_dir >
             // files root; an ABSENT (null) cwd here falls through to that seed, an explicit cwd wins.
             manager.executeCommand(workspace.root, command, cwd, workspace.workingDir, timeoutMillis)
+        }
+    }
+
+    /**
+     * Blocking LLM-shell exec with a PROJECT-JAILED, per-conversation DRIFTING cwd. Unlike
+     * [executeCommand] (a stateless per-call exec), this tracks where the shell ends up: an absent [cwd]
+     * starts at the per-conversation tracked cwd (which starts at the project dir, the workspace
+     * working_dir), the command's final `pwd` is captured, and the tracked cwd PERSISTS if it stayed
+     * inside the project jail or REVERTS to the latest in-jail value if the command left it. No command
+     * is blocked — only whether the cwd persists differs. The captured cwd is untrusted ADVISORY: a
+     * random per-call token plus jail + `/workspace`-parse validation make a spoofed cwd-line harmless.
+     *
+     * Scope: the blocking LLM `workspace_shell` only — the detached path ([startBackgroundCommand]) and
+     * the interactive terminal are unaffected. State is in-memory ([ShellCwdTracker]); it resets to the
+     * project dir on process death.
+     */
+    suspend fun executeTrackedCommand(
+        id: String,
+        conversationId: Uuid,
+        command: String,
+        cwd: String? = null,
+        timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+    ): ShellCwdOutcome {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        val floor = WorkspaceCwdPolicy.normalize(workspace.workingDir)
+        // Same I-ENABLE guard as executeCommand, before any process: a disabled/not-ready shell returns
+        // the byte-identical "Shell is not enabled" result and never spawns.
+        if (!isShellRunnable(workspace.shellEnabled, workspace.shellStatus)) {
+            return ShellCwdOutcome(
+                result = WorkspaceCommandResult(
+                    exitCode = -1,
+                    stdout = "",
+                    stderr = "Shell is not enabled for this workspace",
+                    timedOut = false,
+                ),
+                cwd = WorkspaceCwdPolicy.toShellPath(floor),
+                status = ShellCwdStatus.UNKNOWN,
+            )
+        }
+        return runInterruptible(Dispatchers.IO) {
+            manager.ensureWorkspace(workspace.root)
+            // The revert target ("latest in-jail project_dir"): the tracked cwd if it is STILL inside the
+            // current floor AND still exists on disk; else the floor. This keeps the manager's
+            // exists/isDirectory guard from throwing on a stale (deleted, or out-of-jail after a floor
+            // change) tracked cwd.
+            val tracked = shellCwdTracker.get(id, conversationId)
+            val base = if (tracked != null &&
+                WorkspaceCwdPolicy.isWithin(floor, tracked) &&
+                manager.isDirectory(workspace.root, tracked)
+            ) tracked else floor
+            // Absent cwd -> start at the tracked base, passed as a /workspace-absolute path so the policy
+            // returns it verbatim (no project-relative double-join). Explicit cwd -> the model's path,
+            // resolved project-relative by the policy exactly as the untracked path does.
+            val startCwd = cwd ?: WorkspaceCwdPolicy.toShellPath(base)
+            val token = newCwdCaptureToken()
+            // The capture postlude runs in the runner OUTSIDE the eval'd command (so malformed user
+            // syntax can't consume it); the command is passed RAW. The runner emits <token><pwd> which
+            // extractFinalCwd parses back out below.
+            val raw = manager.executeCommand(
+                workspace.root,
+                command,
+                startCwd,
+                workspace.workingDir,
+                timeoutMillis,
+                cwdCaptureToken = token,
+            )
+            val (cleanStdout, capturedPwd) = extractFinalCwd(raw.stdout, token)
+            val decision = if (capturedPwd == null) {
+                // No cwd captured (footer never ran: exec/exit/syntax error, or truncated past the
+                // 128 KiB stdout cap) -> keep the prior in-jail cwd, report UNKNOWN.
+                ShellCwdDecision(base, ShellCwdStatus.UNKNOWN)
+            } else {
+                // ADVISORY: parseShellPath returns null for a non-/workspace rootfs path (e.g. /etc) =>
+                // treated as outside the jail => REVERTED by the state machine.
+                val finalRel = runCatching { WorkspaceCwdPolicy.parseShellPath(capturedPwd) }.getOrNull()
+                decideTrackedCwd(floor, base, finalRel)
+            }
+            shellCwdTracker.set(id, conversationId, decision.cwd)
+            ShellCwdOutcome(
+                result = raw.copy(stdout = cleanStdout),
+                cwd = WorkspaceCwdPolicy.toShellPath(decision.cwd),
+                status = decision.status,
+            )
         }
     }
 

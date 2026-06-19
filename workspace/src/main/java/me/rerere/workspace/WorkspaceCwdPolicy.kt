@@ -92,6 +92,16 @@ object WorkspaceCwdPolicy {
     fun parseShellPath(shell: String): String = normalize(stripWorkspaceAlias(shell))
 
     /**
+     * True iff [candidate] is the jail [floor] or a descendant of it — the project-dir containment
+     * check for the drifting shell cwd. Both args are files-relative normalized paths ("" == the files
+     * root). A blank floor (the files root) contains every files-relative path; otherwise [candidate]
+     * must equal [floor] or start with `floor + "/"` (so `test` does NOT contain `testify`). Pure string
+     * logic — canonical/symlink containment is the filesystem's concern ([WorkspaceFileSystem.resolve]).
+     */
+    fun isWithin(floor: String, candidate: String): Boolean =
+        floor.isEmpty() || candidate == floor || candidate.startsWith("$floor/")
+
+    /**
      * The resolved FILES-relative cwd for a command:
      *  - `Explicit(p)` -> [resolveModelPath]`(workingDir, p)`: a relative `p` is project-relative, a
      *    `/workspace/...` `p` is root-absolute, blank/`.` `p` is the project dir itself          (W-B2)
