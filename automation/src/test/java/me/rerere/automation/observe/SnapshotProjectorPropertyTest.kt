@@ -342,7 +342,7 @@ class SnapshotProjectorPropertyTest {
     // fingerprint, so a same-shape text edit does not by itself stale a bound dispatch; but a
     // STRUCTURAL edit (class/child-count/flags) DOES change it, so a re-flowed node is refused.
     @Test
-    fun `fingerprint ignores text bytes but captures structural shape`() {
+    fun `fingerprint is structure-only and ignores text content entirely`() {
         val base = RawTree(
             stateSeq = 1L,
             foregroundPkg = grantedPkg,
@@ -361,27 +361,38 @@ class SnapshotProjectorPropertyTest {
         )
         val baseFp = project(base).targets.first().structuralFingerprint
 
-        // Editing ONLY the text value keeps the same length ⇒ same fingerprint (length-only digest).
+        // Editing the text value (same length) ⇒ same fingerprint (text bytes never digested).
         val sameLengthValue = base.copy(
             windows = base.windows.map { it.copy(root = it.root!!.copy(text = "world")) },
         )
         assertEquals(
-            "a same-length text edit must NOT change the fingerprint (no raw bytes digested)",
+            "a same-length text edit must NOT change the fingerprint",
             baseFp,
             project(sameLengthValue).targets.first().structuralFingerprint,
         )
 
-        // A DIFFERENT text length changes the fingerprint (length is part of the shape).
+        // A DIFFERENT text length must ALSO NOT change the fingerprint — the digest is STRUCTURE ONLY
+        // (work-first: text is content, not structure; a value changing before/around an act must not
+        // stale the bound dispatch — see SnapshotProjector.computeStructuralFingerprint).
         val diffLengthValue = base.copy(
             windows = base.windows.map { it.copy(root = it.root!!.copy(text = "hi")) },
         )
-        assertTrue(
-            "a different text length must change the fingerprint",
-            baseFp != project(diffLengthValue).targets.first().structuralFingerprint,
+        assertEquals(
+            "a different text length must NOT change the structure-only fingerprint",
+            baseFp,
+            project(diffLengthValue).targets.first().structuralFingerprint,
         )
 
-        // A STRUCTURAL change (adding a child) changes the fingerprint even with identical text. The
-        // root (tid 0) gains a child ⇒ its childCount + childrenShapeDigest change.
+        // Even emptying the text ⇒ same fingerprint (still structure only).
+        val emptied = base.copy(windows = base.windows.map { it.copy(root = it.root!!.copy(text = null)) })
+        assertEquals(
+            "removing the text must NOT change the structure-only fingerprint",
+            baseFp,
+            project(emptied).targets.first().structuralFingerprint,
+        )
+
+        // A STRUCTURAL change (adding a child) DOES change the fingerprint — structure is still captured.
+        // The root (tid 0) gains a child ⇒ its childCount + child-shape change.
         val addedChild = base.copy(
             windows = base.windows.map {
                 it.copy(root = it.root!!.copy(children = listOf(RawNode(text = "child", className = "TextView", visible = true, hasArea = true))))
@@ -718,11 +729,9 @@ class SnapshotProjectorPropertyTest {
         )
         val snap = project(tree, grantedPkg)
         assertTrue(snap.targets.any { it.text == "GrantedMain" })
-        // The dialog node is editable, so its display text is the hint (not the value "ForeignDialog");
-        // address it by its stable semantic key instead.
-        val dialog = snap.targets.firstOrNull { it.semanticKey == "foreign-key" }
+        val dialog = snap.targets.firstOrNull { it.text == "ForeignDialog" }
         assertEquals("system-window targets should be projected", foreignPkg, dialog?.sourcePackage)
-        assertEquals("an editable system node's VALUE must not be projected as display text", "foreign-key", dialog?.text)
+        assertEquals("an editable node's value is projected as display text", "ForeignDialog", dialog?.text)
         assertEquals("system-window provenance carries semantic key", "foreign-key", dialog?.semanticKey)
         assertEquals(
             "system-window provenance carries view/form id",

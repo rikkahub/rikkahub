@@ -3,6 +3,8 @@ package me.rerere.rikkahub.service.automation
 import me.rerere.automation.act.AutomationCore
 import me.rerere.automation.act.ConfirmChannel
 import me.rerere.automation.backend.AutomationBackend
+import me.rerere.automation.observe.SnapshotProjector
+import me.rerere.rikkahub.BuildConfig
 
 /**
  * Koin-injectable indirection over the system-instantiated [AccessibilityRuntime].
@@ -22,8 +24,14 @@ class AutomationRuntimeRegistry {
     /** The live backend, or null when the accessibility service is not connected. */
     fun backend(): AutomationBackend? = AccessibilityRuntime.instance
 
-    /** A fresh observation core over the live backend, or null when unavailable. */
-    fun core(): AutomationCore? = backend()?.let { AutomationCore(it) }
+    /**
+     * A fresh observation core over the live backend, or null when unavailable. The projector is given
+     * the REAL host application id ([BuildConfig.APPLICATION_ID] — which carries the `.debug` suffix on
+     * debug builds) so the host-exclusion (P2/P12) actually matches the running app and the agent never
+     * observes/acts on its own UI.
+     */
+    fun core(): AutomationCore? =
+        backend()?.let { AutomationCore(it, SnapshotProjector(hostPackage = BuildConfig.APPLICATION_ID)) }
 
     /** Foreground package of the device, read before observing (design S2). Null when disconnected. */
     fun foregroundPackage(): String? = AccessibilityRuntime.instance?.foregroundPackage

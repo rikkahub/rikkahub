@@ -326,11 +326,9 @@ class UiAutomationToolsTest {
                 .text
         }
 
-        // The granted window's editable field stays ADDRESSABLE (its form key + hint render) but its
-        // current VALUE never reaches the model — an editable value can hold a secret the app never
-        // flagged as password, so only the label/hint is surfaced.
-        assertFalse("an editable field's current value must never render", text.contains("granted-text"))
-        assertTrue("granted field hint must remain visible", text.contains("grant-key"))
+        // The granted window's editable field renders its value: a UI-automation agent must read back
+        // field contents to verify its own input. Only a password field is masked (none here).
+        assertTrue("granted editable value must render", text.contains("granted-text"))
         assertTrue("granted form key must remain visible", text.contains("form=com.example.target:id/granted"))
 
         assertFalse("foreign text must never render", text.contains("FORBIDDEN_TEXT"))
@@ -338,9 +336,9 @@ class UiAutomationToolsTest {
         assertFalse("foreign form key must never render", text.contains("form=com.example.foreign-allowed:id/forbidden"))
         assertFalse("foreign view id must never render", text.contains("com.example.foreign-allowed:id/forbidden"))
 
-        // The system dialog stays observable + addressable (hint + form key render), but — being an
-        // editable node — its current value is withheld from the model just like any other editable field.
-        assertFalse("the system dialog editable value must never render", text.contains("SYSTEM_DIALOG_TEXT"))
+        // The system dialog stays observable + addressable; an editable system node renders its value
+        // too (it is not a password) — the allowlist, not the editable flag, is what gates disclosure.
+        assertTrue("system dialog editable value must render", text.contains("SYSTEM_DIALOG_TEXT"))
         assertTrue("system dialog semantic key must remain visible", text.contains("system-key"))
         // The resourceId reaches the model ONLY through the form= key — the raw viewId axis is internal
         // and is never rendered, so asserting the form= prefix (not the bare id) is the correct contract.

@@ -96,8 +96,11 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     private val captureMutex = Mutex()
 
     // Pure projector used by [snapshotRawTree], [resolveBinding] and [perform] to project the raw
-    // tree / re-compute UiTarget fields on live nodes. Stateless, so safe to share across calls.
-    private val projector = SnapshotProjector()
+    // tree / re-compute UiTarget fields on live nodes. Stateless, so safe to share across calls. Seeded
+    // with this service's REAL package (`packageName` — carries the `.debug` suffix on debug builds) so
+    // the host-exclusion matches the running app. Lazy: `packageName` needs the Context attached, which
+    // it is by the time any projection runs (well after onServiceConnected).
+    private val projector by lazy { SnapshotProjector(hostPackage = packageName) }
 
     // Floating STOP kill-switch. WindowManager add/remove must run on the service main thread.
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -324,12 +327,12 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
             try {
                 val acc = StringBuilder()
                 foldStructure(root, acc)
-                (root.packageName?.toString() ?: HOST_PACKAGE) to acc.toString().hashCode().toString(16)
+                (root.packageName?.toString() ?: packageName) to acc.toString().hashCode().toString(16)
             } finally {
                 @Suppress("DEPRECATION") // recycle() required below API 33 (no-op above); minSdk 26
                 root.recycle()
             }
-        } ?: (HOST_PACKAGE to "empty:$seq")
+        } ?: (packageName to "empty:$seq")
         // getWindows() hands out live AccessibilityWindowInfo handles; recycle each after copying
         // its subtree into the value RawWindow (resource discipline — release on every path). On
         // API 33+ recycle() is a no-op, but minSdk is 26 where leaking windows is real.
@@ -470,15 +473,17 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                     allowedPackages = action.allowedPackages,
                     includeHost = action.includeHost,
                 ) { node ->
-                    val actionId = when (action.kind) {
-                        NodeActionKind.SCROLL_FORWARD -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                        NodeActionKind.SCROLL_BACKWARD -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-                        // Slice 10 (the general tap): ACTION_CLICK on the resolved node, never a
-                        // dispatchGesture screen point (design D1). The headline tap guard
-                        // (system-UI/password DENY) already ran in the core before this dispatches.
-                        NodeActionKind.CLICK -> AccessibilityNodeInfo.ACTION_CLICK
+                    // Slice 10 (the general tap): ACTION_CLICK / ACTION_SCROLL_* on the resolved node,
+                    // never a dispatchGesture screen point (design D1). The headline tap guard
+                    // (system-UI/password DENY) already ran in the core before this dispatches.
+                    when (action.kind) {
+                        NodeActionKind.CLICK ->
+                            performOrActionableAncestor(node, AccessibilityNodeInfo.ACTION_CLICK) { it.isClickable }
+                        NodeActionKind.SCROLL_FORWARD ->
+                            performOrActionableAncestor(node, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) { it.isScrollable }
+                        NodeActionKind.SCROLL_BACKWARD ->
+                            performOrActionableAncestor(node, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) { it.isScrollable }
                     }
-                    node.performAction(actionId)
                 }
 
                 // Slice 9 (the input sink): same strict-binding re-resolve + projection-order walk as
@@ -542,7 +547,7 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                 // id (review round 7 #1).
                 val windowId = runCatching { window.id }.getOrNull()?.takeIf { it >= 0 } ?: UNKNOWN_WINDOW_ID
                 if (!SnapshotProjector.isWindowEligible(
-                        pkg, systemWindow, allowedPackages, includeHost,
+                        pkg, systemWindow, allowedPackages, includeHost, packageName,
                     )
                 ) continue
                 walkLiveAndMatch(
@@ -628,6 +633,38 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     ) {
         for (node in nodes) runCatching { @Suppress("DEPRECATION") node.recycle() }
         for (window in windows) runCatching { @Suppress("DEPRECATION") window.recycle() }
+    }
+
+    /**
+     * Dispatch [actionId] on the resolved [node], falling back to the NEAREST ancestor that [capable]
+     * accepts when the node itself cannot perform it. Work-first: an agent that selects a bare TextView
+     * label (no CLICK flag) should still hit the label's clickable ROW rather than fail with a
+     * misleading "screen changed" — this is the standard accessibility-automation behavior and removes
+     * the single biggest source of agent looping (tapping non-actionable labels). The resolved [node]
+     * is still the strict TargetBinding match (the agent's intended element); the climb only redirects
+     * the ACTION to the actionable container that visually owns it, never to a sibling or a different
+     * window. Ancestor handles are recycled here; [node] itself is recycled by dispatchBound's finally.
+     */
+    private fun performOrActionableAncestor(
+        node: AccessibilityNodeInfo,
+        actionId: Int,
+        capable: (AccessibilityNodeInfo) -> Boolean,
+    ): Boolean {
+        if (node.performAction(actionId)) return true
+        val held = ArrayList<AccessibilityNodeInfo>()
+        try {
+            var ancestor = runCatching { node.parent }.getOrNull()
+            var depth = 0
+            while (ancestor != null && depth < MAX_ANCESTOR_CLIMB) {
+                held.add(ancestor)
+                if (capable(ancestor) && ancestor.performAction(actionId)) return true
+                ancestor = runCatching { ancestor.parent }.getOrNull()
+                depth++
+            }
+            return false
+        } finally {
+            recycleAll(held, emptyList())
+        }
     }
 
     /**
@@ -742,7 +779,9 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     }.getOrDefault(false)
 
     companion object {
-        const val HOST_PACKAGE = "me.rerere.rikkahub"
+        // Cap on the clickable/scrollable-ancestor climb (performOrActionableAncestor): a real view
+        // hierarchy is shallow; this only backstops a pathological/looping parent chain.
+        private const val MAX_ANCESTOR_CLIMB = 16
 
         // Online settle bounds for the act path (design D3 / P13), matching the pure SettlePolicy
         // defaults (quiet 250ms, hard cap 1500ms). awaitSettle returns once no window event has

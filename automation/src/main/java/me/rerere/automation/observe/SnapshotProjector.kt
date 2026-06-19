@@ -34,7 +34,13 @@ import java.security.MessageDigest
  * exposed so a real backend's live dispatch walk re-computes the SAME [UiTarget] fields and matches
  * a [TargetBinding] byte-for-byte (the load-bearing parity for atomic fresh resolve + dispatch).
  */
-class SnapshotProjector {
+/**
+ * @param hostPackage the host app's REAL application id, used for the host-exclusion (P2/P12). It MUST
+ *   be the running package — which on a debug build carries the `.debug` suffix
+ *   (`me.rerere.rikkahub.debug`), NOT the base id — or the agent would observe/act on its own UI.
+ *   Defaults to the base id for tests / default construction; the app injects its BuildConfig id.
+ */
+class SnapshotProjector(private val hostPackage: String = HOST_PACKAGE) {
 
     /**
      * @param includeHost when true (YOLO only), the host self-exclusion is lifted: the host may be the
@@ -42,10 +48,10 @@ class SnapshotProjector {
      *   Default false preserves the P2/P12 host exclusion for every scoped (non-YOLO) caller.
      */
     fun project(tree: RawTree, allowedPackages: Set<String>, includeHost: Boolean = false): UiSnapshot {
-        val foregroundIsHost = !includeHost && tree.foregroundPkg == HOST_PACKAGE
+        val foregroundIsHost = !includeHost && tree.foregroundPkg == hostPackage
 
         // Windows the model may see: never the host (unless includeHost), never a secure window's contents.
-        val visibleWindows = tree.windows.filter { isWindowEligible(it.pkg, it.systemWindow, allowedPackages, includeHost) }
+        val visibleWindows = tree.windows.filter { isWindowEligible(it.pkg, it.systemWindow, allowedPackages, includeHost, hostPackage) }
 
         val screenState = when {
             foregroundIsHost -> ScreenState.FOREGROUND_IS_HOST
@@ -117,8 +123,9 @@ class SnapshotProjector {
         private const val MAX_MASK_LENGTH = 32
 
         /** The fingerprint scheme version — prepended to every digest so a future algorithm change is
-         *  unambiguous (two targets with different versions never collide). */
-        const val FINGERPRINT_VERSION = "target-binding:v1"
+         *  unambiguous (two targets with different versions never collide). v2 = structure-only (text
+         *  length dropped; see [computeStructuralFingerprint]). */
+        const val FINGERPRINT_VERSION = "target-binding:v2"
 
         /**
          * Shared predicate for deciding whether a window is traversable by both projection and act replay.
@@ -131,8 +138,9 @@ class SnapshotProjector {
             systemWindow: Boolean,
             allowedPackages: Set<String>,
             includeHost: Boolean = false,
+            hostPackage: String = HOST_PACKAGE,
         ): Boolean =
-            (includeHost || pkg != HOST_PACKAGE) && (pkg in allowedPackages || systemWindow)
+            (includeHost || pkg != hostPackage) && (pkg in allowedPackages || systemWindow)
 
         /** The projection rule (design §4): a node is a target iff `(visible && hasArea) || hasId || hasText`. */
         fun isTarget(node: RawNode): Boolean =
@@ -147,11 +155,10 @@ class SnapshotProjector {
         ): Boolean = (visible && hasArea) || hasId || hasText
 
         /**
-         * A structural snapshot of a node's identity fields used for fingerprinting. Deliberately carries
-         * NO raw text BYTES — only [textLength] (or -1 for null) — so a value the model never sees cannot
-         * leak through the binding, and a same-shape text edit does not by itself stale a bound dispatch.
-         * Shared between the projector (from [RawNode]) and a real backend's live walk (from its native
-         * node type) so both compute byte-for-byte equal fingerprints.
+         * A structural snapshot of a node's identity fields used for fingerprinting. STRUCTURE ONLY —
+         * carries NO text at all (neither bytes nor length): see [computeStructuralFingerprint] for why
+         * text is deliberately excluded. Shared between the projector (from [RawNode]) and a real
+         * backend's live walk (from its native node type) so both compute byte-for-byte equal digests.
          */
         data class NodeFieldSnapshot(
             val className: String?,
@@ -165,17 +172,14 @@ class SnapshotProjector {
             val checkable: Boolean,
             val checked: Boolean,
             val password: Boolean,
-            /** Text length, or -1 when the node's text is null (no raw bytes are ever digested). */
-            val textLength: Int,
             val childCount: Int,
         )
 
         /**
-         * Project a [RawNode]'s identity fields into a [NodeFieldSnapshot]. The user-content `text`
-         * field contributes only its LENGTH (never its bytes), so editing a value does not change the
-         * digest; the structural identity strings (className / resourceId / contentDescription) ARE
-         * carried — they are stable identity axes (contentDescription is also the strict-matched
-         * [UiTarget.semanticKey]), not user-entered content.
+         * Project a [RawNode]'s identity fields into a [NodeFieldSnapshot]. Structural identity strings
+         * (className / resourceId / contentDescription) ARE carried — they are stable identity axes
+         * (contentDescription is also the strict-matched [UiTarget.semanticKey]). The node's text is NOT
+         * carried at all (it is content, not structure — see [computeStructuralFingerprint]).
          */
         fun RawNode.toFieldSnapshot(): NodeFieldSnapshot = NodeFieldSnapshot(
             className = className,
@@ -189,25 +193,31 @@ class SnapshotProjector {
             checkable = checkable,
             checked = checked,
             password = password,
-            textLength = text?.length ?: -1,
             childCount = children.size,
         )
 
         /**
          * The structural fingerprint (spec §5): SHA-256 over the window id + package + system flag +
-         * structural path + the node's FULL subtree shape (the node plus every descendant, pre-order in
-         * raw child order). The user-content `text` field contributes only its LENGTH (never its bytes),
-         * so a value edit does not stale a binding; the structural identity strings (className /
-         * resourceId / contentDescription) ARE digested as identity axes. Coordinates are never carried
+         * structural path + the node's FULL subtree SHAPE (the node plus every descendant, pre-order in
+         * raw child order: className / resourceId / contentDescription / boolean flags / childCount, with
+         * a parenthesized child block making the tree shape unambiguous). Coordinates are never carried
          * (only hasArea). Every field is length-prefix framed (see [str]/[num]/[flag]) so distinct field
          * tuples can never collide. Pure & total — same inputs ⇒ identical digest, so the projector and a
-         * live dispatch walk agree.
+         * live dispatch walk agree. The recursion is full-subtree so a deep same-shell-different-guts
+         * STRUCTURAL swap (a descendant added/removed/reclassed) still refuses the binding.
          *
-         * The digest is recursive over the whole subtree (not just immediate children): the structural
-         * path pins the node's position, but a clickable container can keep an unchanged immediate-child
-         * shape while a DEEP descendant is swapped (a same-shell-different-guts replacement). Digesting
-         * the full subtree — with each node's childCount and a parenthesized child block making the tree
-         * shape unambiguous — refuses a binding whose descendant structure changed since the grounding.
+         * ⚠️ DELIBERATE WORK-FIRST DESIGN — DO NOT add the node's TEXT (bytes OR length) back into this
+         * digest "for security" without the maintainer's explicit sign-off. This is intentional and was
+         * measured: the fingerprint is STRUCTURE ONLY, never text content. An earlier strict version that
+         * digested text LENGTH flipped the strict TargetBinding match to a mismatch on benign content
+         * churn — a field's own value changing right before a `set_text`, a row's dynamic subtitle, any
+         * descendant whose text length shifted between the grounding observe and the dispatch — which made
+         * the on-device agent (especially low-tier models) loop on "screen changed" stale-stops. Text
+         * IDENTITY for a TAP is already enforced by the SEPARATE `visibleText` axis of [TargetBinding]
+         * (requireVisibleTextMatch); a structural swap is already caught by this shape recursion + the
+         * windowId + structuralPath + role/flags/keys axes. Re-introducing text length here re-creates the
+         * looping for a case those axes already cover — it was tried and rejected. (Maintainer decision,
+         * work-first over security-first for the automation act path.)
          */
         fun computeStructuralFingerprint(
             windowId: Int,
@@ -230,8 +240,8 @@ class SnapshotProjector {
         /**
          * Pre-order recursion over [n]'s subtree: the node's own shape, then a parenthesized block of
          * each child's subtree in raw child order. The parens + per-node childCount make differing tree
-         * shapes serialize to different strings (no two distinct subtrees collide). The user-content
-         * `text` field is digested as length only, never its bytes (see [appendShape]).
+         * shapes serialize to different strings (no two distinct subtrees collide). NO text is digested
+         * at all — structure only (see [computeStructuralFingerprint] for why).
          */
         private fun appendSubtree(sb: StringBuilder, n: RawNode) {
             appendShape(sb, n.toFieldSnapshot())
@@ -255,7 +265,6 @@ class SnapshotProjector {
             sb.flag(n.checkable)
             sb.flag(n.checked)
             sb.flag(n.password)
-            sb.num(n.textLength)
             sb.num(n.childCount)
         }
 
@@ -326,19 +335,24 @@ class SnapshotProjector {
                 node.windowId >= 0 -> node.windowId
                 else -> UNKNOWN_WINDOW_ID
             }
-            // Model-facing display text. Two values must NEVER reach the model: a password (masked to
-            // bullets, design I1/P1) and a non-password EDITABLE field's CURRENT VALUE — an editable
-            // field can hold a secret the app never flagged as password (an OTP, a card number, a draft),
-            // so its `node.text` stays internal-only (it lives on [UiTarget.editableText] for the P9
-            // no-op) and the model sees only the field's label/hint (contentDescription). A non-editable
-            // node's text IS a label (a button caption, a status line), so it renders as-is.
-            val text = when {
-                node.password -> {
-                    val rawText = node.text ?: node.contentDescription
-                    rawText?.let { "•".repeat(it.length.coerceAtMost(MAX_MASK_LENGTH)) }
-                }
-                node.editable -> node.contentDescription
-                else -> node.text ?: node.contentDescription
+            // Model-facing display text. A password's plaintext is NEVER surfaced (masked to bullets
+            // sized to the input, design I1/P1). Everything else — including an editable field's CURRENT
+            // VALUE — renders as-is.
+            //
+            // ⚠️ DELIBERATE WORK-FIRST DESIGN — DO NOT withhold non-password editable values "for
+            // security" without the maintainer's explicit sign-off. This was tried (rendering only the
+            // hint for editable fields) and rejected: it left fields WRITE-ONLY from the agent's view,
+            // so after a `ui_set_text` the model could not read back its own input and weaker models
+            // looped, re-typing and hunting for a confirmation that never appeared. A UI-automation
+            // agent MUST read back field contents to verify its input and reason about the screen. The
+            // genuine secret — a password field — is still masked here; the app, not this projector, is
+            // responsible for flagging sensitive inputs as password. (Maintainer decision, work-first
+            // over security-first for the automation act path.)
+            val rawText = node.text ?: node.contentDescription
+            val text = if (node.password) {
+                rawText?.let { "•".repeat(it.length.coerceAtMost(MAX_MASK_LENGTH)) }
+            } else {
+                rawText
             }
             val fingerprint = computeStructuralFingerprint(
                 windowId = effectiveWindowId,
