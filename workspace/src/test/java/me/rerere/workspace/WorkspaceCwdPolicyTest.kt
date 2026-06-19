@@ -96,12 +96,8 @@ class WorkspaceCwdPolicyTest {
     // ---- W-I9: a dot-prefixed segment != `.`/`..` survives normalization unchanged ----
     @Test
     fun `W-I9 dot-prefixed segments like xcloudz survive normalization`() {
-        assertEquals(".xcloudz/scratch", WorkspaceCwdPolicy.normalize(".xcloudz/scratch"))
+        assertEquals(".config/cache", WorkspaceCwdPolicy.normalize(".config/cache"))
         assertEquals(".hidden", WorkspaceCwdPolicy.normalize(".hidden"))
-        assertEquals(
-            WorkspaceCwdPolicy.DEFAULT_SCRATCH.joinToString("/"),
-            WorkspaceCwdPolicy.normalize(".xcloudz/scratch"),
-        )
         runBlocking {
             // Every generated dotdir segment (the generator includes them) survives verbatim.
             checkAll(200, arbSegment()) { seg ->
@@ -238,14 +234,33 @@ class WorkspaceCwdPolicyTest {
         )
     }
 
-    // ---- W-B2: explicit "", " ", ".", "./", /workspace resolve to the files root (NOT the scratch default) ----
+    // ---- W-B2: explicit blank/dot resolves to the PROJECT dir; a /workspace alias to the files root ----
+    // Unified model: a relative (incl. blank/".") explicit cwd is project-relative, so blank == the
+    // project dir itself; only a `/workspace` alias is root-absolute (project dir ignored).
     @Test
-    fun `W-B2 explicit blank-or-dot override resolves to the files root`() {
-        listOf("", " ", "  ", ".", "./", "/workspace", "/workspace/").forEach { blankish ->
+    fun `W-B2 explicit blank-or-dot resolves to the project dir, a workspace alias to the files root`() {
+        // Blank working_dir: the project dir IS the files root, so blank/dot resolve to "".
+        listOf("", " ", "  ", ".", "./").forEach { blankish ->
             assertEquals(
-                "explicit \"$blankish\" must resolve to files root",
+                "explicit \"$blankish\" over a blank working_dir is the files root",
                 "",
-                WorkspaceCwdPolicy.resolveRelative(CwdOverride.Explicit(blankish), workingDir = "ignored"),
+                WorkspaceCwdPolicy.resolveRelative(CwdOverride.Explicit(blankish), workingDir = ""),
+            )
+        }
+        // Set working_dir: blank/dot resolve to the PROJECT dir (NOT the files root).
+        listOf("", " ", ".", "./").forEach { blankish ->
+            assertEquals(
+                "explicit \"$blankish\" over a set working_dir is the project dir",
+                "proj/sub",
+                WorkspaceCwdPolicy.resolveRelative(CwdOverride.Explicit(blankish), workingDir = "proj/sub"),
+            )
+        }
+        // A `/workspace` alias is always the files root, project dir ignored.
+        listOf("/workspace", "/workspace/").forEach { alias ->
+            assertEquals(
+                "explicit \"$alias\" is the files root regardless of working_dir",
+                "",
+                WorkspaceCwdPolicy.resolveRelative(CwdOverride.Explicit(alias), workingDir = "proj/sub"),
             )
         }
     }
@@ -304,11 +319,98 @@ class WorkspaceCwdPolicyTest {
         }
     }
 
+    // ---- resolveModelPath: a /workspace alias is ROOT-ABSOLUTE (project dir ignored) ----
+    @Test
+    fun `resolveModelPath treats a workspace alias as root-absolute`() {
+        assertEquals("", WorkspaceCwdPolicy.resolveModelPath(workingDir = "proj", modelPath = "/workspace"))
+        assertEquals("foo/bar", WorkspaceCwdPolicy.resolveModelPath(workingDir = "proj", modelPath = "/workspace/foo/bar"))
+        runBlocking {
+            checkAll(200, arbRelativePath(), arbRelativePath()) { wd, p ->
+                assertEquals(
+                    "a /workspace alias resolves to its stripped remainder, project dir ignored",
+                    WorkspaceCwdPolicy.normalize(p),
+                    WorkspaceCwdPolicy.resolveModelPath(workingDir = wd, modelPath = "/workspace/$p"),
+                )
+            }
+        }
+    }
+
+    // ---- resolveModelPath: a RELATIVE path is joined onto the project dir (blank => the files root) ----
+    @Test
+    fun `resolveModelPath joins a relative path onto the project dir`() {
+        assertEquals("foo", WorkspaceCwdPolicy.resolveModelPath(workingDir = "", modelPath = "foo"))
+        assertEquals("proj/foo", WorkspaceCwdPolicy.resolveModelPath(workingDir = "proj", modelPath = "foo"))
+        assertEquals("proj", WorkspaceCwdPolicy.resolveModelPath(workingDir = "proj", modelPath = ""))
+        assertEquals("proj", WorkspaceCwdPolicy.resolveModelPath(workingDir = "proj", modelPath = "."))
+        assertEquals("", WorkspaceCwdPolicy.resolveModelPath(workingDir = "", modelPath = ""))
+        runBlocking {
+            checkAll(200, arbRelativePath(), arbRelativePath()) { wd, p ->
+                assertEquals(
+                    "${WorkspaceCwdPolicy.normalize(wd)}/${WorkspaceCwdPolicy.normalize(p)}",
+                    WorkspaceCwdPolicy.resolveModelPath(wd, p),
+                )
+            }
+        }
+    }
+
+    // ---- resolveModelPath: the canonical /workspace output round-trips with NO double-join (the ----
+    // load-bearing decision). A tool reports toShellPath(resolved); reading that back as a model path
+    // re-resolves to the IDENTICAL files-relative value for ANY project dir, so list -> read never
+    // joins a project-relative path onto the project dir twice.
+    @Test
+    fun `resolveModelPath canonical output re-resolves to the same path under any project dir`() {
+        runBlocking {
+            checkAll(200, arbWorkspaceRow(), arbRelativePath()) { wd, p ->
+                val resolved = WorkspaceCwdPolicy.resolveModelPath(wd, p)
+                val canonical = WorkspaceCwdPolicy.toShellPath(resolved)
+                assertEquals(
+                    "the canonical /workspace output must re-resolve to the same files-relative path",
+                    resolved,
+                    WorkspaceCwdPolicy.resolveModelPath(workingDir = "any/other", modelPath = canonical),
+                )
+            }
+        }
+    }
+
+    // ---- resolveModelPath: `..`/NUL/rootfs-absolute model paths are rejected at the source ----
+    @Test
+    fun `resolveModelPath rejects escapes and rootfs-absolute paths`() {
+        listOf("../x", "a/../../b", "/etc/passwd", "/root", "a/ /b").forEach { bad ->
+            try {
+                WorkspaceCwdPolicy.resolveModelPath(workingDir = "proj", modelPath = bad)
+                throw AssertionError("expected resolveModelPath to reject [$bad]")
+            } catch (e: IllegalArgumentException) {
+                // expected — defense at the source via normalize
+            }
+        }
+    }
+
+    // ---- W-UNIFY: a relative file path is visible to the shell at the same name from its default cwd ----
+    // The whole point of the unified model: the file tools resolve a relative model path via
+    // resolveModelPath(wd, X); the shell's default (ABSENT) cwd is resolveRelative(Absent, wd). For the
+    // SAME project dir, the file's resolved path is EXACTLY "<shell default cwd>/X" — one shared
+    // working-directory base, so `workspace_write_file("X")` lands where `workspace_shell` (no cwd) runs.
+    @Test
+    fun `W-UNIFY a relative file path resolves under the shell default cwd`() {
+        runBlocking {
+            checkAll(200, arbWorkspaceRow(), arbRelativePath()) { wd, x ->
+                val fileResolved = WorkspaceCwdPolicy.resolveModelPath(wd, x)
+                val shellCwd = WorkspaceCwdPolicy.resolveRelative(CwdOverride.Absent, wd)
+                val nx = WorkspaceCwdPolicy.normalize(x)
+                val expected = if (shellCwd.isEmpty()) nx else "$shellCwd/$nx"
+                assertEquals(
+                    "a relative file path must live under the shell's default cwd (the unified base)",
+                    expected,
+                    fileResolved,
+                )
+            }
+        }
+    }
+
     // ---- constants pinned ----
     @Test
     fun `policy constants are pinned`() {
         assertEquals("/workspace", WorkspaceCwdPolicy.WORKSPACE_DIR)
-        assertEquals(listOf(".xcloudz", "scratch"), WorkspaceCwdPolicy.DEFAULT_SCRATCH)
     }
 
     private fun assertRejected(bad: String) {

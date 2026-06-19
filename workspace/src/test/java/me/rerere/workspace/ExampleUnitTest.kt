@@ -127,9 +127,9 @@ class ExampleUnitTest {
         val root = "test-workspace"
         manager.ensureWorkspace(root)
 
-        // An EXPLICIT "" cwd is the files root (issue #282): with the cwd arg now nullable, OMITTING it
-        // means ABSENT (-> working_dir / default scratch), so a test that wants the files root must ask
-        // for it explicitly. This is the Absent-vs-Explicit distinction the central policy recovers.
+        // An EXPLICIT "" cwd over an unset working_dir is the files root (issue #282). With the unified
+        // model the omitted (ABSENT) cwd ALSO resolves to the files root here, but asking explicitly keeps
+        // the Absent-vs-Explicit distinction the central policy recovers.
         val result = manager.executeCommand(root, "printf hello > command.txt && cat command.txt", cwd = "")
 
         assertEquals(0, result.exitCode)
@@ -138,20 +138,20 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun omittedCwdDefaultsToTheScratchDirectory() {
+    fun omittedCwdDefaultsToTheFilesRoot() {
         val baseDir = Files.createTempDirectory("workspace-default-cwd-test").toFile()
         val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
         val root = "test-workspace"
         manager.ensureWorkspace(root)
 
-        // Omitting cwd over an unset working_dir resolves to and materializes `.xcloudz/scratch`, so the
-        // file lands there — NOT in the files root (the behavior change Assumption 5 documents).
+        // Omitting cwd over an unset working_dir resolves to the files root (the unified project working
+        // directory default), so the file lands directly there — the SAME place workspace_write_file
+        // writes a relative path. This is the file-tool/shell divergence the unification removes.
         val result = manager.executeCommand(root, "printf hi > here.txt && cat here.txt")
 
         assertEquals(0, result.exitCode)
         assertEquals("hi", result.stdout)
-        assertEquals("hi", File(manager.filesDir(root), ".xcloudz/scratch/here.txt").readText())
-        assertEquals(false, File(manager.filesDir(root), "here.txt").exists())
+        assertEquals("hi", File(manager.filesDir(root), "here.txt").readText())
     }
 
     @Test

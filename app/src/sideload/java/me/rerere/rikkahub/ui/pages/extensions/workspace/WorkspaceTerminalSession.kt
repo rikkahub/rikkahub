@@ -26,8 +26,8 @@ import java.io.File
  * Both this and `WorkspaceManager.executeCommand`'s ABSENT branch reduce to
  * `WorkspaceCwdPolicy.toShellPath(seededRelativeCwd(filesDir, workingDir))`; the terminal has no
  * per-call override, so its cwd is the SEED from the workspace `working_dir` (an unset row resolves to
- * the materialized `.xcloudz/scratch` default). This is a snapshot at session-open time — runtime `cd`
- * drift is never written back (OSC 7 sync is out of scope, W-S3).
+ * the files root, the project working directory default). This is a snapshot at session-open time —
+ * runtime `cd` drift is never written back (OSC 7 sync is out of scope, W-S3).
  */
 internal fun workspaceTerminalCwd(filesDir: File, workingDir: String): String =
     WorkspaceCwdPolicy.toShellPath(seededRelativeCwd(filesDir, workingDir))
@@ -56,9 +56,9 @@ internal fun createWorkspaceTerminalSession(
     )
 
     // The initial `-w` is the seed resolved through the central policy (W-I6) — NOT a hard-coded
-    // `/workspace`. seededRelativeCwd materializes the scratch default before the session opens so the
-    // shell lands in an existing directory. The bind-mount target stays the workspace ROOT alias; only
-    // the working directory differs.
+    // `/workspace`. seededRelativeCwd resolves the working_dir seed (blank => the files root, which
+    // always exists) so the shell lands in an existing directory. The bind-mount target stays the
+    // workspace ROOT alias; only the working directory differs.
     val initialCwd = workspaceTerminalCwd(filesDir, workingDir)
     val args = mutableListOf(
         "--root-id",

@@ -24,7 +24,7 @@ data class ShellRunRequest(
     val conversationId: Uuid,
     val command: String,
     val cwd: String?,
-    /** The persisted workspace working-dir seed; resolution is override(cwd) > workingDir > scratch. */
+    /** The persisted workspace working-dir seed; resolution is override(cwd) > workingDir > files root. */
     val workingDir: String,
     val outputPath: String,
     val detachAfterSeconds: Int?,

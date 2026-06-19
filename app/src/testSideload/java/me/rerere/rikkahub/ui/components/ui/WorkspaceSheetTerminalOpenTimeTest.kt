@@ -63,13 +63,10 @@ private class TerminalOpenTimeStore(
 
     override fun workspacesFlow() = rowsFlow
 
+    // Mirrors production resolvedWorkingDir: blank => the files root (the unified default), else normalize.
     override suspend fun resolvedProjectDir(id: String): String {
         val workingDir = workingDir(id)
-        return if (workingDir.isBlank()) {
-            WorkspaceCwdPolicy.DEFAULT_SCRATCH.joinToString("/")
-        } else {
-            WorkspaceCwdPolicy.normalize(workingDir)
-        }
+        return if (workingDir.isBlank()) "" else WorkspaceCwdPolicy.normalize(workingDir)
     }
 
     override suspend fun listFiles(id: String, path: String): List<WorkspaceFileEntry> = emptyList()

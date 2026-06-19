@@ -13,6 +13,7 @@ import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunResult
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.common.text.generateUnifiedDiff
+import me.rerere.workspace.WorkspaceCwdPolicy
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
 import kotlin.uuid.Uuid
@@ -65,7 +66,7 @@ private fun createWriteFileTool(
 ) = Tool(
     name = "workspace_write_file",
     description = """
-        Write a UTF-8 text file to the assistant's bound workspace files area. Paths are relative to the workspace files root.
+        Write a UTF-8 text file to the assistant's bound workspace files area. Paths are relative to the project working directory; use an absolute /workspace/... path to address the files root.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -89,7 +90,8 @@ private fun createWriteFileTool(
         val path = params.string("path") ?: error("path is required")
         val text = params.string("text") ?: error("text is required")
         val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
-        val entry = workspaceRepository.writeText(workspaceId, path, text, overwrite)
+        val resolved = workspaceRepository.resolveFilesPath(workspaceId, path)
+        val entry = workspaceRepository.writeText(workspaceId, resolved, text, overwrite)
         listOf(UIMessagePart.Text(entry.toJson().toString()))
     },
 )
@@ -135,7 +137,8 @@ private fun createEditFileTool(
         val replaceAll = params["replace_all"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
         require(oldText.isNotEmpty()) { "old_text must not be empty" }
 
-        val original = workspaceRepository.readText(workspaceId, path)
+        val resolved = workspaceRepository.resolveFilesPath(workspaceId, path)
+        val original = workspaceRepository.readText(workspaceId, resolved)
         // Count NON-overlapping occurrences: replace/replaceFirst match non-overlapping, so an
         // overlapping window scan (e.g. "aa" in "aaa" -> 2) would mis-reject single edits and
         // over-report replacements. See countNonOverlappingOccurrences.
@@ -148,12 +151,13 @@ private fun createEditFileTool(
         }
 
         val updated = if (replaceAll) original.replace(oldText, newText) else original.replaceFirst(oldText, newText)
-        val entry = workspaceRepository.writeText(workspaceId, path, updated, overwrite = true)
-        val diff = generateUnifiedDiff(original, updated, entry.path)
+        val entry = workspaceRepository.writeText(workspaceId, resolved, updated, overwrite = true)
+        val canonicalPath = WorkspaceCwdPolicy.toShellPath(entry.path)
+        val diff = generateUnifiedDiff(original, updated, canonicalPath)
         listOf(
             UIMessagePart.Text(
                 text = buildJsonObject {
-                    put("path", entry.path)
+                    put("path", canonicalPath)
                     put("replacements", if (replaceAll) occurrences else 1)
                     put("sizeBytes", entry.sizeBytes)
                     put("updatedAt", entry.updatedAt)
@@ -196,12 +200,13 @@ private fun createDeleteFileTool(
         val params = it.jsonObject
         val path = params.string("path") ?: error("path is required")
         val recursive = params["recursive"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        val deleted = workspaceRepository.deleteFile(workspaceId, WorkspaceStorageArea.FILES, path, recursive)
+        val resolved = workspaceRepository.resolveFilesPath(workspaceId, path)
+        val deleted = workspaceRepository.deleteFile(workspaceId, WorkspaceStorageArea.FILES, resolved, recursive)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
                     put("success", deleted)
-                    put("path", path)
+                    put("path", WorkspaceCwdPolicy.toShellPath(resolved))
                 }.toString()
             )
         )
@@ -224,11 +229,11 @@ private fun createMoveFileTool(
             properties = buildJsonObject {
                 put("source", buildJsonObject {
                     put("type", "string")
-                    put("description", "Source path relative to the workspace files root")
+                    put("description", "Source path relative to the project working directory (use an absolute /workspace/... path for the files root)")
                 })
                 put("target", buildJsonObject {
                     put("type", "string")
-                    put("description", "Target path relative to the workspace files root")
+                    put("description", "Target path relative to the project working directory (use an absolute /workspace/... path for the files root)")
                 })
                 put("overwrite", buildJsonObject {
                     put("type", "boolean")
@@ -244,7 +249,9 @@ private fun createMoveFileTool(
         val source = params.string("source") ?: error("source is required")
         val target = params.string("target") ?: error("target is required")
         val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        val entry = workspaceRepository.moveFile(workspaceId, source, target, overwrite)
+        val resolvedSource = workspaceRepository.resolveFilesPath(workspaceId, source)
+        val resolvedTarget = workspaceRepository.resolveFilesPath(workspaceId, target)
+        val entry = workspaceRepository.moveFile(workspaceId, resolvedSource, resolvedTarget, overwrite)
         listOf(UIMessagePart.Text(entry.toJson().toString()))
     },
 )
@@ -263,7 +270,7 @@ private fun createShellTool(
     name = "workspace_shell",
     description = """
         Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace.
-        Use cwd for a path relative to the workspace files root. Requires Rootfs to be installed and ready.
+        Use cwd for a path relative to the project working directory (an absolute /workspace/... path addresses the files root). Requires Rootfs to be installed and ready.
         Set detachAfterSeconds to auto-background a long-running command after that many seconds: the tool then
         returns {taskId, status: running, outputRef, tail} immediately, keeps running, and notifies you when it
         completes; read its output later with workspace_shell_tail. Omit detachAfterSeconds for the default blocking run.
@@ -277,7 +284,7 @@ private fun createShellTool(
                 })
                 put("cwd", buildJsonObject {
                     put("type", "string")
-                    put("description", "Working directory relative to the workspace files root. Defaults to root.")
+                    put("description", "Working directory relative to the project working directory; an absolute /workspace/... path addresses the files root. Defaults to the project working directory.")
                 })
                 put("timeout", buildJsonObject {
                     put("type", "integer")
@@ -418,8 +425,10 @@ private fun createShellTailTool(
 // Hard ceiling on a single tail read so a huge maxBytes request cannot blow out the model context.
 private const val MAX_SHELL_TAIL_BYTES = 256 * 1024
 
+// A files-area entry's `path` is files-root-relative; report it as the canonical /workspace/... form so
+// a write/move result round-trips through the project-relative file tools without a double-join.
 private fun me.rerere.workspace.WorkspaceFileEntry.toJson() = buildJsonObject {
-    put("path", path)
+    put("path", WorkspaceCwdPolicy.toShellPath(path))
     put("name", name)
     put("isDirectory", isDirectory)
     put("sizeBytes", sizeBytes)

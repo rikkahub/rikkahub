@@ -51,8 +51,8 @@ import org.junit.Test
  */
 class WorkspaceCwdResolutionTest {
 
-    /** `.xcloudz/scratch`, the resolved default when working_dir is unset (W-S1/W-B1). */
-    private val scratch = WorkspaceCwdPolicy.DEFAULT_SCRATCH.joinToString("/")
+    /** The files root `""`, the resolved default when working_dir is unset (the unified default). */
+    private val filesRoot = ""
 
     // --- repository seam: in-memory DAO + transaction runner --------------------------------------
 
@@ -118,7 +118,7 @@ class WorkspaceCwdResolutionTest {
 
         /**
          * Mirror of `WorkspaceManager.executeCommand` cwd resolution: resolve override > working_dir >
-         * default scratch via the central policy and return the resolved FILES-relative cwd, WITHOUT
+         * files root via the central policy and return the resolved FILES-relative cwd, WITHOUT
          * persisting anything (exec never writes the row — W-I5/W-S2).
          */
         suspend fun resolveExec(override: CwdOverride): String =
@@ -196,31 +196,31 @@ class WorkspaceCwdResolutionTest {
     @Test
     fun `W-S2 explicit-cwd execs never change the resolved default`(): Unit = runBlocking {
         checkAll(150, Arb.list(arbExplicitOverride(), 1..5)) { overrides ->
-            // Unset row: the default resolves to scratch. A run of explicit-cwd execs must neither
-            // mutate the row nor shift what an ABSENT exec subsequently resolves to.
+            // Unset row: the default resolves to the files root. A run of explicit-cwd execs must
+            // neither mutate the row nor shift what an ABSENT exec subsequently resolves to.
             val row = WorkspaceWorkingDirRow(initialWorkingDir = "")
             overrides.forEach { row.resolveExec(it) }
             assertEquals("explicit execs must not mutate the row", "", row.workingDir())
-            assertEquals("the default is still scratch after explicit execs", scratch, row.resolveExec(CwdOverride.Absent))
+            assertEquals("the default is still the files root after explicit execs", filesRoot, row.resolveExec(CwdOverride.Absent))
         }
     }
 
-    // --- W-S1: unset -> set(p) -> reset resolves scratch, p, scratch ------------------------------
+    // --- W-S1: unset -> set(p) -> reset resolves files root, p, files root ------------------------
 
     @Test
-    fun `W-S1 unset set reset resolves scratch then p then scratch`(): Unit = runBlocking {
+    fun `W-S1 unset set reset resolves files root then p then files root`(): Unit = runBlocking {
         checkAll(200, arbNonBlankPath()) { p ->
             val row = WorkspaceWorkingDirRow(initialWorkingDir = "")
-            // unset -> ABSENT resolves the scratch default.
-            assertEquals("unset resolves to scratch", scratch, row.resolveExec(CwdOverride.Absent))
+            // unset -> ABSENT resolves the files-root default.
+            assertEquals("unset resolves to the files root", filesRoot, row.resolveExec(CwdOverride.Absent))
 
             row.set(p)
             // set -> ABSENT resolves the persisted working_dir.
             assertEquals("after set, ABSENT resolves the working_dir", WorkspaceCwdPolicy.normalize(p), row.resolveExec(CwdOverride.Absent))
 
             row.reset()
-            // reset -> back to the scratch default (NOT the literal scratch path persisted).
-            assertEquals("after reset, ABSENT resolves scratch again", scratch, row.resolveExec(CwdOverride.Absent))
+            // reset -> back to the files-root default.
+            assertEquals("after reset, ABSENT resolves the files root again", filesRoot, row.resolveExec(CwdOverride.Absent))
             assertEquals("reset returns the row to the unset sentinel", "", row.workingDir())
         }
     }

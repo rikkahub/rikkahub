@@ -141,9 +141,8 @@ class WorkspaceRepository(
 
     /**
      * Clear the working-directory seed back to the UNSET sentinel `""` (issue #282, W-D4): the
-     * resolver then falls back to the default `.xcloudz/scratch`. Resetting twice is a no-op — `""` is
-     * already the unset value — so this is idempotent. Distinct from explicitly setting the scratch
-     * path, which keeps "unset" and "set to scratch" distinguishable.
+     * resolver then falls back to the files root (the project working directory default). Resetting
+     * twice is a no-op — `""` is already the unset value — so this is idempotent.
      */
     suspend fun resetWorkingDir(id: String): Boolean = db.withTransaction {
         val workspace = dao.getById(id) ?: return@withTransaction false
@@ -224,6 +223,14 @@ class WorkspaceRepository(
         )
     }
 
+    /**
+     * The workspace's stored project dir — the files-root-relative `working_dir` seed, "" if unset or
+     * the row is missing. The file tools fetch this at CALL time so a model-supplied relative path can
+     * be resolved against the SAME project dir the shell uses (the unified base), letting a project-dir
+     * change in the terminal/sheet take effect without recreating the tool pool.
+     */
+    suspend fun workingDirOf(id: String): String = dao.getById(id)?.workingDir.orEmpty()
+
     suspend fun readText(
         id: String,
         path: String,
@@ -275,9 +282,9 @@ class WorkspaceRepository(
     suspend fun executeCommand(
         id: String,
         command: String,
-        // NULLABLE: `null` == ABSENT (resolve from the workspace working_dir / default scratch); an
-        // explicit `""`/`"."` == the files root. The Absent-vs-Explicit distinction the old `String = ""`
-        // default + the tool gate's `.orEmpty()` collapsed (issue #282).
+        // NULLABLE: `null` == ABSENT (resolve from the workspace working_dir, blank => the files root);
+        // an explicit relative cwd is project-relative, a `/workspace/...` cwd is root-absolute. The
+        // Absent-vs-Explicit distinction the old `.orEmpty()` at the tool gate collapsed (issue #282).
         cwd: String? = null,
         timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
     ): WorkspaceCommandResult {
@@ -297,7 +304,7 @@ class WorkspaceRepository(
         return runInterruptible(Dispatchers.IO) {
             manager.ensureWorkspace(workspace.root)
             // Pass the persisted working_dir SEED so the central policy resolves override > working_dir >
-            // default scratch; an ABSENT (null) cwd here falls through to that seed, an explicit cwd wins.
+            // files root; an ABSENT (null) cwd here falls through to that seed, an explicit cwd wins.
             manager.executeCommand(workspace.root, command, cwd, workspace.workingDir, timeoutMillis)
         }
     }

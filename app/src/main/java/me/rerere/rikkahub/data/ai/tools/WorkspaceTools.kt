@@ -12,6 +12,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.WorkspaceCwdPolicy
 import me.rerere.workspace.WorkspaceStorageArea
 import kotlin.uuid.Uuid
 
@@ -77,7 +78,8 @@ private fun createListFilesTool(
 ) = Tool(
     name = "workspace_list_files",
     description = """
-        List files in the assistant's bound workspace. Use area "files" for the working directory and "linux" for the installed Rootfs.
+        List files in the assistant's bound workspace. Use area "files" for the project working directory and "linux" for the installed Rootfs.
+        For the files area, path is relative to the project working directory (use an absolute /workspace/... path for the files root) and each entries[].path is returned as an absolute /workspace/... path.
         Response format: entries[].path, name, isDirectory, sizeBytes, updatedAt.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -91,9 +93,14 @@ private fun createListFilesTool(
     needsApproval = needsApproval("workspace_list_files"),
     execute = {
         val params = it.jsonObject
-        val path = params.string("path").orEmpty()
         val area = params.area()
-        val entries = workspaceRepository.listFiles(workspaceId, area, path)
+        val isFiles = area == WorkspaceStorageArea.FILES
+        val path = params.string("path").orEmpty()
+        // FILES paths are project-relative on input and canonical /workspace/... on output (the unified
+        // base both file tools and the shell share); the read-only linux rootfs listing keeps its own
+        // rootfs-relative addressing, so it is passed through and reported unchanged.
+        val resolved = if (isFiles) workspaceRepository.resolveFilesPath(workspaceId, path) else path
+        val entries = workspaceRepository.listFiles(workspaceId, area, resolved)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
@@ -101,7 +108,7 @@ private fun createListFilesTool(
                         entries.forEach { entry ->
                             add(
                                 buildJsonObject {
-                                    put("path", entry.path)
+                                    put("path", if (isFiles) WorkspaceCwdPolicy.toShellPath(entry.path) else entry.path)
                                     put("name", entry.name)
                                     put("isDirectory", entry.isDirectory)
                                     put("sizeBytes", entry.sizeBytes)
@@ -123,7 +130,7 @@ private fun createReadFileTool(
 ) = Tool(
     name = "workspace_read_file",
     description = """
-        Read a UTF-8 text file from the assistant's bound workspace files area. Paths are relative to the workspace files root.
+        Read a UTF-8 text file from the assistant's bound workspace files area. Paths are relative to the project working directory; use an absolute /workspace/... path to address the files root.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -136,11 +143,12 @@ private fun createReadFileTool(
     needsApproval = needsApproval("workspace_read_file"),
     execute = {
         val path = it.jsonObject.string("path") ?: error("path is required")
-        val text = workspaceRepository.readText(workspaceId, path)
+        val resolved = workspaceRepository.resolveFilesPath(workspaceId, path)
+        val text = workspaceRepository.readText(workspaceId, resolved)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
-                    put("path", path)
+                    put("path", WorkspaceCwdPolicy.toShellPath(resolved))
                     put("text", text)
                 }.toString()
             )
@@ -170,6 +178,19 @@ internal fun countNonOverlappingOccurrences(haystack: String, needle: String): I
 internal fun kotlinx.serialization.json.JsonObject.string(name: String): String? =
     this[name]?.jsonPrimitive?.contentOrNull
 
+/**
+ * Resolve a MODEL-supplied [modelPath] to the files-root-relative path the repository/manager expect,
+ * honoring the workspace project dir (the unified base): a relative path is project-relative (resolved
+ * against the row's `working_dir`, blank => the files root), a `/workspace/...` path is root-absolute.
+ * Fetches `working_dir` at CALL time so a project-dir change in the terminal/sheet takes effect without
+ * recreating the tool pool. FILES area only — the read-only `linux` rootfs listing keeps its own
+ * rootfs-relative addressing. The reported output path is the canonical `/workspace/...` form of the
+ * resolved value (via [WorkspaceCwdPolicy.toShellPath]), so a list -> read round-trip never double-joins
+ * a project-relative path onto the project dir twice.
+ */
+internal suspend fun WorkspaceRepository.resolveFilesPath(workspaceId: String, modelPath: String): String =
+    WorkspaceCwdPolicy.resolveModelPath(workingDirOf(workspaceId), modelPath)
+
 internal fun kotlinx.serialization.json.JsonObject.area(): WorkspaceStorageArea =
     when (string("area")?.lowercase()) {
         null, "", "files" -> WorkspaceStorageArea.FILES
@@ -182,8 +203,8 @@ internal fun JsonObjectBuilder.putPathProperty(required: Boolean) {
         put("type", "string")
         put(
             "description",
-            if (required) "Path relative to the workspace root"
-            else "Optional path relative to the workspace root. Defaults to root."
+            if (required) "Path relative to the project working directory. Use an absolute /workspace/... path to address the files root."
+            else "Optional path relative to the project working directory (use an absolute /workspace/... path for the files root). Defaults to the project working directory."
         )
     })
 }

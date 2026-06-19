@@ -12,8 +12,8 @@ private const val TAG = "Migration_26_27"
  *
  * Adds the `working_dir` column to the existing `workspaces` table: a FILES-area relative seed for
  * the resolved shell cwd, "" == UNSET. The DEFAULT '' means a legacy v26 row that never had the
- * column decodes as unset (and so resolves to the default `.xcloudz/scratch` at cwd time), never as
- * NULL — `WorkspaceEntity.workingDir` is non-null.
+ * column decodes as unset (and so resolves to the files root at cwd time), never as NULL —
+ * `WorkspaceEntity.workingDir` is non-null.
  *
  * The column name AND type here MUST byte-match what Room's annotation processor generates for v27
  * (schemas/27.json `workspaces` create-SQL) — otherwise `runMigrationsAndValidate` rejects the

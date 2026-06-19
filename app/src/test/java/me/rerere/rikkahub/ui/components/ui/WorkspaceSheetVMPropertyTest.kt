@@ -346,13 +346,11 @@ private class FakeWorkspaceSheetStore(
 
     fun workingDir(id: String): String = rowsFlow.value.first { it.id == id }.workingDir
 
+    // Mirrors production seededRelativeCwd/resolvedWorkingDir: blank => the files root (the unified
+    // project working directory default), else the normalized seed.
     fun resolveWorkingDir(id: String): String {
         val workingDir = workingDir(id)
-        return if (workingDir.isBlank()) {
-            WorkspaceCwdPolicy.DEFAULT_SCRATCH.joinToString("/")
-        } else {
-            WorkspaceCwdPolicy.normalize(workingDir)
-        }
+        return if (workingDir.isBlank()) "" else WorkspaceCwdPolicy.normalize(workingDir)
     }
 }
 

@@ -10,7 +10,8 @@ data class Workspace(
     val updatedAt: Long,
     val lastAccessAt: Long? = null,
     // FILES-area relative seed for the resolved shell cwd; "" == UNSET (resolver falls back to the
-    // default scratch). Never rootfs-absolute, never per-conversation (issue #282).
+    // files root, the project working directory default). Never rootfs-absolute, never per-conversation
+    // (issue #282).
     val workingDir: String = "",
 )
 

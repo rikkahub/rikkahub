@@ -54,7 +54,7 @@ class WorkspaceTerminalCwdTest {
 
     /** A clean, normalize-stable FILES-relative working_dir (incl. dot-prefixed segments). */
     private fun arbWorkingDir(): Arb<String> = arbitrary {
-        if (Arb.boolean().bind()) "" // unset -> the scratch default branch
+        if (Arb.boolean().bind()) "" // unset -> the files-root default branch
         else Arb.list(Arb.element(segments), 1..4).bind().joinToString("/")
     }
 
@@ -131,7 +131,7 @@ class WorkspaceTerminalCwdTest {
 
     /**
      * A terminal `-w` is a SEED captured at session-open time, never a live cwd (OSC 7 / live drift is
-     * out of scope). So a session opened while `working_dir` is unset (the scratch default) must keep
+     * out of scope). So a session opened while `working_dir` is unset (the files-root default) must keep
      * that initial `-w` even after the default changes; a session opened AFTER the change picks up the
      * new value. The two openings on the same workspace differ iff the seed differed at open time.
      */
@@ -142,7 +142,7 @@ class WorkspaceTerminalCwdTest {
             checkAll(200, nonBlank) { newWorkingDir ->
                 val files = freshFilesDir()
 
-                // Opened BEFORE the change: working_dir is unset, so the seed is the scratch default.
+                // Opened BEFORE the change: working_dir is unset, so the seed is the files root.
                 val before = workspaceTerminalCwd(files, workingDir = "")
 
                 // The default working_dir changes to a non-blank value (a settings edit between opens).
@@ -150,8 +150,8 @@ class WorkspaceTerminalCwdTest {
                 val after = workspaceTerminalCwd(files, workingDir = newWorkingDir)
 
                 assertEquals(
-                    "a session opened before the change keeps the scratch-default seed (W-S3)",
-                    WorkspaceCwdPolicy.toShellPath(WorkspaceCwdPolicy.DEFAULT_SCRATCH.joinToString("/")),
+                    "a session opened before the change keeps the files-root seed (W-S3)",
+                    WorkspaceCwdPolicy.toShellPath(""),
                     before,
                 )
                 assertEquals(

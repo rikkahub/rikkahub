@@ -92,12 +92,10 @@ class WorkspaceManager(
      * [WorkspaceCwdPolicy.resolveRelative] (issue #282) so the value handed to the runner — and thus
      * mapped to PRoot `-w` — is the SAME normalized value the sideload terminal derives (W-I6):
      *
-     *  - [cwd] is NULLABLE. `null` == ABSENT (fall back to [workingDir]/the scratch default); an
-     *    explicit `""`/`"."` == the files root. Collapsing the two (the old `String = ""` default, the
-     *    `.orEmpty()` at the tool gate) is the bug this nullable param recovers from.
-     *  - resolution order is explicit-override > [workingDir] > default `.xcloudz/scratch`.
-     *  - an ABSENT cwd over an UNSET [workingDir] materializes the default scratch dir via
-     *    [ensureDefaultScratch] (mkdir-p, clobber-safe) so the resolved directory actually exists.
+     *  - [cwd] is NULLABLE. `null` == ABSENT (fall back to [workingDir], blank => the files root); an
+     *    explicit relative `cwd` is project-relative (resolved against [workingDir]), a `/workspace/...`
+     *    `cwd` is root-absolute. The Absent-vs-Explicit distinction the old `.orEmpty()` collapsed (#282).
+     *  - resolution order is explicit-override > [workingDir] > the files root (the unified default).
      */
     fun executeCommand(
         root: String,
@@ -139,11 +137,10 @@ class WorkspaceManager(
      * to the runner — and thus mapped to PRoot `-w` — is the SAME normalized value the sideload
      * terminal derives (W-I6):
      *
-     *  - [cwd] is NULLABLE. `null` == ABSENT (fall back to [workingDir]/the scratch default); an
-     *    explicit `""`/`"."` == the files root.
-     *  - resolution order is explicit-override > [workingDir] > default `.xcloudz/scratch`.
-     *  - an ABSENT cwd over an UNSET [workingDir] materializes the default scratch dir via
-     *    [seededRelativeCwd] (mkdir-p, clobber-safe) so the resolved directory actually exists.
+     *  - [cwd] is NULLABLE. `null` == ABSENT (fall back to [workingDir], blank => the files root); an
+     *    explicit relative `cwd` is project-relative (resolved against [workingDir]), a `/workspace/...`
+     *    `cwd` is root-absolute.
+     *  - resolution order is explicit-override > [workingDir] > the files root (the unified default).
      */
     private fun buildShellContext(
         root: String,
