@@ -17,32 +17,50 @@ import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
 
+// 默认的记忆行为规则（可被用户自定义覆盖）
+internal val DEFAULT_MEMORY_TOOL_USER_PROMPT = """
+    Memories will automatically appear in the <memories> tag in later conversations.
+    Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
+    You may store: preferred name, preferences, plans, work-related notes, chat style preferences, first chat time, etc.
+    Do not show memory content directly in the conversation unless the user explicitly asks.
+    Today is {当前日期}（运行时会动态填充）.
+    Similar memories should be merged; prefer updating existing records.
+""".trimIndent()
+
 fun buildMemoryTools(
     json: Json,
+    customMemoryPrompt: String = "",
     onCreation: suspend (String) -> AssistantMemory,
     onUpdate: suspend (Int, String) -> AssistantMemory,
     onDelete: suspend (Int) -> Unit
 ): List<Tool> = listOf(
     Tool(
         name = "memory_tool",
-        description = """
-            The memory tool stores long-term information across conversations.
-            Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).
-            - No relevant record: `create` + `content`
-            - Existing relevant record: `edit` + `id` + `content`
-            - Outdated/irrelevant record: `delete` + `id`
-            Memories will automatically appear in the <memories> tag in later conversations.
-            Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
-            You may store: preferred name, preferences, plans, work-related notes, chat style preferences, first chat time, etc.
-            Do not show memory content directly in the conversation unless the user explicitly asks.
-            Today is ${LocalDate.now().toLocalString(true)}.
-            Similar memories should be merged; prefer updating existing records.
+        description = buildString {
+            // PREFIX（固定，不可修改）
+            append("""
+                The memory tool stores long-term information across conversations.
+                Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).
+                - No relevant record: `create` + `content`
+                - Existing relevant record: `edit` + `id` + `content`
+                - Outdated/irrelevant record: `delete` + `id`
+            """.trimIndent())
+            append("\n")
 
-            Examples:
-            {"action":"create","content":"User prefers brief replies and is more active on weekends."}
-            {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
-            {"action":"delete","id":7}
-        """.trimIndent(),
+            // EDITABLE（用户自定义 或 默认）
+            val promptContent = customMemoryPrompt.ifBlank { DEFAULT_MEMORY_TOOL_USER_PROMPT }
+            // 将占位符 {当前日期} 替换为实际日期
+            append(promptContent.replace("{当前日期}", LocalDate.now().toLocalString(true)))
+            append("\n")
+
+            // SUFFIX（固定，不可修改）
+            append("""
+                Examples:
+                {"action":"create","content":"User prefers brief replies and is more active on weekends."}
+                {"action":"edit","id":12,"content":"User's preferred name updated to "A-Xing", prefers Chinese replies."}
+                {"action":"delete","id":7}
+            """.trimIndent())
+        },
         parameters = {
             InputSchema.Obj(
                 properties = buildJsonObject {
