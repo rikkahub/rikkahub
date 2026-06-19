@@ -2,14 +2,18 @@ package me.rerere.rikkahub.service.automation
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.InputMethod
 import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import android.view.inputmethod.EditorInfo
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -107,6 +111,20 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var overlay: KillSwitchOverlay? = null
 
+    // Real-input typing path (API 33+, FLAG_INPUT_METHOD_EDITOR). The service acts as a supplementary
+    // input method so it can commit text through the focused editor's InputConnection — REAL input
+    // events that live-search controllers honor, unlike ACTION_SET_TEXT which only mutates the node's
+    // text (verified: Instagram explore search ignores ACTION_SET_TEXT, reacts to real input). The
+    // connection is established/torn down by the InputMethod callbacks on the MAIN thread; these fields
+    // are read (volatile) from the service dispatcher and the connection is only ever USED on main
+    // (runOnMainSync), since an InputConnection is main-thread-bound.
+    @Volatile private var imeConnection: InputMethod.AccessibilityInputConnection? = null
+    @Volatile private var imeEditorInfo: EditorInfo? = null
+    // Completed by onStartInput so a focus-then-commit can await the editor session starting WITHOUT a
+    // fixed sleep. Installed BEFORE ACTION_FOCUS so a session that starts after focus cannot be missed;
+    // captureMutex serializes perform() so there is never a concurrent writer of this field.
+    @Volatile private var imeStartSignal: CompletableDeferred<Unit>? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         // Multi-window awareness (app + system dialogs) + the two events that advance stateSeq.
@@ -114,10 +132,39 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            // FLAG_INPUT_METHOD_EDITOR (API 33+) lets this service supply an InputMethod so the type
+            // path can commit text through the focused editor's InputConnection (real input). It rides
+            // the already-granted accessibility permission — no separate IME to enable/select. Older
+            // devices keep the ACTION_SET_TEXT path. No gesture flag is added: still coordinate-free.
+            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
+                } else {
+                    0
+                }
             notificationTimeout = 100
         }
         instance = this
+    }
+
+    /**
+     * Supply the input method used by the API 33+ real-input type path (FLAG_INPUT_METHOD_EDITOR). The
+     * framework calls this only on API 33+. The returned [InputMethod] tracks the focused editor's
+     * [InputMethod.AccessibilityInputConnection] (set on the main thread in onStartInput, cleared in
+     * onFinishInput) so [trySetTextViaIme] can commit text into whatever editable currently has focus.
+     */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    override fun onCreateInputMethod(): InputMethod = object : InputMethod(this) {
+        override fun onStartInput(attribute: EditorInfo, restarting: Boolean) {
+            imeConnection = currentInputConnection
+            imeEditorInfo = currentInputEditorInfo
+            imeStartSignal?.complete(Unit)
+        }
+
+        override fun onFinishInput() {
+            imeConnection = null
+            imeEditorInfo = null
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -487,34 +534,117 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                     }
                 }
 
-                // Slice 9 (the input sink): same strict-binding re-resolve + projection-order walk as
-                // Node, but the per-node operation is ACTION_SET_TEXT with the text payload (a node
-                // operation, never a coordinate). dispatchBound owns the walk + node/window recycling
-                // discipline; only the leaf operation differs.
-                is PerformAction.SetText -> dispatchBound(
-                    binding = action.binding,
-                    allowedPackages = action.allowedPackages,
-                    includeHost = action.includeHost,
-                ) { node ->
-                    val args = Bundle().apply {
-                        putCharSequence(
-                            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                            action.text,
-                        )
+                // Slice 9 (the input sink): prefer the real-input InputConnection path on API 33+,
+                // falling back to the node-level ACTION_SET_TEXT walk. See [dispatchSetText].
+                is PerformAction.SetText -> dispatchSetText(action)
+            }
+        }
+    }
+
+    /**
+     * Set the text of the resolved editable. PREFERS the real-input path on API 33+: commit through the
+     * focused editor's [InputMethod.AccessibilityInputConnection], which produces InputConnection-level
+     * input that live-search controllers honor — `ACTION_SET_TEXT` only mutates the node's text and some
+     * apps (Instagram explore search) ignore it. Falls back to the node-level `ACTION_SET_TEXT` walk when
+     * the IME path is unavailable (API < 33, the focused editor reports no input connection, or it could
+     * not be resolved/focused). The optional submit fires the field's IME editor action either way.
+     */
+    private suspend fun dispatchSetText(action: PerformAction.SetText): PerformResult {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            trySetTextViaIme(action)?.let { return it }
+        }
+        // Fallback (API < 33 or no input connection): node-level ACTION_SET_TEXT, same strict-binding
+        // re-resolve + projection-order walk as Node; only the leaf operation differs. The optional
+        // submit fires ACTION_IME_ENTER (API 30+; a no-op below it, and on a field with no IME action).
+        return dispatchBound(
+            binding = action.binding,
+            allowedPackages = action.allowedPackages,
+            includeHost = action.includeHost,
+        ) { node ->
+            val args = Bundle().apply {
+                putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    action.text,
+                )
+            }
+            val setOk = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            if (setOk && action.submit && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+            }
+            setOk
+        }
+    }
+
+    /**
+     * The API 33+ real-input type path. Resolves + focuses the target so it becomes the active editor,
+     * waits (event-driven, no fixed sleep) for the editor session to start, then replaces the field via
+     * `setSelection`+`commitText` on the [InputMethod.AccessibilityInputConnection] and optionally fires
+     * the IME editor action. Returns:
+     *  - [PerformResult.Dispatched] when the text was committed through the input connection;
+     *  - [PerformResult.BindingMismatch] when the binding no longer resolves to one live node (a genuine
+     *    stale — propagated so the core re-grounds, NOT swallowed into the fallback);
+     *  - `null` when this path is not applicable (could not focus, or no input connection arrived) so
+     *    [dispatchSetText] falls back to `ACTION_SET_TEXT`.
+     *
+     * Threading: the InputConnection is main-thread-bound, so every commit call runs via [runOnMainSync];
+     * [imeConnection]/[imeEditorInfo] are set on the main thread by onStartInput and read volatile here.
+     */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private suspend fun trySetTextViaIme(action: PerformAction.SetText): PerformResult? {
+        // Arm the start signal BEFORE focusing so a session that starts in response to the focus can't be
+        // missed (lost-wakeup safe). captureMutex serializes perform(), so no concurrent writer exists.
+        val started = CompletableDeferred<Unit>()
+        imeStartSignal = started
+        try {
+            // Resolve the unique node + request input focus; capture its current length for the replace.
+            // A non-unique binding is a real stale (propagate); any other non-dispatch ⇒ fall back.
+            var currentLen = 0
+            val focus = dispatchBound(
+                binding = action.binding,
+                allowedPackages = action.allowedPackages,
+                includeHost = action.includeHost,
+            ) { node ->
+                currentLen = node.text?.length ?: 0
+                // Best-effort: an already-focused field re-focuses harmlessly; the connection may already
+                // be live (fast path below). The boolean only reflects focus, not applicability.
+                node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                true
+            }
+            when (focus) {
+                is PerformResult.BindingMismatch -> return focus
+                PerformResult.Dispatched -> {}
+                PerformResult.DispatchFailed -> return null
+            }
+            // Fast path: the field was already focused (keyboard up) ⇒ connection already live. Else wait
+            // for onStartInput, bounded; a field that never starts an editor session ⇒ null ⇒ fall back.
+            val conn = imeConnection ?: withTimeoutOrNull(IME_START_TIMEOUT_MS) {
+                started.await()
+                imeConnection
+            }
+            conn ?: return null
+            val editorInfo = imeEditorInfo
+            // The AccessibilityInputConnection is main-thread-bound. Its mutators return void, so success
+            // is the post-act re-snapshot the core performs (design D4), not a boolean here.
+            runOnMainSync {
+                // select-all then commit: commitText replaces the current selection, replacing the field.
+                conn.setSelection(0, currentLen)
+                conn.commitText(action.text, 1, null)
+                if (action.submit) {
+                    val imeAction = editorInfo
+                        ?.let { it.imeOptions and EditorInfo.IME_MASK_ACTION }
+                        ?.takeIf { it != EditorInfo.IME_ACTION_NONE && it != EditorInfo.IME_ACTION_UNSPECIFIED }
+                    if (imeAction != null) {
+                        conn.performEditorAction(imeAction)
+                    } else {
+                        // No declared editor action ⇒ a raw Enter is the closest real-input equivalent.
+                        conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                        conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
                     }
-                    val setOk = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-                    // Work-first submit: after the text lands, fire the field's IME editor action
-                    // (Search/Go/Send/Done) so live-search controllers that ignore a programmatic
-                    // ACTION_SET_TEXT still run the query (e.g. Instagram explore search). ACTION_IME_ENTER
-                    // is API 30+; on minSdk 26..29 it is unavailable, so the submit half degrades to a
-                    // no-op and the set still counts (best-effort — a field with no IME action no-ops too).
-                    // Dispatch success is the SET landing; the follow-on action never fails the result.
-                    if (setOk && action.submit && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
-                    }
-                    setOk
                 }
             }
+            return PerformResult.Dispatched
+        } finally {
+            imeStartSignal = null
         }
     }
 
@@ -799,6 +929,12 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
         // arrived for the quiet window, or the hard cap elapses — never a fixed sleep.
         private const val SETTLE_QUIET_WINDOW_MS = 250L
         private const val SETTLE_HARD_CAP_MS = 1500L
+
+        // Bound for waiting on the editor session (onStartInput) after focusing a field in the API 33+
+        // real-input type path. Only hit when the field was not already focused; an editor that never
+        // starts a session within this window falls back to ACTION_SET_TEXT. Not a fixed sleep — the
+        // wait completes the instant onStartInput fires.
+        private const val IME_START_TIMEOUT_MS = 700L
 
         /**
          * The live, connected service or null. Set on [onServiceConnected], cleared on teardown.
