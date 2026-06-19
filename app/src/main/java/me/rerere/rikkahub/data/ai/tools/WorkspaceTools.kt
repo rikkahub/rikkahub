@@ -57,6 +57,16 @@ suspend fun createWorkspaceTools(
     val approvalOverrides = workspace.toolApprovalOverrides()
     fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
 
+    // The agent's project working directory, in canonical /workspace/... form, surfaced to the model
+    // via the anchor tool's systemPrompt below so it KNOWS where relative paths land (without this it
+    // only knows a project dir exists, not its value, and falls back to absolute paths / guessing).
+    // Computed from the stored, already-normalized seed — pure, no filesystem IO, cannot throw and fail
+    // the turn; the actual containment check still runs at each file/shell operation. This note is a
+    // per-turn snapshot (the pool is rebuilt each turn); the tools THEMSELVES resolve against the current
+    // working_dir live, so a mid-turn project-dir change takes effect in tool behavior immediately and is
+    // reflected in this note on the next turn.
+    val projectDir = WorkspaceCwdPolicy.toShellPath(WorkspaceCwdPolicy.normalize(workspace.workingDir))
+
     // SECURITY GATE (issue #197 design-gate §C / design note security-model-design:197 §4.1 Option A,
     // §3 I-FLAVOR): the write-capable and shell verbs (workspace_write_file/edit_file/delete_file/
     // move_file/shell) are an LLM-driven arbitrary-write / code-execution sink, "sideload-flavored
@@ -66,13 +76,34 @@ suspend fun createWorkspaceTools(
     // source sets, so the surface stays read-only in every flavor this slice. HP-2 fills ONLY the
     // sideload copy (behind I-ENABLE + I-APPROVE + I-SURFACE) by calling the now-co-located factories.
     return listOf(
-        createListFilesTool(workspaceId, ::needsApproval, workspaceRepository),
+        createListFilesTool(workspaceId, projectDir, ::needsApproval, workspaceRepository),
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
     ) + sideloadWorkspaceTools(workspaceId, conversationId, workspaceRepository, ::needsApproval)
 }
 
+/**
+ * The standing system-prompt note that tells the agent WHERE its workspace is — the resolved project
+ * working directory in canonical `/workspace/...` form. Without it the agent only knows a project dir
+ * exists (the tool descriptions say "relative to the project working directory") but not its VALUE, so
+ * it falls back to absolute `/workspace` paths or trial-and-error. Emitted once per turn via the anchor
+ * [createListFilesTool], which is present in every flavor whenever a workspace is bound.
+ */
+internal fun workspaceContextPrompt(projectDir: String): String {
+    // SECURITY: projectDir is interpolated into the system prompt. A directory name is attacker-
+    // influenceable (the agent can create one via the shell, the user may then select it as the
+    // project dir) and `normalize` only rejects NUL, not newlines/other control chars — so strip every
+    // control char here, at the prompt boundary, before it can break the prompt framing or smuggle in
+    // instructions. A real path never legitimately contains control characters.
+    val safe = projectDir.filterNot { it.isISOControl() }
+    return "A workspace is bound to this assistant: its files area is mounted at /workspace, and your " +
+        "project working directory is $safe. Paths you pass to the workspace tools (and a workspace " +
+        "shell's default working directory) are relative to this project directory; begin a path with " +
+        "/workspace to address the files root instead."
+}
+
 private fun createListFilesTool(
     workspaceId: String,
+    projectDir: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -90,6 +121,9 @@ private fun createListFilesTool(
             }
         )
     },
+    // The anchor tool carries the workspace context note (project dir) so the agent knows where
+    // relative paths resolve; list_files is present in every flavor a workspace is bound in.
+    systemPrompt = { _, _ -> workspaceContextPrompt(projectDir) },
     needsApproval = needsApproval("workspace_list_files"),
     execute = {
         val params = it.jsonObject

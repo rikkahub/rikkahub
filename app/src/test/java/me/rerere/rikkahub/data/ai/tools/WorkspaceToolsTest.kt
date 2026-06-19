@@ -101,6 +101,34 @@ class WorkspaceToolsTest {
         assertTrue(resolveWorkspaceToolApproval("unknown_tool", null))
     }
 
+    // (E) The workspace context note names the resolved project dir + the /workspace absolute escape,
+    // so the agent knows WHERE relative paths land (the awareness gap absolute-path fallback exposed).
+    @Test
+    fun `workspace context note states the project dir and the absolute escape`() {
+        // Files-root default (unset working_dir).
+        val rootNote = workspaceContextPrompt("/workspace")
+        assertTrue("names the project dir value", rootNote.contains("/workspace"))
+        assertTrue("explains relative resolution", rootNote.contains("relative to this project directory"))
+
+        // A set project dir is surfaced verbatim.
+        val repoNote = workspaceContextPrompt("/workspace/rikkahub")
+        assertTrue("names the set project dir", repoNote.contains("/workspace/rikkahub"))
+        assertTrue("offers the /workspace absolute escape", repoNote.contains("begin a path with /workspace"))
+    }
+
+    // (E) SECURITY: a control char in the project dir (an attacker-influenceable directory name) must
+    // NOT reach the system prompt — it is stripped at the boundary, so it cannot break the prompt
+    // framing or inject instructions. Regression for the prompt-injection finding.
+    @Test
+    fun `workspace context note strips control characters from the project dir`() {
+        val note = workspaceContextPrompt("/workspace/ev\nil\tx\u0000y")
+        assertFalse("no newline reaches the prompt", note.contains('\n'))
+        assertFalse("no tab reaches the prompt", note.contains('\t'))
+        assertFalse("no NUL reaches the prompt", note.contains('\u0000'))
+        // The visible characters survive (only the control chars are removed).
+        assertTrue("non-control path text is preserved", note.contains("/workspace/evilxy"))
+    }
+
     // (D) Edit occurrence counting matches replace/replaceFirst (NON-overlapping). Regression for the
     // overlapping-window bug: old_text="aa" in "aaa" must count as 1 (one non-overlapping match),
     // not 2 — otherwise replace_all=false wrongly rejects and replace_all=true over-reports.
