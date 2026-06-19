@@ -1239,5 +1239,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_asr_configure_step_timestamp_desc">単語単位のタイムスタンプを返します。rikkahub では現在使用していないため、token 節約のため既定では無効です</string>
   <string name="setting_asr_configure_step_hotwords">ホットワード</string>
   <string name="setting_asr_configure_step_hotwords_desc">固有名詞や専門用語の認識精度を高める、カンマ区切りのホットワード一覧</string>
+  <string name="log_page_record_requests">リクエスト記録</string>
+  <string name="log_page_record_requests_desc">リクエストヘッダー、ボディ、レスポンスメタデータをキャプチャします</string>
 </resources>
 

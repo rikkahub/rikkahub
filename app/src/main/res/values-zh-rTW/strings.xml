@@ -1237,5 +1237,7 @@
   <string name="setting_asr_configure_step_timestamp_desc">回傳詞級時間戳。rikkahub 目前尚未使用，預設關閉以節省 token</string>
   <string name="setting_asr_configure_step_hotwords">熱詞</string>
   <string name="setting_asr_configure_step_hotwords_desc">以逗號分隔的熱詞清單，用於提升專有名詞／領域術語的辨識準確率</string>
+  <string name="log_page_record_requests">記錄請求</string>
+  <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
 </resources>
 

@@ -1239,5 +1239,7 @@
   <string name="setting_asr_configure_step_timestamp_desc">Возвращать временные метки на уровне слов. Сейчас rikkahub их не использует, поэтому по умолчанию отключено для экономии token</string>
   <string name="setting_asr_configure_step_hotwords">Горячие слова</string>
   <string name="setting_asr_configure_step_hotwords_desc">Список горячих слов через запятую для повышения точности распознавания имён собственных и терминов предметной области</string>
+  <string name="log_page_record_requests">Записывать запросы</string>
+  <string name="log_page_record_requests_desc">Записывать заголовки запросов, тела и метаданные ответов</string>
 </resources>
 
