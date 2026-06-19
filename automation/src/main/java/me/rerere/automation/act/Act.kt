@@ -34,8 +34,17 @@ sealed interface Act {
      * [text], the core derives the OCap from this variant. Coordinate-free (a [Selector], never a
      * position). Subject to the restricted-idempotency no-op (P9): if the resolved target already
      * projects [text], the core succeeds WITHOUT dispatching (design §3 I-act-4, set_text only).
+     *
+     * [submit]: after the text lands, also fire the field's IME editor action (the keyboard
+     * Search/Go/Send/Done button) via ACTION_IME_ENTER. Some apps' live-search controllers do not
+     * react to a programmatic ACTION_SET_TEXT (no per-keystroke input event) and need an explicit
+     * submit to run the query (observed: Instagram's explore search) — and a login/search form often
+     * needs the action pressed regardless. WORK-FIRST: submit stays `Sink.TYPE_INTO` (NOT the
+     * dangerous `Sink.SUBMIT`), so it is verb-gated like any type but NEVER behind an out-of-band
+     * confirm — the maintainer's call (even a send-class IME action is ungated here). When [submit] is
+     * true the P9 no-op does NOT apply: the action must fire even if the text is already present.
      */
-    data class SetText(val selector: Selector, val text: String) : Act
+    data class SetText(val selector: Selector, val text: String, val submit: Boolean = false) : Act
 }
 
 /**

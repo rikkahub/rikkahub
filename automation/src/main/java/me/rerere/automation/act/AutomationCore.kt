@@ -213,7 +213,7 @@ class AutomationCore(
                     }
                     is Act.SetText -> {
                         val binding = target!!.toTargetBinding(requireVisibleTextMatch = false)
-                        dispatchSetText(guard, grounded, binding, request.text)
+                        dispatchSetText(guard, grounded, binding, request.text, request.submit)
                     }
                 }
             },
@@ -284,6 +284,7 @@ class AutomationCore(
         grounded: UiSnapshot,
         binding: me.rerere.automation.observe.TargetBinding,
         text: String,
+        submit: Boolean,
     ): ActOutcome {
         // Pre-resolve settle (spec §6 step 9): quiesce BEFORE the fresh resolveBinding so the P9
         // no-op compares the field's settled editable value (not a mid-reflow transient) and a
@@ -304,7 +305,10 @@ class AutomationCore(
                 // even after the foreground switched, but the fresh snapshot then describes an
                 // un-admitted surface — so return Acted only when it is still the authorized surface,
                 // else StaleState (re-observe), exactly as the post-dispatch tail does.
-                if (r.target.editableText == text) {
+                //
+                // A submit request OVERRIDES P9: even when the text already matches, the IME action must
+                // still fire (the user wants the query run / form submitted), so fall through to dispatch.
+                if (r.target.editableText == text && !submit) {
                     freshSnapForSurface(r.snapshot, grounded)
                         ?.let { ActOutcome.Acted(it) }
                         ?: ActOutcome.StaleState(null)
@@ -314,6 +318,7 @@ class AutomationCore(
                         text = text,
                         allowedPackages = setOf(grounded.foregroundPkg),
                         includeHost = guard.includeHost,
+                        submit = submit,
                     )
                     val result = backend.perform(action)
                     finishAfterPerform(guard, grounded, result)

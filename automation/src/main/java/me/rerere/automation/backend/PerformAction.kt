@@ -46,6 +46,13 @@ sealed interface PerformAction {
         val allowedPackages: Set<String>,
         /** YOLO host policy: when true the replay walk may also match host-package windows. */
         val includeHost: Boolean = false,
+        /**
+         * After ACTION_SET_TEXT lands, also fire the field's IME editor action (ACTION_IME_ENTER,
+         * API 30+) on the same node — the keyboard Search/Go/Send/Done button. For apps whose
+         * live-search controller ignores a programmatic set (no per-keystroke event) or that need an
+         * explicit submit. Best-effort: a node without an IME action just no-ops the follow-on.
+         */
+        val submit: Boolean = false,
     ) : PerformAction
 }
 

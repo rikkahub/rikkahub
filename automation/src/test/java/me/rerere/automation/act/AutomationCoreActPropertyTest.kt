@@ -509,6 +509,42 @@ class AutomationCoreActPropertyTest {
         }
     }
 
+    // ---- submit: a set_text with submit=true dispatches PerformAction.SetText carrying the submit
+    // flag, so the backend fires the field's IME action after the text lands (work-first, the live-
+    // search/explicit-submit case). ----
+    @Test
+    fun `a submit set_text dispatches SetText carrying the submit flag`() {
+        runBlocking {
+            val backend = editableBackend(text = "old")
+            val core = AutomationCore(backend)
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "cat", submit = true))
+            assertTrue("a submit set_text still succeeds", outcome is ActOutcome.Acted)
+            val performed = backend.performed.single()
+            assertTrue("must dispatch a SetText", performed is PerformAction.SetText)
+            assertEquals("the requested text is dispatched", "cat", (performed as PerformAction.SetText).text)
+            assertTrue("the submit flag must reach the backend", performed.submit)
+        }
+    }
+
+    // ---- submit overrides P9: even when the FRESH editable value already equals the requested text,
+    // a submit set_text must NOT take the no-op shortcut — the IME action has to fire (re-run the query
+    // / submit the form). ----
+    @Test
+    fun `a submit set_text overrides P9 and dispatches even when the text already matches`() {
+        runBlocking {
+            val backend = editableBackend(text = "hello")
+            val core = AutomationCore(backend)
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
+            assertEquals("fixture must project the field's editable value", "hello", grounded.target0().editableText)
+            val outcome = core.act(setTextGuard(), grounded, Act.SetText(Selector.ByTid(0), "hello", submit = true))
+            assertTrue("submit still succeeds", outcome is ActOutcome.Acted)
+            val performed = backend.performed.single()
+            assertTrue("submit must bypass the P9 no-op and dispatch", performed is PerformAction.SetText)
+            assertTrue("the dispatched action carries submit=true", (performed as PerformAction.SetText).submit)
+        }
+    }
+
     // ---- binding mismatch (MULTIPLE matches): when the fresh tree has TWO nodes that strictly match
     // the binding (e.g. two windows that both report an unknown id and carry an identical node), the
     // backend must refuse to dispatch (it cannot tell which is the intended target) and stale-stop. ----

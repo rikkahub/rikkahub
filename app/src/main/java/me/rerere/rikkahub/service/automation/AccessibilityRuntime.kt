@@ -3,6 +3,7 @@ package me.rerere.rikkahub.service.automation
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -501,7 +502,17 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                             action.text,
                         )
                     }
-                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                    val setOk = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                    // Work-first submit: after the text lands, fire the field's IME editor action
+                    // (Search/Go/Send/Done) so live-search controllers that ignore a programmatic
+                    // ACTION_SET_TEXT still run the query (e.g. Instagram explore search). ACTION_IME_ENTER
+                    // is API 30+; on minSdk 26..29 it is unavailable, so the submit half degrades to a
+                    // no-op and the set still counts (best-effort — a field with no IME action no-ops too).
+                    // Dispatch success is the SET landing; the follow-on action never fails the result.
+                    if (setOk && action.submit && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                    }
+                    setOk
                 }
             }
         }

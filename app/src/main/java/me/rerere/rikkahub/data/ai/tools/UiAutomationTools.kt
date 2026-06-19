@@ -6,6 +6,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -373,7 +374,10 @@ fun getUiAutomationTools(
                 "the latest ui_observe table), by its form key, by its semantic key, or by its " +
                 "visible text. Returns a fresh ui_observe-style snapshot after the edit — this IS your " +
                 "fresh observation, so do NOT call ui_observe again afterward; read this result. The " +
-                "field's new value is shown in that snapshot, so trust it landed rather than re-typing.",
+                "field's new value is shown in that snapshot, so trust it landed rather than re-typing. " +
+                "Set \"submit\": true to also press the field's keyboard action (Search/Go/Send/Done) " +
+                "after typing — use it for search boxes whose results do NOT appear from typing alone " +
+                "(e.g. Instagram explore search) and to submit login/search forms in one step.",
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
@@ -397,6 +401,19 @@ fun getUiAutomationTools(
                             buildJsonObject {
                                 put("type", JsonPrimitive("string"))
                                 put("description", JsonPrimitive("The text to set as the field's new contents."))
+                            },
+                        )
+                        put(
+                            "submit",
+                            buildJsonObject {
+                                put("type", JsonPrimitive("boolean"))
+                                put(
+                                    "description",
+                                    JsonPrimitive(
+                                        "Optional (default false). When true, press the field's IME " +
+                                            "action (Search/Go/Send/Done) after the text lands.",
+                                    ),
+                                )
                             },
                         )
                     },
@@ -423,13 +440,21 @@ fun getUiAutomationTools(
                 // set_text the act path's P9 no-op already handles.
                 val text = (args["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content
                     ?: return@execute auditMalformedAct(Verb.SET_TEXT, Sink.TYPE_INTO, rawArgs = args.toString())
+                // submit is an OPTIONAL boolean — default false. A missing/non-bool value is NOT
+                // malformed (the write itself is well-formed); it just means "do not press the IME
+                // action". Require a REAL JSON boolean: booleanOrNull alone coerces a quoted string
+                // ("true" -> true), so guard on !isString first — {"submit":"true"} or {"submit":1}
+                // stays false rather than silently firing the action (fail-safe, mirrors the strict
+                // isString check the text payload uses).
+                val submit = (args["submit"] as? JsonPrimitive)
+                    ?.takeIf { !it.isString }?.booleanOrNull ?: false
                 // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
                 val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer
                 // must NOT call authorize/guardInFlight here (would double-audit / break P25). The
                 // restricted P9 no-op (an unchanged-text set_text returns Acted without dispatching)
                 // lives inside core.act; from here it is indistinguishable from a normal Acted.
-                when (val outcome = core.act(guard, snapshot, Act.SetText(selector, text), confirm)) {
+                when (val outcome = core.act(guard, snapshot, Act.SetText(selector, text, submit), confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot // re-ground for the next act
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))

@@ -1035,6 +1035,53 @@ class UiAutomationToolsTest {
     }
 
     @Test
+    fun `ui_set_text with submit true threads the submit flag to the backend SetText`() {
+        val backend = FakeBackend(editableTree(stateSeq = 5L, text = "old"))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        val parts = runBlocking {
+            tools.byName("ui_set_text").execute(
+                buildJsonObject {
+                    put("selector", buildJsonObject { put("tid", 0) })
+                    put("text", "cat")
+                    put("submit", true)
+                },
+            )
+        }
+
+        val action = backend.performed.single() as PerformAction.SetText
+        assertEquals("the dispatched payload is the requested text", "cat", action.text)
+        assertTrue("submit must thread from the tool args through to the backend action", action.submit)
+        assertTrue(
+            "the result is the fresh re-rendered snapshot",
+            (parts.single() as UIMessagePart.Text).text.contains("stateSeq="),
+        )
+    }
+
+    @Test
+    fun `ui_set_text submit stays false for a non-boolean value`() {
+        val backend = FakeBackend(editableTree(stateSeq = 1L, text = "old"))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        // A coerced string ({"submit":"true"}) is NOT boolean true — submit stays false (fail-safe: a
+        // garbage value must never silently press the IME action), and the set still dispatches.
+        runBlocking {
+            tools.byName("ui_set_text").execute(
+                buildJsonObject {
+                    put("selector", buildJsonObject { put("tid", 0) })
+                    put("text", "new")
+                    put("submit", "true")
+                },
+            )
+        }
+
+        val action = backend.performed.single() as PerformAction.SetText
+        assertFalse("a coerced string must not enable submit", action.submit)
+    }
+
+    @Test
     fun `ui_set_text equal to the current field text is a no-op and never performs`() {
         val backend = FakeBackend(editableTree(stateSeq = 3L, text = "hello"))
         val tools = actTools(actGuard(), backend)
