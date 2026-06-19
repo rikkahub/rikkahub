@@ -436,6 +436,7 @@
   <string name="notification_channel_chat_completed">チャット完了</string>
   <string name="notification_channel_chat_live_update">チャット生成の進行状況</string>
   <string name="notification_channel_web_server">Webサーバー</string>
+  <string name="notification_channel_ta_message">Taからの手紙</string>
   <string name="notification_live_update_chip_thinking">考え中</string>
   <string name="notification_live_update_chip_tool">ツール</string>
   <string name="notification_live_update_chip_writing">書き込み中</string>

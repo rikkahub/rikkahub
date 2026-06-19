@@ -90,6 +90,7 @@ import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
+import me.rerere.rikkahub.service.alarm.TaMessageDecisionHelper
 import me.rerere.workspace.WorkspaceShellStatus
 import java.time.Instant
 import java.util.Locale
@@ -647,6 +648,18 @@ class ChatService(
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
             }
+
+            // ===== [新增] Ta 的来信：静默决策时间 =====
+            if (assistant.taMessageEnabled) {
+                launchWithConversationReference(conversationId) {
+                    TaMessageDecisionHelper.onAfterReply(
+                        context = context,
+                        assistant = assistant,
+                        conversation = finalConversation,
+                        settings = settings,
+                    )
+                }
+            }
         }
     }
 
@@ -1081,6 +1094,31 @@ class ChatService(
         } else {
             conversationRepo.updateConversation(updatedConversation)
         }
+    }
+
+    /**
+     * 向指定 conversation 注入一条 ASSISTANT 消息（用于「Ta 的来信」等后台场景）。
+     *
+     * 该方法从 DB 加载会话（不从 session state 读——后台注入时 session 可能尚未初始化），
+     * 将消息包装为 MessageNode 追加到 messageNodes 末尾，然后通过 [saveConversation]
+     * 同时更新内存 session state 和数据库。
+     *
+     * @param conversationId 目标会话 ID
+     * @param message 要注入的 ASSISTANT 消息（应包含 usage 信息以计入 token 统计）
+     */
+    suspend fun injectAssistantMessage(
+        conversationId: Uuid,
+        message: UIMessage,
+    ) {
+        val conversation = conversationRepo.getConversationById(conversationId)
+            ?: return // 会话不存在则静默返回（调用方应保证先创建再注入）
+
+        val newNode = message.toMessageNode()
+        val updatedConversation = conversation.copy(
+            messageNodes = conversation.messageNodes + newNode,
+            updateAt = Instant.now(),
+        )
+        saveConversation(conversationId, updatedConversation)
     }
 
     // ---- 翻译消息 ----

@@ -436,6 +436,7 @@
   <string name="notification_channel_chat_completed">Чат завершён</string>
   <string name="notification_channel_chat_live_update">Прогресс генерации чата</string>
   <string name="notification_channel_web_server">Веб-сервер</string>
+  <string name="notification_channel_ta_message">Сообщение от Ta</string>
   <string name="notification_live_update_chip_thinking">Думает</string>
   <string name="notification_live_update_chip_tool">Инструмент</string>
   <string name="notification_live_update_chip_writing">Идёт запись</string>

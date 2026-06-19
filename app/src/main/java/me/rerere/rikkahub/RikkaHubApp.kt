@@ -24,6 +24,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import me.rerere.common.android.appTempFolder
 import com.whl.quickjs.android.QuickJSLoader
 import me.rerere.rikkahub.di.appModule
@@ -33,6 +36,7 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
+import me.rerere.rikkahub.service.alarm.TaMessageAlarmScheduler
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -48,6 +52,7 @@ private const val TAG = "RikkaHubApp"
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
+const val TA_MESSAGE_NOTIFICATION_CHANNEL_ID = "ta_message"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -99,6 +104,9 @@ class RikkaHubApp : Application() {
         // Increment launch count
         incrementLaunchCount()
 
+        // 观察 settingsFlow, 同步「Ta 的来信」闹钟 (设置变化 / 启动均自动恢复)
+        syncTaMessageAlarms()
+
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
 
@@ -112,6 +120,36 @@ class RikkaHubApp : Application() {
             }.onFailure {
                 Log.e(TAG, "incrementLaunchCount failed", it)
             }
+        }
+    }
+
+    /**
+     * 全局观察 settingsFlow, 当助手的 (id, enabled, nextTime) 投影变化时, 幂等同步闹钟。
+     * distinctUntilChanged 确保仅这三类变化触发同步, 避免普通设置变化产生无谓调度。
+     */
+    private fun syncTaMessageAlarms() {
+        get<AppScope>().launch {
+            get<SettingsStore>().settingsFlow
+                // settingsFlow 以 Settings.dummy() (init=true, 非真实数据) 起步,
+                // 过滤掉它, 避免冷启动时用空/默认助手误触发 syncAlarms 取消全部已注册闹钟
+                .filter { !it.init }
+                .map { settings ->
+                    settings.assistants.map {
+                        TaMessageAlarmScheduler.TaAlarmItem(
+                            assistantId = it.id,
+                            enabled = it.taMessageEnabled,
+                            nextTime = it.taMessageNextTime
+                        )
+                    }
+                }
+                .distinctUntilChanged()
+                .collect { items ->
+                    runCatching {
+                        TaMessageAlarmScheduler.syncAlarms(this@RikkaHubApp, items)
+                    }.onFailure {
+                        Log.e(TAG, "syncTaMessageAlarms failed", it)
+                    }
+                }
         }
     }
 
@@ -232,6 +270,13 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(webServerChannel)
+
+        val taMessageChannel = NotificationChannelCompat
+            .Builder(TA_MESSAGE_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
+            .setName(getString(R.string.notification_channel_ta_message))
+            .setVibrationEnabled(true)
+            .build()
+        notificationManager.createNotificationChannel(taMessageChannel)
     }
 
     override fun onTerminate() {
