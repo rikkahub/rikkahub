@@ -32,7 +32,15 @@ class A2aServerService : Service() {
         const val ACTION_STOP = "me.rerere.rikkahub.action.A2A_SERVER_STOP"
         const val EXTRA_PORT = "port"
         const val EXTRA_LOCALHOST_ONLY = "localhost_only"
-        const val NOTIFICATION_ID = 2002
+
+        // MUST be unique across every foreground-service notification id (2001 WebServerService,
+        // 2002 GenerationForegroundService, 2003 the chat live-update). Two foreground services that
+        // share one id collide: while both are foreground, the one calling startForeground last stamps
+        // the notification content, and a stopForeground(REMOVE) from one CANNOT remove a notification
+        // the other FGS still backs — it lingers with the stale content. Sharing 2002 with the
+        // generation FGS left this service's notification stuck reading "Generating response..." after
+        // a turn ended (it never re-posts its own running notification when idle).
+        const val NOTIFICATION_ID = 2004
     }
 
     private val a2aServerManager: A2aServerManager by inject()

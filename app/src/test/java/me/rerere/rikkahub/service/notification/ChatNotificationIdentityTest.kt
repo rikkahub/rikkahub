@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.service.notification
 
+import me.rerere.rikkahub.service.A2aServerService
 import me.rerere.rikkahub.service.GenerationForegroundService
+import me.rerere.rikkahub.service.WebServerService
 import kotlin.uuid.Uuid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -39,6 +41,28 @@ class ChatNotificationIdentityTest {
         val identity = getLiveUpdateNotificationIdentity(conversationId)
         assertTrue(identity.id != GenerationForegroundService.NOTIFICATION_ID)
         assertTrue(identity.tag == conversationId.toString())
+    }
+
+    @Test
+    fun `every foreground-service notification id is distinct`() {
+        // Two foreground services sharing one notification id collide: a stopForeground(REMOVE) from
+        // one cannot remove a notification another live FGS still backs, so it lingers with the last
+        // content stamped. A2aServerService once shared 2002 with GenerationForegroundService, leaving
+        // the server notification stuck reading "Generating response..." after a turn ended. Pin the
+        // whole id namespace so any future reuse fails here, not on a device.
+        val ids = listOf(
+            WebServerService.NOTIFICATION_ID,
+            GenerationForegroundService.NOTIFICATION_ID,
+            A2aServerService.NOTIFICATION_ID,
+            getLiveUpdateNotificationIdentity(
+                Uuid.parse("77777777-7777-7777-7777-777777777777")
+            ).id,
+        )
+        assertEquals("foreground notification ids must be unique", ids.size, ids.toSet().size)
+        assertNotEquals(
+            A2aServerService.NOTIFICATION_ID,
+            GenerationForegroundService.NOTIFICATION_ID,
+        )
     }
 
     @Test
