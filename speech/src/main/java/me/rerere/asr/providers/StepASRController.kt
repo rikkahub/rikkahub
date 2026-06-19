@@ -45,6 +45,13 @@ private const val TAG = "StepASR"
 // 触发分段, 与 MiMo 一致, 避免单段过大导致网络传输失败.
 private const val MAX_SEGMENT_BYTES = 6 * 1024 * 1024
 
+// 最小段长度: 16kHz/16bit/mono 下 100ms = 3200 字节。短于这个长度直接丢弃,
+// 避免把超短碎片 (比如 stop 时缓冲区里的残留) 发给服务端导致 400。
+private const val MIN_SEGMENT_BYTES = 3200
+
+// HTTP 请求失败时的最大重试次数 (含首次). 主要用于偶发 400/网络抖动的自动恢复.
+private const val MAX_RETRY = 3
+
 /**
  * 阶跃星辰 Step ASR Controller。
  *
@@ -119,6 +126,8 @@ class StepASRController(
         // 把剩余 PCM 做最后一次 flush, 完成后切回 Idle
         scope.launch(Dispatchers.IO) {
             try {
+                // 等当前正在跑的 flushJob 完成, 避免并发 flush 导致缓冲区竞争
+                flushJob?.join()
                 flushSegment()
             } catch (e: Exception) {
                 Log.e(TAG, "Final flush failed", e)
@@ -220,6 +229,13 @@ class StepASRController(
             bytes
         }
 
+        // 太短的段直接丢弃, 避免服务端因音频过短返回 400
+        // (16kHz/16bit/mono 下 6400 字节 = 200ms, 短于这个长度服务端通常无法识别)
+        if (pcmBytes.size < MIN_SEGMENT_BYTES) {
+            Log.d(TAG, "Skip flush: PCM too short (${pcmBytes.size} bytes)")
+            return
+        }
+
         // Step transcriptions 端点只接受 WAV/MP3 等容器, 不收 raw PCM,
         // 跟 MiMo 一样包 44 字节 WAV 头
         val wavBytes = pcm16ToWav(
@@ -252,21 +268,39 @@ class StepASRController(
             .post(bodyBuilder.build())
             .build()
 
-        withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute().use { resp ->
-                val respBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) {
-                    throw IOException("Step ASR HTTP ${resp.code}: $respBody")
+        // 偶发 400 (服务端解析异常) / 网络抖动时自动重试, 避免用户感知到失败.
+        // 实测同样语音重说一次就能成功, 说明大部分 400 是临时性的, 重试可以解决.
+        var lastError: IOException? = null
+        var text = ""
+        for (attempt in 1..MAX_RETRY) {
+            try {
+                text = withContext(Dispatchers.IO) {
+                    httpClient.newCall(request).execute().use { resp ->
+                        val respBody = resp.body?.string().orEmpty()
+                        if (!resp.isSuccessful) {
+                            throw IOException("Step ASR HTTP ${resp.code}: $respBody")
+                        }
+                        val json = runCatching { JSONObject(respBody) }.getOrElse {
+                            throw IOException("Step ASR response is not valid JSON: $respBody")
+                        }
+                        json.optString("text").trim()
+                    }
                 }
-                val json = runCatching { JSONObject(respBody) }.getOrElse {
-                    throw IOException("Step ASR response is not valid JSON: $respBody")
-                }
-                val text = json.optString("text").trim()
-                if (text.isNotEmpty()) {
-                    completedTranscripts.add(text)
-                    publishTranscript()
+                lastError = null
+                break
+            } catch (e: IOException) {
+                lastError = e
+                Log.w(TAG, "flushSegment attempt $attempt/$MAX_RETRY failed: ${e.message}")
+                if (attempt < MAX_RETRY) {
+                    kotlinx.coroutines.delay(300L * attempt) // 指数退避: 300ms, 600ms
                 }
             }
+        }
+        if (lastError != null) throw lastError
+
+        if (text.isNotEmpty()) {
+            completedTranscripts.add(text)
+            publishTranscript()
         }
     }
 
