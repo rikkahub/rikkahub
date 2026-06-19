@@ -91,6 +91,14 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 onResetPrompt = { vm.updateSettings(settings.copy(compressPrompt = DEFAULT_COMPRESS_PROMPT)) },
             )
         }
+        item {
+            Text(
+                text = stringResource(R.string.setting_model_page_ta_message_prompt_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            )
+        }
     }
 }
 

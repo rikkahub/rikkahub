@@ -142,6 +142,16 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
         }
         item {
             ModelSettingItem(
+                title = stringResource(R.string.setting_model_page_ta_message_model),
+                description = stringResource(R.string.setting_model_page_ta_message_model_desc),
+                modelId = settings.taMessageModelId,
+                providers = settings.providers,
+                onSelect = { vm.updateSettings(settings.copy(taMessageModelId = it.id)) },
+                onClear = { vm.updateSettings(settings.copy(taMessageModelId = null)) },
+            )
+        }
+        item {
+            ModelSettingItem(
                 title = stringResource(R.string.setting_model_page_translate_model),
                 description = stringResource(R.string.setting_model_page_translate_model_desc),
                 modelId = settings.translateModeId,

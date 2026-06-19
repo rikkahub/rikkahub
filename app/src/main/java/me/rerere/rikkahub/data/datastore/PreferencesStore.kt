@@ -87,6 +87,7 @@ class SettingsStore(
         val SELECT_MODEL = stringPreferencesKey("chat_model")
         val FAST_MODEL = stringPreferencesKey("fast_model")
         val TITLE_MODEL = stringPreferencesKey("title_model")
+        val TA_MESSAGE_MODEL = stringPreferencesKey("ta_message_model")
         val TRANSLATE_MODEL = stringPreferencesKey("translate_model")
         val ENABLE_SUGGESTION = booleanPreferencesKey("enable_suggestion")
         val SUGGESTION_MODEL = stringPreferencesKey("suggestion_model")
@@ -172,6 +173,7 @@ class SettingsStore(
                 fastModelId = preferences[FAST_MODEL]?.let { Uuid.parse(it) }
                     ?: DEFAULT_AUTO_MODEL_ID,
                 titleModelId = preferences[TITLE_MODEL]?.let { Uuid.parse(it) },
+                taMessageModelId = preferences[TA_MESSAGE_MODEL]?.let { Uuid.parse(it) },
                 translateModeId = preferences[TRANSLATE_MODEL]?.let { Uuid.parse(it) }
                     ?: DEFAULT_AUTO_MODEL_ID,
                 enableSuggestion = preferences[ENABLE_SUGGESTION] != false,
@@ -364,6 +366,9 @@ class SettingsStore(
             settings.titleModelId?.let {
                 preferences[TITLE_MODEL] = it.toString()
             } ?: preferences.remove(TITLE_MODEL)
+            settings.taMessageModelId?.let {
+                preferences[TA_MESSAGE_MODEL] = it.toString()
+            } ?: preferences.remove(TA_MESSAGE_MODEL)
             preferences[TRANSLATE_MODEL] = settings.translateModeId.toString()
             preferences[ENABLE_SUGGESTION] = settings.enableSuggestion
             settings.suggestionModelId?.let {
@@ -504,6 +509,7 @@ data class Settings(
     val chatModelId: Uuid = Uuid.random(),
     val fastModelId: Uuid = Uuid.random(),
     val titleModelId: Uuid? = null,
+    val taMessageModelId: Uuid? = null,
     val imageGenerationModelId: Uuid = Uuid.random(),
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),

@@ -752,6 +752,8 @@
   <string name="setting_model_page_reset_to_default">Сбросить до значения по умолчанию</string>
   <string name="setting_model_page_suggestion_model">Модель предложений чата</string>
   <string name="setting_model_page_suggestion_model_desc">Модель для генерации предложений в чате. Если не задана, используется быстрая модель</string>
+  <string name="setting_model_page_ta_message_model">Модель времени сообщений Ta</string>
+  <string name="setting_model_page_ta_message_model_desc">Модель для принятия решений о времени сообщений Ta. Если не задана, используется быстрая модель</string>
   <string name="setting_model_page_suggestion_prompt_vars">Переменные: Содержание разговора: {content}, Язык: {locale}</string>
   <string name="setting_model_page_title">Настройки модели</string>
   <string name="setting_model_page_title_model">Модель сводки заголовков</string>
@@ -1110,6 +1112,7 @@
   <string name="setting_model_page_prompt_suggestion">Подсказки ответов в чате</string>
   <string name="setting_model_page_prompt_ocr">OCR распознавание</string>
   <string name="setting_model_page_prompt_compress">Сжатие контекста</string>
+  <string name="setting_model_page_ta_message_prompt_note">Промпт времени сообщений Ta можно настроить на странице настроек каждого ассистента.</string>
   <string name="setting_display_page_bubble_opacity_title">Прозрачность пузырьков</string>
   <string name="setting_provider_page_include_history_reasoning">Отправлять историю рассуждений</string>
   <string name="setting_model_page_fast_model">Быстрая модель</string>
