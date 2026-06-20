@@ -10,9 +10,25 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.runtime.hooks.HookConfig
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "Assistant"
+
+// Compiling a Regex is expensive and replaceRegexes is called per visual render
+// (and per stream frame) for every message. Cache by pattern so each distinct
+// regex compiles once; an invalid pattern caches its failure and is skipped.
+private val compiledRegexCache = ConcurrentHashMap<String, Result<Regex>>()
+
+private fun cachedRegex(pattern: String): Regex? =
+    compiledRegexCache.computeIfAbsent(pattern) {
+        try {
+            Result.success(Regex(pattern))
+        } catch (e: Exception) {
+            Log.w(TAG, "replaceRegexes: invalid regex, skipping", e)
+            Result.failure(e)
+        }
+    }.getOrNull()
 
 @Serializable
 data class Assistant(
@@ -164,16 +180,13 @@ fun String.replaceRegexes(
     if (assistant.regexes.isEmpty()) return this
     return assistant.regexes.fold(this) { acc, regex ->
         if (regex.enabled && regex.visualOnly == visual && regex.affectingScope.contains(scope)) {
+            val compiled = cachedRegex(regex.findRegex) ?: return@fold acc
             try {
-                val result = acc.replace(
-                    regex = Regex(regex.findRegex),
-                    replacement = regex.replaceString,
-                )
-                // println("Regex: ${regex.findRegex} -> ${result}")
-                result
+                acc.replace(compiled, regex.replaceString)
             } catch (e: Exception) {
-                Log.w(TAG, "replaceRegexes: invalid regex, returning original string", e)
-                // 如果正则表达式格式错误，返回原字符串
+                // A valid pattern can still fail at replace time (e.g. a $N group
+                // ref with no matching group). Old behaviour: skip this regex.
+                Log.w(TAG, "replaceRegexes: invalid replacement, returning original string", e)
                 acc
             }
         } else {

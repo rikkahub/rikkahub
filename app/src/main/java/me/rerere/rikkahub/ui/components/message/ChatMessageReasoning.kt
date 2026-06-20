@@ -168,11 +168,13 @@ private fun ReasoningContent(
     ) {
         SelectionContainer {
             MarkdownBlock(
-                content = reasoning.reasoning.replaceRegexes(
-                    assistant = assistant,
-                    scope = AssistantAffectScope.ASSISTANT,
-                    visual = true,
-                ),
+                content = remember(reasoning.reasoning, assistant?.regexes) {
+                    reasoning.reasoning.replaceRegexes(
+                        assistant = assistant,
+                        scope = AssistantAffectScope.ASSISTANT,
+                        visual = true,
+                    )
+                },
                 style = reasoningTextStyle,
                 modifier = Modifier.fillMaxSize(),
             )
