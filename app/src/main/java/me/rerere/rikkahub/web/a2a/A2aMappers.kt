@@ -6,6 +6,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isPendingToolApprovalFor
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import kotlin.uuid.Uuid
@@ -116,6 +117,27 @@ fun validateSpawnableSkill(settings: Settings, skillId: String): Assistant {
     }
 
     return assistant
+}
+
+/**
+ * Resolve the skill an inbound A2A task should run against.
+ *
+ * Spec-compliant A2A clients (e.g. the Hermes plugin) address an agent by URL,
+ * not by a rikkahub-specific `skillId`, so a missing skill is the common case.
+ * We then default to the assistant the card advertises as primary: the user's
+ * currently-selected assistant when it is spawnable, otherwise the first
+ * spawnable assistant (the head of the card's skills list).
+ */
+fun resolveSpawnableSkill(settings: Settings, skillId: String?): Assistant {
+    if (skillId != null) {
+        return validateSpawnableSkill(settings, skillId)
+    }
+    val current = settings.getCurrentAssistant()
+    if (current.spawnable) {
+        return current
+    }
+    return settings.assistants.firstOrNull { it.spawnable }
+        ?: throw IllegalArgumentException("no spawnable skill available")
 }
 
 fun validatePendingApproval(conversation: Conversation, approval: A2aToolApproval) {

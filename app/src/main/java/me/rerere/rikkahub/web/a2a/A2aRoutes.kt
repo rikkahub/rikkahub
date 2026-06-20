@@ -21,11 +21,13 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonElement
@@ -56,6 +58,11 @@ import kotlin.uuid.Uuid
 
 private const val EVENT_STATUS_NAME = "task-status-update"
 private const val EVENT_ARTIFACT_NAME = "task-artifact-update"
+
+// How long a synchronous `message/send` blocks waiting for the turn to reach a
+// terminal/input-required state before returning the still-working task. Matches
+// the Hermes A2A plugin's inbound reply timeout (300s).
+internal const val A2A_SYNC_REPLY_TIMEOUT_MS = 300_000L
 
 internal enum class A2aAccessResult {
     ALLOWED,
@@ -218,32 +225,31 @@ internal fun classifyA2aArtifactDelta(
 fun Route.a2aAgentCardRoute(
     settingsStore: SettingsStore,
 ) {
-    get("/.well-known/agent-card.json") {
-        val settings = settingsStore.settingsFlow.value
-        val tokenBlank = settings.a2aServerToken.isBlank()
-        val bearerMatch = a2aBearerMatches(call.request.headers[HttpHeaders.Authorization], settings.a2aServerToken)
-        when (
-            evaluateA2aAccess(
-                enabled = settings.a2aEnabled,
-                serverLocalhostOnly = settings.a2aServerLocalhostOnly,
-                tokenBlank = tokenBlank,
-                bearerMatch = bearerMatch,
-            )
-        ) {
-            A2aAccessResult.DISABLED -> {
-                call.respond(HttpStatusCode.NotFound)
-                return@get
-            }
+    // The current A2A spec serves the card at /.well-known/agent-card.json, but
+    // many clients (incl. the Hermes A2A plugin) still fetch the older
+    // /.well-known/agent.json. Serve both so any A2A-compliant peer discovers us
+    // — and so a peer's POST lands on the card-advertised `$base/a2a` URL.
+    get("/.well-known/agent-card.json") { respondA2aAgentCard(call, settingsStore) }
+    get("/.well-known/agent.json") { respondA2aAgentCard(call, settingsStore) }
+}
 
-            A2aAccessResult.FORBIDDEN -> {
-                call.respond(HttpStatusCode.Forbidden)
-                return@get
-            }
-
-            A2aAccessResult.ALLOWED -> {
-                val baseUrl = buildA2aBaseUrl(call.request)
-                call.respond(settings.toA2aAgentCard(baseUrl = baseUrl, bearerRequired = !tokenBlank))
-            }
+private suspend fun respondA2aAgentCard(call: ApplicationCall, settingsStore: SettingsStore) {
+    val settings = settingsStore.settingsFlow.value
+    val tokenBlank = settings.a2aServerToken.isBlank()
+    val bearerMatch = a2aBearerMatches(call.request.headers[HttpHeaders.Authorization], settings.a2aServerToken)
+    when (
+        evaluateA2aAccess(
+            enabled = settings.a2aEnabled,
+            serverLocalhostOnly = settings.a2aServerLocalhostOnly,
+            tokenBlank = tokenBlank,
+            bearerMatch = bearerMatch,
+        )
+    ) {
+        A2aAccessResult.DISABLED -> call.respond(HttpStatusCode.NotFound)
+        A2aAccessResult.FORBIDDEN -> call.respond(HttpStatusCode.Forbidden)
+        A2aAccessResult.ALLOWED -> {
+            val baseUrl = buildA2aBaseUrl(call.request)
+            call.respond(settings.toA2aAgentCard(baseUrl = baseUrl, bearerRequired = !tokenBlank))
         }
     }
 }
@@ -253,6 +259,7 @@ fun Route.a2aRpcRoute(
     chatService: ChatService,
     settingsStore: SettingsStore,
     registry: A2aTaskRegistry,
+    syncReplyTimeoutMs: Long = A2A_SYNC_REPLY_TIMEOUT_MS,
 ) {
     post("/a2a") {
         val settings = settingsStore.settingsFlow.value
@@ -309,6 +316,13 @@ fun Route.a2aRpcRoute(
                         settingsStore = settingsStore,
                         registry = registry,
                     )
+                    // A2A `message/send` is the synchronous variant: spec clients
+                    // (e.g. the Hermes plugin) read the reply straight from this
+                    // response and never poll tasks/get. Block until the turn
+                    // reaches a terminal/input-required state (or the bound), then
+                    // return the task carrying the agent's reply. On timeout the
+                    // working task is returned and a polling client can follow up.
+                    awaitA2aTerminalOrTimeout(entry, syncReplyTimeoutMs)
                     messageSendSuccess(request.id, entry, chatService)
                 }
             )
@@ -397,13 +411,33 @@ fun Route.a2aRpcRoute(
     }
 }
 
+/**
+ * Resolve the conversation/context id for an inbound task.
+ *
+ * Spec-compliant A2A clients carry the context inside the message
+ * (`params.message.contextId`) and omit it entirely on the first turn. We accept
+ * the rikkahub-native top-level `params.contextId` first, fall back to the
+ * in-message id, and mint a fresh conversation when neither is present. A
+ * supplied-but-malformed id is surfaced rather than silently replaced, so
+ * multi-turn continuity never breaks without the caller knowing.
+ */
+internal fun resolveA2aContextId(params: MessageSendParams): Uuid {
+    val raw = params.contextId ?: params.message.contextId
+    return if (raw == null) {
+        Uuid.random()
+    } else {
+        runCatching { Uuid.parse(raw) }
+            .getOrElse { throw BadRequestException("contextId must be a UUID") }
+    }
+}
+
 internal suspend fun startOrResumeA2aTask(
     appScope: CoroutineScope,
     params: MessageSendParams,
     messageFlowClient: A2aMessageFlowClient,
     registry: A2aTaskRegistry,
     getConversation: (Uuid) -> Conversation,
-    resolveSpawnableSkill: (String) -> Assistant,
+    resolveSpawnableSkill: (String?) -> Assistant,
     onAccepted: suspend (A2aTaskEntry) -> Unit = {},
 ): A2aTaskEntry {
     if (params.approval != null) {
@@ -421,6 +455,16 @@ internal suspend fun startOrResumeA2aTask(
         if (job != null) {
             when (registry.attachJob(entry.taskId, job)) {
                 is A2aAttachResult.Accepted -> {
+                    // The HITL turn resumed, so the task is no longer resting on
+                    // its approval prompt. Move it out of INPUT_REQUIRED before
+                    // returning, or a synchronous message/send would treat the
+                    // stale resting state as "done" and return the old prompt
+                    // instead of blocking for the resumed generation.
+                    registry.transition(
+                        entry.taskId,
+                        A2aTaskState.WORKING,
+                        statusConversation = getConversation(entry.contextId),
+                    )
                     onAccepted(entry)
                 }
                 is A2aAttachResult.Rejected -> {
@@ -431,9 +475,8 @@ internal suspend fun startOrResumeA2aTask(
         return entry
     }
 
-    val contextId = params.contextId?.let { Uuid.parse(it) } ?: throw BadRequestException("contextId is required")
-    val skillId = params.skillId ?: throw BadRequestException("skillId is required")
-    val assistant = resolveSpawnableSkill(skillId)
+    val contextId = resolveA2aContextId(params)
+    val assistant = resolveSpawnableSkill(params.skillId)
 
     return when (val admission = registry.admit(contextId, assistant.id, params.message.messageId)) {
         is A2aAdmission.Duplicate -> admission.existing
@@ -484,7 +527,7 @@ internal suspend fun startOrResumeA2aTask(
         registry = registry,
         getConversation = { chatService.getConversationFlow(it).value },
         resolveSpawnableSkill = { skillId ->
-            validateSpawnableSkill(settingsStore.settingsFlow.value, skillId)
+            resolveSpawnableSkill(settingsStore.settingsFlow.value, skillId)
         },
         onAccepted = { entry ->
             startCollectorIfNeeded(appScope, chatService, registry, entry)
@@ -853,6 +896,25 @@ private fun jsonRpcStreamEvent(requestId: JsonElement?, event: A2aStreamEvent): 
             },
         )
     )
+
+/**
+ * Suspend until the task reaches a resting state the caller can act on
+ * (completed/failed/canceled, or input-required for HITL), bounded by
+ * [timeoutMs]. A non-positive timeout returns immediately (async behaviour); a
+ * timeout leaves the task working so a polling client can still follow up.
+ */
+private suspend fun awaitA2aTerminalOrTimeout(entry: A2aTaskEntry, timeoutMs: Long) {
+    if (timeoutMs <= 0) return
+    withTimeoutOrNull(timeoutMs) {
+        entry.status.first { it.state.isA2aSyncResting() }
+    }
+}
+
+internal fun A2aTaskState.isA2aSyncResting(): Boolean =
+    this == A2aTaskState.COMPLETED ||
+        this == A2aTaskState.FAILED ||
+        this == A2aTaskState.CANCELED ||
+        this == A2aTaskState.INPUT_REQUIRED
 
 private fun messageSendSuccess(
     requestId: JsonElement?,

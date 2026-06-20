@@ -46,7 +46,7 @@ class A2aProtocolSerializationTest {
     }
 
     @Test
-    fun `text part serializes as text discriminator only`() {
+    fun `text part serializes with spec kind discriminator`() {
         val message = A2aMessage(
             messageId = "msg-1",
             role = A2aRole.USER,
@@ -58,11 +58,39 @@ class A2aProtocolSerializationTest {
             ),
         )
         val encoded = Json.encodeToString(message)
-        val parsed = Json.parseToJsonElement(encoded).jsonObject
-        val partType = (parsed["parts"] as kotlinx.serialization.json.JsonArray).first().jsonObject["type"]?.jsonPrimitive?.content
+        val part = (Json.parseToJsonElement(encoded).jsonObject["parts"] as kotlinx.serialization.json.JsonArray)
+            .first().jsonObject
 
-        assertEquals("text", partType)
+        // A2A-spec canonical discriminator is `kind`, not kotlinx's default `type`.
+        assertEquals("text", part["kind"]?.jsonPrimitive?.content)
+        assertEquals(null, part["type"])
+        assertEquals("hello", part["text"]?.jsonPrimitive?.content)
         assertFalse(encoded.contains("\"file\""))
         assertFalse(encoded.contains("\"data\""))
+    }
+
+    @Test
+    fun `text part decodes from kind, legacy type, and no discriminator`() {
+        // Spec / Hermes form.
+        assertEquals(
+            "from-kind",
+            decodeSinglePartText("""{"kind":"text","text":"from-kind"}"""),
+        )
+        // Legacy rikkahub form — must keep working for older callers.
+        assertEquals(
+            "from-type",
+            decodeSinglePartText("""{"type":"text","text":"from-type"}"""),
+        )
+        // Discriminator omitted — tolerate and treat as text.
+        assertEquals(
+            "no-disc",
+            decodeSinglePartText("""{"text":"no-disc"}"""),
+        )
+    }
+
+    private fun decodeSinglePartText(partJson: String): String {
+        val msgJson = """{"messageId":"m","role":"user","parts":[$partJson]}"""
+        val message = Json.decodeFromString<A2aMessage>(msgJson)
+        return (message.parts.single() as A2aPart.TextPart).text
     }
 }

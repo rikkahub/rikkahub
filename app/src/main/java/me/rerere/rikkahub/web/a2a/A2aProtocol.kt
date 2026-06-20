@@ -137,7 +137,7 @@ enum class A2aRole {
     AGENT,
 }
 
-@Serializable
+@Serializable(with = A2aPartSerializer::class)
 sealed class A2aPart {
     abstract val metadata: JsonObject?
 
