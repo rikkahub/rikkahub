@@ -53,8 +53,9 @@ class AssistantDetailVM(
         }
     }
 
-    val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+    // Expose the hot, real-valued flow directly — avoid the dummy->real entry
+    // recomposition (see SettingVM/ChatVM).
+    val settings: StateFlow<Settings> = settingsStore.settingsFlow
 
     val mcpServerConfigs = settingsStore
         .settingsFlow.map { settings ->

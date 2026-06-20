@@ -111,7 +111,7 @@ class BackupVM(
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = Settings.dummy()
+        initialValue = settingsStore.settingsFlow.value
     )
 
     val webDavBackupItems = MutableStateFlow<UiState<List<WebDavBackupItem>>>(UiState.Idle)

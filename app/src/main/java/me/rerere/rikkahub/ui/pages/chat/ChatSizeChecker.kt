@@ -102,9 +102,28 @@ fun rememberConversationSizeInfo(
     assistantMaxTokens: Int?,
     autoCompactThreshold: Float?,
 ): ConversationSizeInfo {
+    val nodeCount = conversation.messageNodes.size
+    // The warning needs BOTH the node-count AND the token threshold (see
+    // computeConversationSizeInfo: showWarning = exceedNodeCountThreshold &&
+    // exceedTokenThreshold). Below the node threshold it can never fire, so skip
+    // the expensive conversation.currentMessages build + token estimate — which
+    // otherwise ran on every chat entry, inside the nav transition. contextTokens
+    // / contextWindow are only read by the warning dialog, so 0 here is unobserved.
+    if (nodeCount <= MESSAGE_NODE_WARNING_THRESHOLD) {
+        return remember(nodeCount) {
+            ConversationSizeInfo(
+                nodeCount = nodeCount,
+                contextTokens = 0,
+                contextWindow = 0,
+                exceedNodeCountThreshold = false,
+                exceedTokenThreshold = false,
+                showWarning = false,
+            )
+        }
+    }
     return remember(conversation.messageNodes, model, assistantMaxTokens, autoCompactThreshold) {
         computeConversationSizeInfo(
-            nodeCount = conversation.messageNodes.size,
+            nodeCount = nodeCount,
             messages = conversation.currentMessages,
             model = model,
             assistantMaxTokens = assistantMaxTokens,

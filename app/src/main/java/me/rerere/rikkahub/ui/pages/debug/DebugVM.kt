@@ -26,7 +26,7 @@ class DebugVM(
     private val conversationRepository: ConversationRepository,
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
+        .stateIn(viewModelScope, SharingStarted.Lazily, settingsStore.settingsFlow.value)
 
     fun updateSettings(settings: Settings) {
         viewModelScope.launch {

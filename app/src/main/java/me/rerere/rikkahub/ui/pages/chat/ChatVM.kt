@@ -125,9 +125,10 @@ class ChatVM(
         chatService.removeConversationReference(_conversationId)
     }
 
-    // 用户设置
-    val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+    // 用户设置 — expose the hot, real-valued flow directly (no dummy->real
+    // recomposition on chat entry; that double-composed the heavy chat screen
+    // right inside the nav transition).
+    val settings: StateFlow<Settings> = settingsStore.settingsFlow
 
     // 网络搜索
     val enableWebSearch = settings.map {

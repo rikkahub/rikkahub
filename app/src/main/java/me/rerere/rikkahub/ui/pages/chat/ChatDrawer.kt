@@ -90,34 +90,23 @@ fun ChatDrawerContent(
     vm: ChatVM,
     settings: Settings,
     current: Conversation,
+    // True only when the drawer is fully open and not closing. The heavy paged
+    // conversation list is composed only then, so the open/close slide (and a
+    // drawer -> Settings navigation, which closes the drawer + pushes a screen at
+    // once) doesn't carry the list's main-thread compose cost.
+    drawerSettledOpen: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val repo = koinInject<ConversationRepository>()
 
     val activity = context as ComponentActivity
-    val drawerVm: ChatDrawerVM = koinViewModel(viewModelStoreOwner = activity)
 
-    val conversations = drawerVm.conversations.collectAsLazyPagingItems()
-    val conversationListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = drawerVm.scrollIndex,
-        initialFirstVisibleItemScrollOffset = drawerVm.scrollOffset,
-    )
-
-    LaunchedEffect(conversationListState) {
-        snapshotFlow {
-            conversationListState.firstVisibleItemIndex to
-                conversationListState.firstVisibleItemScrollOffset
-        }
-            .distinctUntilChanged()
-            .collectLatest { (index, offset) ->
-                drawerVm.saveScrollPosition(index, offset)
-            }
-    }
-
-    val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
-        initialValue = emptyMap(),
-    )
+    // Auto-scroll-to-current latch lives in this always-composed scope so it
+    // survives the conversation list disposing when the drawer closes. Otherwise
+    // it would reset on every reopen, re-fire the scroll-to-current effect, and
+    // clobber the user's saved drawer scroll position.
+    var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
 
     // 昵称编辑状态
     val nicknameEditState = useEditState<String> { newNickname ->
@@ -213,42 +202,74 @@ fun ChatDrawerContent(
 
             DrawerActions(navController = navController)
 
-            ConversationList(
-                current = current,
-                conversations = conversations,
-                conversationJobs = conversationJobs.keys,
-                listState = conversationListState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                onClick = {
-                    navigateToChatPage(navController, it.id)
-                },
-                onRegenerateTitle = {
-                    vm.generateTitle(it, true)
-                },
-                onRename = {
-                    conversationToRename = it
-                    renameInput = it.title
-                },
-                onDelete = {
-                    vm.deleteConversation(it)
-                    // Refresh the conversation list to immediately remove the deleted item
-                    // This fixes the issue where deleted conversations sometimes remain visible
-                    // until manually clicked (issue #747)
-                    conversations.refresh()
-                    if (it.id == current.id) {
-                        navigateToChatPage(navController)
+            if (drawerSettledOpen) {
+                // Heavy work (VM, Paging, scroll-save collector, job collector) is
+                // created only while the drawer is settled open — not on every chat
+                // entry, and not during the open/close slide. drawerVm is
+                // activity-scoped, so the saved scroll position survives this
+                // section disposing when the drawer closes.
+                val drawerVm: ChatDrawerVM = koinViewModel(viewModelStoreOwner = activity)
+                val conversations = drawerVm.conversations.collectAsLazyPagingItems()
+                val conversationListState = rememberLazyListState(
+                    initialFirstVisibleItemIndex = drawerVm.scrollIndex,
+                    initialFirstVisibleItemScrollOffset = drawerVm.scrollOffset,
+                )
+                LaunchedEffect(conversationListState) {
+                    snapshotFlow {
+                        conversationListState.firstVisibleItemIndex to
+                            conversationListState.firstVisibleItemScrollOffset
                     }
-                },
-                onPin = {
-                    vm.updatePinnedStatus(it)
-                },
-                onMoveToAssistant = {
-                    conversationToMove = it
-                    showMoveToAssistantSheet = true
+                        .distinctUntilChanged()
+                        .collectLatest { (index, offset) ->
+                            drawerVm.saveScrollPosition(index, offset)
+                        }
                 }
-            )
+                val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
+                    initialValue = emptyMap(),
+                )
+                ConversationList(
+                    current = current,
+                    conversations = conversations,
+                    conversationJobs = conversationJobs.keys,
+                    listState = conversationListState,
+                    hasScrolledToCurrent = hasScrolledToCurrent,
+                    onScrolledToCurrent = { hasScrolledToCurrent = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    onClick = {
+                        navigateToChatPage(navController, it.id)
+                    },
+                    onRegenerateTitle = {
+                        vm.generateTitle(it, true)
+                    },
+                    onRename = {
+                        conversationToRename = it
+                        renameInput = it.title
+                    },
+                    onDelete = {
+                        vm.deleteConversation(it)
+                        // Refresh the conversation list to immediately remove the deleted item
+                        // This fixes the issue where deleted conversations sometimes remain visible
+                        // until manually clicked (issue #747)
+                        conversations.refresh()
+                        if (it.id == current.id) {
+                            navigateToChatPage(navController)
+                        }
+                    },
+                    onPin = {
+                        vm.updatePinnedStatus(it)
+                    },
+                    onMoveToAssistant = {
+                        conversationToMove = it
+                        showMoveToAssistantSheet = true
+                    }
+                )
+            } else {
+                // Hold the flexible space so DrawerActions stays at top and the
+                // AssistantPicker stays pinned at the bottom while the list defers.
+                Spacer(modifier = Modifier.weight(1f))
+            }
 
             // 助手选择器
             AssistantPicker(

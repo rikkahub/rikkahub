@@ -27,8 +27,10 @@ class AssistantVM(
     private val conversationRepo: ConversationRepository,
     private val filesManager: FilesManager,
 ) : ViewModel() {
+    // Seed with the already-real settings value (not a dummy) so the screen
+    // composes once with real data instead of dummy->real on entry.
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, settingsStore.settingsFlow.value)
 
     var lastError by mutableStateOf<Throwable?>(null)
         private set

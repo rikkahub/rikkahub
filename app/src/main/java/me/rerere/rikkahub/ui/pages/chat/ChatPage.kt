@@ -197,7 +197,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                         navController = navController,
                         current = conversation,
                         vm = vm,
-                        settings = setting
+                        settings = setting,
+                        // Permanent drawer is always on screen → always settled open.
+                        drawerSettledOpen = true,
                     )
                 }
             ) {
@@ -225,11 +227,18 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
+                    // Always compose the (lightweight) drawer shell so the sheet is
+                    // present for measurement + edge-swipe gestures. The heavy paged
+                    // conversation list inside is gated on drawerSettledOpen, so the
+                    // per-chat-entry + open/close cost is avoided without leaving an
+                    // empty, unmeasurable drawer.
                     ChatDrawerContent(
                         navController = navController,
                         current = conversation,
                         vm = vm,
-                        settings = setting
+                        settings = setting,
+                        drawerSettledOpen = drawerState.currentValue == DrawerValue.Open &&
+                            drawerState.targetValue == DrawerValue.Open,
                     )
                 }
             ) {

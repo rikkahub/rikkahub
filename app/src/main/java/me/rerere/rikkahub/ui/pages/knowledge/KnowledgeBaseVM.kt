@@ -35,7 +35,7 @@ class KnowledgeBaseVM(
 ) : ViewModel() {
 
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Lazily, Settings(init = true, providers = emptyList()))
+        .stateIn(viewModelScope, SharingStarted.Lazily, settingsStore.settingsFlow.value)
 
     /**
      * Explicit single-document ingest state: replaces the old `Map<Uuid, Float>` progress map plus a

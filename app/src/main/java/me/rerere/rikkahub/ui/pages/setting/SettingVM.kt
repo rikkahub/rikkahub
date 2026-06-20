@@ -2,9 +2,7 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -15,8 +13,11 @@ class SettingVM(
     private val mcpManager: McpManager
 ) :
     ViewModel() {
+    // Expose the already-hot, real-valued settings flow directly. Re-wrapping it
+    // in a per-VM stateIn with a dummy initial caused a dummy->real recomposition
+    // on every screen entry (the screen composed once with dummy settings, then
+    // again with real ones) — wasted work right inside the nav transition.
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Lazily, Settings(init = true, providers = emptyList()))
 
     fun updateSettings(settings: Settings) {
         viewModelScope.launch {

@@ -77,6 +77,12 @@ fun ColumnScope.ConversationList(
     conversations: LazyPagingItems<ConversationListItem>,
     conversationJobs: Collection<Uuid>,
     listState: LazyListState,
+    // Hoisted so the "already auto-scrolled to current" latch survives this
+    // composable disposing when the drawer closes (it lives in the caller's
+    // always-composed scope); otherwise reopening would re-scroll to current and
+    // clobber the user's saved scroll position.
+    hasScrolledToCurrent: Boolean = false,
+    onScrolledToCurrent: () -> Unit = {},
     modifier: Modifier = Modifier,
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
@@ -85,8 +91,6 @@ fun ColumnScope.ConversationList(
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
-    var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
-
     LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
         if (hasScrolledToCurrent) return@LaunchedEffect
         val currentIndex = conversations.itemSnapshotList.items.indexOfFirst {
@@ -97,7 +101,7 @@ fun ColumnScope.ConversationList(
             if (!isVisible) {
                 listState.scrollToItem(currentIndex)
             }
-            hasScrolledToCurrent = true
+            onScrolledToCurrent()
         }
     }
 
