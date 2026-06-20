@@ -334,26 +334,6 @@ private fun MiMoTTSConfiguration(
             placeholder = { Text("mimo_default") }
         )
     }
-
-    // Instruction (自然语言风格指令, 留空不下发)
-    // 官方说明: user 角色消息作为指令, assistant 消息才是要合成的文本
-    // 文档: https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/speech-synthesis-v2.5
-    // 示例: "语气温柔, 语速偏慢" / "压抑的愤怒, 带哽咽" / "Bright, bouncy tone, fast pace"
-    FormItem(
-        label = { Text("Instruction") },
-        description = { Text("自然语言风格指令, 如 \"语气温柔, 语速偏慢\"; 留空则不发送 user 消息") }
-    ) {
-        OutlinedTextField(
-            value = setting.instruction,
-            onValueChange = { newInstruction ->
-                onValueChange(setting.copy(instruction = newInstruction))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("例如: 语气温柔, 语速偏慢") },
-            minLines = 2,
-            maxLines = 4,
-        )
-    }
 }
 
 @Composable
