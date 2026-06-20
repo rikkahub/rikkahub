@@ -1356,6 +1356,47 @@ class UiAutomationToolsTest {
     }
 
     @Test
+    fun `ui_tap with gesture true threads the gesture flag to the backend Node action`() {
+        val backend = FakeBackend(clickableTree(stateSeq = 5L))
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        runBlocking {
+            tools.byName("ui_tap").execute(
+                buildJsonObject {
+                    put("selector", buildJsonObject { put("tid", 0) })
+                    put("gesture", true)
+                },
+            )
+        }
+
+        val action = backend.performed.single() as PerformAction.Node
+        assertEquals("still a CLICK", NodeActionKind.CLICK, action.kind)
+        assertTrue("gesture must thread from the tool args through to the backend action", action.gesture)
+    }
+
+    @Test
+    fun `ui_tap gesture stays false for a non-boolean value`() {
+        val backend = FakeBackend(clickableTree())
+        val tools = actTools(actGuard(), backend)
+        runBlocking { tools.byName(UI_OBSERVE_TOOL_NAME).execute(buildJsonObject { }) }
+
+        // A coerced string ({"gesture":"true"}) is NOT boolean true — stays false (fail-safe: a garbage
+        // value must not silently switch the dispatch to a raw touch), and the click still dispatches.
+        runBlocking {
+            tools.byName("ui_tap").execute(
+                buildJsonObject {
+                    put("selector", buildJsonObject { put("tid", 0) })
+                    put("gesture", "true")
+                },
+            )
+        }
+
+        val action = backend.performed.single() as PerformAction.Node
+        assertFalse("a coerced string must not enable gesture", action.gesture)
+    }
+
+    @Test
     fun `revoked guard denies ui_tap before the backend and never leaks the deny reason`() {
         val backend = FakeBackend(clickableTree())
         val guard = actGuard()

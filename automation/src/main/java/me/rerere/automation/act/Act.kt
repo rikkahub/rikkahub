@@ -23,7 +23,18 @@ sealed interface Act {
      * and password taps DENY before dispatch via the same target-provenance plumbing as scroll/set_text
      * — observable, never actionable (I-act-3/I8).
      */
-    data class Targeted(val selector: Selector, val kind: NodeActionKind) : Act
+    /**
+     * [gesture] (CLICK only): dispatch the tap as a real touch at the resolved node's bounds
+     * (`dispatchGesture`) instead of the accessibility `ACTION_CLICK`. Some apps wire their navigation
+     * to raw touch (an `OnTouchListener`/custom view) and ignore the synthesized click — e.g. opening
+     * Instagram's explore search screen. Still coordinate-free from the model: it names a [selector],
+     * the backend derives the touch point from the resolved node. Default false keeps the click path.
+     */
+    data class Targeted(
+        val selector: Selector,
+        val kind: NodeActionKind,
+        val gesture: Boolean = false,
+    ) : Act
 
     /** Global navigation. Maps to `Verb.GLOBAL` + `Sink.GLOBAL_NAV` (budgeted, not dangerous — Q2). */
     data class Global(val nav: GlobalNav) : Act

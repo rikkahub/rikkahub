@@ -28,6 +28,11 @@ sealed interface PerformAction {
         val allowedPackages: Set<String>,
         /** YOLO host policy: when true the replay walk may also match host-package windows. */
         val includeHost: Boolean = false,
+        /**
+         * CLICK only: dispatch as a real touch (`dispatchGesture`) at the resolved node's bounds rather
+         * than `ACTION_CLICK`, for views whose navigation responds only to raw touch. Ignored for scrolls.
+         */
+        val gesture: Boolean = false,
     ) : PerformAction
 
     /** A global navigation action — BACK / HOME / RECENTS. No node target (performGlobalAction). */

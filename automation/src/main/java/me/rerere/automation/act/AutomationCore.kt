@@ -208,7 +208,7 @@ class AutomationCore(
                         if (sink?.isDangerous == true) {
                             dispatchSubmitTap(guard, grounded, binding, confirm)
                         } else {
-                            dispatchNodeScrollOrTap(guard, grounded, binding, request.kind)
+                            dispatchNodeScrollOrTap(guard, grounded, binding, request.kind, request.gesture)
                         }
                     }
                     is Act.SetText -> {
@@ -258,6 +258,7 @@ class AutomationCore(
         grounded: UiSnapshot,
         binding: me.rerere.automation.observe.TargetBinding,
         kind: NodeActionKind,
+        gesture: Boolean = false,
     ): ActOutcome {
         // Pre-dispatch settle (spec §6 step 8): quiesce the screen BEFORE the atomic re-resolve so the
         // fresh binding resolves against a stable tree, not a mid-animation one (a transient frame
@@ -268,6 +269,7 @@ class AutomationCore(
             kind = kind,
             allowedPackages = setOf(grounded.foregroundPkg),
             includeHost = guard.includeHost,
+            gesture = gesture,
         )
         val result = backend.perform(action)
         return finishAfterPerform(guard, grounded, result)

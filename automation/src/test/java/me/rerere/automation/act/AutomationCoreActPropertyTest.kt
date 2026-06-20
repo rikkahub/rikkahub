@@ -1107,6 +1107,26 @@ class AutomationCoreActPropertyTest {
         }
     }
 
+    // ---- gesture tap: a CLICK with gesture=true dispatches a Node action carrying the gesture flag,
+    // so the backend taps as a real touch (dispatchGesture) for views that ignore the synthesized click.
+    @Test
+    fun `a tap with gesture true dispatches a CLICK carrying the gesture flag`() {
+        runBlocking {
+            val backend = clickableBackend()
+            val core = AutomationCore(backend)
+            val grounded = core.observe(setOf(backend.rawTree.foregroundPkg))
+            val outcome = core.act(
+                tapGuard(),
+                grounded,
+                Act.Targeted(Selector.ByTid(0), NodeActionKind.CLICK, gesture = true),
+            )
+            assertTrue("a gesture tap still succeeds", outcome is ActOutcome.Acted)
+            val action = backend.performed.single() as PerformAction.Node
+            assertEquals("still a CLICK on the resolved node", NodeActionKind.CLICK, action.kind)
+            assertTrue("the gesture flag must reach the backend", action.gesture)
+        }
+    }
+
     // ---- BENIGN CHURN (tap): a stateSeq advance that leaves the button structurally unchanged does
     // NOT stale a tap. (Old core: any seq bump ⇒ StaleState — the headline regression this fixes.) ----
     @Test

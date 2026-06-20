@@ -4,12 +4,17 @@
 
   The service both READS and ACTS on the screen of other apps: window content is retrieved
   (canRetrieveWindowContent) to advance the monotonic stateSeq, and write verbs are dispatched —
-  tap (node ACTION_CLICK), type (ACTION_SET_TEXT), scroll (ACTION_SCROLL_*), and global navigation
-  (performGlobalAction BACK/HOME/RECENTS). NO canPerformGestures here on purpose: actions are issued
-  as node accessibility actions and performGlobalAction, never as raw screen-point gesture dispatch
-  (design D1). Every action is still gated by the user-granted capability scope and the mandatory
-  STOP kill-switch. flagRetrieveInteractiveWindows gives multi-window awareness (app + system
-  dialogs) so permission/system UI is observable.
+  tap (node ACTION_CLICK), type (ACTION_SET_TEXT, or the editor InputConnection on API 33+), scroll
+  (ACTION_SCROLL_*), and global navigation (performGlobalAction BACK/HOME/RECENTS). canPerformGestures
+  is declared for the OPT-IN real-touch tap (ui_tap gesture=true): the default tap is still the node
+  ACTION_CLICK (design D1), but a view whose navigation responds only to raw touch (an OnTouchListener
+  / custom view that ignores the synthesized click, e.g. opening Instagram's explore search) can be hit
+  with a dispatchGesture tap AT THE RESOLVED NODE'S BOUNDS — still coordinate-free from the model (it
+  names a selector; the backend derives the point). Capabilities (canRetrieveWindowContent,
+  canPerformGestures) come from this meta-data and are immutable at runtime; the service's dynamic
+  setServiceInfo only sets flags/eventTypes. Every action is still gated by the user-granted capability
+  scope and the mandatory STOP kill-switch. flagRetrieveInteractiveWindows gives multi-window awareness
+  (app + system dialogs) so permission/system UI is observable.
 
   The service is inert until the user explicitly enables it in system accessibility settings.
 -->
@@ -19,4 +24,5 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
+    android:canPerformGestures="true"
     android:notificationTimeout="100" />

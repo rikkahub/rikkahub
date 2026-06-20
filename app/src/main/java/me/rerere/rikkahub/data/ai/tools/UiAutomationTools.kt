@@ -474,7 +474,10 @@ fun getUiAutomationTools(
                 "visible text, or by its semantic key. Returns a fresh ui_observe-style snapshot after " +
                 "the tap — this IS your fresh observation, so do NOT call ui_observe again afterward; " +
                 "read this result and pick the next target from it. Tip: select a node that shows the " +
-                "CLICK flag (a bare text label often is not tappable — tap its clickable row instead).",
+                "CLICK flag (a bare text label often is not tappable — tap its clickable row instead). " +
+                "If a tap reports success but the screen does NOT change (some apps' search bars / custom " +
+                "views ignore the accessibility click), retry the same element with \"gesture\": true to " +
+                "use a real touch.",
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
@@ -488,6 +491,20 @@ fun getUiAutomationTools(
                                         "One of: {\"tid\": <int from the latest ui_observe>}, " +
                                             "{\"text\": <visible label>, \"role\"?: <class>}, or " +
                                             "{\"semanticKey\": <key>}.",
+                                    ),
+                                )
+                            },
+                        )
+                        put(
+                            "gesture",
+                            buildJsonObject {
+                                put("type", JsonPrimitive("boolean"))
+                                put(
+                                    "description",
+                                    JsonPrimitive(
+                                        "Optional (default false). When true, tap with a real touch " +
+                                            "instead of the accessibility click — use only when a normal " +
+                                            "tap did not register/navigate.",
                                     ),
                                 )
                             },
@@ -508,6 +525,11 @@ fun getUiAutomationTools(
                 }
                 val selector = parseSelector(args["selector"])
                     ?: return@execute auditMalformedAct(Verb.TAP, sink = null, rawArgs = args.toString())
+                // gesture is an OPTIONAL boolean — default false. Require a REAL JSON boolean (a coerced
+                // "true" string stays false, fail-safe: a garbage value must not silently switch to a
+                // raw-touch dispatch), mirroring the strict parse the set_text submit flag uses.
+                val gesture = (args["gesture"] as? JsonPrimitive)
+                    ?.takeIf { !it.isString }?.booleanOrNull ?: false
                 // tids are turn-scoped: refuse to act until ui_observe has grounded this turn.
                 val snapshot = grounded ?: return@execute listOf(UIMessagePart.Text(ACT_REOBSERVE_MESSAGE))
                 // core.act authorizes internally (S2) and runs guardInFlight (P20) — the tool layer must
@@ -516,7 +538,7 @@ fun getUiAutomationTools(
                 // class confirm gate (#198 slice 11 — a send/pay-class tap derives SUBMIT and must be
                 // confirmed via `confirm`) both live inside core.act, derived from the resolved target;
                 // from here a confirm-declined tap is just an ordinary Denied → vague ACT_DENIED_MESSAGE.
-                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, NodeActionKind.CLICK), confirm)) {
+                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, NodeActionKind.CLICK, gesture), confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot // re-ground for the next act
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))

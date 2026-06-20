@@ -2,6 +2,7 @@ package me.rerere.rikkahub.service.automation
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.GestureDescription
 import android.accessibilityservice.InputMethod
 import android.content.pm.ApplicationInfo
 import android.os.Build
@@ -521,12 +522,18 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
                     allowedPackages = action.allowedPackages,
                     includeHost = action.includeHost,
                 ) { node ->
-                    // Slice 10 (the general tap): ACTION_CLICK / ACTION_SCROLL_* on the resolved node,
-                    // never a dispatchGesture screen point (design D1). The headline tap guard
-                    // (system-UI/password DENY) already ran in the core before this dispatches.
+                    // Slice 10 (the general tap): ACTION_CLICK / ACTION_SCROLL_* on the resolved node.
+                    // The headline tap guard (system-UI/password DENY) already ran in the core before
+                    // this dispatches. CLICK with `gesture` opts into a real touch (dispatchGesture) at
+                    // the resolved node's bounds for views whose navigation ignores the synthesized
+                    // ACTION_CLICK (opt-in; the model still names a selector, the point is derived here).
                     when (action.kind) {
                         NodeActionKind.CLICK ->
-                            performOrActionableAncestor(node, AccessibilityNodeInfo.ACTION_CLICK) { it.isClickable }
+                            if (action.gesture) {
+                                gestureTapNode(node)
+                            } else {
+                                performOrActionableAncestor(node, AccessibilityNodeInfo.ACTION_CLICK) { it.isClickable }
+                            }
                         NodeActionKind.SCROLL_FORWARD ->
                             performOrActionableAncestor(node, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) { it.isScrollable }
                         NodeActionKind.SCROLL_BACKWARD ->
@@ -777,6 +784,25 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
     }
 
     /**
+     * Tap the resolved [node] as a REAL touch via [dispatchGesture] at its on-screen bounds centre —
+     * for views whose navigation responds only to raw touch and ignores the synthesized `ACTION_CLICK`
+     * (e.g. opening Instagram's explore search). Coordinate-free from the model's view: the point is
+     * derived from the strictly-resolved node, never model-supplied. Returns false (so the caller can
+     * fall back) when the node has no on-screen area. `canPerformGestures` is declared in the service
+     * config; dispatchGesture is API 24+ (≥ minSdk 26). The gesture's async completion does not gate
+     * success — the act path re-snapshots after settle (design D4), like every other dispatch.
+     */
+    private fun gestureTapNode(node: AccessibilityNodeInfo): Boolean {
+        val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+        if (bounds.isEmpty) return false
+        val path = android.graphics.Path().apply { moveTo(bounds.exactCenterX(), bounds.exactCenterY()) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, GESTURE_TAP_DURATION_MS))
+            .build()
+        return dispatchGesture(gesture, null, null)
+    }
+
+    /**
      * Dispatch [actionId] on the resolved [node], falling back to the NEAREST ancestor that [capable]
      * accepts when the node itself cannot perform it. Work-first: an agent that selects a bare TextView
      * label (no CLICK flag) should still hit the label's clickable ROW rather than fail with a
@@ -935,6 +961,10 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
         // starts a session within this window falls back to ACTION_SET_TEXT. Not a fixed sleep — the
         // wait completes the instant onStartInput fires.
         private const val IME_START_TIMEOUT_MS = 700L
+
+        // Duration of the synthetic tap stroke for a real-touch (gesture) tap. ~60ms is a normal short
+        // tap — long enough to register, short enough not to be read as a long-press.
+        private const val GESTURE_TAP_DURATION_MS = 60L
 
         /**
          * The live, connected service or null. Set on [onServiceConnected], cleared on teardown.
