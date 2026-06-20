@@ -11,6 +11,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -18,13 +19,38 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('web-ui/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Cache web-ui node_modules
+        uses: actions/cache@v4
+        with:
+          path: web-ui/node_modules
+          key: ${{ runner.os }}-webui-node-modules-${{ hashFiles('web-ui/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-webui-node-modules-
+
       - name: Gradle cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.gradle/configuration-cache
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install zsh and pnpm
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+          npm install -g pnpm
+          cd web-ui && pnpm install --frozen-lockfile
 
       - name: Prepare build files
         run: |
@@ -40,7 +66,7 @@ jobs:
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --parallel --configuration-cache
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
