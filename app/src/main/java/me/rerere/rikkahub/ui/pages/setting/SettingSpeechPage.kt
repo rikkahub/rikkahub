@@ -696,6 +696,7 @@ private fun TTSProviderItem(
                             is TTSProviderSetting.Groq -> "Groq"
                             is TTSProviderSetting.XAI -> "xAI"
                             is TTSProviderSetting.MiMo -> "MiMo"
+                            is TTSProviderSetting.Step -> "Step"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
