@@ -1015,7 +1015,11 @@
   <string name="setting_tts_page_provider_type">Provider Type</string>
   <string name="setting_tts_page_provider_type_description">Select the TTS provider type</string>
   <string name="setting_tts_page_selected">Selected</string>
+  <string name="setting_tts_page_similarity_boost">Similarity Boost</string>
+  <string name="setting_tts_page_similarity_boost_description">Control how closely the voice matches the original (0.0 - 1.0)</string>
   <string name="setting_tts_page_speech_rate">Speech Rate</string>
+  <string name="setting_tts_page_stability">Stability</string>
+  <string name="setting_tts_page_stability_description">Control the stability of the voice (0.0 - 1.0, lower is more expressive)</string>
   <string name="setting_tts_page_speech_rate_description">Control the speed of speech (0.1 - 3.0, 1.0 is normal)</string>
   <string name="setting_tts_page_speed">Speed</string>
   <string name="setting_tts_page_speed_description">Speech speed (0.25 - 4.0)</string>
