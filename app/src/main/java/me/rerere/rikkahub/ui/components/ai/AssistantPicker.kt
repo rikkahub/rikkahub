@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Edit03
-import me.rerere.hugeicons.stroke.LookTop
+import me.rerere.hugeicons.stroke.AiUser
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
@@ -65,7 +65,7 @@ fun AssistantPicker(
 
     NavigationDrawerItem(
         icon = {
-            Icon(HugeIcons.LookTop, contentDescription = null)
+            Icon(HugeIcons.AiUser, contentDescription = null)
         },
         label = {
             Row(

@@ -35,6 +35,8 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,10 +60,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.Activity
 import com.composables.icons.lucide.CalendarClock
+import com.composables.icons.lucide.CircleCheck
+import com.composables.icons.lucide.CircleX
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Minus
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.TriangleAlert
 import java.text.DateFormat
@@ -81,6 +87,7 @@ import me.rerere.ai.runtime.contract.ScheduleSnapshot
 import me.rerere.ai.runtime.schedule.RecurrenceSpec
 import me.rerere.ai.runtime.schedule.RecurrenceUnit
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.db.entity.TaskRunStateTag
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -113,10 +120,12 @@ fun SchedulePage(
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val spawnableAssistants = settings.assistants.filter { it.spawnable }
     val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val runs by vm.runs.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var createError by remember { mutableStateOf<CreateScheduleError?>(null) }
     var deleteTarget by remember { mutableStateOf<ScheduleSnapshot?>(null) }
+    var selectedPage by rememberSaveable { mutableIntStateOf(0) }
 
     LaunchedEffect(vm) { vm.load() }
 
@@ -134,50 +143,55 @@ fun SchedulePage(
                 Icon(Lucide.Plus, contentDescription = "Add schedule")
             }
         },
+        bottomBar = {
+            // Bottom tabs (user request): same shape as the speech config page's bottom NavigationBar —
+            // "Runs" monitors executions, "Scheduled" manages the definitions.
+            NavigationBar(
+                containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor,
+            ) {
+                NavigationBarItem(
+                    selected = selectedPage == 0,
+                    onClick = { selectedPage = 0 },
+                    icon = { Icon(Lucide.Activity, contentDescription = null) },
+                    label = { Text("Runs") },
+                )
+                NavigationBarItem(
+                    selected = selectedPage == 1,
+                    onClick = { selectedPage = 1 },
+                    icon = { Icon(Lucide.CalendarClock, contentDescription = null) },
+                    label = { Text("Scheduled") },
+                )
+            }
+        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        // The four states are rendered distinctly (SPEC.md M6 / SC6) so "loading" is never mistaken for
-        // "empty": a spinner while loading, a CTA-bearing column when genuinely empty, an error line on an
-        // unexpected fault, and the card list when populated. The FAB stays for the populated state; the
-        // empty state additionally hosts a primary in-column Create task button so a first-time user is not
-        // left hunting for the FAB.
-        when (val state = uiState) {
-            is ScheduleUiState.Loading -> ScheduleLoadingState(innerPadding)
-
-            is ScheduleUiState.Empty -> ScheduleEmptyState(
+        // Bottom-tab content (user request): "Runs" monitors task executions (incl. long-running ones
+        // live), "Scheduled" manages the schedule definitions. The bottom NavigationBar selects the page;
+        // innerPadding already accounts for the top bar and the bottom bar.
+        when (selectedPage) {
+            0 -> RunsTabContent(
+                runs = runs,
                 innerPadding = innerPadding,
                 onCreate = { showCreateDialog = true },
             )
 
-            is ScheduleUiState.Error -> ScheduleErrorState(
+            else -> ScheduledTabContent(
+                state = uiState,
                 innerPadding = innerPadding,
-                message = state.message,
+                onCreate = { showCreateDialog = true },
                 onRetry = { vm.load() },
+                onToggleEnabled = { snapshot, enabled ->
+                    // Route the toggle through the VM → repository (the single legality path); a resume
+                    // that breaches a freed cap is Rejected. The Switch is bound to snapshot.enabled —
+                    // which only changes when the list refreshes on Accept — so a Rejected leaves the
+                    // switch visually reverted and we toast the reason.
+                    vm.setEnabled(snapshot.id, enabled) { result ->
+                        if (result is ScheduleMutationResult.Rejected) toaster.show(result.reason)
+                    }
+                },
+                onDelete = { deleteTarget = it },
             )
-
-            is ScheduleUiState.Content -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = innerPadding + PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(state.schedules, key = { it.id.toString() }) { snapshot ->
-                    ScheduleCard(
-                        snapshot = snapshot,
-                        onToggleEnabled = { enabled ->
-                            // Route the toggle through the VM → repository (the single legality path); a
-                            // resume that breaches a freed cap is Rejected. The card has no dialog to host an
-                            // inline error, and the Switch is bound to snapshot.enabled — which only changes
-                            // when the list refreshes on Accept — so a Rejected leaves the switch visually
-                            // reverted and we toast the reason (spec Open Question 3).
-                            vm.setEnabled(snapshot.id, enabled) { result ->
-                                if (result is ScheduleMutationResult.Rejected) toaster.show(result.reason)
-                            }
-                        },
-                        onDelete = { deleteTarget = snapshot },
-                    )
-                }
-            }
         }
     }
 
@@ -231,6 +245,211 @@ fun SchedulePage(
     }
 }
 
+/**
+ * The "Scheduled" tab: the existing four-state schedule list, unchanged except that its padding now
+ * comes from the tab host (top inset is consumed by the tab row). Loading is a spinner, Empty a CTA
+ * column, Error a retry line, Content the schedule cards.
+ */
+@Composable
+private fun ScheduledTabContent(
+    state: ScheduleUiState,
+    innerPadding: PaddingValues,
+    onCreate: () -> Unit,
+    onRetry: () -> Unit,
+    onToggleEnabled: (ScheduleSnapshot, Boolean) -> Unit,
+    onDelete: (ScheduleSnapshot) -> Unit,
+) {
+    when (state) {
+        is ScheduleUiState.Loading -> ScheduleLoadingState(innerPadding)
+
+        is ScheduleUiState.Empty -> ScheduleEmptyState(innerPadding = innerPadding, onCreate = onCreate)
+
+        is ScheduleUiState.Error -> ScheduleErrorState(
+            innerPadding = innerPadding,
+            message = state.message,
+            onRetry = onRetry,
+        )
+
+        is ScheduleUiState.Content -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = innerPadding + PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(state.schedules, key = { it.id.toString() }) { snapshot ->
+                ScheduleCard(
+                    snapshot = snapshot,
+                    onToggleEnabled = { enabled -> onToggleEnabled(snapshot, enabled) },
+                    onDelete = { onDelete(snapshot) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The "Runs" tab (user request): a live monitor of the bound conversation's task executions so a
+ * long-running scheduled task can be watched. Empty until something has fired; otherwise a newest-first
+ * list of run cards whose status updates live (a RUNNING run shows a spinner).
+ */
+@Composable
+private fun RunsTabContent(
+    runs: List<TaskRunRow>,
+    innerPadding: PaddingValues,
+    onCreate: () -> Unit,
+) {
+    if (runs.isEmpty()) {
+        RunsEmptyState(innerPadding = innerPadding, onCreate = onCreate)
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = innerPadding + PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(runs, key = { it.id }) { run -> RunCard(run = run) }
+    }
+}
+
+/** The Runs empty state — mirrors [ScheduleEmptyState] but points the CTA at creating a schedule. */
+@Composable
+private fun RunsEmptyState(
+    innerPadding: PaddingValues,
+    onCreate: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Lucide.Search,
+            contentDescription = null,
+            modifier = Modifier.size(48.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "No runs yet",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Button(
+            onClick = onCreate,
+            modifier = Modifier.padding(top = 20.dp),
+        ) {
+            Icon(Lucide.Plus, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text("New schedule", modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+/** One execution row: a live status badge, when it started, the prompt, and the result/error tail. */
+@Composable
+private fun RunCard(run: TaskRunRow) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RunStatusBadge(state = run.state)
+                Text(
+                    text = runTimeLabel(run.createdAt),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = run.prompt.ifBlank { "(empty prompt)" },
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val detail = run.finalError ?: run.finalResult
+            if (!detail.isNullOrBlank()) {
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (run.finalError != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Status pill for a run: a spinner for any in-flight (ACTIVE) state so a long-running task is obviously
+ * still going, a check for success, an X for a failure, and a neutral mark for cancelled/interrupted.
+ */
+@Composable
+private fun RunStatusBadge(state: TaskRunStateTag) {
+    val active = state in TaskRunStateTag.ACTIVE
+    val color = when {
+        active -> MaterialTheme.colorScheme.primary
+        state == TaskRunStateTag.SUCCEEDED -> MaterialTheme.colorScheme.primary
+        state == TaskRunStateTag.FAILED || state == TaskRunStateTag.BUDGET_EXHAUSTED ->
+            MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val label = when (state) {
+        TaskRunStateTag.CREATED, TaskRunStateTag.QUEUED -> "Queued"
+        TaskRunStateTag.STARTING, TaskRunStateTag.RUNNING, TaskRunStateTag.RESUMING -> "Running"
+        TaskRunStateTag.WAITING_APPROVAL -> "Waiting"
+        TaskRunStateTag.SUCCEEDED -> "Done"
+        TaskRunStateTag.FAILED -> "Failed"
+        TaskRunStateTag.CANCELLED -> "Cancelled"
+        TaskRunStateTag.BUDGET_EXHAUSTED -> "Budget exhausted"
+        TaskRunStateTag.INTERRUPTED -> "Interrupted"
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        when {
+            active -> CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+                color = color,
+            )
+
+            state == TaskRunStateTag.SUCCEEDED -> Icon(
+                imageVector = Lucide.CircleCheck,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = color,
+            )
+
+            else -> Icon(
+                imageVector = Lucide.CircleX,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = color,
+            )
+        }
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+}
+
+private fun runTimeLabel(epochMillis: Long): String =
+    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMillis))
+
 /** Centered spinner shown while [ScheduleUiState.Loading] — distinct from the empty state (SC6). */
 @Composable
 private fun ScheduleLoadingState(innerPadding: PaddingValues) {
@@ -278,7 +497,7 @@ private fun ScheduleEmptyState(
             modifier = Modifier.padding(top = 20.dp),
         ) {
             Icon(Lucide.Plus, contentDescription = null, modifier = Modifier.size(18.dp))
-            Text("Create task", modifier = Modifier.padding(start = 8.dp))
+            Text("New schedule", modifier = Modifier.padding(start = 8.dp))
         }
     }
 }

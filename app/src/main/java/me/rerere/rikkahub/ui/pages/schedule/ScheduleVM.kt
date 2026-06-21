@@ -2,9 +2,15 @@ package me.rerere.rikkahub.ui.pages.schedule
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -12,8 +18,25 @@ import me.rerere.ai.runtime.contract.ScheduleDraft
 import me.rerere.ai.runtime.contract.ScheduleMutationResult
 import me.rerere.ai.runtime.contract.ScheduleOwner
 import me.rerere.ai.runtime.contract.ScheduleSnapshot
+import me.rerere.rikkahub.data.db.entity.TaskRunEntity
+import me.rerere.rikkahub.data.db.entity.TaskRunStateTag
+import me.rerere.rikkahub.data.repository.TaskRunRepository
 import me.rerere.rikkahub.data.repository.TaskScheduleRepository
 import kotlin.uuid.Uuid
+
+/**
+ * One row in the "Runs" tab — a flattened, UI-facing projection of a [TaskRunEntity] for the bound
+ * conversation. Carries only what the monitor renders so no Room entity leaks into the composable.
+ */
+data class TaskRunRow(
+    val id: String,
+    val state: TaskRunStateTag,
+    val prompt: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val finalResult: String?,
+    val finalError: String?,
+)
 
 /**
  * The schedule screen's four distinct states (SPEC.md M6 / task T12 / SC6). Modeled as a sealed type so
@@ -59,6 +82,7 @@ class ScheduleVM(
     private val targetAssistantId: Uuid,
     initialConversationId: Uuid?,
     private val repository: TaskScheduleRepository,
+    private val taskRuns: TaskRunRepository,
     private val ensureConversation: suspend (assistantId: Uuid) -> Uuid,
     private val rollbackConversation: suspend (id: Uuid) -> Unit,
 ) : ViewModel() {
@@ -67,6 +91,31 @@ class ScheduleVM(
 
     /** The bound parent conversation, or null until the first create materializes one. */
     val conversationId: StateFlow<Uuid?> = _conversationId.asStateFlow()
+
+    /**
+     * The "Runs" tab feed: the bound conversation's task runs, newest-first, live-updating. Follows
+     * [_conversationId] so a screen that binds its conversation on first create starts streaming runs
+     * without a reload. Empty while unbound (nothing has fired yet). Read-only — the firing/lifecycle
+     * truth lives in the task runtime; this only observes the persisted rows.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val runs: StateFlow<List<TaskRunRow>> = _conversationId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList())
+            else taskRuns.observeByConversation(id)
+                .map { list -> list.sortedByDescending { it.createdAt }.map { it.toRow() } }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private fun TaskRunEntity.toRow(): TaskRunRow = TaskRunRow(
+        id = id,
+        state = TaskRunStateTag.fromPersistedOrNull(latestState) ?: TaskRunStateTag.CREATED,
+        prompt = prompt,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        finalResult = finalResult,
+        finalError = finalError,
+    )
 
     // The screen's four-state view (SPEC.md M6 / task T12). A sealed UiState — not a nullable list or a
     // separate isLoading boolean — makes "is it loading or genuinely empty?" structurally unanswerable

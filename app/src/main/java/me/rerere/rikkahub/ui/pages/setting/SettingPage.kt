@@ -46,7 +46,7 @@ import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
-import me.rerere.hugeicons.stroke.LookTop
+import me.rerere.hugeicons.stroke.AiUser
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
 import me.rerere.hugeicons.stroke.Package
@@ -162,7 +162,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.Assistant) },
-                        leadingContent = { Icon(HugeIcons.LookTop, null) },
+                        leadingContent = { Icon(HugeIcons.AiUser, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_assistant_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_assistant)) },
                     )

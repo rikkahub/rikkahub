@@ -23,11 +23,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -39,25 +42,62 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 @Composable
 internal fun TextInputRow(
     state: ChatInputState,
+    assistant: Assistant,
     onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
     val filesManager: FilesManager = koinInject()
     val scope = rememberCoroutineScope()
-    val assistant = settings.getCurrentAssistant()
     val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
         settings.getQuickMessagesOfAssistant(assistant)
+    }
+
+    // Slash-command skill picker (user request): typing a leading "/" surfaces a skills popup above the
+    // composer. Skills load once off the main thread; the query is the text after "/" up to the first
+    // space, so "/tts" filters while typing past the command (a space) dismisses the popup.
+    val skillManager: SkillManager = koinInject()
+    val settingsStore: SettingsStore = koinInject()
+    val navController = LocalNavController.current
+    val allSkills by produceState(initialValue = emptyList<SkillMetadata>()) {
+        value = withContext(Dispatchers.IO) { skillManager.listSkills() }
+    }
+    var slashQuery by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state) {
+        snapshotFlow { state.textContent.text.toString() }.collect { text ->
+            slashQuery = if (text.startsWith("/") && !text.contains(' ') && !text.contains('\n')) {
+                text.substring(1)
+            } else {
+                null
+            }
+        }
+    }
+    val slashSkills = remember(slashQuery, allSkills) {
+        val q = slashQuery?.trim()?.lowercase().orEmpty()
+        if (q.isEmpty()) {
+            allSkills
+        } else {
+            allSkills.filter {
+                it.name.lowercase().contains(q) || it.description.lowercase().contains(q)
+            }
+        }
     }
 
     Column(
@@ -122,6 +162,33 @@ internal fun TextInputRow(
                     else -> transferableContent
                 }
             }
+        }
+        if (slashQuery != null) {
+            SlashSkillPopup(
+                skills = slashSkills,
+                onSelect = { skill ->
+                    // Arm the skill on the active assistant NOW (so its use_skill tool is exposed by the
+                    // time the message is sent) and drop the slash command into the input as "/<name> " for
+                    // the user to add optional params and send. The send path (ChatVM.handleMessageSend)
+                    // then rewrites "/<name> ..." into a use_skill directive — synchronously, matching the
+                    // enabled-skill name (so it also handles names with spaces).
+                    scope.launch {
+                        settingsStore.update { s ->
+                            s.copy(
+                                assistants = s.assistants.map { a ->
+                                    if (a.id == assistant.id) {
+                                        a.copy(enabledSkills = a.enabledSkills + skill.name)
+                                    } else {
+                                        a
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    state.setMessageText("/${skill.name} ")
+                },
+                onManage = { navController.navigate(Screen.Skills) },
+            )
         }
         TextField(
             state = state.textContent,

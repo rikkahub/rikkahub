@@ -376,6 +376,7 @@ fun ChatInput(
 
                     TextInputRow(
                         state = state,
+                        assistant = assistant,
                         onSendMessage = { sendMessage() }
                     )
 

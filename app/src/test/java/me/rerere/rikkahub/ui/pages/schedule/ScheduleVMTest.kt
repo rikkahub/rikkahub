@@ -11,8 +11,10 @@ import me.rerere.ai.runtime.contract.ScheduleOwner
 import me.rerere.ai.runtime.schedule.RecurrenceUnit
 import me.rerere.rikkahub.data.db.entity.TaskScheduleEntity
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.repository.TaskRunRepository
 import me.rerere.rikkahub.data.repository.TaskScheduleRepository
 import me.rerere.rikkahub.data.repository.fakes.FakeBoardTransactions
+import me.rerere.rikkahub.data.repository.fakes.FakeTaskRunDAO
 import me.rerere.rikkahub.data.repository.fakes.FakeTaskScheduleDAO
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -75,6 +77,7 @@ class ScheduleVMTest {
             targetAssistantId = target.id,
             initialConversationId = boundConversationId,
             repository = repository,
+            taskRuns = TaskRunRepository(FakeTaskRunDAO(), FakeBoardTransactions()),
             ensureConversation = ensure.ensure,
             rollbackConversation = rollback.rollback,
         )
@@ -363,6 +366,7 @@ class ScheduleVMTest {
             targetAssistantId = f.target.id,
             initialConversationId = null,
             repository = f.repository,
+            taskRuns = TaskRunRepository(FakeTaskRunDAO(), FakeBoardTransactions()),
             ensureConversation = { _ ->
                 ensureCalls.incrementAndGet()
                 gate.await()
@@ -454,6 +458,7 @@ class ScheduleVMTest {
             targetAssistantId = target.id,
             initialConversationId = existing,
             repository = repository,
+            taskRuns = TaskRunRepository(FakeTaskRunDAO(), FakeBoardTransactions()),
             ensureConversation = { existing },
             rollbackConversation = {},
         )

@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.db.entity.TaskRunEntity
 import me.rerere.rikkahub.data.db.entity.TaskRunEventSummary
 import me.rerere.rikkahub.data.db.entity.TaskRunPendingApproval
 import me.rerere.rikkahub.data.db.entity.TaskRunStateTag
+import kotlinx.coroutines.flow.Flow
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
@@ -39,6 +40,14 @@ class TaskRunRepository(
     private val transactions: BoardTransactionRunner,
     private val now: () -> Long = System::currentTimeMillis,
 ) : TaskRunStore {
+
+    /**
+     * Live, ordered-by-DAO stream of every run row keyed to [conversationId] — read-only, for the
+     * Scheduled-tasks "Runs" monitor. Emits on every state transition (the column the reducer writes),
+     * so a long-running task's live status updates without polling.
+     */
+    fun observeByConversation(conversationId: Uuid): Flow<List<TaskRunEntity>> =
+        dao.listByConversationFlow(conversationId.toString())
 
     /** Persist a fresh run in [TaskState.Created]; the spawn tool call has not been accepted yet. */
     override suspend fun create(spec: TaskSpec): TaskState = transactions.inTransaction {

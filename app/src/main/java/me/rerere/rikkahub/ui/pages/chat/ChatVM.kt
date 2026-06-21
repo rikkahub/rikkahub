@@ -31,6 +31,7 @@ import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getAssistantByIdOrCurrent
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AutomationGrant
@@ -203,7 +204,42 @@ class ChatVM(
         if (content.isEmptyInputMessage()) return
         analytics.logEvent("ai_send_message", null)
 
-        chatService.sendMessage(_conversationId, content, answer)
+        // A leading "/<skill> <param>" slash command (from the input popup) is expanded SYNCHRONOUSLY into
+        // a directive that runs the skill — no coroutine/IO before the send, so the slash send is ordered
+        // exactly like a normal send and can never land after (and cancel) a later turn.
+        chatService.sendMessage(_conversationId, expandSlashSkillCommand(content), answer)
+    }
+
+    /**
+     * Expand a leading "/<skill> <param>" into a directive the agent actually runs. The skill must already
+     * be armed on the active assistant (the input popup enables it on selection, so its `use_skill` tool is
+     * exposed for the turn); we match the text after "/" against the assistant's enabled skill NAMES by
+     * longest prefix — which also handles skill names that contain spaces — and rewrite the text part into an
+     * explicit "Use the <name> skill." directive plus the param. Anything that doesn't match an enabled
+     * skill (a plain message, or an unknown/not-yet-enabled token) is returned verbatim. Pure & synchronous.
+     */
+    private fun expandSlashSkillCommand(content: List<UIMessagePart>): List<UIMessagePart> {
+        val idx = content.indexOfLast { it is UIMessagePart.Text }
+        if (idx < 0) return content
+        val text = (content[idx] as UIMessagePart.Text).text
+        if (!text.startsWith("/")) return content
+        val afterSlash = text.substring(1)
+        // Match against the assistant that ACTUALLY runs the turn — the conversation-bound one
+        // (ChatService resolves via getAssistantByIdOrCurrent), not the global current assistant — so the
+        // armed skill and the exposed use_skill tool belong to the same assistant.
+        val name = settingsStore.settingsFlow.value
+            .getAssistantByIdOrCurrent(conversation.value.assistantId).enabledSkills
+            .filter { afterSlash == it || afterSlash.startsWith("$it ") || afterSlash.startsWith("$it\n") }
+            .maxByOrNull { it.length } ?: return content
+        val param = afterSlash.removePrefix(name).trim()
+        val directive = buildString {
+            append("Use the \"$name\" skill.")
+            if (param.isNotEmpty()) {
+                append("\n\n")
+                append(param)
+            }
+        }
+        return content.toMutableList().also { it[idx] = UIMessagePart.Text(directive) }
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {

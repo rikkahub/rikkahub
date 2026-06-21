@@ -137,6 +137,7 @@ val appModule = module {
             targetAssistantId = params.get<Uuid>(0),
             initialConversationId = params.get<Uuid?>(1),
             repository = get(),
+            taskRuns = get(),
             ensureConversation = { assistantId ->
                 val conversation = me.rerere.rikkahub.data.model.Conversation(
                     assistantId = assistantId,
