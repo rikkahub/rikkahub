@@ -70,6 +70,8 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.rikkahub.R
+import com.composables.icons.lucide.LayoutGrid
+import com.composables.icons.lucide.Lucide
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.ImageUtils
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -138,6 +140,11 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                         ) {
                             AutoAIIcon("AiHubMix")
                         }
+                    }
+                    IconButton(
+                        onClick = { navController.navigate(Screen.SettingProviderCatalog) }
+                    ) {
+                        Icon(Lucide.LayoutGrid, contentDescription = "Catalog")
                     }
                     ImportProviderButton {
                         vm.updateSettings(

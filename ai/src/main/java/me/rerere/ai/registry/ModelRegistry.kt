@@ -573,10 +573,12 @@ object ModelRegistry {
         val abilities = resolveModels(modelId)
             .flatMap { it.abilities }
             .toSet()
-        buildList {
+        val registryAbilities = buildList {
             if (ModelAbility.TOOL in abilities) add(ModelAbility.TOOL)
             if (ModelAbility.REASONING in abilities) add(ModelAbility.REASONING)
         }
+        // Gap-fill: models.dev supplies abilities for the long tail the pattern matcher doesn't cover.
+        registryAbilities.ifEmpty { ModelsDevCatalog.lookup(modelId)?.abilities ?: emptyList() }
     }
 
     // Conservative default context window (tokens) when neither an explicit Model.contextWindow
@@ -587,8 +589,10 @@ object ModelRegistry {
     // Per-family context window in tokens, resolved by the same best-score matcher as abilities.
     // Returns null when no matched family declares a window (caller falls back to the default).
     val MODEL_CONTEXT_WINDOW = ModelData<Int?> { modelId ->
-        resolveModels(modelId)
-            .firstNotNullOfOrNull { it.contextWindow }
+        // Registry's curated/conditional value wins (e.g. Claude base vs 1M-beta); models.dev fills
+        // the long tail the matcher misses, before getContextWindowForModel applies the 128k default.
+        resolveModels(modelId).firstNotNullOfOrNull { it.contextWindow }
+            ?: ModelsDevCatalog.lookup(modelId)?.contextWindow
     }
 
     fun supportsClaude1MContext(modelId: String): Boolean = CLAUDE_1M_CONTEXT_SERIES.match(modelId)

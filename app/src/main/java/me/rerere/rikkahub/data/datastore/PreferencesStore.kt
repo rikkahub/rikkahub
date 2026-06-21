@@ -37,6 +37,7 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV4Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV5Migration
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV6Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.AutomationSink
@@ -71,6 +72,7 @@ private val Context.settingsStore by preferencesDataStore(
             PreferenceStoreV3Migration(),
             PreferenceStoreV4Migration(),
             PreferenceStoreV5Migration(),
+            PreferenceStoreV6Migration(),
         )
     }
 )
@@ -172,13 +174,13 @@ class SettingsStore(
                 JsonInstant.decodeFromString(it)
             } ?: emptyList(),
             chatModelId = preferences[SELECT_MODEL]?.let { Uuid.parse(it) }
-                ?: DEFAULT_AUTO_MODEL_ID,
+                ?: UNSET_MODEL_ID,
             fastModelId = preferences[FAST_MODEL]?.let { Uuid.parse(it) }
-                ?: DEFAULT_AUTO_MODEL_ID,
+                ?: UNSET_MODEL_ID,
             titleModelId = preferences[TITLE_MODEL]?.let { Uuid.parse(it) },
             memoryEmbeddingModelId = preferences[MEMORY_EMBEDDING_MODEL]?.let { Uuid.parse(it) },
             translateModeId = preferences[TRANSLATE_MODEL]?.let { Uuid.parse(it) }
-                ?: DEFAULT_AUTO_MODEL_ID,
+                ?: UNSET_MODEL_ID,
             enableSuggestion = preferences[ENABLE_SUGGESTION] != false,
             suggestionModelId = preferences[SUGGESTION_MODEL]?.let { Uuid.parse(it) },
             imageGenerationModelId = preferences[IMAGE_GENERATION_MODEL]?.let { Uuid.parse(it) }
@@ -189,7 +191,7 @@ class SettingsStore(
             suggestionPrompt = preferences[SUGGESTION_PROMPT] ?: DEFAULT_SUGGESTION_PROMPT,
             ocrModelId = preferences[OCR_MODEL]?.let { Uuid.parse(it) } ?: UNCONFIGURED_MODEL_ID,
             ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
-            compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
+            compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: UNSET_MODEL_ID,
             compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
             assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                 ?: DEFAULT_ASSISTANT_ID,
@@ -270,20 +272,11 @@ class SettingsStore(
             }
         }.map { preferences -> decodeSettings(preferences) }
         .map {
-            var providers = it.providers.ifEmpty { DEFAULT_PROVIDERS }.toMutableList()
-            DEFAULT_PROVIDERS.forEach { defaultProvider ->
-                if (providers.none { it.id == defaultProvider.id }) {
-                    providers.add(defaultProvider.copyProvider())
-                }
-            }
-            providers = providers.map { provider ->
-                val defaultProvider = DEFAULT_PROVIDERS.find { it.id == provider.id }
-                if (defaultProvider != null) {
-                    provider.copyProvider(
-                        builtIn = defaultProvider.builtIn,
-                    )
-                } else provider
-            }.toMutableList()
+            // Providers are seeded ONCE by PreferenceStoreV6Migration and are fully user-owned after
+            // that: the read path neither re-adds defaults (a deleted provider stays deleted — even if
+            // the user deletes every one, the list is left empty and the UI shows the not-configured
+            // onboarding) nor forces a built-in flag. Assistants/TTS keep the legacy always-present
+            // defaults.
             val assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
             DEFAULT_ASSISTANTS.forEach { defaultAssistant ->
                 if (assistants.none { it.id == defaultAssistant.id }) {
@@ -297,7 +290,6 @@ class SettingsStore(
                 }
             }
             it.copy(
-                providers = providers,
                 assistants = assistants,
                 ttsProviders = ttsProviders,
             )
