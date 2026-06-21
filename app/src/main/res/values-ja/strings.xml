@@ -972,7 +972,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_tts_page_provider_type">プロバイダーの種類</string>
   <string name="setting_tts_page_provider_type_description">TTSプロバイダーの種類を選択</string>
   <string name="setting_tts_page_selected">選択済み</string>
+  <string name="setting_tts_page_similarity_boost">類似性向上</string>
+  <string name="setting_tts_page_similarity_boost_description">元の声との一致度を制御（0.0 - 1.0）</string>
   <string name="setting_tts_page_speech_rate">音声速度</string>
+  <string name="setting_tts_page_stability">安定性</string>
+  <string name="setting_tts_page_stability_description">音声の安定性を制御（0.0 - 1.0、低いほど表現力豊か）</string>
   <string name="setting_tts_page_speech_rate_description">音声の再生速度を制御 (0.1 - 3.0、1.0が標準)</string>
   <string name="setting_tts_page_speed">速度</string>
   <string name="setting_tts_page_speed_description">音声合成の速度 (0.25 - 4.0)</string>

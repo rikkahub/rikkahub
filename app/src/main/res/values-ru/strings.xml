@@ -972,7 +972,11 @@
   <string name="setting_tts_page_provider_type">Тип поставщика</string>
   <string name="setting_tts_page_provider_type_description">Выберите тип поставщика TTS</string>
   <string name="setting_tts_page_selected">Выбрано</string>
+  <string name="setting_tts_page_similarity_boost">Усиление схожести</string>
+  <string name="setting_tts_page_similarity_boost_description">Управление степенью совпадения голоса с оригиналом (0.0 - 1.0)</string>
   <string name="setting_tts_page_speech_rate">Скорость речи</string>
+  <string name="setting_tts_page_stability">Стабильность</string>
+  <string name="setting_tts_page_stability_description">Контроль стабильности голоса (0.0 - 1.0, ниже — выразительнее)</string>
   <string name="setting_tts_page_speech_rate_description">Управление скоростью речи (0,1–3,0, 1,0 — нормальная скорость)</string>
   <string name="setting_tts_page_speed">Скорость</string>
   <string name="setting_tts_page_speed_description">Скорость речи (0,25–4,0)</string>
