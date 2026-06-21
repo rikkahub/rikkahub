@@ -196,10 +196,10 @@ fun ChatInput(
     }
     val (_, launchCameraCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
-            scope.launch {
-                state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
-                dismissExpand()
-            }
+            // useCropLauncher launches this suspend block and only deletes the cropped file once it
+            // returns, so the copy below reads the file before it's cleaned up.
+            state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
+            dismissExpand()
         },
         onCleanup = {
             cleanupCameraCapture()
@@ -237,10 +237,10 @@ fun ChatInput(
     var preCropTempFile by remember { mutableStateOf<File?>(null) }
     val (_, launchImageCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
-            scope.launch {
-                state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
-                dismissExpand()
-            }
+            // useCropLauncher launches this suspend block and only deletes the cropped file once it
+            // returns, so the copy below reads the file before it's cleaned up.
+            state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
+            dismissExpand()
         },
         onCleanup = {
             preCropTempFile?.delete()
