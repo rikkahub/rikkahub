@@ -38,6 +38,28 @@ fun Instant.toLocalTime(): String {
         .format(localDateTime)
 }
 
+/**
+ * 将本地日期时间格式化为日期字符串，与 [Instant.toLocalDate] 输出格式一致。
+ *
+ * 用于消息模板的 {{ date }} 变量：接收消息自身的创建时间（java.time.LocalDateTime），
+ * 直接格式化而不经过时区转换，使历史消息的时间戳跨请求保持稳定，避免破坏 prompt 缓存。
+ */
+fun LocalDateTime.toLocalDateString(): String =
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+        .withLocale(Locale.getDefault())
+        .format(this)
+
+/**
+ * 将本地日期时间格式化为时间字符串，与 [Instant.toLocalTime] 输出格式一致。
+ *
+ * 用于消息模板的 {{ time }} 变量：接收消息自身的创建时间（java.time.LocalDateTime），
+ * 使历史消息的时间戳跨请求保持稳定，避免破坏 prompt 缓存。
+ */
+fun LocalDateTime.toLocalTimeString(): String =
+    DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM)
+        .withLocale(Locale.getDefault())
+        .format(this)
+
 fun LocalDateTime.toLocalString(): String {
     val locale = Locale.getDefault()
     val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale)
