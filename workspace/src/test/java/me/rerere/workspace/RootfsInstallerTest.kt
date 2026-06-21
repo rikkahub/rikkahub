@@ -2,6 +2,7 @@ package me.rerere.workspace
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -47,6 +48,40 @@ class RootfsInstallerTest {
 
         assertEquals(true, File(target, "dir").isDirectory)
         assertEquals("content", File(target, "dir/file.txt").readText())
+    }
+
+    @Test
+    fun `validate rootfs archive passes for archive with shell`() {
+        val archive = tmp.newFile("rootfs.tar.gz")
+        GZIPOutputStream(archive.outputStream()).use { out ->
+            out.writeTarEntry("bin/", '5', ByteArray(0))
+            out.writeTarEntry("bin/sh", '0', "#!/bin/sh\n".toByteArray())
+            out.write(ByteArray(TAR_BLOCK * 2))
+        }
+
+        val manager = WorkspaceManager(tmp.newFolder())
+        val installer = RootfsInstaller(manager)
+        installer.install("test", "rootfs.tar.gz", archive.inputStream()) {}
+
+        assertTrue(manager.hasRootfs("test"))
+    }
+
+    @Test
+    fun `validate rootfs archive rejects archive without shell`() {
+        val archive = tmp.newFile("rootfs.tar.gz")
+        GZIPOutputStream(archive.outputStream()).use { out ->
+            out.writeTarEntry("etc/passwd", '0', "root:x:0:0:root:/root:\n".toByteArray())
+            out.write(ByteArray(TAR_BLOCK * 2))
+        }
+
+        val manager = WorkspaceManager(tmp.newFolder())
+        val installer = RootfsInstaller(manager)
+        try {
+            installer.install("test", "rootfs.tar.gz", archive.inputStream()) {}
+            throw AssertionError("Expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertEquals("not a valid rootfs archive file", e.message)
+        }
     }
 
     private fun createInstaller() = RootfsInstaller(WorkspaceManager(tmp.newFolder()))

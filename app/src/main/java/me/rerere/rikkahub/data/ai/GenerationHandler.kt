@@ -12,8 +12,13 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
@@ -473,6 +478,72 @@ class GenerationHandler(
 
         if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return output
 
+        // 尝试保留 JSON 结构（exitCode/stdout/stderr），仅截断大字段
+        val truncatedTextParts = textParts.map { part ->
+            val truncated = runCatching {
+                val obj = json.parseToJsonElement(part.text).jsonObject
+                val hasExitCode = obj.containsKey("exitCode") && obj["exitCode"]?.jsonPrimitive?.intOrNull != null
+                val hasStdoutOrStderr = obj.containsKey("stdout") || obj.containsKey("stderr")
+                if (hasExitCode && hasStdoutOrStderr) {
+                    val maxFieldLen = MAX_TOOL_OUTPUT_CHARS / 4
+                    json.encodeToString(
+                        buildJsonObject {
+                            obj.forEach { (key, value) ->
+                                if ((key == "stdout" || key == "stderr") && value is kotlinx.serialization.json.JsonPrimitive) {
+                                    val content = value.contentOrNull ?: ""
+                                    if (content.length > maxFieldLen) {
+                                        put(key, content.take(maxFieldLen))
+                                    } else {
+                                        put(key, value)
+                                    }
+                                } else {
+                                    put(key, value)
+                                }
+                            }
+                            put("truncated", JsonPrimitive(true))
+                        }
+                    )
+                } else {
+                    null
+                }
+            }.getOrNull()
+            if (truncated != null) UIMessagePart.Text(truncated) else part
+        }
+
+        val newTotal = truncatedTextParts.sumOf { it.text.length }
+        if (newTotal <= MAX_TOOL_OUTPUT_CHARS) {
+            // 写入完整输出到文件
+            val fullText = textParts.joinToString("\n") { it.text }
+            val fileName = "${toolCallId}.txt"
+            val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
+            File(outputDir, fileName).writeText(fullText)
+
+            // 在 JSON 中附加 systemReminder 字段
+            val withReminder = truncatedTextParts.map { part ->
+                runCatching {
+                    val obj = json.parseToJsonElement(part.text).jsonObject
+                    json.encodeToString(
+                        buildJsonObject {
+                            obj.forEach { (key, value) -> put(key, value) }
+                            put(
+                                "systemReminder",
+                                JsonPrimitive(
+                                    buildString {
+                                        appendLine("[Tool output truncated: $totalChars characters total]")
+                                        appendLine("Full output saved to: /tool_outputs/$fileName")
+                                        appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
+                                        append("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
+                                    }
+                                ),
+                            )
+                        }
+                    )
+                }.getOrNull()?.let { UIMessagePart.Text(it) } ?: part
+            }
+            return withReminder + nonTextParts
+        }
+
+        // Fallback: 写入文件并返回摘要
         Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
 
         val fullText = textParts.joinToString("\n") { it.text }
