@@ -30,6 +30,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
+import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -1061,6 +1062,163 @@ class GoogleProvider(
             val mime = inline["mimeType"]?.jsonPrimitive?.contentOrNull ?: "image/jpeg"
             ImageGenerationItem(data = data, mimeType = mime)
         }
+    }
+
+    // Image EDITING (image-to-image): nano-banana (gemini-*-flash-image) conditions on the supplied
+    // reference images via generateContent — the same wire as generation, with the reference images as
+    // inlineData parts BEFORE the edit prompt. Routes like generateImage: the managed (antigravity)
+    // backend vs the public/Vertex API. Imagen `:predict` is not image-to-image, so a non-flash-image
+    // model surfaces the backend's error rather than a silent no-op.
+    override suspend fun editImage(
+        providerSetting: ProviderSetting,
+        params: ImageEditParams
+    ): Flow<ImageGenerationItem> = flow {
+        val items = withContext(Dispatchers.IO) {
+            require(providerSetting is ProviderSetting.Google) { "Expected Google provider setting" }
+            require(params.images.isNotEmpty()) { "At least one image is required" }
+            if (providerSetting.antigravity) {
+                editImageAntigravity(providerSetting, params)
+            } else {
+                editImagePublic(providerSetting, params)
+            }
+        }
+        items.forEach { emit(it) }
+    }
+
+    /**
+     * A reference image (local file path) as a Gemini `inlineData` content part. Encoded via the
+     * shared image path used for chat uploads, so it inherits the byte-size cap, dimension/pixel
+     * compression, magic-byte MIME sniffing, and EXIF normalization instead of a raw unbounded read.
+     */
+    private fun imageInlineDataPart(path: String): JsonObject {
+        val encoded = UIMessagePart.Image(url = "file://$path").encodeBase64(withPrefix = false).getOrThrow()
+        return buildJsonObject {
+            putJsonObject("inlineData") {
+                put("mimeType", encoded.mimeType)
+                put("data", encoded.base64)
+            }
+        }
+    }
+
+    private fun parseInlineImages(candidates: JsonArray): List<ImageGenerationItem> =
+        candidates.flatMap { cand ->
+            cand.jsonObject["content"]?.jsonObject?.get("parts")?.jsonArray.orEmpty()
+        }.mapNotNull { part ->
+            val inline = part.jsonObject["inlineData"]?.jsonObject ?: return@mapNotNull null
+            val data = inline["data"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val mime = inline["mimeType"]?.jsonPrimitive?.contentOrNull ?: "image/jpeg"
+            ImageGenerationItem(data = data, mimeType = mime)
+        }
+
+    private suspend fun editImageAntigravity(
+        providerSetting: ProviderSetting.Google,
+        params: ImageEditParams,
+    ): List<ImageGenerationItem> {
+        val access = antigravityAuth.accessToken(providerSetting.antigravityRefreshToken)
+        val project = antigravityAuth.project(access)
+        val inner = buildJsonObject {
+            putJsonArray("contents") {
+                add(buildJsonObject {
+                    put("role", "user")
+                    putJsonArray("parts") {
+                        params.images.forEach { add(imageInlineDataPart(it)) }
+                        add(buildJsonObject { put("text", params.prompt) })
+                    }
+                })
+            }
+            putJsonObject("generationConfig") {
+                put("candidateCount", params.numOfImages)
+                putJsonObject("imageConfig") {
+                    put(
+                        "aspectRatio", when (params.aspectRatio) {
+                            ImageAspectRatio.SQUARE -> "1:1"
+                            ImageAspectRatio.LANDSCAPE -> "16:9"
+                            ImageAspectRatio.PORTRAIT -> "9:16"
+                        }
+                    )
+                }
+            }
+        }.mergeCustomBody(params.customBody)
+
+        val envelope = antigravityAuth.wrapEnvelope(inner, params.model.modelId, project, "image_gen")
+        val request = Request.Builder()
+            .url("https://${antigravityAuth.host()}/v1internal:generateContent".toHttpUrl())
+            .headers(params.customHeaders.toHeaders())
+            .addHeader("Authorization", "Bearer $access")
+            .header("User-Agent", antigravityAuth.userAgent())
+            .post(json.encodeToString(envelope).toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to edit image: ${response.code} ${response.body.string()}")
+        }
+        val body = json.parseToJsonElement(response.body.string()).jsonObject
+        val candidates = providerSetting.unwrapResponse(body)["candidates"]?.jsonArray
+            ?: error("No candidates in image response")
+        return parseInlineImages(candidates)
+    }
+
+    private suspend fun editImagePublic(
+        providerSetting: ProviderSetting.Google,
+        params: ImageEditParams,
+    ): List<ImageGenerationItem> {
+        val requestBody = buildJsonObject {
+            putJsonArray("contents") {
+                add(buildJsonObject {
+                    put("role", "user")
+                    putJsonArray("parts") {
+                        params.images.forEach { add(imageInlineDataPart(it)) }
+                        add(buildJsonObject { put("text", params.prompt) })
+                    }
+                })
+            }
+            putJsonObject("generationConfig") {
+                put("candidateCount", params.numOfImages)
+                putJsonArray("responseModalities") {
+                    add(JsonPrimitive("TEXT"))
+                    add(JsonPrimitive("IMAGE"))
+                }
+                // generateContent carries aspect ratio in generationConfig.imageConfig (the
+                // Imagen :predict `parameters.aspectRatio` does not apply here), matching the
+                // managed edit path so landscape/portrait edits aren't silently squared.
+                putJsonObject("imageConfig") {
+                    put(
+                        "aspectRatio", when (params.aspectRatio) {
+                            ImageAspectRatio.SQUARE -> "1:1"
+                            ImageAspectRatio.LANDSCAPE -> "16:9"
+                            ImageAspectRatio.PORTRAIT -> "9:16"
+                        }
+                    )
+                }
+            }
+        }.mergeCustomBody(params.customBody)
+
+        val url = buildUrl(
+            providerSetting = providerSetting,
+            path = if (providerSetting.vertexAI) {
+                "publishers/google/models/${params.model.modelId}:generateContent"
+            } else {
+                "models/${params.model.modelId}:generateContent"
+            }
+        )
+        val request = transformRequest(
+            providerSetting = providerSetting,
+            request = Request.Builder()
+                .url(url)
+                .headers(params.customHeaders.toHeaders())
+                .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
+                .configureReferHeaders(providerSetting.baseUrl)
+                .build()
+        )
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to edit image: ${response.code} ${response.body.string()}")
+        }
+        val body = json.parseToJsonElement(response.body.string()).jsonObject
+        val candidates = providerSetting.unwrapResponse(body)["candidates"]?.jsonArray
+            ?: error("No candidates in image response")
+        return parseInlineImages(candidates)
     }
 }
 

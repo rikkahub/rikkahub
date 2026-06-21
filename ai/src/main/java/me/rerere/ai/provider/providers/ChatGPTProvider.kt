@@ -21,6 +21,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -136,6 +137,28 @@ class ChatGPTProvider(
             codexGenerateImage(
                 accessToken = providerSetting.accessToken,
                 prompt = params.prompt,
+                baseUrl = providerSetting.baseUrl,
+                model = params.model.modelId,
+            )
+        }
+        results.forEach { base64 -> emit(ImageGenerationItem(data = base64, mimeType = "image/png")) }
+    }
+
+    // Image edit via the same Codex hosted image_generation tool: the source images are inlined as
+    // input_image parts ahead of the prompt (gpt-image-2 image-to-image). Mirrors generateImage's
+    // token + wire fingerprint.
+    override suspend fun editImage(
+        providerSetting: ProviderSetting,
+        params: ImageEditParams
+    ): Flow<ImageGenerationItem> = flow {
+        require(providerSetting is ProviderSetting.ChatGPT) { "Expected ChatGPT provider setting" }
+        require(params.images.isNotEmpty()) { "At least one image is required" }
+        requireNonExpired(providerSetting)
+        val results = withContext(Dispatchers.IO) {
+            codexEditImage(
+                accessToken = providerSetting.accessToken,
+                prompt = params.prompt,
+                images = params.images,
                 baseUrl = providerSetting.baseUrl,
                 model = params.model.modelId,
             )

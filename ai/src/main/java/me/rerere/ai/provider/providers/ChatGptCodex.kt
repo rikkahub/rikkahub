@@ -22,6 +22,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.encodeBase64
 import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
@@ -141,6 +143,7 @@ private fun codexResponsesBody(
     tools: JsonArray,
     toolChoice: JsonObject,
     verbosity: String,
+    imageDataUrls: List<String> = emptyList(),
 ): JsonObject = buildJsonObject {
     put("model", model)
     put("store", false)
@@ -151,6 +154,14 @@ private fun codexResponsesBody(
         add(buildJsonObject {
             put("role", "user")
             putJsonArray("content") {
+                // Source images precede the text so the prompt reads as the edit instruction over
+                // them (input_image-then-input_text, matching the verified Codex image-edit recipe).
+                imageDataUrls.forEach { url ->
+                    add(buildJsonObject {
+                        put("type", "input_image")
+                        put("image_url", url)
+                    })
+                }
                 add(buildJsonObject {
                     put("type", "input_text")
                     put("text", userText)
@@ -338,3 +349,34 @@ suspend fun codexGenerateImage(
     }
     return results
 }
+
+/**
+ * Edit/compose local source images via the Codex hosted image_generation tool (gpt-image-2). Each
+ * source image is inlined as a data URL (input_image part) ahead of the edit prompt; returns the raw
+ * base64 payload of each produced image.
+ */
+suspend fun codexEditImage(
+    accessToken: String,
+    prompt: String,
+    images: List<String>,
+    client: OkHttpClient = codexBackendClient,
+    baseUrl: String = CODEX_DEFAULT_BASE_URL,
+    model: String = CODEX_IMAGE_DRIVER_MODEL,
+): List<String> {
+    require(images.isNotEmpty()) { "At least one source image is required" }
+    val dataUrls = images.map { imageFileToDataUrl(it) }
+    val body = codexResponsesBody(
+        model, IMAGE_INSTRUCTIONS, prompt, imageGenTools(), imageGenToolChoice(), "low", dataUrls,
+    )
+    val results = extractCodexImageResults(codexPost(client, baseUrl, accessToken, body))
+    if (results.isEmpty()) {
+        throw HttpException("Codex image edit produced no image — try again or rephrase the prompt")
+    }
+    return results
+}
+
+// Encode a local source image as a `data:<mime>;base64,...` URL via the shared chat-upload image
+// path, so it inherits the byte-size cap, dimension/pixel compression, magic-byte MIME sniffing, and
+// EXIF normalization instead of a raw unbounded read.
+private fun imageFileToDataUrl(path: String): String =
+    UIMessagePart.Image(url = "file://$path").encodeBase64(withPrefix = true).getOrThrow().base64
