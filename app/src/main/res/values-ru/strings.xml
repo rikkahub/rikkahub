@@ -1153,8 +1153,11 @@
   <string name="workspace_detail_tool_delete_file">Удалить файл</string>
   <string name="workspace_detail_tool_move_file">Переместить файл</string>
   <string name="workspace_detail_tool_shell">Выполнить команду</string>
-  <string name="workspace_detail_install_rootfs_desc">Загрузит tar.gz и распакует в каталог Linux %s.</string>
-  <string name="workspace_detail_download_url">URL для скачивания tar.gz</string>
+  <string name="workspace_detail_install_rootfs_desc">Выберите способ установки Rootfs.</string>
+  <string name="workspace_detail_install_rootfs_url_desc">Загрузит tar.gz или tar.xz и распакует в каталог Linux %s.</string>
+  <string name="workspace_detail_install_from_local">Локальный файл</string>
+  <string name="workspace_detail_install_from_url">URL</string>
+  <string name="workspace_detail_download_url">URL архива Rootfs</string>
   <string name="workspace_detail_area_files">Файлы</string>
   <string name="workspace_detail_area_rootfs">Корневая ФС</string>
   <string name="workspace_detail_empty_directory">Пустая директория</string>
@@ -1163,6 +1166,7 @@
   <string name="workspace_detail_shell_ready">Готово</string>
   <string name="workspace_detail_shell_broken">Ошибка</string>
   <string name="workspace_detail_downloading">Загрузка %1$s%2$s</string>
+  <string name="workspace_detail_uploading">Отправка %1$s%2$s</string>
   <string name="workspace_detail_extracting">Извлечение %1$d элементов%2$s</string>
   <string name="workspace_detail_install_complete">Установка завершена</string>
   <string name="workspace_terminal_title">Терминал</string>

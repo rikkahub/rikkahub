@@ -193,6 +193,27 @@ class WorkspaceDetailVM(
         }
     }
 
+    fun installRootfs(archiveName: String, inputStream: InputStream) {
+        viewModelScope.launch {
+            _installError.value = null
+            val workspace = state.value.workspace ?: return@launch
+            _installProgress.value = RootfsInstallProgress(stage = RootfsInstallStage.UPLOADING)
+            try {
+                repository.installRootfs(workspace.id, archiveName, inputStream) { progress ->
+                    _installProgress.value = progress
+                }
+                loadWorkspace()
+                refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (error: Throwable) {
+                _installError.value = error.message ?: "Rootfs 安装失败"
+            } finally {
+                _installProgress.value = null
+            }
+        }
+    }
+
     fun dismissInstallError() {
         _installError.value = null
     }

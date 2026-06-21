@@ -1153,8 +1153,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_tool_delete_file">ファイルを削除</string>
   <string name="workspace_detail_tool_move_file">ファイルを移動</string>
   <string name="workspace_detail_tool_shell">コマンド実行</string>
-  <string name="workspace_detail_install_rootfs_desc">tar.gzをダウンロードして、%sのLinuxディレクトリに展開します。</string>
-  <string name="workspace_detail_download_url">tar.gz ダウンロードURL</string>
+  <string name="workspace_detail_install_rootfs_desc">Rootfs のインストール方法を選択します。</string>
+  <string name="workspace_detail_install_rootfs_url_desc">tar.gz または tar.xz をダウンロードして、%sのLinuxディレクトリに展開します。</string>
+  <string name="workspace_detail_install_from_local">ローカルファイル</string>
+  <string name="workspace_detail_install_from_url">URL</string>
+  <string name="workspace_detail_download_url">Rootfs アーカイブ URL</string>
   <string name="workspace_detail_area_files">ファイル</string>
   <string name="workspace_detail_area_rootfs">Rootfs</string>
   <string name="workspace_detail_empty_directory">空のディレクトリ</string>
@@ -1163,6 +1166,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_shell_ready">準備完了</string>
   <string name="workspace_detail_shell_broken">エラー</string>
   <string name="workspace_detail_downloading">ダウンロード中 %1$s%2$s</string>
+  <string name="workspace_detail_uploading">アップロード中 %1$s%2$s</string>
   <string name="workspace_detail_extracting">抽出中 %1$dアイテム%2$s</string>
   <string name="workspace_detail_install_complete">インストール完了</string>
   <string name="workspace_terminal_title">ターミナル</string>

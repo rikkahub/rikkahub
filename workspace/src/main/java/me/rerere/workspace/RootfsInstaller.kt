@@ -6,6 +6,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 import java.nio.file.Files
 import java.util.Locale
@@ -22,8 +23,29 @@ class RootfsInstaller(
         onProgress: (RootfsInstallProgress) -> Unit = {},
     ) {
         require(url.isNotBlank()) { "Rootfs download url is required" }
+        installArchive(root, ArchiveFormat.fromUrl(url), onProgress) { archive ->
+            download(url, archive, onProgress)
+        }
+    }
+
+    fun install(
+        root: String,
+        archiveName: String,
+        inputStream: InputStream,
+        onProgress: (RootfsInstallProgress) -> Unit = {},
+    ) {
+        installArchive(root, ArchiveFormat.fromUrl(archiveName), onProgress) { archive ->
+            importArchive(inputStream, archive, onProgress)
+        }
+    }
+
+    private fun installArchive(
+        root: String,
+        format: ArchiveFormat,
+        onProgress: (RootfsInstallProgress) -> Unit,
+        prepareArchive: (File) -> Unit,
+    ) {
         manager.ensureWorkspace(root)
-        val format = ArchiveFormat.fromUrl(url)
         val tempDir = manager.tempDir(root)
         val archive = File(tempDir, "rootfs.${format.extension}")
         val stagingDir = File(tempDir, "rootfs-staging")
@@ -32,7 +54,7 @@ class RootfsInstaller(
         try {
             stagingDir.deleteRecursively()
             stagingDir.mkdirs()
-            download(url, archive, onProgress)
+            prepareArchive(archive)
             extractTar(archive, stagingDir, format, onProgress)
             linuxDir.deleteRecursively()
             require(stagingDir.renameTo(linuxDir)) {
@@ -51,6 +73,19 @@ class RootfsInstaller(
         target: File,
         onProgress: (RootfsInstallProgress) -> Unit,
     ) {
+        if (url.startsWith("file://") || !url.contains("://")) {
+            val source = if (url.startsWith("file://")) {
+                runCatching { File(URI(url)) }.getOrElse { File(url.removePrefix("file://")) }
+            } else {
+                File(url)
+            }
+            require(source.isFile) { "Rootfs archive does not exist: $url" }
+            source.inputStream().use { input ->
+                copyArchive(input, target, source.length().takeIf { it > 0 }, RootfsInstallStage.UPLOADING, onProgress)
+            }
+            return
+        }
+
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = CONNECT_TIMEOUT_MS
         connection.readTimeout = READ_TIMEOUT_MS
@@ -59,42 +94,62 @@ class RootfsInstaller(
             val code = connection.responseCode
             require(code in 200..299) { "Rootfs download failed: HTTP $code" }
             val totalBytes = connection.contentLengthLong.takeIf { it > 0 }
-            target.parentFile?.mkdirs()
             connection.inputStream.use { input ->
-                target.outputStream().use { output ->
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    var bytesRead = 0L
-                    var lastReportBytes = 0L
-                    while (true) {
-                        checkInterrupted()
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        bytesRead += read
-                        if (bytesRead - lastReportBytes >= PROGRESS_STEP_BYTES || bytesRead == totalBytes) {
-                            lastReportBytes = bytesRead
-                            onProgress(
-                                RootfsInstallProgress(
-                                    stage = RootfsInstallStage.DOWNLOADING,
-                                    bytesRead = bytesRead,
-                                    totalBytes = totalBytes,
-                                )
-                            )
-                        }
-                    }
-                    if (bytesRead == 0L) {
-                        onProgress(
-                            RootfsInstallProgress(
-                                stage = RootfsInstallStage.DOWNLOADING,
-                                bytesRead = 0,
-                                totalBytes = totalBytes,
-                            )
-                        )
-                    }
-                }
+                copyArchive(input, target, totalBytes, RootfsInstallStage.DOWNLOADING, onProgress)
             }
         } finally {
             connection.disconnect()
+        }
+    }
+
+    private fun importArchive(
+        inputStream: InputStream,
+        target: File,
+        onProgress: (RootfsInstallProgress) -> Unit,
+    ) {
+        inputStream.use { input ->
+            copyArchive(input, target, null, RootfsInstallStage.UPLOADING, onProgress)
+        }
+    }
+
+    private fun copyArchive(
+        inputStream: InputStream,
+        target: File,
+        totalBytes: Long?,
+        stage: RootfsInstallStage,
+        onProgress: (RootfsInstallProgress) -> Unit,
+    ) {
+        target.parentFile?.mkdirs()
+        target.outputStream().use { output ->
+            val buffer = ByteArray(BUFFER_SIZE)
+            var bytesRead = 0L
+            var lastReportBytes = 0L
+            while (true) {
+                checkInterrupted()
+                val read = inputStream.read(buffer)
+                if (read < 0) break
+                output.write(buffer, 0, read)
+                bytesRead += read
+                if (bytesRead - lastReportBytes >= PROGRESS_STEP_BYTES || bytesRead == totalBytes) {
+                    lastReportBytes = bytesRead
+                    onProgress(
+                        RootfsInstallProgress(
+                            stage = stage,
+                            bytesRead = bytesRead,
+                            totalBytes = totalBytes,
+                        )
+                    )
+                }
+            }
+            if (bytesRead == 0L) {
+                onProgress(
+                    RootfsInstallProgress(
+                        stage = RootfsInstallStage.DOWNLOADING,
+                        bytesRead = 0,
+                        totalBytes = totalBytes,
+                    )
+                )
+            }
         }
     }
 
@@ -318,6 +373,7 @@ class RootfsInstaller(
 
     private fun File.safeResolve(path: String): File {
         val normalized = normalizeTarPath(path)
+        require(normalized.isNotBlank()) { "Rootfs entry path is blank" }
         val root = canonicalFile
         val target = File(root, normalized).canonicalFile
         require(target.path == root.path || target.path.startsWith(root.path + File.separator)) {
@@ -338,7 +394,6 @@ class RootfsInstaller(
             .trim()
             .trimStart('/')
             .removePrefix("./")
-        require(normalized.isNotBlank()) { "Rootfs entry path is blank" }
         require(!normalized.contains('\u0000')) { "Rootfs entry path contains invalid character" }
         require(normalized.split('/').none { it == ".." }) { "Rootfs entry escapes target directory: $path" }
         return normalized

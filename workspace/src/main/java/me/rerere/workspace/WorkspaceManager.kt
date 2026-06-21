@@ -4,6 +4,8 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.charset.StandardCharsets
 
 class WorkspaceManager(
@@ -36,7 +38,9 @@ class WorkspaceManager(
 
     fun tempDir(root: String): File = File(workspaceDir(root), TEMP_DIR)
 
-    fun hasRootfs(root: String): Boolean = File(linuxDir(root), "bin/sh").isFile
+    fun hasRootfs(root: String): Boolean = ROOTFS_SHELLS.any { shell ->
+        Files.exists(File(linuxDir(root), shell).toPath(), LinkOption.NOFOLLOW_LINKS)
+    }
 
     fun deleteWorkspace(root: String): Boolean = workspaceDir(root).deleteRecursively()
 
@@ -177,5 +181,13 @@ class WorkspaceManager(
         private const val TEMP_DIR = "tmp"
         const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
         private val ROOT_NAME_REGEX = Regex("[A-Za-z0-9._-]+")
+        private val ROOTFS_SHELLS = listOf(
+            "bin/bash",
+            "usr/bin/bash",
+            "bin/ash",
+            "bin/dash",
+            "bin/sh",
+            "usr/bin/sh",
+        )
     }
 }
