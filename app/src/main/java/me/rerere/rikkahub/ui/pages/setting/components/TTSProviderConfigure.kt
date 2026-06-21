@@ -1083,8 +1083,7 @@ private fun ElevenLabsTTSConfiguration(
                 onValueChange(setting.copy(stability = newStability.coerceIn(0f, 1f)))
             },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("0.5") },
-            singleLine = true,
+            label = "0.5",
         )
     }
 
@@ -1099,8 +1098,7 @@ private fun ElevenLabsTTSConfiguration(
                 onValueChange(setting.copy(similarityBoost = newSimilarityBoost.coerceIn(0f, 1f)))
             },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("0.75") },
-            singleLine = true,
+            label = "0.75",
         )
     }
 }
