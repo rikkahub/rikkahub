@@ -102,6 +102,22 @@ class FilesManager(
     fun getFile(entity: ManagedFileEntity): File =
         File(context.filesDir, entity.relativePath)
 
+    /**
+     * Resolve a chat-file URI (as stored in [UIMessagePart.Image.url]) to its on-disk file, but ONLY
+     * when it resolves inside the managed upload directory. Returns null for a non-file URI, a path
+     * that escapes the upload dir (canonicalized — defeats `..` traversal and symlinks), or a missing
+     * file. This is the containment guard for the generate_image edit path: an agent passes image
+     * references by url, and without this an arbitrary `file:///…` could be read off-disk and uploaded.
+     */
+    fun resolveManagedFile(uri: Uri): File? {
+        val file = runCatching { uri.toFile() }.getOrNull() ?: return null
+        val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return null
+        val root = runCatching { context.filesDir.resolve(FileFolders.UPLOAD).canonicalFile }
+            .getOrNull() ?: return null
+        val withinRoot = canonical == root || canonical.path.startsWith(root.path + File.separator)
+        return canonical.takeIf { withinRoot && it.isFile }
+    }
+
     suspend fun createChatFilesByContents(uris: List<Uri>): List<Uri> = withContext(Dispatchers.IO) {
         val newUris = mutableListOf<Uri>()
         val dir = context.filesDir.resolve(FileFolders.UPLOAD)

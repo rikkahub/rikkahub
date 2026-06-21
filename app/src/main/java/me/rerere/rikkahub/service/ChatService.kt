@@ -1943,13 +1943,15 @@ class ChatService(
                         if (settings.enableWebSearch) {
                             addAll(createSearchTools(settings))
                         }
-                        // Deferred Codex tools — present only when a ChatGPT provider is configured, so
-                        // a chat with a model that lacks native web-fetch / image-gen (e.g. Anthropic)
-                        // can still reach those capabilities through the Codex backend.
+                        // Deferred managed-backend tools — present only when the relevant managed
+                        // provider is configured, so a chat with a model that lacks native web-fetch /
+                        // image-gen (e.g. Anthropic) can still reach those capabilities. fetch is
+                        // Codex-only; image-gen works through EITHER managed image provider (Codex
+                        // gpt-image-2 or Gagy Gemini) and self-gates to empty when neither is set.
                         if (settings.hasChatGpt()) {
                             addAll(createFetchTools(settings))
-                            addAll(createImageGenTools(settings, filesManager))
                         }
+                        addAll(createImageGenTools(settings, filesManager, providerManager))
                         addAll(localTools.getTools(assistant.localTools))
                         addAll(createWorkspaceTools(assistant.workspaceId?.toString(), conversationId, workspaceRepository))
                         // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
