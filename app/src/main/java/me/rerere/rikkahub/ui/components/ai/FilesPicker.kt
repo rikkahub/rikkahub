@@ -262,27 +262,6 @@ private fun InjectionQuickConfigSheet(
                         navController.navigate(Screen.Skills)
                     }
                 },
-                onNavigateToWorkspaces = {
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.Workspaces)
-                    }
-                },
-                onNavigateToWorkspaceDetail = { id ->
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.WorkspaceDetail(id))
-                    }
-                },
-                onNavigateToWorkspaceTerminal = { id ->
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.WorkspaceTerminal(id))
-                    }
-                },
             )
 
             Spacer(modifier = Modifier.height(16.dp))

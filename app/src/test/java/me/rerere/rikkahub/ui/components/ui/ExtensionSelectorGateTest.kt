@@ -30,8 +30,8 @@ class ExtensionSelectorGateTest {
     @Test
     fun `awaitPage fires once, only after the first target, never before`() = runBlocking<Unit> {
         val target = SKILLS_PAGE_INDEX
-            val nonTarget = Arb.int(0..3)          // Workspace, Quick Messages, Mode, Lorebooks
-            checkAll(Arb.list(nonTarget, 0..6), Arb.list(Arb.int(0..4), 0..6)) { prefix, suffix ->
+            val nonTarget = Arb.int(0..2)          // Quick Messages, Mode, Lorebooks (every page except Skills)
+            checkAll(Arb.list(nonTarget, 0..6), Arb.list(Arb.int(0..3), 0..6)) { prefix, suffix ->
             var nonTargetSeen = 0
             var targetSeen = 0
             var loadCount = 0
@@ -64,8 +64,7 @@ class ExtensionSelectorGateTest {
     /** Boundary: the gate must target the same pager index the Skills tab lives at. */
     @Test
     fun `skills page index is pinned`() {
-        assertEquals(0, WORKSPACE_PAGE_INDEX)
-        assertEquals(1, QUICK_MESSAGES_PAGE_INDEX)
-        assertEquals(4, SKILLS_PAGE_INDEX)
+        assertEquals(0, QUICK_MESSAGES_PAGE_INDEX)
+        assertEquals(3, SKILLS_PAGE_INDEX)
     }
 }

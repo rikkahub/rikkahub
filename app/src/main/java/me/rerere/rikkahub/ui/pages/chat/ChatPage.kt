@@ -9,12 +9,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -22,7 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -73,13 +69,12 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MessageAdd01
-import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Task01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.model.AutomationVerb
-import me.rerere.rikkahub.ui.pages.assistant.detail.DEFAULT_MAX_STEPS
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantByIdOrCurrent
 import me.rerere.rikkahub.data.datastore.getChatModelForAssistant
@@ -293,7 +288,6 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var showBoard by rememberSaveable { mutableStateOf(false) }
-    var showAutomationGrant by rememberSaveable { mutableStateOf(false) }
     var showBackgroundJobs by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     val selectModelFirstMessage = stringResource(R.string.chat_page_select_model_first)
@@ -344,8 +338,19 @@ private fun ChatPageContent(
                     onOpenBoard = {
                         showBoard = true
                     },
-                    onOpenAutomationGrant = {
-                        showAutomationGrant = true
+                    onOpenWorkspaceFiles = {
+                        // Lazy: create + assign a workspace on first press (no cold-start provisioning),
+                        // then open its file browser — so the folder button always lands somewhere real.
+                        scope.launch {
+                            runCatching { vm.ensureWorkspaceId(activeAssistant.id) }
+                                .onSuccess { navController.navigate(Screen.WorkspaceDetail(it)) }
+                                .onFailure {
+                                    toaster.show(
+                                        it.message ?: "Failed to open workspace",
+                                        type = ToastType.Error,
+                                    )
+                                }
+                        }
                     },
                     backgroundJobs = backgroundJobs,
                     onOpenBackgroundJobs = {
@@ -502,17 +507,6 @@ private fun ChatPageContent(
             )
         }
 
-        // Per-run automation grant (#187 v2, T10). Confirming writes a TRANSIENT AutomationGrant to
-        // the session's pendingAutomationGrant (scoped to the current foreground app, SUBMIT excluded
-        // by buildPerRunGrant); it is consumed by the lease derivation and cleared with the automation
-        // lease lifecycle. No persistence on the Assistant — this grant lives only for the run.
-        if (showAutomationGrant) {
-            AutomationGrantSheet(
-                vm = vm,
-                onDismiss = { showAutomationGrant = false },
-            )
-        }
-
         if (showBackgroundJobs) {
             BackgroundShellJobsSheet(
                 jobs = backgroundJobs,
@@ -543,149 +537,6 @@ private fun ChatBoardSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AutomationGrantSheet(
-    vm: ChatVM,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    // Read once when the sheet opens: the foreground package the grant will be scoped to, and the
-    // user's verb selection. Verbs default to OBSERVE only — the most conservative usable scope (read
-    // before any write). TTL defaults to the same conservative lease length the scope-editor uses.
-    val foregroundPackage = remember { vm.automationForegroundPackage() }
-    var selectedVerbs by remember { mutableStateOf(setOf(AutomationVerb.OBSERVE)) }
-    var ttlMinutes by remember { mutableStateOf(DEFAULT_TTL_MINUTES_IN_CHAT) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 16.dp)
-                .navigationBarsPadding()
-                .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.chat_automation_grant_title),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = stringResource(R.string.chat_automation_grant_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = stringResource(R.string.chat_automation_grant_foreground_label),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                if (foregroundPackage.isNullOrBlank()) {
-                    Text(
-                        text = stringResource(R.string.chat_automation_grant_no_foreground),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                } else {
-                    Text(
-                        text = foregroundPackage,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = stringResource(R.string.chat_automation_grant_actions_label),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AutomationVerb.entries.forEach { verb ->
-                        val selected = selectedVerbs.contains(verb)
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                selectedVerbs =
-                                    if (selected) selectedVerbs - verb else selectedVerbs + verb
-                            },
-                            label = { Text(chatVerbLabel(verb)) },
-                        )
-                    }
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = stringResource(R.string.chat_automation_grant_ttl_label),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TTL_PRESETS_MINUTES.forEach { minutes ->
-                        FilterChip(
-                            selected = ttlMinutes == minutes,
-                            onClick = { ttlMinutes = minutes },
-                            label = {
-                                Text(
-                                    stringResource(R.string.chat_automation_grant_ttl_minutes, minutes)
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.chat_automation_grant_cancel))
-                }
-                Button(
-                    // No foreground app ⇒ nothing to scope to ⇒ buildPerRunGrant returns null; disable
-                    // confirm so the user can't "grant" an empty scope that would silently deny anyway.
-                    enabled = !foregroundPackage.isNullOrBlank(),
-                    onClick = {
-                        val grant = buildPerRunGrant(
-                            foregroundPackage = foregroundPackage,
-                            verbs = selectedVerbs,
-                            ttlMinutes = ttlMinutes,
-                            maxSteps = DEFAULT_MAX_STEPS,
-                        )
-                        if (grant != null) vm.grantAutomation(grant)
-                        onDismiss()
-                    },
-                ) {
-                    Text(stringResource(R.string.chat_automation_grant_confirm))
-                }
-            }
-        }
-    }
-}
-
-// Conservative in-chat lease length (zero ⇒ deny). The selector offers a few presets around it.
-private const val DEFAULT_TTL_MINUTES_IN_CHAT: Int = 5
-private val TTL_PRESETS_MINUTES: List<Int> = listOf(1, 5, 10, 30)
-
-@Composable
-private fun chatVerbLabel(verb: AutomationVerb): String = stringResource(
-    when (verb) {
-        AutomationVerb.OBSERVE -> R.string.assistant_page_automation_verb_observe
-        AutomationVerb.TAP -> R.string.assistant_page_automation_verb_tap
-        AutomationVerb.SET_TEXT -> R.string.assistant_page_automation_verb_set_text
-        AutomationVerb.SCROLL -> R.string.assistant_page_automation_verb_scroll
-        AutomationVerb.GLOBAL -> R.string.assistant_page_automation_verb_global
-    }
-)
-
 @Composable
 private fun TopBar(
     settings: Settings,
@@ -695,7 +546,7 @@ private fun TopBar(
     previewMode: Boolean,
     onClickMenu: () -> Unit,
     onOpenBoard: () -> Unit,
-    onOpenAutomationGrant: () -> Unit,
+    onOpenWorkspaceFiles: () -> Unit,
     backgroundJobs: List<UiBackgroundJob>,
     onOpenBackgroundJobs: () -> Unit,
     onNewChat: () -> Unit,
@@ -792,10 +643,10 @@ private fun TopBar(
 
             IconButton(
                 onClick = {
-                    onOpenAutomationGrant()
+                    onOpenWorkspaceFiles()
                 }
             ) {
-                Icon(HugeIcons.SmartPhone01, stringResource(R.string.chat_automation_grant_open))
+                Icon(HugeIcons.Folder01, "Workspace files")
             }
 
             IconButton(

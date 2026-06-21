@@ -36,6 +36,16 @@ class WorkspaceDetailVM(
     private val _installError = MutableStateFlow<String?>(null)
     val installError = _installError.asStateFlow()
 
+    // Transient error from a file action (create/set-project) — surfaced as a toast by the page, then
+    // dismissed. Kept separate from [WorkspaceDetailState.error] (which is the directory-listing error
+    // shown as an inline card) so a failed "New Folder" doesn't blank the file list.
+    private val _actionError = MutableStateFlow<String?>(null)
+    val actionError = _actionError.asStateFlow()
+
+    // The file currently open in the read-only viewer (null = closed).
+    private val _fileView = MutableStateFlow<FileViewState?>(null)
+    val fileView = _fileView.asStateFlow()
+
     // The in-flight rootfs install, if any. Held so installRootfs() can refuse re-entry while one is
     // running (a second install races the shared tmp archive/staging dir).
     private var installJob: Job? = null
@@ -46,6 +56,13 @@ class WorkspaceDetailVM(
     // cancelling the previous job makes the latest navigation the sole writer.
     private var refreshJob: Job? = null
 
+    // One-shot guard: on the first workspace-row emission, open the FILES view at the project dir.
+    private var seededInitialPath = false
+
+    // The in-flight file-open read; cancelled when a newer file opens or the viewer closes so a stale
+    // read can't repopulate/overwrite the current view.
+    private var fileViewJob: Job? = null
+
     init {
         // Observe the row instead of read-modify-reloading it. setToolApproval (and any other writer)
         // mutates the row inside a DB transaction; Room re-emits the fresh row on this Flow, so
@@ -54,16 +71,38 @@ class WorkspaceDetailVM(
         // whichever getById resumed last won the _state write — a stale snapshot on the switches. A
         // single collected Flow has exactly one writer, so that out-of-order-write race cannot occur.
         repository.getByIdFlow(id)
-            .onEach { workspace -> _state.update { foldWorkspaceRow(it, workspace) } }
+            .onEach { workspace ->
+                _state.update { foldWorkspaceRow(it, workspace) }
+                // On the first row load, open the FILES view at the project dir (if one is set) so the
+                // browser starts where the agent works, not at the root. Guarded so it never overrides
+                // later user navigation.
+                if (!seededInitialPath && workspace != null) {
+                    seededInitialPath = true
+                    val projectDir = workspace.workingDir
+                    if (state.value.area == WorkspaceStorageArea.FILES &&
+                        state.value.path.isBlank() &&
+                        projectDir.isNotBlank()
+                    ) {
+                        browseTo(projectDir)
+                    }
+                }
+            }
             .launchIn(viewModelScope)
         refresh()
     }
 
     fun selectArea(area: WorkspaceStorageArea) {
+        // Re-entering FILES lands on the project dir (the working_dir seed) instead of the root, so a
+        // round-trip through the rootfs tab keeps the user where their project is.
+        val seed = if (area == WorkspaceStorageArea.FILES) {
+            state.value.workspace?.workingDir.orEmpty()
+        } else {
+            ""
+        }
         _state.update {
             it.copy(
                 area = area,
-                path = "",
+                path = seed,
                 entries = emptyList(),
                 error = null,
             )
@@ -74,6 +113,13 @@ class WorkspaceDetailVM(
     fun open(entry: WorkspaceFileEntry) {
         if (!entry.isDirectory) return
         _state.update { it.copy(path = entry.path, entries = emptyList(), error = null) }
+        refresh()
+    }
+
+    /** Jump directly to a known FILES-relative folder path (breadcrumb navigation); "" == root. */
+    fun browseTo(path: String) {
+        if (path == state.value.path) return
+        _state.update { it.copy(path = path, entries = emptyList(), error = null) }
         refresh()
     }
 
@@ -114,6 +160,114 @@ class WorkspaceDetailVM(
             )
             _state.update { it.copy(entries = entries, loading = false) }
         }
+    }
+
+    // Resolve a new entry name against the currently-browsed FILES path. Folder/file creation only
+    // applies to the FILES area (the project tree); the LINUX rootfs is managed by the installer.
+    // The name must be a single path segment: reject separators and `.`/`..` so a typed `../x` can't
+    // create an entry outside the directory the user is looking at (resolvePath already bounds it to
+    // the workspace root, but New file/folder must stay a child of the current dir).
+    private fun childPath(name: String): String {
+        val clean = name.trim()
+        require(
+            clean.isNotEmpty() && clean != "." && clean != ".." &&
+                !clean.contains('/') && !clean.contains('\\')
+        ) { "Name must be a single folder/file name without path separators" }
+        val base = state.value.path
+        return if (base.isBlank()) clean else "$base/$clean"
+    }
+
+    fun createFolder(name: String) {
+        if (name.isBlank() || state.value.area != WorkspaceStorageArea.FILES) return
+        launchVm(onError = { _actionError.value = it.message ?: "Failed to create folder" }) {
+            repository.createFolder(id, childPath(name))
+            refresh()
+        }
+    }
+
+    fun createFile(name: String) {
+        if (name.isBlank() || state.value.area != WorkspaceStorageArea.FILES) return
+        launchVm(onError = { _actionError.value = it.message ?: "Failed to create file" }) {
+            // Empty file, overwrite=false so an existing name surfaces a clear error instead of clobbering.
+            repository.writeText(id, childPath(name), text = "", overwrite = false)
+            refresh()
+        }
+    }
+
+    fun deleteEntry(entry: WorkspaceFileEntry) {
+        launchVm(onError = { _actionError.value = it.message ?: "Failed to delete" }) {
+            repository.deleteFile(id, state.value.area, entry.path, recursive = entry.isDirectory)
+            refresh()
+        }
+    }
+
+    /** Open a file in the read-only viewer. Binary/non-text content is reported, never dumped as garbage. */
+    fun openFile(entry: WorkspaceFileEntry) {
+        if (entry.isDirectory || state.value.area != WorkspaceStorageArea.FILES) return
+        // Supersede any in-flight open so a slow read can't land after the user closed the sheet or
+        // opened a different file.
+        fileViewJob?.cancel()
+        if (isLikelyBinaryName(entry.name)) {
+            _fileView.value = FileViewState(name = entry.name, path = entry.path, content = null, isBinary = true)
+            return
+        }
+        _fileView.value = FileViewState(name = entry.name, path = entry.path, loading = true)
+        fileViewJob = launchVm(onError = {
+            _fileView.value = null
+            // readText throws on a too-large file (maxReadBytes) — surface that instead of a blank viewer.
+            _actionError.value = it.message ?: "Failed to open file"
+        }) {
+            val text = repository.readText(id, entry.path)
+            // A NUL byte is the cheap, reliable binary tell that the extension allowlist missed.
+            val binary = text.contains('\u0000')
+            _fileView.value = FileViewState(
+                name = entry.name,
+                path = entry.path,
+                content = if (binary) null else text,
+                isBinary = binary,
+            )
+        }
+    }
+
+    /** Write edited text back to the open file (FILES area), then reflect it in the viewer + listing. */
+    fun saveFile(text: String) {
+        val current = _fileView.value ?: return
+        if (current.isBinary || current.loading || current.path.isBlank()) return
+        launchVm(onError = { _actionError.value = it.message ?: "Failed to save file" }) {
+            repository.writeText(id, current.path, text, overwrite = true)
+            // Only reflect the save if the same file is still open (the sheet may have been closed or
+            // switched to another file while writing).
+            if (_fileView.value?.path == current.path) {
+                _fileView.value = current.copy(content = text)
+            }
+            refresh()
+        }
+    }
+
+    fun closeFile() {
+        fileViewJob?.cancel()
+        _fileView.value = null
+    }
+
+    /** Designate the currently-browsed FILES folder as the workspace project dir (the agent's cwd seed). */
+    fun setCurrentAsProjectDir() {
+        if (state.value.area != WorkspaceStorageArea.FILES) return
+        val target = state.value.path
+        launchVm(onError = { _actionError.value = it.message ?: "Failed to set project directory" }) {
+            // The row re-emits via getByIdFlow, so state.workspace.workingDir updates without a reload.
+            repository.setWorkingDir(id, target)
+        }
+    }
+
+    /** Clear the project dir back to the files root (unset). */
+    fun clearProjectDir() {
+        launchVm(onError = { _actionError.value = it.message ?: "Failed to clear project directory" }) {
+            repository.resetWorkingDir(id)
+        }
+    }
+
+    fun dismissActionError() {
+        _actionError.value = null
     }
 
     fun setToolApproval(toolName: String, needsApproval: Boolean) {
@@ -188,3 +342,24 @@ data class WorkspaceDetailState(
     val loading: Boolean = false,
     val error: String? = null,
 )
+
+/** State of the read-only file viewer: text [content], or [isBinary] when the file isn't human-readable. */
+data class FileViewState(
+    val name: String,
+    val path: String = "",
+    val content: String? = null,
+    val isBinary: Boolean = false,
+    val loading: Boolean = false,
+)
+
+// Extensions whose content is not human-readable text — skip reading them and report a binary file
+// instead of dumping garbage into the viewer. A NUL-byte content check (openFile) catches the rest.
+private val BINARY_EXTENSIONS = setOf(
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svgz", "pdf", "zip", "gz", "tar", "tgz",
+    "7z", "rar", "jar", "apk", "aab", "so", "o", "a", "exe", "dll", "bin", "class", "dex", "wasm",
+    "mp3", "mp4", "m4a", "wav", "ogg", "flac", "avi", "mov", "mkv", "ttf", "otf", "woff", "woff2",
+    "eot", "db", "sqlite", "dat",
+)
+
+private fun isLikelyBinaryName(name: String): Boolean =
+    name.substringAfterLast('.', "").lowercase() in BINARY_EXTENSIONS

@@ -56,35 +56,53 @@ class WorkspaceFileSystem(
         return file.toEntry(root)
     }
 
+    fun mkdir(root: File, path: String): WorkspaceFileEntry {
+        require(path.isNotBlank() && path.trim().trimStart('/') != ".") { "Folder path is required" }
+        val dir = resolvePath(root, path)
+        require(!dir.exists()) { "Path already exists: $path" }
+        require(dir.mkdirs()) { "Failed to create folder: $path" }
+        return dir.toEntry(root)
+    }
+
     fun delete(root: File, path: String, recursive: Boolean = false): Boolean {
         require(path.isNotBlank() && path != ".") { "Refusing to delete workspace root" }
         val rootFile = root.canonicalFile
-        val file = resolvePath(root, path)
-        requireNotRoot(file, rootFile)
-        if (!file.exists()) return false
-        return if (file.isDirectory) {
+        val leaf = resolveLeafNoFollow(root, path)
+        val leafPath = leaf.toPath()
+        if (!Files.exists(leafPath, LinkOption.NOFOLLOW_LINKS)) return false
+        // Delete a symlink entry as the link itself — never follow it to (and recurse into) its
+        // target, which would silently destroy a different, in-root entry the user never selected.
+        if (Files.isSymbolicLink(leafPath)) {
+            Files.delete(leafPath)
+            return true
+        }
+        requireNotRoot(leaf, rootFile)
+        return if (leaf.isDirectory) {
             require(recursive) { "Directory delete requires recursive = true" }
-            deleteRecursivelyNoFollow(rootFile, file)
+            deleteRecursivelyNoFollow(rootFile, leaf)
             true
         } else {
-            file.delete()
+            leaf.delete()
         }
     }
 
     fun move(root: File, source: String, target: String, overwrite: Boolean = false): WorkspaceFileEntry {
         require(source.isNotBlank() && source != ".") { "Refusing to move workspace root" }
         val rootFile = root.canonicalFile
-        val sourceFile = resolvePath(root, source)
-        val targetFile = resolvePath(root, target)
-        requireNotRoot(sourceFile, rootFile)
-        requireNotRoot(targetFile, rootFile)
-        require(sourceFile.exists()) { "Source does not exist: $source" }
-        if (targetFile.exists()) {
+        // Resolve leaves without following them, so moving/overwriting a symlink entry acts on the link
+        // itself — never on what it points at. Entries report logical paths (see relativePath), so a
+        // listed `link -> real` round-tripped into move must relocate `link`, not `real`.
+        val sourceFile = resolveLeafNoFollow(root, source)
+        val targetFile = resolveLeafNoFollow(root, target)
+        val sourcePath = sourceFile.toPath()
+        require(Files.exists(sourcePath, LinkOption.NOFOLLOW_LINKS)) { "Source does not exist: $source" }
+        val targetPath = targetFile.toPath()
+        if (Files.exists(targetPath, LinkOption.NOFOLLOW_LINKS)) {
             require(overwrite) { "Target already exists: $target" }
-            if (targetFile.isDirectory) {
-                deleteRecursivelyNoFollow(rootFile, targetFile)
-            } else {
-                targetFile.delete()
+            when {
+                Files.isSymbolicLink(targetPath) -> Files.delete(targetPath)
+                targetFile.isDirectory -> deleteRecursivelyNoFollow(rootFile, targetFile)
+                else -> targetFile.delete()
             }
         }
         targetFile.parentFile?.mkdirs()
@@ -101,7 +119,7 @@ class WorkspaceFileSystem(
         val matcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
         return walk(start) { paths ->
             paths
-                .filter { Files.isRegularFile(it) || Files.isDirectory(it) }
+                .filter { (Files.isRegularFile(it) || Files.isDirectory(it)) && staysWithinRoot(it, root) }
                 .filter { matcher.matches(root.toPath().relativize(it).normalizeForMatch()) }
                 .take(config.maxListEntries)
                 .map { it.toFile().toEntry(root) }
@@ -129,7 +147,7 @@ class WorkspaceFileSystem(
         val results = mutableListOf<WorkspaceSearchMatch>()
         walk(start) { paths ->
             paths
-                .filter { Files.isRegularFile(it) }
+                .filter { Files.isRegularFile(it) && staysWithinRoot(it, root) }
                 .forEach { path ->
                     if (results.size >= config.maxSearchResults) return@forEach
                     if (includeMatcher != null &&
@@ -193,6 +211,19 @@ class WorkspaceFileSystem(
         return true
     }
 
+    // True if a walked entry, with all symlinks resolved, stays within the workspace root. The
+    // walk-based readers (glob/grep) surface raw filesystem entries and bypass resolvePath's per-leaf
+    // containment, so without this a leaf symlink pointing outside the root would be listed or read
+    // and — because entries now report logical (in-root) paths — masked as in-root content. Files.walk
+    // never descends symlinked dirs, so only a leaf symlink can escape; non-symlinks are always in-root
+    // and skip the extra realpath syscall.
+    private fun staysWithinRoot(candidate: Path, root: File): Boolean {
+        if (!Files.isSymbolicLink(candidate)) return true
+        val real = runCatching { candidate.toRealPath() }.getOrNull() ?: return false
+        val rootReal = root.canonicalFile.toPath()
+        return real == rootReal || real.startsWith(rootReal)
+    }
+
     private fun requirePathUnderRoot(candidate: Path, rootPath: Path) {
         val realPath = candidate.toRealPath(LinkOption.NOFOLLOW_LINKS)
         require(realPath == rootPath || realPath.startsWith(rootPath)) {
@@ -219,6 +250,22 @@ class WorkspaceFileSystem(
         return target
     }
 
+    // Resolve a path's parent canonically (enforcing workspace-root containment) then attach the
+    // final segment WITHOUT canonicalizing it, so a leaf symlink resolves to the link itself rather
+    // than its target. Used by delete so removing a symlink entry removes the link, not what it
+    // points at. The leaf must be a single safe segment — separators were already split off and
+    // `.`/`..`/null are rejected — and the parent is bounded by resolvePath.
+    private fun resolveLeafNoFollow(root: File, path: String): File {
+        val normalized = path.replace('\\', '/').trim().trim('/').ifBlank { "." }
+        require(!normalized.contains('\u0000')) { "Path contains invalid character" }
+        require(normalized != ".") { "Refusing to operate on workspace root" }
+        val leafName = normalized.substringAfterLast('/')
+        require(leafName.isNotEmpty() && leafName != "." && leafName != "..") { "Invalid path: $path" }
+        val parentRel = normalized.substringBeforeLast('/', "")
+        val parent = resolvePath(root, parentRel)
+        return File(parent, leafName)
+    }
+
     fun resolve(root: File, path: String): File = resolvePath(root, path)
 
     private fun File.toEntry(root: File): WorkspaceFileEntry = WorkspaceFileEntry(
@@ -229,8 +276,13 @@ class WorkspaceFileSystem(
         updatedAt = lastModified(),
     )
 
+    // The entry path is the logical location under the canonical root, NOT the canonicalized target.
+    // Canonicalizing here would make a symlink entry report (and operations target) what it points at
+    // instead of the link itself — e.g. a `link -> real` listing would show `real`, so deleting the
+    // link would wipe `real`. Containment is enforced by resolvePath/deleteRecursivelyNoFollow, not
+    // by this display string, so the logical path is both safe and what the user actually sees.
     private fun File.relativePath(root: File): String =
-        canonicalFile.relativeTo(root.canonicalFile).path.replace(File.separatorChar, '/')
+        relativeTo(root.canonicalFile).path.replace(File.separatorChar, '/')
 
     private fun Path.normalizeForMatch(): Path =
         FileSystems.getDefault().getPath(relativeToString())

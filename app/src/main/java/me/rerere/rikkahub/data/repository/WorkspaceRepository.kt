@@ -261,6 +261,15 @@ class WorkspaceRepository(
         manager.writeText(workspace.root, path, text, overwrite)
     }
 
+    suspend fun createFolder(
+        id: String,
+        path: String,
+    ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
+        manager.mkdir(workspace.root, path)
+    }
+
     suspend fun deleteFile(
         id: String,
         area: WorkspaceStorageArea,

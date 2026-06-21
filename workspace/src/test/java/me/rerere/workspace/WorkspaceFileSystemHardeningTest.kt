@@ -89,6 +89,80 @@ class WorkspaceFileSystemHardeningTest {
     }
 
     @Test
+    fun `delete of an in-root symlink removes only the link and preserves its in-root target`() {
+        // Regression: a `link -> real` entry lists with its own name but resolved to `real`, so the
+        // file browser's delete followed the link and wiped the (separately visible) `real` dir.
+        val root = Files.createTempDirectory("workspace-delete-inroot-symlink").toFile()
+        val realDir = File(root, "real").apply { mkdirs() }
+        File(realDir, "keep.txt").writeText("keep")
+        Files.createSymbolicLink(File(root, "link").toPath(), realDir.toPath())
+
+        assertTrue(fs.delete(root, "link", recursive = true))
+
+        assertFalse("the symlink itself must be removed", File(root, "link").exists())
+        assertTrue("the symlink's in-root target must survive", realDir.exists())
+        assertEquals("keep", File(realDir, "keep.txt").readText())
+    }
+
+    @Test
+    fun `move of an in-root symlink moves the link and preserves its in-root target`() {
+        // Entries report logical paths, so a listed `link -> real` round-tripped into move must
+        // relocate the link, not follow it and rename the (separately visible) `real` dir.
+        val root = Files.createTempDirectory("workspace-move-inroot-symlink").toFile()
+        val realDir = File(root, "real").apply { mkdirs() }
+        File(realDir, "keep.txt").writeText("keep")
+        Files.createSymbolicLink(File(root, "link").toPath(), realDir.toPath())
+
+        fs.move(root, "link", "moved")
+
+        assertFalse("the original link path must be gone", File(root, "link").exists())
+        assertTrue(
+            "moved must be the relocated symlink",
+            Files.isSymbolicLink(File(root, "moved").toPath()),
+        )
+        assertTrue("the symlink's in-root target must survive", realDir.exists())
+        assertEquals("keep", File(realDir, "keep.txt").readText())
+    }
+
+    @Test
+    fun `grep does not read through a symlink escaping the workspace root`() {
+        val root = Files.createTempDirectory("workspace-grep-symlink").toFile()
+        val outside = Files.createTempDirectory("workspace-grep-outside").toFile()
+        File(outside, "secret.txt").writeText("TOPSECRET marker")
+        Files.createSymbolicLink(File(root, "leak.txt").toPath(), File(outside, "secret.txt").toPath())
+
+        val matches = fs.grep(root, "TOPSECRET")
+
+        assertTrue("grep must not surface content read through an escaping symlink", matches.isEmpty())
+        assertEquals("secret outside file must be untouched", "TOPSECRET marker", File(outside, "secret.txt").readText())
+    }
+
+    @Test
+    fun `glob does not surface a symlink escaping the workspace root`() {
+        val root = Files.createTempDirectory("workspace-glob-symlink").toFile()
+        val outside = Files.createTempDirectory("workspace-glob-outside").toFile()
+        File(outside, "secret.txt").writeText("x")
+        File(root, "real.txt").writeText("y")
+        Files.createSymbolicLink(File(root, "leak.txt").toPath(), File(outside, "secret.txt").toPath())
+
+        val paths = fs.glob(root, "*.txt").map { it.path }.toSet()
+
+        assertTrue("an in-root file is found", paths.contains("real.txt"))
+        assertFalse("an escaping symlink must not be surfaced", paths.contains("leak.txt"))
+    }
+
+    @Test
+    fun `list reports a symlink entry by its own path not the resolved target`() {
+        val root = Files.createTempDirectory("workspace-list-symlink").toFile()
+        val realDir = File(root, "real").apply { mkdirs() }
+        Files.createSymbolicLink(File(root, "link").toPath(), realDir.toPath())
+
+        val paths = fs.list(root).map { it.path }.toSet()
+        assertTrue("symlink must list by its own path", paths.contains("link"))
+        assertTrue(paths.contains("real"))
+    }
+
+    @Test
     fun `trailing slash child paths stay within workspace`() {
         val root = Files.createTempDirectory("workspace-trailing-slash").toFile()
         File(root, "dir").mkdir()

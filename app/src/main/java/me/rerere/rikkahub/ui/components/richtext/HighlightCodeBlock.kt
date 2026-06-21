@@ -100,6 +100,9 @@ fun HighlightCodeBlock(
         fontSize = 12.sp,
         lineHeight = 16.sp,
     ),
+    // Per-call overrides; null = follow the user's global display settings.
+    forceWrap: Boolean? = null,
+    forceLineNumbers: Boolean? = null,
 ) {
     val darkMode = LocalDarkMode.current
     val colorPalette = if (darkMode) AtomOneDarkPalette else AtomOneLightPalette
@@ -118,8 +121,8 @@ fun HighlightCodeBlock(
     var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
         mutableStateOf(!settings.displaySetting.codeBlockAutoCollapse)
     }
-    val autoWrap = settings.displaySetting.codeBlockAutoWrap
-    val showLineNumbers = settings.displaySetting.showLineNumbers
+    val autoWrap = forceWrap ?: settings.displaySetting.codeBlockAutoWrap
+    val showLineNumbers = forceLineNumbers ?: settings.displaySetting.showLineNumbers
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")

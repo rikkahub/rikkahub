@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -309,6 +311,34 @@ class ChatVM(
             val updatedConversation = conversation.value.copy(title = title)
             chatService.saveConversation(_conversationId, updatedConversation)
         }
+    }
+
+    private val ensureWorkspaceMutex = Mutex()
+
+    /**
+     * Lazily ensure the assistant has a workspace, creating + assigning one on first use (no
+     * cold-start provisioning at app launch). Returns the workspace id to open — drives the chat
+     * folder shortcut so pressing it always lands in a real workspace. Single-flight via the mutex:
+     * the lock serializes concurrent presses, and [settingsStore.update] sets `settingsFlow.value`
+     * synchronously before persisting, so the next caller re-reads the just-assigned `workspaceId`
+     * from live settings — two quick taps can't each create + assign a separate workspace. Reading
+     * live settings each call (no memo) also means a later workspace deletion/reassignment can't
+     * strand the shortcut on a stale id.
+     */
+    suspend fun ensureWorkspaceId(assistantId: Uuid): String = ensureWorkspaceMutex.withLock {
+        val assistant = settings.value.assistants.find { it.id == assistantId }
+            ?: error("Assistant not found")
+        assistant.workspaceId?.let { return@withLock it.toString() }
+        val workspace = workspaceRepository.create(assistant.name)
+        val newId = Uuid.parse(workspace.id)
+        settingsStore.update { s ->
+            s.copy(
+                assistants = s.assistants.map {
+                    if (it.id == assistantId) it.copy(workspaceId = newId) else it
+                }
+            )
+        }
+        workspace.id
     }
 
     fun deleteConversation(conversation: Conversation) {

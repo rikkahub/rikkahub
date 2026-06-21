@@ -72,6 +72,9 @@ class WorkspaceManager(
         charset: Charset = StandardCharsets.UTF_8,
     ): WorkspaceFileEntry = fileSystem.writeText(filesDir(root), path, text, overwrite, charset)
 
+    fun mkdir(root: String, path: String): WorkspaceFileEntry =
+        fileSystem.mkdir(filesDir(root), path)
+
     fun deleteFile(
         root: String,
         path: String,
