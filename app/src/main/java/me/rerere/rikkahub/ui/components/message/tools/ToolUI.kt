@@ -97,6 +97,7 @@ object ToolUIRegistry {
             ClipboardToolUI,
             TextToSpeechToolUI,
             UseSkillToolUI,
+            GenerateImageToolUI,
             EditFileToolUI,
             TaskToolUI,
         ).forEach { put(it.toolName, it) }

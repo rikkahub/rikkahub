@@ -95,6 +95,8 @@ internal fun SearchServiceOptions.redactSecrets(): SearchServiceOptions = when (
     is SearchServiceOptions.CustomJsOptions -> this
     // refreshToken is @Transient (never serialized), so there's nothing persisted to redact.
     is SearchServiceOptions.GoogleSearchOptions -> this
+    // accessToken is @Transient (never serialized), so there's nothing persisted to redact.
+    is SearchServiceOptions.CodexSearchOptions -> this
 }
 
 internal fun TTSProviderSetting.redactSecrets(): TTSProviderSetting = when (this) {

@@ -223,6 +223,8 @@ private fun SearchServiceOptionsEditor(
         }
         // No editable fields — the Gagy refresh token is injected live from the Google provider.
         is SearchServiceOptions.GoogleSearchOptions -> {}
+        // No editable fields — the ChatGPT access token is injected live from the ChatGPT provider.
+        is SearchServiceOptions.CodexSearchOptions -> {}
     }
 }
 

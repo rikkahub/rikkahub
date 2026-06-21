@@ -64,6 +64,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
                 is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
                 is SearchServiceOptions.GoogleSearchOptions -> GoogleSearchService
+                is SearchServiceOptions.CodexSearchOptions -> CodexSearchService
             } as SearchService<T>
         }
 
@@ -168,6 +169,7 @@ sealed class SearchServiceOptions {
             TinyfishOptions::class to "Tinyfish",
             CustomJsOptions::class to "Custom JS",
             GoogleSearchOptions::class to "Google Search",
+            CodexSearchOptions::class to "Codex Search",
         )
     }
 
@@ -206,6 +208,15 @@ sealed class SearchServiceOptions {
         // The Gagy refresh token, injected live from the configured Google provider at
         // tool-creation time. @Transient so it is never persisted (no stale/duplicated credential).
         @Transient val refreshToken: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("codex_web_search")
+    data class CodexSearchOptions(
+        override val id: Uuid = Uuid.random(),
+        // The ChatGPT (Codex) access token, injected live from the configured ChatGPT provider at
+        // tool-creation time. @Transient so it is never persisted (no stale/duplicated credential).
+        @Transient val accessToken: String = "",
     ) : SearchServiceOptions()
 
     @Serializable

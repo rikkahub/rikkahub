@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.ui.components.message.tools
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -22,6 +24,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Clipboard
@@ -38,6 +41,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.common.http.jsonPrimitiveOrNull
@@ -320,5 +324,43 @@ object UseSkillToolUI : ToolUIRenderer {
         val skillName = context.arguments.getStringContent("name") ?: ""
         val path = context.arguments.getStringContent("path")
         return if (path != null) "Skill: $skillName / $path" else "Skill: $skillName"
+    }
+}
+
+/**
+ * Image generation: the title carries the prompt; the summary renders the generated image(s) inline
+ * (the Image parts in the tool output).
+ */
+object GenerateImageToolUI : ToolUIRenderer {
+    override val toolName: String = "generate_image"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.MagicWand01
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        val prompt = context.arguments.getStringContent("prompt")?.let {
+            if (it.length > 24) it.take(24) + "…" else it
+        } ?: ""
+        return "Generate image: $prompt"
+    }
+
+    private fun images(context: ToolUIContext): List<UIMessagePart.Image> =
+        context.tool.output.filterIsInstance<UIMessagePart.Image>()
+
+    override fun hasSummary(context: ToolUIContext): Boolean = images(context).isNotEmpty()
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            images(context).forEach { image ->
+                ZoomableAsyncImage(
+                    model = image.url,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                )
+            }
+        }
     }
 }

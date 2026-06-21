@@ -16,15 +16,20 @@ fun Settings.hasAntigravity(): Boolean = antigravityProvider() != null
 fun Settings.antigravityRefreshToken(): String? = antigravityProvider()?.antigravityRefreshToken
 
 /**
- * [options] with the live Antigravity refresh token injected for Google Search (the token is @Transient,
- * never persisted — it must be filled from the current provider at use time); unchanged for other engines.
- * Use this everywhere a search service is about to run (agent tool AND the settings test button).
+ * [options] with the live managed credential injected for the engine that needs one (the credential is
+ * @Transient, never persisted — it must be filled from the current provider at use time): the Gagy
+ * refresh token for Google Search, the ChatGPT access token for Codex Search; unchanged for other
+ * engines. Use this everywhere a search service is about to run (agent tool AND the settings test button).
  */
 fun Settings.resolveSearchOptions(options: SearchServiceOptions): SearchServiceOptions =
-    if (options is SearchServiceOptions.GoogleSearchOptions) {
-        options.copy(refreshToken = antigravityRefreshToken().orEmpty())
-    } else {
-        options
+    when (options) {
+        is SearchServiceOptions.GoogleSearchOptions ->
+            options.copy(refreshToken = antigravityRefreshToken().orEmpty())
+
+        is SearchServiceOptions.CodexSearchOptions ->
+            options.copy(accessToken = chatGptAccessToken().orEmpty())
+
+        else -> options
     }
 
 /**

@@ -110,6 +110,8 @@ import me.rerere.rikkahub.data.ai.subagent.SubagentAutomationLease
 import me.rerere.rikkahub.data.ai.subagent.buildSpawnTool
 import me.rerere.rikkahub.data.ai.subagent.subagentBoardTools
 import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.ai.tools.createFetchTools
+import me.rerere.rikkahub.data.ai.tools.createImageGenTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
@@ -128,6 +130,7 @@ import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getAssistantByIdOrCurrent
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.hasChatGpt
 import me.rerere.rikkahub.data.datastore.getChatModelForAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.AGENT_EVENT_ID_METADATA_KEY
@@ -1939,6 +1942,13 @@ class ChatService(
                     buildList {
                         if (settings.enableWebSearch) {
                             addAll(createSearchTools(settings))
+                        }
+                        // Deferred Codex tools — present only when a ChatGPT provider is configured, so
+                        // a chat with a model that lacks native web-fetch / image-gen (e.g. Anthropic)
+                        // can still reach those capabilities through the Codex backend.
+                        if (settings.hasChatGpt()) {
+                            addAll(createFetchTools(settings))
+                            addAll(createImageGenTools(settings, filesManager))
                         }
                         addAll(localTools.getTools(assistant.localTools))
                         addAll(createWorkspaceTools(assistant.workspaceId?.toString(), conversationId, workspaceRepository))

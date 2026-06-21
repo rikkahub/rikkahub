@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.fold
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,20 +54,12 @@ import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import kotlin.time.Clock
-import kotlin.uuid.Uuid
 
 private const val TAG = "ChatGPTProvider"
 
-// codex_cli_rs is the originator the ChatGPT (Codex) backend gates on; a plain OpenAI-compatible
-// client (without it) is rejected. The client_version must be RECENT — an old value makes the models
-// endpoint return an EMPTY list (verified live: client_version=0.20.0 -> {"models":[]}). Keep it
-// aligned with a current codex CLI release.
-private const val CHATGPT_ORIGINATOR = "codex_cli_rs"
-private const val CHATGPT_CLIENT_VERSION = "0.139.0"
-
-// User-Agent mirroring the codex CLI (`codex_cli_rs/<version>`), aligned with the `originator` header
-// so the request presents as codex end-to-end (instead of the default OkHttp UA).
-private const val CHATGPT_USER_AGENT = "codex_cli_rs/$CHATGPT_CLIENT_VERSION"
+// CHATGPT_ORIGINATOR / CHATGPT_CLIENT_VERSION / CHATGPT_USER_AGENT live in ChatGptCodex.kt (same
+// package): the chat path here and the standalone web-search / fetch / image-gen calls share one
+// wire fingerprint and one set of header logic (applyCodexHeaders).
 
 private const val EXPIRED_TOKEN_MESSAGE =
     "ChatGPT access token expired — paste a new one in provider settings."
@@ -98,12 +91,10 @@ class ChatGPTProvider(
 
     private val responseAPI = ResponseAPI(client, KeyRoulette.default(), streamClient)
 
-    // Used verbatim — see KeyRoulette warning above. A fresh session_id per request matches codex-cli.
-    private fun Request.Builder.applyChatGptHeaders(p: ProviderSetting.ChatGPT): Request.Builder = this
-        .addHeader("Authorization", "Bearer ${p.accessToken}")
-        .addHeader("originator", CHATGPT_ORIGINATOR)
-        .addHeader("User-Agent", CHATGPT_USER_AGENT)
-        .addHeader("session_id", Uuid.random().toString())
+    // Used verbatim — see KeyRoulette warning above. Delegates to the shared codex header logic
+    // (Authorization + originator + User-Agent + a fresh session_id per request).
+    private fun Request.Builder.applyChatGptHeaders(p: ProviderSetting.ChatGPT): Request.Builder =
+        applyCodexHeaders(p.accessToken)
 
     // Fail closed on a token we can PROVE is expired: throw the typed expiry message before any
     // network call, so the user sees a clear "paste a new one" instead of a raw 401. A non-JWT /
@@ -132,11 +123,24 @@ class ChatGPTProvider(
             parseChatGptModels(response.body.string())
         }
 
+    // Image generation via the Codex backend's hosted image_generation tool (gpt-image-2), reusing
+    // the same paste-only token + wire fingerprint as chat. Uses codexGenerateImage's dedicated
+    // long-timeout client (image rendering can take tens of seconds) rather than the chat client.
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): Flow<ImageGenerationItem> {
-        error("ChatGPT provider does not support image generation")
+    ): Flow<ImageGenerationItem> = flow {
+        require(providerSetting is ProviderSetting.ChatGPT) { "Expected ChatGPT provider setting" }
+        requireNonExpired(providerSetting)
+        val results = withContext(Dispatchers.IO) {
+            codexGenerateImage(
+                accessToken = providerSetting.accessToken,
+                prompt = params.prompt,
+                baseUrl = providerSetting.baseUrl,
+                model = params.model.modelId,
+            )
+        }
+        results.forEach { base64 -> emit(ImageGenerationItem(data = base64, mimeType = "image/png")) }
     }
 
     override suspend fun generateText(

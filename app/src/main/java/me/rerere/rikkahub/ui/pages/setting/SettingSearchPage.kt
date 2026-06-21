@@ -62,6 +62,7 @@ import me.rerere.rikkahub.ui.ext.plus
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.datastore.hasAntigravity
+import me.rerere.rikkahub.data.datastore.hasChatGpt
 import me.rerere.search.SearchServiceOptions
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -178,6 +179,7 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
     if (showAddDialog) {
         AddProviderDialog(
             hasAntigravity = settings.hasAntigravity(),
+            hasChatGpt = settings.hasChatGpt(),
             onDismiss = { showAddDialog = false },
             onConfirm = { options ->
                 showAddDialog = false
@@ -197,13 +199,19 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
 @Composable
 private fun AddProviderDialog(
     hasAntigravity: Boolean,
+    hasChatGpt: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (SearchServiceOptions) -> Unit
 ) {
-    // "Google Search" rides the Gagy login — hide it unless Gagy is configured.
-    val types = remember(hasAntigravity) {
+    // "Google Search" rides the Gagy login and "Codex Search" the ChatGPT login — hide each unless
+    // its provider is configured.
+    val types = remember(hasAntigravity, hasChatGpt) {
         SearchServiceOptions.TYPES.keys.filter {
-            hasAntigravity || it != SearchServiceOptions.GoogleSearchOptions::class
+            when (it) {
+                SearchServiceOptions.GoogleSearchOptions::class -> hasAntigravity
+                SearchServiceOptions.CodexSearchOptions::class -> hasChatGpt
+                else -> true
+            }
         }
     }
     var selectedType by remember(types) {

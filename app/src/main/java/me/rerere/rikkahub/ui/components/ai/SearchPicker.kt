@@ -50,6 +50,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.hasAntigravity
+import me.rerere.rikkahub.data.datastore.hasChatGpt
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -260,10 +261,15 @@ private fun AppSearchSettings(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Hide a Google Search engine unless Gagy is configured (it rides that login). Keep the
-        // ORIGINAL index so selection/highlight still map to settings.searchServices.
+        // Hide a managed-login engine unless its provider is configured (Google Search rides Gagy,
+        // Codex Search rides ChatGPT). Keep the ORIGINAL index so selection/highlight still map to
+        // settings.searchServices.
         val visibleServices = settings.searchServices.withIndex().filter { (_, service) ->
-            settings.hasAntigravity() || service !is SearchServiceOptions.GoogleSearchOptions
+            when (service) {
+                is SearchServiceOptions.GoogleSearchOptions -> settings.hasAntigravity()
+                is SearchServiceOptions.CodexSearchOptions -> settings.hasChatGpt()
+                else -> true
+            }
         }
         items(visibleServices, key = { it.value.id }) { indexed ->
             val index = indexed.index

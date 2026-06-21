@@ -36,7 +36,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.withAntigravityImageModels
+import me.rerere.rikkahub.data.datastore.withManagedImageModels
 import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ImageUtils
@@ -114,7 +114,7 @@ internal fun ImageGenInputBar(
         ) {
             ModelSelector(
                 modelId = settings.imageGenerationModelId,
-                providers = settings.withAntigravityImageModels(),
+                providers = settings.withManagedImageModels(),
                 type = ModelType.IMAGE,
                 onlyIcon = true,
                 onSelect = { model ->

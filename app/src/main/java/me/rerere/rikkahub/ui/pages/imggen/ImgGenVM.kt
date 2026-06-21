@@ -28,7 +28,7 @@ import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.data.datastore.withAntigravityImageModels
+import me.rerere.rikkahub.data.datastore.withManagedImageModels
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.GenMediaRepository
@@ -199,7 +199,7 @@ class ImgGenVM(
                 _currentGeneratedImages.value = emptyList()
 
                 val settings = settingsStore.settingsFlow.first()
-                    .let { it.copy(providers = it.withAntigravityImageModels()) }
+                    .let { it.copy(providers = it.withManagedImageModels()) }
                 val model = settings.findModelById(settings.imageGenerationModelId)
                     ?: throw IllegalStateException("No model selected")
 
@@ -247,7 +247,7 @@ class ImgGenVM(
                 _currentGeneratedImages.value = emptyList()
 
                 val settings = settingsStore.settingsFlow.first()
-                    .let { it.copy(providers = it.withAntigravityImageModels()) }
+                    .let { it.copy(providers = it.withManagedImageModels()) }
                 val model = settings.findModelById(settings.imageGenerationModelId)
                     ?: throw IllegalStateException("No model selected")
 

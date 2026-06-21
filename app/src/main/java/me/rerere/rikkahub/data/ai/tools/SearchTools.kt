@@ -10,6 +10,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.hasAntigravity
+import me.rerere.rikkahub.data.datastore.hasChatGpt
 import me.rerere.rikkahub.data.datastore.resolveSearchOptions
 import me.rerere.common.json.JsonInstantPretty
 import me.rerere.common.time.toLocalString
@@ -26,9 +27,12 @@ private fun activeSearchOptions(settings: Settings): SearchServiceOptions {
     val selected = settings.searchServices.getOrElse(
         index = settings.searchServiceSelected,
         defaultValue = { SearchServiceOptions.DEFAULT })
-    // A Google Search engine left selected after Gagy was turned off would fail every search with
-    // "not configured" — fall back to the default engine so the agent's search tool keeps working.
+    // A managed-login engine left selected after its provider was removed would fail every search
+    // with "not configured" — fall back to the default engine so the agent's search tool keeps working.
     if (selected is SearchServiceOptions.GoogleSearchOptions && !settings.hasAntigravity()) {
+        return SearchServiceOptions.DEFAULT
+    }
+    if (selected is SearchServiceOptions.CodexSearchOptions && !settings.hasChatGpt()) {
         return SearchServiceOptions.DEFAULT
     }
     return settings.resolveSearchOptions(selected)
