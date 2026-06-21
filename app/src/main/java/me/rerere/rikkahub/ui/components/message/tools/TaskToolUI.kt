@@ -95,9 +95,11 @@ object TaskToolUI : ToolUIRenderer {
     @Composable
     override fun title(context: ToolUIContext): String {
         // The subagent the parent delegated to (the spawn tool's `subagent` arg) is the most
-        // useful label; fall back to a generic title when it is absent.
+        // useful label; fall back to a generic title when it is absent. Labelled "Subagent" (not
+        // "Task") so the delegation bubble doesn't read as the ToDo/task-board feature — matching the
+        // "Subagent" wording already used by this renderer's status/approval text and the settings UI.
         val sub = context.arguments.getStringContent("subagent")
-        return if (sub != null) "Task: $sub" else "Task"
+        return if (sub != null) "Subagent: $sub" else "Subagent"
     }
 
     override fun hasSummary(context: ToolUIContext): Boolean {

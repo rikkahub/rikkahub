@@ -64,7 +64,7 @@ class SpawnToolRenameMetamorphicTest {
      *  runtime; the production composable applies exactly this expression. */
     private fun titleOf(context: ToolUIContext): String {
         val sub = context.arguments.getStringContent("subagent")
-        return if (sub != null) "Task: $sub" else "Task"
+        return if (sub != null) "Subagent: $sub" else "Subagent"
     }
 
     private fun envelopeOutput(): List<UIMessagePart> {
