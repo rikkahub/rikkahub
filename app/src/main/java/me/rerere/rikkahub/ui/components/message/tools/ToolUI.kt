@@ -72,6 +72,14 @@ interface ToolUIRenderer {
     fun Summary(context: ToolUIContext) {
     }
 
+    /**
+     * Whether this renderer draws the tool's output [UIMessagePart.Image]s itself (in [Summary]).
+     * When true, the shared step wrapper suppresses its generic output-image thumbnail strip so the
+     * same image is not rendered twice (the renderer's own — typically larger — render is the single
+     * surface). Defaults to false: tools without a custom image render still get the generic strip.
+     */
+    val rendersOutputImages: Boolean get() = false
+
     /** 点击步骤后的详情, 渲染在 BottomSheet 内 */
     @Composable
     fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {

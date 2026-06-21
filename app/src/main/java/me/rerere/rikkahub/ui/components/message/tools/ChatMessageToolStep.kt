@@ -145,7 +145,9 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     renderer.Summary(context)
-                    if (images.isNotEmpty()) {
+                    // Skip the generic thumbnail strip when the renderer draws the output images
+                    // itself (e.g. generate_image) — otherwise the same image renders twice.
+                    if (images.isNotEmpty() && !renderer.rendersOutputImages) {
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.wrapContentWidth(),

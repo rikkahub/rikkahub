@@ -334,6 +334,10 @@ object UseSkillToolUI : ToolUIRenderer {
 object GenerateImageToolUI : ToolUIRenderer {
     override val toolName: String = "generate_image"
 
+    // Summary renders the generated images itself; suppress the wrapper's generic thumbnail strip so
+    // the image isn't drawn twice (big in Summary + a small duplicate below).
+    override val rendersOutputImages: Boolean = true
+
     override fun icon(context: ToolUIContext): ImageVector = HugeIcons.MagicWand01
 
     @Composable
