@@ -124,6 +124,55 @@ class MessageTest {
     }
 
     @Test
+    fun `limitContext must not start on an in-place executed-tool assistant turn`() {
+        // rikkahub merges a tool call + its result into ONE executed Tool part, so there is no
+        // separate UNEXECUTED tool-call message for the dependency loop to find. A cut landing on
+        // such an assistant turn previously made it message[0] -> a leading orphaned functionCall
+        // that every provider rejects (Gemini: "function call turn must come after a user/function
+        // response turn"; Claude: "messages.0.content.0.tool_use.id required"). The window must
+        // instead open at the preceding user turn.
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("u0"))),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("a0"))),
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("u1"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    // call + result merged into one EXECUTED Tool part (rikkahub's storage shape)
+                    UIMessagePart.Tool("call1", "search", "{}", listOf(UIMessagePart.Text("result"))),
+                    UIMessagePart.Text("here you go"),
+                )
+            ),
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("u2"))),
+        )
+
+        // size 2 cuts at index 3 (the executed-tool assistant turn); the fix walks back to u1.
+        val result = messages.limitContext(2)
+
+        assertEquals(MessageRole.USER, result.first().role)
+        assertEquals("u1", (result.first().parts.first() as UIMessagePart.Text).text)
+    }
+
+    @Test
+    fun `limitContext window always opens on a user turn`() {
+        // Invariant: whatever the cut index, the kept window's first message is a USER turn
+        // (unless it walks all the way to index 0). Covers cuts landing on assistant/tool turns.
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("q"))),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("a1"))),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("a2"))),
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("q2"))),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("a3"))),
+        )
+        for (n in 1..messages.size) {
+            val result = messages.limitContext(n)
+            if (result.isNotEmpty() && result !== messages) {
+                assertEquals("limitContext($n) must open on a user turn", MessageRole.USER, result.first().role)
+            }
+        }
+    }
+
+    @Test
     fun `limitContext with empty list should return empty list`() {
         val messages = emptyList<UIMessage>()
         val result = messages.limitContext(5)

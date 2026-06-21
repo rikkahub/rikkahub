@@ -61,6 +61,7 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.ext.plus
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchService
+import me.rerere.rikkahub.data.datastore.hasAntigravity
 import me.rerere.search.SearchServiceOptions
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -176,6 +177,7 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
 
     if (showAddDialog) {
         AddProviderDialog(
+            hasAntigravity = settings.hasAntigravity(),
             onDismiss = { showAddDialog = false },
             onConfirm = { options ->
                 showAddDialog = false
@@ -194,11 +196,18 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
 
 @Composable
 private fun AddProviderDialog(
+    hasAntigravity: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (SearchServiceOptions) -> Unit
 ) {
-    var selectedType by remember {
-        mutableStateOf(SearchServiceOptions.TYPES.keys.first())
+    // "Google Search" rides the Gagy login — hide it unless Gagy is configured.
+    val types = remember(hasAntigravity) {
+        SearchServiceOptions.TYPES.keys.filter {
+            hasAntigravity || it != SearchServiceOptions.GoogleSearchOptions::class
+        }
+    }
+    var selectedType by remember(types) {
+        mutableStateOf(types.first())
     }
 
     AlertDialog(
@@ -210,7 +219,7 @@ private fun AddProviderDialog(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(SearchServiceOptions.TYPES.keys.toList()) { type ->
+                items(types) { type ->
                     val name = SearchServiceOptions.TYPES[type] ?: "Unknown"
                     val isSelected = selectedType == type
                     Card(

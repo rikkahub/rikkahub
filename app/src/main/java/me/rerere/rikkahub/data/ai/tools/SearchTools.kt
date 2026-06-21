@@ -9,6 +9,8 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.hasAntigravity
+import me.rerere.rikkahub.data.datastore.resolveSearchOptions
 import me.rerere.common.json.JsonInstantPretty
 import me.rerere.common.time.toLocalString
 import me.rerere.search.SearchService
@@ -16,7 +18,25 @@ import me.rerere.search.SearchServiceOptions
 import java.time.LocalDate
 import kotlin.uuid.Uuid
 
+/**
+ * The active search service options, with the live Gagy refresh token injected for Google Search
+ * (the token is @Transient, never persisted — it must be filled from the current provider each time).
+ */
+private fun activeSearchOptions(settings: Settings): SearchServiceOptions {
+    val selected = settings.searchServices.getOrElse(
+        index = settings.searchServiceSelected,
+        defaultValue = { SearchServiceOptions.DEFAULT })
+    // A Google Search engine left selected after Gagy was turned off would fail every search with
+    // "not configured" — fall back to the default engine so the agent's search tool keeps working.
+    if (selected is SearchServiceOptions.GoogleSearchOptions && !settings.hasAntigravity()) {
+        return SearchServiceOptions.DEFAULT
+    }
+    return settings.resolveSearchOptions(selected)
+}
+
 fun createSearchTools(settings: Settings): Set<Tool> {
+    val options = activeSearchOptions(settings)
+    val service = SearchService.getService(options)
     return buildSet {
         add(
             Tool(
@@ -40,17 +60,9 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                     The population is about 2.1 million. [citation,example.com](abc123) [citation,example2.com](def456)
                     """.trimIndent(),
                 parameters = {
-                    val options = settings.searchServices.getOrElse(
-                        index = settings.searchServiceSelected,
-                        defaultValue = { SearchServiceOptions.DEFAULT })
-                    val service = SearchService.getService(options)
                     service.parameters(options)
                 },
                 execute = {
-                    val options = settings.searchServices.getOrElse(
-                        index = settings.searchServiceSelected,
-                        defaultValue = { SearchServiceOptions.DEFAULT })
-                    val service = SearchService.getService(options)
                     val result = service.search(
                         params = it.jsonObject,
                         commonOptions = settings.searchCommonOptions,
@@ -73,10 +85,6 @@ fun createSearchTools(settings: Settings): Set<Tool> {
             )
         )
 
-        val options = settings.searchServices.getOrElse(
-            index = settings.searchServiceSelected,
-            defaultValue = { SearchServiceOptions.DEFAULT })
-        val service = SearchService.getService(options)
         if (service.scrapingParameters(options) != null) {
             add(
                 Tool(
@@ -87,17 +95,9 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                         Avoid using it for common questions unless the user asks.
                         """.trimIndent(),
                     parameters = {
-                        val options = settings.searchServices.getOrElse(
-                            index = settings.searchServiceSelected,
-                            defaultValue = { SearchServiceOptions.DEFAULT })
-                        val service = SearchService.getService(options)
                         service.scrapingParameters(options)
                     },
                     execute = {
-                        val options = settings.searchServices.getOrElse(
-                            index = settings.searchServiceSelected,
-                            defaultValue = { SearchServiceOptions.DEFAULT })
-                        val service = SearchService.getService(options)
                         val result = service.scrape(
                             params = it.jsonObject,
                             commonOptions = settings.searchCommonOptions,

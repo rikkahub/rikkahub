@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.InputSchema
@@ -62,6 +63,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.GrokOptions -> GrokSearchService
                 is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
                 is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
+                is SearchServiceOptions.GoogleSearchOptions -> GoogleSearchService
             } as SearchService<T>
         }
 
@@ -165,6 +167,7 @@ sealed class SearchServiceOptions {
             GrokOptions::class to "Grok",
             TinyfishOptions::class to "Tinyfish",
             CustomJsOptions::class to "Custom JS",
+            GoogleSearchOptions::class to "Google Search",
         )
     }
 
@@ -194,6 +197,15 @@ sealed class SearchServiceOptions {
     data class ExaOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("antigravity_google_search")
+    data class GoogleSearchOptions(
+        override val id: Uuid = Uuid.random(),
+        // The Gagy refresh token, injected live from the configured Google provider at
+        // tool-creation time. @Transient so it is never persisted (no stale/duplicated credential).
+        @Transient val refreshToken: String = "",
     ) : SearchServiceOptions()
 
     @Serializable

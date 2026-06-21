@@ -27,6 +27,7 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.withAntigravityImageModels
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
@@ -66,7 +67,7 @@ internal fun ImageGenSettingsSheet(
             ) {
                 ModelSelector(
                     modelId = settings.imageGenerationModelId,
-                    providers = settings.providers,
+                    providers = settings.withAntigravityImageModels(),
                     type = ModelType.IMAGE,
                     onlyIcon = false,
                     onSelect = { model ->

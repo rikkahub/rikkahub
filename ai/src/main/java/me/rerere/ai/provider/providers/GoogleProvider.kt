@@ -2,6 +2,7 @@ package me.rerere.ai.provider.providers
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -41,6 +43,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.jsonObjectHasField
 import me.rerere.ai.provider.runChatProbe
 import me.rerere.ai.provider.runModelListProbe
+import me.rerere.ai.provider.toTransportError
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.GoogleThoughtMetadata
@@ -97,8 +100,14 @@ class GoogleProvider(
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
+    private val antigravityAuth by lazy { AntigravityGoogleAuth(client) }
 
     private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
+        if (providerSetting.antigravity) {
+            // The managed backend exposes a single internal method endpoint, not models/<id>:method.
+            val method = path.substringAfterLast(":") // generateContent / streamGenerateContent
+            return "https://${antigravityAuth.host()}/v1internal:$method".toHttpUrl()
+        }
         return if (!providerSetting.vertexAI) {
             "${providerSetting.baseUrl}/$path".toHttpUrl()
         } else if (providerSetting.useServiceAccount) {
@@ -112,6 +121,13 @@ class GoogleProvider(
         providerSetting: ProviderSetting.Google,
         request: Request
     ): Request {
+        if (providerSetting.antigravity) {
+            val access = antigravityAuth.accessToken(providerSetting.antigravityRefreshToken)
+            return request.newBuilder()
+                .addHeader("Authorization", "Bearer $access")
+                .header("User-Agent", antigravityAuth.userAgent())
+                .build()
+        }
         return if (providerSetting.vertexAI && providerSetting.useServiceAccount) {
             val accessToken = serviceAccountTokenProvider.fetchAccessToken(
                 serviceAccountEmail = providerSetting.serviceAccountEmail.trim(),
@@ -140,10 +156,36 @@ class GoogleProvider(
     // which is exactly why Google MUST override the default probe: the swallow-to-empty listModels
     // can't tell a wrong key from a wrong endpoint.
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
-        probeModelList(providerSetting).models
+        if (providerSetting.antigravity) antigravityAuth.catalog()
+        else probeModelList(providerSetting).models
+
+    // Gagy has no /models endpoint; validate the refresh token via project resolution and
+    // report success/failure in the ProbeOutcome shape the connection classifier consumes.
+    private suspend fun antigravityProbe(providerSetting: ProviderSetting.Google): ProbeOutcome =
+        try {
+            val access = antigravityAuth.accessToken(providerSetting.antigravityRefreshToken)
+            antigravityAuth.project(access)
+            ProbeOutcome.Http(200, ProbeOutcome.Body.ChatOk)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: HttpException) {
+            // Reached the backend but it rejected us (bad/expired token, no access) — auth failure.
+            ProbeOutcome.Http(401, ProbeOutcome.Body.ProviderError)
+        } catch (e: Throwable) {
+            ProbeOutcome.Transport(e.toTransportError())
+        }
 
     override suspend fun probeModelList(providerSetting: ProviderSetting.Google): ModelListProbe =
         withContext(Dispatchers.IO) {
+            if (providerSetting.antigravity) {
+                val outcome = antigravityProbe(providerSetting)
+                val ok = outcome is ProbeOutcome.Http && outcome.status == 200
+                val catalog = antigravityAuth.catalog()
+                return@withContext ModelListProbe(
+                    outcome = if (ok) ProbeOutcome.Http(200, ProbeOutcome.Body.ModelList(catalog.size)) else outcome,
+                    models = if (ok) catalog else emptyList(),
+                )
+            }
             val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
             val request = transformRequest(
                 providerSetting = providerSetting,
@@ -159,6 +201,9 @@ class GoogleProvider(
         providerSetting: ProviderSetting.Google,
         modelId: String,
     ): ProbeOutcome = withContext(Dispatchers.IO) {
+        if (providerSetting.antigravity) {
+            return@withContext antigravityProbe(providerSetting)
+        }
         val path = if (providerSetting.vertexAI) {
             "publishers/google/models/$modelId:generateContent"
         } else {
@@ -213,12 +258,39 @@ class GoogleProvider(
         }
     }
 
+    // For gagy, wrap the bare Gemini body in the managed-backend envelope (resolving the
+    // OAuth access token + project). A no-op for the API-key / vertex paths.
+    private suspend fun maybeWrapEnvelope(
+        providerSetting: ProviderSetting.Google,
+        inner: JsonObject,
+        params: TextGenerationParams,
+    ): JsonObject {
+        if (!providerSetting.antigravity) return inner
+        val access = antigravityAuth.accessToken(providerSetting.antigravityRefreshToken)
+        val project = antigravityAuth.project(access)
+        val hasTools = params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+        return antigravityAuth.wrapEnvelope(inner, params.model.modelId, project, if (hasTools) "agent" else "chat")
+    }
+
+    // The managed backend wraps the Gemini response in {response: …}; unwrap it so the shared
+    // parser sees the same shape as the public API. A no-op for the API-key / vertex paths.
+    private fun ProviderSetting.Google.unwrapResponse(obj: JsonObject): JsonObject =
+        if (antigravity) obj["response"]?.jsonObject ?: obj else obj
+
     override suspend fun generateText(
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
-        val requestBody = buildCompletionRequestBody(messages, params)
+        val requestBody = maybeWrapEnvelope(
+            providerSetting,
+            buildCompletionRequestBody(
+                messages,
+                params,
+                requireToolCallId = providerSetting.antigravity && geminiRequiresToolCallId(params.model.modelId),
+            ),
+            params,
+        )
 
         val url = buildUrl(
             providerSetting = providerSetting,
@@ -247,7 +319,7 @@ class GoogleProvider(
         }
 
         val bodyStr = response.body.string()
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        val bodyJson = providerSetting.unwrapResponse(json.parseToJsonElement(bodyStr).jsonObject)
 
         parseGenerateContentResponse(bodyJson, params.model.modelId)
     }
@@ -291,7 +363,15 @@ class GoogleProvider(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
-        val requestBody = buildCompletionRequestBody(messages, params)
+        val requestBody = maybeWrapEnvelope(
+            providerSetting,
+            buildCompletionRequestBody(
+                messages,
+                params,
+                requireToolCallId = providerSetting.antigravity && geminiRequiresToolCallId(params.model.modelId),
+            ),
+            params,
+        )
 
         val url = buildUrl(
             providerSetting = providerSetting,
@@ -326,7 +406,7 @@ class GoogleProvider(
                 AiLog.event(TAG, type, id)
 
                 try {
-                    val jsonData = json.parseToJsonElement(data).jsonObject
+                    val jsonData = providerSetting.unwrapResponse(json.parseToJsonElement(data).jsonObject)
                     val emit = when (val outcome = googleStreamFrameOutcome(jsonData)) {
                         is GoogleStreamFrame.Terminate -> {
                             close(RuntimeException("Prompt feedback: ${outcome.reason}"))
@@ -427,7 +507,8 @@ class GoogleProvider(
 
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,
-        params: TextGenerationParams
+        params: TextGenerationParams,
+        requireToolCallId: Boolean,
     ): JsonObject = buildJsonObject {
         // System message if available
         val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
@@ -455,7 +536,11 @@ class GoogleProvider(
                     add(JsonPrimitive("IMAGE"))
                 })
             }
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
+            // GPT-OSS via the managed backend is an OpenAI model with no Gemini thinkingConfig
+            // support; the backend's translation layer 500s ("Unknown Error.") when it receives one.
+            // Gemini and Claude both accept it, so only skip it for gpt-oss.
+            val skipThinkingConfig = requireToolCallId && params.model.modelId.startsWith("gpt-oss-")
+            if (params.model.abilities.contains(ModelAbility.REASONING) && !skipThinkingConfig) {
                 put("thinkingConfig", buildJsonObject {
                     put("includeThoughts", true)
 
@@ -490,10 +575,12 @@ class GoogleProvider(
             }
         })
 
-        // Contents (user messages)
+        // Contents (user messages). Merge adjacent same-role turns so a model turn carrying a
+        // functionCall always follows a user/functionResponse turn — the Gemini ordering invariant
+        // that otherwise 400s on long / model-switched transcripts.
         put(
             "contents",
-            buildContents(messages)
+            mergeAdjacentSameRoleContents(buildContents(messages, requireToolCallId))
         )
 
         val hasFunctionTools = params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
@@ -689,13 +776,13 @@ class GoogleProvider(
         }
     }
 
-    private fun buildContents(messages: List<UIMessage>): JsonArray {
+    private fun buildContents(messages: List<UIMessage>, requireToolCallId: Boolean): JsonArray {
         return buildJsonArray {
             messages
                 .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
                 .forEach { message ->
                     if (message.role == MessageRole.ASSISTANT) {
-                        addModelMessage(message)
+                        addModelMessage(message, requireToolCallId)
                     } else {
                         addUserMessage(message)
                     }
@@ -703,7 +790,7 @@ class GoogleProvider(
         }
     }
 
-    private fun JsonArrayBuilder.addModelMessage(message: UIMessage) {
+    private fun JsonArrayBuilder.addModelMessage(message: UIMessage, requireToolCallId: Boolean) {
         val groups = groupPartsByToolBoundary(message.parts)
         val partsBuffer = mutableListOf<JsonObject>()
 
@@ -715,7 +802,7 @@ class GoogleProvider(
 
                 is PartGroup.Tools -> {
                     // 添加 functionCall 到 parts 缓冲
-                    group.tools.forEach { partsBuffer.add(it.toFunctionCallPart()) }
+                    group.tools.forEach { partsBuffer.add(it.toFunctionCallPart(requireToolCallId)) }
 
                     // 输出 model 消息
                     add(buildJsonObject {
@@ -728,7 +815,7 @@ class GoogleProvider(
                     add(buildJsonObject {
                         put("role", "user")
                         putJsonArray("parts") {
-                            group.tools.forEach { add(it.toFunctionResponsePart()) }
+                            group.tools.forEach { add(it.toFunctionResponsePart(requireToolCallId)) }
                         }
                     })
                 }
@@ -797,9 +884,12 @@ class GoogleProvider(
         else -> null
     }
 
-    private fun UIMessagePart.Tool.toFunctionCallPart() = buildJsonObject {
+    private fun UIMessagePart.Tool.toFunctionCallPart(requireToolCallId: Boolean) = buildJsonObject {
         put("functionCall", buildJsonObject {
             put("name", toolName)
+            // Claude / GPT-OSS via the managed backend require an explicit call id to pair the
+            // functionCall with its functionResponse; Gemini matches by order and must NOT get one.
+            if (requireToolCallId) put("id", normalizeGeminiToolCallId(toolCallId))
             put("args", inputAsJson())
         })
         metadataAs<GoogleThoughtMetadata>()?.thoughtSignature?.let {
@@ -807,9 +897,11 @@ class GoogleProvider(
         }
     }
 
-    private fun UIMessagePart.Tool.toFunctionResponsePart() = buildJsonObject {
+    private fun UIMessagePart.Tool.toFunctionResponsePart(requireToolCallId: Boolean) = buildJsonObject {
         put("functionResponse", buildJsonObject {
             put("name", toolName)
+            // Must echo the SAME id used on the functionCall above so the backend can pair them.
+            if (requireToolCallId) put("id", normalizeGeminiToolCallId(toolCallId))
             put("response", buildJsonObject {
                 put(
                     "result",
@@ -844,6 +936,10 @@ class GoogleProvider(
         val items = withContext(Dispatchers.IO) {
             require(providerSetting is ProviderSetting.Google) {
                 "Expected Google provider setting"
+            }
+
+            if (providerSetting.antigravity) {
+                return@withContext generateImageAntigravity(providerSetting, params)
             }
 
             val requestBody = buildJsonObject {
@@ -910,6 +1006,62 @@ class GoogleProvider(
 
         items.forEach { emit(it) }
     }
+
+    // Gagy image generation: the managed backend does NOT serve Imagen `:predict`; it generates
+    // images through `generateContent` with `requestType:"image_gen"` on the Nano-Banana model and
+    // returns base64 in `candidates[].content.parts[].inlineData` (same shape the chat path parses).
+    private suspend fun generateImageAntigravity(
+        providerSetting: ProviderSetting.Google,
+        params: ImageGenerationParams,
+    ): List<ImageGenerationItem> {
+        val access = antigravityAuth.accessToken(providerSetting.antigravityRefreshToken)
+        val project = antigravityAuth.project(access)
+        val inner = buildJsonObject {
+            putJsonArray("contents") {
+                add(buildJsonObject {
+                    put("role", "user")
+                    putJsonArray("parts") { add(buildJsonObject { put("text", params.prompt) }) }
+                })
+            }
+            putJsonObject("generationConfig") {
+                put("candidateCount", params.numOfImages)
+                putJsonObject("imageConfig") {
+                    put(
+                        "aspectRatio", when (params.aspectRatio) {
+                            ImageAspectRatio.SQUARE -> "1:1"
+                            ImageAspectRatio.LANDSCAPE -> "16:9"
+                            ImageAspectRatio.PORTRAIT -> "9:16"
+                        }
+                    )
+                }
+            }
+        }.mergeCustomBody(params.customBody)
+
+        val envelope = antigravityAuth.wrapEnvelope(inner, params.model.modelId, project, "image_gen")
+        val request = Request.Builder()
+            .url("https://${antigravityAuth.host()}/v1internal:generateContent".toHttpUrl())
+            .headers(params.customHeaders.toHeaders())
+            .addHeader("Authorization", "Bearer $access")
+            .header("User-Agent", antigravityAuth.userAgent())
+            .post(json.encodeToString(envelope).toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to generate image: ${response.code} ${response.body.string()}")
+        }
+        val body = json.parseToJsonElement(response.body.string()).jsonObject
+        val candidates = providerSetting.unwrapResponse(body)["candidates"]?.jsonArray
+            ?: error("No candidates in image response")
+        return candidates.flatMap { cand ->
+            cand.jsonObject["content"]?.jsonObject?.get("parts")?.jsonArray.orEmpty()
+        }.mapNotNull { part ->
+            val inline = part.jsonObject["inlineData"]?.jsonObject ?: return@mapNotNull null
+            val data = inline["data"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val mime = inline["mimeType"]?.jsonPrimitive?.contentOrNull ?: "image/jpeg"
+            ImageGenerationItem(data = data, mimeType = mime)
+        }
+    }
 }
 
 internal data class GeminiToolsDecision(
@@ -972,4 +1124,72 @@ internal fun googleStreamFrameOutcome(frame: JsonObject): GoogleStreamFrame {
     if (candidates.isNullOrEmpty()) return GoogleStreamFrame.Skip
 
     return GoogleStreamFrame.Emit(candidates)
+}
+
+/**
+ * Merge adjacent same-role `contents` entries so the Gemini ordering invariant holds: a `model` turn
+ * that carries a `functionCall` must immediately follow a `user` turn or a `functionResponse` turn.
+ *
+ * rikkahub emits one model turn per assistant UIMessage and never merges across messages, so a
+ * multi-step or model-switched transcript can place two model turns back-to-back where the second
+ * leads with a functionCall — which the backend rejects with HTTP 400 ("Please ensure that function
+ * call turn comes immediately after a user turn or after a function response turn"). Concatenating
+ * adjacent same-role parts is always a valid Gemini transform and removes the illegal adjacency at
+ * the source, for every Google auth mode (api-key / vertex / gagy). Pure → unit-testable.
+ */
+internal fun mergeAdjacentSameRoleContents(contents: JsonArray): JsonArray = buildJsonArray {
+    var role: String? = null
+    var parts: MutableList<JsonElement>? = null
+
+    fun flush() {
+        val r = role
+        val p = parts
+        if (r != null && p != null) {
+            add(buildJsonObject {
+                put("role", r)
+                put("parts", JsonArray(p))
+            })
+        }
+        role = null
+        parts = null
+    }
+
+    for (entry in contents) {
+        val obj = entry as? JsonObject
+        val entryRole = obj?.get("role")?.jsonPrimitiveOrNull?.contentOrNull
+        val entryParts = obj?.get("parts")?.jsonArrayOrNull
+        if (entryRole == null || entryParts == null) {
+            // Not a {role, parts} turn — can't merge; flush the pending run and pass it through.
+            flush()
+            add(entry)
+            continue
+        }
+        if (entryRole == role) {
+            parts!!.addAll(entryParts)
+        } else {
+            flush()
+            role = entryRole
+            parts = entryParts.toMutableList()
+        }
+    }
+    flush()
+}
+
+/**
+ * Claude and GPT-OSS served via the managed cloudcode backend require explicit function-call /
+ * function-response ids to pair tool calls with their results; native Gemini matches by order and
+ * rejects unexpected ids, so `gemini-*` models must NOT get them.
+ */
+internal fun geminiRequiresToolCallId(modelId: String): Boolean =
+    modelId.startsWith("claude-") || modelId.startsWith("gpt-oss-")
+
+private val GEMINI_TOOL_ID_DISALLOWED = Regex("[^A-Za-z0-9_-]")
+
+/**
+ * Normalize a tool call id to the conservative `[A-Za-z0-9_-]{1,64}` shape the backend accepts.
+ * Deterministic, so the id placed on a `functionCall` and echoed on its `functionResponse` match.
+ */
+internal fun normalizeGeminiToolCallId(id: String): String {
+    val normalized = GEMINI_TOOL_ID_DISALLOWED.replace(id, "_").take(64)
+    return normalized.ifEmpty { "tool_call_${id.hashCode().toUInt()}" }
 }

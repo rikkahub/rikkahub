@@ -531,7 +531,7 @@ private fun ProviderConfigureGoogle(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    if (!(provider.vertexAI && provider.useServiceAccount)) {
+    if (!provider.antigravity && !(provider.vertexAI && provider.useServiceAccount)) {
         var keyVisible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = provider.apiKey,
@@ -548,7 +548,7 @@ private fun ProviderConfigureGoogle(
         )
     }
 
-    if (!provider.vertexAI) {
+    if (!provider.antigravity && !provider.vertexAI) {
         OutlinedTextField(
             value = provider.baseUrl,
             onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
@@ -560,6 +560,23 @@ private fun ProviderConfigureGoogle(
             supportingText = if (!provider.baseUrl.endsWith("/v1beta")) {
                 { Text("The base URL usually ends with `/v1beta`") }
             } else null,
+        )
+    }
+
+    if (provider.antigravity) {
+        var tokenVisible by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            value = provider.antigravityRefreshToken,
+            onValueChange = { onEdit(provider.copy(antigravityRefreshToken = it.trim())) },
+            label = { Text("Antigravity refresh token") },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3,
+            visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                    Icon(if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
     }
 
@@ -580,11 +597,27 @@ private fun ProviderConfigureGoogle(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(stringResource(R.string.setting_provider_page_vertex_ai))
+        Text("Antigravity")
         Switch(
-            checked = provider.vertexAI,
-            onCheckedChange = { onEdit(provider.copy(vertexAI = it)) }
+            checked = provider.antigravity,
+            onCheckedChange = {
+                onEdit(provider.copy(antigravity = it, vertexAI = if (it) false else provider.vertexAI))
+            }
         )
+    }
+
+    if (!provider.antigravity) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(R.string.setting_provider_page_vertex_ai))
+            Switch(
+                checked = provider.vertexAI,
+                onCheckedChange = { onEdit(provider.copy(vertexAI = it)) }
+            )
+        }
     }
 
     if (provider.vertexAI) {

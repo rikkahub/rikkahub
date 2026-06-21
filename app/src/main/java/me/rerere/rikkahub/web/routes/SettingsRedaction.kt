@@ -44,6 +44,7 @@ internal fun ProviderSetting.redactSecrets(): ProviderSetting = when (this) {
     is ProviderSetting.Google -> copy(
         apiKey = WebSettingsSecretFields.REDACTED_STRING,
         privateKey = WebSettingsSecretFields.REDACTED_STRING,
+        antigravityRefreshToken = WebSettingsSecretFields.REDACTED_STRING,
         models = models.map { it.redactSecrets() }
     )
     is ProviderSetting.Claude -> copy(
@@ -92,6 +93,8 @@ internal fun SearchServiceOptions.redactSecrets(): SearchServiceOptions = when (
     is SearchServiceOptions.GrokOptions -> copy(apiKey = "")
     is SearchServiceOptions.TinyfishOptions -> copy(apiKey = "")
     is SearchServiceOptions.CustomJsOptions -> this
+    // refreshToken is @Transient (never serialized), so there's nothing persisted to redact.
+    is SearchServiceOptions.GoogleSearchOptions -> this
 }
 
 internal fun TTSProviderSetting.redactSecrets(): TTSProviderSetting = when (this) {

@@ -344,6 +344,18 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
         }
     }
 
+    // The window must begin at a real USER turn. rikkahub stores a tool call and its result
+    // together as ONE executed Tool part, so the dependency loop above (which looks for a separate
+    // UNEXECUTED tool-call message) never fires for in-place tool turns: a cut landing on an
+    // assistant/tool message would then send a leading orphaned turn — a functionCall with nothing
+    // before it — which every provider rejects (Gemini: "function call turn must come immediately
+    // after a user turn or after a function response turn"; Claude: "messages.0.content.0.
+    // tool_use.id: Field required"). Walk back to the nearest user turn so the transcript opens
+    // cleanly for all providers.
+    while (adjustedStartIndex > 0 && this[adjustedStartIndex].role != MessageRole.USER) {
+        adjustedStartIndex--
+    }
+
     return this.subList(adjustedStartIndex, this.size)
 }
 

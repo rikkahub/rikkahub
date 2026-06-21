@@ -42,23 +42,31 @@ class GoogleProviderMessageTest {
     }
 
     // Helper to invoke private buildContents method via reflection
-    private fun invokeBuildContents(messages: List<UIMessage>): JsonArray {
+    private fun invokeBuildContents(
+        messages: List<UIMessage>,
+        requireToolCallId: Boolean = false,
+    ): JsonArray {
         val method = GoogleProvider::class.java.getDeclaredMethod(
             "buildContents",
-            List::class.java
+            List::class.java,
+            Boolean::class.javaPrimitiveType
         )
         method.isAccessible = true
-        return method.invoke(provider, messages) as JsonArray
+        return method.invoke(provider, messages, requireToolCallId) as JsonArray
     }
 
-    private fun invokeBuildCompletionRequestBody(params: TextGenerationParams): JsonObject {
+    private fun invokeBuildCompletionRequestBody(
+        params: TextGenerationParams,
+        requireToolCallId: Boolean = false,
+    ): JsonObject {
         val method = GoogleProvider::class.java.getDeclaredMethod(
             "buildCompletionRequestBody",
             List::class.java,
-            TextGenerationParams::class.java
+            TextGenerationParams::class.java,
+            Boolean::class.javaPrimitiveType
         )
         method.isAccessible = true
-        return method.invoke(provider, listOf(UIMessage.user("hello")), params) as JsonObject
+        return method.invoke(provider, listOf(UIMessage.user("hello")), params, requireToolCallId) as JsonObject
     }
 
     @Test
@@ -509,6 +517,77 @@ class GoogleProviderMessageTest {
         assertEquals(1, tools?.size)
         assertNotNull(tools?.find { it.jsonObject.containsKey("functionDeclarations") })
         assertTrue(tools?.none { it.jsonObject.containsKey("googleSearch") } == true)
+    }
+
+    @Test
+    fun `requireToolCallId adds matching ids to functionCall and functionResponse`() {
+        // Claude / GPT-OSS via the managed backend reject tool turns without ids
+        // ("messages.N.content.0.tool_use.id: Field required"). The functionCall and its
+        // functionResponse must carry the SAME id so the backend can pair them.
+        val messages = listOf(
+            UIMessage.user("search please"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(createExecutedTool("call_abc", "search", """{"q":"x"}""", "result"))
+            )
+        )
+
+        val contents = invokeBuildContents(messages, requireToolCallId = true)
+
+        val modelTurn = contents.first { it.jsonObject["role"]?.jsonPrimitive?.content == "model" }.jsonObject
+        val functionCall = modelTurn["parts"]!!.jsonArray
+            .first { it.jsonObject.containsKey("functionCall") }.jsonObject["functionCall"]!!.jsonObject
+        val callId = functionCall["id"]?.jsonPrimitive?.content
+        assertNotNull("functionCall must carry an id", callId)
+
+        val responseTurn = contents.last { it.jsonObject["role"]?.jsonPrimitive?.content == "user" }.jsonObject
+        val functionResponse = responseTurn["parts"]!!.jsonArray
+            .first { it.jsonObject.containsKey("functionResponse") }.jsonObject["functionResponse"]!!.jsonObject
+        val responseId = functionResponse["id"]?.jsonPrimitive?.content
+        assertEquals("functionResponse id must match the functionCall id", callId, responseId)
+    }
+
+    @Test
+    fun `default gemini build adds no tool-call ids`() {
+        val messages = listOf(
+            UIMessage.user("search please"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(createExecutedTool("call_abc", "search", """{"q":"x"}""", "result"))
+            )
+        )
+
+        val contents = invokeBuildContents(messages) // requireToolCallId defaults to false (Gemini)
+
+        val modelTurn = contents.first { it.jsonObject["role"]?.jsonPrimitive?.content == "model" }.jsonObject
+        val functionCall = modelTurn["parts"]!!.jsonArray
+            .first { it.jsonObject.containsKey("functionCall") }.jsonObject["functionCall"]!!.jsonObject
+        assertFalse("Gemini functionCall must NOT carry an id", functionCall.containsKey("id"))
+    }
+
+    @Test
+    fun `gpt-oss via antigravity omits thinkingConfig`() {
+        // gpt-oss is an OpenAI model with no Gemini thinkingConfig support; the cloudcode
+        // translation layer 500s ("Unknown Error.") when it receives one.
+        val body = invokeBuildCompletionRequestBody(
+            TextGenerationParams(
+                model = Model(modelId = "gpt-oss-120b-medium", abilities = listOf(ModelAbility.REASONING))
+            ),
+            requireToolCallId = true,
+        )
+        val genConfig = body["generationConfig"]!!.jsonObject
+        assertFalse("gpt-oss must not receive thinkingConfig", genConfig.containsKey("thinkingConfig"))
+    }
+
+    @Test
+    fun `gemini reasoning model keeps thinkingConfig`() {
+        val body = invokeBuildCompletionRequestBody(
+            TextGenerationParams(
+                model = Model(modelId = "gemini-pro-agent", abilities = listOf(ModelAbility.REASONING))
+            )
+        )
+        val genConfig = body["generationConfig"]!!.jsonObject
+        assertTrue("gemini reasoning must keep thinkingConfig", genConfig.containsKey("thinkingConfig"))
     }
 
     // ==================== Helper Functions ====================

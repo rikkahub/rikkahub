@@ -126,6 +126,8 @@ sealed class ProviderSetting {
         var serviceAccountEmail: String = "", // only for vertex AI service account
         var location: String = "us-central1", // only for vertex AI service account
         var projectId: String = "", // only for vertex AI service account
+        var antigravity: Boolean = false, // route via the managed cloudcode backend (OAuth refresh token) instead of an API key
+        var antigravityRefreshToken: String = "", // only for antigravity mode; paste-only
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

@@ -48,6 +48,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.resolveSearchOptions
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -156,7 +157,7 @@ fun SettingSearchDetailPage(
 
             item("test") {
                 SearchTestSection(
-                    options = options,
+                    options = settings.resolveSearchOptions(options),
                     commonOptions = settings.searchCommonOptions
                 )
             }
@@ -220,6 +221,8 @@ private fun SearchServiceOptionsEditor(
         is SearchServiceOptions.CustomJsOptions -> {
             CustomJsOptions(options) { onUpdateOptions(it) }
         }
+        // No editable fields — the Gagy refresh token is injected live from the Google provider.
+        is SearchServiceOptions.GoogleSearchOptions -> {}
     }
 }
 
