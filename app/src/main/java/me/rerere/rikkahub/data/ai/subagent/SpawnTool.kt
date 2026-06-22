@@ -131,7 +131,7 @@ fun buildSpawnTool(
     parentModelId: Uuid?,
     settings: Settings,
     registry: ExecutionHandleRegistry,
-    buildSubagentTools: (sub: Assistant, handle: ExecutionHandle) -> List<Tool>,
+    buildSubagentTools: suspend (sub: Assistant, handle: ExecutionHandle) -> List<Tool>,
     releaseOrphanedClaims: suspend (handleId: String) -> Unit,
     approvalGateFor: (sub: Assistant) -> TaskApprovalGate,
     processingStatus: MutableStateFlow<String?>,

@@ -2218,6 +2218,22 @@ class ChatService(
                             buildSubagentTools = { sub, handle ->
                                 buildList {
                                     addAll(localTools.getTools(sub.localTools))
+                                    // Mirror the main turn's non-registry tool injections so a subagent
+                                    // reaches the same capabilities it's configured for (the spawn path
+                                    // bypasses AppToolCatalog, so these would otherwise be main-turn-only):
+                                    //  - web search, gated on the same global settings.enableWebSearch;
+                                    //  - the SUB's own workspace (its workspaceId) shell/file tools, which
+                                    //    self-gate to empty without a bound workspace and by product flavor.
+                                    if (settings.enableWebSearch) {
+                                        addAll(createSearchTools(settings))
+                                    }
+                                    addAll(
+                                        createWorkspaceTools(
+                                            sub.workspaceId?.toString(),
+                                            conversationId,
+                                            workspaceRepository,
+                                        )
+                                    )
                                     if (sub.enabledSkills.isNotEmpty()) {
                                         addAll(
                                             createSkillTools(
