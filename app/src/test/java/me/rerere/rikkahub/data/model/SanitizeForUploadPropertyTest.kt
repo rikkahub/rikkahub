@@ -31,7 +31,11 @@ import org.junit.Test
  *    selected message survives sanitization (the bug dropped whole branches,
  *    discarding this content). FAILS on master for the orphan-tool case.
  * #2 BALANCE — no retained tool is an unbalanced orphan (unexecuted AND not
- *    resumable) except a legitimately Pending tool awaiting approval.
+ *    resumable) except a legitimately Pending tool awaiting approval, OR an `Auto`
+ *    sibling deferred behind pending-approval work in the same message (issue #356
+ *    #3): such a sibling is executed by the approval-resume pass before any upload,
+ *    and the turn is gated PAUSED_FOR_APPROVAL meanwhile, so it never reaches a
+ *    provider unbalanced — the same lifecycle guarantee the Pending exception relies on.
  * #3 IDEMPOTENCE — sanitize is a fixed point: sanitize(sanitize(x)) == sanitize(x)
  *    structurally (same roles + same selected-message parts).
  * #4 METAMORPHIC — an empty-output Auto tool and the same tool given a synthetic
@@ -153,16 +157,28 @@ class SanitizeForUploadPropertyTest {
     }
 
     @Test
-    fun `property 2 - no retained tool is an unbalanced orphan except a pending one`() {
+    fun `property 2 - no retained tool is an unbalanced orphan except pending or a deferred auto sibling`() {
         runBlocking {
             checkAll(200, arbNodes) { nodes ->
                 val sanitized = nodes.sanitizeForUpload()
-                sanitized.flatMap { it.currentMessage.getTools() }.forEach { tool ->
-                    if (!tool.isExecuted && !tool.approvalState.canResumeToolExecution()) {
-                        assertTrue(
-                            "an unexecuted non-resumable tool may only survive if Pending",
-                            tool.approvalState is ToolApprovalState.Pending
-                        )
+                sanitized.forEach { node ->
+                    val message = node.currentMessage
+                    // A message paused mid-approval (or mid-resume) defers its Auto siblings to the
+                    // resume pass (issue #356 #3): they legitimately survive unexecuted because the
+                    // resume runs them before any upload, exactly like the Pending tool that gates them.
+                    val awaitingResume = message.getTools().any {
+                        !it.isExecuted &&
+                            (it.approvalState is ToolApprovalState.Pending || it.approvalState.canResumeToolExecution())
+                    }
+                    message.getTools().forEach { tool ->
+                        if (!tool.isExecuted && !tool.approvalState.canResumeToolExecution()) {
+                            assertTrue(
+                                "an unexecuted non-resumable tool may only survive if Pending, or an " +
+                                    "Auto sibling deferred behind pending-approval work",
+                                tool.approvalState is ToolApprovalState.Pending ||
+                                    (awaitingResume && tool.approvalState is ToolApprovalState.Auto)
+                            )
+                        }
                     }
                 }
             }

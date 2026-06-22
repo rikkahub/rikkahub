@@ -264,9 +264,18 @@ class ChatTurnRuntime(
 
                 toolsToProcess = updatedTools
             } else {
-                // Resuming after user interaction - use the resumable tools directly.
+                // Resuming after user interaction: execute every not-yet-run tool whose approval is
+                // resolved — the approved/denied/answered tools AND any `Auto` sibling that was emitted
+                // alongside an approval-gated tool in the SAME assistant message (issue #356 finding #3).
+                // Filtering on canResumeExecution alone dropped that Auto sibling — `Auto` is deliberately
+                // not "resumable" (canResumeToolExecution() == false), so once the approval barrier paused
+                // the turn the Auto tool was never picked up again and stayed permanently unexecuted.
+                // `!isExecuted` keeps the original guard (approved tools never re-run); `!is Pending`
+                // excludes a tool still awaiting the user (defensive — ChatService only resumes once all
+                // approvals are resolved, and the call-site below also skips Pending).
                 logSink.info(TAG, "generateText: resuming with ${pendingTools.size} resumable tools")
-                toolsToProcess = messages.last().getTools().filter { it.canResumeExecution }
+                toolsToProcess = messages.last().getTools()
+                    .filter { !it.isExecuted && it.approvalState !is ToolApprovalState.Pending }
             }
 
             // Handle tools (execute approved tools, handle denied tools)

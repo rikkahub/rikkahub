@@ -270,13 +270,28 @@ private fun MessageNode.sanitizeNode(): MessageNode? {
  * which is also why sanitizeForUpload stays idempotent.
  *
  * A Pending tool is left untouched so the approval/resume UI path is unchanged.
+ *
+ * EXCEPTION — an `Auto` sibling of pending approval work (issue #356 #3): when this message still has
+ * an unresolved approval barrier (a Pending tool) or a resolved-but-not-yet-executed tool awaiting the
+ * resume pass, an un-executed `Auto` tool is NOT an orphan from an interrupted turn — it is a deferred
+ * sibling the approval-resume pass will execute. Stamping it cancelled here would mark it executed, so
+ * the resume filter (`!isExecuted && !Pending`) would then skip it and the sibling would never run.
+ * Auto tools are only treated as orphans when the turn is genuinely finished (no pending/resumable work
+ * remains in this message — e.g. a real Stop/crash interruption), preserving the orphan-balance repair.
  */
 private fun UIMessage.repairOrphanTools(): UIMessage {
+    // True while this message is paused mid-approval (or mid-resume): an Auto sibling here is deferred,
+    // not orphaned. A lone Auto tool with no such sibling (interrupted turn) is still a real orphan.
+    val awaitingResume = parts.any { part ->
+        part is UIMessagePart.Tool && !part.isExecuted &&
+            (part.approvalState is ToolApprovalState.Pending || part.approvalState.canResumeToolExecution())
+    }
     val newParts = parts.map { part ->
         if (part is UIMessagePart.Tool &&
             !part.isExecuted &&
             !part.approvalState.canResumeToolExecution() &&
-            part.approvalState !is ToolApprovalState.Pending
+            part.approvalState !is ToolApprovalState.Pending &&
+            !(awaitingResume && part.approvalState is ToolApprovalState.Auto)
         ) {
             val marker = if (part.isBackgroundableShell()) SHELL_BACKGROUNDED_MARKER else TOOL_CANCELLED_MARKER
             part.copy(output = listOf(UIMessagePart.Text(marker)))

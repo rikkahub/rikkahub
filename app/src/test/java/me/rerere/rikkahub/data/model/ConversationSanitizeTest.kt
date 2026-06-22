@@ -204,6 +204,78 @@ class ConversationSanitizeTest {
         )
     }
 
+    // Issue #356 #3: an `Auto` (no-approval) tool emitted in the SAME message as a Pending approval
+    // tool is a DEFERRED sibling, not an interrupted-turn orphan. repairOrphanTools must NOT stamp it
+    // cancelled — otherwise it becomes "executed" with a synthetic result and the approval-resume pass
+    // (ChatTurnRuntime's `!isExecuted && !Pending` filter) skips it, so the auto tool never runs. This
+    // is the app-level half of the fix: the runtime predicate alone is defeated by this finalizer.
+    @Test
+    fun `auto sibling of a pending approval tool is preserved for the resume pass`() {
+        val paused = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = "call_danger",
+                    toolName = "dangerous_op",
+                    input = "{}",
+                    output = emptyList(),
+                    approvalState = me.rerere.ai.ui.ToolApprovalState.Pending,
+                ),
+                UIMessagePart.Tool(
+                    toolCallId = "call_time",
+                    toolName = "get_time",
+                    input = "{}",
+                    output = emptyList(),
+                    approvalState = me.rerere.ai.ui.ToolApprovalState.Auto,
+                ),
+            ),
+        )
+        val nodes = listOf(userNode("do both"), paused.toMessageNode())
+
+        val sanitized = nodes.sanitizeForUpload()
+        val tools = sanitized.flatMap { it.currentMessage.getTools() }.associateBy { it.toolName }
+
+        // FAILS-BEFORE: repairOrphanTools stamped the Auto sibling cancelled, making it executed.
+        val auto = tools.getValue("get_time")
+        assertTrue("the Auto sibling must stay unexecuted so the resume pass runs it", auto.output.isEmpty())
+        assertTrue(
+            "the Auto sibling must keep its Auto state",
+            auto.approvalState is me.rerere.ai.ui.ToolApprovalState.Auto,
+        )
+        // The Pending tool is untouched as before.
+        val pending = tools.getValue("dangerous_op")
+        assertTrue("the pending tool stays unexecuted", pending.output.isEmpty())
+        assertTrue(
+            "the pending tool keeps Pending",
+            pending.approvalState is me.rerere.ai.ui.ToolApprovalState.Pending,
+        )
+    }
+
+    // Contrast: a lone Auto orphan with NO pending/resumable sibling is a genuinely interrupted turn,
+    // so the orphan-balance repair is preserved — it is still stamped cancelled, never left unbalanced.
+    @Test
+    fun `lone auto orphan with no pending sibling is still balanced`() {
+        val orphan = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = "call_1",
+                    toolName = "get_time",
+                    input = "{}",
+                    output = emptyList(),
+                    approvalState = me.rerere.ai.ui.ToolApprovalState.Auto,
+                ),
+            ),
+        )
+        val nodes = listOf(userNode("what time"), orphan.toMessageNode())
+
+        val sanitized = nodes.sanitizeForUpload()
+        val tool = sanitized.flatMap { it.currentMessage.getTools() }.single()
+
+        assertTrue("a lone interrupted Auto orphan must be balanced", tool.isExecuted)
+        assertEquals(TOOL_CANCELLED_MARKER, (tool.output.single() as UIMessagePart.Text).text)
+    }
+
     // case (c): an unterminated reasoning part with no signature must not be
     // uploaded as an unsigned thinking block.
     @Test
