@@ -250,6 +250,17 @@ class WorkspaceRepository(
         manager.readText(workspace.root, path)
     }
 
+    /** Resolve a FILES-area path to its on-disk file (containment + size-capped) for image rendering. */
+    suspend fun resolveReadableFile(
+        id: String,
+        path: String,
+        maxBytes: Long,
+    ): File = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
+        manager.resolveReadableFile(workspace.root, path, maxBytes)
+    }
+
     suspend fun writeText(
         id: String,
         path: String,

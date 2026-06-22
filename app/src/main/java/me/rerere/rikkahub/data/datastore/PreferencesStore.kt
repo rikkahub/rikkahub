@@ -635,6 +635,9 @@ data class DisplaySetting(
     // the risk once; default false keeps the fail-closed scoped posture until then. Additive default ⇒
     // no migration.
     val automationYoloAcknowledged: Boolean = false,
+    // Workspace file browser view mode (true = grid, false = list), persisted so the choice survives
+    // navigating away and back. Additive default ⇒ no migration.
+    val workspaceFileBrowserGrid: Boolean = false,
 )
 
 @Serializable

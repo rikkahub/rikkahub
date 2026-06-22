@@ -536,7 +536,7 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.WorkspaceDetail> { key ->
-                                WorkspaceDetailPage(id = key.id)
+                                WorkspaceDetailPage(id = key.id, initialFilesTab = key.initialFilesTab)
                             }
 
                             // Flavor-gated PTY terminal route (I-FLAVOR): registers
@@ -764,7 +764,7 @@ sealed interface Screen : NavKey {
     data object Workspaces : Screen
 
     @Serializable
-    data class WorkspaceDetail(val id: String) : Screen
+    data class WorkspaceDetail(val id: String, val initialFilesTab: Boolean = false) : Screen
 
     // Route KEY only — pure data, so it may live in main. The PTY page it resolves to is sideload-only
     // (I-FLAVOR): the entry<>{ WorkspaceTerminalPage() } binding lives behind the per-flavor

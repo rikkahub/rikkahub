@@ -37,6 +37,21 @@ class WorkspaceFileSystem(
         return file.readText(charset)
     }
 
+    /**
+     * Resolve [path] to its on-disk file for direct reading (e.g. image rendering), enforcing the same
+     * workspace-root containment as every other op and a [maxBytes] size cap. The returned file is
+     * already validated to live under [root]; callers only read from it.
+     */
+    fun resolveReadableFile(root: File, path: String, maxBytes: Long): File {
+        val file = resolvePath(root, path)
+        require(file.exists()) { "File does not exist: $path" }
+        require(file.isFile) { "Path is not a file: $path" }
+        require(file.length() <= maxBytes) {
+            "File is too large to open: ${file.length()} bytes"
+        }
+        return file
+    }
+
     fun writeText(
         root: File,
         path: String,

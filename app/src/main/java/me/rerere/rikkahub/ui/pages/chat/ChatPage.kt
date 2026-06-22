@@ -343,7 +343,7 @@ private fun ChatPageContent(
                         // then open its file browser — so the folder button always lands somewhere real.
                         scope.launch {
                             runCatching { vm.ensureWorkspaceId(activeAssistant.id) }
-                                .onSuccess { navController.navigate(Screen.WorkspaceDetail(it)) }
+                                .onSuccess { navController.navigate(Screen.WorkspaceDetail(it, initialFilesTab = true)) }
                                 .onFailure {
                                     toaster.show(
                                         it.message ?: "Failed to open workspace",

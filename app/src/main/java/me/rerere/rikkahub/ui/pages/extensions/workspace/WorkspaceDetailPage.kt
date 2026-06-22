@@ -53,16 +53,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.Binary
+import com.composables.icons.lucide.FileArchive
+import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.LayoutGrid
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Trash2
@@ -82,24 +85,31 @@ import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.SegmentedButtonLabel
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
+import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 private enum class CreateKind { FILE, FOLDER }
 
 @Composable
-fun WorkspaceDetailPage(id: String) {
+fun WorkspaceDetailPage(id: String, initialFilesTab: Boolean = false) {
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
     val actionError by vm.actionError.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState { 2 }
+    val settingsStore: SettingsStore = koinInject()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle(Settings())
+    // initialFilesTab lands the page on the Files pane (page 1) when opened from the chat folder button.
+    val pagerState = rememberPagerState(initialPage = if (initialFilesTab) 1 else 0) { 2 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
 
@@ -118,7 +128,9 @@ fun WorkspaceDetailPage(id: String) {
 
     var showCreateMenu by remember { mutableStateOf(false) }
     var createKind by remember { mutableStateOf<CreateKind?>(null) }
-    var viewMode by rememberSaveable { mutableStateOf(FileViewMode.LIST) }
+    // View mode is read from (and written back to) the persisted display setting so it survives leaving
+    // and re-entering the page.
+    val viewMode = if (settings.displaySetting.workspaceFileBrowserGrid) FileViewMode.GRID else FileViewMode.LIST
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     val fileView by vm.fileView.collectAsStateWithLifecycle()
     // New file/folder is a FILES-area, files-tab affordance only (the LINUX rootfs is installer-managed).
@@ -207,7 +219,15 @@ fun WorkspaceDetailPage(id: String) {
                     state = state,
                     viewMode = viewMode,
                     onToggleViewMode = {
-                        viewMode = if (viewMode == FileViewMode.LIST) FileViewMode.GRID else FileViewMode.LIST
+                        scope.launch {
+                            settingsStore.update {
+                                it.copy(
+                                    displaySetting = it.displaySetting.copy(
+                                        workspaceFileBrowserGrid = !it.displaySetting.workspaceFileBrowserGrid,
+                                    ),
+                                )
+                            }
+                        }
                     },
                     onSelectArea = vm::selectArea,
                     onBrowseTo = vm::browseTo,
@@ -489,14 +509,21 @@ private fun WorkspaceFilesPage(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
+            WorkspaceAreaSelector(selected = state.area, onSelected = onSelectArea)
+        }
+
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            // Breadcrumb takes the row; the grid/list toggle sits at its trailing edge (aligned with it).
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    WorkspaceAreaSelector(selected = state.area, onSelected = onSelectArea)
-                }
+                WorkspaceBreadcrumb(
+                    path = state.path,
+                    onNavigate = onBrowseTo,
+                    modifier = Modifier.weight(1f),
+                )
                 IconButton(onClick = onToggleViewMode) {
                     Icon(
                         imageVector = if (viewMode == FileViewMode.LIST) {
@@ -508,10 +535,6 @@ private fun WorkspaceFilesPage(
                     )
                 }
             }
-        }
-
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            WorkspaceBreadcrumb(path = state.path, onNavigate = onBrowseTo)
         }
 
         // Project directory is a FILES-area concept (the agent's cwd seed); hide it for the LINUX rootfs.
@@ -540,10 +563,13 @@ private fun WorkspaceFilesPage(
 
         gridItems(state.entries, key = { "${state.area.name}:${it.path}" }) { entry ->
             val onActivate = { if (entry.isDirectory) onOpen(entry) else onView(entry) }
+            // Protected Linux system dirs (in the Rootfs area) carry no delete affordance — see
+            // isProtectedRootfsEntry. The VM enforces the same rule as a fail-safe.
+            val canDelete = !isProtectedRootfsEntry(state.area, entry)
             if (viewMode == FileViewMode.GRID) {
-                WorkspaceFileTile(entry = entry, onOpen = onActivate, onDelete = { onDelete(entry) })
+                WorkspaceFileTile(entry = entry, onOpen = onActivate, onDelete = { onDelete(entry) }, canDelete = canDelete)
             } else {
-                WorkspaceFileCard(entry = entry, onOpen = onActivate, onDelete = { onDelete(entry) })
+                WorkspaceFileCard(entry = entry, onOpen = onActivate, onDelete = { onDelete(entry) }, canDelete = canDelete)
             }
         }
     }
@@ -575,11 +601,11 @@ private fun WorkspaceAreaSelector(
 private fun WorkspaceBreadcrumb(
     path: String,
     onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val segments = path.split('/').filter { it.isNotBlank() }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -680,6 +706,7 @@ private fun WorkspaceFileCard(
     entry: WorkspaceFileEntry,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    canDelete: Boolean = true,
 ) {
     Card(
         modifier = Modifier
@@ -694,7 +721,7 @@ private fun WorkspaceFileCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = if (entry.isDirectory) HugeIcons.Folder01 else HugeIcons.File02,
+                imageVector = fileIcon(entry),
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
                 tint = fileTint(entry),
@@ -719,7 +746,9 @@ private fun WorkspaceFileCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            FileEntryMenu(onDelete = onDelete)
+            if (canDelete) {
+                FileEntryMenu(onDelete = onDelete)
+            }
         }
     }
 }
@@ -729,6 +758,7 @@ private fun WorkspaceFileTile(
     entry: WorkspaceFileEntry,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    canDelete: Boolean = true,
 ) {
     Box {
         Card(
@@ -745,7 +775,7 @@ private fun WorkspaceFileTile(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    imageVector = if (entry.isDirectory) HugeIcons.Folder01 else HugeIcons.File02,
+                    imageVector = fileIcon(entry),
                     contentDescription = null,
                     modifier = Modifier.size(36.dp),
                     tint = fileTint(entry),
@@ -759,10 +789,12 @@ private fun WorkspaceFileTile(
                 )
             }
         }
-        FileEntryMenu(
-            onDelete = onDelete,
-            modifier = Modifier.align(Alignment.TopEnd),
-        )
+        if (canDelete) {
+            FileEntryMenu(
+                onDelete = onDelete,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
     }
 }
 
@@ -807,7 +839,7 @@ private fun FileViewerSheet(
     // the persisted content changes (e.g. after a save round-trips through the VM).
     var editing by remember(state.path) { mutableStateOf(false) }
     var draft by remember(state.path, state.content) { mutableStateOf(state.content.orEmpty()) }
-    val canEdit = !state.loading && !state.isBinary && state.content != null
+    val canEdit = !state.loading && !state.isBinary && state.imageModel == null && state.content != null
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -860,6 +892,14 @@ private fun FileViewerSheet(
                     text = "Loading…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                state.imageModel != null -> ZoomableAsyncImage(
+                    model = state.imageModel,
+                    contentDescription = state.name,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 480.dp),
                 )
 
                 state.isBinary -> Text(
@@ -988,6 +1028,24 @@ private fun fileTint(entry: WorkspaceFileEntry): Color {
         "md", "markdown", "txt", "rst", "adoc" -> MaterialTheme.colorScheme.primary
 
         else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+}
+
+private val ARCHIVE_EXTENSIONS = setOf("zip", "gz", "tar", "tgz", "7z", "rar", "jar", "apk", "aab", "xz", "bz2")
+
+/**
+ * Per-type leading icon so files don't all read as the generic text icon: a directory, an image, an
+ * archive, an opaque binary, or text/code (the default). Images are checked first since the binary set
+ * also lists image extensions.
+ */
+private fun fileIcon(entry: WorkspaceFileEntry): ImageVector {
+    if (entry.isDirectory) return HugeIcons.Folder01
+    val ext = entry.name.substringAfterLast('.', "").lowercase()
+    return when {
+        isImageName(entry.name) -> Lucide.Image
+        ext in ARCHIVE_EXTENSIONS -> Lucide.FileArchive
+        isLikelyBinaryName(entry.name) -> Lucide.Binary
+        else -> HugeIcons.File02
     }
 }
 

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -195,6 +196,12 @@ class WorkspaceDetailVM(
     }
 
     fun deleteEntry(entry: WorkspaceFileEntry) {
+        // Fail-safe mirror of the UI guard: never delete a Linux system-structure dir in the rootfs,
+        // even if a delete is somehow requested for one (the UI already hides the affordance).
+        if (isProtectedRootfsEntry(state.value.area, entry)) {
+            _actionError.value = "${entry.name} is part of the Linux system structure and can't be deleted"
+            return
+        }
         launchVm(onError = { _actionError.value = it.message ?: "Failed to delete" }) {
             repository.deleteFile(id, state.value.area, entry.path, recursive = entry.isDirectory)
             refresh()
@@ -207,6 +214,27 @@ class WorkspaceDetailVM(
         // Supersede any in-flight open so a slow read can't land after the user closed the sheet or
         // opened a different file.
         fileViewJob?.cancel()
+        // Images render inline (Coil) rather than being reported as opaque binary. Resolve the on-disk
+        // file through the size-capped containment path and hand the viewer a file:// model.
+        if (isImageName(entry.name)) {
+            _fileView.value = FileViewState(name = entry.name, path = entry.path, loading = true)
+            fileViewJob = launchVm(onError = {
+                _fileView.value = null
+                _actionError.value = it.message ?: "Failed to open image"
+            }) {
+                val file = repository.resolveReadableFile(id, entry.path, MAX_IMAGE_VIEW_BYTES)
+                if (_fileView.value?.path == entry.path) {
+                    _fileView.value = FileViewState(
+                        name = entry.name,
+                        path = entry.path,
+                        // Uri.fromFile percent-encodes the path so names with URI delimiters (# ? space)
+                        // resolve correctly instead of being misparsed as fragment/query by Coil.
+                        imageModel = Uri.fromFile(file).toString(),
+                    )
+                }
+            }
+            return
+        }
         if (isLikelyBinaryName(entry.name)) {
             _fileView.value = FileViewState(name = entry.name, path = entry.path, content = null, isBinary = true)
             return
@@ -343,23 +371,71 @@ data class WorkspaceDetailState(
     val error: String? = null,
 )
 
-/** State of the read-only file viewer: text [content], or [isBinary] when the file isn't human-readable. */
+/**
+ * State of the read-only file viewer: text [content], an [imageModel] (a file:// url Coil renders) for
+ * image files, or [isBinary] when the file isn't human-readable.
+ */
 data class FileViewState(
     val name: String,
     val path: String = "",
     val content: String? = null,
+    val imageModel: String? = null,
     val isBinary: Boolean = false,
     val loading: Boolean = false,
 )
 
+// Cap for opening an image in the viewer — generous (images are bigger than the 512KB text cap) but
+// bounded so a mislabeled huge file can't be force-loaded.
+internal const val MAX_IMAGE_VIEW_BYTES = 16L * 1024 * 1024
+
+// Raster image extensions rendered inline by the viewer. SVG is intentionally absent — it's XML, so it
+// opens as (highlightable) text. SVGZ stays in BINARY_EXTENSIONS (gzip-compressed, not text).
+private val IMAGE_EXTENSIONS = setOf(
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "heic", "heif", "avif",
+)
+
+internal fun isImageName(name: String): Boolean =
+    name.substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
+
 // Extensions whose content is not human-readable text — skip reading them and report a binary file
 // instead of dumping garbage into the viewer. A NUL-byte content check (openFile) catches the rest.
-private val BINARY_EXTENSIONS = setOf(
+internal val BINARY_EXTENSIONS = setOf(
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svgz", "pdf", "zip", "gz", "tar", "tgz",
     "7z", "rar", "jar", "apk", "aab", "so", "o", "a", "exe", "dll", "bin", "class", "dex", "wasm",
     "mp3", "mp4", "m4a", "wav", "ogg", "flac", "avi", "mov", "mkv", "ttf", "otf", "woff", "woff2",
     "eot", "db", "sqlite", "dat",
 )
 
-private fun isLikelyBinaryName(name: String): Boolean =
+internal fun isLikelyBinaryName(name: String): Boolean =
     name.substringAfterLast('.', "").lowercase() in BINARY_EXTENSIONS
+
+// Top-level rootfs directories that make up the Linux system structure. Deleting one corrupts the
+// per-workspace rootfs, and most users don't know which are load-bearing — so the file browser refuses
+// to delete them and hides the delete affordance. Only the dirs THEMSELVES are protected; files and
+// folders inside them stay deletable.
+internal val PROTECTED_ROOTFS_DIRS = setOf(
+    "bin", "boot", "dev", "etc", "lib", "lib64", "proc", "root", "run",
+    "sbin", "sys", "usr", "var", "opt", "srv", "mnt", "media", "tmp",
+)
+
+/**
+ * True when [entry] is a protected top-level system directory in the Linux rootfs area. Guards both the
+ * UI (hide delete) and the VM (refuse delete). The FILES project area is fully user-owned, so it never
+ * matches.
+ */
+internal fun isProtectedRootfsEntry(area: WorkspaceStorageArea, entry: WorkspaceFileEntry): Boolean {
+    if (area != WorkspaceStorageArea.LINUX || !entry.isDirectory) return false
+    // Normalize the SAME way the filesystem delete sink does (\ -> /, drop . and resolve ..) BEFORE
+    // matching, so a path that resolves to a single top-level rootfs segment is caught however it was
+    // spelled (etc, ./etc, foo/../etc, etc\). Matching the raw string would let those bypass the guard
+    // while the sink still deletes the real top-level dir.
+    val segments = mutableListOf<String>()
+    for (seg in entry.path.replace('\\', '/').split('/')) {
+        when (seg) {
+            "", "." -> {}
+            ".." -> if (segments.isNotEmpty()) segments.removeAt(segments.lastIndex)
+            else -> segments.add(seg)
+        }
+    }
+    return segments.size == 1 && segments[0].lowercase() in PROTECTED_ROOTFS_DIRS
+}

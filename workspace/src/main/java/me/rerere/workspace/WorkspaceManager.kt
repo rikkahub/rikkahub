@@ -64,6 +64,12 @@ class WorkspaceManager(
         charset: Charset = StandardCharsets.UTF_8,
     ): String = fileSystem.readText(filesDir(root), path, charset)
 
+    fun resolveReadableFile(
+        root: String,
+        path: String,
+        maxBytes: Long,
+    ): File = fileSystem.resolveReadableFile(filesDir(root), path, maxBytes)
+
     fun writeText(
         root: String,
         path: String,
