@@ -10,7 +10,7 @@ import me.rerere.ai.runtime.mcp.McpTool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
 import me.rerere.rikkahub.data.ai.subagent.stripSpawnTools
-import me.rerere.rikkahub.service.mapMcpTool
+import me.rerere.rikkahub.service.buildMcpTools
 import kotlin.uuid.Uuid
 
 /**
@@ -52,6 +52,10 @@ class AppToolCatalog(
     private val spawnTool: (parentModelId: Uuid?) -> Tool?,
     private val boardTools: suspend () -> List<Tool> = { emptyList() },
     private val scheduleTools: suspend () -> List<Tool> = { emptyList() },
+    // Resolves a serverId to its human name for the readable model-facing MCP tool name
+    // (`mcp__<serverName>__<tool>`, issue #356 #2). Defaulted to blank so the namer falls back to a
+    // stable short id when unwired (e.g. in tests that don't exercise MCP naming).
+    private val mcpServerName: (serverId: Uuid) -> String = { "" },
 ) : ToolCatalog {
 
     override suspend fun tools(ctx: ToolAssemblyContext): List<Tool> {
@@ -66,9 +70,14 @@ class AppToolCatalog(
             // needsApproval=true, so the approval strip drops them from a subagent pool; conversation
             // scope and owner are bound inside the port (SchedulePortAdapter), never visible here.
             addAll(scheduleTools())
-            mcpToolsForAssistant(ctx.targetAssistant).forEach { (serverId, tool) ->
-                add(mapMcpTool(serverId, tool) { sid, name, args -> mcpCall(sid, name, args) })
-            }
+            // Readable, collision-free model-facing MCP names (issue #356 #2): mapped at the pool level
+            // so the de-dup of identically-named servers is consistent within this pool.
+            addAll(
+                buildMcpTools(
+                    entries = mcpToolsForAssistant(ctx.targetAssistant),
+                    serverName = mcpServerName,
+                ) { sid, name, args -> mcpCall(sid, name, args) }
+            )
             if (ctx.mode == TurnMode.Main && ctx.includeSpawnTool) {
                 // The spawn parent is the current (main/parent) assistant's model, exactly as the
                 // production spawn site passes `parentModelId = assistant.chatModelId`

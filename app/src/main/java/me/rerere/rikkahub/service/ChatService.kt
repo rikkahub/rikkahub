@@ -2199,6 +2199,9 @@ class ChatService(
                 // current main turn (where target == this assistant's config).
                 mcpToolsForAssistant = { target -> mcpManager.getAllAvailableTools(target) },
                 mcpCall = { sid, name, args -> mcpManager.callTool(sid, name, args) },
+                // Human server name → the readable model-facing MCP name `mcp__<serverName>__<tool>`
+                // (issue #356 #2).
+                mcpServerName = { serverId -> mcpManager.getServerName(serverId) },
                 // Subagent spawn tool (issue #201). The catalog adds it only on a Main turn with
                 // includeSpawnTool true; the sub's own pool is built off the TARGET (sub) assistant's
                 // allowlist (local + skills + MCP keyed off `sub`), never containing the spawn tool —
@@ -2243,11 +2246,15 @@ class ChatService(
                                             )
                                         )
                                     }
-                                    mcpManager.getAllAvailableTools(sub).forEach { (serverId, tool) ->
-                                        add(mapMcpTool(serverId, tool) { sid, name, args ->
-                                            mcpManager.callTool(sid, name, args)
-                                        })
-                                    }
+                                    // Readable, collision-free MCP names for the subagent pool, mapped at
+                                    // the pool level so de-dup is consistent (issue #356 #2). Same naming
+                                    // path as the main-agent pool (AppToolCatalog) — must not drift.
+                                    addAll(
+                                        buildMcpTools(
+                                            entries = mcpManager.getAllAvailableTools(sub),
+                                            serverName = { serverId -> mcpManager.getServerName(serverId) },
+                                        ) { sid, name, args -> mcpManager.callTool(sid, name, args) }
+                                    )
                                     // The shared per-conversation board tools (finding #1). The
                                     // production spawn path feeds THIS list straight to
                                     // TaskCoordinator.run, never the catalog's TurnMode.Subagent arm,
@@ -3081,16 +3088,91 @@ internal fun removedFileUris(oldFiles: List<String>, newFiles: List<String>): Li
  * JVM-unit-testable function — mirroring [selectMcpToolsForAssistant]/[callToolWithHeal] in McpManager.kt.
  */
 internal fun mapMcpTool(
+    modelName: String,
     serverId: Uuid,
     tool: McpTool,
     callTool: suspend (Uuid, String, JsonObject) -> List<UIMessagePart>,
 ): Tool = Tool(
-    name = "mcp__" + tool.name,
+    name = modelName,
     description = tool.description ?: "",
     parameters = { tool.inputSchema },
     needsApproval = tool.needsApproval,
+    // The execute closure forwards the RAW (serverId, tool.name) to the MCP server, so the model-facing
+    // [modelName] is free to be sanitized/disambiguated/deduped without any reverse map.
     execute = { callTool(serverId, tool.name, it.jsonObject) },
 )
+
+/** Provider function-name length limit (OpenAI/Anthropic/Google all cap at 64 chars). */
+internal const val MCP_TOOL_NAME_MAX_LEN = 64
+private const val MCP_SERVER_SLUG_MAX = 24
+// Headroom reserved on the base name for a `_<n>` de-duplication suffix (covers up to `_999`).
+private const val MCP_DEDUP_RESERVE = 4
+
+/** Sanitizes [raw] to a provider-safe `[A-Za-z0-9_]` segment, trimming framing underscores. */
+private fun sanitizeMcpSegment(raw: String): String = buildString {
+    raw.forEach { c ->
+        append(if (c == '_' || c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9') c else '_')
+    }
+}.trim('_')
+
+/**
+ * The READABLE per-server segment of an MCP tool name (issue #356 #2): the human server name, sanitized
+ * to `[A-Za-z0-9_]` and bounded, so the model sees `mcp__context7__lookup`, not an opaque id. Falls back
+ * to a short stable id (`srv<8 hex of the UUID>`) only when the server is unnamed.
+ */
+internal fun mcpServerSlug(serverName: String, serverId: Uuid): String {
+    val slug = sanitizeMcpSegment(serverName)
+        .ifEmpty { "srv" + serverId.toString().replace("-", "").take(8) }
+    return slug.take(MCP_SERVER_SLUG_MAX)
+}
+
+/**
+ * The base model-facing name for an MCP tool: `mcp__<serverSlug>__<toolSlug>`, provider-safe
+ * (`[A-Za-z0-9_]`) and bounded so it leaves headroom for a de-dup suffix. NOT yet deduplicated —
+ * [buildMcpTools] resolves any residual collision (two identically-named servers, or two raw names that
+ * sanitize alike) with a numeric suffix.
+ */
+internal fun mcpModelToolName(serverSlug: String, rawToolName: String): String {
+    val prefix = "mcp__${serverSlug}__"
+    val maxTool = (MCP_TOOL_NAME_MAX_LEN - prefix.length - MCP_DEDUP_RESERVE).coerceAtLeast(1)
+    val slug = sanitizeMcpSegment(rawToolName).ifEmpty { "tool" }
+    return prefix + slug.take(maxTool)
+}
+
+/**
+ * Adapts the MCP (serverId, tool) [entries] of ONE tool pool into AI-SDK [Tool]s with readable,
+ * provider-safe, COLLISION-FREE model-facing names (issue #356 #2). The legacy `"mcp__" + tool.name`
+ * collided when two servers exposed the same tool name — the runtime resolves a call by FIRST
+ * exact-name match, so the second server's tool was unreachable. Here each name is
+ * `mcp__<serverSlug>__<toolSlug>` (server slug from [serverName]); any residual duplicate is given a
+ * `_<n>` suffix, deterministically by [entries] order, so a persisted call resolves to the same name
+ * across restarts of the same config.
+ *
+ * [callTool] forwards the RAW (serverId, rawName). Shared by both the main-agent pool ([AppToolCatalog])
+ * and the subagent pool so the naming invariant cannot drift between them.
+ */
+internal fun buildMcpTools(
+    entries: List<Pair<Uuid, McpTool>>,
+    serverName: (Uuid) -> String,
+    callTool: suspend (Uuid, String, JsonObject) -> List<UIMessagePart>,
+): List<Tool> {
+    val taken = HashSet<String>()
+    return entries.map { (serverId, tool) ->
+        val base = mcpModelToolName(mcpServerSlug(serverName(serverId), serverId), tool.name)
+        var name = base
+        var n = 2
+        while (!taken.add(name)) {
+            // Length-aware suffixing: keep the de-duped name within the provider cap even when the
+            // suffix outgrows MCP_DEDUP_RESERVE (e.g. a 5-char `_1000`), truncating the base if needed.
+            // The `taken` check still guarantees uniqueness, so a truncated candidate that collides
+            // simply advances to the next suffix.
+            val suffix = "_$n"
+            name = base.take((MCP_TOOL_NAME_MAX_LEN - suffix.length).coerceAtLeast(0)) + suffix
+            n++
+        }
+        mapMcpTool(name, serverId, tool, callTool)
+    }
+}
 
 /**
  * Atomic streaming-UI publish seam (issue #108). Merges the accumulated [messages] into the LIVE

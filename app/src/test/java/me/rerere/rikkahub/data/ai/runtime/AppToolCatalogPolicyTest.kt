@@ -104,7 +104,9 @@ class AppToolCatalogPolicyTest {
             )
         ).map { it.name }
 
-        assertTrue("mcp tool carries mcp__ prefix", names.contains("mcp__remote_call"))
+        // Readable model-facing MCP name `mcp__<serverSlug>__<tool>` (issue #356 #2); the catalog under
+        // test has no server-name resolver wired, so the slug is the stable-id fallback — assert by shape.
+        assertTrue("mcp tool carries mcp__ prefix and tool name", names.any { it.startsWith("mcp__") && it.endsWith("__remote_call") })
         assertTrue("approval tool present in main turn", names.contains("dangerous_write"))
         assertTrue("advertised spawn tool `agent` present in main turn", names.contains(SPAWN_TOOL_MODEL_NAME))
         assertTrue("legacy spawn alias `task` present in main turn", names.contains(SPAWN_TOOL_NAME))
@@ -193,7 +195,7 @@ class AppToolCatalogPolicyTest {
 
         assertFalse("approval tool stripped on subagent turn", names.contains("dangerous_write"))
         assertFalse("spawn tool absent on subagent turn", names.contains(SPAWN_TOOL_NAME))
-        assertTrue("non-approval mcp tool retained", names.contains("mcp__remote_call"))
+        assertTrue("non-approval mcp tool retained", names.any { it.startsWith("mcp__") && it.endsWith("__remote_call") })
     }
 
     /**
@@ -260,8 +262,8 @@ class AppToolCatalogPolicyTest {
             )
         ).map { it.name }
 
-        assertTrue("subagent selects its own server's tool", names.contains("mcp__beta"))
-        assertFalse("subagent does not inherit parent's server tool", names.contains("mcp__alpha"))
+        assertTrue("subagent selects its own server's tool", names.any { it.startsWith("mcp__") && it.endsWith("__beta") })
+        assertFalse("subagent does not inherit parent's server tool", names.any { it.startsWith("mcp__") && it.endsWith("__alpha") })
     }
 
     @Test

@@ -25,7 +25,7 @@ import me.rerere.rikkahub.data.ai.schedule.ScheduleEnqueuer
 import me.rerere.rikkahub.data.ai.schedule.ScheduleFireRunner
 import me.rerere.rikkahub.data.ai.schedule.ScheduleWorker
 import me.rerere.rikkahub.data.ai.schedule.ScheduledTaskRunner
-import me.rerere.rikkahub.service.mapMcpTool
+import me.rerere.rikkahub.service.buildMcpTools
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
@@ -254,11 +254,14 @@ val dataSourceModule = module {
             buildChildTools = { sub ->
                 buildList {
                     addAll(localTools.getTools(sub.localTools))
-                    mcpManager.getAllAvailableTools(sub).forEach { (serverId, tool) ->
-                        add(mapMcpTool(serverId, tool) { sid, name, args ->
-                            mcpManager.callTool(sid, name, args)
-                        })
-                    }
+                    // Readable, collision-free MCP names for the scheduled-run pool, mapped at the pool
+                    // level (issue #356 #2) — same naming path as the main-agent and subagent pools.
+                    addAll(
+                        buildMcpTools(
+                            entries = mcpManager.getAllAvailableTools(sub),
+                            serverName = { serverId -> mcpManager.getServerName(serverId) },
+                        ) { sid, name, args -> mcpManager.callTool(sid, name, args) }
+                    )
                 }
             },
         )

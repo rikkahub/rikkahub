@@ -159,6 +159,15 @@ class McpManager(
         )
     }
 
+    /**
+     * The human name of the MCP server [serverId], for the readable model-facing tool name
+     * (`mcp__<serverName>__<tool>`, issue #356 #2). Empty when the server is unknown/unnamed — the
+     * namer then falls back to a short stable id.
+     */
+    fun getServerName(serverId: Uuid): String =
+        settingsStore.settingsFlow.value.mcpServers
+            .find { it.id == serverId }?.commonOptions?.name.orEmpty()
+
     suspend fun callTool(serverId: Uuid, toolName: String, args: JsonObject): List<UIMessagePart> {
         val entry = clients.entries.find { it.key.id == serverId }
         val client = entry?.value
