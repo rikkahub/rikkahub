@@ -32,13 +32,19 @@ val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
 )
 
 /**
- * Resolves whether [name] needs user approval. A null [overrides] means the stored policy blob was
- * corrupt/unparseable: fail CLOSED (require approval) rather than fall back to the relaxed defaults,
- * so a tampered/garbled column can never silently downgrade a tool to no-approval.
+ * Resolves whether [name] needs user approval. Two fail-CLOSED guards:
+ *  - a null [overrides] means the stored policy blob was corrupt/unparseable — require approval
+ *    rather than fall back to the relaxed defaults, so a tampered/garbled column can never silently
+ *    downgrade a tool to no-approval.
+ *  - an unknown tool [name] (no override AND no [WorkspaceToolDefaultApprovals] entry) defaults to
+ *    approval-required (issue #356 finding #6). A future `workspace_*` tool whose default-approval
+ *    entry is forgotten must require approval, never silently become no-approval. Every current
+ *    factory tool has an explicit entry; `WorkspaceToolsTest` pins that, so this fallback only ever
+ *    fires for a genuinely unregistered name.
  */
 fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>?): Boolean {
     if (overrides == null) return true
-    return overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: false
+    return overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: true
 }
 
 suspend fun createWorkspaceTools(

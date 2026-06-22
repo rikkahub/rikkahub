@@ -58,10 +58,14 @@ class WorkspaceToolsTest {
         assertFalse(resolveWorkspaceToolApproval("workspace_read_file", emptyMap()))
     }
 
-    // (A) Unknown tools fall through to the final `?: false` (no approval, no crash).
+    // (A) Unknown tools fail CLOSED: no override AND no default entry now requires approval (issue
+    // #356 finding #6), so a future `workspace_*` tool whose default entry is forgotten can never
+    // silently become no-approval. (Was: fell through to the relaxed `?: false`.)
     @Test
-    fun `unknown tool defaults to no approval`() {
-        assertFalse(resolveWorkspaceToolApproval("unknown_tool", emptyMap()))
+    fun `unknown tool fails closed and requires approval`() {
+        assertTrue(resolveWorkspaceToolApproval("unknown_tool", emptyMap()))
+        // The issue's concrete example: a plausible future tool not yet registered in the defaults map.
+        assertTrue(resolveWorkspaceToolApproval("workspace_chmod_file", emptyMap()))
     }
 
     // (B) A per-workspace override wins over the default — in both directions.
@@ -99,6 +103,36 @@ class WorkspaceToolsTest {
         assertTrue(resolveWorkspaceToolApproval("workspace_shell", null))
         // Even an unknown tool fails closed rather than falling through to `?: false`.
         assertTrue(resolveWorkspaceToolApproval("unknown_tool", null))
+    }
+
+    // (F) COVERAGE (issue #356 finding #6): every workspace tool the factories create must have an
+    // explicit [WorkspaceToolDefaultApprovals] entry, so the fail-closed fallback only ever fires for
+    // a genuinely-new, not-yet-registered tool — never for a shipped tool whose entry was forgotten.
+    // The factories (`createWorkspaceTools` + `sideloadWorkspaceTools`) are WorkspaceRepository-coupled
+    // and can't be instantiated in pure JVM (the same constraint this file documents above), so this
+    // pins the canonical name set they produce against the defaults map: adding a `workspace_*` factory
+    // tool without a default-approval entry breaks this test — update the factory list AND the map
+    // together. The map is the single source of truth the resolver fails closed against.
+    @Test
+    fun `every workspace factory tool has an explicit default-approval entry`() {
+        val factoryToolNames = setOf(
+            "workspace_list_files",
+            "workspace_read_file",
+            "workspace_write_file",
+            "workspace_edit_file",
+            "workspace_delete_file",
+            "workspace_move_file",
+            "workspace_shell",
+            "workspace_shell_tail",
+        )
+        assertEquals(
+            "WorkspaceToolDefaultApprovals must have exactly one entry per factory-created workspace tool",
+            factoryToolNames,
+            WorkspaceToolDefaultApprovals.keys,
+        )
+        WorkspaceToolDefaultApprovals.keys.forEach { name ->
+            assertTrue("default-approval key `$name` must be in the workspace_ namespace", name.startsWith("workspace_"))
+        }
     }
 
     // (E) The workspace context note names the resolved project dir + the /workspace absolute escape,
