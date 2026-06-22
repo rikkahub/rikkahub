@@ -78,11 +78,28 @@ internal const val UNTRUSTED_TOOL_CONTENT_CLAUSE =
 
 /**
  * I-DELIMIT (#197 design note §4.5): the untrusted-tool-content clause is part of the system prompt
- * exactly when the generation exposes tools — a no-tool chat has no untrusted-tool-content channel to
- * fence. Pure so the gating is unit-testable; the system-prompt builder just appends the result.
+ * exactly when the generation has an untrusted-tool-content channel to fence — either it exposes tools
+ * this request, OR the included transcript already carries tool output (issue #356 #4). Pure so the
+ * gating is unit-testable; the system-prompt builder just appends the result.
  */
 internal fun untrustedToolContentClauseFor(hasTools: Boolean): String =
     if (hasTools) UNTRUSTED_TOOL_CONTENT_CLAUSE else ""
+
+/**
+ * Whether any message carries TOOL OUTPUT visible to the model — a modern executed [UIMessagePart.Tool]
+ * (non-empty `output`) or a legacy standalone [UIMessagePart.ToolResult]. Used to gate the
+ * untrusted-tool-content clause on the historical transcript, not only the currently-exposed tools
+ * (issue #356 #4): a later turn can include prior shell/file/web/MCP output while exposing no tools this
+ * request — tools disabled, or the schema-budget fallback dropped them — and that output must still be
+ * fenced as untrusted data. Gating on the included (context-limited) set errs toward INCLUDING the
+ * clause: an over-included clause with no tool content present is a harmless no-op instruction, whereas
+ * a missing clause over visible tool output is the prompt-injection hole this closes.
+ */
+internal fun List<UIMessage>.hasToolOutput(): Boolean = any { message ->
+    message.parts.any { part ->
+        (part is UIMessagePart.Tool && part.output.isNotEmpty()) || part is UIMessagePart.ToolResult
+    }
+}
 
 @Serializable
 sealed interface GenerationChunk {
@@ -401,6 +418,9 @@ class ChatTurnRuntime(
             error(message)
         }
 
+        // The context-limited set is what actually goes into this request; gate the untrusted clause on
+        // ITS tool output (issue #356 #4), not the full history, and reuse it for the message payload.
+        val includedConvo = messages.limitContext(assistant.contextMessageSize)
         val internalMessages = buildList {
             val system = buildInternalSystemPrompt(
                 assistant = assistant,
@@ -409,9 +429,10 @@ class ChatTurnRuntime(
                 memories = memories,
                 tools = effectiveTools,
                 conversationSystemPrompt = conversationSystemPrompt,
+                includedMessagesHaveToolOutput = includedConvo.hasToolOutput(),
             )
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.limitContext(assistant.contextMessageSize))
+            addAll(includedConvo)
         }.let { transforms.transformInput(it) }
         val fit = internalMessages.fitToWindow(budget = payloadBudget)
         val providerMessages = fit.payload
@@ -499,6 +520,10 @@ class ChatTurnRuntime(
         memories: List<RecalledMemory>,
         tools: List<Tool>,
         conversationSystemPrompt: String?,
+        // Whether the messages actually included in THIS request carry tool output (issue #356 #4) —
+        // computed by the caller on the context-limited set so the untrusted clause is gated on what is
+        // sent, not on the full conversation history.
+        includedMessagesHaveToolOutput: Boolean,
     ): String = buildString {
         val effectiveSystemPrompt =
             if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
@@ -543,8 +568,10 @@ class ChatTurnRuntime(
 
         // I-DELIMIT (#197 design note §4.5): a standing instruction that content arriving from tools —
         // shell/file output, web pages, documents, screen text, MCP results — is untrusted DATA, never
-        // instructions to follow. Defense in depth on top of the approval loop-breaker.
-        val untrustedClause = untrustedToolContentClauseFor(tools.isNotEmpty())
+        // instructions to follow. Defense in depth on top of the approval loop-breaker. Gated on tools
+        // exposed THIS request OR tool output already present in the included transcript (issue #356 #4):
+        // historical tool output must stay fenced even when no tools are exposed now.
+        val untrustedClause = untrustedToolContentClauseFor(tools.isNotEmpty() || includedMessagesHaveToolOutput)
         if (untrustedClause.isNotEmpty()) {
             appendLine()
             append(untrustedClause)
