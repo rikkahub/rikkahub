@@ -71,6 +71,8 @@ class TaskApprovalVisiblePropertyTest {
             summaries.getOrPut(taskId) { mutableListOf() } += kind to summary
             return summaries.getValue(taskId).size.toLong()
         }
+        override suspend fun attachToolAnchor(taskId: Uuid, anchor: me.rerere.rikkahub.data.ai.task.SubagentToolAnchor): Boolean = false
+        override suspend fun getToolAnchor(taskId: Uuid): me.rerere.rikkahub.data.ai.task.SubagentToolAnchor? = null
         override suspend fun recordUsage(taskId: Uuid, reported: TaskBudgetUsage, budget: TaskBudget): TaskBudgetBreach? = null
     }
 

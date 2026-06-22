@@ -93,6 +93,10 @@ import me.rerere.rikkahub.data.ai.agentevent.AgentEventTerminalStatus
 import me.rerere.rikkahub.data.ai.agentevent.SyntheticAppendResult
 import me.rerere.rikkahub.data.ai.agentevent.TurnGateState
 import me.rerere.rikkahub.data.ai.shellrun.ShellCompletion
+import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_MODEL_NAME
+import me.rerere.rikkahub.data.ai.subagent.SPAWN_TOOL_NAME
+import me.rerere.rikkahub.data.ai.subagent.SubagentCompletion
+import me.rerere.rikkahub.data.ai.task.SubagentToolAnchor
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunToolAnchor
 import me.rerere.rikkahub.data.ai.runtime.AppToolCatalog
@@ -400,6 +404,54 @@ internal fun buildSyntheticAgentEventMessage(event: AgentEventEntity): UIMessage
         ),
     )
 
+/**
+ * Human-readable outcome text for a background subagent completion payload
+ * (`{taskId,status,summary?,error?,steps?,tokens?}`). Robust to a missing/garbled payload.
+ */
+internal fun renderSubagentCompletionText(payloadJson: String): String {
+    val obj = runCatching { Json.parseToJsonElement(payloadJson).jsonObject }.getOrNull()
+    fun str(key: String) = obj?.get(key)?.jsonPrimitive?.contentOrNull
+    val status = str("status") ?: "COMPLETED"
+    val taskId = str("taskId")
+    val summary = str("summary")
+    val error = str("error")
+    val head = buildString {
+        append("[Background subagent ")
+        append(if (status == "SUCCEEDED") "completed" else "ended — $status")
+        if (!taskId.isNullOrBlank()) append(" · task $taskId")
+        append("]")
+    }
+    val body = when {
+        !summary.isNullOrBlank() -> "\n\nResult:\n$summary"
+        !error.isNullOrBlank() -> "\n\n$error"
+        else -> ""
+    }
+    return head + body
+}
+
+/**
+ * The visible USER message a background subagent completion is delivered as. A USER role is REQUIRED,
+ * not cosmetic: a background spawn's parent turn already continued PAST the running marker and ended on
+ * an assistant message, so the completion must arrive as a fresh user-role turn — both to end the
+ * conversation on a user message (else the model rejects the continuation: "must end with a user
+ * message" / no assistant prefill) AND to actually NOTIFY the parent of the outcome so it need not poll.
+ * Carries the synthetic-event marker so FTS/stats/sanitizer exclude it (SYNTHETIC_DISTINCTNESS).
+ */
+internal fun buildSubagentCompletionNotice(event: AgentEventEntity): UIMessage =
+    UIMessage(
+        role = MessageRole.USER,
+        parts = listOf(
+            UIMessagePart.Text(
+                text = renderSubagentCompletionText(event.payloadJson),
+                metadata = buildJsonObject {
+                    put(SYNTHETIC_KIND_METADATA_KEY, AGENT_EVENT_SYNTHETIC_KIND)
+                    put(AGENT_EVENT_ID_METADATA_KEY, event.id)
+                    put(AGENT_EVENT_KIND_METADATA_KEY, event.kind)
+                },
+            ),
+        ),
+    )
+
 internal fun resolveDeferredShellCompletion(
     conversation: Conversation,
     anchor: ShellRunToolAnchor,
@@ -459,6 +511,59 @@ private fun deferredShellTaskId(tool: UIMessagePart.Tool): Uuid? {
             ?.contentOrNull
             ?.let { Uuid.parse(it) }
     }.getOrNull()
+}
+
+/**
+ * The taskId of a still-RUNNING background subagent marker (`agent`/`task` tool whose executed output
+ * is `{status:"running",taskId,...}`), or null if [tool] is not one. Unlike a deferred shell tool, the
+ * background marker is an EXECUTED tool output — so the match is on the running status, not isDeferred.
+ */
+internal fun runningSubagentTaskId(tool: UIMessagePart.Tool): Uuid? {
+    if (tool.toolName != SPAWN_TOOL_MODEL_NAME && tool.toolName != SPAWN_TOOL_NAME) return null
+    val text = (tool.output.singleOrNull() as? UIMessagePart.Text)?.text ?: return null
+    return runCatching {
+        val obj = Json.parseToJsonElement(text).jsonObject
+        if (obj["status"]?.jsonPrimitive?.contentOrNull != "running") return@runCatching null
+        obj["taskId"]?.jsonPrimitive?.contentOrNull?.let { Uuid.parse(it) }
+    }.getOrNull()
+}
+
+/** Background `agent`/`task` running markers in the conversation, as (taskId, anchor) candidates. */
+internal fun findBackgroundSubagentToolAnchors(
+    conversation: Conversation,
+): List<Pair<Uuid, SubagentToolAnchor>> =
+    conversation.messageNodes.flatMap { node ->
+        val message = runCatching { node.currentMessage }.getOrNull() ?: return@flatMap emptyList()
+        message.parts.mapNotNull { part ->
+            val tool = part as? UIMessagePart.Tool ?: return@mapNotNull null
+            val taskId = runningSubagentTaskId(tool) ?: return@mapNotNull null
+            taskId to SubagentToolAnchor(
+                toolCallId = tool.toolCallId,
+                toolNodeId = node.id,
+                toolMessageId = message.id,
+            )
+        }
+    }
+
+/**
+ * Whether a background subagent's spawn [anchor] (the `agent`/`task` tool call) lives in the node's
+ * CURRENTLY SELECTED branch. The completion is always delivered as a trailing USER notice, but we
+ * auto-continue the parent ONLY when the anchor is on the selected branch — so a completion for a
+ * branch the user regenerated/switched away from is recorded without driving a continuation on the
+ * now-current branch (which never spawned that run). A pure read-only check (no mutation), so delivery
+ * stays a single failure-atomic append.
+ *
+ * Returns FALSE when the anchor's node is no longer present (e.g. a regenerate TRUNCATED away the node
+ * that held the spawn marker while the detached run kept going): a known anchor whose node/message is
+ * gone is exactly the regenerated-away case and must NOT auto-continue. The anchorLESS case (no anchor
+ * could be located at all) is handled by the caller (deliver + continue best-effort), not here.
+ */
+internal fun isBackgroundAnchorOnSelectedBranch(
+    conversation: Conversation,
+    anchor: SubagentToolAnchor,
+): Boolean {
+    val node = conversation.messageNodes.firstOrNull { it.id == anchor.toolNodeId } ?: return false
+    return node.messages.getOrNull(node.selectIndex)?.id == anchor.toolMessageId
 }
 
 /**
@@ -1099,6 +1204,17 @@ class ChatService(
             _generationDoneFlow.emit(conversationId)
         }
         session.setJob(job)
+        // Every generation-entry turn-end — success, failure, regenerate, approval-resume, cancel —
+        // must settle pending agent events, e.g. a background-subagent completion enqueued WHILE this
+        // turn was generating (its own idle-drain poke was refused for the live turn). The onSuccess
+        // turn-end drain (handleMessageComplete) covers only the success branch; this catch-all pokes
+        // an idle-gated drain once THIS job completes and the slot frees (async, so it runs after the
+        // slot-release completion handler), so a completion is never stranded by a failed/regenerate/
+        // approval turn. Idle-gated + AT_MOST_ONCE make it a no-op when the success
+        // path already drained.
+        job.invokeOnCompletion {
+            appScope.launch { maybeDrainAgentEventsWhenIdle(conversationId) }
+        }
         return job
     }
 
@@ -1274,6 +1390,21 @@ class ChatService(
                     Log.e(TAG, "agent-event idle drain failed", e)
                     addError(e, conversationId, title = context.getString(R.string.error_title_generation))
                 }
+            }.also { drainJob ->
+                // The drain delivers only a bounded SNAPSHOT per pass (drainAgentEventsAtTurnEnd); a
+                // continuation can enqueue a fresh completion AFTER that snapshot whose own idle-drain
+                // poke is refused while THIS slot is held. So, once the slot clears, re-poke if events
+                // remain — delivered promptly instead of stranding until an unrelated turn.
+                // Launched async so it runs AFTER the slot-release completion handler; each re-poke
+                // is its own bounded pass with the slot released between, so the user can interject and
+                // an endlessly-spawning continuation cannot hold the slot (its own budgets bound it).
+                drainJob.invokeOnCompletion {
+                    appScope.launch {
+                        if (agentEventStore.listPending(conversationId).isNotEmpty()) {
+                            maybeDrainAgentEventsWhenIdle(conversationId)
+                        }
+                    }
+                }
             }
         }
     }
@@ -1322,9 +1453,29 @@ class ChatService(
      * completion runs with `runTurnEndJobs = false`, so it does not recurse into another drain.
      */
     private suspend fun drainAgentEventsAtTurnEnd(conversationId: Uuid) {
+        // Drain a SNAPSHOT of the events pending NOW, one at a time, each with its own continuation
+        // (one event per continuation, productDecision #5). The FIFO enqueue sequence is monotone, so
+        // the oldest `budget` events are exactly those pending at entry. This CHAINS past the round-3
+        // strand: completions queued WHILE the conversation was generating (their idle-drain refused)
+        // are all pending when this idle drain begins, so all are in the snapshot and all get delivered
+        // — the continuation runs with runTurnEndJobs = false and does not itself re-drain.
+        //
+        // The snapshot count BOUNDS the loop: a continuation is a normal turn that can
+        // spawn a fast detached background child which enqueues its completion concurrently; chasing
+        // those this pass would not provably terminate. They are delivered instead by their own
+        // onBackgroundComplete idle-drain poke or the next turn-end, never lost (cold-start replay is
+        // the final backstop).
+        var budget = agentEventStore.listPending(conversationId).size
+        while (budget-- > 0 && drainOneAgentEvent(conversationId)) {
+            // deliver the snapshot, oldest first
+        }
+    }
+
+    /** Deliver (or terminalize) the single oldest pending event; returns true if more may remain. */
+    private suspend fun drainOneAgentEvent(conversationId: Uuid): Boolean {
         val conversation = getConversationFlow(conversationId).value
         val lastMessage = conversation.currentMessages.lastOrNull()
-        if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return
+        if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return false
 
         val outcome = agentEventStore.claimAndAppendAndConsume(conversationId) { event ->
             val persistedConversation = conversationRepo.getConversationById(conversationId)
@@ -1377,6 +1528,46 @@ class ChatService(
                 }
             }
 
+            if (event.kind == SubagentCompletion.KIND) {
+                // Deliver the outcome as a trailing USER notice. A background spawn's parent turn already
+                // CONTINUED past the running marker and ended on an ASSISTANT message, so resolving the
+                // buried tool and continuing from it would (a) leave the conversation ending on an
+                // assistant turn — the provider rejects the continuation ("must end with a user message"
+                // / no assistant prefill) — and (b) never tell the parent the outcome. The trailing USER
+                // notice ends the turn on a user message AND is the parent's notification (so it need not
+                // poll the run itself). Contrast deferred shell: it BLOCKS the turn, so its tool IS the
+                // last message and resolve-then-continue is valid.
+                val taskId = shellCompletionTaskId(event.payloadJson)
+                val anchor = taskId?.let { id ->
+                    taskRunStore.getToolAnchor(id)
+                        ?: findBackgroundSubagentToolAnchors(persistedConversation)
+                            .firstOrNull { it.first == id }?.second
+                }
+                // SELECTED-BRANCH GUARD: only auto-continue when the spawn's anchor lives in the node's
+                // CURRENTLY SELECTED branch. If the user regenerated/switched away from the branch that
+                // spawned this subagent, still deliver the notice (history + notification), but do NOT
+                // drive a continuation on the now-current branch (it never spawned this run). A read-only
+                // check — no resolve write — so delivery is a SINGLE append (failure-atomic: a thrown
+                // append cannot leave a half-applied resolve behind). The agent/task tool bubble keeps its
+                // running marker; the USER notice is the authoritative outcome.
+                val onSelectedBranch = anchor == null ||
+                    isBackgroundAnchorOnSelectedBranch(persistedConversation, anchor)
+
+                val notice = buildSubagentCompletionNotice(event)
+                val noticeNode = notice.toMessageNode()
+                conversationRepo.appendMessageNode(
+                    persistedConversation.copy(messageNodes = persistedConversation.messageNodes + noticeNode),
+                    noticeNode,
+                )
+                return@claimAndAppendAndConsume ClaimAppendAction.Append(
+                    synthetic = SyntheticAppendResult(
+                        syntheticNodeId = noticeNode.id.toString(),
+                        syntheticMessageId = notice.id.toString(),
+                    ),
+                    continueGeneration = onSelectedBranch,
+                )
+            }
+
             val syntheticMessage = buildSyntheticAgentEventMessage(event)
             val syntheticNode = syntheticMessage.toMessageNode()
             conversationRepo.appendMessageNode(
@@ -1391,14 +1582,22 @@ class ChatService(
             )
         }
 
-        if (outcome is ClaimOutcome.Delivered) {
-            refreshSessionAndFts(conversationId)
-            // Continue the model on the just-appended synthetic message. runTurnEndJobs = false: the
-            // continuation does not own the turn-end-job launch here, and — crucially — does not
-            // recurse into another drain (one event per continuation, productDecision #5).
-            if (outcome.continueGeneration) {
-                handleMessageComplete(conversationId, runTurnEndJobs = false)
+        return when (outcome) {
+            is ClaimOutcome.Delivered -> {
+                refreshSessionAndFts(conversationId)
+                // Continue the model on the just-appended synthetic message. runTurnEndJobs = false:
+                // the continuation does not own the turn-end-job launch and does not itself recurse
+                // into a drain (one event per continuation, productDecision #5); the outer loop drains
+                // the next pending event after it returns.
+                if (outcome.continueGeneration) {
+                    handleMessageComplete(conversationId, runTurnEndJobs = false)
+                }
+                true // a delivered event may be followed by more pending ones — keep draining
             }
+            // A tombstoned/malformed event was terminalized (consumed, not delivered); more may remain.
+            is ClaimOutcome.Terminalized -> true
+            // Empty queue, or a concurrent drain won the claim (it owns the rest of the chain).
+            ClaimOutcome.Empty, ClaimOutcome.Lost -> false
         }
     }
 
@@ -2085,6 +2284,12 @@ class ChatService(
                             automationLease = SubagentAutomationLease { sub, block ->
                                 openSubagentAutomationLease(sub, session, block)
                             },
+                            // Opt-in `background` spawn (background-spawn v1): the app-lifetime scope a
+                            // detached child runs on (so it outlives this turn), and the idle-drain poke
+                            // that delivers its enqueued completion the moment the child terminates
+                            // instead of waiting for the user's next turn-end.
+                            backgroundScope = appScope,
+                            onBackgroundComplete = { maybeDrainAgentEventsWhenIdle(conversationId) },
                         )
                     }
                 },
@@ -2608,6 +2813,12 @@ class ChatService(
                 )
             }
         }
+        // Same persistence for background subagent running markers, so a completion can resolve back
+        // into the original agent/task tool output by taskId. A false return is benign (already
+        // anchored / row gone) — the drain's conversation-scan fallback covers a missing anchor.
+        findBackgroundSubagentToolAnchors(conversation).forEach { (taskId, anchor) ->
+            taskRunStore.attachToolAnchor(taskId, anchor)
+        }
     }
 
     private fun isConversationTombstoned(conversationId: Uuid): Boolean {
@@ -2624,6 +2835,10 @@ class ChatService(
     suspend fun deleteConversation(conversation: Conversation) = conversationDeleteRestoreMutex.withLock {
         tombstonedConversations[conversation.id] = Unit
         stopGeneration(conversation.id)
+        // Cancel any DETACHED background subagents this conversation owns — stopGeneration only stops the
+        // foreground turn; a background run is on appScope and would otherwise keep running, count against
+        // a finite cap, and try to deliver into the now-deleted conversation.
+        taskCoordinator.cancelBackgroundForConversation(conversation.id)
         removeSession(conversation.id, force = true)
         conversationRepo.deleteConversation(conversation)
     }

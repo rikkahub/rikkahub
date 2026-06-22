@@ -21,11 +21,43 @@ class FakeTaskRunDAO : TaskRunDAO {
     private val lock = Any()
     private val runs = LinkedHashMap<String, TaskRunEntity>()
 
+    /** Snapshot/restore so a test [BoardTransactionRunner] fake can roll the table back on a throw. */
+    class StateSnapshot internal constructor(internal val runs: Map<String, TaskRunEntity>)
+
+    fun snapshot(): StateSnapshot = synchronized(lock) { StateSnapshot(runs.toMap()) }
+
+    fun restore(snapshot: StateSnapshot) = synchronized(lock) {
+        runs.clear()
+        runs.putAll(snapshot.runs)
+    }
+
     override suspend fun upsert(run: TaskRunEntity) {
         synchronized(lock) { runs[run.id] = run }
     }
 
     override suspend fun getById(id: String): TaskRunEntity? = synchronized(lock) { runs[id] }
+
+    override suspend fun attachToolAnchor(
+        taskId: String,
+        toolCallId: String,
+        toolNodeId: String,
+        toolMessageId: String,
+    ): Int = synchronized(lock) {
+        val row = runs[taskId] ?: return 0
+        // Mirror the DAO: attach only when unset OR all three fields already match (idempotent);
+        // ANY conflicting anchor returns 0.
+        val unset = row.toolCallId == null && row.toolNodeId == null && row.toolMessageId == null
+        val sameAnchor = row.toolCallId == toolCallId &&
+            row.toolNodeId == toolNodeId &&
+            row.toolMessageId == toolMessageId
+        if (!unset && !sameAnchor) return 0
+        runs[taskId] = row.copy(
+            toolCallId = toolCallId,
+            toolNodeId = toolNodeId,
+            toolMessageId = toolMessageId,
+        )
+        1
+    }
 
     override fun getByIdFlow(id: String): Flow<TaskRunEntity?> = flow { emit(getById(id)) }
 
@@ -39,6 +71,12 @@ class FakeTaskRunDAO : TaskRunDAO {
 
     override suspend fun listByStates(states: Set<String>): List<TaskRunEntity> =
         synchronized(lock) { runs.values.filter { it.latestState in states } }
+
+    override suspend fun listBackgroundByStates(states: Set<String>): List<TaskRunEntity> =
+        synchronized(lock) { runs.values.filter { it.isBackground && it.latestState in states } }
+
+    override suspend fun listForegroundByStates(states: Set<String>): List<TaskRunEntity> =
+        synchronized(lock) { runs.values.filter { !it.isBackground && it.latestState in states } }
 
     override suspend fun deleteById(id: String): Int = synchronized(lock) {
         if (runs.remove(id) != null) 1 else 0

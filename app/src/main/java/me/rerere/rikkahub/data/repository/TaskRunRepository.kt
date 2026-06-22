@@ -8,7 +8,11 @@ import me.rerere.ai.runtime.task.TaskEvent
 import me.rerere.ai.runtime.task.TaskSpec
 import me.rerere.ai.runtime.task.TaskState
 import me.rerere.ai.runtime.task.TaskStateReducer
+import me.rerere.rikkahub.data.ai.subagent.SubagentCompletion
+import me.rerere.rikkahub.data.ai.task.SubagentToolAnchor
 import me.rerere.rikkahub.data.ai.task.TaskRunStore
+import me.rerere.rikkahub.data.db.dao.AgentEventDAO
+import me.rerere.rikkahub.data.db.dao.NoopAgentEventDAO
 import me.rerere.rikkahub.data.db.dao.TaskRunDAO
 import me.rerere.rikkahub.data.db.entity.TaskRunEntity
 import me.rerere.rikkahub.data.db.entity.TaskRunEventSummary
@@ -38,6 +42,10 @@ import kotlin.uuid.Uuid
 class TaskRunRepository(
     private val dao: TaskRunDAO,
     private val transactions: BoardTransactionRunner,
+    // Sink for background-run completion events, folded into the SAME terminal transaction as the
+    // state write. Defaults to [NoopAgentEventDAO] so non-background callers/tests need not wire a
+    // queue (a foreground run never enqueues); production injects the real DAO (DataSourceModule).
+    private val agentEventDao: AgentEventDAO = NoopAgentEventDAO,
     private val now: () -> Long = System::currentTimeMillis,
 ) : TaskRunStore {
 
@@ -62,6 +70,7 @@ class TaskRunRepository(
                 latestState = TaskRunStateTag.CREATED.name,
                 createdAt = timestamp,
                 updatedAt = timestamp,
+                isBackground = spec.isBackground,
             )
         )
         TaskState.Created
@@ -90,7 +99,11 @@ class TaskRunRepository(
      * ids of the rows actually recovered.
      */
     suspend fun recoverInterruptedRuns(): List<Uuid> = transactions.inTransaction {
-        val active = dao.listByStates(TaskRunStateTag.ACTIVE.map { it.name }.toSet())
+        // FOREGROUND rows only: a background row is fail-closed to a terminal by
+        // [recoverBackgroundInterrupted], never folded to the resumable Interrupted (from which the
+        // reducer ignores FinalResult/ExecutionFailed, losing the detached completion). The two scans
+        // operate on disjoint row sets, so this holds regardless of their order or of fail-close success.
+        val active = dao.listForegroundByStates(TaskRunStateTag.ACTIVE.map { it.name }.toSet())
         active.mapNotNull { entity ->
             val taskId = Uuid.parse(entity.id)
             val current = entity.toTaskState()
@@ -113,6 +126,37 @@ class TaskRunRepository(
                 dao.upsert(entity.applyState(next, updatedAt = now()))
                 taskId
             }
+        }
+    }
+
+    /**
+     * Cold-start FAIL-CLOSE for DETACHED background runs (background-spawn v1). A foreground run is
+     * folded to the resumable [TaskState.Interrupted] by [recoverInterruptedRuns] because its parent
+     * turn died with it and a user can re-drive it; a BACKGROUND run is different — its parent turn
+     * ALREADY ENDED with a `{status:"running"}` tool marker, and v1 does not partial-resume an
+     * orphaned LLM run, so the marker must be closed honestly to a terminal failure (decision (a)).
+     *
+     * Each active background row is folded through [applyEvent] with [TaskEvent.ExecutionFailed], which
+     * (1) drives the state to terminal [TaskState.Failed] and (2) — because the row is background and
+     * the transition is terminal — atomically enqueues its [SubagentCompletion] (FAILED/"interrupted")
+     * in the SAME transaction, so the idle-drain resolves the stuck running marker. Reusing [applyEvent]
+     * (not a bespoke write) inherits the no-op guard + dedupeKey=taskId, so this is idempotent: a row
+     * already terminal is skipped, and a recovery enqueue can never collide with the detached awaiter's
+     * own terminal write (only one of them wins the first terminal transition). MUST run BEFORE
+     * [recoverInterruptedRuns] so a background row is fail-closed, never folded to Interrupted.
+     *
+     * Returns the ids of the rows actually fail-closed (for logging/tests).
+     */
+    suspend fun recoverBackgroundInterrupted(): List<Uuid> {
+        val active = transactions.inTransaction {
+            dao.listBackgroundByStates(TaskRunStateTag.ACTIVE.map { it.name }.toSet())
+        }
+        return active.mapNotNull { entity ->
+            val taskId = Uuid.parse(entity.id)
+            val next = applyEvent(taskId, TaskEvent.ExecutionFailed(BACKGROUND_INTERRUPTED_ERROR))
+            // applyEvent's no-op guard leaves an already-terminal/gone row unchanged; report only the
+            // rows this pass actually drove to Failed.
+            if (next is TaskState.Failed) taskId else null
         }
     }
 
@@ -163,6 +207,28 @@ class TaskRunRepository(
             return@inTransaction current
         }
         dao.upsert(entity.applyState(next, updatedAt = now()))
+        // A DETACHED background run's parent turn already ended, so a terminal transition must durably
+        // enqueue its completion (in THIS transaction) for the idle-drain to deliver. The next != current
+        // guard above means this fires only on the FIRST terminal transition (an absorbing terminal
+        // re-applied is a no-op above), and dedupeKey=taskId collapses any race with the cold-start
+        // recovery scan to a single delivery (AT_MOST_ONCE). insertIgnore + the throwing-DAO rollback
+        // keep terminal-state and completion atomic.
+        if (entity.isBackground && next.isTerminal) {
+            val completion = SubagentCompletion.of(
+                conversationId = Uuid.parse(entity.conversationId),
+                taskId = taskId,
+                state = next,
+                steps = entity.usageSteps,
+                tokens = entity.usageTokens,
+            )
+            agentEventDao.insertIgnore(
+                completion.asPendingAgentEventEntity(
+                    eventId = Uuid.random().toString(),
+                    enqueueSeq = agentEventDao.nextEnqueueSeq(entity.conversationId),
+                    createdAt = now(),
+                )
+            )
+        }
         next
     }
 
@@ -232,6 +298,26 @@ class TaskRunRepository(
         )
         budget.firstBreach(merged)
     }
+
+    override suspend fun attachToolAnchor(taskId: Uuid, anchor: SubagentToolAnchor): Boolean =
+        transactions.inTransaction {
+            dao.attachToolAnchor(
+                taskId = taskId.toString(),
+                toolCallId = anchor.toolCallId,
+                toolNodeId = anchor.toolNodeId.toString(),
+                toolMessageId = anchor.toolMessageId.toString(),
+            ) == 1
+        }
+
+    override suspend fun getToolAnchor(taskId: Uuid): SubagentToolAnchor? =
+        transactions.inTransaction {
+            dao.getById(taskId.toString())?.let { row ->
+                val callId = row.toolCallId ?: return@let null
+                val nodeId = row.toolNodeId ?: return@let null
+                val messageId = row.toolMessageId ?: return@let null
+                SubagentToolAnchor(callId, Uuid.parse(nodeId), Uuid.parse(messageId))
+            }
+        }
 
     // --- entity <-> domain bridge ---------------------------------------------------------------
 
@@ -342,5 +428,13 @@ class TaskRunRepository(
          */
         const val CORRUPT_SUMMARY_MARKER: String =
             "[progress summary unavailable — prior run state could not be read; avoid repeating already-completed work]"
+
+        /**
+         * The terminal error a cold-start fail-close stamps on an orphaned background run
+         * ([recoverBackgroundInterrupted]). v1 does not partial-resume a detached LLM run, so this is
+         * an honest interruption — never a fabricated success.
+         */
+        const val BACKGROUND_INTERRUPTED_ERROR: String =
+            "interrupted: the app was closed before this background subagent finished"
     }
 }

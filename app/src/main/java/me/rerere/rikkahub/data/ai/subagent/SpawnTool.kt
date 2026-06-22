@@ -1,13 +1,16 @@
 package me.rerere.rikkahub.data.ai.subagent
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -18,6 +21,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.runtime.contract.TaskApprovalGate
 import me.rerere.ai.runtime.subagent.filterToolsForSubagent
 import me.rerere.ai.runtime.task.TaskState
+import me.rerere.rikkahub.data.ai.task.BackgroundCapExceededException
 import me.rerere.rikkahub.data.ai.task.ExecutionHandle
 import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
@@ -139,6 +143,15 @@ fun buildSpawnTool(
     // EMPTY list when the sub has no usable grant / no reachable kill switch). Null = the legacy
     // behavior (subagents get no automation tools).
     automationLease: SubagentAutomationLease? = null,
+    // App-lifetime scope enabling the opt-in `background` mode: when supplied, a `background:true` call
+    // spawns a DETACHED run (returns a running taskId immediately, delivered later via the durable
+    // completion queue) instead of awaiting the child. Null = background unsupported (the param is not
+    // even advertised), and every spawn is the legacy synchronous run.
+    backgroundScope: CoroutineScope? = null,
+    // Invoked AFTER a background child reaches its durable terminal (its completion is already
+    // enqueued by then), so the caller can poke an idle drain to deliver it promptly. Wired to
+    // ChatService.maybeDrainAgentEventsWhenIdle at the composition root; default no-op.
+    onBackgroundComplete: suspend () -> Unit = {},
 ): Tool = Tool(
     name = SPAWN_TOOL_MODEL_NAME,
     description = "Delegate a self-contained sub-task to a specialized subagent and return its result.",
@@ -159,6 +172,16 @@ fun buildSpawnTool(
                         JsonPrimitive("The full self-contained task for the subagent. It does not see this conversation; include all needed context."),
                     )
                 })
+                // Only advertise background mode when an app-lifetime scope is wired to run it.
+                if (backgroundScope != null) {
+                    put("background", buildJsonObject {
+                        put("type", JsonPrimitive("boolean"))
+                        put(
+                            "description",
+                            JsonPrimitive("Optional. Run the subagent in the BACKGROUND: returns immediately with a running taskId and delivers the result later, so you can keep working in the meantime. Use for long or independent sub-tasks. Default false (wait for the result inline)."),
+                        )
+                    })
+                }
             },
             required = listOf("subagent", "prompt"),
         )
@@ -167,11 +190,106 @@ fun buildSpawnTool(
     // Approval UI is unreachable mid-subagent (v1 security note in the design): a subagent runs
     // only needsApproval=false tools. The spawn tool itself is therefore auto.
     needsApproval = false,
-    execute = { args ->
+    execute = exec@{ args ->
         val subName = args.subagentArg()
         val prompt = args.promptArg()
         val sub = spawnableAssistants.firstOrNull { it.name == subName }
             ?: error("No spawnable subagent named \"$subName\". Available: ${spawnableAssistants.joinToString { it.name }}")
+
+        // BACKGROUND (opt-in, detached): persist + spawn on the app-lifetime scope and return a running
+        // marker IMMEDIATELY. The output is a non-empty, non-deferred Text part (isExecuted && !isDeferred)
+        // so the parent turn ENDS normally — it never trips the deferred-tool conversation gate — and the
+        // child's terminal is delivered later via the durable SubagentCompletion queue. The handle is
+        // parented to backgroundScope (survives the turn) and owns the child's board claims; runBackground
+        // releases it + cancels via the coordinator's taskId map (jobs sheet). v1: no automation lease for
+        // a background child (approval-gated child tools are still auto-denied by gateSubagentTools).
+        if (args.backgroundArg() && backgroundScope != null) {
+            val backgroundJob = requireNotNull(backgroundScope.coroutineContext.job) {
+                "background scope must carry a Job"
+            }
+            val handle = registry.register(
+                conversationId = parentConversationId,
+                assistantId = sub.id,
+                parentJob = backgroundJob,
+            )
+            val taskId = Uuid.random()
+            registry.markRunning(handle.id)
+            // Tear down the handle on EVERY exit: the detached job's finally (onTerminal) on a launched
+            // run, or HERE on a SYNCHRONOUS pre-launch failure (model resolution / start handshake /
+            // tool build throwing) or a cap rejection — without this, a throw before the job launches
+            // leaves the handle's job pinned live with no background run to cancel it (registry.unregister
+            // is what completes the handle job). releaseOrphanedClaims also frees the run's board claims.
+            val teardownHandle: suspend () -> Unit = {
+                try {
+                    releaseOrphanedClaims(handle.id)
+                } finally {
+                    registry.unregister(handle.id)
+                }
+            }
+            try {
+                val subTools = gateSubagentTools(
+                    tools = buildSubagentTools(sub, handle),
+                    taskId = taskId,
+                    gate = approvalGateFor(sub),
+                )
+                coordinator.runBackground(
+                    sub = sub,
+                    prompt = prompt,
+                    parentModelId = parentModelId,
+                    settings = settings,
+                    tools = subTools,
+                    parentConversationId = parentConversationId,
+                    taskId = taskId,
+                    onTerminal = {
+                        // The handle is dead on EVERY terminal path; drop it (orphan recovery,
+                        // decision #5), then poke an idle drain so the just-enqueued completion is
+                        // delivered promptly instead of at the user's next turn-end. NonCancellable is
+                        // already held by runBackground's finally.
+                        teardownHandle()
+                        onBackgroundComplete()
+                    },
+                )
+            } catch (cap: BackgroundCapExceededException) {
+                // The user's configured max concurrent background subagents is reached; no detached job
+                // launched, so its finally never runs — release the handle here and tell the model the
+                // limit so it can wait/cancel or run this one inline.
+                withContext(NonCancellable) { teardownHandle() }
+                return@exec listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("status", JsonPrimitive("rejected"))
+                            put("background", JsonPrimitive(true))
+                            put("subagent", JsonPrimitive(sub.name))
+                            put(
+                                "reason",
+                                JsonPrimitive(
+                                    "The configured maximum of ${cap.cap} concurrent background " +
+                                        "subagent(s) is already running. Wait for one to finish (or " +
+                                        "cancel it from the jobs sheet), or run this one inline (omit " +
+                                        "background)."
+                                )
+                            )
+                        }.toString()
+                    )
+                )
+            } catch (t: Throwable) {
+                // Synchronous pre-launch failure: tear down the handle, then surface the error as a
+                // tool failure (NonCancellable so a cancelled spawn still cleans up; the throw — incl.
+                // CancellationException — is rethrown to preserve structured concurrency).
+                withContext(NonCancellable) { teardownHandle() }
+                throw t
+            }
+            return@exec listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("status", JsonPrimitive("running"))
+                        put("taskId", JsonPrimitive(taskId.toString()))
+                        put("background", JsonPrimitive(true))
+                        put("subagent", JsonPrimitive(sub.name))
+                    }.toString()
+                )
+            )
+        }
 
         // One live execution handle per spawn (SPEC.md M4): its Job is a structural child of the
         // spawning coroutine's job, so the parent's cancel cascades without registry bookkeeping.
@@ -310,6 +428,12 @@ private fun JsonElement.subagentArg(): String =
 
 private fun JsonElement.promptArg(): String =
     jsonObject["prompt"]?.jsonPrimitive?.content.orEmpty()
+
+/** Tolerant boolean: accepts a JSON boolean OR the string "true" (models often send it as a string). */
+private fun JsonElement.backgroundArg(): Boolean {
+    val prim = jsonObject["background"]?.jsonPrimitive ?: return false
+    return prim.booleanOrNull ?: (prim.content.trim().equals("true", ignoreCase = true))
+}
 
 /**
  * Opens a UI-automation lease for a spawned subagent (Option B — subagent UI automation). The

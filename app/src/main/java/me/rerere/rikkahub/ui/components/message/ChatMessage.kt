@@ -9,6 +9,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,13 +23,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +68,8 @@ import androidx.core.net.toFile
 import androidx.core.net.toUri
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import com.composables.icons.lucide.Bell
+import com.composables.icons.lucide.Lucide
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -79,6 +88,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.isSyntheticAgentEvent
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.message.tools.ChatMessageToolStep
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -99,6 +109,81 @@ import me.rerere.rikkahub.utils.openUrl
 import me.rerere.common.text.urlDecode
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
+
+/**
+ * A synthetic agent-event message (a background-subagent completion) is USER-role on the wire — so the
+ * turn ends on a user message — but it is injected by the runtime, not typed by the human. Render it
+ * like a TOOL STEP (agent-process card, bell icon + one-line outcome), never as a user bubble; tapping
+ * it opens a bottom sheet with the full result detail (the same affordance a tool call has).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SyntheticAgentEventNotice(message: UIMessage, modifier: Modifier = Modifier) {
+    val full = remember(message) { message.toText() }
+    val headline = remember(full) {
+        full.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: "Background subagent completed"
+    }
+    var showDetail by remember { mutableStateOf(false) }
+
+    ChainOfThought(
+        modifier = modifier,
+        steps = listOf(Unit),
+    ) {
+        ControlledChainOfThoughtStep(
+            expanded = false,
+            onExpandedChange = {},
+            icon = {
+                Icon(
+                    imageVector = Lucide.Bell,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = LocalContentColor.current.copy(alpha = 0.7f),
+                )
+            },
+            label = {
+                Text(
+                    text = headline,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            onClick = { showDetail = true },
+            contentVisible = false,
+        )
+    }
+
+    if (showDetail) {
+        ModalBottomSheet(
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+            ),
+            onDismissRequest = { showDetail = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Background subagent",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                // The subagent's result is markdown (tables, bold, lists) — render it, don't dump raw.
+                MarkdownBlock(
+                    content = full,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun ChatMessage(
@@ -122,6 +207,13 @@ fun ChatMessage(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
+    // A synthetic agent-event message (e.g. a background-subagent completion) is USER-role ON THE WIRE
+    // so the turn ends on a user message, but it is NOT something the human typed — render it as a
+    // distinct, subdued notification instead of a user bubble (mirrors the task-notification UI).
+    if (message.isSyntheticAgentEvent()) {
+        SyntheticAgentEventNotice(message = message, modifier = modifier)
+        return
+    }
     val settings = LocalSettings.current.displaySetting
     val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
     val textStyle = LocalTextStyle.current.copy(

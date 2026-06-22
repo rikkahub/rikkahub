@@ -512,6 +512,7 @@ private fun ChatPageContent(
                 jobs = backgroundJobs,
                 onDismiss = { showBackgroundJobs = false },
                 loadTail = { vm.tailBackgroundJob(it) },
+                onCancel = { vm.cancelBackgroundJob(it) },
             )
         }
     }

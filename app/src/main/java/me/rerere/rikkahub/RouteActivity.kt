@@ -110,6 +110,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesAdvancedPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
@@ -449,6 +450,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingPreferencesUIPage()
                             }
 
+                            entry<Screen.SettingPreferencesAdvanced> {
+                                SettingPreferencesAdvancedPage()
+                            }
+
                             entry<Screen.SettingProvider> {
                                 SettingProviderPage()
                             }
@@ -699,6 +704,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingPreferencesUI : Screen
+
+    @Serializable
+    data object SettingPreferencesAdvanced : Screen
 
     @Serializable
     data object SettingProvider : Screen

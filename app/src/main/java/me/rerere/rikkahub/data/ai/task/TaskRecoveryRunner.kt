@@ -50,6 +50,14 @@ class TaskRecoveryRunner(
         retentionMaxAgeMillis: Long = TaskRunRepository.DEFAULT_RETENTION_MAX_AGE_MILLIS,
         retentionKeepNewestPerConversation: Int = TaskRunRepository.DEFAULT_RETENTION_KEEP_NEWEST,
     ): Result {
+        // FAIL-CLOSE detached background runs FIRST: each folds to terminal Failed and atomically
+        // enqueues its completion (so the stuck `{status:"running"}` marker resolves), and removing it
+        // from ACTIVE keeps the generic interrupt scan below from folding it to the resumable
+        // Interrupted instead. Background-spawn v1 does not partial-resume an orphaned LLM run.
+        val failClosed = runCatching { taskRuns.recoverBackgroundInterrupted() }
+            .onFailure { Log.e(TAG, "background fail-close scan failed", it) }
+            .getOrDefault(emptyList())
+
         val recovered = runCatching { taskRuns.recoverInterruptedRuns() }
             .onFailure { Log.e(TAG, "interrupt scan failed", it) }
             .getOrDefault(emptyList())
@@ -70,13 +78,23 @@ class TaskRecoveryRunner(
             )
         }.onFailure { Log.e(TAG, "board retention sweep failed", it) }.getOrDefault(0)
 
-        Log.i(TAG, "startup recovery: ${recovered.size} interrupted, $sweptRuns runs + $sweptItems items swept")
-        return Result(recoveredRuns = recovered.size, sweptRuns = sweptRuns, sweptItems = sweptItems)
+        Log.i(
+            TAG,
+            "startup recovery: ${failClosed.size} background fail-closed, ${recovered.size} interrupted, " +
+                "$sweptRuns runs + $sweptItems items swept",
+        )
+        return Result(
+            recoveredRuns = recovered.size,
+            backgroundFailClosed = failClosed.size,
+            sweptRuns = sweptRuns,
+            sweptItems = sweptItems,
+        )
     }
 
     /** What one [runStartupRecovery] pass did, for logging and tests. */
     data class Result(
         val recoveredRuns: Int,
+        val backgroundFailClosed: Int,
         val sweptRuns: Int,
         val sweptItems: Int,
     )

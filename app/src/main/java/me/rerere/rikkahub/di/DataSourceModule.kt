@@ -303,6 +303,9 @@ val dataSourceModule = module {
         TaskRunRepository(
             dao = get(),
             transactions = RoomBoardTransactionRunner(get<AppDatabase>()),
+            // Real queue DAO so a DETACHED background run's terminal enqueues its completion atomically
+            // with the state write (NoopAgentEventDAO default would silently drop background completions).
+            agentEventDao = get(),
         )
     }
     single<me.rerere.rikkahub.data.ai.task.TaskRunStore> { get<TaskRunRepository>() }

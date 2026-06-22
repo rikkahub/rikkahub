@@ -91,6 +91,8 @@ class TaskCoordinatorLifecycleClosureTest {
             return 1L
         }
 
+        override suspend fun attachToolAnchor(taskId: Uuid, anchor: me.rerere.rikkahub.data.ai.task.SubagentToolAnchor): Boolean = false
+        override suspend fun getToolAnchor(taskId: Uuid): me.rerere.rikkahub.data.ai.task.SubagentToolAnchor? = null
         override suspend fun recordUsage(taskId: Uuid, reported: TaskBudgetUsage, budget: TaskBudget) =
             budget.firstBreach(TaskBudgetUsage())
     }
@@ -216,6 +218,8 @@ class TaskCoordinatorLifecycleClosureTest {
         override suspend fun claimResume(taskId: Uuid) = inner.claimResume(taskId)
         override suspend fun appendEventSummary(taskId: Uuid, summary: String, kind: String) =
             inner.appendEventSummary(taskId, summary, kind)
+        override suspend fun attachToolAnchor(taskId: Uuid, anchor: me.rerere.rikkahub.data.ai.task.SubagentToolAnchor): Boolean = false
+        override suspend fun getToolAnchor(taskId: Uuid): me.rerere.rikkahub.data.ai.task.SubagentToolAnchor? = null
         override suspend fun recordUsage(taskId: Uuid, reported: TaskBudgetUsage, budget: TaskBudget) =
             inner.recordUsage(taskId, reported, budget)
     }

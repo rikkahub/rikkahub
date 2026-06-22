@@ -82,6 +82,12 @@ fun SettingPreferencesPage() {
                         headlineContent = { Text(stringResource(R.string.setting_page_preferences_ui)) },
                         supportingContent = { Text(stringResource(R.string.setting_page_preferences_ui_desc)) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingPreferencesAdvanced) },
+                        leadingContent = { Icon(HugeIcons.Settings03, null) },
+                        headlineContent = { Text("Advanced") },
+                        supportingContent = { Text("Background subagents and other runtime knobs") },
+                    )
                 }
             }
         }

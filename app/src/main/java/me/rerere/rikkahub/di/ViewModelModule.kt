@@ -41,6 +41,8 @@ val viewModelModule = module {
             favoriteRepository = get(),
             shellRunStore = get(),
             workspaceRepository = get(),
+            taskRunRepository = get(),
+            taskCoordinator = get(),
         )
     }
     viewModelOf(::ChatDrawerVM)

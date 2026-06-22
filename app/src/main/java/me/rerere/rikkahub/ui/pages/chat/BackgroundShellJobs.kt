@@ -8,6 +8,10 @@ private val BACKGROUND_JOB_STATUS_NAMES = setOf(
     ShellRunStatus.BACKGROUND_RUNNING.name,
 )
 
+/** Which detached surface a [UiBackgroundJob] came from — they share the jobs sheet but differ in
+ * how the tail is loaded and whether the user can cancel them. */
+enum class BackgroundJobKind { Shell, Subagent }
+
 data class UiBackgroundJob(
     val taskId: String,
     val conversationId: String,
@@ -16,6 +20,13 @@ data class UiBackgroundJob(
     val status: String,
     val startedAt: Long?,
     val detachedAt: Long?,
+    val kind: BackgroundJobKind = BackgroundJobKind.Shell,
+    /** Pre-rendered tail for surfaces with no async output channel (subagent runs); shell uses the
+     * async [ChatVM.tailBackgroundJob] path and leaves this null. */
+    val detail: String? = null,
+    /** True when the user can cancel this job from the sheet. Background shell runs stay view-only;
+     * a background subagent is cancellable via its detached coordinator job. */
+    val cancellable: Boolean = false,
 )
 
 internal fun mapBackgroundShellJobs(
@@ -34,6 +45,8 @@ internal fun mapBackgroundShellJobs(
                 status = it.status,
                 startedAt = it.startedAt,
                 detachedAt = it.detachedAt,
+                kind = BackgroundJobKind.Shell,
+                cancellable = false,
             )
         }
         .toList()

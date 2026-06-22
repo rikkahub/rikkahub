@@ -47,7 +47,24 @@ interface TaskRunStore {
         reported: TaskBudgetUsage,
         budget: TaskBudget = TaskBudget(),
     ): TaskBudgetBreach?
+
+    /**
+     * Attach the background run's tool anchor (the parent `agent`/`task` tool call + its transcript
+     * node/message) after the spawn output is saved, so the detached completion can resolve back into
+     * the original tool output. Idempotent; returns false on a conflicting anchor or a missing row.
+     */
+    suspend fun attachToolAnchor(taskId: Uuid, anchor: SubagentToolAnchor): Boolean
+
+    /** Read the persisted background tool anchor by task id, if one was attached. */
+    suspend fun getToolAnchor(taskId: Uuid): SubagentToolAnchor?
 }
+
+/** The parent `agent`/`task` tool anchor a background run's completion resolves back into. */
+data class SubagentToolAnchor(
+    val toolCallId: String,
+    val toolNodeId: Uuid,
+    val toolMessageId: Uuid,
+)
 
 /**
  * A no-op store for runs that need no persistence (e.g. a unit-test path that only asserts the
@@ -61,4 +78,6 @@ object NoopTaskRunStore : TaskRunStore {
     override suspend fun claimResume(taskId: Uuid): Boolean = false
     override suspend fun appendEventSummary(taskId: Uuid, summary: String, kind: String): Long? = null
     override suspend fun recordUsage(taskId: Uuid, reported: TaskBudgetUsage, budget: TaskBudget): TaskBudgetBreach? = null
+    override suspend fun attachToolAnchor(taskId: Uuid, anchor: SubagentToolAnchor): Boolean = false
+    override suspend fun getToolAnchor(taskId: Uuid): SubagentToolAnchor? = null
 }

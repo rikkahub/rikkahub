@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -20,10 +22,13 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
@@ -35,6 +40,7 @@ fun BackgroundShellJobsSheet(
     jobs: List<UiBackgroundJob>,
     onDismiss: () -> Unit,
     loadTail: suspend (UiBackgroundJob) -> String,
+    onCancel: (UiBackgroundJob) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val toaster = LocalToaster.current
@@ -87,6 +93,7 @@ fun BackgroundShellJobsSheet(
                             job = job,
                             tailState = tails[job.taskId] ?: TailState.Loading,
                             nowMillis = nowMillis,
+                            onCancel = { onCancel(job) },
                         )
                     }
                 }
@@ -100,6 +107,7 @@ private fun BackgroundJobItem(
     job: UiBackgroundJob,
     tailState: TailState,
     nowMillis: Long,
+    onCancel: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -110,12 +118,28 @@ private fun BackgroundJobItem(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = job.command,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = job.command,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (job.cancellable) {
+                    IconButton(onClick = onCancel) {
+                        Icon(
+                            imageVector = Lucide.X,
+                            contentDescription = "Cancel job",
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

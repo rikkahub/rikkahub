@@ -1,7 +1,11 @@
 package me.rerere.rikkahub.data.ai.task
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -34,6 +38,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
@@ -101,11 +106,25 @@ data class TaskRunResult(
  * `ChatService.saveConversation`, never in `generateText`, so a child never touches the
  * conversation Room tables.
  */
+/**
+ * Thrown by [TaskCoordinator.runBackground] when the USER-CONFIGURED max concurrent background runs
+ * ([me.rerere.rikkahub.data.datastore.Settings.maxBackgroundSubagents], default 0 = unlimited) is
+ * already met. Admission is bounded at the spawn boundary (BEFORE any durable row is created), so a
+ * refused spawn leaves no dangling row and no completion; the spawn tool catches this and returns a
+ * `rejected` marker so the user stays within the limit they chose. Never thrown when the limit is 0.
+ */
+class BackgroundCapExceededException(val cap: Int) :
+    IllegalStateException("background subagent limit reached ($cap already running)")
+
 class TaskCoordinator(
     private val generate: SubagentGenerate,
     private val store: TaskRunStore = NoopTaskRunStore,
     private val defaultBudget: TaskBudget = TaskBudget(),
     private val monotonicNow: () -> Duration = { Duration.ZERO },
+    // App-lifetime scope for DETACHED background runs (runBackground). Null in the simplest
+    // constructor (foreground-only); the composition root supplies AppScope so a background child
+    // outlives the spawning generation job. runBackground requires it non-null.
+    private val appScope: CoroutineScope? = null,
 ) {
     /**
      * DI/composition-root constructor: bind the engine to [GenerationHandler.generateText] and the
@@ -123,6 +142,7 @@ class TaskCoordinator(
         clock: TaskBudgetClock,
         defaultBudget: TaskBudget = TaskBudget(),
         transformers: ChatMessageTransformers,
+        appScope: CoroutineScope? = null,
     ) : this(
         generate = { settings, model, messages, assistant, tools, maxSteps, processingStatus ->
             generationHandler.generateText(
@@ -140,10 +160,26 @@ class TaskCoordinator(
         store = store,
         defaultBudget = defaultBudget,
         monotonicNow = clock::monotonicNow,
+        appScope = appScope,
     )
 
     /** Process-wide concurrency gate. Recomputed per cap so a test/override budget is honored. */
     private val globalSemaphores = ConcurrentHashMap<Int, Semaphore>()
+
+    /** Live detached background runs, taskId -> their appScope Job, so the jobs sheet can cancel one. */
+    private val backgroundJobs = ConcurrentHashMap<Uuid, Job>()
+
+    /** Live background runs' taskId -> owning conversation, so deleting a conversation can cancel them. */
+    private val backgroundConversations = ConcurrentHashMap<Uuid, Uuid>()
+
+    /**
+     * Admission gate for background runs: [backgroundAdmissionLock] makes "count < cap, then reserve"
+     * atomic against concurrent spawns (the execution semaphore only serializes RUNNING, it does not
+     * bound ACCEPTED jobs). A reserved id is promoted into [backgroundJobs] once its job exists, or
+     * released if the pre-launch handshake throws — so a rejected/failed spawn never holds a slot.
+     */
+    private val backgroundAdmissionLock = Mutex()
+    private val backgroundReserved = HashSet<Uuid>()
 
     /**
      * Per-parent-tool-call concurrency gate, keyed by the spawn tool call id. Each entry is
@@ -313,6 +349,232 @@ class TaskCoordinator(
             if (grouped) withContext(NonCancellable) { releaseParentMutex(parentToolCallId) }
         }
     }
+
+    /**
+     * Spawn a DETACHED background run: persist the durable row (START HANDSHAKE) and return its
+     * [taskId] IMMEDIATELY, then drive the child on [appScope] (app-lifetime — NOT the caller's
+     * generation job, which the next turn cancels). The parent turn ends; the terminal is delivered
+     * later via the durable `SubagentCompletion` the terminal transition enqueues (the Slice-2 fold in
+     * [TaskRunStore.applyEvent]). Requires [appScope] — only the background spawn path reaches here.
+     *
+     * Model resolution runs SYNCHRONOUSLY so a misconfigured model fails the spawn call (visible to
+     * the model) rather than dying silently in the background. The global concurrency permit is
+     * acquired INSIDE the detached coroutine, so a second background spawn queues there instead of
+     * blocking this call's immediate return.
+     */
+    suspend fun runBackground(
+        sub: Assistant,
+        prompt: String,
+        parentModelId: Uuid?,
+        settings: Settings,
+        tools: List<Tool> = emptyList(),
+        parentConversationId: Uuid,
+        parentToolCallId: String = "",
+        taskId: Uuid = Uuid.random(),
+        budget: TaskBudget = defaultBudget,
+        // Teardown run after the detached child terminates, on EVERY path (success/failure/cancel) —
+        // the spawn tool passes its handle release + unregister here so a background run cleans up its
+        // board claims/handle exactly like a foreground run's finally does.
+        onTerminal: suspend () -> Unit = {},
+    ): Uuid {
+        val scope = requireNotNull(appScope) { "runBackground requires an appScope (wire it in DI)" }
+
+        // ADMISSION CAP from the user preference: 0 = UNLIMITED (default — never artificially limit
+        // correct work; the completion drain handles any number of concurrent finishes). A positive N
+        // refuses an (N+1)th concurrent background run BEFORE any durable row is created (so a refused
+        // spawn leaves no dangling row, no completion). Reserve atomically; the reservation is promoted
+        // to a live job below or released if the handshake throws.
+        val cap = settings.maxBackgroundSubagents
+        if (cap > 0) {
+            backgroundAdmissionLock.withLock {
+                if (backgroundJobs.size + backgroundReserved.size >= cap) {
+                    throw BackgroundCapExceededException(cap)
+                }
+                backgroundReserved.add(taskId)
+            }
+        }
+
+        return try {
+            // NonCancellable so a parent-turn cancellation mid-handshake cannot tear the spawn apart:
+            // it would otherwise leave a durable is_background row (created at store.create) with no
+            // backgroundJobs entry and no completion — a phantom "active" job the sheet shows but cannot
+            // cancel. Under NonCancellable the handshake either completes (row + live, cancellable job,
+            // consistent) or fails as a real error below. The detached child still runs on appScope,
+            // decoupled from the (possibly cancelled) parent.
+            withContext(NonCancellable) {
+                admitBackground(
+                    scope, sub, prompt, parentModelId, settings, tools,
+                    parentConversationId, parentToolCallId, taskId, budget, onTerminal,
+                    reserved = cap > 0,
+                )
+            }
+        } catch (t: Throwable) {
+            // Pre-launch real failure (model resolution / start handshake throwing): release the
+            // reservation so the slot is not held by a run that never started. NonCancellable so the
+            // release still lands even if the caller is being cancelled.
+            if (cap > 0) {
+                withContext(NonCancellable) {
+                    backgroundAdmissionLock.withLock { backgroundReserved.remove(taskId) }
+                }
+            }
+            throw t
+        }
+    }
+
+    /** The body of [runBackground]: resolve, START HANDSHAKE, launch DETACHED + PARALLEL (no execution
+     *  semaphore — background runs are bounded only by the optional admission cap, so up to the cap, or
+     *  unlimited, run concurrently), and register the live job. [reserved] = a reservation was taken and
+     *  must be promoted under the lock. */
+    private suspend fun admitBackground(
+        scope: CoroutineScope,
+        sub: Assistant,
+        prompt: String,
+        parentModelId: Uuid?,
+        settings: Settings,
+        tools: List<Tool>,
+        parentConversationId: Uuid,
+        parentToolCallId: String,
+        taskId: Uuid,
+        budget: TaskBudget,
+        onTerminal: suspend () -> Unit,
+        reserved: Boolean,
+    ): Uuid {
+        val modelId = resolveSubagentModel(
+            sub = sub.toAssistantConfig(),
+            parentModelId = parentModelId,
+            turn = TurnConfig(
+                defaultModelId = settings.chatModelId,
+                providers = emptyList(),
+                assistants = emptyList(),
+            ),
+        )
+        val model = settings.findModelById(modelId)
+            ?: error("Subagent model not found for id $modelId")
+        val ephemeralSub = sub.copy(
+            chatModelId = model.id,
+            enableMemory = false,
+            enableRecentChatsReference = false,
+        )
+        val maxSteps = sub.maxSteps ?: budget.maxSteps
+        // Same depth-1 recursion guard as run(): strip BOTH spawn-tool names from the child pool.
+        val childTools = stripSpawnTools(tools)
+        val messages = listOf(UIMessage.user(prompt))
+
+        // START HANDSHAKE: persist Created -> Queued BEFORE returning, so a returned taskId always has
+        // a durable, recoverable row — cold-start can fail-close it; the drain can resolve it.
+        store.create(
+            TaskSpec(
+                taskId = taskId,
+                parentConversationId = parentConversationId,
+                parentToolCallId = parentToolCallId,
+                agentTypeId = sub.id.toString(),
+                prompt = prompt,
+                parentModelId = parentModelId,
+                budget = budget,
+                isBackground = true,
+            )
+        )
+        store.applyEvent(taskId, TaskEvent.Enqueued)
+
+        // Detached execution on appScope. A terminal/failure/cancel is folded to the durable
+        // completion (terminal via execute()'s own writes + the Slice-2 fold; failure/cancel here).
+        // No per-parent mutex AND no global execution semaphore: the parent turn has ended, and a
+        // background run is bounded only by the optional admission cap — so up to the cap (or unlimited)
+        // run truly in PARALLEL, not serialized. LAZY-started so the taskId -> Job map is populated
+        // BEFORE the body can run (and self-remove) under an eager dispatcher — otherwise
+        // cancelBackground could miss a just-started run.
+        val bodyRan = AtomicBoolean(false)
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            bodyRan.set(true) // first line, before any suspension — if the body runs at all, this is set
+            try {
+                execute(
+                    taskId, settings, model, messages, ephemeralSub, childTools,
+                    maxSteps, MutableStateFlow(null), budget,
+                )
+            } catch (cancellation: CancellationException) {
+                withContext(NonCancellable) { store.applyEvent(taskId, TaskEvent.CancelRequested) }
+            } catch (error: Throwable) {
+                store.applyEvent(
+                    taskId,
+                    TaskEvent.ExecutionFailed(error.message ?: error::class.simpleName.orEmpty()),
+                )
+            } finally {
+                withContext(NonCancellable) { onTerminal() }
+            }
+        }
+        // Register the live job. When a reservation was taken (a finite cap), promote it under the lock
+        // so a concurrent admission count is exact (reservation -> job, no double-count, no gap); with
+        // no cap (unlimited) there is no reservation to promote — just record the job. Start OUTSIDE the
+        // lock (an Unconfined dispatcher would otherwise run the whole child body under the lock).
+        if (reserved) {
+            backgroundAdmissionLock.withLock {
+                backgroundJobs[taskId] = job
+                backgroundReserved.remove(taskId)
+            }
+        } else {
+            backgroundJobs[taskId] = job
+        }
+        // Track taskId -> conversation so deleting a conversation can cancel its still-live background
+        // runs (else they keep running detached, count against a finite cap, and try to deliver into a
+        // deleted conversation).
+        backgroundConversations[taskId] = parentConversationId
+        job.invokeOnCompletion {
+            backgroundConversations.remove(taskId)
+            if (bodyRan.get()) {
+                // Normal path: the body's own finally did the terminal write + teardown; just free the
+                // admission slot.
+                backgroundJobs.remove(taskId)
+            } else {
+                // PRE-START CANCEL: a LAZY job cancelled (e.g. via cancelBackground) in the window
+                // before job.start() ran its body never executes that body, so the body's terminal
+                // write + onTerminal teardown never fire — leaving the durable row active with a leaked
+                // handle and no completion. Run the same close-out on appScope under NonCancellable, and
+                // KEEP the admission slot held (the backgroundJobs entry) until it finishes, so a second
+                // background run cannot be admitted before this row reaches terminal / releases its
+                // handle. Exactly once: bodyRan partitions this from the body's finally.
+                scope.launch(NonCancellable) {
+                    try {
+                        store.applyEvent(taskId, TaskEvent.CancelRequested)
+                        onTerminal()
+                    } finally {
+                        backgroundJobs.remove(taskId)
+                    }
+                }
+            }
+        }
+        job.start()
+        return taskId
+    }
+
+    /**
+     * Cancel a live detached background run by [taskId] (the jobs-sheet stop). Cancelling its Job
+     * surfaces in [runBackground]'s catch as a [TaskEvent.CancelRequested] terminal (folded to the
+     * durable completion), then the onTerminal teardown runs. Returns false if no live run is found
+     * (already terminal / unknown id).
+     */
+    fun cancelBackground(taskId: Uuid): Boolean {
+        val job = backgroundJobs[taskId] ?: return false
+        job.cancel()
+        return true
+    }
+
+    /**
+     * Cancel EVERY live detached background run owned by [conversationId] — called when that conversation
+     * is deleted, so its background subagents don't keep running detached (counting against a finite cap
+     * and trying to deliver into a deleted conversation). Returns the number cancelled. Each cancel folds
+     * to the durable Cancelled terminal + teardown exactly like the jobs-sheet stop; a terminal write
+     * against an already-deleted task_runs row is a harmless no-op.
+     */
+    fun cancelBackgroundForConversation(conversationId: Uuid): Int {
+        val ids = backgroundConversations.entries
+            .filter { it.value == conversationId }
+            .map { it.key }
+        ids.forEach { cancelBackground(it) }
+        return ids.size
+    }
+
+    /** Live background run ids — test/inspection aid. */
+    internal fun backgroundTaskIds(): Set<Uuid> = backgroundJobs.keys.toSet()
 
     /**
      * Resume an [TaskState.Interrupted] run (SPEC.md M6, maintainer decisions #1/#3): keep the

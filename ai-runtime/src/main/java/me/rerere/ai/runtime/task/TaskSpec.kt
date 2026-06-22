@@ -35,6 +35,12 @@ data class TaskSpec(
     val depth: Int = 1,
     val parentModelId: Uuid? = null,
     val budget: TaskBudget = TaskBudget(),
+    /**
+     * When true the run is DETACHED (background): the spawn tool returns immediately and the child
+     * runs on an app-lifetime scope, its terminal delivered later via a durable completion event.
+     * Default false keeps the synchronous, parent-awaited behaviour.
+     */
+    val isBackground: Boolean = false,
 )
 
 /**

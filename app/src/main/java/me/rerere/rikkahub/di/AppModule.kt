@@ -106,6 +106,10 @@ val appModule = module {
             store = get(),
             clock = get(),
             transformers = get(),
+            // App-lifetime scope for DETACHED background subagent runs: a background spawn launches its
+            // child here so it outlives the parent turn (and survives chat navigation), cancellable
+            // only via the jobs sheet. Foreground spawns never touch this.
+            appScope = get<me.rerere.rikkahub.AppScope>(),
         )
     }
 

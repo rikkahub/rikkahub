@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -28,6 +29,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
+import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -43,6 +45,7 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
+import me.rerere.rikkahub.data.repository.TaskRunRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
@@ -67,6 +70,8 @@ class ChatVM(
     private val favoriteRepository: FavoriteRepository,
     private val shellRunStore: ShellRunStore,
     private val workspaceRepository: WorkspaceRepository,
+    private val taskRunRepository: TaskRunRepository,
+    private val taskCoordinator: TaskCoordinator,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -99,9 +104,17 @@ class ChatVM(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    val backgroundJobs: StateFlow<List<UiBackgroundJob>> = shellRunStore
-        .observeBackgroundJobs(_conversationId)
-        .map { rows -> mapBackgroundShellJobs(rows, _conversationId.toString()) }
+    // Detached shell runs AND detached background subagents share the jobs sheet. They live in
+    // separate stores, so combine the two live flows; each is independently mapped/filtered to the
+    // in-flight rows of THIS conversation and concatenated, newest first.
+    val backgroundJobs: StateFlow<List<UiBackgroundJob>> = combine(
+        shellRunStore.observeBackgroundJobs(_conversationId)
+            .map { rows -> mapBackgroundShellJobs(rows, _conversationId.toString()) },
+        taskRunRepository.observeByConversation(_conversationId)
+            .map { rows -> mapBackgroundSubagentJobs(rows, _conversationId.toString()) },
+    ) { shell, subagent ->
+        (shell + subagent).sortedByDescending { it.elapsedStartMillis() ?: 0L }
+    }
         .catch { e ->
             if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             android.util.Log.e(TAG, "backgroundJobs flow failed; degrading to empty list", e)
@@ -328,13 +341,29 @@ class ChatVM(
         chatService.setPendingAutomationGrant(_conversationId, grant)
     }
 
-    suspend fun tailBackgroundJob(job: UiBackgroundJob): String =
-        workspaceRepository.tailShellRun(
+    suspend fun tailBackgroundJob(job: UiBackgroundJob): String = when (job.kind) {
+        // A subagent has no async output channel like a shell run; its detail (latest progress
+        // summary, or the prompt) is pre-rendered at map time.
+        BackgroundJobKind.Subagent -> job.detail.orEmpty()
+        BackgroundJobKind.Shell -> workspaceRepository.tailShellRun(
             id = job.workspaceId,
             conversationId = _conversationId,
             taskId = job.taskId,
             maxBytes = BACKGROUND_JOB_TAIL_MAX_BYTES,
         )
+    }
+
+    /**
+     * Cancel a cancellable background job from the jobs sheet. Only a background subagent is
+     * cancellable in v1 (its detached coordinator job is interrupted, which folds the run to
+     * Cancelled and enqueues its completion); a shell job is view-only and ignored. Cancelling a
+     * job whose coordinator job is already gone (completed/process-restarted) is a benign no-op.
+     */
+    fun cancelBackgroundJob(job: UiBackgroundJob) {
+        if (job.kind != BackgroundJobKind.Subagent) return
+        val taskId = runCatching { Uuid.parse(job.taskId) }.getOrNull() ?: return
+        taskCoordinator.cancelBackground(taskId)
+    }
 
     fun saveConversationAsync() {
         launchVm(onError = { reportOperationError(it) }) {

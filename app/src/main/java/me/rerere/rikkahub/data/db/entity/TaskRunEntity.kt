@@ -66,6 +66,24 @@ data class TaskRunEntity(
     val createdAt: Long,
     @ColumnInfo("updated_at")
     val updatedAt: Long,
+    /**
+     * True for a DETACHED background run (the parent turn already ended). A terminal transition on a
+     * background row durably enqueues a `SubagentCompletion` agent_event in the SAME transaction, so
+     * the idle-drain can deliver it; foreground runs never enqueue. Additive default 0 ⇒ auto-migration.
+     */
+    @ColumnInfo("is_background", defaultValue = "0")
+    val isBackground: Boolean = false,
+    /**
+     * The parent `agent`/`task` tool anchor (call id + transcript node/message), persisted after the
+     * spawn output is saved so the background completion resolves back into the original tool output
+     * instead of a synthetic message. Null until attached. Nullable ⇒ auto-migration.
+     */
+    @ColumnInfo("tool_call_id")
+    val toolCallId: String? = null,
+    @ColumnInfo("tool_node_id")
+    val toolNodeId: String? = null,
+    @ColumnInfo("tool_message_id")
+    val toolMessageId: String? = null,
 ) {
     /**
      * Null when the stored blob cannot be parsed — callers must distinguish "no events yet"

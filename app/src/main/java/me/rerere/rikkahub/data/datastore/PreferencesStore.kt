@@ -167,6 +167,7 @@ class SettingsStore(
 
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
+        val MAX_BACKGROUND_SUBAGENTS = intPreferencesKey("max_background_subagents")
 
         internal fun decodeSettings(preferences: Preferences): Settings = Settings(
             enableWebSearch = preferences[ENABLE_WEB_SEARCH] == true,
@@ -258,6 +259,7 @@ class SettingsStore(
             } ?: BackupReminderConfig(),
             launchCount = preferences[LAUNCH_COUNT] ?: 0,
             sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+            maxBackgroundSubagents = preferences[MAX_BACKGROUND_SUBAGENTS] ?: 0,
         )
     }
 
@@ -436,6 +438,7 @@ class SettingsStore(
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+            preferences[MAX_BACKGROUND_SUBAGENTS] = settings.maxBackgroundSubagents
         }
     }
 
@@ -572,6 +575,14 @@ data class Settings(
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
+    /**
+     * Max number of background subagents that may run concurrently. 0 = UNLIMITED (the default — the
+     * runtime does not artificially limit correct work; the durable completion drain handles any number
+     * of concurrent finishes). A positive N caps concurrent background runs at N: an (N+1)th background
+     * spawn while N are live is refused with a `rejected` marker so the user stays within a limit they
+     * chose. Foreground (awaited) subagents are unaffected.
+     */
+    val maxBackgroundSubagents: Int = 0,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

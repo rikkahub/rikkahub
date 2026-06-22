@@ -19,6 +19,27 @@ interface TaskRunDAO {
     @Query("SELECT * FROM task_runs WHERE id = :id")
     suspend fun getById(id: String): TaskRunEntity?
 
+    /**
+     * Attach a background run's tool anchor (the parent `agent`/`task` tool call + transcript
+     * node/message) so its detached completion resolves back into the original tool output. Idempotent:
+     * re-attaching the SAME (call, node, message) returns 1; ANY conflicting anchor matches zero rows
+     * and returns 0. Mirrors ShellRunDAO.attachToolAnchor — all THREE fields must match, so a forked
+     * conversation (which regenerates node ids while preserving the copied call/message ids) cannot
+     * overwrite the original conversation's persisted anchor.
+     */
+    @Query(
+        "UPDATE task_runs SET tool_call_id = :toolCallId, tool_node_id = :toolNodeId, " +
+            "tool_message_id = :toolMessageId WHERE id = :taskId AND " +
+            "((tool_call_id IS NULL AND tool_node_id IS NULL AND tool_message_id IS NULL) OR " +
+            "(tool_call_id = :toolCallId AND tool_node_id = :toolNodeId AND tool_message_id = :toolMessageId))"
+    )
+    suspend fun attachToolAnchor(
+        taskId: String,
+        toolCallId: String,
+        toolNodeId: String,
+        toolMessageId: String,
+    ): Int
+
     @Query("SELECT * FROM task_runs WHERE id = :id")
     fun getByIdFlow(id: String): Flow<TaskRunEntity?>
 
@@ -28,6 +49,25 @@ interface TaskRunDAO {
     /** Recovery scan: rows whose persisted state is in [states] (TaskRunStateTag names). */
     @Query("SELECT * FROM task_runs WHERE latest_state IN (:states)")
     suspend fun listByStates(states: Set<String>): List<TaskRunEntity>
+
+    /**
+     * Background-run recovery scan: only `is_background = 1` rows whose persisted state is in [states].
+     * A detached background run whose parent turn already ended must be FAIL-CLOSED to a terminal at
+     * cold start (no resume), distinct from a foreground run that folds to the resumable Interrupted.
+     */
+    @Query("SELECT * FROM task_runs WHERE is_background = 1 AND latest_state IN (:states)")
+    suspend fun listBackgroundByStates(states: Set<String>): List<TaskRunEntity>
+
+    /**
+     * Foreground-run recovery scan: only `is_background = 0` rows in [states]. The generic interrupt
+     * scan uses THIS (not [listByStates]) so it can never fold a background row to the resumable
+     * Interrupted — background rows are owned exclusively by the fail-close pass ([listBackgroundByStates]).
+     * Making the two scans operate on DISJOINT row sets removes any dependency on their ordering or on
+     * the fail-close pass succeeding (a thrown fail-close leaves the background row active for the next
+     * cold start, never lost to Interrupted).
+     */
+    @Query("SELECT * FROM task_runs WHERE is_background = 0 AND latest_state IN (:states)")
+    suspend fun listForegroundByStates(states: Set<String>): List<TaskRunEntity>
 
     @Query("DELETE FROM task_runs WHERE id = :id")
     suspend fun deleteById(id: String): Int

@@ -57,7 +57,7 @@ import me.rerere.common.json.JsonInstant
         AgentEventEntity::class,
         ShellRunEntity::class
     ],
-    version = 31,
+    version = 32,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -93,6 +93,10 @@ import me.rerere.common.json.JsonInstant
         // 30 -> 31 adds nullable tool-anchor columns to shell_runs so detached shell completions can
         // mutate the original tool output. Nullable additive columns are auto-migratable.
         AutoMigration(from = 30, to = 31),
+        // 31 -> 32 adds task_runs.is_background (default 0) + nullable tool-anchor columns so a
+        // DETACHED background subagent run can durably enqueue + resolve its completion. Additive
+        // (defaulted/nullable) columns are auto-migratable, so Room derives it without a spec.
+        AutoMigration(from = 31, to = 32),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
