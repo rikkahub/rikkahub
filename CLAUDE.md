@@ -39,6 +39,17 @@ Notes that save real time:
   full lint before declaring a change done.
 - **Prerequisite:** the build applies the Google Services plugin and expects `app/google-services.json`; a placeholder
   file is sufficient for local builds that don't exercise Firebase.
+- **Fresh `git worktree` setup (two gotchas that fail the build on every new worktree).** A `git worktree add`
+  populates neither git submodules nor git-ignored files, so a brand-new worktree fails to build until you run both of
+  these from the worktree root:
+  - `git submodule update --init --recursive` — `material3/` vendors the Material color utilities from the
+    `material3/material-color-utilities` **submodule** (`material3/build.gradle.kts` does
+    `kotlin.srcDir("material-color-utilities/kotlin")`). Without it, `:material3:compileDebugKotlin` fails with
+    `Unresolved reference` on `DynamicScheme` color roles (`tertiaryFixed`, `onSecondaryFixedVariant`, …) and blocks
+    every app build/test/lint task that transitively depends on `:material3`.
+  - `cp <main-checkout>/app/google-services.json app/google-services.json` — `app/google-services.json` is git-ignored,
+    so it is absent from a new worktree and `:app:process<Variant>GoogleServices` fails with `File google-services.json
+    is missing`. Copy the placeholder from your primary checkout (it stays git-ignored, never committed).
 
 ## Architecture Overview
 
