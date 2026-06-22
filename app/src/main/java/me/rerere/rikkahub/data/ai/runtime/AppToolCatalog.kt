@@ -83,9 +83,15 @@ class AppToolCatalog(
                     // (find { it.name == toolName }), so without a `task`-named entry that replay throws
                     // "Tool task not found". `Tool.copy(name = …)` keeps the identical
                     // execute/parameters/needsApproval, so the legacy call runs the exact same spawn impl.
-                    // Added ONLY here (Main + includeSpawnTool) so subagent pools never gain it; the
-                    // subagent recursion strip ([stripSpawnTools]) removes both names belt-and-suspenders.
-                    add(it.copy(name = SPAWN_TOOL_NAME))
+                    // `advertised = false` (issue #355): the alias stays resolvable but is NOT offered to
+                    // the model — without it the copy carried `agent`'s identical description AND
+                    // systemPrompt, so the subagent registry block was emitted twice and the model saw two
+                    // interchangeable delegation tools. The runtime filters advertised tools at its single
+                    // provider-facing seam, so hiding it here removes both redundancies without touching
+                    // exact-name resolution. Added ONLY here (Main + includeSpawnTool) so subagent pools
+                    // never gain it; the subagent recursion strip ([stripSpawnTools]) removes both names
+                    // belt-and-suspenders.
+                    add(it.copy(name = SPAWN_TOOL_NAME, advertised = false))
                 }
             }
         }

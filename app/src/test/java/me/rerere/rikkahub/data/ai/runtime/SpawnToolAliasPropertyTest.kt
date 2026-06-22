@@ -222,6 +222,36 @@ class SpawnToolAliasPropertyTest {
     }
 
     /**
+     * Issue #355: the legacy `task` alias is RESOLVABLE but HIDDEN. On a fresh Main turn the
+     * advertised `agent` carries `advertised = true` while the `task` alias carries
+     * `advertised = false`, so the runtime's provider-facing filter (`tools.filter { it.advertised }`)
+     * offers `agent` to the model and drops `task` — killing both the duplicate subagent registry
+     * block and the second interchangeable delegation tool — yet leaves `task` in the pool for
+     * exact-name resolution of a replayed pending call (pinned by the identity properties above).
+     */
+    @Test
+    fun `task alias is resolvable but not advertised while agent is advertised`() {
+        runBlocking {
+            checkAll(300, arbBasePool) { names ->
+                val cat = catalog(baseTools = { _, _ -> names.map { tool(it) } })
+                val pool = cat.tools(mainCtx(assistant(Uuid.random(), emptySet()), includeSpawnTool = true))
+
+                val agentTool = pool.find { it.name == SPAWN_TOOL_MODEL_NAME }
+                val taskTool = pool.find { it.name == SPAWN_TOOL_NAME }
+
+                assertNotNull("advertised `agent` present on a fresh main turn", agentTool)
+                assertNotNull("legacy `task` alias still resolvable on a fresh main turn", taskTool)
+                assertTrue("canonical `agent` is advertised to the model", agentTool!!.advertised)
+                assertFalse("legacy `task` alias is hidden from the model", taskTool!!.advertised)
+                // The model-advertised view the runtime actually sends: `agent` in, `task` out.
+                val advertised = pool.filter { it.advertised }.map { it.name }
+                assertTrue("advertised view offers `agent`", advertised.contains(SPAWN_TOOL_MODEL_NAME))
+                assertFalse("advertised view hides `task`", advertised.contains(SPAWN_TOOL_NAME))
+            }
+        }
+    }
+
+    /**
      * The alias is added ONLY where the real spawn tool is added (Main + includeSpawnTool). An
      * `includeSpawnTool=false` Main turn must add NEITHER the advertised `agent` NOR the legacy `task`
      * alias — the alias never appears without the tool it aliases — while the board family still

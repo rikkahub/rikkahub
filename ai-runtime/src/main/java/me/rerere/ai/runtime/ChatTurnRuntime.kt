@@ -188,7 +188,13 @@ class ChatTurnRuntime(
                     model = model,
                     providerImpl = providerImpl,
                     provider = provider,
-                    tools = toolsInternal,
+                    // The single seam where tools become provider-facing: only advertised tools enter
+                    // the schema + the tool system-prompt block. A non-advertised tool (the legacy
+                    // `task` spawn alias, issue #355) stays in [toolsInternal] for exact-name
+                    // resolution below (a replayed pending call must still execute) but is never
+                    // offered to the model — so the subagent registry block is emitted once and only
+                    // `agent` is advertised. Filtering here keeps advertised ⊆ executable by construction.
+                    tools = toolsInternal.filter { it.advertised },
                     memories = memories ?: emptyList(),
                     stream = assistant.streamOutput,
                     conversationSystemPrompt = conversationSystemPrompt,
