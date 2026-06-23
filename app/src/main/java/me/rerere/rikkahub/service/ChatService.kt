@@ -180,7 +180,6 @@ import me.rerere.rikkahub.utils.shouldRethrowVmError
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
@@ -1044,7 +1043,9 @@ class ChatService(
         onGenerationStart = { foregroundGeneration.onGenerationStart() },
         onGenerationStop = { foregroundGeneration.onGenerationStop() },
     )
-    private val tombstonedConversations = ConcurrentHashMap<Uuid, Unit>()
+    // Conversation delete/restore coordination (#360 P3): the tombstone set + delete↔restore
+    // serialization + the insert-before-clear ordering, extracted to a JVM-testable component.
+    private val tombstones = ConversationTombstones()
 
     // In-flight forwarded CHILD approvals (SPEC.md M4 / Gap A), keyed taskId/childToolCallId.
     // The waiter suspends inside the live generation; handleToolApproval resolves it IN PLACE —
@@ -3183,19 +3184,14 @@ class ChatService(
         }
     }
 
-    private fun isConversationTombstoned(conversationId: Uuid): Boolean {
-        return tombstonedConversations.containsKey(conversationId)
-    }
+    private fun isConversationTombstoned(conversationId: Uuid): Boolean =
+        tombstones.isTombstoned(conversationId)
 
-    // Serializes delete vs restore so an Undo cannot interleave with an in-flight delete: History
-    // fires delete fire-and-forget and offers Undo immediately, and deleteConversation SUSPENDS (it
-    // joins the generation job before the repo delete). Without this lock, a restore in that window
-    // could clear the tombstone + re-insert and then the still-running delete would remove the
-    // restored row (or vice versa). The lock guarantees restore observes a fully-committed delete.
-    private val conversationDeleteRestoreMutex = Mutex()
-
-    suspend fun deleteConversation(conversation: Conversation) = conversationDeleteRestoreMutex.withLock {
-        tombstonedConversations[conversation.id] = Unit
+    // Delete↔restore serialization + the tombstone set live in [tombstones] (#360 P3): History fires
+    // delete fire-and-forget and offers Undo immediately, so a restore in that window must observe a
+    // fully-committed delete (and never the reverse). The ordering invariants (mark-before-body on
+    // delete; insert-before-clear on restore) are encoded + tested in ConversationTombstones.
+    suspend fun deleteConversation(conversation: Conversation) = tombstones.delete(conversation.id) {
         stopGeneration(conversation.id)
         // Cancel any DETACHED background subagents this conversation owns — stopGeneration only stops the
         // foreground turn; a background run is on appScope and would otherwise keep running, count against
@@ -3205,21 +3201,9 @@ class ChatService(
         conversationRepo.deleteConversation(conversation)
     }
 
-    /**
-     * Restore a previously-deleted conversation (History "Undo"). Runs under the same mutex as
-     * [deleteConversation], so a restore that races an in-flight delete waits for the delete to fully
-     * commit first.
-     *
-     * Invariant: the tombstone is cleared ONLY AFTER the restored row is durably re-inserted. Order
-     * matters — insert first, then clear. While the insert is in flight the id is still tombstoned, so
-     * a stale app-scope save (e.g. a post-turn suggestion job holding pre-delete state) is blocked by
-     * [saveConversation]'s guard instead of racing in an insert; once the tombstone is cleared the row
-     * already exists, so any later save takes the update path and can never resurrect via insert. This
-     * removes the save/restore window without dragging the hot-path [saveConversation] under the mutex.
-     */
-    suspend fun restoreConversation(conversation: Conversation) = conversationDeleteRestoreMutex.withLock {
+    /** Restore a previously-deleted conversation (History "Undo"); see [ConversationTombstones.restore]. */
+    suspend fun restoreConversation(conversation: Conversation) = tombstones.restore(conversation.id) {
         conversationRepo.insertConversation(conversation)
-        tombstonedConversations.remove(conversation.id)
     }
 
     // ---- 翻译消息 ----
