@@ -89,16 +89,8 @@ internal fun TextInputRow(
             }
         }
     }
-    val slashSkills = remember(slashQuery, allSkills) {
-        val q = slashQuery?.trim()?.lowercase().orEmpty()
-        if (q.isEmpty()) {
-            allSkills
-        } else {
-            allSkills.filter {
-                it.name.lowercase().contains(q) || it.description.lowercase().contains(q)
-            }
-        }
-    }
+    // Built-in reserved commands (#364: /goal, /loop) lead, then the matching skills (filterSlashItems).
+    val slashItems = remember(slashQuery, allSkills) { filterSlashItems(slashQuery, allSkills) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -165,27 +157,34 @@ internal fun TextInputRow(
         }
         if (slashQuery != null) {
             SlashSkillPopup(
-                skills = slashSkills,
-                onSelect = { skill ->
-                    // Arm the skill on the active assistant NOW (so its use_skill tool is exposed by the
-                    // time the message is sent) and drop the slash command into the input as "/<name> " for
-                    // the user to add optional params and send. The send path (ChatVM.handleMessageSend)
-                    // then rewrites "/<name> ..." into a use_skill directive — synchronously, matching the
-                    // enabled-skill name (so it also handles names with spaces).
-                    scope.launch {
-                        settingsStore.update { s ->
-                            s.copy(
-                                assistants = s.assistants.map { a ->
-                                    if (a.id == assistant.id) {
-                                        a.copy(enabledSkills = a.enabledSkills + skill.name)
-                                    } else {
-                                        a
-                                    }
+                items = slashItems,
+                onSelect = { item ->
+                    when (item) {
+                        // A reserved native command (#364: /goal, /loop) has NO skill behind it: just drop
+                        // "/<name> " into the input. The send path (ChatVM.handleReservedSlashCommand) runs
+                        // it BEFORE skill expansion, so arming a use_skill here would be wrong.
+                        is SlashItem.Builtin -> state.setMessageText("/${item.name} ")
+                        // A skill: arm it on the active assistant NOW (so its use_skill tool is exposed by
+                        // the time the message is sent) and drop "/<name> " in for optional params. The send
+                        // path then rewrites "/<name> ..." into a use_skill directive (longest-prefix match,
+                        // so it also handles names with spaces).
+                        is SlashItem.Skill -> {
+                            scope.launch {
+                                settingsStore.update { s ->
+                                    s.copy(
+                                        assistants = s.assistants.map { a ->
+                                            if (a.id == assistant.id) {
+                                                a.copy(enabledSkills = a.enabledSkills + item.name)
+                                            } else {
+                                                a
+                                            }
+                                        }
+                                    )
                                 }
-                            )
+                            }
+                            state.setMessageText("/${item.name} ")
                         }
                     }
-                    state.setMessageText("/${skill.name} ")
                 },
                 onManage = { navController.navigate(Screen.Skills) },
             )
