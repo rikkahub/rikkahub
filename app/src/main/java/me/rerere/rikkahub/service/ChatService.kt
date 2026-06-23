@@ -1592,7 +1592,15 @@ class ChatService(
         unit: RecurrenceUnit,
         prompt: String,
     ): ScheduleMutationResult = loopMutex.withLock {
+        // A loop can be armed on a brand-new conversation that has not been persisted yet:
+        // saveConversation deliberately skips an empty new conversation (新会话且为空时不保存), so
+        // getConversationById is null when the user opens a fresh chat and types `/loop` as the FIRST
+        // action — which previously rejected with "conversation not found". A CONVERSATION_EVENT loop
+        // fire delivers back INTO this conversation (deliverLoopFire no-ops if it is absent), so it must
+        // exist in Room. Fall back to the live in-session conversation (the active chat always has a
+        // valid one via initializeConversation) and persist it so the schedule has a real target.
         val conversation = conversationRepo.getConversationById(conversationId)
+            ?: ensureLoopTargetPersisted(conversationId)
             ?: return@withLock ScheduleMutationResult.Rejected("conversation not found")
         val intervalMillis = recurrenceIntervalMillis(every, unit)
         val spec = RecurrenceSpec(every = every, unit = unit)
@@ -1610,6 +1618,23 @@ class ChatService(
             clearLoopSchedules(conversationId, keep = result.snapshot.id)
         }
         result
+    }
+
+    /**
+     * Persist the live in-session conversation as a `/loop` target when arming a loop on a brand-new
+     * conversation that has not been auto-saved yet (empty new conversations are not persisted). Returns
+     * the conversation now in Room, or null when there genuinely is none.
+     *
+     * - A tombstoned (being-deleted) conversation returns null rather than RESURRECTING it via insert.
+     * - The insert is race-safe: a concurrent first persist (e.g. a near-simultaneous message send) makes
+     *   the @Insert conflict; the fallback re-reads the row the other writer just created. That re-read
+     *   IS the recovery, not a swallowed error — a genuine failure leaves no row and returns null.
+     */
+    private suspend fun ensureLoopTargetPersisted(conversationId: Uuid): Conversation? {
+        if (isConversationTombstoned(conversationId)) return null
+        val live = getConversationFlow(conversationId).value
+        return runCatching { conversationRepo.insertConversation(live); live }
+            .getOrElse { conversationRepo.getConversationById(conversationId) }
     }
 
     /** Clear ALL `/loop` schedules on [conversationId] (the `/loop` / `/loop clear` path). Idempotent. */
