@@ -98,6 +98,7 @@ import me.rerere.rikkahub.data.ai.task.SubagentToolAnchor
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunToolAnchor
 import me.rerere.rikkahub.data.ai.runtime.AppToolCatalog
+import me.rerere.rikkahub.data.ai.runtime.assembleBaseTools
 import me.rerere.rikkahub.data.ai.runtime.toAssistantConfig
 import me.rerere.rikkahub.data.ai.task.ExecutionHandleRegistry
 import me.rerere.rikkahub.data.ai.task.ParentApprovalSurface
@@ -2430,28 +2431,35 @@ class ChatService(
                 // catalog with targetAssistant == assistant.toAssistantConfig(), so the in-scope app
                 // `assistant` is the faithful source (no lossy AssistantConfig round-trip).
                 baseTools = { _, _ ->
-                    buildList {
-                        if (settings.enableWebSearch) {
-                            addAll(createSearchTools(settings))
-                        }
-                        // Deferred managed-backend tools — present only when the relevant managed
-                        // provider is configured, so a chat with a model that lacks native web-fetch /
-                        // image-gen (e.g. Anthropic) can still reach those capabilities. fetch is
-                        // Codex-only; image-gen works through EITHER managed image provider (Codex
-                        // gpt-image-2 or Gagy Gemini) and self-gates to empty when neither is set.
-                        if (settings.hasChatGpt()) {
-                            addAll(createFetchTools(settings))
-                        }
-                        addAll(createImageGenTools(settings, filesManager, providerManager))
-                        addAll(localTools.getTools(assistant.localTools))
-                        addAll(createWorkspaceTools(assistant.workspaceId?.toString(), conversationId, workspaceRepository))
-                        // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
-                        // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Empty surface
-                        // unless automation is enabled AND a guard was minted; each tool authorizes via the
-                        // closed-over guard BEFORE the backend (S2). No-op (empty) when disabled or when the
-                        // a11y service is not connected (the core() is null ⇒ no guard path is reachable).
-                        automationRegistry.core()?.let { automationCore ->
-                            addAll(
+                    // The (target, mode) args are unused on the main turn — production only ever invokes
+                    // this catalog with targetAssistant == assistant.toAssistantConfig(), so the in-scope
+                    // app `assistant` is the faithful source. The gate policy (which capability under which
+                    // condition, and in which order) lives in [assembleBaseTools] (#360 P5); each producer
+                    // below is invoked LAZILY behind its gate, so a disabled capability is never built.
+                    assembleBaseTools(
+                        webSearchEnabled = settings.enableWebSearch,
+                        // Deferred managed-backend tool — present only when the managed provider is
+                        // configured, so a chat with a model that lacks native web-fetch (e.g. Anthropic)
+                        // can still reach it. fetch is Codex-only.
+                        managedFetchAvailable = settings.hasChatGpt(),
+                        skillsEnabled = assistant.enabledSkills.isNotEmpty(),
+                        searchTools = { createSearchTools(settings) },
+                        fetchTools = { createFetchTools(settings) },
+                        // image-gen works through EITHER managed image provider (Codex gpt-image-2 or Gagy
+                        // Gemini) and self-gates to empty when neither is set, so it is unconditional.
+                        imageGenTools = { createImageGenTools(settings, filesManager, providerManager) },
+                        localTools = { localTools.getTools(assistant.localTools) },
+                        workspaceTools = {
+                            createWorkspaceTools(assistant.workspaceId?.toString(), conversationId, workspaceRepository)
+                        },
+                        uiAutomationTools = {
+                            // ui_observe (#187 v1) + nav act verbs ui_scroll/ui_global (#198 slice 8) +
+                            // ui_set_text (slice 9) + ui_tap (slice 10), all over the same core. Read the
+                            // a11y core ONCE here (this position, after the suspend workspace read) and use
+                            // that single snapshot for both the null-check and the build — empty surface
+                            // unless connected. Each tool then authorizes via the closed-over guard before
+                            // the backend (S2).
+                            automationRegistry.core()?.let { automationCore ->
                                 getUiAutomationTools(
                                     guard = automationGuard,
                                     core = automationCore,
@@ -2461,29 +2469,27 @@ class ChatService(
                                     // user already accepted the danger, so the human confirm step is
                                     // short-circuited — the SubmitClassifier + guard still run in-path (the
                                     // SUBMIT sink is still derived and budget-checked) and the kill-switch
-                                    // overlay stays mandatory; only the prompt is skipped. This is gated
-                                    // strictly on the YOLO capability, NOT a fallback for a missing overlay.
-                                    // Scoped mode fails closed: if no overlay-backed channel is reachable
-                                    // (a11y service not connected), a dangerous sink can never be confirmed,
-                                    // so it is always denied — never silently auto-confirmed.
+                                    // overlay stays mandatory; only the prompt is skipped. Gated strictly on
+                                    // the YOLO capability, NOT a fallback for a missing overlay. Scoped mode
+                                    // fails closed: if no overlay-backed channel is reachable (a11y service
+                                    // not connected), a dangerous sink can never be confirmed, so it is
+                                    // always denied — never silently auto-confirmed.
                                     confirm = if (automationGuard?.includeHost == true) {
                                         AlwaysConfirm
                                     } else {
                                         automationRegistry.confirmChannel() ?: AlwaysDeny
                                     },
                                 )
+                            } ?: emptyList()
+                        },
+                        skillTools = {
+                            createSkillTools(
+                                enabledSkills = assistant.enabledSkills,
+                                allSkills = skillManager.listSkills(),
+                                skillManager = skillManager,
                             )
-                        }
-                        if (assistant.enabledSkills.isNotEmpty()) {
-                            addAll(
-                                createSkillTools(
-                                    enabledSkills = assistant.enabledSkills,
-                                    allSkills = skillManager.listSkills(),
-                                    skillManager = skillManager,
-                                )
-                            )
-                        }
-                    }
+                        },
+                    )
                 },
                 // MCP tools are selected off the TARGET assistant the catalog passes (the §C3 by-target
                 // invariant), named `mcp__…` by the catalog's mapMcpTool. Honoring `target` keeps this
