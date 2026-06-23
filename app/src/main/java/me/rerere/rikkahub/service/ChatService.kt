@@ -2343,26 +2343,30 @@ class ChatService(
         val assistant = settings.getAssistantByIdOrCurrent(initialConversation.assistantId)
         val model = settings.getChatModelForAssistant(assistant) ?: return false
 
-        val senderName = if (assistant.useAssistantAvatar) {
-            assistant.name.ifEmpty { strings.getString(R.string.assistant_page_default_assistant) }
-        } else {
-            model.displayName
-        }
+        val senderName = resolveSenderName(
+            useAssistantAvatar = assistant.useAssistantAvatar,
+            assistantName = assistant.name,
+            modelDisplayName = model.displayName,
+        ) { strings.getString(R.string.assistant_page_default_assistant) }
 
         return runCatching {
 
             // reset suggestions
             updateConversationStateOnly(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
-            // memory tool
-            if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (settings.enableWebSearch || mcpManager.getAllAvailableTools(assistant).isNotEmpty()) {
-                    addError(
-                        IllegalStateException(strings.getString(R.string.tools_warning)),
-                        conversationId,
-                        title = strings.getString(R.string.error_title_tool_unavailable)
-                    )
-                }
+            // memory tool — warn when the model can't run the tools the turn would otherwise carry.
+            // The MCP enumeration is the lazy probe, run only when the cheaper checks don't decide it.
+            if (shouldWarnToolUnavailable(
+                    modelSupportsTools = model.abilities.contains(ModelAbility.TOOL),
+                    webSearchEnabled = settings.enableWebSearch,
+                    hasMcpTools = { mcpManager.getAllAvailableTools(assistant).isNotEmpty() },
+                )
+            ) {
+                addError(
+                    IllegalStateException(strings.getString(R.string.tools_warning)),
+                    conversationId,
+                    title = strings.getString(R.string.error_title_tool_unavailable)
+                )
             }
 
             // check invalid messages
@@ -2658,13 +2662,7 @@ class ChatService(
                     publishStreamingMessages(getOrCreateSession(conversationId).state, messages)
                 }
             )
-            val effectiveMessages = conversation.currentMessages.let {
-                if (messageRange != null) {
-                    it.subList(messageRange.start, messageRange.endInclusive + 1)
-                } else {
-                    it
-                }
-            }
+            val effectiveMessages = sliceTurnMessages(conversation.currentMessages, messageRange)
             // Relevance recall (issue #210) replaces the historic full memory dump: gated on
             // enableMemory, scoped global-or-assistant, ranked against the last user turn. Skipped ⇒
             // empty (no memories injected) — so memory-off behaviour is unchanged.
