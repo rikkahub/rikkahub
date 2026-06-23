@@ -19,6 +19,7 @@ import me.rerere.ai.runtime.contract.ScheduleMutationResult
 import me.rerere.ai.runtime.contract.ScheduleOwner
 import me.rerere.ai.runtime.contract.ScheduleSnapshot
 import me.rerere.rikkahub.data.db.entity.TaskRunEntity
+import me.rerere.rikkahub.data.db.entity.TaskRunEventSummary
 import me.rerere.rikkahub.data.db.entity.TaskRunStateTag
 import me.rerere.rikkahub.data.repository.TaskRunRepository
 import me.rerere.rikkahub.data.repository.TaskScheduleRepository
@@ -36,6 +37,13 @@ data class TaskRunRow(
     val updatedAt: Long,
     val finalResult: String?,
     val finalError: String?,
+    // Detail-view fields (run-detail sheet): the summary-only progress events and the budget counters.
+    // The full child transcript is intentionally not persisted (TaskRunEntity is SUMMARY-ONLY), so the
+    // "full outcome" surfaced is the final result/error in full + these events + usage.
+    val events: List<TaskRunEventSummary>,
+    val usageSteps: Int,
+    val usageTokens: Long,
+    val usageElapsedMs: Long,
 )
 
 /**
@@ -115,6 +123,11 @@ class ScheduleVM(
         updatedAt = updatedAt,
         finalResult = finalResult,
         finalError = finalError,
+        // A corrupt blob decodes to null; treat it as no events rather than failing the whole row.
+        events = decodeEventSummaries() ?: emptyList(),
+        usageSteps = usageSteps,
+        usageTokens = usageTokens,
+        usageElapsedMs = usageElapsedMs,
     )
 
     // The screen's four-state view (SPEC.md M6 / task T12). A sealed UiState — not a nullable list or a

@@ -2,6 +2,9 @@ package me.rerere.rikkahub.ui.pages.schedule
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -87,6 +90,7 @@ import me.rerere.ai.runtime.contract.ScheduleSnapshot
 import me.rerere.ai.runtime.schedule.RecurrenceSpec
 import me.rerere.ai.runtime.schedule.RecurrenceUnit
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.db.entity.TaskRunEventSummary
 import me.rerere.rikkahub.data.db.entity.TaskRunStateTag
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Assistant
@@ -301,13 +305,23 @@ private fun RunsTabContent(
         RunsEmptyState(innerPadding = innerPadding, onCreate = onCreate)
         return
     }
+    // Track the open run by ID, not by a captured TaskRunRow snapshot: `runs` live-updates from the
+    // repository, so an open sheet bound to the clicked snapshot would freeze the outcome at tap time
+    // (a RUNNING run that later finishes, usage/events filling in, would never refresh). Deriving the
+    // displayed row from the latest `runs` each recomposition keeps the sheet ground-truth; if the run
+    // vanishes (the conversation/run was deleted while open) the lookup is null and the sheet dismisses.
+    var selectedRunId by remember { mutableStateOf<String?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = innerPadding + PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(runs, key = { it.id }) { run -> RunCard(run = run) }
+        items(runs, key = { it.id }) { run -> RunCard(run = run, onClick = { selectedRunId = run.id }) }
     }
+
+    selectedRunId
+        ?.let { id -> runs.firstOrNull { it.id == id } }
+        ?.let { run -> RunDetailSheet(run = run, onDismiss = { selectedRunId = null }) }
 }
 
 /** The Runs empty state — mirrors [ScheduleEmptyState] but points the CTA at creating a schedule. */
@@ -346,10 +360,12 @@ private fun RunsEmptyState(
     }
 }
 
-/** One execution row: a live status badge, when it started, the prompt, and the result/error tail. */
+/** One execution row: a live status badge, when it started, the prompt, and the result/error tail.
+ *  Tap to open the full outcome in [RunDetailSheet]. */
 @Composable
-private fun RunCard(run: TaskRunRow) {
+private fun RunCard(run: TaskRunRow, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
@@ -449,6 +465,90 @@ private fun RunStatusBadge(state: TaskRunStateTag) {
 
 private fun runTimeLabel(epochMillis: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMillis))
+
+/**
+ * The full outcome of a finished (or in-flight) run: the prompt, the un-truncated final result / error,
+ * the budget usage, and the summary-only progress events. The full child transcript is not persisted
+ * (TaskRunEntity is SUMMARY-ONLY by design), so this is the complete recoverable outcome. The body is
+ * wrapped in a [SelectionContainer] so the outcome text can be copied.
+ */
+@Composable
+private fun RunDetailSheet(run: TaskRunRow, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        SelectionContainer {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    RunStatusBadge(state = run.state)
+                    Text(
+                        text = runTimeLabel(run.createdAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                RunDetailSection("Prompt", run.prompt.ifBlank { "(empty prompt)" })
+
+                run.finalError?.takeIf { it.isNotBlank() }?.let {
+                    RunDetailSection("Error", it, error = true)
+                }
+                run.finalResult?.takeIf { it.isNotBlank() }?.let {
+                    RunDetailSection("Outcome", it)
+                }
+
+                if (run.usageSteps > 0 || run.usageTokens > 0L || run.usageElapsedMs > 0L) {
+                    RunDetailSection(
+                        "Usage",
+                        "${run.usageSteps} step(s) · ${run.usageTokens} token(s) · " +
+                            "${run.usageElapsedMs / 1000}s",
+                    )
+                }
+
+                if (run.events.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Progress",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        run.events.sortedBy { it.sequence }.forEach { event ->
+                            Text(
+                                text = "• ${event.summary}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A labelled block in [RunDetailSheet]: a caption label over the full (un-truncated) value. */
+@Composable
+private fun RunDetailSection(label: String, value: String, error: Boolean = false) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
 
 /** Centered spinner shown while [ScheduleUiState.Loading] — distinct from the empty state (SC6). */
 @Composable
