@@ -166,6 +166,11 @@ class ChatTurnRuntime(
         // (which only gates the conversation prompt). So the model is steered by — and can report —
         // the active goal even when the conversation system prompt is disallowed. Null when no goal.
         activeGoal: String? = null,
+        // Whether the untrusted-content prompt-injection framing (#197 I-DELIMIT) is included in the
+        // system prompt: the tool-content clause AND the per-block untrusted-data directive on recalled
+        // memory / knowledge. Defaults true (the safe floor); the app passes false when the user turns
+        // it off in Advanced > Security.
+        untrustedContentFraming: Boolean = true,
     ): Flow<GenerationChunk> = flow {
         val provider = resolver.findProvider(model, turn) ?: error("Provider not found")
         @Suppress("UNCHECKED_CAST") // resolver.provider(setting) returns the Provider for this setting's
@@ -239,6 +244,7 @@ class ChatTurnRuntime(
                     stream = assistant.streamOutput,
                     conversationSystemPrompt = conversationSystemPrompt,
                     activeGoal = activeGoal,
+                    untrustedContentFraming = untrustedContentFraming,
                 )
                 messages = transforms.visualTransform(messages)
                 messages = transforms.onGenerationFinish(messages)
@@ -416,6 +422,7 @@ class ChatTurnRuntime(
         stream: Boolean,
         conversationSystemPrompt: String?,
         activeGoal: String?,
+        untrustedContentFraming: Boolean,
     ) {
         val window = ModelRegistry.getContextWindowForModel(model)
         val allowedTokens = computeAllowedTokens(window, resolveReserveOutput(assistant.maxTokens))
@@ -455,6 +462,7 @@ class ChatTurnRuntime(
                 tools = effectiveTools,
                 conversationSystemPrompt = conversationSystemPrompt,
                 activeGoal = activeGoal,
+                untrustedContentFraming = untrustedContentFraming,
                 includedMessagesHaveToolOutput = includedConvo.hasToolOutput(),
             )
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
@@ -547,6 +555,7 @@ class ChatTurnRuntime(
         tools: List<Tool>,
         conversationSystemPrompt: String?,
         activeGoal: String?,
+        untrustedContentFraming: Boolean,
         // Whether the messages actually included in THIS request carry tool output (issue #356 #4) —
         // computed by the caller on the context-limited set so the untrusted clause is gated on what is
         // sent, not on the full conversation history.
@@ -580,6 +589,7 @@ class ChatTurnRuntime(
                 estimateTokens(listOf(UIMessagePart.Text(this.toString())))
             val memoryBlocks = buildMemoryPrompt(
                 memories = memories,
+                includeUntrustedDirective = untrustedContentFraming,
                 scope = if (assistant.useGlobalMemory) KnowledgeScope.GLOBAL else KnowledgeScope.ASSISTANT,
             )
             val selected = KnowledgeContextAssembler.assemble(
@@ -588,7 +598,7 @@ class ChatTurnRuntime(
             )
             selected.forEach { block ->
                 appendLine()
-                append(KnowledgeContextRenderer.render(block))
+                append(KnowledgeContextRenderer.render(block, includeUntrustedDirective = untrustedContentFraming))
             }
         }
         if (assistant.enableRecentChatsReference) {
@@ -607,7 +617,10 @@ class ChatTurnRuntime(
         // instructions to follow. Defense in depth on top of the approval loop-breaker. Gated on tools
         // exposed THIS request OR tool output already present in the included transcript (issue #356 #4):
         // historical tool output must stay fenced even when no tools are exposed now.
-        val untrustedClause = untrustedToolContentClauseFor(tools.isNotEmpty() || includedMessagesHaveToolOutput)
+        // Gated on the user's Advanced > Security toggle as well: when off, the framing is dropped.
+        val untrustedClause = untrustedToolContentClauseFor(
+            (tools.isNotEmpty() || includedMessagesHaveToolOutput) && untrustedContentFraming
+        )
         if (untrustedClause.isNotEmpty()) {
             appendLine()
             append(untrustedClause)
@@ -631,6 +644,10 @@ internal fun buildMemoryPrompt(
     memories: List<RecalledMemory>,
     scope: KnowledgeScope,
     nowMs: Long = System.currentTimeMillis(),
+    // Must match the directive inclusion used when the block is finally rendered, so the token estimate
+    // below does not drift from the actual on-wire size when untrusted framing is off. Kept LAST so the
+    // existing positional `nowMs` callers (tests) are unaffected.
+    includeUntrustedDirective: Boolean = true,
 ): List<KnowledgeContextBlock> =
     memories.map { memory ->
         val content = JsonInstantPretty.encodeToString(
@@ -650,7 +667,7 @@ internal fun buildMemoryPrompt(
         )
         block.copy(
             estimatedTokens = estimateTokens(
-                listOf(UIMessagePart.Text(KnowledgeContextRenderer.render(block)))
+                listOf(UIMessagePart.Text(KnowledgeContextRenderer.render(block, includeUntrustedDirective)))
             )
         )
     }

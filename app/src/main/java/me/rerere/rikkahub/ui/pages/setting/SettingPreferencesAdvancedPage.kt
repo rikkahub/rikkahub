@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -108,6 +109,33 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                                     )
                                 }
                             }
+                        },
+                    )
+                }
+            }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("Security") },
+                ) {
+                    item(
+                        headlineContent = { Text("Untrusted content protection") },
+                        supportingContent = {
+                            Text(
+                                "Tell the model to treat tool output (shell, files, web pages, MCP results) " +
+                                    "and recalled memory / knowledge as untrusted data, not instructions — a " +
+                                    "defense against prompt injection. On by default. Turn off only if you " +
+                                    "understand the risk (e.g. to cut prompt noise on trusted, local-only use)."
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.enableUntrustedContentFraming,
+                                onCheckedChange = {
+                                    vm.updateSettings(settings.copy(enableUntrustedContentFraming = it))
+                                },
+                            )
                         },
                     )
                 }

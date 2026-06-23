@@ -28,39 +28,48 @@ object KnowledgeContextRenderer {
      *  - MEMORY: `content` is the raw memory text, wrapped in `<memory>`. Defined now for Phase 2;
      *    no Phase 1 emitter produces MEMORY blocks yet.
      */
-    fun render(block: KnowledgeContextBlock): String = when (block.source) {
-        KnowledgeSource.RAG -> knowledgeBaseContext(block.content)
-        KnowledgeSource.ATTACHMENT -> block.content
-        KnowledgeSource.MEMORY -> memoryContext(block.content)
+    /**
+     * [includeUntrustedDirective] gates the per-block untrusted-data directive (#197 I-DELIMIT). It
+     * defaults to true (the safe floor, byte-identical to the historical output); the caller passes
+     * false when the user has turned untrusted-content framing OFF in Advanced > Security. The
+     * structural escaping ([UntrustedContentFraming.escape]) and the source wrapper tags are ALWAYS
+     * kept — only the model-facing "treat this as data" directive line is dropped.
+     */
+    fun render(block: KnowledgeContextBlock, includeUntrustedDirective: Boolean = true): String =
+        when (block.source) {
+            KnowledgeSource.RAG -> knowledgeBaseContext(block.content, includeUntrustedDirective)
+            KnowledgeSource.ATTACHMENT -> block.content
+            KnowledgeSource.MEMORY -> memoryContext(block.content, includeUntrustedDirective)
+        }
+
+    // Built explicitly (buildString/appendLine), NOT a trimIndent template. For a SINGLE-line payload
+    // the directive-included output is byte-identical to the legacy trimIndent wrapper. For a MULTI-line
+    // payload it is INTENTIONALLY cleaner: the old template's common-indent detection was defeated by the
+    // zero-indent payload continuation, so it leaked the raw-string's 16-space indentation onto the
+    // wrapper/guidance/directive lines — a stray artifact, not a contract. The explicit builder always
+    // emits unindented lines. It also lets an omitted directive (framing off) drop without a blank line.
+    private fun knowledgeBaseContext(joinedChunks: String, includeUntrustedDirective: Boolean): String {
+        if (joinedChunks.isBlank()) return ""
+        return buildString {
+            appendLine("<knowledge_base_context>")
+            appendLine("The following excerpts were retrieved from the user's attached knowledge base and may be")
+            appendLine("relevant to the request. Use them when helpful; ignore them when not.")
+            if (includeUntrustedDirective) {
+                appendLine(UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE)
+                appendLine()
+            }
+            appendLine(UntrustedContentFraming.escape(joinedChunks))
+            append("</knowledge_base_context>")
+        }
     }
 
-    // Exact reproduction of the legacy KnowledgeRetrievalTransformer.buildContextBlock wrapper so the
-    // generous-budget path is byte-identical to today's RAG injection, with deterministic escaping for
-    // untrusted payloads.
-    private fun knowledgeBaseContext(joinedChunks: String): String =
-        if (joinedChunks.isBlank()) {
-            ""
-        } else {
-            """
-                <knowledge_base_context>
-                The following excerpts were retrieved from the user's attached knowledge base and may be
-                relevant to the request. Use them when helpful; ignore them when not.
-                ${UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE}
-
-                ${UntrustedContentFraming.escape(joinedChunks)}
-                </knowledge_base_context>
-            """.trimIndent()
+    private fun memoryContext(content: String, includeUntrustedDirective: Boolean): String {
+        if (content.isBlank()) return ""
+        return buildString {
+            appendLine("<memory>")
+            if (includeUntrustedDirective) appendLine(UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE)
+            appendLine(UntrustedContentFraming.escape(content))
+            append("</memory>")
         }
-
-    private fun memoryContext(content: String): String =
-        if (content.isBlank()) {
-            ""
-        } else {
-            """
-                <memory>
-                ${UntrustedContentFraming.UNTRUSTED_DATA_DIRECTIVE}
-                ${UntrustedContentFraming.escape(content)}
-                </memory>
-            """.trimIndent()
-        }
+    }
 }

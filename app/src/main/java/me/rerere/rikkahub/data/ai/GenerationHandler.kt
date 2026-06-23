@@ -166,6 +166,8 @@ class GenerationHandler(
             maxSteps = maxSteps,
             conversationSystemPrompt = conversationSystemPrompt,
             activeGoal = activeGoal,
+            // Advanced > Security toggle: when off, drop the untrusted-content framing from the prompt.
+            untrustedContentFraming = settings.enableUntrustedContentFraming,
         )
     }
 
