@@ -86,6 +86,24 @@ internal fun untrustedToolContentClauseFor(hasTools: Boolean): String =
     if (hasTools) UNTRUSTED_TOOL_CONTENT_CLAUSE else ""
 
 /**
+ * The active-goal standing-directive section (the app's `/goal`). Rendered as its OWN additive system-
+ * prompt section EVERY turn, independent of [AssistantConfig.allowConversationSystemPrompt] (which only
+ * gates the conversation prompt) — so the model is both steered by the goal and able to answer "what is
+ * your goal?". Empty when no goal is armed. Pure so the rendering is unit-testable; the system-prompt
+ * builder just appends the non-empty result.
+ */
+internal fun activeGoalSection(activeGoal: String?): String =
+    if (activeGoal.isNullOrBlank()) {
+        ""
+    } else {
+        "# Active goal\n" +
+            "The user has set this autonomous goal for you to accomplish:\n" +
+            "\"$activeGoal\"\n" +
+            "Keep working toward it until it is fully achieved. If the user asks what your goal is, " +
+            "report THIS goal."
+    }
+
+/**
  * Whether any message carries TOOL OUTPUT visible to the model — a modern executed [UIMessagePart.Tool]
  * (non-empty `output`) or a legacy standalone [UIMessagePart.ToolResult]. Used to gate the
  * untrusted-tool-content clause on the historical transcript, not only the currently-exposed tools
@@ -143,6 +161,11 @@ class ChatTurnRuntime(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
         conversationSystemPrompt: String? = null,
+        // A standing turn directive (the app's `/goal`) surfaced into the system prompt as its OWN
+        // additive section EVERY turn, independent of [AssistantConfig.allowConversationSystemPrompt]
+        // (which only gates the conversation prompt). So the model is steered by — and can report —
+        // the active goal even when the conversation system prompt is disallowed. Null when no goal.
+        activeGoal: String? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = resolver.findProvider(model, turn) ?: error("Provider not found")
         @Suppress("UNCHECKED_CAST") // resolver.provider(setting) returns the Provider for this setting's
@@ -215,6 +238,7 @@ class ChatTurnRuntime(
                     memories = memories ?: emptyList(),
                     stream = assistant.streamOutput,
                     conversationSystemPrompt = conversationSystemPrompt,
+                    activeGoal = activeGoal,
                 )
                 messages = transforms.visualTransform(messages)
                 messages = transforms.onGenerationFinish(messages)
@@ -391,6 +415,7 @@ class ChatTurnRuntime(
         memories: List<RecalledMemory>,
         stream: Boolean,
         conversationSystemPrompt: String?,
+        activeGoal: String?,
     ) {
         val window = ModelRegistry.getContextWindowForModel(model)
         val allowedTokens = computeAllowedTokens(window, resolveReserveOutput(assistant.maxTokens))
@@ -429,6 +454,7 @@ class ChatTurnRuntime(
                 memories = memories,
                 tools = effectiveTools,
                 conversationSystemPrompt = conversationSystemPrompt,
+                activeGoal = activeGoal,
                 includedMessagesHaveToolOutput = includedConvo.hasToolOutput(),
             )
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
@@ -520,6 +546,7 @@ class ChatTurnRuntime(
         memories: List<RecalledMemory>,
         tools: List<Tool>,
         conversationSystemPrompt: String?,
+        activeGoal: String?,
         // Whether the messages actually included in THIS request carry tool output (issue #356 #4) —
         // computed by the caller on the context-limited set so the untrusted clause is gated on what is
         // sent, not on the full conversation history.
@@ -533,6 +560,15 @@ class ChatTurnRuntime(
             }
         if (effectiveSystemPrompt.isNotBlank()) {
             append(effectiveSystemPrompt)
+        }
+
+        // Active goal (the app's `/goal`): its OWN additive section, NOT the either/or system-prompt
+        // slot above — so it reaches the model every turn regardless of allowConversationSystemPrompt.
+        val goalSection = activeGoalSection(activeGoal)
+        if (goalSection.isNotEmpty()) {
+            appendLine()
+            appendLine()
+            append(goalSection)
         }
 
         // 记忆

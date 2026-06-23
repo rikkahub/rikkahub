@@ -103,6 +103,8 @@ class GenerationHandler(
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
+        // The active `/goal` condition, surfaced into the system prompt every turn (ungated). Null = none.
+        activeGoal: String? = null,
     ): Flow<GenerationChunk> {
         // The transformer pipeline still holds Android context/settings/assistant on the app side;
         // bind it behind the neutral seam, capturing those here so the runtime never sees them. The
@@ -163,6 +165,7 @@ class GenerationHandler(
             tools = tools,
             maxSteps = maxSteps,
             conversationSystemPrompt = conversationSystemPrompt,
+            activeGoal = activeGoal,
         )
     }
 

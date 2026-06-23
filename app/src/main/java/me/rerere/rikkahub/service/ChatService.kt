@@ -2678,6 +2678,10 @@ class ChatService(
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
+                // Surface the armed `/goal` into the system prompt every turn so the model is steered by
+                // it and can report it (a normal user turn, a goal continuation, and a loop fire all run
+                // through here). Null when no goal is armed.
+                activeGoal = session.activeGoal?.condition,
                 memories = recalledMemories,
                 inputTransformers = chatMessageTransformers.input,
                 outputTransformers = chatMessageTransformers.output,
