@@ -480,6 +480,19 @@ internal fun buildLoopFireMessage(event: AgentEventEntity, prompt: String): UIMe
         ),
     )
 
+/**
+ * The visible "✓ Goal achieved" notice appended when a `/goal` is judged met (#364 follow-up): the
+ * autonomous goal loop used to clear the goal and stop SILENTLY, so the user had no signal it
+ * finished. A plain ASSISTANT message — NOT the agent-event synthetic marker, which is event-id-keyed
+ * ([syntheticAgentEventMarker] requires an [AGENT_EVENT_ID_METADATA_KEY]) and would be a half-state
+ * lie here — so it is honest, durable, and readable when the app is backgrounded.
+ */
+internal fun buildGoalAchievedNotice(condition: String): UIMessage =
+    UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(UIMessagePart.Text(text = "✓ Goal achieved: \"$condition\"")),
+    )
+
 internal fun resolveDeferredShellCompletion(
     conversation: Conversation,
     anchor: ShellRunToolAnchor,
@@ -1501,9 +1514,12 @@ class ChatService(
                 lastAssistantText = lastMessage?.takeIf { it.role == MessageRole.ASSISTANT }?.toText(),
             )) {
                 // LLM judged the goal achieved -> clear and stop. Guarded so a goal re-armed during the
-                // (slow) judge call is not clobbered by this stale "met".
+                // (slow) judge call is not clobbered by this stale "met"; only announce completion when
+                // WE actually cleared THIS goal (#364 follow-up: the loop used to end silently).
                 GoalVerdict.Met -> {
-                    session.compareAndSetGoal(goal, null)
+                    if (session.compareAndSetGoal(goal, null)) {
+                        announceGoalAchieved(conversationId, goal.condition)
+                    }
                     return
                 }
                 // The judge gave no usable verdict (hook/provider/parse failure, timeout, empty answer).
@@ -1535,6 +1551,20 @@ class ChatService(
             // goal stays armed so a later manual send can retry; the budget was already charged above.
             if (!handleMessageComplete(conversationId, runTurnEndJobs = false)) return
         }
+    }
+
+    /**
+     * Append the visible "✓ Goal achieved" notice for [conversationId] (#364 follow-up). Re-reads the
+     * live conversation so the notice trails whatever the goal turn left, then persists it.
+     */
+    private suspend fun announceGoalAchieved(conversationId: Uuid, condition: String) {
+        val current = getConversationFlow(conversationId).value
+        saveConversation(
+            conversationId,
+            current.copy(
+                messageNodes = current.messageNodes + buildGoalAchievedNotice(condition).toMessageNode(),
+            ),
+        )
     }
 
     // ---- Conversation loop (issue #364, `/loop`) ----
