@@ -30,6 +30,7 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import android.app.Application
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.AndroidChatServiceProcessBinding
+import me.rerere.rikkahub.service.AndroidStringProvider
 import me.rerere.rikkahub.service.automation.AutomationActivationTracker
 import me.rerere.rikkahub.service.automation.AutomationKillSwitch
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
@@ -194,7 +195,7 @@ val appModule = module {
         val killSwitch = get<AutomationKillSwitch>()
         val registry = get<AutomationRuntimeRegistry>()
         ChatService(
-            context = get(),
+            strings = AndroidStringProvider(ctx),
             appScope = get(),
             settingsStore = get(),
             conversationRepo = get(),

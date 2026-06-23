@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.service
 
-import android.app.Application
 import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
@@ -976,7 +975,9 @@ internal fun revokeActiveAutomation(sessions: Collection<ConversationSession>) {
 }
 
 class ChatService(
-    private val context: Application,
+    // String-resource lookup (#360 P1b) — replaces the direct Application/Context dependency, which was
+    // ChatService's last raw Android type. A test supplies a fake StringProvider.
+    private val strings: StringProvider,
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
@@ -1302,7 +1303,7 @@ class ChatService(
 
         return launchGenerationEntry(
             conversationId = conversationId,
-            errorTitle = context.getString(R.string.error_title_send_message),
+            errorTitle = strings.getString(R.string.error_title_send_message),
         ) { session ->
             finishInterruptedPendingTools(conversationId)
 
@@ -1667,7 +1668,7 @@ class ChatService(
             }.onFailure { e ->
                 if (e is CancellationException) throw e
                 Log.e(TAG, "enqueueAgentEvent failed", e)
-                addError(e, conversationId, title = context.getString(R.string.error_title_generation))
+                addError(e, conversationId, title = strings.getString(R.string.error_title_generation))
             }.isSuccess
             if (persisted) maybeDrainAgentEventsWhenIdle(conversationId)
         }
@@ -1700,7 +1701,7 @@ class ChatService(
                     throw e
                 } catch (e: Throwable) {
                     Log.e(TAG, "agent-event idle drain failed", e)
-                    addError(e, conversationId, title = context.getString(R.string.error_title_generation))
+                    addError(e, conversationId, title = strings.getString(R.string.error_title_generation))
                 }
             }.also { drainJob ->
                 // The drain delivers only a bounded SNAPSHOT per pass (drainAgentEventsAtTurnEnd); a
@@ -2037,7 +2038,7 @@ class ChatService(
                 session.consecutiveAutoCompactFailures, AutoCompactOutcome.FAILURE
             )
             Log.e(TAG, "maybeAutoCompact: history compaction failed", it)
-            addError(it, conversationId, title = context.getString(R.string.error_title_auto_compact))
+            addError(it, conversationId, title = strings.getString(R.string.error_title_auto_compact))
         }
     }
 
@@ -2068,7 +2069,7 @@ class ChatService(
     ) {
         launchGenerationEntry(
             conversationId = conversationId,
-            errorTitle = context.getString(R.string.error_title_regenerate_message),
+            errorTitle = strings.getString(R.string.error_title_regenerate_message),
         ) { session ->
             val conversation = session.state.value
 
@@ -2115,7 +2116,7 @@ class ChatService(
                     throw cancellation
                 } catch (error: Throwable) {
                     Log.e(TAG, "child approval resolution failed", error)
-                    addError(error, conversationId, title = context.getString(R.string.error_title_tool_approval))
+                    addError(error, conversationId, title = strings.getString(R.string.error_title_tool_approval))
                 }
             }
             return null
@@ -2123,7 +2124,7 @@ class ChatService(
 
         return launchGenerationEntry(
             conversationId = conversationId,
-            errorTitle = context.getString(R.string.error_title_tool_approval),
+            errorTitle = strings.getString(R.string.error_title_tool_approval),
         ) { session ->
             val conversation = session.state.value
             val newApprovalState = when {
@@ -2300,7 +2301,7 @@ class ChatService(
         if (automationGuard != null && !automationActivation.activate(conversationId)) {
             if (session.activeAutomationGuard === automationGuard) session.clearAutomationLeaseState()
             automationGuard.revoke()
-            throw IllegalStateException(context.getString(R.string.automation_kill_switch_unavailable))
+            throw IllegalStateException(strings.getString(R.string.automation_kill_switch_unavailable))
         }
         // Tracks a NORMAL return from [block] vs an exceptional exit. Only a normal completion that
         // PAUSED on an approval is a resumable break; a CancellationException (Stop, or a newer entry
@@ -2411,7 +2412,7 @@ class ChatService(
         val model = settings.getChatModelForAssistant(assistant) ?: return false
 
         val senderName = if (assistant.useAssistantAvatar) {
-            assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
+            assistant.name.ifEmpty { strings.getString(R.string.assistant_page_default_assistant) }
         } else {
             model.displayName
         }
@@ -2425,9 +2426,9 @@ class ChatService(
             if (!model.abilities.contains(ModelAbility.TOOL)) {
                 if (settings.enableWebSearch || mcpManager.getAllAvailableTools(assistant).isNotEmpty()) {
                     addError(
-                        IllegalStateException(context.getString(R.string.tools_warning)),
+                        IllegalStateException(strings.getString(R.string.tools_warning)),
                         conversationId,
-                        title = context.getString(R.string.error_title_tool_unavailable)
+                        title = strings.getString(R.string.error_title_tool_unavailable)
                     )
                 }
             }
@@ -2655,7 +2656,7 @@ class ChatService(
                             },
                             processingStatus = session.processingStatus,
                             progressLabel = { subName ->
-                                context.getString(R.string.chat_subagent_running, subName)
+                                strings.getString(R.string.chat_subagent_running, subName)
                             },
                             // Associate the persisted task row with THIS conversation so the board
                             // panel / retention / cleanup find it (review finding #2). Same id the
@@ -2821,7 +2822,7 @@ class ChatService(
         }.onFailure {
             // Live Update 通知为 per-conversation 生命周期，已在 onCompletion 统一取消。
             if (it !is CancellationException) Log.e(TAG, "handleMessageComplete: generation failed", it)
-            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+            addError(it, conversationId, title = strings.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {
@@ -2941,7 +2942,7 @@ class ChatService(
             addError(
                 error = it,
                 conversationId = conversationId,
-                title = context.getString(R.string.error_title_generate_title),
+                title = strings.getString(R.string.error_title_generate_title),
                 solution = ChatErrorSolution.CheckTitleModelSettings,
             )
         }
@@ -3026,7 +3027,7 @@ class ChatService(
             messagesToKeep = allMessages.takeLast(keepRecentMessages)
         } else if (keepRecentMessages > 0) {
             // Not enough messages to compress while keeping recent ones
-            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
+            throw IllegalStateException(strings.getString(R.string.chat_page_compress_not_enough_messages))
         } else {
             messagesToCompress = allMessages
             messagesToKeep = emptyList()
@@ -3261,7 +3262,7 @@ class ChatService(
                 if (messageText.isBlank()) return@launch
 
                 // Set loading state for translation
-                val loadingText = context.getString(R.string.translating)
+                val loadingText = strings.getString(R.string.translating)
                 updateTranslationField(conversationId, message.id, loadingText)
 
                 generationHandler.translateText(
@@ -3280,7 +3281,7 @@ class ChatService(
                 // must never stick), but cancellation itself must propagate, not report.
                 clearTranslationField(conversationId, message.id)
                 if (shouldRethrowVmError(e)) throw e
-                addError(e, conversationId, title = context.getString(R.string.error_title_translate_message))
+                addError(e, conversationId, title = strings.getString(R.string.error_title_translate_message))
             }
         }
     }
