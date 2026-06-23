@@ -43,9 +43,9 @@ internal fun getLiveUpdateIntentSpec(conversationId: Uuid): LiveUpdateIntentSpec
     )
 }
 
-class ChatNotificationSender(private val context: Context) {
+class ChatNotificationSender(private val context: Context) : ChatNotifications {
 
-    fun sendGenerationDone(conversationId: Uuid, senderName: String, contentPreview: String) {
+    override fun sendGenerationDone(conversationId: Uuid, senderName: String, contentPreview: String) {
         // The per-conversation Live Update notification is cancelled separately by the generation
         // completion path (ChatService -> cancelLiveUpdate), keyed by this conversation's (tag, id);
         // this "done" notification is a distinct one-off, so nothing to cancel here.
@@ -62,7 +62,7 @@ class ChatNotificationSender(private val context: Context) {
         }
     }
 
-    fun sendLiveUpdate(conversationId: Uuid, senderName: String, parts: List<UIMessagePart>) {
+    override fun sendLiveUpdate(conversationId: Uuid, senderName: String, parts: List<UIMessagePart>) {
         val strings = NotificationStrings(
             chipTool = context.getString(R.string.notification_live_update_chip_tool),
             chipThinking = context.getString(R.string.notification_live_update_chip_thinking),
@@ -95,7 +95,7 @@ class ChatNotificationSender(private val context: Context) {
         }
     }
 
-    fun cancelLiveUpdate(conversationId: Uuid) {
+    override fun cancelLiveUpdate(conversationId: Uuid) {
         val identity = getLiveUpdateNotificationIdentity(conversationId)
         context.cancelNotification(identity.tag, identity.id)
     }

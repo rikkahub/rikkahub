@@ -27,9 +27,15 @@ import me.rerere.rikkahub.data.InstalledPackageSource
 import me.rerere.rikkahub.data.AndroidInstalledPackageSource
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
+import android.app.Application
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.AndroidChatServiceProcessBinding
+import me.rerere.rikkahub.service.automation.AutomationActivationTracker
 import me.rerere.rikkahub.service.automation.AutomationKillSwitch
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
+import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundController
+import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
+import me.rerere.rikkahub.service.notification.ChatNotificationSender
 import me.rerere.rikkahub.ui.components.EmojiData
 import me.rerere.rikkahub.ui.components.EmojiUtils
 import me.rerere.common.json.JsonInstant
@@ -181,6 +187,12 @@ val appModule = module {
     single<RuntimeClock> { SystemRuntimeClock() }
 
     single {
+        // Platform side-effect collaborators (#360 P1a) are constructed HERE at the composition root
+        // (not inside ChatService) and injected as narrow ports, so ChatService stays free of Android
+        // lifecycle/notification/foreground construction and a test can supply fakes.
+        val ctx = get<Application>()
+        val killSwitch = get<AutomationKillSwitch>()
+        val registry = get<AutomationRuntimeRegistry>()
         ChatService(
             context = get(),
             appScope = get(),
@@ -202,8 +214,14 @@ val appModule = module {
             taskRunStore = get(),
             agentEventStore = get(),
             shellRunStore = get(),
-            automationRegistry = get(),
-            automationKillSwitch = get(),
+            automationRegistry = registry,
+            foregroundGeneration = GenerationForegroundCoordinator(AndroidGenerationForegroundController(ctx)),
+            notifications = ChatNotificationSender(ctx),
+            processBinding = AndroidChatServiceProcessBinding(killSwitch),
+            automationActivation = AutomationActivationTracker(
+                showOverlay = { registry.showKillSwitch(onStop = { killSwitch.trip() }) },
+                hideOverlay = { registry.hideKillSwitch() },
+            ),
             hookDispatcher = get()
         )
     }

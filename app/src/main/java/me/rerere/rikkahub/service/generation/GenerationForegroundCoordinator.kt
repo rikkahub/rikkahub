@@ -15,7 +15,7 @@ private const val TAG = "GenerationFGCoord"
 class GenerationForegroundCoordinator(
     private val controller: GenerationForegroundController,
     private val clock: () -> Long = { System.currentTimeMillis() },
-) {
+) : ForegroundGenerationLifecycle {
     // 活跃生成引用计数：跨会话计数，只有 0->1 边启动前台服务、1->0 边停止。
     private val generationTracker = GenerationActivityTracker()
 
@@ -41,7 +41,7 @@ class GenerationForegroundCoordinator(
     // it, a non-STARTED retry could observe running==false, enter start() concurrently with the
     // STARTED edge's start(), and its onFailure set(false) could clobber the other's success.
     @Synchronized
-    fun onGenerationStart() {
+    override fun onGenerationStart() {
         val transition = generationTracker.acquire()
         // Attempt the start on the 0->1 edge, OR whenever the service is not yet running. A transient
         // start failure (ForegroundServiceStartNotAllowedException) used to latch: the active count
@@ -61,7 +61,7 @@ class GenerationForegroundCoordinator(
     // 服务，且仅当启动确实成功过时才发 ACTION_STOP（startService 在后台对未启动的服务也可能抛
     // IllegalStateException）。服务在 ACTION_STOP / onDestroy 释放锁。
     @Synchronized
-    fun onGenerationStop() {
+    override fun onGenerationStop() {
         if (generationTracker.release() != GenerationActivityTracker.Transition.STOPPED) return
         if (foregroundServiceRunning.compareAndSet(true, false)) {
             runCatching { controller.stop() }
@@ -71,7 +71,7 @@ class GenerationForegroundCoordinator(
 
     // 流式进展时按时间节流地续期前台服务 WakeLock。节流判定抽成纯函数 [shouldRenewWakeLock] 以便
     // JVM 单测；仅当服务确实在运行且距上次续期超过间隔时才发 IPC。
-    fun onStreamingProgress() {
+    override fun onStreamingProgress() {
         if (!foregroundServiceRunning.get()) return
         val now = clock()
         val last = lastWakeLockRenewAt.get()

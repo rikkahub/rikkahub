@@ -3,9 +3,6 @@ package me.rerere.rikkahub.service
 import android.app.Application
 import android.util.Log
 import androidx.core.net.toUri
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -124,7 +121,6 @@ import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.getUiAutomationTools
 import me.rerere.rikkahub.service.automation.AUTOMATION_YOLO_SUPPORTED
 import me.rerere.rikkahub.service.automation.AutomationActivationTracker
-import me.rerere.rikkahub.service.automation.AutomationKillSwitch
 import me.rerere.rikkahub.service.automation.AutomationRuntimeRegistry
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.ChatMessageTransformers
@@ -175,10 +171,9 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.ai.runtime.memory.MEMORY_RECALL_K
 import me.rerere.rikkahub.data.ai.memory.MemoryRecaller
 import me.rerere.rikkahub.data.ai.memory.resolveMemoryRecallScope
-import me.rerere.rikkahub.service.generation.AndroidGenerationForegroundController
-import me.rerere.rikkahub.service.generation.GenerationForegroundCoordinator
+import me.rerere.rikkahub.service.generation.ForegroundGenerationLifecycle
 import me.rerere.rikkahub.service.mutation.ConversationMutations
-import me.rerere.rikkahub.service.notification.ChatNotificationSender
+import me.rerere.rikkahub.service.notification.ChatNotifications
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.common.text.applyPlaceholders
@@ -964,6 +959,22 @@ enum class ChatErrorSolution {
     CheckTitleModelSettings,
 }
 
+/**
+ * The automation kill-switch sweep (#187 §7/I9), extracted to file level (#360 P1a) so the
+ * "revoke EVERY active-automation session and cancel its job, leave the rest untouched" policy is
+ * JVM-unit-testable with real [ConversationSession]s — independent of constructing the full ChatService.
+ * Revokes a session iff it has ANY live automation guard (the main lease OR a subagent lease, Option B),
+ * then cancels its generation job so structured concurrency tears down the in-flight capture.
+ */
+internal fun revokeActiveAutomation(sessions: Collection<ConversationSession>) {
+    sessions.forEach { session ->
+        if (session.hasActiveAutomation()) {
+            session.revokeAutomation()
+            session.getJob()?.cancel()
+        }
+    }
+}
+
 class ChatService(
     private val context: Application,
     private val appScope: AppScope,
@@ -998,9 +1009,21 @@ class ChatService(
     private val agentEventStore: AgentEventStore,
     private val shellRunStore: ShellRunStore,
     // On-device UI automation (#187 v1, read-only). Registry hands out the live, system-instantiated
-    // AccessibilityRuntime as a pure backend; the kill-switch dispatches STOP to the active guard(s).
+    // AccessibilityRuntime as a pure backend. The kill-switch is no longer a direct dependency (#360
+    // P1a): its register()/trip() wiring moved into [processBinding] and [automationActivation].
     private val automationRegistry: AutomationRuntimeRegistry,
-    private val automationKillSwitch: AutomationKillSwitch,
+    // Platform side-effect seams (#360 P1a), INJECTED so ChatService no longer constructs them from
+    // `context` nor references Android lifecycle APIs directly — tests supply fakes:
+    //  - [foregroundGeneration]: the active-generation → foreground-service lifecycle (was an inline
+    //    GenerationForegroundCoordinator(AndroidGenerationForegroundController(context))).
+    //  - [notifications]: Live Update / generation-done notifications (was an inline ChatNotificationSender(context)).
+    //  - [processBinding]: ProcessLifecycleOwner foreground state + the kill-switch registration (was
+    //    raw ProcessLifecycleOwner.get() + automationKillSwitch.register in init).
+    //  - [automationActivation]: the STOP-overlay refcount/fail-closed tracker (was inline).
+    private val foregroundGeneration: ForegroundGenerationLifecycle,
+    private val notifications: ChatNotifications,
+    private val processBinding: ChatServiceProcessBinding,
+    private val automationActivation: AutomationActivationTracker,
     // Event hooks (#200 v1) are opt-in at the composition root: null preserves the pre-hooks
     // send/stop paths exactly (mirrors ChatTurnRuntime's optional dispatcher port).
     hookDispatcher: HookDispatcher? = null,
@@ -1019,25 +1042,9 @@ class ChatService(
     // never through launchGenerationEntry, whose cancel-previous would kill the waiting child.
     private val pendingChildApprovals = PendingChildApprovals()
 
-    // 活跃生成 -> 前台服务的生命周期状态机。引用计数（0->1 启动、1->0 停止）、前台服务运行标志、
-    // WakeLock 续期节流统一由协调器独占持有；ChatService 只委派，不再直接调用 GenerationForegroundService。
-    private val foregroundCoordinator = GenerationForegroundCoordinator(AndroidGenerationForegroundController(context))
-
-    // 通知发送器：封装"生成完成"与"Live Update"通知的构建，不持有会话状态（内容由调用方传入）。
-    private val notificationSender = ChatNotificationSender(context)
-
     // UI-automation lease clock (#187). A real wall-clock; the kernel injects it instead of reading
     // System.now directly so lease/TTL behaviour is reproducible in the :automation PBT suite.
     private val trustClock = TrustClock { System.currentTimeMillis() }
-
-    // Refcounts the conversations with a live automation lease and owns the single STOP overlay
-    // (#187 §7). The overlay is process-global but the leases are per-conversation: toggling it on
-    // a per-completion boolean removed the any-app kill-switch for a still-active concurrent session.
-    // Show on the 0→1 edge, hide on 1→0; showOverlay reports reachability so the caller fails closed.
-    private val automationActivation = AutomationActivationTracker(
-        showOverlay = { automationRegistry.showKillSwitch(onStop = { automationKillSwitch.trip() }) },
-        hideOverlay = { automationRegistry.hideKillSwitch() },
-    )
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -1071,44 +1078,27 @@ class ChatService(
     private val _isForeground = MutableStateFlow(false)
     val isForeground: StateFlow<Boolean> = _isForeground.asStateFlow()
 
-    private val lifecycleObserver = LifecycleEventObserver { _, event ->
-        when (event) {
-            Lifecycle.Event.ON_START -> _isForeground.value = true
-            Lifecycle.Event.ON_STOP -> _isForeground.value = false
-            else -> {}
-        }
-    }
-
-    // Handle for the kill-switch revoke action registered in init, released in cleanup so a
-    // recreated ChatService does not leak a stale handler that captures dead `sessions`.
-    private var killSwitchHandle: Any? = null
+    // Process-binding handle (#360 P1a): undoes the foreground + kill-switch registration on cleanup so
+    // a recreated ChatService does not leak a stale handler that captures dead `sessions`.
+    private var processBindingHandle: AutoCloseable? = null
 
     init {
-        // 添加生命周期观察者
-        ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
-
-        // Kill-switch (#187 design §7/I9): the floating STOP overlay (reachable from any app) trips
-        // this — revoke EVERY active automation grant (future authorize ⇒ DENY) and cancel its
-        // generation job. Cancelling the job tears down that session's in-flight capture by
-        // structured concurrency (the capture is a child of the generation coroutine), so this is
-        // the global kill-switch that legitimately stops ALL automation sessions at once.
-        killSwitchHandle = automationKillSwitch.register {
-            sessions.values.forEach { session ->
-                // Fire when the session has ANY live automation guard — the main lease OR a subagent
-                // lease (Option B): a no-automation parent can still own a spawned automation subagent,
-                // whose guard must be revoked and whose (child) coroutine must be cancelled via the job.
-                if (session.hasActiveAutomation()) {
-                    session.revokeAutomation()
-                    session.getJob()?.cancel()
-                }
-            }
-        }
+        // Bind the two process-global, platform-coupled hooks (#360 P1a) behind the injected port
+        // instead of referencing ProcessLifecycleOwner / AutomationKillSwitch.register here directly:
+        //  - foreground state (drives notification gating); and
+        //  - the floating-STOP kill-switch (#187 §7/I9): revoke EVERY active automation grant and cancel
+        //    its generation job. The kill-switch CALLBACK still traverses THIS service's sessions, so the
+        //    session-coupled policy stays in ChatService (via [revokeActiveAutomation]) while only the
+        //    Android wiring moves behind the port — keeping P1a independent of the session-registry seam.
+        processBindingHandle = processBinding.bind(
+            onForegroundChanged = { _isForeground.value = it },
+            onKillSwitchTrip = { revokeActiveAutomation(sessions.values) },
+        )
     }
 
     fun cleanup() = runCatching {
-        ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
-        killSwitchHandle?.let { automationKillSwitch.unregister(it) }
-        killSwitchHandle = null
+        processBindingHandle?.close()
+        processBindingHandle = null
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
     }
@@ -1126,8 +1116,8 @@ class ChatService(
                 ),
                 scope = appScope,
                 onIdle = { removeSession(it) },
-                onGenerationStart = { foregroundCoordinator.onGenerationStart() },
-                onGenerationStop = { foregroundCoordinator.onGenerationStop() },
+                onGenerationStart = { foregroundGeneration.onGenerationStart() },
+                onGenerationStop = { foregroundGeneration.onGenerationStop() },
             ).also {
                 _sessionsVersion.value++
                 Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
@@ -2782,12 +2772,12 @@ class ChatService(
                     sideEffect = { messages ->
                         // 任何流式进展都重置前台服务的 WakeLock 超时，使长 agentic 循环（工具/MCP/搜索跨多段
                         // 子-120s SSE）在息屏下不会在 15 分钟处误超时停机。按时间节流，避免逐 token IPC。
-                        foregroundCoordinator.onStreamingProgress()
+                        foregroundGeneration.onStreamingProgress()
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
                             messages.lastOrNull()?.parts?.let {
-                                notificationSender.sendLiveUpdate(conversationId, senderName, it)
+                                notifications.sendLiveUpdate(conversationId, senderName, it)
                             }
                         }
                     },
@@ -2798,7 +2788,7 @@ class ChatService(
                 // attached), not here. The lease itself is also self-expiring (TTL) as a backstop.
 
                 // Live Update 通知使用 per-conversation 的 (tag,id) 键，当前会话结束后即时移除，避免并发会话互相覆盖。
-                notificationSender.cancelLiveUpdate(conversationId)
+                notifications.cancelLiveUpdate(conversationId)
 
                 // UI 末帧强制刷新由上游 coalesce 的 onCompletion 负责，已先于此处执行——下面读
                 // getConversationFlow().value 的定型保存与通知预览都已看到刷新后的精确最终状态。这里只负责与
@@ -2823,7 +2813,7 @@ class ChatService(
                 if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
                     val preview = getConversationFlow(conversationId).value.currentMessages
                         .lastOrNull()?.toText()?.take(50)?.trim() ?: ""
-                    notificationSender.sendGenerationDone(conversationId, senderName, preview)
+                    notifications.sendGenerationDone(conversationId, senderName, preview)
                 }
             }.collect { /* 终端消费：所有 chunk 副作用已在 coalesce 内完成 */ }
 
