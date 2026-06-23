@@ -4,7 +4,6 @@ import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -82,6 +81,7 @@ import me.rerere.ai.runtime.task.TaskApprovalDecision
 import me.rerere.ai.runtime.task.TaskApprovalRequest
 import me.rerere.ai.runtime.task.TaskToolPolicy
 import me.rerere.ai.runtime.contract.TurnMode
+import me.rerere.rikkahub.data.ai.agentevent.AgentEventDrainCoordinator
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventQueueReducer
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventStore
 import me.rerere.rikkahub.data.ai.agentevent.ClaimOutcome
@@ -1092,6 +1092,27 @@ class ChatService(
     // a recreated ChatService does not leak a stale handler that captures dead `sessions`.
     private var processBindingHandle: AutoCloseable? = null
 
+    // Durable agent-event drain COORDINATION (#290) extracted to a JVM-testable coordinator (#360 P4):
+    // idle gating, the no-double-generation slot claim, the snapshot-bounded loop, and the re-poke. The
+    // per-event DELIVERY (drainOneAgentEvent) stays here and is injected — it continues the model via the
+    // turn runner (handleMessageComplete), so it extracts cleanly only with P6. The session-coupled
+    // projections (turnGateState, the idle-slot claim, the conversation ref, hydrate) are forwarded.
+    private val agentEventDrainCoordinator = AgentEventDrainCoordinator(
+        store = agentEventStore,
+        scope = appScope,
+        turnGate = ::turnGateState,
+        claimIdleSlot = { conversationId, jobFactory ->
+            getOrCreateSession(conversationId).tryClaimIdleGenerationSlot(jobFactory)
+        },
+        withConversationRef = { conversationId, block -> launchWithConversationReference(conversationId, block) },
+        hydrate = ::hydrateSessionFromStoreIfBlank,
+        drainOne = ::drainOneAgentEvent,
+        signalDrainPass = { conversationId -> _generationDoneFlow.emit(conversationId) },
+        reportError = { e, conversationId ->
+            addError(e, conversationId, title = strings.getString(R.string.error_title_generation))
+        },
+    )
+
     init {
         // Bind the two process-global, platform-coupled hooks (#360 P1a) behind the injected port
         // instead of referencing ProcessLifecycleOwner / AutomationKillSwitch.register here directly:
@@ -1633,25 +1654,7 @@ class ChatService(
         kind: String,
         payloadJson: String,
         dedupeKey: String,
-    ) {
-        // Off the caller's thread; the store + drain are suspend. A reference keeps the session alive
-        // across the async hop. Failures are surfaced as conversation errors, never swallowed.
-        launchWithConversationReference(conversationId) {
-            val persisted = runCatching {
-                agentEventStore.enqueue(
-                    conversationId = conversationId,
-                    kind = kind,
-                    payloadJson = payloadJson,
-                    dedupeKey = dedupeKey,
-                )
-            }.onFailure { e ->
-                if (e is CancellationException) throw e
-                Log.e(TAG, "enqueueAgentEvent failed", e)
-                addError(e, conversationId, title = strings.getString(R.string.error_title_generation))
-            }.isSuccess
-            if (persisted) maybeDrainAgentEventsWhenIdle(conversationId)
-        }
-    }
+    ) = agentEventDrainCoordinator.enqueue(conversationId, kind, payloadJson, dedupeKey)
 
     /**
      * Deliver a freshly-enqueued event immediately IFF the conversation is idle, as a generation that
@@ -1663,43 +1666,8 @@ class ChatService(
      * generation, so a background event can never supersede a user turn; when not idle the event
      * stays buffered (PENDING) for the next genuine turn-end drain.
      */
-    fun maybeDrainAgentEventsWhenIdle(conversationId: Uuid) {
-        if (!AgentEventQueueReducer.canDrain(turnGateState(conversationId))) return
-        val session = getOrCreateSession(conversationId)
-        session.tryClaimIdleGenerationSlot {
-            appScope.launch(start = CoroutineStart.LAZY) {
-                try {
-                    // Hydrate the session from the persisted conversation BEFORE the drain appends: at
-                    // cold-start replay (or an enqueue for a never-opened conversation) the session is a
-                    // blank placeholder, and appending to it would overwrite the persisted message nodes
-                    // on save (data loss). Idempotent — a live, already-hydrated session is left as-is.
-                    hydrateSessionFromStoreIfBlank(conversationId)
-                    drainAgentEventsAtTurnEnd(conversationId)
-                    _generationDoneFlow.emit(conversationId)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    Log.e(TAG, "agent-event idle drain failed", e)
-                    addError(e, conversationId, title = strings.getString(R.string.error_title_generation))
-                }
-            }.also { drainJob ->
-                // The drain delivers only a bounded SNAPSHOT per pass (drainAgentEventsAtTurnEnd); a
-                // continuation can enqueue a fresh completion AFTER that snapshot whose own idle-drain
-                // poke is refused while THIS slot is held. So, once the slot clears, re-poke if events
-                // remain — delivered promptly instead of stranding until an unrelated turn.
-                // Launched async so it runs AFTER the slot-release completion handler; each re-poke
-                // is its own bounded pass with the slot released between, so the user can interject and
-                // an endlessly-spawning continuation cannot hold the slot (its own budgets bound it).
-                drainJob.invokeOnCompletion {
-                    appScope.launch {
-                        if (agentEventStore.listPending(conversationId).isNotEmpty()) {
-                            maybeDrainAgentEventsWhenIdle(conversationId)
-                        }
-                    }
-                }
-            }
-        }
-    }
+    fun maybeDrainAgentEventsWhenIdle(conversationId: Uuid) =
+        agentEventDrainCoordinator.maybeDrainWhenIdle(conversationId)
 
     /**
      * Load the persisted conversation into a BLANK session before an agent-event drain appends to it.
@@ -1744,24 +1712,8 @@ class ChatService(
      * for a genuine idle turn-end. One event per continuation (productDecision #5): the nested
      * completion runs with `runTurnEndJobs = false`, so it does not recurse into another drain.
      */
-    private suspend fun drainAgentEventsAtTurnEnd(conversationId: Uuid) {
-        // Drain a SNAPSHOT of the events pending NOW, one at a time, each with its own continuation
-        // (one event per continuation, productDecision #5). The FIFO enqueue sequence is monotone, so
-        // the oldest `budget` events are exactly those pending at entry. This CHAINS past the round-3
-        // strand: completions queued WHILE the conversation was generating (their idle-drain refused)
-        // are all pending when this idle drain begins, so all are in the snapshot and all get delivered
-        // — the continuation runs with runTurnEndJobs = false and does not itself re-drain.
-        //
-        // The snapshot count BOUNDS the loop: a continuation is a normal turn that can
-        // spawn a fast detached background child which enqueues its completion concurrently; chasing
-        // those this pass would not provably terminate. They are delivered instead by their own
-        // onBackgroundComplete idle-drain poke or the next turn-end, never lost (cold-start replay is
-        // the final backstop).
-        var budget = agentEventStore.listPending(conversationId).size
-        while (budget-- > 0 && drainOneAgentEvent(conversationId)) {
-            // deliver the snapshot, oldest first
-        }
-    }
+    private suspend fun drainAgentEventsAtTurnEnd(conversationId: Uuid) =
+        agentEventDrainCoordinator.drainAtTurnEnd(conversationId)
 
     /** Deliver (or terminalize) the single oldest pending event; returns true if more may remain. */
     private suspend fun drainOneAgentEvent(conversationId: Uuid): Boolean {
