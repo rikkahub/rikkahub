@@ -83,6 +83,33 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                             }
                         },
                     )
+                    item(
+                        headlineContent = { Text("Max goal iterations") },
+                        supportingContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("How many times a /goal may auto-continue the agent before it stops. 0 = unlimited. A user-stop always ends it.")
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Slider(
+                                        value = settings.maxGoalIterations.coerceIn(0, 50).toFloat(),
+                                        onValueChange = {
+                                            vm.updateSettings(settings.copy(maxGoalIterations = it.toInt()))
+                                        },
+                                        valueRange = 0f..50f,
+                                        steps = 49,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        text = if (settings.maxGoalIterations <= 0) "∞"
+                                        else "${settings.maxGoalIterations}",
+                                    )
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }

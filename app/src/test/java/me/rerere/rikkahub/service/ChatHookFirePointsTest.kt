@@ -173,4 +173,63 @@ class ChatHookFirePointsTest {
         assertNull(continuation)
         assertTrue(executor.inputs.isEmpty())
     }
+
+    // ---- /goal judge (#364): the 3-way verdict that keeps a judge FAILURE from clearing the goal ----
+
+    @Test
+    fun `judge goal returns Continue with the directive when not met`() = runBlocking {
+        val executor = ScriptedExecutor { _, _ ->
+            """{"hookEventName":"Stop","additionalContext":"run the failing test next"}"""
+        }
+
+        val verdict = firePoints(executor).judgeGoal(trustedConfig(HookEvent.Stop), lastAssistantText = "wip")
+
+        assertEquals(GoalVerdict.Continue("run the failing test next"), verdict)
+    }
+
+    @Test
+    fun `judge goal returns Met when the LLM sets preventContinuation`() = runBlocking {
+        val executor = ScriptedExecutor { _, _ -> """{"preventContinuation":true}""" }
+
+        val verdict = firePoints(executor).judgeGoal(trustedConfig(HookEvent.Stop), lastAssistantText = "done")
+
+        assertEquals(GoalVerdict.Met, verdict)
+    }
+
+    @Test
+    fun `judge goal returns Inconclusive when the judge fails (fail-open empty)`() = runBlocking {
+        val executor = ScriptedExecutor { _, _ -> throw RuntimeException("provider down") }
+
+        val verdict = firePoints(executor).judgeGoal(trustedConfig(HookEvent.Stop), lastAssistantText = "wip")
+
+        // A judge failure must NOT look like "met" — it must pause the goal, not clear it.
+        assertEquals(GoalVerdict.Inconclusive, verdict)
+    }
+
+    @Test
+    fun `judge goal returns Inconclusive on an empty no-verdict answer`() = runBlocking {
+        val executor = ScriptedExecutor { _, _ -> """{}""" }
+
+        val verdict = firePoints(executor).judgeGoal(trustedConfig(HookEvent.Stop), lastAssistantText = "wip")
+
+        assertEquals(GoalVerdict.Inconclusive, verdict)
+    }
+
+    @Test
+    fun `judge goal returns Inconclusive with a null dispatcher`() = runBlocking {
+        val verdict = ChatHookFirePoints(dispatcher = null)
+            .judgeGoal(trustedConfig(HookEvent.Stop), lastAssistantText = "wip")
+
+        assertEquals(GoalVerdict.Inconclusive, verdict)
+    }
+
+    @Test
+    fun `judge goal returns Inconclusive when no Stop matcher is configured`() = runBlocking {
+        val executor = ScriptedExecutor { _, _ -> """{"additionalContext":"must not run"}""" }
+
+        val verdict = firePoints(executor).judgeGoal(HookConfig(trusted = true), lastAssistantText = "wip")
+
+        assertEquals(GoalVerdict.Inconclusive, verdict)
+        assertTrue(executor.inputs.isEmpty())
+    }
 }

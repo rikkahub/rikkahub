@@ -13,10 +13,24 @@ import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.uuid.Uuid
 
 private const val TAG = "ConversationSession"
 private const val IDLE_TIMEOUT_MS = 5_000L
+
+/**
+ * A session-scoped autonomous goal (issue #364, `/goal`). While set, the turn-end goal loop keeps
+ * continuing the agent toward [condition] until an LLM judges it achieved (or the `maxGoalIterations`
+ * budget / a user-stop ends it). Session-scoped and in-memory by design — never persisted into the
+ * assistant config — so a process death cannot silently resurrect an autonomous-spend loop.
+ *
+ * [iterationsUsed] accumulates across loop invocations for THIS armed goal so the `maxGoalIterations`
+ * budget is a true PER-GOAL bound, not a per-invocation one: if a turn pauses (e.g. a tool approval)
+ * the loop returns with the count persisted here, and the next invocation resumes the same budget
+ * rather than restarting at zero. A fresh `/goal` resets it (a new GoalSpec).
+ */
+data class GoalSpec(val condition: String, val iterationsUsed: Int = 0)
 
 class ConversationSession(
     val id: Uuid,
@@ -71,6 +85,37 @@ class ConversationSession(
     // access shape as the guard, so @Volatile.
     @Volatile
     var pendingAutomationGrant: AutomationGrant? = null
+
+    // Session-scoped autonomous goal (#364, `/goal`). When non-null the turn-end goal loop continues
+    // the agent toward this condition until an LLM judges it met (or the budget / a user-stop ends it).
+    // In-memory only — dies with the session, never persisted. Backed by an AtomicReference rather than
+    // a plain @Volatile var because the re-entrant loop does a READ-MODIFY-WRITE on it (charge the
+    // iteration count) while a user-stop / a fresh `/goal` can flip it concurrently — a bare volatile
+    // write-back would resurrect a cleared goal, clobber a newer goal, or carry a stale count into it.
+    // The identity-guarded [compareAndSetGoal] makes those transitions atomic.
+    private val goalRef = AtomicReference<GoalSpec?>(null)
+
+    /** The session-scoped autonomous goal (#364), or null if none armed. */
+    val activeGoal: GoalSpec? get() = goalRef.get()
+
+    /** Arm a fresh goal — a new `/goal` unconditionally wins over any in-flight loop transition. */
+    fun armGoal(spec: GoalSpec) {
+        goalRef.set(spec)
+    }
+
+    /** Clear the goal (`/goal clear`, user-stop, cleanup). A clear unconditionally wins. Idempotent. */
+    fun clearGoal() {
+        goalRef.set(null)
+    }
+
+    /**
+     * Identity-guarded goal transition for the re-entrant loop: commit [update] only if the goal is
+     * STILL exactly [expect] (the instance the loop read). A concurrent clear (user-stop) or re-arm (a
+     * new `/goal`) flips the reference, the CAS fails, and the loop bails — so a stale iteration can
+     * never resurrect a cleared goal, overwrite a newer goal, or charge an old count onto it.
+     */
+    fun compareAndSetGoal(expect: GoalSpec?, update: GoalSpec?): Boolean =
+        goalRef.compareAndSet(expect, update)
 
     // Subagent automation guards (Option B): a no-automation PARENT can spawn a subagent that mints
     // its OWN automation lease from the subagent assistant's own grant. That guard is NOT this
@@ -234,5 +279,6 @@ class ConversationSession(
         idleCheckJob?.cancel()
         idleCheckJob = null
         clearAutomationLeaseState()
+        clearGoal()
     }
 }

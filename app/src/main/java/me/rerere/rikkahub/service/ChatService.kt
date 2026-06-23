@@ -68,6 +68,8 @@ import me.rerere.ai.runtime.hooks.HookConfig
 import me.rerere.ai.runtime.hooks.HookDispatchContext
 import me.rerere.ai.runtime.hooks.HookDispatcher
 import me.rerere.ai.runtime.hooks.HookEvent
+import me.rerere.ai.runtime.hooks.HookHandler
+import me.rerere.ai.runtime.hooks.HookMatcher
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.ai.runtime.mcp.McpTool
@@ -193,18 +195,21 @@ internal fun sanitizeSyntheticToolName(kind: String): String =
         .take(SYNTHETIC_TOOL_NAME_MAX_LENGTH)
         .ifEmpty { SYNTHETIC_TOOL_NAME_FALLBACK }
 
-// Turn-end sequencing for the sendMessage path (review mustFix #2). The invariant it pins: the
-// Stop-hook continuation strictly precedes ONE turn-end job launch, so title/suggestion jobs are
-// always built from the final transcript and never race a continued turn; a failed completion
-// launches no jobs (the continuation still runs, matching the previous unconditional behavior).
-// Top-level so the ordering contract is JVM-testable without constructing ChatService.
+// Turn-end sequencing for the sendMessage + approval-resume paths (review mustFix #2). The invariant
+// it pins: the Stop-hook continuation strictly precedes ONE turn-end job launch, so title/suggestion
+// jobs are always built from the final transcript and never race a continued turn; a failed completion
+// launches no jobs (the continuation still runs, matching the previous unconditional behavior). The
+// completion result is HANDED to [continueAfterStopHook] so a continuation step that must not run after
+// a failed turn (the #364 /goal loop) can gate itself on it, while a step that must run regardless
+// (the #200 Stop hook, the #290 drain on the sendMessage path) ignores it. Top-level so the ordering
+// contract is JVM-testable without constructing ChatService.
 internal suspend fun sequenceTurnEnd(
     complete: suspend () -> Boolean,
-    continueAfterStopHook: suspend () -> Unit,
+    continueAfterStopHook: suspend (completed: Boolean) -> Unit,
     launchTurnEndJobs: () -> Unit,
 ) {
     val completed = complete()
-    continueAfterStopHook()
+    continueAfterStopHook(completed)
     if (completed) launchTurnEndJobs()
 }
 
@@ -811,6 +816,31 @@ internal fun invalidateStalePressureAnchor(usage: TokenUsage?): TokenUsage? =
 internal data class StopHookContinuation(val additionalContext: String)
 
 /**
+ * The `/goal` judge's verdict (#364), kept as three distinct cases so a JUDGE FAILURE never silently
+ * abandons the goal. [ChatHookFirePoints.onStop] collapses "met" / "blank" / "failed" all to a single
+ * null; the goal loop needs them apart:
+ *  - [Met]          the LLM judged the goal achieved (preventContinuation) -> clear the goal and stop.
+ *  - [Continue]     not yet met -> inject [directive] as the next user turn and run one more turn.
+ *  - [Inconclusive] the judge produced no usable verdict — a hook/provider/parse failure, a timeout,
+ *                   a missing dispatcher/Stop matcher, or an empty answer. PAUSE: keep the goal armed
+ *                   so a later manual send can retry; a transient judge failure must never clear it.
+ */
+internal sealed interface GoalVerdict {
+    data object Met : GoalVerdict
+    data class Continue(val directive: String) : GoalVerdict
+    data object Inconclusive : GoalVerdict
+}
+
+/**
+ * Whether the `/goal` autonomous loop may run another continuation (#364). [maxIterations] <= 0 means
+ * UNLIMITED (the user opted out of an iteration cap); otherwise the loop stops once [iteration]
+ * reaches the cap. Pure so the bound is JVM-unit-testable independently of the turn machinery; a
+ * user-stop and the LLM "goal met" verdict end the loop separately, regardless of this bound.
+ */
+internal fun shouldContinueGoal(iteration: Int, maxIterations: Int): Boolean =
+    maxIterations <= 0 || iteration < maxIterations
+
+/**
  * ChatService-side hook fire-points (#200 T8): UserPromptSubmit at the send seam ([onUserPromptSubmit])
  * and Stop at turn end ([onStop]). Extracted to file level so production and JVM tests drive the
  * SAME logic against a real [HookDispatcher] (the [StreamingUiCoalescer] precedent — not a
@@ -863,6 +893,32 @@ internal class ChatHookFirePoints(
         if (result.preventContinuation) return null
         val context = result.additionalContext?.takeIf { it.isNotBlank() } ?: return null
         return StopHookContinuation(context)
+    }
+
+    /**
+     * Judge a `/goal` (#364) via the synthetic Stop hook, returning a 3-way [GoalVerdict] rather than
+     * the collapsed nullable [onStop] gives — so the loop can tell "met" (clear the goal) from a judge
+     * FAILURE (pause, keep it armed). A null dispatcher or no configured Stop matcher is
+     * [GoalVerdict.Inconclusive]: with no judge there is no verdict, so the safe move is to pause, never
+     * to clear the goal. A hook/provider/parse failure degrades (fail-open) to an empty aggregate,
+     * which falls through to [GoalVerdict.Inconclusive] for the same reason.
+     */
+    suspend fun judgeGoal(config: HookConfig, lastAssistantText: String?): GoalVerdict {
+        val dispatcher = this.dispatcher ?: return GoalVerdict.Inconclusive
+        if (config.hooks[HookEvent.Stop].isNullOrEmpty()) return GoalVerdict.Inconclusive
+        val result = dispatcher.dispatch(
+            event = HookEvent.Stop,
+            input = buildJsonObject {
+                put("hookEventName", HookEvent.Stop.name)
+                put("lastAssistantMessage", lastAssistantText.orEmpty())
+            }.toString(),
+            ctx = HookDispatchContext(config = config),
+        )
+        return when {
+            result.preventContinuation -> GoalVerdict.Met
+            !result.additionalContext.isNullOrBlank() -> GoalVerdict.Continue(result.additionalContext!!)
+            else -> GoalVerdict.Inconclusive
+        }
     }
 }
 
@@ -1266,8 +1322,20 @@ class ChatService(
                 // continuation so they reflect the final transcript (review mustFix #2).
                 sequenceTurnEnd(
                     complete = { handleMessageComplete(conversationId, runTurnEndJobs = false) },
-                    continueAfterStopHook = {
-                        continueAfterStopHookIfRequested(conversationId, assistant)
+                    continueAfterStopHook = { completed ->
+                        // The single-shot assistant.hooks Stop continuation may itself run one more turn;
+                        // its success (or the passthrough when none ran) is what gates /goal — NOT the
+                        // original `completed`, which would let the goal advance after a FAILED Stop-hook
+                        // continuation turn.
+                        val turnSucceeded =
+                            continueAfterStopHookIfRequested(conversationId, assistant, precedingTurnSucceeded = completed)
+                        // The /goal autonomous loop (issue #364): re-entrant, goal-only, bounded by
+                        // maxGoalIterations — runs after the single-shot assistant.hooks continuation
+                        // so a user goal can keep the agent working until the condition is met. Gated on
+                        // a SUCCESSFUL turn: a failed turn must not trigger an autonomous continuation
+                        // (a failure is not evidence the goal needs another step, and an unlimited
+                        // budget would otherwise spin on a persistent provider error).
+                        continueGoalLoopIfActive(conversationId, precedingTurnSucceeded = turnSucceeded)
                         // Agent-event drain (issue #290): after the Stop-hook continuation, before
                         // the turn-end jobs (the "continuation before jobs" rule). The drain is
                         // idle-gated by its own pending-tool guard; a deferred background event is
@@ -1296,15 +1364,24 @@ class ChatService(
     //    completion instead of an unbounded loop.
     // The injected context becomes a visible user-role message (never silent) so the transcript
     // shows exactly why the agent kept going.
-    private suspend fun continueAfterStopHookIfRequested(conversationId: Uuid, assistant: Assistant) {
+    //
+    // Returns the EFFECTIVE last-turn success so a downstream autonomous step (#364 /goal) can gate on
+    // it: the incoming [precedingTurnSucceeded] when no continuation ran (a pending-tool break, no hook,
+    // or a vetoed/blank context), else the result of the continuation turn this method ran. Without
+    // this, /goal would advance after a FAILED Stop-hook continuation turn.
+    private suspend fun continueAfterStopHookIfRequested(
+        conversationId: Uuid,
+        assistant: Assistant,
+        precedingTurnSucceeded: Boolean,
+    ): Boolean {
         val conversation = getConversationFlow(conversationId).value
         val lastMessage = conversation.currentMessages.lastOrNull()
-        if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return
+        if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return precedingTurnSucceeded
 
         val continuation = hookFirePoints.onStop(
             config = assistant.hooks,
             lastAssistantText = lastMessage?.takeIf { it.role == MessageRole.ASSISTANT }?.toText(),
-        ) ?: return
+        ) ?: return precedingTurnSucceeded
 
         saveConversation(
             conversationId,
@@ -1317,7 +1394,126 @@ class ChatService(
         )
         // runTurnEndJobs = false: the sendMessage path owns the single turn-end job launch via
         // sequenceTurnEnd, after this continuation finished (review mustFix #2).
-        handleMessageComplete(conversationId, runTurnEndJobs = false)
+        return handleMessageComplete(conversationId, runTurnEndJobs = false)
+    }
+
+    // ---- Autonomous goal loop (issue #364, `/goal`) ----
+
+    /**
+     * Arm a session-scoped autonomous goal: the turn-end goal loop will keep continuing the agent
+     * toward [condition] until an LLM judges it met (or the `maxGoalIterations` budget / a user-stop
+     * ends it). Session-scoped — never persisted into the assistant config.
+     */
+    fun setGoal(conversationId: Uuid, condition: String) {
+        getOrCreateSession(conversationId).armGoal(GoalSpec(condition.trim()))
+    }
+
+    /** Clear the active goal (the `/goal clear` path and the user-stop path). Idempotent. */
+    fun clearGoal(conversationId: Uuid) {
+        sessions[conversationId]?.clearGoal()
+    }
+
+    /**
+     * The synthetic Stop-hook config that JUDGES a goal: an LLM Stop hook whose prompt asks whether
+     * [condition] is achieved. Consumed by [ChatHookFirePoints.judgeGoal]: not-met → the hook returns
+     * `additionalContext` (the next step) → [GoalVerdict.Continue]; met → the hook sets
+     * `preventContinuation` → [GoalVerdict.Met]; a judge failure → [GoalVerdict.Inconclusive].
+     * `trusted = true` because this config is minted in-process from the user's own `/goal`, never
+     * imported. Kept separate from `assistant.hooks` so the user's persisted Stop hooks stay
+     * SINGLE-SHOT — only this goal loop re-enters.
+     */
+    private fun goalStopConfig(condition: String): HookConfig = HookConfig(
+        hooks = mapOf(
+            HookEvent.Stop to listOf(
+                HookMatcher(handlers = listOf(HookHandler.Llm(prompt = goalJudgePrompt(condition)))),
+            ),
+        ),
+        trusted = true,
+    )
+
+    private fun goalJudgePrompt(condition: String): String = """
+        The user set this GOAL for you to accomplish autonomously:
+        "$condition"
+
+        Decide, from the conversation so far, whether the goal is now FULLY achieved.
+        - If it IS fully achieved: set "preventContinuation": true and do not continue.
+        - If it is NOT yet achieved: set "additionalContext" to ONE short directive naming the next
+          concrete step toward the goal. It is injected as the next user turn to keep you working.
+          Leave "preventContinuation" false.
+    """.trimIndent()
+
+    /**
+     * The `/goal` re-entrant continuation (#364). Runs at a genuine turn end (after the single-shot
+     * `assistant.hooks` Stop continuation, before the agent-event drain). While a goal is armed it asks
+     * an LLM whether the goal is met; if not, it injects the next-step directive as a visible user
+     * message and runs one more turn, looping until met, until the `maxGoalIterations` budget is hit,
+     * until the goal is cleared (a user-stop clears it), or until a pending tool approval breaks the
+     * turn. Bounded by construction (`shouldContinueGoal`), so it can never loop unboundedly.
+     *
+     * [precedingTurnSucceeded] gates the whole loop: a FAILED turn (provider error, cancellation) must
+     * not start an autonomous continuation — a failure is not evidence the goal needs another step, and
+     * an unlimited budget (`maxGoalIterations <= 0`) would otherwise spin forever on a persistent
+     * failure. The goal stays armed (a later manual send can retry); it is just not auto-advanced now.
+     */
+    private suspend fun continueGoalLoopIfActive(conversationId: Uuid, precedingTurnSucceeded: Boolean) {
+        if (!precedingTurnSucceeded) return
+        val session = sessions[conversationId] ?: return
+        val maxIterations = settingsStore.settingsFlow.value.maxGoalIterations
+        while (true) {
+            val goal = session.activeGoal ?: return // cleared (user-stop / clear / met) -> stop
+            // The budget is PER-GOAL: charge against the count carried on the goal, accumulated across
+            // loop invocations, so a positive cap bounds the goal's TOTAL continuations even when an
+            // approval break pauses and a later send resumes the loop. Identity-guarded so a concurrent
+            // re-arm of a NEW goal is never wiped by THIS goal's budget running out.
+            if (!shouldContinueGoal(goal.iterationsUsed, maxIterations)) {
+                session.compareAndSetGoal(goal, null)
+                return
+            }
+            val conversation = getConversationFlow(conversationId).value
+            val lastMessage = conversation.currentMessages.lastOrNull()
+            // A HITL approval break is not a turn end — the user owns the next step. Return WITHOUT
+            // clearing so the goal (and its used-iteration count) survives for the resume.
+            if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return
+
+            val directive = when (val verdict = hookFirePoints.judgeGoal(
+                config = goalStopConfig(goal.condition),
+                lastAssistantText = lastMessage?.takeIf { it.role == MessageRole.ASSISTANT }?.toText(),
+            )) {
+                // LLM judged the goal achieved -> clear and stop. Guarded so a goal re-armed during the
+                // (slow) judge call is not clobbered by this stale "met".
+                GoalVerdict.Met -> {
+                    session.compareAndSetGoal(goal, null)
+                    return
+                }
+                // The judge gave no usable verdict (hook/provider/parse failure, timeout, empty answer).
+                // PAUSE: leave the goal armed (do NOT clear) so a transient failure can't abandon it; a
+                // later manual send retries the judge.
+                GoalVerdict.Inconclusive -> return
+                is GoalVerdict.Continue -> verdict.directive
+            }
+            // Charge the budget BEFORE injecting/running, with an identity-guarded CAS: if a user-stop
+            // or a fresh `/goal` flipped the reference while the judge ran, the CAS fails and we bail
+            // WITHOUT injecting a directive or running a turn for a goal that is no longer ours.
+            // Charging before the turn means a crash mid-turn can only OVER-count (safe), never let the
+            // goal exceed its cap.
+            if (!session.compareAndSetGoal(goal, goal.copy(iterationsUsed = goal.iterationsUsed + 1))) {
+                return
+            }
+            saveConversation(
+                conversationId,
+                conversation.copy(
+                    messageNodes = conversation.messageNodes + UIMessage(
+                        role = MessageRole.USER,
+                        parts = listOf(UIMessagePart.Text(directive)),
+                    ).toMessageNode(),
+                ),
+            )
+            // Bail on a FAILED continuation turn (handleMessageComplete returns false on error; it
+            // catches and records instead of throwing). Without this the loop would re-judge the failed
+            // transcript and inject again — an unlimited budget would spin on a persistent failure. The
+            // goal stays armed so a later manual send can retry; the budget was already charged above.
+            if (!handleMessageComplete(conversationId, runTurnEndJobs = false)) return
+        }
     }
 
     // ---- 异步代理事件队列 (issue #290) ----
@@ -1815,9 +2011,24 @@ class ChatService(
                 }
             }
 
-            // Only continue generation when all pending tools are handled
+            // Only continue generation when all pending tools are handled. Route through the SAME
+            // sequenceTurnEnd contract as the sendMessage path (issue #364): an approved tool that
+            // ends the turn must re-enter the /goal autonomous loop BEFORE the agent-event drain and
+            // the single turn-end job launch — otherwise the goal strands until the next ordinary send.
+            // The assistant.hooks Stop hook stays single-shot and is deliberately NOT fired here (a
+            // HITL approval break is not a turn end for it); only the re-entrant goal loop resumes.
             if (!hasPendingTools) {
-                handleMessageComplete(conversationId)
+                sequenceTurnEnd(
+                    complete = { handleMessageComplete(conversationId, runTurnEndJobs = false) },
+                    continueAfterStopHook = { completed ->
+                        // /goal resumes only after a SUCCESSFUL approval-resume turn (#364). The drain
+                        // is gated on success too, restoring the pre-#364 approval-resume behavior where
+                        // handleMessageComplete(runTurnEndJobs = true) drained only inside onSuccess.
+                        continueGoalLoopIfActive(conversationId, precedingTurnSucceeded = completed)
+                        if (completed) drainAgentEventsAtTurnEnd(conversationId)
+                    },
+                    launchTurnEndJobs = { launchTurnEndJobs(conversationId) },
+                )
             }
         }
     }
@@ -3046,6 +3257,11 @@ class ChatService(
         // propagates through withAutomationLease as a non-normal exit, so its finally clears the
         // per-run grant too (finding 3): a stopped turn will not resume, so the grant must not survive.
         sessions[conversationId]?.revokeAutomation()
+        // A user-stop always wins over an autonomous /goal (#364): clear it so the loop does not
+        // resume on the next turn end. The unconditional clear beats any in-flight loop CAS (the
+        // loop's charge re-checks identity and bails). The in-flight goal-loop coroutine is a child of
+        // this job and is torn down by the cancel below.
+        sessions[conversationId]?.clearGoal()
         job.cancel()
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)

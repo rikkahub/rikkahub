@@ -168,6 +168,7 @@ class SettingsStore(
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
         val MAX_BACKGROUND_SUBAGENTS = intPreferencesKey("max_background_subagents")
+        val MAX_GOAL_ITERATIONS = intPreferencesKey("max_goal_iterations")
 
         internal fun decodeSettings(preferences: Preferences): Settings = Settings(
             enableWebSearch = preferences[ENABLE_WEB_SEARCH] == true,
@@ -260,6 +261,7 @@ class SettingsStore(
             launchCount = preferences[LAUNCH_COUNT] ?: 0,
             sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
             maxBackgroundSubagents = preferences[MAX_BACKGROUND_SUBAGENTS] ?: 0,
+            maxGoalIterations = preferences[MAX_GOAL_ITERATIONS] ?: DEFAULT_MAX_GOAL_ITERATIONS,
         )
     }
 
@@ -439,6 +441,7 @@ class SettingsStore(
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
             preferences[MAX_BACKGROUND_SUBAGENTS] = settings.maxBackgroundSubagents
+            preferences[MAX_GOAL_ITERATIONS] = settings.maxGoalIterations
         }
     }
 
@@ -583,12 +586,23 @@ data class Settings(
      * chose. Foreground (awaited) subagents are unaffected.
      */
     val maxBackgroundSubagents: Int = 0,
+    /**
+     * Max number of autonomous `/goal` continuations per goal (#364). 0 = UNLIMITED. Unlike
+     * [maxBackgroundSubagents] (which defaults to unlimited), this defaults to
+     * [DEFAULT_MAX_GOAL_ITERATIONS] because a goal loop is continuous self-prompting that keeps
+     * spending tokens until the goal is judged met — a non-zero default is the safer floor; the user
+     * can raise it or set 0 to opt into an unbounded loop. A user-stop always ends the loop regardless.
+     */
+    val maxGoalIterations: Int = DEFAULT_MAX_GOAL_ITERATIONS,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
     }
 }
+
+/** Default cap on `/goal` autonomous continuations (#364); 0 in settings means unlimited. */
+const val DEFAULT_MAX_GOAL_ITERATIONS = 25
 
 @Serializable
 enum class ChatFontFamily {

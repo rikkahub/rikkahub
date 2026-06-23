@@ -217,10 +217,38 @@ class ChatVM(
         if (content.isEmptyInputMessage()) return
         analytics.logEvent("ai_send_message", null)
 
+        // Reserved native slash commands (#364) are handled BEFORE skill expansion: they perform a
+        // guaranteed side effect (arming/clearing the autonomous goal), not a model-trusted prose send.
+        if (handleReservedSlashCommand(content)) return
+
         // A leading "/<skill> <param>" slash command (from the input popup) is expanded SYNCHRONOUSLY into
         // a directive that runs the skill — no coroutine/IO before the send, so the slash send is ordered
         // exactly like a normal send and can never land after (and cancel) a later turn.
         chatService.sendMessage(_conversationId, expandSlashSkillCommand(content), answer)
+    }
+
+    /**
+     * Intercept reserved native slash commands (#364) before skill expansion. Returns true iff the
+     * input was a reserved command (and was handled — no message is sent for it).
+     *
+     * - `/goal` or `/goal clear` → clear the active goal.
+     * - `/goal <condition>` → arm the session goal AND kick a turn working toward it (the condition is
+     *   sent as the first user message; the turn-end goal loop then continues until it is met, bounded
+     *   by the maxGoalIterations preference and by user-stop).
+     */
+    private fun handleReservedSlashCommand(content: List<UIMessagePart>): Boolean {
+        val idx = content.indexOfLast { it is UIMessagePart.Text }
+        if (idx < 0) return false
+        val text = (content[idx] as UIMessagePart.Text).text.trim()
+        if (text != "/goal" && !text.startsWith("/goal ")) return false
+        val arg = text.removePrefix("/goal").trim()
+        if (arg.isEmpty() || arg.equals("clear", ignoreCase = true)) {
+            chatService.clearGoal(_conversationId)
+        } else {
+            chatService.setGoal(_conversationId, arg)
+            chatService.sendMessage(_conversationId, listOf(UIMessagePart.Text(arg)), answer = true)
+        }
+        return true
     }
 
     /**
