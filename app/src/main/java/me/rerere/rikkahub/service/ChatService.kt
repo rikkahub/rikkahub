@@ -1033,9 +1033,17 @@ class ChatService(
     // suite drives the same code (ChatHookFirePointsTest).
     private val hookFirePoints = ChatHookFirePoints(hookDispatcher)
 
-    // 统一会话管理
-    private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
-    private val _sessionsVersion = MutableStateFlow(0L)
+    // 统一会话管理 (#360 P2): the per-conversation session map + lifecycle live in a JVM-testable
+    // registry. The construction inputs are forwarded so the registry names no settings store /
+    // foreground controller; ChatService delegates getOrCreateSession/removeSession to it.
+    private val sessionRegistry = SessionRegistry(
+        scope = appScope,
+        newConversation = { id ->
+            Conversation.ofId(id = id, assistantId = settingsStore.settingsFlow.value.getCurrentAssistant().id)
+        },
+        onGenerationStart = { foregroundGeneration.onGenerationStart() },
+        onGenerationStop = { foregroundGeneration.onGenerationStop() },
+    )
     private val tombstonedConversations = ConcurrentHashMap<Uuid, Unit>()
 
     // In-flight forwarded CHILD approvals (SPEC.md M4 / Gap A), keyed taskId/childToolCallId.
@@ -1093,51 +1101,21 @@ class ChatService(
         //    Android wiring moves behind the port — keeping P1a independent of the session-registry seam.
         processBindingHandle = processBinding.bind(
             onForegroundChanged = { _isForeground.value = it },
-            onKillSwitchTrip = { revokeActiveAutomation(sessions.values) },
+            onKillSwitchTrip = { revokeActiveAutomation(sessionRegistry.snapshot()) },
         )
     }
 
     fun cleanup() = runCatching {
         processBindingHandle?.close()
         processBindingHandle = null
-        sessions.values.forEach { it.cleanup() }
-        sessions.clear()
+        sessionRegistry.cleanupAll()
     }
 
     // ---- Session 管理 ----
 
-    private fun getOrCreateSession(conversationId: Uuid): ConversationSession {
-        return sessions.computeIfAbsent(conversationId) { id ->
-            val settings = settingsStore.settingsFlow.value
-            ConversationSession(
-                id = id,
-                initial = Conversation.ofId(
-                    id = id,
-                    assistantId = settings.getCurrentAssistant().id
-                ),
-                scope = appScope,
-                onIdle = { removeSession(it) },
-                onGenerationStart = { foregroundGeneration.onGenerationStart() },
-                onGenerationStop = { foregroundGeneration.onGenerationStop() },
-            ).also {
-                _sessionsVersion.value++
-                Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
-            }
-        }
-    }
-
-    private fun removeSession(conversationId: Uuid, force: Boolean = false) {
-        val session = sessions[conversationId] ?: return
-        if (!force && session.isInUse) {
-            Log.d(TAG, "removeSession: skipped $conversationId (still in use)")
-            return
-        }
-        if (sessions.remove(conversationId, session)) {
-            session.cleanup()
-            _sessionsVersion.value++
-            Log.i(TAG, "removeSession: $conversationId (remaining: ${sessions.size})")
-        }
-    }
+    // Thin delegator (#360 P2): the session map + create/evict lifecycle live in [sessionRegistry].
+    private fun getOrCreateSession(conversationId: Uuid): ConversationSession =
+        sessionRegistry.getOrCreate(conversationId)
 
     // ---- 引用管理 ----
 
@@ -1146,7 +1124,7 @@ class ChatService(
     }
 
     fun removeConversationReference(conversationId: Uuid) {
-        sessions[conversationId]?.release()
+        sessionRegistry.get(conversationId)?.release()
     }
 
     private fun launchWithConversationReference(
@@ -1168,12 +1146,12 @@ class ChatService(
     }
 
     fun getGenerationJobStateFlow(conversationId: Uuid): Flow<Job?> {
-        val session = sessions[conversationId] ?: return flowOf(null)
+        val session = sessionRegistry.get(conversationId) ?: return flowOf(null)
         return session.generationJob
     }
 
     fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> {
-        val session = sessions[conversationId] ?: return MutableStateFlow(null)
+        val session = sessionRegistry.get(conversationId) ?: return MutableStateFlow(null)
         return session.processingStatus
     }
 
@@ -1202,8 +1180,8 @@ class ChatService(
     // web 的 .first()/SSE 则应让真实异常以 HTTP 500 上抛，而非被静默改写成“无活跃任务”的 200。
     fun getConversationJobs(): Flow<Map<Uuid, Job?>> =
         assembleConversationJobsFlow(
-            version = _sessionsVersion,
-            sessionsSnapshot = { sessions.values.toList().map { it.id to it.generationJob } }
+            version = sessionRegistry.version,
+            sessionsSnapshot = { sessionRegistry.snapshot().toList().map { it.id to it.generationJob } }
         )
 
     // ---- 初始化对话 ----
@@ -1430,7 +1408,7 @@ class ChatService(
 
     /** Clear the active goal (the `/goal clear` path and the user-stop path). Idempotent. */
     fun clearGoal(conversationId: Uuid) {
-        sessions[conversationId]?.clearGoal()
+        sessionRegistry.get(conversationId)?.clearGoal()
     }
 
     /**
@@ -1477,7 +1455,7 @@ class ChatService(
      */
     private suspend fun continueGoalLoopIfActive(conversationId: Uuid, precedingTurnSucceeded: Boolean) {
         if (!precedingTurnSucceeded) return
-        val session = sessions[conversationId] ?: return
+        val session = sessionRegistry.get(conversationId) ?: return
         val maxIterations = settingsStore.settingsFlow.value.maxGoalIterations
         while (true) {
             val goal = session.activeGoal ?: return // cleared (user-stop / clear / met) -> stop
@@ -2957,7 +2935,7 @@ class ChatService(
             val model = settings.findModelById(settings.suggestionModelId, fallback = settings.fastModelId) ?: return
             val provider = model.findProvider(settings.providers) ?: return
 
-            sessions[conversationId]?.let { session ->
+            sessionRegistry.get(conversationId)?.let { session ->
                 updateConversationWithFileCleanup(
                     conversationId,
                     session.state.value.copy(chatSuggestions = emptyList())
@@ -2982,7 +2960,7 @@ class ChatService(
                     ?.filter { it.isNotBlank() } ?: emptyList()
 
             val latestConversation = conversationRepo.getConversationById(conversationId)
-                ?: sessions[conversationId]?.state?.value
+                ?: sessionRegistry.get(conversationId)?.state?.value
                 ?: conversation
             saveConversation(
                 conversationId,
@@ -3223,7 +3201,7 @@ class ChatService(
         // foreground turn; a background run is on appScope and would otherwise keep running, count against
         // a finite cap, and try to deliver into the now-deleted conversation.
         taskCoordinator.cancelBackgroundForConversation(conversation.id)
-        removeSession(conversation.id, force = true)
+        sessionRegistry.remove(conversation.id, force = true)
         conversationRepo.deleteConversation(conversation)
     }
 
@@ -3396,7 +3374,7 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid, expectedJob: Job) {
-        val session = sessions[conversationId] ?: return
+        val session = sessionRegistry.get(conversationId) ?: return
         if (!shouldStopA2aJob(session.getJob(), expectedJob)) return
 
         val job = session.getJob() ?: return
@@ -3406,19 +3384,19 @@ class ChatService(
         // generation coroutine) — a concurrent automation session is untouched. The cancellation
         // propagates through withAutomationLease as a non-normal exit, so its finally clears the
         // per-run grant too (finding 3): a stopped turn will not resume, so the grant must not survive.
-        sessions[conversationId]?.revokeAutomation()
+        sessionRegistry.get(conversationId)?.revokeAutomation()
         // A user-stop always wins over an autonomous /goal (#364): clear it so the loop does not
         // resume on the next turn end. The unconditional clear beats any in-flight loop CAS (the
         // loop's charge re-checks identity and bails). The in-flight goal-loop coroutine is a child of
         // this job and is torn down by the cancel below.
-        sessions[conversationId]?.clearGoal()
+        sessionRegistry.get(conversationId)?.clearGoal()
         job.cancel()
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)
     }
 
     suspend fun stopGeneration(conversationId: Uuid) {
-        val job = sessions[conversationId]?.getJob() ?: return
+        val job = sessionRegistry.get(conversationId)?.getJob() ?: return
         stopGeneration(conversationId, job)
     }
 
