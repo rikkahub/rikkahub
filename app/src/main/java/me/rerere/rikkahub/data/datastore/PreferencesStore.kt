@@ -170,6 +170,7 @@ class SettingsStore(
         val MAX_BACKGROUND_SUBAGENTS = intPreferencesKey("max_background_subagents")
         val MAX_GOAL_ITERATIONS = intPreferencesKey("max_goal_iterations")
         val ENABLE_UNTRUSTED_CONTENT_FRAMING = booleanPreferencesKey("enable_untrusted_content_framing")
+        val ALLOW_INSECURE_HTTPS = booleanPreferencesKey("allow_insecure_https")
 
         internal fun decodeSettings(preferences: Preferences): Settings = Settings(
             enableWebSearch = preferences[ENABLE_WEB_SEARCH] == true,
@@ -264,6 +265,7 @@ class SettingsStore(
             maxBackgroundSubagents = preferences[MAX_BACKGROUND_SUBAGENTS] ?: 0,
             maxGoalIterations = preferences[MAX_GOAL_ITERATIONS] ?: DEFAULT_MAX_GOAL_ITERATIONS,
             enableUntrustedContentFraming = preferences[ENABLE_UNTRUSTED_CONTENT_FRAMING] ?: true,
+            allowInsecureHttps = preferences[ALLOW_INSECURE_HTTPS] ?: false,
         )
     }
 
@@ -445,6 +447,7 @@ class SettingsStore(
             preferences[MAX_BACKGROUND_SUBAGENTS] = settings.maxBackgroundSubagents
             preferences[MAX_GOAL_ITERATIONS] = settings.maxGoalIterations
             preferences[ENABLE_UNTRUSTED_CONTENT_FRAMING] = settings.enableUntrustedContentFraming
+            preferences[ALLOW_INSECURE_HTTPS] = settings.allowInsecureHttps
         }
     }
 
@@ -607,6 +610,15 @@ data class Settings(
      * strips both from the system prompt. Turning it off WEAKENS prompt-injection defense.
      */
     val enableUntrustedContentFraming: Boolean = true,
+    /**
+     * Whether HTTPS connections may skip TLS certificate + hostname verification — the curl `-k` /
+     * `--insecure` equivalent. OFF by default (secure). ON lets the app reach providers with
+     * self-signed or otherwise-invalid certificates (self-hosted endpoints, dev proxies). Read LIVE
+     * per TLS handshake, so toggling it in Advanced > Security takes effect on the next connection.
+     * SECURITY: ON disables MITM protection for the shared HTTP client — a deliberate, default-off,
+     * user-opted escape hatch.
+     */
+    val allowInsecureHttps: Boolean = false,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

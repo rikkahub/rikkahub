@@ -138,6 +138,26 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                     )
+                    item(
+                        headlineContent = { Text("Allow insecure HTTPS") },
+                        supportingContent = {
+                            Text(
+                                "Skip TLS certificate & hostname verification for network requests — the " +
+                                    "curl -k / --insecure equivalent. Off by default. Turn on only to reach a " +
+                                    "provider with a self-signed or invalid certificate (a self-hosted endpoint " +
+                                    "or dev proxy). WARNING: while on, connections are not protected against " +
+                                    "man-in-the-middle interception."
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.allowInsecureHttps,
+                                onCheckedChange = {
+                                    vm.updateSettings(settings.copy(allowInsecureHttps = it))
+                                },
+                            )
+                        },
+                    )
                 }
             }
         }

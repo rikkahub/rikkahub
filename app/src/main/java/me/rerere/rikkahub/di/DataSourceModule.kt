@@ -30,6 +30,7 @@ import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.network.insecureAware
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventRecoveryRunner
 import me.rerere.rikkahub.data.ai.agentevent.AgentEventStore
 import me.rerere.rikkahub.data.ai.agentevent.RoomAgentEventStore
@@ -471,6 +472,7 @@ val dataSourceModule = module {
     single<OkHttpClient> {
         val acceptLang = AcceptLanguageBuilder.fromAndroid(get())
             .build()
+        val settingsStore = get<SettingsStore>()
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.MINUTES)
@@ -478,6 +480,9 @@ val dataSourceModule = module {
             .followSslRedirects(true)
             .followRedirects(true)
             .retryOnConnectionFailure(true)
+            // curl -k / --insecure escape hatch, default OFF (Advanced > Security). Read live per
+            // handshake, so the secure default is the standard platform-verified path.
+            .insecureAware { settingsStore.settingsFlow.value.allowInsecureHttps }
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
                 val requestBuilder = originalRequest.newBuilder()
