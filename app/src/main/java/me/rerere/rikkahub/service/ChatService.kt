@@ -1936,7 +1936,16 @@ class ChatService(
                 // into a drain (one event per continuation, productDecision #5); the outer loop drains
                 // the next pending event after it returns.
                 if (outcome.continueGeneration) {
-                    handleMessageComplete(conversationId, runTurnEndJobs = false)
+                    val completed = handleMessageComplete(conversationId, runTurnEndJobs = false)
+                    // The /goal autonomous loop (#364 slice 3): an agent-event continuation — a /loop
+                    // fire, a background subagent/shell completion — is a genuine turn end too, so a goal
+                    // armed in THIS live session must advance off it, not just off a user send / approval
+                    // (the three turn-end seams now run the goal loop uniformly). Gated on success, and a
+                    // cheap no-op when no goal is armed (returns after the activeGoal null-check), so the
+                    // existing agent-event paths are unchanged when /goal is unused. The goal is in-memory
+                    // (session-scoped), so a cold-start replay never runs it — correct, /goal dies with the
+                    // process. The nested goal turns also use runTurnEndJobs = false, so no re-drain.
+                    continueGoalLoopIfActive(conversationId, precedingTurnSucceeded = completed)
                 }
                 true // a delivered event may be followed by more pending ones — keep draining
             }
