@@ -260,7 +260,7 @@ class ScheduleVMTest {
     // guarantee — every form state validate() deems submittable projects (via the SAME toDraft() the
     // dialog's confirm uses) into a draft the repository ACCEPTS. Were a mirrored gate weaker than its
     // repository counterpart, some submittable form would yield a Rejected here, breaking the contract.
-    // The drafts span each gate's submittable side: a plain one-shot, MINUTES at the 15-min floor, HOURS
+    // The drafts span each gate's submittable side: a plain one-shot, MINUTES well above the 1-min floor, HOURS
     // at every=1, DAYS with and without a timeOfDay anchor, a non-default IANA zone, and a prompt at the
     // exact 8000-char bound — the boundary inputs whose repository acceptance most depends on the mirror
     // being exact. Each runs on its own conversation so the per-conversation cap never confounds the test.

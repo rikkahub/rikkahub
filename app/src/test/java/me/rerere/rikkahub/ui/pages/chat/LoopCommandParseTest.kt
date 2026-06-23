@@ -7,8 +7,8 @@ import org.junit.Test
 /**
  * JVM unit tests for [parseLoopCommand] (#364 slice 2): the PURE parse of a `/loop` argument into a
  * [LoopCommand]. The invariants pinned: clear vs schedule vs usage classification, interval-token
- * extraction, and the 15-minute floor (a durable schedule cannot fire faster than WorkManager's
- * minimum, so any sub-floor interval rounds UP).
+ * extraction, and the 1-minute floor (cron granularity — only SUB-minute inputs round UP; `1m`/`5m`/
+ * `1h`/`1d` are honored as typed).
  */
 class LoopCommandParseTest {
 
@@ -37,7 +37,7 @@ class LoopCommandParseTest {
     }
 
     @Test
-    fun `no interval token defaults to the 15-minute floor and uses the whole arg as prompt`() {
+    fun `no interval token defaults to the 1-minute floor and uses the whole arg as prompt`() {
         assertEquals(
             LoopCommand.Schedule(MIN_LOOP_MINUTES, RecurrenceUnit.MINUTES, "keep watching the deploy"),
             parseLoopCommand("keep watching the deploy"),
@@ -45,17 +45,17 @@ class LoopCommandParseTest {
     }
 
     @Test
-    fun `a sub-floor minute interval rounds up to the floor`() {
+    fun `minute intervals at or above the 1-minute floor pass through unchanged`() {
+        // 1m is exactly the floor — honored as typed, not bumped.
         assertEquals(
-            LoopCommand.Schedule(MIN_LOOP_MINUTES, RecurrenceUnit.MINUTES, "ping"),
+            LoopCommand.Schedule(1, RecurrenceUnit.MINUTES, "ping"),
             parseLoopCommand("1m ping"),
         )
-        // exactly the floor passes through
+        // 5m / 45m are above the floor — honored as typed (no more 15m clamp).
         assertEquals(
-            LoopCommand.Schedule(15, RecurrenceUnit.MINUTES, "ping"),
-            parseLoopCommand("15m ping"),
+            LoopCommand.Schedule(5, RecurrenceUnit.MINUTES, "ping"),
+            parseLoopCommand("5m ping"),
         )
-        // above the floor passes through
         assertEquals(
             LoopCommand.Schedule(45, RecurrenceUnit.MINUTES, "ping"),
             parseLoopCommand("45m ping"),
@@ -63,10 +63,16 @@ class LoopCommandParseTest {
     }
 
     @Test
-    fun `seconds round up to whole minutes then to the floor`() {
+    fun `seconds round up to whole minutes, then the 1-minute floor`() {
+        // 30s -> ceil(30/60) = 1m, which is also the floor.
         assertEquals(
-            LoopCommand.Schedule(MIN_LOOP_MINUTES, RecurrenceUnit.MINUTES, "tick"),
+            LoopCommand.Schedule(1, RecurrenceUnit.MINUTES, "tick"),
             parseLoopCommand("30s tick"),
+        )
+        // 90s -> ceil(90/60) = 2m, above the floor, so the rounded value passes through.
+        assertEquals(
+            LoopCommand.Schedule(2, RecurrenceUnit.MINUTES, "tick"),
+            parseLoopCommand("90s tick"),
         )
     }
 

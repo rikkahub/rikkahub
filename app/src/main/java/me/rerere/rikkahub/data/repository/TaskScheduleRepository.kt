@@ -44,8 +44,10 @@ data class ScheduleClaim(
  *   ([MAX_ACTIVE_PER_CONVERSATION]) AND per owner class ([MAX_ACTIVE_PER_USER]); the owner split
  *   keeps an agent from starving the user's quota and vice-versa (spec assumption 4).
  * - **Minimum recurring interval.** A `RECURRING` draft's interval must be
- *   >= [MIN_RECURRENCE_INTERVAL_MILLIS]; a malformed or missing spec is rejected too. This prevents
- *   a runaway tight loop chewing battery and aligns with WorkManager's own 15-minute floor.
+ *   >= [MIN_RECURRENCE_INTERVAL_MILLIS] (1 minute, cron granularity); a malformed or missing spec is
+ *   rejected too. This is an anti-abuse floor against a runaway tight loop chewing battery — the
+ *   transport is a self-rescheduling OneTimeWorkRequest, so WorkManager's 15-minute *periodic*
+ *   minimum does not apply.
  * - **Prompt bound.** `prompt.length <= ` [MAX_PROMPT_CHARS].
  * - **Scoping.** [list] and [delete] are scoped to the bound conversation; a [delete] of an id not
  *   in this conversation REJECTS (never silently deletes cross-conversation).
@@ -462,11 +464,15 @@ class TaskScheduleRepository(
         const val MAX_ACTIVE_PER_USER: Int = 100
 
         /**
-         * Minimum recurring interval (spec assumption 3): 15 minutes, aligned with WorkManager's own
-         * minimum periodic interval — promising a tighter cadence than the transport can honor (and
-         * the battery drain it implies) is forbidden.
+         * Minimum recurring interval: 1 minute — the granularity of standard 5-field cron (no
+         * sub-minute field). The transport is a self-rescheduling [androidx.work.OneTimeWorkRequest]
+         * with an initial delay, NOT a `PeriodicWorkRequest`, so WorkManager's 15-minute periodic
+         * minimum does NOT apply here. The floor is purely an anti-abuse bound (it stops a runaway
+         * tight loop chewing battery), set to cron granularity so a user `/loop <time>` is honored
+         * from 1 minute up. Sub-minute fires would be best-effort under Doze anyway, so 1 minute is
+         * the sane floor.
          */
-        const val MIN_RECURRENCE_INTERVAL_MILLIS: Long = 15L * 60 * 1000
+        const val MIN_RECURRENCE_INTERVAL_MILLIS: Long = 1L * 60 * 1000
 
         /** Maximum schedule prompt length (spec assumption 3). */
         const val MAX_PROMPT_CHARS: Int = 8000

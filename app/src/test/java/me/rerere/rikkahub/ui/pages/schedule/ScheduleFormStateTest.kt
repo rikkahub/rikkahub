@@ -14,8 +14,8 @@ import java.util.TimeZone
  * replace — the gates in [me.rerere.rikkahub.data.repository.TaskScheduleRepository]:
  *
  *  - prompt non-blank AND length <= 8000 (`MAX_PROMPT_CHARS`),
- *  - a RECURRING effective interval >= 15 min (`MIN_RECURRENCE_INTERVAL_MILLIS`), so MINUTES requires
- *    `every >= 15` (`every = 1, MINUTES` is unsubmittable — the 15-min floor),
+ *  - a RECURRING effective interval >= 1 min (`MIN_RECURRENCE_INTERVAL_MILLIS`), so MINUTES requires
+ *    `every >= 1` (`every = 1, MINUTES` is the floor and IS submittable),
  *  - a valid IANA `timeZoneId` (`ZoneId.of`),
  *  - a valid `HH:mm` `timeOfDay` for DAYS (`LocalTime.parse`).
  *
@@ -102,24 +102,25 @@ class ScheduleFormStateTest {
         )
     }
 
-    // ---- minimum recurring interval (mirrors MIN_RECURRENCE_INTERVAL_MILLIS = 15 min) ------------
+    // ---- minimum recurring interval (mirrors MIN_RECURRENCE_INTERVAL_MILLIS = 1 min) -------------
 
     @Test
-    fun `every 1 unit MINUTES is invalid (below the 15-minute floor)`() {
+    fun `every 1 unit MINUTES is valid (exactly the 1-minute floor)`() {
         val errors = recurring(every = 1, unit = RecurrenceUnit.MINUTES).validate(now)
-        assertTrue("1 minute breaches the 15-min floor: $errors", errors.containsKey(ScheduleField.EVERY))
+        assertFalse("1 minute meets the floor, must be submittable: $errors", errors.containsKey(ScheduleField.EVERY))
+        assertTrue("1-min recurring must be fully submittable: $errors", errors.isEmpty())
     }
 
     @Test
-    fun `every 14 unit MINUTES is invalid (below the 15-minute floor)`() {
+    fun `every 14 unit MINUTES is valid (above the 1-minute floor, no more 15-min clamp)`() {
         val errors = recurring(every = 14, unit = RecurrenceUnit.MINUTES).validate(now)
-        assertTrue("14 minutes breaches the 15-min floor: $errors", errors.containsKey(ScheduleField.EVERY))
+        assertFalse("14 minutes clears the 1-min floor: $errors", errors.containsKey(ScheduleField.EVERY))
     }
 
     @Test
-    fun `every 15 unit MINUTES is valid (exactly the 15-minute floor)`() {
+    fun `every 15 unit MINUTES is valid`() {
         val errors = recurring(every = 15, unit = RecurrenceUnit.MINUTES).validate(now)
-        assertFalse("15 minutes meets the floor, must be submittable: $errors", errors.containsKey(ScheduleField.EVERY))
+        assertFalse("15 minutes clears the floor, must be submittable: $errors", errors.containsKey(ScheduleField.EVERY))
         assertTrue("15-min recurring must be fully submittable: $errors", errors.isEmpty())
     }
 
@@ -187,11 +188,11 @@ class ScheduleFormStateTest {
     // ---- stepper floor per unit (M3 / task T8) --------------------------------------------------
     // The create form's -/+ stepper must floor `every` at the minimum LEGAL value for the chosen
     // unit, so the stepper can never produce a sub-floor draft the repository would reject. MINUTES'
-    // floor is 15 (mirrors MIN_RECURRENCE_INTERVAL_MILLIS = 15 min); HOURS/DAYS floor at 1.
+    // floor is 1 (mirrors MIN_RECURRENCE_INTERVAL_MILLIS = 1 min); HOURS/DAYS floor at 1.
 
     @Test
-    fun `minimum every for MINUTES is 15 (mirrors the 15-minute interval floor)`() {
-        assertEquals(15, minEveryFor(RecurrenceUnit.MINUTES))
+    fun `minimum every for MINUTES is 1 (mirrors the 1-minute interval floor)`() {
+        assertEquals(1, minEveryFor(RecurrenceUnit.MINUTES))
     }
 
     @Test

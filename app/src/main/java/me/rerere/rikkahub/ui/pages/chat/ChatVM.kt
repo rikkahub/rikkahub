@@ -78,8 +78,8 @@ internal sealed interface LoopCommand {
     data object Usage : LoopCommand
 }
 
-/** The `/loop` recurring floor: 15 minutes, matching the schedule repository's WorkManager-aligned minimum. */
-internal const val MIN_LOOP_MINUTES = 15
+/** The `/loop` recurring floor: 1 minute (cron granularity), matching [TaskScheduleRepository.MIN_RECURRENCE_INTERVAL_MILLIS]. */
+internal const val MIN_LOOP_MINUTES = 1
 
 private val LOOP_INTERVAL_REGEX = Regex("""^(\d+)([smhd])$""")
 
@@ -91,8 +91,9 @@ private val LOOP_INTERVAL_REGEX = Regex("""^(\d+)([smhd])$""")
  *   → [LoopCommand.Usage].
  * - no interval token → the whole argument is the prompt at the [MIN_LOOP_MINUTES] floor.
  *
- * Sub-floor intervals are rounded UP to the floor (the durable schedule cannot fire faster than the
- * WorkManager 15-minute minimum), so the returned ([every], [unit]) is always >= 15 minutes.
+ * The interval is honored as typed; only SUB-MINUTE values are rounded UP to the [MIN_LOOP_MINUTES]
+ * floor (1 minute = cron granularity, the smallest the schedule meaningfully fires at), so the
+ * returned ([every], [unit]) is always >= 1 minute. `5m`, `1h`, `1d` etc. pass through unchanged.
  */
 internal fun parseLoopCommand(arg: String): LoopCommand {
     val trimmed = arg.trim()
@@ -111,7 +112,7 @@ internal fun parseLoopCommand(arg: String): LoopCommand {
 
 /** Map a parsed `<N><unit>` to a recurrence cadence clamped UP to the [MIN_LOOP_MINUTES] floor. */
 private fun clampLoopInterval(n: Int, unitChar: String): Pair<Int, RecurrenceUnit> = when (unitChar) {
-    // cron/WorkManager has no sub-minute granularity: round seconds up to whole minutes, then floor.
+    // cron has no sub-minute granularity: round seconds up to whole minutes, then apply the 1m floor.
     "s" -> maxOf((n + 59) / 60, MIN_LOOP_MINUTES) to RecurrenceUnit.MINUTES
     "m" -> maxOf(n, MIN_LOOP_MINUTES) to RecurrenceUnit.MINUTES
     "h" -> maxOf(n, 1) to RecurrenceUnit.HOURS
@@ -310,7 +311,8 @@ class ChatVM(
      *   by the maxGoalIterations preference and by user-stop).
      * - `/loop` or `/loop clear` → clear this conversation's durable loop schedule(s).
      * - `/loop [interval] <prompt>` → arm a durable recurring schedule that injects `<prompt>` back into
-     *   this conversation every interval (15-minute floor; sub-floor intervals are rounded up).
+     *   this conversation every interval (1-minute floor = cron granularity; only sub-minute intervals
+     *   round up, so `5m`/`1h`/`1d` are honored as typed).
      */
     private fun handleReservedSlashCommand(content: List<UIMessagePart>): Boolean {
         val idx = content.indexOfLast { it is UIMessagePart.Text }

@@ -648,8 +648,8 @@ private fun scheduleSubtitle(snapshot: ScheduleSnapshot): String {
  * Controls, each grounded in the data model:
  *  - segmented kind (One-shot / Recurring) and unit (minutes / hours / days);
  *  - a -/+ stepper whose floor is [minEveryFor] for the chosen unit, so it can never produce a
- *    sub-floor draft the repository rejects (and re-clamps `every` up when the unit switches to a
- *    coarser floor, e.g. HOURS→MINUTES forces `every` to at least 15);
+ *    sub-floor draft the repository rejects (it re-clamps `every` up to [minEveryFor] on a unit
+ *    switch — a safety no-op now that every unit floors at every = 1 under the 1-minute floor);
  *  - an M3 date + time picker for `firstFireAt` (replaces the old blind `now + 1h`);
  *  - an M3 time picker for the daily `timeOfDay`, shown only for DAYS (Recurrence ignores it
  *    otherwise — Recurrence.kt:34);
@@ -810,8 +810,9 @@ private fun CreateScheduleDialog(
                                     selected = unit == candidate,
                                     onClick = {
                                         unit = candidate
-                                        // Re-clamp up so switching to a coarser floor (e.g. → MINUTES,
-                                        // floor 15) can never leave `every` sitting below the new floor.
+                                        // Re-clamp `every` up to the new unit's [minEveryFor] on a unit
+                                        // switch. A safety no-op now that every unit floors at every = 1
+                                        // (1-minute floor), kept so it stays correct if a floor ever rises.
                                         every = maxOf(every, minEveryFor(candidate))
                                     },
                                 ) {

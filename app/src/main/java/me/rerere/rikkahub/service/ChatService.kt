@@ -1548,7 +1548,7 @@ class ChatService(
      * Arm a durable recurring `/loop` (#364 slice 2) on [conversationId]: a CONVERSATION_EVENT schedule
      * whose every-[every]-[unit] fire injects [prompt] as a USER turn back INTO this conversation (via
      * the agent-event queue), so the conversation keeps working on it in-session. Durable (survives
-     * process death) with the standard 15-minute recurring floor.
+     * process death) with the 1-minute recurring floor (cron granularity).
      *
      * A conversation has at most ONE active loop ("keep alive" is singular), so this SUPERSEDES any
      * existing loop: it creates the new schedule first and only then clears the others — so a REJECTED

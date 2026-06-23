@@ -201,26 +201,20 @@ class TaskScheduleRepositoryTest {
         assertTrue(otherConv is ScheduleMutationResult.Accepted)
     }
 
-    @Test
-    fun create_rejects_a_sub_minimum_recurring_interval() = runBlocking {
-        val f = Fixture()
-        // 1 minute < 15-minute floor.
-        val result = f.repository.create(
-            Uuid.random(),
-            ScheduleOwner.USER,
-            recurringDraft(f.spawnable.id, every = 1, unit = RecurrenceUnit.MINUTES),
-        )
-        assertTrue(result is ScheduleMutationResult.Rejected)
-    }
+    // NOTE: there is no longer a "sub-minimum recurring interval" rejection test. With the floor at
+    // 1 minute and MINUTES the smallest unit, the smallest CONSTRUCTIBLE interval (every = 1, MINUTES
+    // = 1 min) equals the floor, and RecurrenceSpec.init already rejects `every < 1`. So no decodable
+    // spec produces an interval below the floor — the repo's `interval < MIN` guard is unreachable
+    // defense-in-depth, not a triggerable path. The malformed-spec rejection is covered separately.
 
     @Test
     fun create_accepts_a_recurring_interval_at_the_minimum() = runBlocking {
         val f = Fixture()
-        // Exactly the 15-minute floor is allowed (boundary).
+        // Exactly the 1-minute floor is allowed (boundary).
         val result = f.repository.create(
             Uuid.random(),
             ScheduleOwner.USER,
-            recurringDraft(f.spawnable.id, every = 15, unit = RecurrenceUnit.MINUTES),
+            recurringDraft(f.spawnable.id, every = 1, unit = RecurrenceUnit.MINUTES),
         )
         assertTrue("expected Accepted, got $result", result is ScheduleMutationResult.Accepted)
     }

@@ -33,7 +33,7 @@ enum class ScheduleField { ASSISTANT, PROMPT, EVERY, UNIT, TIMEZONE, TIME_OF_DAY
  *    counts the stored, trimmed prompt, so this guard counts `prompt.trim().length` to match),
  *  - delegation target id is non-NIL (guarded in form, with full spawnability validation in repository),
  *  - a RECURRING effective interval `>= ` [TaskScheduleRepository.MIN_RECURRENCE_INTERVAL_MILLIS]
- *    (so MINUTES requires `every >= 15`; `every = 1, MINUTES` is unsubmittable),
+ *    (1 minute, so MINUTES requires `every >= 1`; `every = 1, MINUTES` is the floor and IS submittable),
  *  - a valid IANA [timeZoneId] (`ZoneId.of`),
  *  - a valid `HH:mm` [timeOfDay] for DAYS (`LocalTime.parse`); ignored for MINUTES/HOURS, exactly as
  *    [me.rerere.ai.runtime.schedule.Recurrence] ignores it off the DAYS path.
@@ -87,7 +87,8 @@ data class ScheduleFormState(
                 every < 1 ->
                     errors[ScheduleField.EVERY] = "Interval must be at least 1"
                 intervalMillis < TaskScheduleRepository.MIN_RECURRENCE_INTERVAL_MILLIS ->
-                    errors[ScheduleField.EVERY] = "Minimum interval is 15 minutes"
+                    errors[ScheduleField.EVERY] =
+                        "Minimum interval is ${TaskScheduleRepository.MIN_RECURRENCE_INTERVAL_MILLIS / 60_000} minute(s)"
             }
             // timeOfDay anchors DAYS fires only (Recurrence.kt:34); MINUTES/HOURS ignore it, so a
             // stale value left over from a prior DAYS selection must not block submission.
@@ -153,8 +154,8 @@ data class ScheduleFormState(
  * its value here so it can never produce a sub-floor draft the repository rejects — the stepper's
  * lower bound and [ScheduleFormState.validate]'s interval gate are derived from the SAME
  * [TaskScheduleRepository.MIN_RECURRENCE_INTERVAL_MILLIS], so they cannot drift apart. Computed by
- * dividing the floor by the unit's millis and rounding UP (so MINUTES needs 15; HOURS/DAYS already
- * clear the 15-minute floor at every = 1).
+ * dividing the floor by the unit's millis and rounding UP. With the 1-minute floor every unit clears
+ * it at every = 1 (MINUTES, HOURS, and DAYS all floor at 1).
  */
 fun minEveryFor(unit: RecurrenceUnit): Int {
     val unitMillis = when (unit) {
