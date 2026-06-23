@@ -282,6 +282,17 @@ val dataSourceModule = module {
                 scheduleDao.getById(id.toString())?.conversationId?.let { kotlin.uuid.Uuid.parse(it) }
             },
             run = { claim, parent -> runner.run(claim, parent) },
+            // CONVERSATION_EVENT delivery (#364 /loop): enqueue the loop prompt into the parent
+            // conversation. ChatService is resolved LAZILY inside the lambda (not at construction) to
+            // avoid a startup init-order / circular dependency, exactly like AgentEventRecoveryRunner.
+            injectConversationEvent = { claim, parent ->
+                get<me.rerere.rikkahub.service.ChatService>().deliverLoopFire(
+                    conversationId = parent,
+                    prompt = claim.snapshot.prompt,
+                    scheduleId = claim.snapshot.id,
+                    dedupeKey = claim.runId.toString(),
+                )
+            },
             finishRun = { id, runId, terminal -> repository.finishRun(id, runId, terminal) },
             nextFireIfStillArmed = { id -> repository.nextFireIfStillArmed(id) },
             enqueue = { id, fireAt -> enqueuer.enqueue(id, fireAt) },

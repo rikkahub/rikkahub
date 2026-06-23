@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import me.rerere.ai.runtime.contract.DeliveryMode
 import me.rerere.ai.runtime.contract.MisfirePolicy
 import me.rerere.ai.runtime.contract.ScheduleKind
 import me.rerere.ai.runtime.contract.ScheduleOwner
@@ -43,6 +44,7 @@ class ScheduleWorkerTest {
         kind: ScheduleKind,
         enabled: Boolean,
         nextFireAt: Long,
+        deliveryMode: DeliveryMode = DeliveryMode.DETACHED_TASK,
     ): ScheduleSnapshot = ScheduleSnapshot(
         id = Uuid.random(),
         targetAssistantId = Uuid.random(),
@@ -58,6 +60,7 @@ class ScheduleWorkerTest {
         lastFiredAt = 1_000L,
         lastTaskRunId = null,
         runningTaskRunId = Uuid.random(),
+        deliveryMode = deliveryMode,
     )
 
     /**
@@ -89,6 +92,11 @@ class ScheduleWorkerTest {
             assertEquals(claim, c)
             assertEquals(parentConversationId, parent)
             terminalRunId
+        },
+        injectConversationEvent = { c, parent ->
+            trace.steps += "inject"
+            assertEquals(claim, c)
+            assertEquals(parentConversationId, parent)
         },
         finishRun = { id, runId, terminal ->
             trace.steps += "finish"
@@ -138,6 +146,30 @@ class ScheduleWorkerTest {
         assertEquals(listOf("claim", "run", "finish", "enqueue"), trace.steps)
         // The re-enqueue targets the SAME schedule id at the ADVANCED next-fire time.
         assertEquals(1, enqueued.size)
+        assertEquals(scheduleId to 9_000L, enqueued.single())
+    }
+
+    @Test
+    fun `a CONVERSATION_EVENT claim injects instead of running, then finishes and re-enqueues`() = runBlocking {
+        val trace = Trace()
+        val scheduleId = Uuid.random()
+        val parent = Uuid.random()
+        // A /loop schedule (#364 slice 2): CONVERSATION_EVENT delivery must INJECT (not spawn a detached
+        // run) and still finish + re-enqueue the recurring fire.
+        val claim = ScheduleClaim(
+            runId = Uuid.random(),
+            snapshot = snapshot(
+                ScheduleKind.RECURRING, enabled = true, nextFireAt = 9_000L,
+                deliveryMode = DeliveryMode.CONVERSATION_EVENT,
+            ),
+        )
+        val enqueued = mutableListOf<Pair<Uuid, Long>>()
+        val runner = runner(trace, scheduleId, parent, claim, enqueued = enqueued)
+
+        runner.fire(scheduleId)
+
+        // inject, NOT run — and the standard finish + re-enqueue still happen.
+        assertEquals(listOf("claim", "inject", "finish", "enqueue"), trace.steps)
         assertEquals(scheduleId to 9_000L, enqueued.single())
     }
 
@@ -224,6 +256,7 @@ class ScheduleWorkerTest {
             claimDue = { _, _ -> trace.steps += "claim"; claim },
             resolveParentConversation = { parent },
             run = { _, _ -> trace.steps += "run"; throw IllegalStateException("model missing") },
+            injectConversationEvent = { _, _ -> trace.steps += "inject" },
             finishRun = { id, runId, terminal ->
                 trace.steps += "finish"
                 assertEquals(scheduleId, id)
@@ -294,6 +327,7 @@ class ScheduleWorkerTest {
                 runStarted.complete(Unit)
                 awaitCancellation() // suspend until the fire coroutine is cancelled
             },
+            injectConversationEvent = { _, _ -> trace.steps += "inject" },
             finishRun = { _, _, _ ->
                 trace.steps += "finish"
                 // A CANCELLABLE suspension before signalling: this is what makes the test genuinely

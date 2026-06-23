@@ -156,7 +156,14 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.sanitizeForUpload
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.ai.runtime.board.buildBoardTools
+import me.rerere.ai.runtime.contract.DeliveryMode
+import me.rerere.ai.runtime.contract.ScheduleDraft
+import me.rerere.ai.runtime.contract.ScheduleKind
+import me.rerere.ai.runtime.contract.ScheduleMutationResult
 import me.rerere.ai.runtime.contract.ScheduleOwner
+import me.rerere.ai.runtime.schedule.RecurrenceSpec
+import me.rerere.ai.runtime.schedule.RecurrenceUnit
+import me.rerere.rikkahub.data.ai.schedule.LoopFire
 import me.rerere.ai.runtime.schedule.buildScheduleTools
 import me.rerere.rikkahub.data.ai.task.BoardPortAdapter
 import me.rerere.rikkahub.data.ai.schedule.SchedulePortAdapter
@@ -448,6 +455,28 @@ internal fun buildSubagentCompletionNotice(event: AgentEventEntity): UIMessage =
         parts = listOf(
             UIMessagePart.Text(
                 text = renderSubagentCompletionText(event.payloadJson),
+                metadata = buildJsonObject {
+                    put(SYNTHETIC_KIND_METADATA_KEY, AGENT_EVENT_SYNTHETIC_KIND)
+                    put(AGENT_EVENT_ID_METADATA_KEY, event.id)
+                    put(AGENT_EVENT_KIND_METADATA_KEY, event.kind)
+                },
+            ),
+        ),
+    )
+
+/**
+ * The visible USER message a `/loop` fire (#364 slice 2) is delivered as: the loop [prompt] verbatim,
+ * carried as a fresh user-role turn so the conversation's assistant works on it. Like
+ * [buildSubagentCompletionNotice] a USER role is required (the conversation ended on an assistant
+ * message; the provider needs a user turn to continue) and it carries the synthetic-event marker so
+ * FTS/stats/sanitizer treat it as agent-injected, not user-typed.
+ */
+internal fun buildLoopFireMessage(event: AgentEventEntity, prompt: String): UIMessage =
+    UIMessage(
+        role = MessageRole.USER,
+        parts = listOf(
+            UIMessagePart.Text(
+                text = prompt,
                 metadata = buildJsonObject {
                     put(SYNTHETIC_KIND_METADATA_KEY, AGENT_EVENT_SYNTHETIC_KIND)
                     put(AGENT_EVENT_ID_METADATA_KEY, event.id)
@@ -1516,6 +1545,103 @@ class ChatService(
         }
     }
 
+    // ---- Conversation loop (issue #364, `/loop`) ----
+
+    // Serializes /loop supersede (create-then-clear-others) and clear so two concurrent `/loop`
+    // commands cannot interleave their create/delete and end up deleting each other's just-created
+    // schedule (leaving zero loops). Loop mutations are rare and fast, so a single mutex is enough.
+    private val loopMutex = Mutex()
+
+    /**
+     * Arm a durable recurring `/loop` (#364 slice 2) on [conversationId]: a CONVERSATION_EVENT schedule
+     * whose every-[every]-[unit] fire injects [prompt] as a USER turn back INTO this conversation (via
+     * the agent-event queue), so the conversation keeps working on it in-session. Durable (survives
+     * process death) with the standard 15-minute recurring floor.
+     *
+     * A conversation has at most ONE active loop ("keep alive" is singular), so this SUPERSEDES any
+     * existing loop: it creates the new schedule first and only then clears the others — so a REJECTED
+     * create (cap reached, sub-floor interval) leaves the existing loop intact instead of wiping it.
+     * The target assistant is the conversation's own (unused for CONVERSATION_EVENT — nothing is
+     * spawned — but a sensible non-null value).
+     */
+    suspend fun setLoop(
+        conversationId: Uuid,
+        every: Int,
+        unit: RecurrenceUnit,
+        prompt: String,
+    ): ScheduleMutationResult = loopMutex.withLock {
+        val conversation = conversationRepo.getConversationById(conversationId)
+            ?: return@withLock ScheduleMutationResult.Rejected("conversation not found")
+        val intervalMillis = recurrenceIntervalMillis(every, unit)
+        val spec = RecurrenceSpec(every = every, unit = unit)
+        val draft = ScheduleDraft(
+            targetAssistantId = conversation.assistantId,
+            prompt = prompt,
+            kind = ScheduleKind.RECURRING,
+            firstFireAt = System.currentTimeMillis() + intervalMillis,
+            timeZoneId = ZoneId.systemDefault().id,
+            recurrenceSpec = Json.encodeToString(RecurrenceSpec.serializer(), spec),
+            deliveryMode = DeliveryMode.CONVERSATION_EVENT,
+        )
+        val result = taskScheduleRepository.create(conversationId, ScheduleOwner.USER, draft)
+        if (result is ScheduleMutationResult.Accepted) {
+            clearLoopSchedules(conversationId, keep = result.snapshot.id)
+        }
+        result
+    }
+
+    /** Clear ALL `/loop` schedules on [conversationId] (the `/loop` / `/loop clear` path). Idempotent. */
+    suspend fun clearLoop(conversationId: Uuid) = loopMutex.withLock {
+        clearLoopSchedules(conversationId, keep = null)
+    }
+
+    /** Delete every CONVERSATION_EVENT schedule on [conversationId] except [keep] (if any). */
+    private suspend fun clearLoopSchedules(conversationId: Uuid, keep: Uuid?) {
+        taskScheduleRepository.list(conversationId)
+            .filter { it.deliveryMode == DeliveryMode.CONVERSATION_EVENT && it.id != keep }
+            .forEach { taskScheduleRepository.delete(conversationId, it.id) }
+    }
+
+    /**
+     * Deliver one CONVERSATION_EVENT (`/loop`) fire by durably enqueuing the loop prompt as an
+     * agent-event into [conversationId] (#364 slice 2). Bound into [ScheduleFireRunner] at the root.
+     * SUSPEND (not the fire-and-forget [enqueueAgentEvent]) so the fire path persists the event WITHIN
+     * its own coroutine before clearing the schedule's in-flight marker — the worker's process may die
+     * the instant `doWork` returns. [dedupeKey] is the per-fire run id, so a duplicate worker that lost
+     * the claim never double-injects (the queue's unique enqueue collapses it). After persisting, kick
+     * an idle drain so an idle conversation gets the prompt now; a busy one gets it at turn-end.
+     */
+    suspend fun deliverLoopFire(conversationId: Uuid, prompt: String, scheduleId: Uuid, dedupeKey: String) {
+        // The enqueue is the durable goal: a failure (or cancellation) MUST propagate so the fire is
+        // NOT advanced as a successful delivery (the worker maps it to Result.failure; the fire runner's
+        // NonCancellable finally still clears the schedule's in-flight marker, so nothing pins). This
+        // mirrors the DETACHED path, where a throwing run() also propagates rather than being swallowed.
+        val persisted = agentEventStore.enqueue(
+            conversationId = conversationId,
+            kind = LoopFire.KIND,
+            payloadJson = LoopFire.payloadJson(prompt, scheduleId),
+            dedupeKey = dedupeKey,
+        )
+        // The event is now DURABLE; the immediate drain kick is a best-effort optimization (it will
+        // otherwise drain at the next idle turn-end / cold-start replay), so a kick failure must not
+        // fail an already-persisted fire. Cancellation still propagates.
+        if (persisted) {
+            try {
+                maybeDrainAgentEventsWhenIdle(conversationId)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Log.w(TAG, "loop fire drain kick failed (event already durable) for $conversationId", t)
+            }
+        }
+    }
+
+    private fun recurrenceIntervalMillis(every: Int, unit: RecurrenceUnit): Long = when (unit) {
+        RecurrenceUnit.MINUTES -> every.toLong() * 60_000L
+        RecurrenceUnit.HOURS -> every.toLong() * 3_600_000L
+        RecurrenceUnit.DAYS -> every.toLong() * 86_400_000L
+    }
+
     // ---- 异步代理事件队列 (issue #290) ----
 
     /**
@@ -1761,6 +1887,30 @@ class ChatService(
                         syntheticMessageId = notice.id.toString(),
                     ),
                     continueGeneration = onSelectedBranch,
+                )
+            }
+
+            if (event.kind == LoopFire.KIND) {
+                // A /loop fire (#364 slice 2) is a fresh USER prompt that DRIVES a turn — unlike the
+                // subagent notice (which reports a finished detached run), so there is no tool anchor to
+                // resolve and no selected-branch guard: a loop always continues generation. A malformed/
+                // blank payload terminalizes FAILED rather than injecting an empty user turn.
+                val prompt = LoopFire.promptOf(event.payloadJson)
+                    ?: return@claimAndAppendAndConsume ClaimAppendAction.Terminalize(
+                        AgentEventTerminalStatus.FAILED,
+                    )
+                val loopMessage = buildLoopFireMessage(event, prompt)
+                val loopNode = loopMessage.toMessageNode()
+                conversationRepo.appendMessageNode(
+                    persistedConversation.copy(messageNodes = persistedConversation.messageNodes + loopNode),
+                    loopNode,
+                )
+                return@claimAndAppendAndConsume ClaimAppendAction.Append(
+                    synthetic = SyntheticAppendResult(
+                        syntheticNodeId = loopNode.id.toString(),
+                        syntheticMessageId = loopMessage.id.toString(),
+                    ),
+                    continueGeneration = true,
                 )
             }
 

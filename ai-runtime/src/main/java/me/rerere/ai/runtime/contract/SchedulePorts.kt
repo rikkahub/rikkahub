@@ -20,6 +20,18 @@ import kotlin.uuid.Uuid
 enum class ScheduleKind { ONE_SHOT, RECURRING }
 
 /**
+ * How a fired schedule delivers its prompt (#364 slice 2).
+ * - [DETACHED_TASK] (default, the pre-#364 behavior): spawn the target assistant as a DETACHED
+ *   background run out-of-session, writing a `task_runs` row — never touching the live conversation.
+ *   This is what UI- and tool-created schedules use.
+ * - [CONVERSATION_EVENT] (the in-session `/loop`): inject the prompt as a USER-role message INTO the
+ *   bound conversation at its next idle turn-end (via the durable agent-event queue), so the
+ *   conversation's OWN assistant works on it in-session. No task run is created; the target assistant
+ *   is unused (and the spawnable gate is skipped) because nothing is spawned.
+ */
+enum class DeliveryMode { DETACHED_TASK, CONVERSATION_EVENT }
+
+/**
  * Who authored a schedule. The active-schedule cap is computed per owner class so an agent cannot
  * starve the user's quota and vice-versa (spec assumption 4). [USER] = UI-created, [AGENT] =
  * tool-created (the port adapter knows the caller is an agent generation).
@@ -51,6 +63,7 @@ data class ScheduleDraft(
     val timeZoneId: String,
     val recurrenceSpec: String? = null,
     val misfirePolicy: MisfirePolicy = MisfirePolicy.FIRE_ONCE_AND_COALESCE,
+    val deliveryMode: DeliveryMode = DeliveryMode.DETACHED_TASK,
 )
 
 /**
@@ -73,6 +86,7 @@ data class ScheduleSnapshot(
     val lastFiredAt: Long?,
     val lastTaskRunId: Uuid?,
     val runningTaskRunId: Uuid?,
+    val deliveryMode: DeliveryMode = DeliveryMode.DETACHED_TASK,
 )
 
 /**

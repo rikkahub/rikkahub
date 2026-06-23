@@ -15,14 +15,18 @@ import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.rerere.ai.runtime.contract.ScheduleMutationResult
+import me.rerere.ai.runtime.schedule.RecurrenceUnit
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -58,6 +62,69 @@ import java.util.Locale
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatVM"
+
+/**
+ * The parsed form of a `/loop` argument (#364 slice 2). Pure so [parseLoopCommand] is JVM-unit-testable
+ * without the ViewModel.
+ */
+internal sealed interface LoopCommand {
+    /** `/loop` or `/loop clear` — clear this conversation's loop(s). */
+    data object Clear : LoopCommand
+
+    /** `/loop [interval] <prompt>` — arm a recurring loop at the clamped ([every], [unit]) cadence. */
+    data class Schedule(val every: Int, val unit: RecurrenceUnit, val prompt: String) : LoopCommand
+
+    /** Malformed input (an interval with no prompt) — show usage, mutate nothing. */
+    data object Usage : LoopCommand
+}
+
+/** The `/loop` recurring floor: 15 minutes, matching the schedule repository's WorkManager-aligned minimum. */
+internal const val MIN_LOOP_MINUTES = 15
+
+private val LOOP_INTERVAL_REGEX = Regex("""^(\d+)([smhd])$""")
+
+/**
+ * Parse a `/loop` argument into a [LoopCommand]. PURE.
+ *
+ * - empty / "clear" → [LoopCommand.Clear].
+ * - a leading `<N><s|m|d|h>` token is the interval; the rest is the prompt. An interval with no prompt
+ *   → [LoopCommand.Usage].
+ * - no interval token → the whole argument is the prompt at the [MIN_LOOP_MINUTES] floor.
+ *
+ * Sub-floor intervals are rounded UP to the floor (the durable schedule cannot fire faster than the
+ * WorkManager 15-minute minimum), so the returned ([every], [unit]) is always >= 15 minutes.
+ */
+internal fun parseLoopCommand(arg: String): LoopCommand {
+    val trimmed = arg.trim()
+    if (trimmed.isEmpty() || trimmed.equals("clear", ignoreCase = true)) return LoopCommand.Clear
+
+    val firstToken = trimmed.substringBefore(' ').substringBefore('\n')
+    val match = LOOP_INTERVAL_REGEX.matchEntire(firstToken)
+        ?: return LoopCommand.Schedule(MIN_LOOP_MINUTES, RecurrenceUnit.MINUTES, trimmed)
+
+    val n = match.groupValues[1].toIntOrNull() ?: return LoopCommand.Usage
+    val prompt = trimmed.removePrefix(firstToken).trim()
+    if (prompt.isEmpty()) return LoopCommand.Usage
+    val (every, unit) = clampLoopInterval(n, match.groupValues[2])
+    return LoopCommand.Schedule(every, unit, prompt)
+}
+
+/** Map a parsed `<N><unit>` to a recurrence cadence clamped UP to the [MIN_LOOP_MINUTES] floor. */
+private fun clampLoopInterval(n: Int, unitChar: String): Pair<Int, RecurrenceUnit> = when (unitChar) {
+    // cron/WorkManager has no sub-minute granularity: round seconds up to whole minutes, then floor.
+    "s" -> maxOf((n + 59) / 60, MIN_LOOP_MINUTES) to RecurrenceUnit.MINUTES
+    "m" -> maxOf(n, MIN_LOOP_MINUTES) to RecurrenceUnit.MINUTES
+    "h" -> maxOf(n, 1) to RecurrenceUnit.HOURS
+    "d" -> maxOf(n, 1) to RecurrenceUnit.DAYS
+    else -> MIN_LOOP_MINUTES to RecurrenceUnit.MINUTES
+}
+
+/** Human-readable cadence for the `/loop` confirmation toast, e.g. "15m", "1h", "2d". */
+internal fun describeInterval(every: Int, unit: RecurrenceUnit): String = when (unit) {
+    RecurrenceUnit.MINUTES -> "${every}m"
+    RecurrenceUnit.HOURS -> "${every}h"
+    RecurrenceUnit.DAYS -> "${every}d"
+}
 
 class ChatVM(
     id: String,
@@ -166,6 +233,12 @@ class ChatVM(
     // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow
 
+    // One-shot user feedback for the reserved `/loop` command (#364 slice 2): the schedule create is
+    // async (Room IO), so the result is surfaced as a toast the page collects rather than returned
+    // inline. extraBufferCapacity = 1 so an emit from a non-suspending VM context is never dropped.
+    private val _loopCommandFeedback = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val loopCommandFeedback: SharedFlow<String> = _loopCommandFeedback.asSharedFlow()
+
     // MCP管理器
     val mcpManager = chatService.mcpManager
 
@@ -235,20 +308,64 @@ class ChatVM(
      * - `/goal <condition>` → arm the session goal AND kick a turn working toward it (the condition is
      *   sent as the first user message; the turn-end goal loop then continues until it is met, bounded
      *   by the maxGoalIterations preference and by user-stop).
+     * - `/loop` or `/loop clear` → clear this conversation's durable loop schedule(s).
+     * - `/loop [interval] <prompt>` → arm a durable recurring schedule that injects `<prompt>` back into
+     *   this conversation every interval (15-minute floor; sub-floor intervals are rounded up).
      */
     private fun handleReservedSlashCommand(content: List<UIMessagePart>): Boolean {
         val idx = content.indexOfLast { it is UIMessagePart.Text }
         if (idx < 0) return false
         val text = (content[idx] as UIMessagePart.Text).text.trim()
-        if (text != "/goal" && !text.startsWith("/goal ")) return false
-        val arg = text.removePrefix("/goal").trim()
+        return when {
+            text == "/goal" || text.startsWith("/goal ") -> {
+                handleGoalCommand(text.removePrefix("/goal").trim()); true
+            }
+            text == "/loop" || text.startsWith("/loop ") -> {
+                handleLoopCommand(text.removePrefix("/loop").trim()); true
+            }
+            else -> false
+        }
+    }
+
+    private fun handleGoalCommand(arg: String) {
         if (arg.isEmpty() || arg.equals("clear", ignoreCase = true)) {
             chatService.clearGoal(_conversationId)
         } else {
             chatService.setGoal(_conversationId, arg)
             chatService.sendMessage(_conversationId, listOf(UIMessagePart.Text(arg)), answer = true)
         }
-        return true
+    }
+
+    /**
+     * Handle `/loop` (#364 slice 2). Parsing is a PURE [parseLoopCommand]; the schedule mutation is
+     * async Room IO so it runs in [viewModelScope] and reports the outcome via [loopCommandFeedback]
+     * (a toast the page shows) — a reserved command must give a guaranteed, visible side effect.
+     */
+    private fun handleLoopCommand(arg: String) {
+        when (val command = parseLoopCommand(arg)) {
+            LoopCommand.Usage -> _loopCommandFeedback.tryEmit(
+                "Usage: /loop [interval] <prompt> — e.g. /loop 30m check the build"
+            )
+            LoopCommand.Clear -> viewModelScope.launch {
+                chatService.clearLoop(_conversationId)
+                _loopCommandFeedback.emit("Loop cleared.")
+            }
+            is LoopCommand.Schedule -> viewModelScope.launch {
+                val result = chatService.setLoop(
+                    conversationId = _conversationId,
+                    every = command.every,
+                    unit = command.unit,
+                    prompt = command.prompt,
+                )
+                _loopCommandFeedback.emit(
+                    when (result) {
+                        is ScheduleMutationResult.Accepted ->
+                            "Looping every ${describeInterval(command.every, command.unit)}. Clear with /loop clear."
+                        is ScheduleMutationResult.Rejected -> "Couldn't start loop: ${result.reason}"
+                    }
+                )
+            }
+        }
     }
 
     /**

@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.repository
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import me.rerere.ai.runtime.contract.DeliveryMode
 import me.rerere.ai.runtime.contract.ScheduleDraft
 import me.rerere.ai.runtime.contract.ScheduleKind
 import me.rerere.ai.runtime.contract.ScheduleMutationResult
@@ -115,6 +116,36 @@ class TaskScheduleRepositoryTest {
     fun create_rejects_a_non_spawnable_target() = runBlocking {
         val f = Fixture()
         val result = f.repository.create(Uuid.random(), ScheduleOwner.USER, oneShotDraft(f.notSpawnable.id))
+        assertTrue(result is ScheduleMutationResult.Rejected)
+    }
+
+    @Test
+    fun create_conversation_event_skips_the_spawnable_gate_and_round_trips_delivery_mode() = runBlocking {
+        // A /loop schedule (#364 slice 2) injects into its bound conversation and spawns nothing, so the
+        // spawnable gate must NOT apply — a non-spawnable target (the conversation's own chat assistant,
+        // typically not spawnable) is accepted, and the persisted delivery mode round-trips.
+        val f = Fixture()
+        val draft = recurringDraft(f.notSpawnable.id, every = 15, unit = RecurrenceUnit.MINUTES)
+            .copy(deliveryMode = DeliveryMode.CONVERSATION_EVENT)
+
+        val result = f.repository.create(Uuid.random(), ScheduleOwner.USER, draft)
+
+        assertTrue("a CONVERSATION_EVENT schedule bypasses the spawnable gate", result is ScheduleMutationResult.Accepted)
+        assertEquals(
+            DeliveryMode.CONVERSATION_EVENT,
+            (result as ScheduleMutationResult.Accepted).snapshot.deliveryMode,
+        )
+    }
+
+    @Test
+    fun create_detached_task_still_requires_a_spawnable_target() = runBlocking {
+        // The default DETACHED_TASK delivery keeps the spawnable gate (it spawns the target as a subagent).
+        val f = Fixture()
+        val draft = recurringDraft(f.notSpawnable.id, every = 15, unit = RecurrenceUnit.MINUTES)
+            .copy(deliveryMode = DeliveryMode.DETACHED_TASK)
+
+        val result = f.repository.create(Uuid.random(), ScheduleOwner.USER, draft)
+
         assertTrue(result is ScheduleMutationResult.Rejected)
     }
 

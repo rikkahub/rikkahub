@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.repository
 
 import kotlinx.serialization.json.Json
+import me.rerere.ai.runtime.contract.DeliveryMode
 import me.rerere.ai.runtime.contract.ScheduleDraft
 import me.rerere.ai.runtime.contract.ScheduleKind
 import me.rerere.ai.runtime.contract.ScheduleMutationResult
@@ -102,14 +103,20 @@ class TaskScheduleRepository(
             )
         }
 
-        val target = resolveAssistant(draft.targetAssistantId)
-            ?: return ScheduleMutationResult.Rejected(
-                "unknown target assistant: ${draft.targetAssistantId}"
-            )
-        if (!target.spawnable) {
-            return ScheduleMutationResult.Rejected(
-                "target assistant is not spawnable: ${draft.targetAssistantId}"
-            )
+        // The spawnable gate applies ONLY to DETACHED_TASK delivery, which spawns the target as a
+        // background subagent. A CONVERSATION_EVENT schedule (#364 /loop) spawns nothing — it injects
+        // into the bound conversation, whose OWN assistant runs the turn — so the target assistant is
+        // unused and need not be spawnable (the conversation's chat assistant usually is not).
+        if (draft.deliveryMode == DeliveryMode.DETACHED_TASK) {
+            val target = resolveAssistant(draft.targetAssistantId)
+                ?: return ScheduleMutationResult.Rejected(
+                    "unknown target assistant: ${draft.targetAssistantId}"
+                )
+            if (!target.spawnable) {
+                return ScheduleMutationResult.Rejected(
+                    "target assistant is not spawnable: ${draft.targetAssistantId}"
+                )
+            }
         }
 
         // The zone is dereferenced at fire time (`ZoneId.of(row.timeZoneId)` in [claimDue]); an
@@ -162,6 +169,7 @@ class TaskScheduleRepository(
             nextFireAt = draft.firstFireAt,
             enabled = true,
             misfirePolicy = draft.misfirePolicy.name,
+            deliveryMode = draft.deliveryMode.name,
             createdAt = timestamp,
             updatedAt = timestamp,
         )
@@ -443,6 +451,7 @@ class TaskScheduleRepository(
         lastFiredAt = lastFiredAt,
         lastTaskRunId = lastTaskRunId?.let { Uuid.parse(it) },
         runningTaskRunId = runningTaskRunId?.let { Uuid.parse(it) },
+        deliveryMode = DeliveryMode.valueOf(deliveryMode),
     )
 
     companion object {

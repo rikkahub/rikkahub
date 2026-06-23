@@ -296,6 +296,12 @@ private fun ChatPageContent(
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
+    // Surface the reserved `/loop` command's async outcome (#364 slice 2) as a toast — the schedule
+    // create is Room IO, so the VM reports the result here rather than inline.
+    LaunchedEffect(Unit) {
+        vm.loopCommandFeedback.collect { toaster.show(it, type = ToastType.Info) }
+    }
+
     // Single submit path for tap and long-press send; only the answer flag differs.
     fun submitInput(answer: Boolean) {
         if (shouldBlockSubmitForMissingModel(answer = answer, hasChatModel = activeChatModel != null)) {

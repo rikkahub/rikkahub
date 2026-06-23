@@ -57,7 +57,7 @@ import me.rerere.common.json.JsonInstant
         AgentEventEntity::class,
         ShellRunEntity::class
     ],
-    version = 32,
+    version = 33,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -97,6 +97,10 @@ import me.rerere.common.json.JsonInstant
         // DETACHED background subagent run can durably enqueue + resolve its completion. Additive
         // (defaulted/nullable) columns are auto-migratable, so Room derives it without a spec.
         AutoMigration(from = 31, to = 32),
+        // 32 -> 33 adds task_schedules.delivery_mode (default DETACHED_TASK, issue #364 slice 2) so an
+        // in-session /loop schedule can mark itself CONVERSATION_EVENT. A defaulted additive column is
+        // auto-migratable, so Room derives it from the exported schemas without a spec.
+        AutoMigration(from = 32, to = 33),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)

@@ -76,4 +76,11 @@ data class TaskScheduleEntity(
     /** Persisted name of a `MisfirePolicy`; default FIRE_ONCE_AND_COALESCE. */
     @ColumnInfo("misfire_policy", defaultValue = "FIRE_ONCE_AND_COALESCE")
     val misfirePolicy: String = "FIRE_ONCE_AND_COALESCE",
+    /**
+     * Persisted name of a `DeliveryMode` (#364 slice 2); default DETACHED_TASK so every pre-existing
+     * row (UI/tool schedules) keeps spawning a detached run. CONVERSATION_EVENT rows are the in-session
+     * `/loop` and inject into the bound conversation instead.
+     */
+    @ColumnInfo("delivery_mode", defaultValue = "DETACHED_TASK")
+    val deliveryMode: String = "DETACHED_TASK",
 )

@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import me.rerere.ai.runtime.contract.DeliveryMode
 import me.rerere.rikkahub.data.repository.ScheduleClaim
 import kotlin.uuid.Uuid
 
@@ -38,8 +39,11 @@ private const val TAG = "ScheduleWorker"
  * @param resolveParentConversation maps a schedule id to its bound parent conversation id, or null if
  *   that conversation was deleted. Threaded into [run] so the spawned task keys on the REAL parent —
  *   never `TaskCoordinator.run`'s `Uuid.random()` default.
- * @param run fires a winning claim against its target and returns the terminal run id (or null if the
- *   target assistant no longer exists). Bound to [ScheduledTaskRunner.run] at the root.
+ * @param run fires a DETACHED_TASK winning claim against its target and returns the terminal run id
+ *   (or null if the target assistant no longer exists). Bound to [ScheduledTaskRunner.run] at the root.
+ * @param injectConversationEvent delivers a CONVERSATION_EVENT winning claim (#364 `/loop`) by enqueuing
+ *   the loop prompt as a durable agent-event into the parent conversation — no detached run, no
+ *   task_runs row. Bound to a [me.rerere.rikkahub.service.ChatService.enqueueAgentEvent] call at the root.
  * @param finishRun clears the in-flight marker and records the terminal run id. Abort-safe in the repo.
  * @param nextFireIfStillArmed re-reads the CURRENT row and returns its `nextFireAt` iff the schedule is
  *   still enabled, else null. The re-enqueue decision MUST read fresh state, never the stale post-claim
@@ -54,6 +58,7 @@ class ScheduleFireRunner(
     private val claimDue: suspend (Uuid, Long) -> ScheduleClaim?,
     private val resolveParentConversation: suspend (Uuid) -> Uuid?,
     private val run: suspend (ScheduleClaim, Uuid) -> Uuid?,
+    private val injectConversationEvent: suspend (ScheduleClaim, Uuid) -> Unit,
     private val finishRun: suspend (Uuid, Uuid, Uuid) -> Unit,
     private val nextFireIfStillArmed: suspend (Uuid) -> Long?,
     private val enqueue: (Uuid, Long) -> Unit,
@@ -78,11 +83,17 @@ class ScheduleFireRunner(
         var terminalRunId = claim.runId
         try {
             val parent = resolveParentConversation(scheduleId)
-            // A missing parent (conversation deleted between enqueue and fire) skips the run; the
+            // A missing parent (conversation deleted between enqueue and fire) skips delivery; the
             // claim run id stands in as the terminal id (recording it is harmless, the marker is
             // cleared either way).
             if (parent != null) {
-                terminalRunId = run(claim, parent) ?: claim.runId
+                when (claim.snapshot.deliveryMode) {
+                    // DETACHED_TASK: spawn the target out-of-session; its terminal run id is recorded.
+                    DeliveryMode.DETACHED_TASK -> terminalRunId = run(claim, parent) ?: claim.runId
+                    // CONVERSATION_EVENT (#364 /loop): inject the prompt into the parent conversation;
+                    // no detached run, so terminalRunId stays the claim id (just records the fire).
+                    DeliveryMode.CONVERSATION_EVENT -> injectConversationEvent(claim, parent)
+                }
             }
         } finally {
             // NonCancellable: the cleanup writes (finishRun, the fresh nextFireIfStillArmed read) are
