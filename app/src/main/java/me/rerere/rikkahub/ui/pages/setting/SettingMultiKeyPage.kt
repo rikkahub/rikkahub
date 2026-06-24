@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.compose.material3.HorizontalFloatingToolbar
+import androidx.compose.material3.FloatingToolbarDefaults
+import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import me.rerere.hugeicons.stroke.Connect
 import androidx.compose.foundation.lazy.items
 import me.rerere.ai.provider.ModelType
@@ -220,7 +223,6 @@ internal fun SettingMultiKeyContent(
                             },
                             onDismiss = { showStrategy = false }
                         )
-                    }
                 }
             }
 

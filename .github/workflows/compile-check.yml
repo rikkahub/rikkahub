@@ -3,7 +3,7 @@ name: Compile Check
 on:
   workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [ master, extv-master ]
   pull_request:
     branches: [ master ]
 

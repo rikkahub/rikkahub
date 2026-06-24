@@ -1795,4 +1795,42 @@
   <string name="codex_response_failed">The Codex response failed.</string>
   <string name="codex_monthly_limit">Monthly limit</string>
   <string name="codex_oauth_ports_unavailable">Codex sign-in cannot start because the local callback ports are in use. Close the app using them and try again.</string>
-</resources>
+
+
+    <!-- Multi-Key Management -->
+    <string name="multi_key_title">Key Management</string>
+    <string name="multi_key_total">Total</string>
+    <string name="multi_key_normal">Normal</string>
+    <string name="multi_key_error">Error</string>
+    <string name="multi_key_strategy">Rotation Strategy</string>
+    <string name="multi_key_empty">No keys yet, tap + to add</string>
+    <string name="multi_key_import">Import from existing keys (%d)</string>
+    <string name="multi_key_add">Add API Key</string>
+    <string name="multi_key_add_hint">One key per line, supports spaces/newlines/commas</string>
+    <string name="multi_key_edit">Edit Key</string>
+    <string name="multi_key_alias">Alias (optional)</string>
+    <string name="multi_key_alias_placeholder">e.g. Primary Key</string>
+    <string name="multi_key_deleted">Deleted %s</string>
+    <string name="multi_key_deleted_errors">Deleted %d error keys</string>
+    <string name="multi_key_imported">Added %d keys</string>
+    <string name="multi_key_undo">Undo</string>
+    <string name="multi_key_strategy_round_robin">Round Robin — Use each key in turn</string>
+    <string name="multi_key_strategy_random">Random — Pick a key randomly</string>
+    <string name="multi_key_status_active">Normal</string>
+    <string name="multi_key_status_disabled">Disabled</string>
+    <string name="multi_key_status_error">Error</string>
+    <string name="multi_key_status_rate_limited">Rate Limited</string>
+    <string name="multi_key_status_exhausted">Exhausted</string>
+    <string name="multi_key_strategy_label_round_robin">Round Robin</string>
+    <string name="multi_key_strategy_label_random">Random</string>
+    <string name="multi_key_strategy_label_least_used">Least Used</string>
+    <string name="multi_key_strategy_label_priority">Priority</string>
+    <string name="multi_key_delete_errors">Delete errors</string>
+    <string name="multi_key_delete">Delete</string>
+    <string name="multi_key_edit_btn">Edit</string>
+    <string name="multi_key_save">Save</string>
+    <string name="multi_key_restored">Restored</string>
+    <string name="multi_key_test">Test</string>
+    <string name="multi_key_manage">Manage Keys</string>
+    <string name="multi_key_summary">%d active / %d total</string>
+    </resources>
