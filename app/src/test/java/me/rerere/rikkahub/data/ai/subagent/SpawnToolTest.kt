@@ -261,6 +261,14 @@ class SpawnToolTest {
             "prompt must not reference the legacy `task` tool name, was: $prompt",
             !prompt.contains("`task`"),
         )
+        assertTrue(
+            "prompt must describe the subagent execution boundary, was: $prompt",
+            prompt.contains("own assistant configuration"),
+        )
+        assertTrue(
+            "prompt must tell the model to pass context explicitly, was: $prompt",
+            prompt.contains("does not automatically"),
+        )
     }
 
     @Test

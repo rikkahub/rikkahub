@@ -121,8 +121,12 @@ private fun createListFilesTool(
 ) = Tool(
     name = "workspace_list_files",
     description = """
-        List files in the assistant's bound workspace. Use area "files" for the project working directory and "linux" for the installed Rootfs.
-        For the files area, path is relative to the project working directory (use an absolute /workspace/... path for the files root) and each entries[].path is returned as an absolute /workspace/... path.
+        List files/directories in the assistant's bound workspace. Use area "files" for the project
+        working directory and "linux" for the installed Rootfs.
+        For the files area, path is relative to the project working directory (use an absolute
+        /workspace/... path for the files root) and each entries[].path is returned as an absolute
+        /workspace/... path.
+        Entries are returned directories first, then files, each sorted case-insensitively by name; use workspace_glob for recursive pattern search.
         Response format: entries[].path, name, isDirectory, sizeBytes, updatedAt.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -176,7 +180,12 @@ private fun createReadFileTool(
 ) = Tool(
     name = "workspace_read_file",
     description = """
-        Read a UTF-8 text file from the assistant's bound workspace files area. Paths are relative to the project working directory; use an absolute /workspace/... path to address the files root. The file is returned as a line window, not always in full: pass offset (1-based start line) and limit (max lines, default $DEFAULT_READ_FILE_LINE_LIMIT) to page through a large file. The result reports totalLines and, when lines remain past the window, hasMore=true.
+        Read a UTF-8 text file from the assistant's bound workspace files area. Paths are relative to the
+        project working directory; use an absolute /workspace/... path to address the files root. The file
+        is returned as a line window, not always in full: pass offset (1-based start line) and limit (max
+        lines, default $DEFAULT_READ_FILE_LINE_LIMIT) to page through a large file. The result reports
+        totalLines and, when lines remain past the window, hasMore=true. Binary/non-UTF-8 files are not
+        supported by this text reader.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -184,13 +193,18 @@ private fun createReadFileTool(
                 putPathProperty(required = true)
                 put("offset", buildJsonObject {
                     put("type", "integer")
-                    put("description", "Optional 1-based line number to start reading from. Defaults to 1 (start of file).")
+                    put(
+                        "description",
+                        "Optional 1-based line number to start reading from. Defaults to 1 (start of file)."
+                    )
                 })
                 put("limit", buildJsonObject {
                     put("type", "integer")
                     put(
                         "description",
-                        "Optional maximum number of lines to return. Defaults to $DEFAULT_READ_FILE_LINE_LIMIT; a larger file is windowed to this many lines (read totalLines/hasMore and page with offset)."
+                        "Optional maximum number of lines to return. Defaults to " +
+                            "$DEFAULT_READ_FILE_LINE_LIMIT; a larger file is windowed to this many " +
+                            "lines (read totalLines/hasMore and page with offset)."
                     )
                 })
             },
@@ -229,14 +243,24 @@ private fun createGlobTool(
 ) = Tool(
     name = "workspace_glob",
     description = """
-        Find files in the assistant's bound workspace files area by glob pattern, recursively from the files root. The pattern is matched against each file's path relative to the files root (the part after /workspace/). Supports * (any run of characters within one path segment, does not cross /), ** (across directories), ? (one character), [abc] character classes, and {a,b} alternation. Examples: **/*.kt, src/**/*.{kt,java}, **/README.md. Returns up to 500 entries (path is the absolute /workspace/... form); use a more specific pattern if truncated.
+        Find files/directories in the assistant's bound workspace files area by glob pattern, recursively
+        from the files root. The pattern is matched against each path relative to the files root (the part
+        after /workspace/), not the project working directory. Supports * (within one path segment), **
+        (across directories), ? (one character), [abc] character classes, and {a,b} alternation. Examples:
+        **/*.kt, src/**/*.{kt,java}, **/README.md. Hidden files are matched if the pattern matches them.
+        Returns up to 500 entries in filesystem walk order; if count is 500, narrow the pattern because
+        there may be more results.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("pattern", buildJsonObject {
                     put("type", "string")
-                    put("description", "Glob pattern matched against the files-root-relative path, e.g. **/*.kt or src/**/*.{kt,java}.")
+                    put(
+                        "description",
+                        "Glob pattern matched against the files-root-relative path, e.g. **/*.kt or " +
+                            "src/**/*.{kt,java}."
+                    )
                 })
             },
             required = listOf("pattern"),
@@ -274,14 +298,24 @@ private fun createGrepTool(
 ) = Tool(
     name = "workspace_grep",
     description = """
-        Search file CONTENTS in the assistant's bound workspace files area, recursively from the files root, returning matching lines with their file path and line number. By default the query is a literal substring matched case-insensitively; set regex=true to treat it as a regular expression, or ignore_case=false for a case-sensitive match. Optionally restrict which files are searched with glob (matched against the files-root-relative path, e.g. **/*.kt). Skips files larger than 512 KB and returns up to 100 matches; narrow the query or glob if truncated.
+        Search UTF-8 text file contents in the assistant's bound workspace files area, recursively from
+        the files root, returning matching lines with their file path and line number. By default the query
+        is a literal substring matched case-insensitively; set regex=true to treat it as a regular
+        expression, or ignore_case=false for a case-sensitive match. Optionally restrict files with glob
+        (matched against the files-root-relative path, e.g. **/*.kt). Files larger than 512 KB are skipped,
+        very long matching lines are shortened, and up to 100 matches are returned in filesystem walk order;
+        if count is 100, narrow the query or glob because there may be more matches.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
-                    put("description", "Text to search for: a literal substring by default, or a regular expression when regex=true.")
+                    put(
+                        "description",
+                        "Text to search for: a literal substring by default, or a regular expression " +
+                            "when regex=true."
+                    )
                 })
                 put("regex", buildJsonObject {
                     put("type", "boolean")
@@ -293,7 +327,11 @@ private fun createGrepTool(
                 })
                 put("glob", buildJsonObject {
                     put("type", "string")
-                    put("description", "Optional glob to restrict which files are searched, matched against the files-root-relative path, e.g. **/*.kt.")
+                    put(
+                        "description",
+                        "Optional glob to restrict which files are searched, matched against the " +
+                            "files-root-relative path, e.g. **/*.kt."
+                    )
                 })
             },
             required = listOf("query"),
@@ -434,8 +472,13 @@ internal fun JsonObjectBuilder.putPathProperty(required: Boolean) {
         put("type", "string")
         put(
             "description",
-            if (required) "Path relative to the project working directory. Use an absolute /workspace/... path to address the files root."
-            else "Optional path relative to the project working directory (use an absolute /workspace/... path for the files root). Defaults to the project working directory."
+            if (required) {
+                "Path relative to the project working directory. Use an absolute /workspace/... path " +
+                    "to address the files root."
+            } else {
+                "Optional path relative to the project working directory (use an absolute " +
+                    "/workspace/... path for the files root). Defaults to the project working directory."
+            }
         )
     })
 }

@@ -124,7 +124,9 @@ class AndroidAppLauncher(private val context: Context) : AppLauncher {
 fun openAppTool(launcher: AppLauncher): Tool = Tool(
     name = "open_app",
     description = "Launch an installed app by its package name. " +
-        "Returns an error if the package is not installed or has no launchable activity.",
+        "This only brings the app to the foreground; it does not inspect or control the app UI. " +
+        "Use UI automation tools or a UI Automation subagent after launch if you need to interact " +
+        "with the screen. Returns an error if the package is not installed or has no launchable activity.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -147,7 +149,11 @@ fun openAppTool(launcher: AppLauncher): Tool = Tool(
         val payload = if (!launched) {
             buildJsonObject {
                 put("success", false)
-                put("error", "Package '$pkg' could not be launched (not installed, no launchable activity, or launch was rejected).")
+                put(
+                    "error",
+                    "Package '$pkg' could not be launched (not installed, no launchable activity, " +
+                        "or launch was rejected).",
+                )
             }
         } else {
             buildJsonObject {
@@ -166,7 +172,7 @@ fun openAppTool(launcher: AppLauncher): Tool = Tool(
 fun listAppTool(launcher: AppLauncher): Tool = Tool(
     name = "list_app",
     description = "List the installed apps that have a launcher entry. " +
-        "Returns each app's package name and display label.",
+        "Returns each app's package name and display label only; it does not open, inspect, or control apps.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject { })
     },
@@ -197,7 +203,9 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                 The result is the value of the last expression in the code.
                 For calculations with decimals, use toFixed() to control precision.
                 Console output (log/info/warn/error) is captured and returned in 'logs' field.
-                No DOM or Node.js APIs available.
+                No DOM, Node.js, fetch/network, timer, or filesystem APIs are provided.
+                Use for small deterministic calculations or JSON/text transformations; do not use it for
+                long-running loops or large data processing.
                 Example: '1 + 2' returns 3; 'const x = 5; x * 2' returns 10.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -255,7 +263,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         Tool(
             name = "get_time_info",
             description = """
-                Get the current local date and time info from the device.
+                Get the current local date and time info from the Android device running this app.
                 Returns year/month/day, weekday, ISO date/time strings, timezone, and timestamp.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -293,6 +301,8 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             description = """
                 Read or write plain text from the device clipboard.
                 Use action: read or write. For write, provide text.
+                The clipboard may contain sensitive user data; read it only when the user asks about the
+                clipboard or the current task explicitly requires clipboard content.
                 Do NOT write to the clipboard unless the user has explicitly requested it.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -311,7 +321,10 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                         })
                         put("text", buildJsonObject {
                             put("type", "string")
-                            put("description", "Text to write to the clipboard (required for write)")
+                            put(
+                                "description",
+                                "Plain text to write to the clipboard (required for write; ignored for read)"
+                            )
                         })
                     },
                     required = listOf("action")
@@ -349,8 +362,9 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             name = "text_to_speech",
             description = """
                 Speak text aloud to the user using the device's text-to-speech engine.
-                Use this when the user asks you to read something aloud, or when audio output is appropriate.
-                The tool returns immediately; audio plays in the background on the device.
+                Use this only when the user explicitly asks for audio/read-aloud output or the current task
+                explicitly requires spoken output. The tool returns immediately; audio plays in the
+                background on the device. This tool exposes no stop, pause, or queue-management operation.
                 Provide natural, readable text without markdown formatting.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -380,7 +394,9 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         Tool(
             name = "ask_user",
             description = """
-                Ask the user one or more questions when you need clarification, additional information, or confirmation.
+                Ask the user one or more questions only when you cannot proceed safely or correctly without
+                clarification, additional information, or confirmation. If a low-risk reasonable assumption
+                is enough, state the assumption instead of calling this tool.
                 Each question can optionally provide a list of suggested options for the user to choose from.
                 The user may select an option or provide their own free-text answer for each question.
                 The answers will be returned as a JSON object mapping question IDs to the user's responses.
@@ -424,7 +440,9 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                                         )
                                         put(
                                             "description",
-                                            "Answer type: text (free text input, default), single (select exactly one option), multi (select one or more options)"
+                                            "Answer type: text (free text input, default), single " +
+                                                "(select exactly one option), multi (select one or " +
+                                                "more options)"
                                         )
                                     })
                                 })

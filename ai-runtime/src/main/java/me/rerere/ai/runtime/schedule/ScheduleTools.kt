@@ -44,21 +44,30 @@ fun buildScheduleTools(port: TaskSchedulePort): List<Tool> = listOf(
         needsApproval = true,
         description = """
             Schedule a prompt to run against a target assistant at a future time, in this conversation.
-            - `targetAssistant`: id (uuid) of the spawnable assistant the scheduled run targets (required).
+            - `targetAssistant`: assistant UUID of the spawnable assistant the scheduled run targets
+              (required). This is not the assistant's display name; if you only know a name, ask the user
+              to pick/confirm the target or use a surfaced UUID from existing schedule output.
             - `prompt`: the message sent to the target assistant when the schedule fires (required).
             - `kind`: `one_shot` (fires once) or `recurring` (fires on a repeating cadence) (required).
             - `firstFireAt`: epoch millis (wall clock) of the first or only fire (required).
             - `timeZoneId`: IANA zone id (e.g. "America/New_York"); recurrence is computed in this zone (required).
-            - `recurrenceSpec`: required iff `kind` is `recurring` — `{ "every": N, "unit": "MINUTES"|"HOURS"|"DAYS", "timeOfDay"?: "HH:mm" }`.
-            Caps, minimum interval, prompt length, and a spawnable target are enforced; an over-cap, unspawnable,
-            or otherwise illegal schedule is rejected without aborting the turn. Returns the created schedule.
+            - `recurrenceSpec`: required iff `kind` is `recurring` — `{ "every": N,
+              "unit": "MINUTES"|"HOURS"|"DAYS", "timeOfDay"?: "HH:mm" }`. MINUTES/HOURS are fixed
+              elapsed-time intervals from `firstFireAt`; DAYS is calendar-based in `timeZoneId`, and
+              `timeOfDay` pins the local HH:mm fire time.
+            The repository enforces target-spawnable, active-schedule caps, minimum recurring interval,
+            prompt length, and valid timezone/spec. Rejections return `{ok:false,error}` with the exact
+            reason instead of aborting the turn. Returns the created schedule.
         """.trimIndent(),
         parameters = {
             InputSchema.Obj(
                 properties = buildJsonObject {
                     put("targetAssistant", buildJsonObject {
                         put("type", "string")
-                        put("description", "Id (uuid) of the spawnable assistant the scheduled run targets")
+                        put(
+                            "description",
+                            "UUID of the spawnable assistant to run, not the assistant display name"
+                        )
                     })
                     put("prompt", buildJsonObject {
                         put("type", "string")
@@ -79,7 +88,11 @@ fun buildScheduleTools(port: TaskSchedulePort): List<Tool> = listOf(
                     })
                     put("recurrenceSpec", buildJsonObject {
                         put("type", "object")
-                        put("description", "Required iff kind is recurring: { every, unit (MINUTES|HOURS|DAYS), timeOfDay? }")
+                        put(
+                            "description",
+                            "Required iff kind is recurring: { every, unit (MINUTES|HOURS|DAYS), " +
+                                "timeOfDay? }. timeOfDay is local HH:mm and applies to DAYS."
+                        )
                     })
                 },
                 required = listOf("targetAssistant", "prompt", "kind", "firstFireAt", "timeZoneId")

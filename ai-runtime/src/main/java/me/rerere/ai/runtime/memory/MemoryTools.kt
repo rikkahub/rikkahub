@@ -38,19 +38,26 @@ fun buildMemoryTools(
         description = """
             The memory tool stores long-term information across conversations.
             Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).
-            - No relevant record: `create` + `content`
-            - Existing relevant record: `edit` + `id` + `content`
-            - Outdated/irrelevant record: `delete` + `id`
+            Store only durable facts that are likely to help in later conversations. Do not store one-off
+            task details, raw file/document contents, temporary debugging output, or exact private paths
+            unless the user explicitly asks you to remember them.
+            - No relevant record on the same user/entity/project/preference: `create` + `content`
+            - Existing record on the same subject that the new fact corrects, refines, or extends without
+              conflict: `edit` + `id` + merged `content`
+            - Existing record is false, obsolete, or the user asks you to forget it: `delete` + `id`
             Memories will automatically appear in the <memory> tag in later conversations.
-            Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
-            You may store: preferred name, preferences, plans, work-related notes, chat style preferences, first chat time, etc.
+            Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political
+            views, sex life, criminal records) or secrets (e.g., passwords, tokens, API keys).
+            You may store: preferred name, durable preferences, recurring plans, stable work/project notes,
+            chat style preferences, first chat time, and durable technical environment preferences.
             Do not show memory content directly in the conversation unless the user explicitly asks.
             Today is ${LocalDate.now().toLocalString(true)}.
-            Similar memories should be merged; prefer updating existing records.
+            Prefer updating an existing record over creating a duplicate when the new content is about the
+            same subject.
 
             Examples:
             {"action":"create","content":"User prefers brief replies and is more active on weekends."}
-            {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
+            {"action":"edit","id":12,"content":"User prefers the name A-Xing and Chinese replies."}
             {"action":"delete","id":7}
         """.trimIndent(),
         parameters = {

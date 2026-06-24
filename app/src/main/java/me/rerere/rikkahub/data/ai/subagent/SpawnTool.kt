@@ -154,7 +154,10 @@ fun buildSpawnTool(
     onBackgroundComplete: suspend () -> Unit = {},
 ): Tool = Tool(
     name = SPAWN_TOOL_MODEL_NAME,
-    description = "Delegate a self-contained sub-task to a specialized subagent and return its result.",
+    description = "Run a named subagent for a self-contained task when that subagent's advertised " +
+        "description clearly matches the work. The subagent runs with its own assistant configuration " +
+        "and enabled tools; do not assume it shares this conversation, workspace, or screen unless its " +
+        "configuration says so.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -162,14 +165,21 @@ fun buildSpawnTool(
                     put("type", JsonPrimitive("string"))
                     put(
                         "description",
-                        JsonPrimitive("The name of the subagent to run (see the system prompt for the available subagents and when to use each)."),
+                        JsonPrimitive(
+                            "The exact name of the subagent to run. Use only a subagent listed in the " +
+                                "system prompt, and only when its description clearly matches the task.",
+                        ),
                     )
                 })
                 put("prompt", buildJsonObject {
                     put("type", JsonPrimitive("string"))
                     put(
                         "description",
-                        JsonPrimitive("The full self-contained task for the subagent. It does not see this conversation; include all needed context."),
+                        JsonPrimitive(
+                            "The full self-contained task for the subagent. It does not automatically " +
+                                "see this conversation; include the goal, relevant context, constraints, " +
+                                "and expected output.",
+                        ),
                     )
                 })
                 // Only advertise background mode when an app-lifetime scope is wired to run it.
@@ -178,7 +188,12 @@ fun buildSpawnTool(
                         put("type", JsonPrimitive("boolean"))
                         put(
                             "description",
-                            JsonPrimitive("Optional. Run the subagent in the BACKGROUND: returns immediately with a running taskId and delivers the result later, so you can keep working in the meantime. Use for long or independent sub-tasks. Default false (wait for the result inline)."),
+                            JsonPrimitive(
+                                "Optional. Run the subagent in the BACKGROUND: returns immediately with " +
+                                    "a running taskId and delivers the result later, so you can keep " +
+                                    "working in the meantime. Use for long or independent sub-tasks. " +
+                                    "Default false (wait for the result inline).",
+                            ),
                         )
                     })
                 }
@@ -194,7 +209,10 @@ fun buildSpawnTool(
         val subName = args.subagentArg()
         val prompt = args.promptArg()
         val sub = spawnableAssistants.firstOrNull { it.name == subName }
-            ?: error("No spawnable subagent named \"$subName\". Available: ${spawnableAssistants.joinToString { it.name }}")
+            ?: error(
+                "No spawnable subagent named \"$subName\". Available: " +
+                    spawnableAssistants.joinToString { it.name }
+            )
 
         // BACKGROUND (opt-in, detached): persist + spawn on the app-lifetime scope and return a running
         // marker IMMEDIATELY. The output is a non-empty, non-deferred Text part (isExecuted && !isDeferred)
@@ -418,6 +436,10 @@ internal fun advertiseSpawnableAssistants(spawnableAssistants: List<Assistant>):
     return buildString {
         append("Available subagents you can run via the `$SPAWN_TOOL_MODEL_NAME` tool ")
         append("(pass the subagent's name as `subagent` and a self-contained task as `prompt`):")
+        append("\n")
+        append("Use a subagent only when its description clearly matches the task. A subagent runs with ")
+        append("its own assistant configuration, enabled tools, and workspace; it does not automatically ")
+        append("see this conversation unless you include the needed context in `prompt`.")
         append("\n")
         append(lines.joinToString("\n"))
     }

@@ -183,7 +183,8 @@ class ChatTurnAdvertisedToolsTest {
 
     private fun spawnTool(name: String, advertised: Boolean): Tool = Tool(
         name = name,
-        description = "Delegate a self-contained sub-task to a specialized subagent and return its result.",
+        description = "Run a named subagent for a self-contained task when that subagent's " +
+            "advertised description clearly matches the work.",
         systemPrompt = { _, _ -> registryBlock },
         advertised = advertised,
         execute = { emptyList() },

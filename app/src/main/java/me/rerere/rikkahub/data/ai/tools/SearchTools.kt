@@ -46,8 +46,10 @@ fun createSearchTools(settings: Settings): Set<Tool> {
             Tool(
                 name = "search_web",
                 description = """
-                    Search the web for up-to-date or specific information.
-                    Use this when the user asks for the latest news, current facts, or needs verification.
+                    Search the web to discover relevant pages or verify up-to-date/current information.
+                    Use this for latest news, current facts, broad discovery, or when you do not already
+                    know the exact URL. Do not use this to read a known URL in depth; use fetch or
+                    scrape_web for a specific page.
                     Generate focused keywords and run multiple searches if needed.
                     Today is ${LocalDate.now().toLocalString(true)}.
 
@@ -94,9 +96,12 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                 Tool(
                     name = "scrape_web",
                     description = """
-                        Scrape a URL for detailed page content.
-                        Use this when the user requests content from a specific page or when search snippets are insufficient.
-                        Avoid using it for common questions unless the user asks.
+                        Scrape a specific URL through the configured search/scraping provider and return
+                        detailed page content. Use this when search snippets are insufficient or the user
+                        asks about a specific page and this provider exposes scraping. If the ChatGPT/Codex
+                        fetch tool is also available, prefer fetch for a user-provided URL that needs a
+                        reading/extraction answer; use scrape_web when you need the configured provider's
+                        raw scraped content.
                         """.trimIndent(),
                     parameters = {
                         service.scrapingParameters(options)

@@ -23,9 +23,10 @@ fun createFetchTools(settings: Settings): List<Tool> {
         Tool(
             name = "fetch",
             description = """
-                Fetch and read the content of a specific URL.
-                Use this to open a web page or document the user references (or a link found in search
-                results) and answer from its content. Optionally describe what to extract.
+                Fetch and read one specific absolute URL through the ChatGPT/Codex hosted web reader.
+                Use this when the user gives a URL, or after search_web finds a URL whose page content you
+                need to answer from. Do not use this for broad discovery; use search_web first when you do
+                not know the URL. Optionally describe what to extract.
             """.trimIndent(),
             parameters = {
                 InputSchema.Obj(

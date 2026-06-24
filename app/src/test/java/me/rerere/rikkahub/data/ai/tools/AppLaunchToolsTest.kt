@@ -115,6 +115,18 @@ class AppLaunchToolsTest {
     }
 
     @Test
+    fun `app launch tool descriptions distinguish launching from UI automation`() {
+        val launcher = object : AppLauncher {
+            override fun launch(packageName: String): Boolean = true
+            override fun listApps(): List<AppInfo> = emptyList()
+        }
+
+        assertTrue(openAppTool(launcher).description.contains("does not inspect or control"))
+        assertTrue(openAppTool(launcher).description.contains("UI automation tools"))
+        assertTrue(listAppTool(launcher).description.contains("does not open, inspect, or control"))
+    }
+
+    @Test
     fun `getTools dispatches OpenApp and ListApp options`() {
         val launcher = object : AppLauncher {
             override fun launch(packageName: String): Boolean = true

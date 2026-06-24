@@ -35,11 +35,12 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 /**
  * The `generate_image` agent tool: render an image from a text prompt — or EDIT/compose existing
  * conversation images (image-to-image) when `images` is set — through whichever MANAGED image provider
- * is configured: Gagy (the managed Google provider — Gemini "nano-banana") or ChatGPT/Codex (gpt-image-2). Deferred —
- * only added when at least one managed image provider is set up (see ChatService baseTools), so a chat
- * with a model that has no native image generation (e.g. Anthropic) can still produce/edit images
- * in-conversation. Both managed providers run through the same Provider.generateImage/editImage wire as
- * the image-generation page, so this stays a thin adapter over that path.
+ * is configured: Gagy (the managed Google provider — Gemini "nano-banana") or ChatGPT/Codex
+ * (gpt-image-2). Deferred — only added when at least one managed image provider is set up (see
+ * ChatService baseTools), so a chat with a model that has no native image generation (e.g. Anthropic)
+ * can still produce/edit images in-conversation. Both managed providers run through the same
+ * Provider.generateImage/editImage wire as the image-generation page, so this stays a thin adapter
+ * over that path.
  *
  * Image references: the agent can't pass binary, so it edits by url. [Tool.systemPrompt] (which sees
  * the conversation) lists the `file://` image urls already present; the model copies the chosen url(s)
@@ -82,10 +83,12 @@ fun createImageGenTools(
                 Generate an image from a text description, or edit/compose existing image(s) from this
                 conversation when you set the `images` parameter.
                 Use this when the user asks to create, draw, render, design, or EDIT an image,
-                illustration, logo, icon, or artwork. Provide a single detailed prompt describing the
-                desired image (or, when editing, the change to make). To edit/compose images already in
-                this conversation instead of generating from scratch, set `images` to a JSON array of
-                their exact url(s) — the system note lists which urls are available.
+                illustration, logo, icon, or artwork. Omit `images` to generate from scratch. Set `images`
+                only when the user asks to modify/combine image(s) that already appear in this
+                conversation, and only with exact file:// url(s) listed in the system note. Provide a
+                single detailed prompt describing the desired image or edit; include requested style,
+                composition, text, and aspect/resolution constraints in the prompt because this tool has
+                no separate style/size parameters.
             """.trimIndent(),
             parameters = {
                 InputSchema.Obj(
@@ -117,7 +120,8 @@ fun createImageGenTools(
             systemPrompt = { _, messages ->
                 val available = messages.conversationImageUrls()
                 if (available.isEmpty()) {
-                    ""
+                    "No existing conversation images are currently available for generate_image " +
+                        "`images`. Omit `images` to generate from scratch; do not invent image urls."
                 } else {
                     buildString {
                         appendLine(
@@ -150,7 +154,11 @@ fun createImageGenTools(
                 } else {
                     val blanks = requestedUrls.count { it.isEmpty() }
                     if (blanks > 0) {
-                        error("The `images` array has $blanks blank entr${if (blanks == 1) "y" else "ies"}; every entry must be the url of an image in this conversation")
+                        val entry = if (blanks == 1) "entry" else "entries"
+                        error(
+                            "The `images` array has $blanks blank $entry; every entry must be the " +
+                                "url of an image in this conversation"
+                        )
                     }
                     val resolved = withContext(Dispatchers.IO) {
                         requestedUrls.map { url ->
@@ -159,7 +167,10 @@ fun createImageGenTools(
                     }
                     val unresolved = resolved.filter { it.second == null }.map { it.first }
                     if (unresolved.isNotEmpty()) {
-                        error("These referenced images are not available in this conversation: ${unresolved.joinToString(", ")}")
+                        error(
+                            "These referenced images are not available in this conversation: " +
+                                unresolved.joinToString(", ")
+                        )
                     }
                     resolved.mapNotNull { it.second }
                 }
@@ -189,7 +200,8 @@ fun createImageGenTools(
                 // Drop streaming partials (Codex gpt-image streams refinement passes); keep finals only.
                 val items = flow.filter { !it.partial }.toList()
                 if (items.isEmpty()) {
-                    error("Image ${if (sourcePaths.isNotEmpty()) "edit" else "generation"} produced no image — try again or rephrase the prompt")
+                    val action = if (sourcePaths.isNotEmpty()) "edit" else "generation"
+                    error("Image $action produced no image — try again or rephrase the prompt")
                 }
                 val uris = withContext(Dispatchers.IO) {
                     filesManager.createChatFilesByByteArrays(items.map { Base64.decode(it.data) })

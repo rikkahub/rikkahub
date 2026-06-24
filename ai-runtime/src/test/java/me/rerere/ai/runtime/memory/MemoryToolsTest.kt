@@ -30,8 +30,14 @@ class MemoryToolsTest {
     private fun execute(params: Map<String, Any?>, recorder: Recorder): String = runBlocking {
         val tool = buildMemoryTools(
             json = json,
-            onCreation = { content -> recorder.created.add(content); AssistantMemory(id = 42, content = content) },
-            onUpdate = { id, content -> recorder.updated.add(id to content); AssistantMemory(id = id, content = content) },
+            onCreation = { content ->
+                recorder.created.add(content)
+                AssistantMemory(id = 42, content = content)
+            },
+            onUpdate = { id, content ->
+                recorder.updated.add(id to content)
+                AssistantMemory(id = id, content = content)
+            },
             onDelete = { id -> recorder.deleted.add(id) },
         ).single()
         val element = buildJsonObject {
@@ -46,6 +52,21 @@ class MemoryToolsTest {
         val created = mutableListOf<String>()
         val updated = mutableListOf<Pair<Int, String>>()
         val deleted = mutableListOf<Int>()
+    }
+
+    @Test
+    fun `description clarifies durable memory and merge rules`() {
+        val tool = buildMemoryTools(
+            json = json,
+            onCreation = { AssistantMemory(id = 1, content = it) },
+            onUpdate = { id, content -> AssistantMemory(id = id, content = content) },
+            onDelete = { },
+        ).single()
+
+        assertTrue(tool.description.contains("durable facts"))
+        assertTrue(tool.description.contains("one-off"))
+        assertTrue(tool.description.contains("same subject"))
+        assertTrue(tool.description.contains("passwords, tokens, API keys"))
     }
 
     @Test

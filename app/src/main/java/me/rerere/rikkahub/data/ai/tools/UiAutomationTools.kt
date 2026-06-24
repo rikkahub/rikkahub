@@ -239,7 +239,8 @@ fun getUiAutomationTools(
         Tool(
             name = UI_SCROLL_TOOL_NAME,
             description = "Scroll an actionable element of the foreground app (other apps), forward " +
-                "or backward. You MUST call ui_observe first this turn — a target id is only valid " +
+                "(usually down/next) or backward (usually up/previous). You MUST call ui_observe first " +
+                "this turn — a target id is only valid " +
                 "for the snapshot it appears in. Select the element by its tid (from the latest " +
                 "ui_observe table), by its visible text, or by its semantic key. Returns a fresh " +
                 "ui_observe-style snapshot after the scroll — this IS your fresh observation, so do " +
@@ -265,7 +266,10 @@ fun getUiAutomationTools(
                             "direction",
                             buildJsonObject {
                                 put("type", JsonPrimitive("string"))
-                                put("enum", buildJsonArray { add(JsonPrimitive("forward")); add(JsonPrimitive("backward")) })
+                                put("enum", buildJsonArray {
+                                    add(JsonPrimitive("forward"))
+                                    add(JsonPrimitive("backward"))
+                                })
                                 put("description", JsonPrimitive("Scroll direction."))
                             },
                         )
@@ -327,7 +331,9 @@ fun getUiAutomationTools(
                                 put(
                                     "enum",
                                     buildJsonArray {
-                                        add(JsonPrimitive("back")); add(JsonPrimitive("home")); add(JsonPrimitive("recents"))
+                                        add(JsonPrimitive("back"))
+                                        add(JsonPrimitive("home"))
+                                        add(JsonPrimitive("recents"))
                                     },
                                 )
                                 put("description", JsonPrimitive("Which global navigation to perform."))
@@ -538,7 +544,8 @@ fun getUiAutomationTools(
                 // class confirm gate (#198 slice 11 — a send/pay-class tap derives SUBMIT and must be
                 // confirmed via `confirm`) both live inside core.act, derived from the resolved target;
                 // from here a confirm-declined tap is just an ordinary Denied → vague ACT_DENIED_MESSAGE.
-                when (val outcome = core.act(guard, snapshot, Act.Targeted(selector, NodeActionKind.CLICK, gesture), confirm)) {
+                val target = Act.Targeted(selector, NodeActionKind.CLICK, gesture)
+                when (val outcome = core.act(guard, snapshot, target, confirm)) {
                     is ActOutcome.Acted -> {
                         grounded = outcome.snapshot // re-ground for the next act
                         listOf(UIMessagePart.Text(renderCompactSnapshot(outcome.snapshot)))

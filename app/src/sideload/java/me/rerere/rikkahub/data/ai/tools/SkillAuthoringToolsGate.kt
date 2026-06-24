@@ -25,6 +25,27 @@ import me.rerere.rikkahub.data.files.SkillManager
 // tool behind it (mirrors AUTOMATION_YOLO_SUPPORTED). Sideload = true; the play seam sets it false.
 internal const val SKILL_AUTHORING_SUPPORTED: Boolean = true
 
+internal val CREATE_SKILL_TOOL_DESCRIPTION = """
+    Author a NEW skill by writing a complete text file bundle. A skill is a folder containing SKILL.md
+    plus optional helper files (for example references/foo.md or scripts/bar.sh) that SKILL.md links to
+    with Markdown links. `files` maps skill-root-relative paths to complete text file contents; it is not
+    a diff/patch format and cannot carry binary data. `files` MUST include "SKILL.md". SKILL.md must
+    start with YAML frontmatter setting `name` (the unique skill id; no slashes) and `description` (one
+    line shown to the model for discovery), followed by the instructions body. The whole bundle is
+    written atomically. Creation refuses an existing skill name; use update_skill for existing skills.
+    The new skill is NOT auto-enabled; the user enables it from the skills screen.
+""".trimIndent().replace("\n", " ")
+
+internal val UPDATE_SKILL_TOOL_DESCRIPTION = """
+    Modify an EXISTING skill by applying full-file writes/deletes to its current bundle. `name` is the
+    existing skill directory id. `changes` maps skill-root-relative paths to complete replacement text for
+    those files; it is not a diff/patch format. `deletes` removes whole files by relative path. Files you
+    do NOT mention are preserved as-is. Paths are normalized inside the skill directory; escaping or
+    ambiguous paths are rejected. You cannot delete SKILL.md or rename the skill. If `changes` includes
+    SKILL.md, it must be the complete SKILL.md with YAML frontmatter whose `name` stays equal to `name`
+    and whose `description` is non-blank. At least one of `changes`/`deletes` is required.
+""".trimIndent().replace("\n", " ")
+
 internal fun sideloadSkillAuthoringTools(
     spec: SkillAuthoringSpec,
     skillManager: SkillManager,
@@ -37,21 +58,14 @@ private fun createCreateSkillTool(
     skillManager: SkillManager,
 ) = Tool(
     name = CREATE_SKILL_TOOL_NAME,
-    description = """
-        Author a NEW skill. A skill is a folder containing SKILL.md plus optional helper files
-        (e.g. references/foo.md, scripts/bar.sh) that SKILL.md links to with Markdown links. SKILL.md
-        must start with YAML frontmatter setting `name` (the unique skill id; letters/digits/dashes, no
-        slashes) and `description` (one line shown to the model for discovery), followed by the
-        instructions body. Pass every file in `files` (relative path -> content); `files` MUST include
-        "SKILL.md". The whole bundle is written atomically. The new skill is NOT auto-enabled; the user
-        enables it from the skills screen.
-    """.trimIndent().replace("\n", " "),
+    description = CREATE_SKILL_TOOL_DESCRIPTION,
     systemPrompt = { _, _ ->
         "The user asked to CREATE a skill. Author it in THIS turn by calling create_skill with a files " +
-            "map whose SKILL.md has YAML frontmatter (name + description) and a clear instructions body; " +
+            "map of skill-root-relative paths to complete text file contents, not diffs or fragments. " +
+            "SKILL.md must have YAML frontmatter (name + description) and a clear instructions body; " +
             "add references/ or scripts/ files only if the skill needs them and link to them from " +
             "SKILL.md. The write requires the user's approval. The create_skill tool is available only " +
-            "for this turn — make reasonable choices for any unspecified detail instead of deferring; " +
+            "for this turn - make reasonable choices for any unspecified detail instead of deferring; " +
             "only if you truly cannot tell what to build, ask the user to re-run /create_skill <description>."
     },
     needsApproval = true,
@@ -62,7 +76,8 @@ private fun createCreateSkillTool(
                     put("type", "object")
                     put(
                         "description",
-                        "Map of relative file path to its text content. Must include \"SKILL.md\". Example: {\"SKILL.md\": \"---\\nname: my-skill\\ndescription: ...\\n---\\n...\", \"references/notes.md\": \"...\"}."
+                        "Map of skill-root-relative file path to complete text content. Not a diff; " +
+                            "include every file the new skill should contain. Must include \"SKILL.md\"."
                     )
                 })
             },
@@ -102,20 +117,18 @@ private fun createUpdateSkillTool(
     skillManager: SkillManager,
 ) = Tool(
     name = UPDATE_SKILL_TOOL_NAME,
-    description = """
-        Modify an EXISTING skill. `changes` writes or overwrites files (relative path -> content);
-        `deletes` removes files by relative path. Files you do NOT mention are kept as-is. You cannot
-        delete SKILL.md or rename the skill. Read the current content first via the use_skill tool
-        (use_skill(name) for SKILL.md, use_skill(name, path) for a helper file) so your changes are
-        correct. At least one of `changes`/`deletes` is required.
-    """.trimIndent().replace("\n", " "),
+    description = UPDATE_SKILL_TOOL_DESCRIPTION,
     systemPrompt = { _, _ ->
         buildString {
             append("The user asked to UPDATE a skill")
             spec.targetSkill?.takeIf { it.isNotBlank() }?.let { append(" (target: \"$it\")") }
-            append(". In THIS turn, first read its current files with use_skill, then call update_skill ")
-            append("with the changed files in `changes` and any removals in `deletes`. The write requires ")
-            append("the user's approval. The update_skill tool is available only for this turn — if you ")
+            append(". In THIS turn, inspect the current skill content when available (for enabled skills, ")
+            append("use `use_skill`; helper file paths should come from SKILL.md links), then call ")
+            append("update_skill with complete replacement file contents in `changes` and any whole-file ")
+            append("removals in `deletes`. Do not send diffs or partial file fragments. If changing ")
+            append("SKILL.md, include the full SKILL.md with unchanged `name` and non-blank `description`. ")
+            append("The write requires the user's approval. The update_skill tool is available only ")
+            append("for this turn - if you ")
             append("need more direction, ask the user to re-run /update_skill <name> rather than deferring.")
         }
     },
@@ -129,11 +142,15 @@ private fun createUpdateSkillTool(
                 })
                 put("changes", buildJsonObject {
                     put("type", "object")
-                    put("description", "Map of relative file path to new content to write/overwrite. Omit a file to keep it unchanged.")
+                    put(
+                        "description",
+                        "Map of skill-root-relative path to complete replacement text for that file. " +
+                            "Not a diff. Omitted files are preserved."
+                    )
                 })
                 put("deletes", buildJsonObject {
                     put("type", "array")
-                    put("description", "Relative file paths to delete. Cannot include SKILL.md.")
+                    put("description", "Skill-root-relative file paths to delete. Cannot remove SKILL.md (listing it here is only valid if `changes` re-adds a complete SKILL.md).")
                 })
             },
             required = listOf("name"),

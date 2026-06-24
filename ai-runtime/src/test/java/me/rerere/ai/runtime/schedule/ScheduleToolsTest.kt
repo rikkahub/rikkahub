@@ -116,6 +116,16 @@ class ScheduleToolsTest {
     }
 
     @Test
+    fun `create description clarifies target uuid and recurrence time semantics`() {
+        val description = tool(FakeSchedulePort(), "schedule_create").description
+
+        assertTrue(description.contains("not the assistant's display name"))
+        assertTrue(description.contains("MINUTES/HOURS are fixed"))
+        assertTrue(description.contains("pins the local HH:mm"))
+        assertTrue(description.contains("{ok:false,error}"))
+    }
+
+    @Test
     fun `create parses a one-shot draft and routes it through the port`() {
         val port = FakeSchedulePort().apply { createResult = ScheduleMutationResult.Accepted(snapshot()) }
         val out = execute(port, "schedule_create", buildJsonObject {
@@ -236,7 +246,9 @@ class ScheduleToolsTest {
     @Test
     fun `list routes through the port and returns the schedules`() {
         val port = FakeSchedulePort().apply {
-            listResult = listOf(snapshot(kind = ScheduleKind.RECURRING, recurrenceSpec = "{\"every\":1,\"unit\":\"DAYS\"}"))
+            listResult = listOf(
+                snapshot(kind = ScheduleKind.RECURRING, recurrenceSpec = "{\"every\":1,\"unit\":\"DAYS\"}")
+            )
         }
         val out = execute(port, "schedule_list", buildJsonObject { })
         assertEquals(1, port.listCalls)

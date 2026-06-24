@@ -66,7 +66,11 @@ private fun createWriteFileTool(
 ) = Tool(
     name = "workspace_write_file",
     description = """
-        Write a UTF-8 text file to the assistant's bound workspace files area. Paths are relative to the project working directory; use an absolute /workspace/... path to address the files root.
+        Create or replace an entire UTF-8 text file in the assistant's bound workspace files area. Use
+        workspace_edit_file for a targeted exact-text replacement inside an existing file. Paths are
+        relative to the project working directory; use an absolute /workspace/... path to address the
+        files root. Parent directories are created as needed. This writes text bytes; it does not preserve
+        existing file metadata or perform newline normalization beyond the text you provide.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -106,7 +110,10 @@ private fun createEditFileTool(
     name = "workspace_edit_file",
     description = """
         Edit a UTF-8 text file in the assistant's bound workspace files area by replacing exact text.
-        Provide old_text and new_text. By default old_text must occur exactly once; set replace_all=true to replace every occurrence.
+        Provide old_text and new_text exactly, including whitespace and newlines. By default old_text must
+        occur exactly once; set replace_all=true to replace every non-overlapping occurrence. If the target
+        text is ambiguous or appears multiple times, read or grep the file first and choose a more specific
+        old_text.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -178,7 +185,8 @@ private fun createDeleteFileTool(
 ) = Tool(
     name = "workspace_delete_file",
     description = """
-        Delete a file or directory in the assistant's bound workspace files area. Use recursive=true for directories.
+        Delete a file or directory in the assistant's bound workspace files area. This is destructive and
+        approval-gated; verify the path first when intent is unclear. Use recursive=true for directories.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -222,18 +230,28 @@ private fun createMoveFileTool(
 ) = Tool(
     name = "workspace_move_file",
     description = """
-        Move or rename a file or directory in the assistant's bound workspace files area.
+        Move or rename a file or directory in the assistant's bound workspace files area. Parent
+        directories for the target are created as needed. By default an existing target is rejected; set
+        overwrite=true only when replacing the target is intended.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("source", buildJsonObject {
                     put("type", "string")
-                    put("description", "Source path relative to the project working directory (use an absolute /workspace/... path for the files root)")
+                    put(
+                        "description",
+                        "Source path relative to the project working directory (use an absolute " +
+                            "/workspace/... path for the files root)"
+                    )
                 })
                 put("target", buildJsonObject {
                     put("type", "string")
-                    put("description", "Target path relative to the project working directory (use an absolute /workspace/... path for the files root)")
+                    put(
+                        "description",
+                        "Target path relative to the project working directory (use an absolute " +
+                            "/workspace/... path for the files root)"
+                    )
                 })
                 put("overwrite", buildJsonObject {
                     put("type", "boolean")
@@ -269,12 +287,21 @@ private fun createShellTool(
 ) = Tool(
     name = "workspace_shell",
     description = """
-        Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace.
-        Use cwd for a path relative to the project working directory (an absolute /workspace/... path addresses the files root). Requires Rootfs to be installed and ready.
-        The working directory PERSISTS across blocking commands within the project directory: a `cd` deeper into the project subtree carries to the next command, while a `cd` outside it reverts after the command. Each blocking result reports `cwd` (where the next command will run) and `cwdStatus` (persisted/unchanged/reverted/unknown).
+        Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted
+        at /workspace.
+        Use cwd for a path relative to the project working directory; an absolute /workspace/... path
+        starts at the workspace files root. Requires Rootfs to be installed and ready.
+        Treat this as arbitrary command execution: inspect secrets, credentials, environment variables, or
+        network resources only when required by the user task. Network availability depends on the Rootfs
+        and device environment.
+        For blocking commands, the next shell command starts in the reported `cwd` only when the command
+        ended inside the project subtree. If the command cd's outside that subtree, the next command
+        reverts to the project working directory. Each blocking result reports `cwd` and `cwdStatus`
+        (persisted/unchanged/reverted/unknown).
         Set detachAfterSeconds to auto-background a long-running command after that many seconds: the tool then
         returns {taskId, status: running, outputRef, tail} immediately, keeps running, and notifies you when it
-        completes; read its output later with workspace_shell_tail. Omit detachAfterSeconds for the default blocking run.
+        completes; read its output later with workspace_shell_tail. Omit detachAfterSeconds for the
+        default blocking run.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -285,7 +312,12 @@ private fun createShellTool(
                 })
                 put("cwd", buildJsonObject {
                     put("type", "string")
-                    put("description", "Working directory relative to the project working directory; an absolute /workspace/... path addresses the files root. Defaults to the project working directory.")
+                    put(
+                        "description",
+                        "Working directory relative to the project working directory; an absolute " +
+                            "/workspace/... path addresses the files root. Defaults to the project " +
+                            "working directory."
+                    )
                 })
                 put("timeout", buildJsonObject {
                     put("type", "integer")
@@ -326,7 +358,13 @@ private fun createShellTool(
         if (detachAfterSeconds == null) {
             // Blocking path: the project-jailed DRIFTING cwd (per-conversation). cwd persists within the
             // project dir and reverts on escape; the result carries the resulting cwd + its status.
-            val outcome = workspaceRepository.executeTrackedCommand(workspaceId, conversationId, command, cwd, timeoutMillis)
+            val outcome = workspaceRepository.executeTrackedCommand(
+                workspaceId,
+                conversationId,
+                command,
+                cwd,
+                timeoutMillis,
+            )
             val result = outcome.result
             listOf(
                 UIMessagePart.Text(
