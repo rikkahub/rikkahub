@@ -258,7 +258,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
 
                     item(
-                        onClick = { navController.navigate(Screen.SettingSsh) },
+                        onClick = { /* TODO: navController.navigate(Screen.SettingSsh) */ },
                         leadingContent = { Icon(HugeIcons.ServerStack01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_ssh_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_ssh)) },

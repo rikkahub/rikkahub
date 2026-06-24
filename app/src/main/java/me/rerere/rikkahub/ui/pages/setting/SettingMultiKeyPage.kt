@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import me.rerere.hugeicons.stroke.Connect
 import androidx.compose.foundation.lazy.items
 import me.rerere.ai.provider.ModelType
@@ -194,7 +195,7 @@ internal fun SettingMultiKeyContent(
                     onCollapse = { expanded = false },
                 ),
             state = lazyListState,
-            contentPadding = PaddingValues(vertical = 16.dp) + PaddingValues(bottom = 128.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 144.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -212,7 +213,7 @@ internal fun SettingMultiKeyContent(
                     if (showStrategy) {
                         StrategySheet(
                             current = internalProvider.keyManagement.strategy,
-                            onSelect = { strategy ->
+                            onSelect = { strategy: LoadBalanceStrategy ->
                                 val km = internalProvider.keyManagement.copy(strategy = strategy)
                                 val updated = internalProvider.copyProvider(keyManagement = km)
                                 saveProvider(updated)
@@ -248,7 +249,7 @@ internal fun SettingMultiKeyContent(
                                 if (showAdd) {
                                     AddKeysSheet(
                                         onDismiss = { showAdd = false },
-                                        onAdd = { newKeys ->
+                                        onAdd = { newKeys: List<String> ->
                                             val existingSet = apiKeys.map { it.key.trim() }.toSet()
                                             val unique = newKeys.filter { it.trim() !in existingSet && it.isNotBlank() }.distinct()
                                             if (unique.isNotEmpty()) {
@@ -448,7 +449,7 @@ internal fun SettingMultiKeyContent(
         if (showAdd) {
             AddKeysSheet(
                 onDismiss = { showAdd = false },
-                onAdd = { newKeys ->
+                onAdd = { newKeys: List<String> ->
                     val existingSet = apiKeys.map { it.key.trim() }.toSet()
                     val unique = newKeys.filter { it.trim() !in existingSet && it.isNotBlank() }.distinct()
                     if (unique.isNotEmpty()) {
@@ -460,7 +461,6 @@ internal fun SettingMultiKeyContent(
                 }
             )
         }
-    }
     }
 }
 

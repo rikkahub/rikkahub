@@ -202,7 +202,7 @@ class ResponseAPI(
         }
     }
 
-    internal fun buildRequestBody(
+    fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
@@ -464,7 +464,7 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
