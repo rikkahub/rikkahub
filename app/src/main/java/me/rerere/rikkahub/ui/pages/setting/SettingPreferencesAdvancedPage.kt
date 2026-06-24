@@ -160,6 +160,33 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                     )
                 }
             }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("Diagnostics") },
+                ) {
+                    item(
+                        headlineContent = { Text("Request log") },
+                        supportingContent = {
+                            Text(
+                                "Record per-request network metadata (URL, method, headers, status, " +
+                                    "timing) for the in-app Log page. Off by default. Request bodies are " +
+                                    "never stored — only safe metadata; turn on temporarily to diagnose " +
+                                    "connection issues."
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.enableRequestLog,
+                                onCheckedChange = {
+                                    vm.updateSettings(settings.copy(enableRequestLog = it))
+                                },
+                            )
+                        },
+                    )
+                }
+            }
         }
     }
 }

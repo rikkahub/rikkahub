@@ -173,6 +173,7 @@ class SettingsStore(
         val MAX_GOAL_ITERATIONS = intPreferencesKey("max_goal_iterations")
         val ENABLE_UNTRUSTED_CONTENT_FRAMING = booleanPreferencesKey("enable_untrusted_content_framing")
         val ALLOW_INSECURE_HTTPS = booleanPreferencesKey("allow_insecure_https")
+        val ENABLE_REQUEST_LOG = booleanPreferencesKey("enable_request_log")
 
         internal fun decodeSettings(preferences: Preferences): Settings = Settings(
             enableWebSearch = preferences[ENABLE_WEB_SEARCH] == true,
@@ -268,6 +269,7 @@ class SettingsStore(
             maxGoalIterations = preferences[MAX_GOAL_ITERATIONS] ?: DEFAULT_MAX_GOAL_ITERATIONS,
             enableUntrustedContentFraming = preferences[ENABLE_UNTRUSTED_CONTENT_FRAMING] ?: true,
             allowInsecureHttps = preferences[ALLOW_INSECURE_HTTPS] ?: false,
+            enableRequestLog = preferences[ENABLE_REQUEST_LOG] ?: false,
         )
     }
 
@@ -446,6 +448,7 @@ class SettingsStore(
             preferences[MAX_GOAL_ITERATIONS] = settings.maxGoalIterations
             preferences[ENABLE_UNTRUSTED_CONTENT_FRAMING] = settings.enableUntrustedContentFraming
             preferences[ALLOW_INSECURE_HTTPS] = settings.allowInsecureHttps
+            preferences[ENABLE_REQUEST_LOG] = settings.enableRequestLog
         }
     }
 
@@ -617,6 +620,14 @@ data class Settings(
      * user-opted escape hatch.
      */
     val allowInsecureHttps: Boolean = false,
+    /**
+     * Whether per-request network logging (the in-app Log page's HTTP request records) is captured.
+     * OFF by default — the [me.rerere.rikkahub.data.ai.RequestLoggingInterceptor] reads this LIVE and
+     * skips recording when off, so the request-log buffer stays empty until the user opts in for
+     * diagnostics. Request bodies are never stored regardless (only safe metadata); this gates the
+     * metadata records themselves.
+     */
+    val enableRequestLog: Boolean = false,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

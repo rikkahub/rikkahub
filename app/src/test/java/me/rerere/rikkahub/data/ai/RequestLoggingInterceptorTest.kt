@@ -70,6 +70,31 @@ class RequestLoggingInterceptorTest {
         assertFalse(logged.requestHeaders.values.any { it.contains("oauth-secret") })
     }
 
+    @Test
+    fun `disabled interceptor records nothing and still proceeds`() {
+        val request = Request.Builder()
+            .url("https://api.openai.com/v1/chat/completions")
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val response = RequestLoggingInterceptor(enabled = { false }).intercept(StubChain(request))
+
+        assertTrue("request must still proceed when logging is off", response.isSuccessful)
+        assertTrue("no request log may be recorded when disabled", Logging.getRequestLogs().isEmpty())
+    }
+
+    @Test
+    fun `enabled interceptor records a request log`() {
+        val request = Request.Builder()
+            .url("https://api.openai.com/v1/chat/completions")
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+
+        RequestLoggingInterceptor(enabled = { true }).intercept(StubChain(request))
+
+        assertTrue("a request log must be recorded when enabled", Logging.getRequestLogs().isNotEmpty())
+    }
+
     private class StubChain(private val request: Request) : Interceptor.Chain {
         override fun request(): Request = request
 

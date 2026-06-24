@@ -511,7 +511,7 @@ val dataSourceModule = module {
                     chain.proceed(request)
                 }
             }
-            .addNetworkInterceptor(RequestLoggingInterceptor())
+            .addNetworkInterceptor(RequestLoggingInterceptor { settingsStore.settingsFlow.value.enableRequestLog })
             .addInterceptor(AIRequestInterceptor(remoteConfig = get()))
             // Logcat header logging is debug-only and redacts every credential header:
             // HttpLoggingInterceptor.HEADERS otherwise prints `Authorization: Bearer ...`

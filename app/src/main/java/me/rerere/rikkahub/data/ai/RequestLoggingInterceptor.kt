@@ -62,8 +62,17 @@ fun redactUrlSecrets(url: String): String {
     return builder.build().toString()
 }
 
-class RequestLoggingInterceptor : Interceptor {
+/**
+ * @param enabled read LIVE per request: when it returns false the interceptor is a pure pass-through
+ *   (no [LogEntry.RequestLog] recorded), so the in-app request log stays empty until the user opts in
+ *   (Advanced > Diagnostics). Defaults to always-on for callers/tests that don't gate it.
+ */
+class RequestLoggingInterceptor(
+    private val enabled: () -> Boolean = { true },
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
+        if (!enabled()) return chain.proceed(chain.request())
+
         val request = chain.request()
         val startTime = System.currentTimeMillis()
 
