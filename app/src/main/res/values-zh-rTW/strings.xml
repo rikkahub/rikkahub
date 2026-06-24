@@ -1239,5 +1239,6 @@
   <string name="setting_asr_configure_step_hotwords_desc">以逗號分隔的熱詞清單，用於提升專有名詞／領域術語的辨識準確率</string>
   <string name="log_page_record_requests">記錄請求</string>
   <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
+  <string name="assistant_page_context_message_truncation_warning">限制上下文可能導致頻繁的上下文截斷，並妨礙提示詞快取</string>
 </resources>
 

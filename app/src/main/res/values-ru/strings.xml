@@ -1241,5 +1241,6 @@
   <string name="setting_asr_configure_step_hotwords_desc">Список горячих слов через запятую для повышения точности распознавания имён собственных и терминов предметной области</string>
   <string name="log_page_record_requests">Записывать запросы</string>
   <string name="log_page_record_requests_desc">Записывать заголовки запросов, тела и метаданные ответов</string>
+  <string name="assistant_page_context_message_truncation_warning">Ограничение контекста может привести к частому усечению контекста и предотвратить кэширование промптов</string>
 </resources>
 
