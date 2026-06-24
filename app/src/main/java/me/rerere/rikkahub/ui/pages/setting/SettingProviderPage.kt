@@ -249,7 +249,7 @@ private fun RecommendProviderButton(
         ModalBottomSheet(
             onDismissRequest = { showSheet = false },
             sheetState = rememberBottomSheetState(
-                initialValue = SheetValue.Expanded,
+                initialValue = SheetValue.Hidden,
                 enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
             )
         ) {
