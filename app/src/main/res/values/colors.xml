@@ -1,3 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <!-- Splash window background: dark so the neon-gradient splash icon reads. -->
+  <color name="splash_background">#1A1D23</color>
 </resources>

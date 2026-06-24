@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
@@ -174,6 +175,10 @@ class RouteActivity : ComponentActivity() {
     // CacheControlCacheStrategy: deliberate use of Coil's experimental cache-control support
     @OptIn(ExperimentalCoilApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Show the launch splash (neon icon on the dark splash background) before any other setup;
+        // installSplashScreen() must run before super.onCreate(). Hands off to Theme.Rikkahub via
+        // postSplashScreenTheme once the first frame is ready.
+        installSplashScreen()
         enableEdgeToEdge()
         disableNavigationBarContrast()
         super.onCreate(savedInstanceState)
