@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
+import me.rerere.rikkahub.ui.components.ui.SecretTextField
 import me.rerere.tts.provider.TTSProviderSetting
 
 @Composable
@@ -179,7 +180,7 @@ private fun OpenAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = setting.apiKey,
             onValueChange = { newApiKey ->
                 onValueChange(setting.copy(apiKey = newApiKey))
@@ -272,7 +273,7 @@ private fun MiMoTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = setting.apiKey,
             onValueChange = { newApiKey ->
                 onValueChange(setting.copy(apiKey = newApiKey))
@@ -338,7 +339,7 @@ private fun MiniMaxTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = setting.apiKey,
             onValueChange = { newApiKey ->
                 onValueChange(setting.copy(apiKey = newApiKey))
@@ -432,7 +433,11 @@ private fun MiniMaxTTSConfiguration(
 
     // Emotion
     var emotionExpanded by remember { mutableStateOf(false) }
-    val emotions = listOf("calm", "happy", "sad", "angry", "fearful", "disgusted", "surprised")
+    // Full MiniMax T2A emotion set; fluent/whisper are valid on speech-2.6-* (the default model),
+    // so the read-only picker must list the complete set or it would hide valid values.
+    val emotions = listOf(
+        "calm", "happy", "sad", "angry", "fearful", "disgusted", "surprised", "fluent", "whisper"
+    )
 
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_emotion)) },
@@ -447,9 +452,10 @@ private fun MiniMaxTTSConfiguration(
                 onValueChange = { newEmotion ->
                     onValueChange(setting.copy(emotion = newEmotion))
                 },
+                readOnly = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = emotionExpanded)
                 }
@@ -499,7 +505,7 @@ private fun GeminiTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = setting.apiKey,
             onValueChange = { newApiKey ->
                 onValueChange(setting.copy(apiKey = newApiKey))
@@ -605,7 +611,7 @@ private fun QwenTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = setting.apiKey,
             onValueChange = { newApiKey ->
                 onValueChange(setting.copy(apiKey = newApiKey))
@@ -745,7 +751,7 @@ private fun GroqTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = setting.apiKey,
             onValueChange = { newApiKey ->
                 onValueChange(setting.copy(apiKey = newApiKey))
@@ -837,7 +843,7 @@ private fun XAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = setting.apiKey,
             onValueChange = { newApiKey ->
                 onValueChange(setting.copy(apiKey = newApiKey))

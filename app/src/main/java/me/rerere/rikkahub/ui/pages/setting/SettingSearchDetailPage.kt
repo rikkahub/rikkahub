@@ -53,6 +53,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
+import me.rerere.rikkahub.ui.components.ui.SecretTextField
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -359,7 +360,7 @@ internal fun TavilyOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -402,7 +403,7 @@ internal fun ExaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -422,7 +423,7 @@ internal fun ZhipuOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -498,7 +499,7 @@ internal fun SearXNGOptions(
             Text(stringResource(R.string.search_detail_password))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.password,
             onValueChange = {
                 onUpdateOptions(options.copy(password = it))
@@ -518,7 +519,7 @@ internal fun SearchLinkUpOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -561,7 +562,7 @@ internal fun BraveOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -581,7 +582,7 @@ internal fun MetasoOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -601,7 +602,7 @@ internal fun OllamaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -621,7 +622,7 @@ internal fun PerplexityOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -671,7 +672,7 @@ internal fun FirecrawlOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -691,7 +692,7 @@ internal fun JinaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -745,7 +746,7 @@ internal fun BochaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -782,7 +783,7 @@ internal fun RikkaHubOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -825,7 +826,7 @@ internal fun TinyfishOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
@@ -845,7 +846,7 @@ internal fun GrokOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
+        SecretTextField(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
