@@ -967,7 +967,11 @@
   <string name="setting_tts_page_provider_type">提供商類型</string>
   <string name="setting_tts_page_provider_type_description">選擇TTS提供商類型</string>
   <string name="setting_tts_page_selected">已選擇</string>
+  <string name="setting_tts_page_similarity_boost">相似度增強</string>
+  <string name="setting_tts_page_similarity_boost_description">控制語音與原始聲音的匹配程度（0.0 - 1.0）</string>
   <string name="setting_tts_page_speech_rate">語音速度</string>
+  <string name="setting_tts_page_stability">穩定度</string>
+  <string name="setting_tts_page_stability_description">控制語音的穩定度（0.0 - 1.0，越低越有表現力）</string>
   <string name="setting_tts_page_speech_rate_description">控制語音播放速度 (0.1 - 3.0，1.0為正常速度)</string>
   <string name="setting_tts_page_speed">語速</string>
   <string name="setting_tts_page_speed_description">語音合成速度 (0.25 - 4.0)</string>
