@@ -45,12 +45,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
+import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Database02
+import me.rerere.hugeicons.stroke.Console
+import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
@@ -59,10 +64,13 @@ import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
 import me.rerere.hugeicons.stroke.Package
+import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.ServerStack01
-import me.rerere.hugeicons.stroke.Zap
+import me.rerere.hugeicons.stroke.Shield01
+import me.rerere.hugeicons.stroke.Telegram
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
+import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
@@ -127,7 +135,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 navigationIcon = {
                     BackButton()
                 },
-                scrollBehavior = scrollBehavior,
                 actions = {
                     if(settings.developerMode) {
                         IconButton(
@@ -139,6 +146,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         }
                     }
                 },
+                scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors
             )
         },
@@ -256,12 +264,65 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_web_server_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server)) },
                     )
-
                     item(
-                        onClick = { /* TODO: navController.navigate(Screen.SettingSsh) */ },
-                        leadingContent = { Icon(HugeIcons.ServerStack01, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_ssh)) },
+                        onClick = { navController.navigate(Screen.SettingTelegram) },
+                        leadingContent = { Icon(HugeIcons.Telegram, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_telegram_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_telegram)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingWorkflows) },
+                        leadingContent = { Icon(HugeIcons.Connect, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_workflows_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_workflows)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingScheduledJobs) },
+                        leadingContent = { Icon(HugeIcons.Clock02, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_scheduled_jobs_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_scheduled_jobs)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingBrowser) },
+                        leadingContent = { Icon(HugeIcons.Earth, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_browser_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_browser)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingTermux) },
+                        leadingContent = { Icon(HugeIcons.Console, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_termux_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_termux)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingDoctor) },
+                        leadingContent = { Icon(HugeIcons.Wrench01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_doctor_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_doctor)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingToolApprovals) },
+                        leadingContent = { Icon(HugeIcons.Tick01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_tool_approvals_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_tool_approvals)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingAccessibility) },
+                        leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_accessibility_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_accessibility)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingNotifications) },
+                        leadingContent = { Icon(HugeIcons.Alert01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_notifications_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_notifications)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingPermissions) },
+                        leadingContent = { Icon(HugeIcons.Shield01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_permissions_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_permissions)) },
                     )
                 }
             }
