@@ -929,6 +929,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_scan_error">エラー: %s</string>
   <string name="setting_provider_page_scan_qr_code">QRコードをスキャン</string>
   <string name="setting_provider_page_search_providers">プロバイダーを検索</string>
+  <string name="setting_provider_page_recommend">おすすめのプロバイダー</string>
   <string name="setting_provider_page_select_all">すべて選択 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">ギャラリーから選択</string>
   <string name="setting_provider_page_service_account_email">サービスアカウントメール</string>

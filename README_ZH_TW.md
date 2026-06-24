@@ -22,11 +22,9 @@
 
 ## 💖 贊助商
 
-<div align="center">
-  <img src="app/src/main/assets/icons/aihubmix-color.svg" alt="Aihubmix" width="50" />
-  <p style="font-size: 16px; font-weight: bold;">Aihubmix</p>
-  <p style="font-size: 14px;">感謝 <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> 的資金支持。我們推薦使用 aihubmix 作為全球主流模型的一站式服務平台。（OpenAI、Claude、Google Gemini、DeepSeek、Qwen 以及數百種其他模型）。</p>
-</div>
+|                                         贊助商                                         | 介紹                                                                                                                                              |
+|:-----------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------------------------------------------------------|
+| <img src="docs/sponsors/aihubmix.png" alt="Aihubmix" width="50" /><br /><b>Aihubmix</b> | 感謝 <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> 的資金支持。我們推薦使用 aihubmix 作為全球主流模型的一站式服務平台。（OpenAI、Claude、Google Gemini、DeepSeek、Qwen 以及數百種其他模型）。 |
 
 ## ✨ 功能特色
 
