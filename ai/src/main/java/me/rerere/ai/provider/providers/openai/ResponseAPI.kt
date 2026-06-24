@@ -45,6 +45,7 @@ import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
+import me.rerere.ai.util.resolveKey
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
@@ -64,12 +65,14 @@ private const val TAG = "ResponseAPI"
 class ResponseAPI(
     private val client: OkHttpClient,
     private val keyRoulette: KeyRoulette = KeyRoulette.default()
+
 ) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -82,7 +85,7 @@ class ResponseAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader(
                 "Authorization",
-                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
+                "Bearer ${keyConfig.key}"
             )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
@@ -90,17 +93,24 @@ class ResponseAPI(
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+        try {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            }
+
+            val bodyStr = response.body?.string() ?: ""
+            Log.i(TAG, "generateText: $bodyStr")
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+            val output = parseResponseOutput(bodyJson)
+
+            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
+            return output
+        } catch (e: Exception) {
+            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+            throw e
         }
-
-        val bodyStr = response.body.string()
-        Log.i(TAG, "generateText: $bodyStr")
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-        val output = parseResponseOutput(bodyJson)
-
-        return output
     }
 
     override suspend fun streamText(
@@ -108,6 +118,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -120,13 +131,14 @@ class ResponseAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader(
                 "Authorization",
-                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
+                "Bearer ${keyConfig.key}"
             )
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
+        var streamFailed = false
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -150,26 +162,33 @@ class ResponseAPI(
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                streamFailed = true
+                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
                 var exception = t
 
-                Log.w(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
+                t?.printStackTrace()
+                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        Log.d(TAG, "onFailure: error body $bodyElement")
+                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
                         Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw", e)
+                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
+                    e.printStackTrace()
                 } finally {
                     close(exception)
                 }
             }
 
             override fun onClosed(eventSource: EventSource) {
+                if (!streamFailed) {
+                    keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
+                }
                 close()
             }
         }
@@ -182,13 +201,6 @@ class ResponseAPI(
             eventSource.cancel()
         }
     }
-
-    fun createRequestBody(
-        providerSetting: ProviderSetting.OpenAI,
-        messages: List<UIMessage>,
-        params: TextGenerationParams,
-        stream: Boolean
-    ): JsonObject = buildRequestBody(providerSetting, messages, params, stream)
 
     internal fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
@@ -282,7 +294,7 @@ class ResponseAPI(
         }.mergeCustomBody(params.customBody)
     }
 
-    fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
@@ -394,20 +406,6 @@ class ResponseAPI(
                                 )
                             }
                         })
-                        // Image lift: function_call_output is text-only, so a tool that
-                        // returns UIMessagePart.Image (take_screenshot, take_photo, etc.)
-                        // would otherwise be invisible to vision-capable models. Inject
-                        // those images as a follow-up user content item.
-                        val toolImages = tool.output.filterIsInstance<UIMessagePart.Image>()
-                        if (toolImages.isNotEmpty()) {
-                            addContentItem(
-                                MessageRole.USER,
-                                buildList {
-                                    add(UIMessagePart.Text("[Tool ${tool.toolName} produced the image(s) below.]"))
-                                    addAll(toolImages)
-                                }
-                            )
-                        }
                     }
                 }
             }
@@ -451,7 +449,7 @@ class ResponseAPI(
                                         put("type", "input_image")
                                         put("image_url", encodedImage.base64)
                                     }.onFailure {
-                                        Log.w(TAG, "failed to encode image to base64", it)
+                                        it.printStackTrace()
                                         put("type", "input_text")
                                         put("text", "Error: Failed to encode image to base64")
                                     }
@@ -466,7 +464,7 @@ class ResponseAPI(
         })
     }
 
-    fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
@@ -681,7 +679,7 @@ class ResponseAPI(
         return null
     }
 
-    fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
+    private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
         println(jsonObject)
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
@@ -800,3 +798,4 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
+

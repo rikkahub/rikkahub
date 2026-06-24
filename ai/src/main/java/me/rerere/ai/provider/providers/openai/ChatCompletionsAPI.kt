@@ -15,7 +15,6 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -47,6 +46,7 @@ import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
+import me.rerere.ai.util.resolveKey
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonObjectOrNull
@@ -73,6 +73,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody =
             buildChatCompletionRequest(
                 messages = messages,
@@ -84,45 +85,53 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader("Authorization", "Bearer ${keyConfig.key}")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+        try {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            }
+
+            val bodyStr = response.body?.string() ?: ""
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+
+            // 从 JsonObject 中提取必要的信息
+            val id = bodyJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
+            val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
+            val choice = bodyJson["choices"]?.jsonArray?.get(0)?.jsonObject ?: error("choices is null")
+
+            val message = choice["message"]?.jsonObject ?: throw Exception("message is null")
+            val finishReason = choice["finish_reason"]
+                ?.jsonPrimitive
+                ?.content
+                ?: "unknown"
+            val usage = parseTokenUsage(bodyJson["usage"] as? JsonObject)
+
+            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
+
+            MessageChunk(
+                id = id,
+                model = model,
+                choices = listOf(
+                    UIMessageChoice(
+                        index = 0,
+                        delta = null,
+                        message = parseMessage(message),
+                        finishReason = finishReason
+                    )
+                ),
+                usage = usage
+            )
+        } catch (e: Exception) {
+            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+            throw e
         }
-
-        val bodyStr = response.body.string()
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-
-        // 从 JsonObject 中提取必要的信息
-        val id = bodyJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
-        val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
-        val choice = bodyJson["choices"]?.jsonArray?.get(0)?.jsonObject ?: error("choices is null")
-
-        val message = choice["message"]?.jsonObject ?: throw Exception("message is null")
-        val finishReason = choice["finish_reason"]
-            ?.jsonPrimitive
-            ?.content
-            ?: "unknown"
-        val usage = parseTokenUsage(bodyJson["usage"] as? JsonObject)
-
-        MessageChunk(
-            id = id,
-            model = model,
-            choices = listOf(
-                UIMessageChoice(
-                    index = 0,
-                    delta = null,
-                    message = parseMessage(message),
-                    finishReason = finishReason
-                )
-            ),
-            usage = usage
-        )
     }
 
     override suspend fun streamText(
@@ -130,6 +139,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -141,7 +151,7 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader("Authorization", "Bearer ${keyConfig.key}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -149,8 +159,9 @@ class ChatCompletionsAPI(
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
         // just for debugging response body
-        // println(client.newCall(request).await().body.string())
+        // println(client.newCall(request).await().body?.string())
 
+        var streamFailed = false
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -210,20 +221,24 @@ class ChatCompletionsAPI(
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                streamFailed = true
+                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
                 var exception = t
 
-                Log.w(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
+                t?.printStackTrace()
+                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        Log.d(TAG, "onFailure: error body $bodyElement")
+                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
                         Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw", e)
+                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
+                    e.printStackTrace()
                     exception = e
                 } finally {
                     close(exception)
@@ -231,6 +246,9 @@ class ChatCompletionsAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
+                if (!streamFailed) {
+                    keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
+                }
                 close()
             }
         }
@@ -251,21 +269,9 @@ class ChatCompletionsAPI(
         stream: Boolean = false,
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
-        // OpenRouter prompt caching: add per-block cache_control breakpoints for every model.
-        // Anthropic/Gemini/Qwen need them explicitly; providers that cache automatically
-        // (OpenAI/DeepSeek/Grok/MiniMax) have the field stripped by OpenRouter. So this is safe
-        // for any model and, unlike top-level cache_control, never pins routing to one upstream.
-        val openRouterCache = host == "openrouter.ai" && providerSetting.promptCaching
-        val messagesArray = buildMessages(
-            messages,
-            providerSetting.includeHistoryReasoning,
-            openRouterCache = openRouterCache,
-        ).let {
-            if (openRouterCache) insertOpenRouterCacheControl(it) else it
-        }
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", messagesArray)
+            put("messages", buildMessages(messages, providerSetting.includeHistoryReasoning))
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
@@ -284,23 +290,11 @@ class ChatCompletionsAPI(
 
             // open router适配
             if(host == "openrouter.ai") {
-                // Ask OpenRouter to report the real generation cost in the usage object
-                // (surfaced per-message in the UI). Works for both streamed and non-streamed.
-                put("usage", buildJsonObject {
-                    put("include", true)
-                })
                 if(params.model.outputModalities.contains(Modality.IMAGE)) {
                     put("modalities", buildJsonArray {
                         add("image")
                         add("text")
                     })
-                }
-                // Provider routing preferences (sort/order/only/ignore/max_price/...).
-                // Forces require_parameters when the request carries tools so a provider
-                // that can't do tool-calling isn't picked and silently drops them.
-                val hasTools = params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
-                buildProviderObject(providerSetting.routing, hasToolsOrSchema = hasTools)?.let {
-                    put("provider", it)
                 }
             }
 
@@ -375,6 +369,10 @@ class ChatCompletionsAPI(
                         if (modelId in siliconflowThinkingModels) {
                             put("enable_thinking", level.isEnabled)
                         }
+                    }
+
+                    "aiping.cn" -> {
+                        put("enable_thinking", level.isEnabled)
                     }
 
                     "open.bigmodel.cn" -> {
@@ -453,99 +451,18 @@ class ChatCompletionsAPI(
         }.mergeCustomBody(params.customBody)
     }
 
-    // Mirrors the native ClaudeProvider's breakpoint placement, but in OpenAI message
-    // shape: mark the static system prefix and the cacheable conversation prefix (the
-    // second-to-last user turn). Two of OpenRouter's four allowed breakpoints.
-    private fun insertOpenRouterCacheControl(messages: JsonArray): JsonArray {
-        val systemIndex = messages.indexOfLast {
-            it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "system"
-        }
-        val userIndices = messages.mapIndexedNotNull { index, msg ->
-            if (msg.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "user") index else null
-        }
-        val userTarget = if (userIndices.size >= 2) userIndices[userIndices.size - 2] else -1
-
-        if (systemIndex < 0 && userTarget < 0) return messages
-
-        return JsonArray(messages.mapIndexed { index, msg ->
-            when (index) {
-                // System: breakpoint on the FIRST (stable) block so the volatile block
-                // (memory / recent chats) after it does not invalidate the cached prefix.
-                systemIndex -> msg.jsonObject.withCacheControlOnFirstBlock()
-                userTarget -> msg.jsonObject.withCacheControlOnLastBlock()
-                else -> msg
-            }
-        })
-    }
-
-    private fun JsonObject.withCacheControlOnFirstBlock(): JsonObject {
-        val ephemeral = buildJsonObject { put("type", "ephemeral") }
-        val newContent: JsonArray = when (val content = this["content"]) {
-            is JsonPrimitive -> buildJsonArray {
-                add(buildJsonObject {
-                    put("type", "text")
-                    put("text", content.contentOrNull ?: "")
-                    put("cache_control", ephemeral)
-                })
-            }
-
-            is JsonArray -> {
-                if (content.isEmpty()) return this
-                JsonArray(content.mapIndexed { idx, block ->
-                    if (idx == 0 && block is JsonObject) {
-                        JsonObject(block + ("cache_control" to ephemeral))
-                    } else block
-                })
-            }
-
-            else -> return this
-        }
-        return JsonObject(this + ("content" to newContent))
-    }
-
-    // Attach cache_control to the last content block, promoting a plain-string content
-    // to the array form that can carry the field.
-    private fun JsonObject.withCacheControlOnLastBlock(): JsonObject {
-        val ephemeral = buildJsonObject { put("type", "ephemeral") }
-        val newContent: JsonArray = when (val content = this["content"]) {
-            is JsonPrimitive -> buildJsonArray {
-                add(buildJsonObject {
-                    put("type", "text")
-                    put("text", content.contentOrNull ?: "")
-                    put("cache_control", ephemeral)
-                })
-            }
-
-            is JsonArray -> {
-                if (content.isEmpty()) return this
-                JsonArray(content.mapIndexed { idx, block ->
-                    if (idx == content.lastIndex && block is JsonObject) {
-                        JsonObject(block + ("cache_control" to ephemeral))
-                    } else block
-                })
-            }
-
-            else -> return this
-        }
-        return JsonObject(this + ("content" to newContent))
-    }
-
     private fun isModelAllowTemperature(model: Model): Boolean {
         return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
     }
 
-    private fun buildMessages(
-        messages: List<UIMessage>,
-        includeHistoryReasoning: Boolean = true,
-        openRouterCache: Boolean = false,
-    ) = buildJsonArray {
+    private fun buildMessages(messages: List<UIMessage>, includeHistoryReasoning: Boolean = true) = buildJsonArray {
         val filteredMessages = messages.filter { it.isValidToUpload() }
 
         filteredMessages.forEach { message ->
             if (message.role == MessageRole.ASSISTANT) {
                 addAssistantMessages(message, includeReasoning = includeHistoryReasoning)
             } else {
-                addNonAssistantMessage(message, openRouterCache = openRouterCache)
+                addNonAssistantMessage(message)
             }
         }
     }
@@ -591,36 +508,6 @@ class ChatCompletionsAPI(
                                 "content",
                                 tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
                         })
-                        // Image lift: ChatCompletions tool messages are text-only, so any
-                        // UIMessagePart.Image returned by the tool would be invisible to a
-                        // vision-capable model otherwise. Emit a follow-up user message that
-                        // carries those images so the model actually sees them on its next
-                        // turn (e.g. take_screenshot, take_photo, etc.).
-                        val toolImages = tool.output.filterIsInstance<UIMessagePart.Image>()
-                        if (toolImages.isNotEmpty()) {
-                            add(buildJsonObject {
-                                put("role", "user")
-                                putJsonArray("content") {
-                                    add(buildJsonObject {
-                                        put("type", "text")
-                                        put("text", "[Tool ${tool.toolName} produced the image(s) below.]")
-                                    })
-                                    toolImages.forEach { part ->
-                                        add(buildJsonObject {
-                                            part.encodeBase64().onSuccess { encodedImage ->
-                                                put("type", "image_url")
-                                                put("image_url", buildJsonObject {
-                                                    put("url", encodedImage.base64)
-                                                })
-                                            }.onFailure {
-                                                put("type", "text")
-                                                put("text", "(image encode failed: ${it.message})")
-                                            }
-                                        })
-                                    }
-                                }
-                            })
-                        }
                     }
                 }
             }
@@ -687,7 +574,7 @@ class ChatCompletionsAPI(
                                             put("url", encodedImage.base64)
                                         })
                                     }.onFailure {
-                                        Log.w(TAG, "failed to encode image to base64", it)
+                                        it.printStackTrace()
                                         put("type", "text")
                                         put("text", "")
                                     }
@@ -718,30 +605,11 @@ class ChatCompletionsAPI(
         }
     }
 
-    private fun JsonArrayBuilder.addNonAssistantMessage(message: UIMessage, openRouterCache: Boolean = false) {
+    private fun JsonArrayBuilder.addNonAssistantMessage(message: UIMessage) {
         add(buildJsonObject {
             put("role", JsonPrimitive(message.role.name.lowercase()))
 
-            val textParts = message.parts.filterIsInstance<UIMessagePart.Text>()
-            val allText = message.parts.isNotEmpty() && message.parts.all { it is UIMessagePart.Text }
-
-            if (message.role == MessageRole.SYSTEM && allText && openRouterCache && textParts.size >= 2) {
-                // Emit the system prompt as content blocks [stable, volatile] so the
-                // cache_control breakpoint can land on the stable (first) block; the
-                // volatile block after it does not bust the prefix hash.
-                putJsonArray("content") {
-                    textParts.forEach { part ->
-                        add(buildJsonObject {
-                            put("type", "text")
-                            put("text", part.text)
-                        })
-                    }
-                }
-            } else if (message.role == MessageRole.SYSTEM && allText) {
-                // Non-caching path: join the stable+volatile parts into a single string,
-                // byte-identical to the combined system prompt other providers received.
-                put("content", textParts.joinToString("\n") { it.text })
-            } else if (message.parts.isOnlyTextPart()) {
+            if (message.parts.isOnlyTextPart()) {
                 put("content", message.parts.filterIsInstance<UIMessagePart.Text>().first().text)
             } else {
                 putJsonArray("content") {
@@ -762,7 +630,7 @@ class ChatCompletionsAPI(
                                             put("url", encodedImage.base64)
                                         })
                                     }.onFailure {
-                                        Log.w(TAG, "failed to encode image to base64", it)
+                                        it.printStackTrace()
                                         put("type", "text")
                                         put("text", "")
                                     }
@@ -783,17 +651,7 @@ class ChatCompletionsAPI(
         )
 
         // 也许支持其他模态的输出content?
-        val contentElement = jsonObject["content"]
-        // content可能是字符串, 也可能是block数组(如[{type:"text",text:"..."}]); 数组时拼接text块, 否则文本会丢失
-        val content = contentElement?.jsonPrimitiveOrNull?.contentOrNull
-            ?: (contentElement as? JsonArray)?.mapNotNull { block ->
-                val obj = block.jsonObjectOrNull ?: return@mapNotNull null
-                if (obj["type"]?.jsonPrimitiveOrNull?.contentOrNull == "text") {
-                    obj["text"]?.jsonPrimitiveOrNull?.contentOrNull
-                } else {
-                    null
-                }
-            }?.joinToString("") ?: ""
+        val content = jsonObject["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
         val reasoning = jsonObject["reasoning_content"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: jsonObject["reasoning"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: jsonObject["content"]?.takeIf { it is JsonArray }?.let { arr ->
@@ -820,12 +678,7 @@ class ChatCompletionsAPI(
                 }
                 toolCalls.forEach { toolCalls ->
                     val type = toolCalls.jsonObject["type"]?.jsonPrimitive?.contentOrNull
-                    if (!type.isNullOrEmpty() && type != "function") {
-                        // Skip unsupported tool-call types rather than throwing, which would
-                        // crash the stream. Today only "function" is handled.
-                        Log.w(TAG, "skipping unsupported tool call type: $type")
-                        return@forEach
-                    }
+                    if (!type.isNullOrEmpty() && type != "function") error("tool call type not supported: $type")
                     val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
                     val toolName =
                         toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
@@ -846,11 +699,8 @@ class ChatCompletionsAPI(
                     val type = imageObject["type"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                     if (type != "image_url") return@forEach
                     val url = imageObject["image_url"]?.jsonObjectOrNull?.get("url")?.jsonPrimitive?.contentOrNull ?: return@forEach
-                    // OpenRouter image models return data:image/<mime>;base64,... for any mime
-                    // (png/jpeg/webp). Parse mime-agnostically; the old png-hardcoded substring
-                    // returned garbage for non-png images.
-                    val parsed = parseImageDataUri(url) ?: return@forEach
-                    add(UIMessagePart.Image(parsed.base64))
+                    require(url.startsWith("data:image")) { "Only data uri is supported" }
+                    add(UIMessagePart.Image(url.substringAfter("data:image/png;base64,")))
                 }
             },
             annotations = parseAnnotations(
@@ -862,9 +712,9 @@ class ChatCompletionsAPI(
     }
 
     private fun parseAnnotations(jsonArray: JsonArray): List<UIMessageAnnotation> {
-        return jsonArray.mapNotNull { element ->
+        return jsonArray.map { element ->
             val type =
-                element.jsonObject["type"]?.jsonPrimitive?.contentOrNull
+                element.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: error("type is null")
             when (type) {
                 "url_citation" -> {
                     UIMessageAnnotation.UrlCitation(
@@ -875,13 +725,7 @@ class ChatCompletionsAPI(
                     )
                 }
 
-                else -> {
-                    // Newer providers add annotation types (file_citation, web_search_result,
-                    // ...). Skip unknown/missing types instead of throwing, which would crash
-                    // the whole stream for the user.
-                    Log.w(TAG, "skipping unknown annotation type: $type")
-                    null
-                }
+                else -> error("unknown annotation type: $type")
             }
         }
     }
@@ -893,10 +737,7 @@ class ChatCompletionsAPI(
             completionTokens = jsonObject["completion_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             totalTokens = jsonObject["total_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             cachedTokens = jsonObject["prompt_tokens_details"]?.jsonObjectOrNull?.get("cached_tokens")?.jsonPrimitive?.intOrNull
-                ?: 0,
-            // OpenRouter reports the generation cost (USD) here when the request asks for it
-            // via usage:{include:true}. Other OpenAI-compatible providers omit it -> null.
-            cost = jsonObject["cost"]?.jsonPrimitive?.doubleOrNull
+                ?: 0
         )
     }
 

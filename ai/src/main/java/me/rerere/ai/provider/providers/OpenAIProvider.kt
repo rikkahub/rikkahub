@@ -6,12 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -28,8 +24,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
-import me.rerere.ai.provider.providers.openai.openRouterModelFromJson
-import me.rerere.ai.provider.providers.openai.parseImageDataUri
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
@@ -39,6 +33,7 @@ import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.toHeaders
+import me.rerere.ai.util.resolveKey
 import me.rerere.common.http.await
 import me.rerere.common.http.getByKey
 import okhttp3.MultipartBody
@@ -53,34 +48,21 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 private const val TAG = "OpenAIProvider"
 
-// Same shape as ClaudeProvider.MINIMAX_FALLBACK_MODELS — see comment there for
-// why a fallback is needed (Minimax's /v1/models returns `{"object":"","data":null}`
-// even with a valid key, despite their published OpenAPI spec). Duplicated rather
-// than shared because both providers are otherwise self-contained and a util
-// module just for this would be overkill.
-private val MINIMAX_FALLBACK_MODELS = listOf(
-    "MiniMax-M2.7",
-    "MiniMax-M2.7-highspeed",
-    "MiniMax-M2.5",
-    "MiniMax-M2.5-highspeed",
-    "MiniMax-M2.1",
-    "MiniMax-M2.1-highspeed",
-    "MiniMax-M2",
-).map { Model(modelId = it, displayName = it) }
-
 class OpenAIProvider(
     private val client: OkHttpClient,
     context: Context? = null
 ) : Provider<ProviderSetting.OpenAI> {
-    private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+    private val keyRoulette = if (context != null) KeyRoulette.structured(context) else KeyRoulette.default()
 
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
+
     private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
-            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+            val keyConfig = keyRoulette.resolveKey(providerSetting)
+            val key = keyConfig.key
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
                 .addHeader("Authorization", "Bearer $key")
@@ -88,55 +70,30 @@ class OpenAIProvider(
                 .build()
 
             val response = client.newCall(request).await()
-            val bodyStr = response.body.string()
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} $bodyStr")
+                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
+            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
 
+            val bodyStr = response.body?.string() ?: ""
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            // `as? JsonArray` handles both an absent `data` key (Kotlin null)
-            // and a JSON `null` value (`JsonNull`, which is a non-null Kotlin
-            // object that throws if you call `.jsonArray` on it).
-            val data = bodyJson["data"] as? JsonArray
-            if (data == null) {
-                // Some providers (Minimax, etc.) return HTTP 200 with an error
-                // envelope instead of a 4xx. Surface the error so the user sees
-                // why the model list is empty rather than a silent blank sheet.
-                val baseResp = bodyJson["base_resp"] as? JsonObject
-                val statusCode = baseResp?.get("status_code")?.jsonPrimitive?.intOrNull
-                if (statusCode != null && statusCode != 0) {
-                    val msg = baseResp["status_msg"]?.jsonPrimitive?.contentOrNull
-                    error("Failed to get models: ${msg ?: "status_code=$statusCode"}")
-                }
-                val errMsg = (bodyJson["error"] as? JsonObject)?.get("message")
-                    ?.jsonPrimitive?.contentOrNull
-                if (errMsg != null) {
-                    error("Failed to get models: $errMsg")
-                }
-                if (providerSetting.baseUrl.contains("api.minimax.io", ignoreCase = true)) {
-                    return@withContext MINIMAX_FALLBACK_MODELS
-                }
-                error("Failed to get models: response has no `data` field")
-            }
+            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
 
-            val isOpenRouter = providerSetting.baseUrl.contains("openrouter.ai", ignoreCase = true)
             data.mapNotNull { modelJson ->
                 val modelObj = modelJson.jsonObject
-                if (isOpenRouter) {
-                    // Rich capability + pricing detection from OpenRouter's catalog.
-                    openRouterModelFromJson(modelObj)
-                } else {
-                    val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                    Model(
-                        modelId = id,
-                        displayName = id,
-                    )
-                }
+                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+
+                Model(
+                    modelId = id,
+                    displayName = id,
+                )
             }
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
+        val key = keyConfig.key
         val url = if (providerSetting.balanceOption.apiPath.startsWith("http")) {
             providerSetting.balanceOption.apiPath
         } else {
@@ -149,8 +106,10 @@ class OpenAIProvider(
             .build()
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to get balance: ${response.code} ${response.body.string()}")
+            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+            error("Failed to get balance: ${response.code} ${response.body?.string()}")
         }
+        keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
 
         val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -205,7 +164,8 @@ class OpenAIProvider(
     ): EmbeddingGenerationResult = withContext(Dispatchers.IO) {
         require(params.input.isNotEmpty()) { "Embedding input cannot be empty" }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
+        val key = keyConfig.key
         val requestBody = json.encodeToString(
             buildJsonObject {
                 put("model", params.model.modelId)
@@ -230,10 +190,12 @@ class OpenAIProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to generate embedding: ${response.code} ${response.body.string()}")
+            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+            error("Failed to generate embedding: ${response.code} ${response.body?.string()}")
         }
+        keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
 
-        val bodyStr = response.body.string()
+        val bodyStr = response.body?.string() ?: ""
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
         val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: params.model.modelId
@@ -258,14 +220,8 @@ class OpenAIProvider(
             "Expected OpenAI provider setting"
         }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
-
-        // OpenRouter has no /images/generations endpoint (that 404s to its website). Image
-        // generation goes through /chat/completions with modalities:["image","text"].
-        if (providerSetting.baseUrl.contains("openrouter.ai", ignoreCase = true)) {
-            generateImageViaChatCompletions(providerSetting, params, key).forEach { emit(it) }
-            return@flow
-        }
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
+        val key = keyConfig.key
 
         val requestBody = json.encodeToString(
             buildJsonObject {
@@ -305,68 +261,6 @@ class OpenAIProvider(
         items.forEach { emit(it) }
     }
 
-    /** OpenRouter image generation via /chat/completions with modalities:["image","text"]. */
-    private suspend fun generateImageViaChatCompletions(
-        providerSetting: ProviderSetting.OpenAI,
-        params: ImageGenerationParams,
-        key: String,
-    ): List<ImageGenerationItem> {
-        val body = buildJsonObject {
-            put("model", params.model.modelId)
-            putJsonArray("messages") {
-                add(buildJsonObject {
-                    put("role", "user")
-                    put("content", params.prompt)
-                })
-            }
-            putJsonArray("modalities") {
-                add("image")
-                add("text")
-            }
-            put("image_config", buildJsonObject {
-                put(
-                    "aspect_ratio", when (params.aspectRatio) {
-                        ImageAspectRatio.SQUARE -> "1:1"
-                        ImageAspectRatio.LANDSCAPE -> "16:9"
-                        ImageAspectRatio.PORTRAIT -> "9:16"
-                    }
-                )
-            })
-        }.mergeCustomBody(params.customBody)
-
-        val request = Request.Builder()
-            .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
-            .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
-            .addHeader("Content-Type", "application/json")
-            .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
-            .build()
-
-        val response = client.newCall(request).await()
-        val bodyStr = response.body.string()
-        if (!response.isSuccessful) {
-            error("Failed to generate image: ${response.code} $bodyStr")
-        }
-        val message = json.parseToJsonElement(bodyStr).jsonObject["choices"]?.jsonArray
-            ?.getOrNull(0)?.jsonObject?.get("message")?.jsonObject
-            ?: error("No choices in image response")
-        val images = message["images"]?.jsonArray ?: JsonArray(emptyList())
-        val items = images.mapNotNull { img ->
-            val url = img.jsonObject["image_url"]?.jsonObject?.get("url")
-                ?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val parsed = parseImageDataUri(url) ?: return@mapNotNull null
-            ImageGenerationItem(data = parsed.base64, mimeType = parsed.mime)
-        }
-        if (items.isEmpty()) {
-            val text = message["content"]?.jsonPrimitive?.contentOrNull
-            error(
-                "No image returned. The model may not support image output or returned text only." +
-                    (text?.takeIf { it.isNotBlank() }?.let { " Model said: $it" } ?: "")
-            )
-        }
-        return items
-    }
-
     override suspend fun editImage(
         providerSetting: ProviderSetting,
         params: ImageEditParams
@@ -378,7 +272,8 @@ class OpenAIProvider(
             "At least one image is required"
         }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
+        val key = keyConfig.key
         val bodyBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model", params.model.modelId)
