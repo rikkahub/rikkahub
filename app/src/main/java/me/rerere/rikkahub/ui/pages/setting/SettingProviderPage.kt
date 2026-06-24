@@ -489,7 +489,7 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
             },
         ) {
             dialogState.currentState?.let {
-                ProviderConfigure(it) { newState ->
+                ProviderConfigure(it, allowTypeChange = true) { newState ->
                     dialogState.currentState = newState
                 }
             }

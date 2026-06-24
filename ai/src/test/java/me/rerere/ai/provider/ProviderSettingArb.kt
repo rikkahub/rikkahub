@@ -71,6 +71,7 @@ object ProviderSettingArbs {
             includeHistoryReasoning = Arb.boolean().bind(),
             mode = Arb.enum<OpenAIMode>().bind(),
             accessToken = arbShortString.bind(),
+            azureApiVersion = arbShortString.bind(),
         )
     }
 

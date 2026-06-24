@@ -52,13 +52,18 @@ import kotlin.reflect.KClass
 fun ProviderConfigure(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
+    // The provider-TYPE selector (tabs) converts the in-flight provider via convertTo. That is only
+    // meaningful while ADDING a new provider — switching the type of an ALREADY-SAVED provider would
+    // rewrite its kind and drop type-specific config. So the tabs show only in the add flow; editing a
+    // saved provider (detail page, model override) keeps its type fixed.
+    allowTypeChange: Boolean = false,
     onEdit: (provider: ProviderSetting) -> Unit
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
     ) {
-        if (!provider.builtIn) {
+        if (!provider.builtIn && allowTypeChange) {
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 ProviderSetting.Types.forEachIndexed { index, type ->
                     SegmentedButton(
@@ -154,6 +159,9 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
     // Without this, "reset base URL" would point a ChatGPT provider at the Standard OpenAI host while
     // leaving mode = ChatGPT, so ChatGPTProvider would then build Codex requests against the wrong host.
     if (this is ProviderSetting.OpenAI && mode == OpenAIMode.ChatGPT) return CHATGPT_CODEX_BASE_URL
+    // Azure's base URL is the user's resource endpoint — there is no shared default to reset to, so the
+    // "default" IS whatever the user entered (reset is a no-op; the reset affordance hides itself).
+    if (this is ProviderSetting.OpenAI && mode == OpenAIMode.Azure) return baseUrl
     val defaultProvider = DEFAULT_PROVIDERS.find { it.id == id }
     if (defaultProvider != null) {
         when (this) {
@@ -268,7 +276,7 @@ private fun ProviderConfigureOpenAI(
     // Auth/transport mode (the OpenAI-brand analog of the Google provider's Vertex/Gagy modes):
     // Standard API key vs the ChatGPT (Codex) subscription backend. Hidden on a built-in provider.
     if (!provider.builtIn) {
-        val modes = listOf(OpenAIMode.Standard, OpenAIMode.ChatGPT)
+        val modes = listOf(OpenAIMode.Standard, OpenAIMode.Azure, OpenAIMode.ChatGPT)
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             modes.forEachIndexed { index, m ->
                 SegmentedButton(
@@ -277,6 +285,7 @@ private fun ProviderConfigureOpenAI(
                         SegmentedButtonLabel(
                             when (m) {
                                 OpenAIMode.Standard -> "API Key"
+                                OpenAIMode.Azure -> "Azure"
                                 OpenAIMode.ChatGPT -> "ChatGPT"
                             }
                         )
@@ -289,6 +298,54 @@ private fun ProviderConfigureOpenAI(
     }
 
     when (provider.mode) {
+        OpenAIMode.Azure -> {
+            var keyVisible by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = provider.apiKey,
+                onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+                label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { keyVisible = !keyVisible }) {
+                        Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                    }
+                },
+            )
+
+            OutlinedTextField(
+                value = provider.baseUrl,
+                onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+                label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+                placeholder = { Text("https://{resource}.openai.azure.com") },
+                supportingText = { Text("Azure resource endpoint root. Each model's ID is its deployment name.") },
+                modifier = Modifier.fillMaxWidth(),
+                isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+            )
+
+            OutlinedTextField(
+                value = provider.azureApiVersion,
+                onValueChange = { onEdit(provider.copy(azureApiVersion = it.trim())) },
+                label = { Text("API version") },
+                placeholder = { Text("2024-10-21") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.setting_provider_page_enable))
+                Switch(
+                    checked = provider.enabled,
+                    onCheckedChange = { onEdit(provider.copy(enabled = it)) }
+                )
+            }
+        }
+
         OpenAIMode.ChatGPT -> {
             var tokenVisible by remember { mutableStateOf(false) }
             OutlinedTextField(

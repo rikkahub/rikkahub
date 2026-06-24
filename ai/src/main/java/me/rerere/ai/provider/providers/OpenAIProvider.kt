@@ -28,6 +28,10 @@ import me.rerere.ai.provider.ProbeOutcome
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.openai.applyOpenAIAuth
+import me.rerere.ai.provider.providers.openai.azureDeploymentUrl
+import me.rerere.ai.provider.providers.openai.chatCompletionsUrl
+import me.rerere.ai.provider.providers.openai.isAzure
 import me.rerere.ai.provider.jsonObjectHasField
 import me.rerere.ai.provider.runChatProbe
 import me.rerere.ai.provider.runModelListProbe
@@ -89,10 +93,20 @@ class OpenAIProvider(
 
     override suspend fun probeModelList(providerSetting: ProviderSetting.OpenAI): ModelListProbe =
         withContext(Dispatchers.IO) {
+            // Azure OpenAI has no inference-scope `/models` listing — models are added manually as
+            // deployments (modelId == deployment name). Skip the call (it would 404 and read as a wrong
+            // endpoint) and report an empty list; reachability is proven by the chat probe once a
+            // deployment exists, and a brand-new Azure provider falls to "add a model manually + re-test".
+            if (providerSetting.isAzure) {
+                return@withContext ModelListProbe(
+                    outcome = ProbeOutcome.Http(status = 200, body = ProbeOutcome.Body.ModelList(count = 0)),
+                    models = emptyList(),
+                )
+            }
             val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("Authorization", "Bearer $key")
+                .applyOpenAIAuth(providerSetting, key)
                 .get()
                 .build()
             runModelListProbe(client, request) { parseModels(it) }
@@ -106,7 +120,9 @@ class OpenAIProvider(
         // Probe whichever generation API this provider actually uses: a Responses-API-only endpoint
         // has no /chat/completions, so probing chat there would read as unreachable. For the chat
         // path, honor the configured chatCompletionsPath (proxies remap it).
-        val (url, body, successField) = if (providerSetting.useResponseApi) {
+        // Azure has no Responses API; force the chat-completions probe there regardless of useResponseApi.
+        val useResponses = providerSetting.useResponseApi && !providerSetting.isAzure
+        val (url, body, successField) = if (useResponses) {
             Triple(
                 "${providerSetting.baseUrl}/responses",
                 buildJsonObject {
@@ -118,7 +134,7 @@ class OpenAIProvider(
             )
         } else {
             Triple(
-                "${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}",
+                providerSetting.chatCompletionsUrl(modelId),
                 buildJsonObject {
                     put("model", modelId)
                     putJsonArray("messages") {
@@ -134,7 +150,7 @@ class OpenAIProvider(
         }
         val request = Request.Builder()
             .url(url)
-            .addHeader("Authorization", "Bearer $key")
+            .applyOpenAIAuth(providerSetting, key)
             .addHeader("Content-Type", "application/json")
             .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
             .build()
@@ -164,7 +180,7 @@ class OpenAIProvider(
         }
         val request = Request.Builder()
             .url(url)
-            .addHeader("Authorization", "Bearer $key")
+            .applyOpenAIAuth(providerSetting, key)
             .get()
             .build()
         val response = client.newCall(request).await()
@@ -187,7 +203,7 @@ class OpenAIProvider(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): Flow<MessageChunk> = if (providerSetting.useResponseApi) {
+    ): Flow<MessageChunk> = if (providerSetting.useResponseApi && !providerSetting.isAzure) {
         responseAPI.streamText(
             providerSetting = providerSetting,
             messages = messages,
@@ -205,7 +221,7 @@ class OpenAIProvider(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): MessageChunk = if (providerSetting.useResponseApi) {
+    ): MessageChunk = if (providerSetting.useResponseApi && !providerSetting.isAzure) {
         responseAPI.generateText(
             providerSetting = providerSetting,
             messages = messages,
@@ -241,9 +257,12 @@ class OpenAIProvider(
         )
 
         val request = Request.Builder()
-            .url("${providerSetting.baseUrl}/embeddings")
+            .url(
+                if (providerSetting.isAzure) providerSetting.azureDeploymentUrl(params.model.modelId, "embeddings")
+                else "${providerSetting.baseUrl}/embeddings"
+            )
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
+            .applyOpenAIAuth(providerSetting, key)
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .build()
@@ -309,9 +328,12 @@ class OpenAIProvider(
         )
 
         val request = Request.Builder()
-            .url("${providerSetting.baseUrl}/images/generations")
+            .url(
+                if (providerSetting.isAzure) providerSetting.azureDeploymentUrl(params.model.modelId, "images/generations")
+                else "${providerSetting.baseUrl}/images/generations"
+            )
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
+            .applyOpenAIAuth(providerSetting, key)
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .configureReferHeaders(providerSetting.baseUrl)
@@ -387,9 +409,12 @@ class OpenAIProvider(
         }
 
         val request = Request.Builder()
-            .url("${providerSetting.baseUrl}/images/edits")
+            .url(
+                if (providerSetting.isAzure) providerSetting.azureDeploymentUrl(params.model.modelId, "images/edits")
+                else "${providerSetting.baseUrl}/images/edits"
+            )
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
+            .applyOpenAIAuth(providerSetting, key)
             .post(bodyBuilder.build())
             .configureReferHeaders(providerSetting.baseUrl)
             .build()

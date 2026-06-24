@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ConnectionResult
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProbeOutcome
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
@@ -61,6 +62,16 @@ class ProviderDetailViewModel(
     private suspend fun probe(setting: ProviderSetting): Pair<ConnectionResult, List<Model>> {
         return try {
             val provider = providerManager.getProviderByType(setting)
+
+            // Azure exposes no inference-scope model list — deployments are added manually. With no
+            // deployment yet there is nothing to chat-probe, so the generic classifier would fall to
+            // UnreachableOrWrongEndpoint ("couldn't reach the provider"), which is misleading. Surface
+            // the "reachable, add a model manually" state instead. Once a deployment exists, the normal
+            // path below chat-probes it (via the Azure deployment URL) for a real verdict.
+            if (setting is ProviderSetting.OpenAI && setting.mode == OpenAIMode.Azure && setting.models.isEmpty()) {
+                return ConnectionResult.ReachableNoModelList to emptyList()
+            }
+
             val modelsProbe = provider.probeModelList(setting)
 
             // The list already proves the connection when it returned models OR a 429 (authed +

@@ -44,6 +44,12 @@ enum class OpenAIMode {
 
     @SerialName("chatgpt")
     ChatGPT,
+
+    // Azure OpenAI: `baseUrl` is the resource endpoint root (https://{resource}.openai.azure.com),
+    // auth is the `api-key` header (not a Bearer token), each model's `modelId` is its DEPLOYMENT name,
+    // and the chat URL is /openai/deployments/{deployment}/chat/completions?api-version={azureApiVersion}.
+    @SerialName("azure")
+    Azure,
 }
 
 @Serializable
@@ -87,6 +93,8 @@ sealed class ProviderSetting {
         var mode: OpenAIMode = OpenAIMode.Standard,
         // ChatGPT (Codex) mode only: paste-only ChatGPT subscription access token; no in-app login/refresh.
         var accessToken: String = "",
+        // Azure mode only: the data-plane API version query param (e.g. "2024-10-21").
+        var azureApiVersion: String = "2024-10-21",
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

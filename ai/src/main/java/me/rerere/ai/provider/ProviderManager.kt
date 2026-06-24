@@ -53,7 +53,9 @@ class ProviderManager(
             // internal Vertex/Gagy branching.
             is ProviderSetting.OpenAI -> when (setting.mode) {
                 OpenAIMode.ChatGPT -> chatGPT
-                OpenAIMode.Standard -> openAI
+                // Standard and Azure both run on the OpenAI wire; OpenAIProvider branches Azure's
+                // deployment URL + api-key auth internally.
+                OpenAIMode.Standard, OpenAIMode.Azure -> openAI
             }
 
             is ProviderSetting.Google -> google
