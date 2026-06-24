@@ -14,7 +14,7 @@ import javax.jmdns.ServiceInfo
 
 private const val TAG = "NsdServiceRegistrar"
 private const val DEFAULT_SERVICE_TYPE = "_http._tcp.local."
-const val DEFAULT_SERVICE_NAME = "rikkahub"
+const val DEFAULT_SERVICE_NAME = "poci"
 
 data class RegisteredServiceInfo(
     val serviceName: String,
@@ -66,7 +66,7 @@ class NsdServiceRegistrar(
                 serviceType,
                 serviceName,
                 port,
-                "RikkaHub Web Server"
+                "Poci Web Server"
             )
             mdns.registerService(serviceInfo)
 

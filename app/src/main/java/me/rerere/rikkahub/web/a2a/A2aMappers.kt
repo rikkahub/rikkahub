@@ -14,8 +14,8 @@ import kotlin.uuid.Uuid
 internal val A2A_FINAL_ARTIFACT_NODE_ID: Uuid = Uuid.parse("00000000-0000-0000-0000-000000000000")
 
 fun Settings.toA2aAgentCard(baseUrl: String, bearerRequired: Boolean): AgentCard = AgentCard(
-    name = "RikkaHub A2A Agent",
-    description = "RikkaHub assistant card",
+    name = "Poci A2A Agent",
+    description = "Poci assistant card",
     url = "$baseUrl/a2a",
     capabilities = AgentCapabilities(),
     skills = assistants
