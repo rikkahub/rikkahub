@@ -198,6 +198,21 @@ class ScheduleVM(
         }
     }
 
+    /**
+     * Edit a schedule's definition through the shared repository path (scoped to the bound
+     * conversation). The repository is the SINGLE legality path — it re-validates the same gates a
+     * create runs (minus caps) and re-arms the fire — so the VM never rewrites a row directly. On
+     * acceptance the list is re-published so the card observes the new definition; a
+     * [ScheduleMutationResult.Rejected] is returned for the dialog to surface inline.
+     */
+    suspend fun updateSchedule(id: Uuid, draft: ScheduleDraft): ScheduleMutationResult {
+        val conversationId = _conversationId.value
+            ?: return ScheduleMutationResult.Rejected("no conversation bound")
+        val result = repository.update(conversationId, id, draft)
+        if (result is ScheduleMutationResult.Accepted) refresh(conversationId)
+        return result
+    }
+
     /** Delete a schedule through the shared repository path (scoped to the bound conversation). */
     suspend fun deleteSchedule(id: Uuid): ScheduleMutationResult {
         val conversationId = _conversationId.value
@@ -236,6 +251,10 @@ class ScheduleVM(
 
     fun create(draft: ScheduleDraft, onResult: (ScheduleMutationResult) -> Unit = {}) {
         viewModelScope.launch { onResult(createSchedule(draft)) }
+    }
+
+    fun update(id: Uuid, draft: ScheduleDraft, onResult: (ScheduleMutationResult) -> Unit = {}) {
+        viewModelScope.launch { onResult(updateSchedule(id, draft)) }
     }
 
     fun delete(id: Uuid, onResult: (ScheduleMutationResult) -> Unit = {}) {

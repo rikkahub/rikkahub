@@ -554,6 +554,209 @@ class TaskScheduleRepositoryTest {
         assertTrue(f.dao.getById(created.snapshot.id.toString())!!.enabled)
     }
 
+    // --- update (edit definition, SPEC.md Repository Safety Gates) -------------------------------
+
+    @Test
+    fun update_changes_the_definition_and_preserves_enabled_owner_and_created_at() = runBlocking {
+        val f = Fixture()
+        val conversationId = Uuid.random()
+        val created = f.repository.create(
+            conversationId,
+            ScheduleOwner.AGENT,
+            oneShotDraft(f.spawnable.id, prompt = "old", firstFireAt = 10_000L),
+        ) as ScheduleMutationResult.Accepted
+        val createdAtBefore = f.dao.getById(created.snapshot.id.toString())!!.createdAt
+
+        val result = f.repository.update(
+            conversationId,
+            created.snapshot.id,
+            oneShotDraft(f.spawnable.id, prompt = "new", firstFireAt = 50_000L),
+        )
+
+        assertTrue("expected Accepted, got $result", result is ScheduleMutationResult.Accepted)
+        val snapshot = (result as ScheduleMutationResult.Accepted).snapshot
+        assertEquals("new", snapshot.prompt)
+        assertEquals("the next fire re-anchors to the chosen time", 50_000L, snapshot.nextFireAt)
+        assertEquals("firstFireAt re-anchors too", 50_000L, snapshot.firstFireAt)
+        assertTrue("an edit never flips enabled", snapshot.enabled)
+        assertEquals("owner is preserved", ScheduleOwner.AGENT, snapshot.owner)
+        assertEquals(
+            "createdAt is preserved",
+            createdAtBefore,
+            f.dao.getById(created.snapshot.id.toString())!!.createdAt,
+        )
+    }
+
+    @Test
+    fun update_re_arms_the_fire_at_the_new_time() = runBlocking {
+        val f = Fixture()
+        val conversationId = Uuid.random()
+        val created = f.repository.create(conversationId, ScheduleOwner.USER, oneShotDraft(f.spawnable.id))
+            as ScheduleMutationResult.Accepted
+        f.enqueued.clear()
+        f.cancelled.clear()
+
+        f.repository.update(
+            conversationId,
+            created.snapshot.id,
+            oneShotDraft(f.spawnable.id, firstFireAt = 77_000L),
+        )
+
+        // An enabled row re-arms (REPLACE-keyed) at the new fire time; the edit cancels nothing.
+        assertEquals(listOf(created.snapshot.id to 77_000L), f.enqueued)
+        assertTrue("an edit of an enabled row must not cancel", f.cancelled.isEmpty())
+    }
+
+    @Test
+    fun update_of_a_disabled_row_does_not_re_arm() = runBlocking {
+        val f = Fixture()
+        val conversationId = Uuid.random()
+        val created = f.repository.create(conversationId, ScheduleOwner.USER, oneShotDraft(f.spawnable.id))
+            as ScheduleMutationResult.Accepted
+        f.repository.setEnabled(conversationId, created.snapshot.id, enabled = false)
+        f.enqueued.clear()
+        f.cancelled.clear()
+
+        val result = f.repository.update(
+            conversationId,
+            created.snapshot.id,
+            oneShotDraft(f.spawnable.id, firstFireAt = 88_000L),
+        )
+
+        assertTrue("expected Accepted, got $result", result is ScheduleMutationResult.Accepted)
+        assertTrue("editing a paused row must stay disabled", !(result as ScheduleMutationResult.Accepted).snapshot.enabled)
+        // A disabled row has no pending fire; an edit must NOT arm one (that would silently un-pause it).
+        assertTrue("an edit of a disabled row must not enqueue", f.enqueued.isEmpty())
+        assertTrue(f.cancelled.isEmpty())
+    }
+
+    @Test
+    fun update_of_a_foreign_conversation_id_rejects_and_changes_nothing() = runBlocking {
+        val f = Fixture()
+        val owningConversation = Uuid.random()
+        val foreignConversation = Uuid.random()
+        val created = f.repository.create(
+            owningConversation,
+            ScheduleOwner.USER,
+            oneShotDraft(f.spawnable.id, prompt = "keep"),
+        ) as ScheduleMutationResult.Accepted
+
+        val result = f.repository.update(
+            foreignConversation,
+            created.snapshot.id,
+            oneShotDraft(f.spawnable.id, prompt = "hijacked"),
+        )
+
+        assertTrue("expected Rejected, got $result", result is ScheduleMutationResult.Rejected)
+        assertEquals(
+            "a foreign edit must not change the row",
+            "keep",
+            f.dao.getById(created.snapshot.id.toString())!!.prompt,
+        )
+    }
+
+    @Test
+    fun update_of_an_unknown_id_rejects() = runBlocking {
+        val f = Fixture()
+        val result = f.repository.update(Uuid.random(), Uuid.random(), oneShotDraft(f.spawnable.id))
+        assertTrue(result is ScheduleMutationResult.Rejected)
+    }
+
+    @Test
+    fun update_detached_task_rejects_a_non_spawnable_target() = runBlocking {
+        val f = Fixture()
+        val conversationId = Uuid.random()
+        val created = f.repository.create(conversationId, ScheduleOwner.USER, oneShotDraft(f.spawnable.id))
+            as ScheduleMutationResult.Accepted
+
+        // A DETACHED_TASK schedule (default delivery) keeps the spawnable gate on edit.
+        val result = f.repository.update(
+            conversationId,
+            created.snapshot.id,
+            oneShotDraft(f.notSpawnable.id),
+        )
+
+        assertTrue("expected Rejected, got $result", result is ScheduleMutationResult.Rejected)
+    }
+
+    @Test
+    fun update_conversation_event_preserves_delivery_mode_and_skips_the_spawnable_gate() = runBlocking {
+        val f = Fixture()
+        val conversationId = Uuid.random()
+        // A /loop CONVERSATION_EVENT schedule with a NON-spawnable target (the conversation's own
+        // assistant). Editing it keeps the delivery mode and bypasses the spawnable gate (the gate keys
+        // on the row's preserved mode, not the draft's) — even though the draft defaults to DETACHED_TASK.
+        val created = f.repository.create(
+            conversationId,
+            ScheduleOwner.USER,
+            recurringDraft(f.notSpawnable.id, every = 15, unit = RecurrenceUnit.MINUTES)
+                .copy(deliveryMode = DeliveryMode.CONVERSATION_EVENT),
+        ) as ScheduleMutationResult.Accepted
+
+        val result = f.repository.update(
+            conversationId,
+            created.snapshot.id,
+            recurringDraft(f.notSpawnable.id, every = 30, unit = RecurrenceUnit.MINUTES, prompt = "edited loop"),
+        )
+
+        assertTrue("a CONVERSATION_EVENT edit bypasses the spawnable gate", result is ScheduleMutationResult.Accepted)
+        val snapshot = (result as ScheduleMutationResult.Accepted).snapshot
+        assertEquals("delivery mode is preserved across an edit", DeliveryMode.CONVERSATION_EVENT, snapshot.deliveryMode)
+        assertEquals("edited loop", snapshot.prompt)
+    }
+
+    @Test
+    fun update_rejects_an_over_length_prompt() = runBlocking {
+        val f = Fixture()
+        val conversationId = Uuid.random()
+        val created = f.repository.create(conversationId, ScheduleOwner.USER, oneShotDraft(f.spawnable.id))
+            as ScheduleMutationResult.Accepted
+        val tooLong = "a".repeat(TaskScheduleRepository.MAX_PROMPT_CHARS + 1)
+
+        val result = f.repository.update(
+            conversationId,
+            created.snapshot.id,
+            oneShotDraft(f.spawnable.id, prompt = tooLong),
+        )
+
+        assertTrue(result is ScheduleMutationResult.Rejected)
+    }
+
+    @Test
+    fun update_preserves_last_fired_at_and_the_running_marker() = runBlocking {
+        val f = Fixture()
+        val hour = 60L * 60 * 1000
+        // A recurring row that already fired carries lastFiredAt + an in-flight runningTaskRunId and
+        // stays enabled with an advanced nextFireAt. Editing it must preserve that firing history.
+        val conversationId = Uuid.random()
+        val created = f.repository.create(
+            conversationId,
+            ScheduleOwner.USER,
+            recurringDraft(f.spawnable.id, every = 1, unit = RecurrenceUnit.HOURS),
+        ) as ScheduleMutationResult.Accepted
+        val claim = f.repository.claimDue(created.snapshot.id, now = 10 * hour)!!
+        val firedRow = f.dao.getById(created.snapshot.id.toString())!!
+        f.enqueued.clear()
+        f.cancelled.clear()
+
+        val result = f.repository.update(
+            conversationId,
+            created.snapshot.id,
+            recurringDraft(f.spawnable.id, every = 2, unit = RecurrenceUnit.HOURS, prompt = "edited"),
+        )
+
+        assertTrue("expected Accepted, got $result", result is ScheduleMutationResult.Accepted)
+        val row = f.dao.getById(created.snapshot.id.toString())!!
+        assertEquals("lastFiredAt is preserved", firedRow.lastFiredAt, row.lastFiredAt)
+        assertEquals("the in-flight marker is preserved", claim.runId.toString(), row.runningTaskRunId)
+        assertEquals("edited", row.prompt)
+        // An edit while a fire is IN FLIGHT must NOT re-arm: a REPLACE enqueue would cancel the unique
+        // work still running the fire (killing the active run). The running worker's own post-run
+        // re-enqueue arms the next (edited) fire instead.
+        assertTrue("editing a running row must not re-arm (would cancel the active worker)", f.enqueued.isEmpty())
+        assertTrue(f.cancelled.isEmpty())
+    }
+
     // --- claimDue / finishRun (atomic, SPEC.md M3 / task T5) -------------------------------------
 
     /** Create one schedule and return its persisted entity for direct claim-path manipulation. */

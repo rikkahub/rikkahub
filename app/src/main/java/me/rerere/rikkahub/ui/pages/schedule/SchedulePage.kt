@@ -69,6 +69,7 @@ import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.CircleX
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Minus
+import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Trash2
@@ -83,6 +84,7 @@ import java.time.ZonedDateTime
 import java.util.Date
 import java.util.TimeZone
 import kotlin.uuid.Uuid
+import kotlinx.serialization.json.Json
 import me.rerere.ai.runtime.contract.ScheduleDraft
 import me.rerere.ai.runtime.contract.ScheduleKind
 import me.rerere.ai.runtime.contract.ScheduleMutationResult
@@ -128,6 +130,16 @@ fun SchedulePage(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var createError by remember { mutableStateOf<CreateScheduleError?>(null) }
+    // Saveable so an in-progress edit survives a configuration change: the edit dialog's field state is
+    // rememberSaveable(editing.id), but that only matters if the parent target also survives — a plain
+    // `remember` here would drop editTarget on rotation, removing the dialog before the saved fields can
+    // restore. The id is saveable (a String); the snapshot is re-derived from the live list, so a list
+    // refresh under the open dialog re-resolves the same row (and a deleted row closes the dialog).
+    var editTargetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editError by remember { mutableStateOf<CreateScheduleError?>(null) }
+    val editTarget = editTargetId?.let { id ->
+        (uiState as? ScheduleUiState.Content)?.schedules?.firstOrNull { it.id.toString() == id }
+    }
     var deleteTarget by remember { mutableStateOf<ScheduleSnapshot?>(null) }
     var selectedPage by rememberSaveable { mutableIntStateOf(0) }
 
@@ -194,6 +206,7 @@ fun SchedulePage(
                         if (result is ScheduleMutationResult.Rejected) toaster.show(result.reason)
                     }
                 },
+                onEdit = { editTargetId = it.id.toString(); editError = null },
                 onDelete = { deleteTarget = it },
             )
         }
@@ -224,6 +237,37 @@ fun SchedulePage(
 
                         is ScheduleMutationResult.Rejected ->
                             createError = createScheduleError(result.reason)
+                    }
+                }
+            },
+        )
+    }
+
+    editTarget?.let { target ->
+        // The edit dialog reuses the create form (same fields, same single toDraft mapping), seeded from
+        // the snapshot. Like create it stays open until the result is known: an Accepted dismisses it; a
+        // Rejected (e.g. an over-length prompt) keeps it open and surfaces the reason inline. The target
+        // is keyed by id, so a live list refresh under it does not reset the in-progress edit.
+        CreateScheduleDialog(
+            error = editError,
+            assistants = spawnableAssistants,
+            defaultAssistantId = targetAssistantId,
+            editing = target,
+            onDismiss = {
+                editTargetId = null
+                editError = null
+            },
+            onConfirm = { draft ->
+                editError = null
+                vm.update(target.id, draft) { result ->
+                    when (result) {
+                        is ScheduleMutationResult.Accepted -> {
+                            editTargetId = null
+                            toaster.show("Schedule updated")
+                        }
+
+                        is ScheduleMutationResult.Rejected ->
+                            editError = createScheduleError(result.reason)
                     }
                 }
             },
@@ -261,6 +305,7 @@ private fun ScheduledTabContent(
     onCreate: () -> Unit,
     onRetry: () -> Unit,
     onToggleEnabled: (ScheduleSnapshot, Boolean) -> Unit,
+    onEdit: (ScheduleSnapshot) -> Unit,
     onDelete: (ScheduleSnapshot) -> Unit,
 ) {
     when (state) {
@@ -283,6 +328,7 @@ private fun ScheduledTabContent(
                 ScheduleCard(
                     snapshot = snapshot,
                     onToggleEnabled = { enabled -> onToggleEnabled(snapshot, enabled) },
+                    onEdit = { onEdit(snapshot) },
                     onDelete = { onDelete(snapshot) },
                 )
             }
@@ -652,6 +698,7 @@ private fun ScheduleErrorState(
 private fun ScheduleCard(
     snapshot: ScheduleSnapshot,
     onToggleEnabled: (Boolean) -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Card(
@@ -701,6 +748,13 @@ private fun ScheduleCard(
                 checked = snapshot.enabled,
                 onCheckedChange = onToggleEnabled,
             )
+            IconButton(onClick = onEdit) {
+                Icon(
+                    imageVector = Lucide.Pencil,
+                    contentDescription = "Edit",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Lucide.Trash2,
@@ -765,18 +819,34 @@ private fun CreateScheduleDialog(
     defaultAssistantId: Uuid,
     onDismiss: () -> Unit,
     onConfirm: (ScheduleDraft) -> Unit,
+    // Non-null => EDIT mode: the same form seeded from an existing schedule (title/button switch to
+    // "Edit"/"Save"). The id keys the field seeds (rememberSaveable inputs) so opening the dialog on a
+    // different schedule re-seeds instead of carrying the previous edit's values.
+    editing: ScheduleSnapshot? = null,
 ) {
-    var prompt by rememberSaveable { mutableStateOf("") }
-    var kind by rememberSaveable { mutableStateOf(ScheduleKind.ONE_SHOT) }
-    var unit by rememberSaveable { mutableStateOf(RecurrenceUnit.HOURS) }
-    var every by rememberSaveable { mutableIntStateOf(1) }
-    // Seed first fire one hour out so the user edits a future, valid instant, not a past one.
-    var firstFireAt by rememberSaveable { mutableLongStateOf(System.currentTimeMillis() + 60 * 60 * 1000) }
-    var timeOfDay by rememberSaveable { mutableStateOf<String?>(null) }
-    var timeZoneId by rememberSaveable { mutableStateOf(TimeZone.getDefault().id) }
+    val isEdit = editing != null
+    // Decode the recurrence seed once per edited schedule; a corrupt/absent spec falls back to defaults.
+    val seedSpec = remember(editing?.id) {
+        editing?.takeIf { it.kind == ScheduleKind.RECURRING }
+            ?.recurrenceSpec
+            ?.let { runCatching { Json.decodeFromString<RecurrenceSpec>(it) }.getOrNull() }
+    }
+    var prompt by rememberSaveable(editing?.id) { mutableStateOf(editing?.prompt ?: "") }
+    var kind by rememberSaveable(editing?.id) { mutableStateOf(editing?.kind ?: ScheduleKind.ONE_SHOT) }
+    var unit by rememberSaveable(editing?.id) { mutableStateOf(seedSpec?.unit ?: RecurrenceUnit.HOURS) }
+    var every by rememberSaveable(editing?.id) { mutableIntStateOf(seedSpec?.every ?: 1) }
+    // Edit seeds the NEXT fire (what the user sees and re-anchors); create seeds one hour out so the
+    // user edits a future, valid instant, not a past one.
+    var firstFireAt by rememberSaveable(editing?.id) {
+        mutableLongStateOf(editing?.nextFireAt ?: (System.currentTimeMillis() + 60 * 60 * 1000))
+    }
+    var timeOfDay by rememberSaveable(editing?.id) { mutableStateOf(seedSpec?.timeOfDay) }
+    var timeZoneId by rememberSaveable(editing?.id) {
+        mutableStateOf(editing?.timeZoneId ?: TimeZone.getDefault().id)
+    }
     val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
-    var targetAssistantId by rememberSaveable {
-        mutableStateOf(resolveScheduleTarget(assistants, defaultAssistantId))
+    var targetAssistantId by rememberSaveable(editing?.id) {
+        mutableStateOf(editing?.targetAssistantId ?: resolveScheduleTarget(assistants, defaultAssistantId))
     }
     // The spawnable list arrives asynchronously (settingsFlow seeds with dummy/empty first), and an
     // assistant can lose `spawnable` while the dialog is open. Re-seed whenever the current target is
@@ -831,19 +901,20 @@ private fun CreateScheduleDialog(
     }.format(Date(firstFireAt))
 
     FormBottomSheet(
-        title = "New scheduled task",
+        title = if (isEdit) "Edit scheduled task" else "New scheduled task",
         onDismiss = onDismiss,
         footer = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
             TextButton(
-                // Create is enabled iff the form mirrors every repository gate cleanly (SC3): an empty
-                // validate() == submittable, so the button cannot offer a draft the repository rejects.
+                // The submit is enabled iff the form mirrors every repository gate cleanly (SC3): an
+                // empty validate() == submittable, so the button cannot offer a draft the repository
+                // rejects. Edit re-runs the same gates (minus caps) in the repository.
                 enabled = validationErrors.isEmpty(),
                 // The dialog projects its live formState through the SAME toDraft() the SC3 invariant
                 // test exercises — one form→draft mapping, no hand-rolled duplicate that could drift.
                 onClick = { onConfirm(formState.toDraft()) },
             ) {
-                Text("Create")
+                Text(if (isEdit) "Save" else "Create")
             }
         },
     ) {

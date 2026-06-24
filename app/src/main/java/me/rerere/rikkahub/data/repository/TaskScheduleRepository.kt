@@ -207,6 +207,110 @@ class TaskScheduleRepository(
     }
 
     /**
+     * Edit the definition of schedule [id] iff it belongs to [conversationId]. Re-validates the SAME
+     * definition gates [create] enforces (prompt bound, target spawnable for DETACHED_TASK, valid zone,
+     * recurrence spec/min-interval) so an edit can never persist a value a create would reject, MINUS
+     * the active-schedule caps: an edit never flips `enabled`, so it cannot grow either the
+     * per-conversation or per-owner enabled count, and re-checking caps would spuriously reject editing
+     * an already-counted row. Like [delete]/[setEnabled], a foreign or absent id REJECTS — the scope
+     * check is the single guard against a UI/agent bound to one conversation rewriting another's.
+     *
+     * Only the form-controlled definition is applied; every firing / ownership / history field is
+     * preserved (`enabled`, `owner`, `createdAt`, `lastFiredAt`, `lastTaskRunId`, `runningTaskRunId`,
+     * `deliveryMode`). In particular the spawnable gate keys on the row's OWN preserved [DeliveryMode],
+     * not the draft's: an edit never changes delivery mode, so a `/loop` CONVERSATION_EVENT stays one
+     * (its conversation assistant runs the turn and need not be spawnable), exactly as [create] gates it.
+     *
+     * `nextFireAt` is re-anchored to the chosen `firstFireAt` so a time edit takes effect on the next
+     * fire. After the transaction commits, an enabled row with NO in-flight run re-arms via
+     * [onScheduleCreated] (the enqueue seam keys on the schedule id with `ExistingWorkPolicy.REPLACE`,
+     * so this OVERWRITES the prior pending fire rather than stacking a second one). The re-arm is
+     * SKIPPED when `runningTaskRunId != null`: `REPLACE` cancels the unique work that is still RUNNING
+     * the in-flight fire (a DETACHED_TASK fire awaits its task run to completion), which would KILL the
+     * active run — so instead the running worker's own post-run `nextFireIfStillArmed` re-enqueue
+     * (read fresh, off the edited `nextFireAt`) arms the next fire, and a process death before that is
+     * recovered by the startup rescheduler's orphan-marker pass. A disabled (paused / fired one-shot)
+     * row already has no pending fire and is left un-armed. Fired after commit so a rolled-back edit
+     * never moves the transport.
+     */
+    suspend fun update(
+        conversationId: Uuid,
+        id: Uuid,
+        draft: ScheduleDraft,
+    ): ScheduleMutationResult {
+        val result = transactions.inTransaction { updateInTransaction(conversationId, id, draft) }
+        if (result is ScheduleMutationResult.Accepted &&
+            result.snapshot.enabled &&
+            result.snapshot.runningTaskRunId == null
+        ) {
+            onScheduleCreated(result.snapshot.id, result.snapshot.nextFireAt)
+        }
+        return result
+    }
+
+    private suspend fun updateInTransaction(
+        conversationId: Uuid,
+        id: Uuid,
+        draft: ScheduleDraft,
+    ): ScheduleMutationResult {
+        val row = dao.getById(id.toString())
+            ?.takeIf { it.conversationId == conversationId.toString() }
+            ?: return ScheduleMutationResult.Rejected("schedule not found: $id")
+
+        if (draft.prompt.length > MAX_PROMPT_CHARS) {
+            return ScheduleMutationResult.Rejected(
+                "prompt is too long: ${draft.prompt.length} > $MAX_PROMPT_CHARS"
+            )
+        }
+
+        // The spawnable gate keys on the row's OWN (preserved) delivery mode — an edit never changes it.
+        if (DeliveryMode.valueOf(row.deliveryMode) == DeliveryMode.DETACHED_TASK) {
+            val target = resolveAssistant(draft.targetAssistantId)
+                ?: return ScheduleMutationResult.Rejected(
+                    "unknown target assistant: ${draft.targetAssistantId}"
+                )
+            if (!target.spawnable) {
+                return ScheduleMutationResult.Rejected(
+                    "target assistant is not spawnable: ${draft.targetAssistantId}"
+                )
+            }
+        }
+
+        if (!isValidZoneId(draft.timeZoneId)) {
+            return ScheduleMutationResult.Rejected("invalid timeZoneId: ${draft.timeZoneId}")
+        }
+
+        if (draft.kind == ScheduleKind.RECURRING) {
+            val rawRecurrenceSpec = draft.recurrenceSpec
+                ?: return ScheduleMutationResult.Rejected("recurring schedule requires a valid recurrenceSpec")
+            val spec = runCatching {
+                json.decodeFromString<RecurrenceSpec>(rawRecurrenceSpec)
+            }.getOrElse {
+                return ScheduleMutationResult.Rejected("invalid recurrenceSpec: ${it.message}")
+            }
+            val intervalMillis = spec.intervalMillis()
+            if (intervalMillis < MIN_RECURRENCE_INTERVAL_MILLIS) {
+                return ScheduleMutationResult.Rejected(
+                    "recurring interval $intervalMillis ms is below the minimum $MIN_RECURRENCE_INTERVAL_MILLIS ms"
+                )
+            }
+        }
+
+        val updated = row.copy(
+            targetAssistantId = draft.targetAssistantId.toString(),
+            prompt = draft.prompt,
+            kind = draft.kind.name,
+            recurrenceSpec = if (draft.kind == ScheduleKind.RECURRING) draft.recurrenceSpec else null,
+            timeZoneId = draft.timeZoneId,
+            firstFireAt = draft.firstFireAt,
+            nextFireAt = draft.firstFireAt,
+            updatedAt = now(),
+        )
+        dao.update(updated)
+        return ScheduleMutationResult.Accepted(updated.toSnapshot())
+    }
+
+    /**
      * Pause ([enabled] = false) or resume ([enabled] = true) the schedule [id] iff it belongs to
      * [conversationId] (SPEC.md M5 / task T10). Like [delete], a row owned by a different conversation
      * (or absent) REJECTS — the scope check is the single guard against a UI/agent bound to one
