@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 import me.rerere.rikkahub.service.RikkaNotificationListenerService
 
@@ -94,7 +95,7 @@ object PermissionInventory {
                 return Row(
                     id = perm,
                     label = "Display over other apps",
-                    description = "Lets RikkaHub draw the \"agent is working\" overlay while automation is in progress.",
+                    description = overlayDesc(context),
                     status = if (granted) Status.GRANTED else Status.DENIED,
                     group = Group.SpecialAccess,
                     grant = GrantAction.SystemSettings(
@@ -107,7 +108,7 @@ object PermissionInventory {
                 return Row(
                     id = perm,
                     label = "Modify system settings",
-                    description = "Lets the agent change brightness via set_brightness.",
+                    description = writeSettingsDesc(context),
                     status = if (granted) Status.GRANTED else Status.DENIED,
                     group = Group.SpecialAccess,
                     grant = GrantAction.SystemSettings(
@@ -121,7 +122,7 @@ object PermissionInventory {
                 return Row(
                     id = perm,
                     label = "Do Not Disturb access",
-                    description = "Lets the agent change ringer mode and per-stream volume.",
+                    description = dndDesc(context),
                     status = if (granted) Status.GRANTED else Status.DENIED,
                     group = Group.SpecialAccess,
                     grant = GrantAction.SystemSettings(
@@ -135,7 +136,7 @@ object PermissionInventory {
                 return Row(
                     id = perm,
                     label = "Ignore battery optimizations",
-                    description = "Keeps the Telegram bot foreground service responsive when the screen is off.",
+                    description = batteryDesc(context),
                     status = if (granted) Status.GRANTED else Status.DENIED,
                     group = Group.SpecialAccess,
                     // ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS pops a system dialog asking
@@ -152,13 +153,13 @@ object PermissionInventory {
                     Row(
                         id = perm,
                         label = "Post notifications",
-                        description = "Required so the bot foreground service and TTS / progress notifications can show.",
+                        description = notificationsDesc(context),
                         status = if (granted) Status.GRANTED else Status.DENIED,
                         group = Group.Runtime,
                         grant = GrantAction.Runtime(perm),
                     )
                 } else {
-                    autoRow(perm, "Post notifications")
+                    autoRow(context, perm, "Post notifications")
                 }
             }
         }
@@ -181,7 +182,7 @@ object PermissionInventory {
             return Row(
                 id = perm,
                 label = humanize(perm),
-                description = "Custom permission. Owner app may not be installed yet.",
+                description = customDesc(context),
                 status = if (granted) Status.GRANTED else Status.DENIED,
                 group = Group.Runtime,
                 grant = GrantAction.Runtime(perm),
@@ -197,20 +198,20 @@ object PermissionInventory {
             Row(
                 id = perm,
                 label = labelOrHumanize(perm),
-                description = describeRuntime(perm),
+                description = describeRuntime(context, perm),
                 status = if (granted) Status.GRANTED else Status.DENIED,
                 group = Group.Runtime,
                 grant = GrantAction.Runtime(perm),
             )
         } else {
-            autoRow(perm, labelOrHumanize(perm))
+            autoRow(context, perm, labelOrHumanize(perm))
         }
     }
 
-    private fun autoRow(perm: String, label: String) = Row(
+    private fun autoRow(ctx: Context, perm: String, label: String) = Row(
         id = perm,
         label = label,
-        description = "Auto-granted at install (no user action needed).",
+        description = autoDesc(ctx),
         status = Status.AUTO_GRANTED,
         group = Group.AutoGranted,
         grant = GrantAction.None,
@@ -225,7 +226,7 @@ object PermissionInventory {
         return Row(
             id = "rikkahub.SERVICE_ACCESSIBILITY",
             label = "Screen automation (Accessibility)",
-            description = "Required for tap, swipe, click_node, screenshot, read_window_tree, set_text and other UI-driving tools.",
+            description = accessibilityDesc(context),
             status = if (enabled) Status.GRANTED else Status.DENIED,
             group = Group.ServicesAndIntegrations,
             grant = GrantAction.SystemSettings(
@@ -243,7 +244,7 @@ object PermissionInventory {
         return Row(
             id = "rikkahub.SERVICE_NOTIFICATION_LISTENER",
             label = "Notification access",
-            description = "Lets the agent read incoming notifications and auto-forward whitelisted apps to Telegram.",
+            description = notificationListenerDesc(context),
             status = if (enabled) Status.GRANTED else Status.DENIED,
             group = Group.ServicesAndIntegrations,
             grant = GrantAction.SystemSettings(
@@ -269,22 +270,35 @@ object PermissionInventory {
         "com.termux.permission.RUN_COMMAND" to "Termux RUN_COMMAND",
     )
 
-    private val DESCRIPTIONS = mapOf(
-        Manifest.permission.CAMERA to "Used by take_photo to capture a still image.",
-        Manifest.permission.RECORD_AUDIO to "Used by record_audio and speech_to_text.",
-        Manifest.permission.READ_PHONE_STATE to "Used by get_telephony_info (SIM operator, signal).",
-        Manifest.permission.ACCESS_FINE_LOCATION to "Used by get_location and get_wifi_info.",
-        Manifest.permission.ACCESS_COARSE_LOCATION to "Approximate location fallback for get_location.",
-        Manifest.permission.READ_CONTACTS to "Used by search_contacts and list_contacts.",
-        Manifest.permission.READ_CALL_LOG to "Used by list_call_log.",
-        Manifest.permission.READ_SMS to "Used by list_sms_inbox and search_sms.",
-        Manifest.permission.SEND_SMS to "Used by send_sms to send text messages programmatically.",
-        "com.termux.permission.RUN_COMMAND" to "Lets RikkaHub start commands inside Termux for the termux_run_command tool.",
+    private val DESCRIPTION_IDS = mapOf(
+        Manifest.permission.CAMERA to R.string.perm_desc_camera,
+        Manifest.permission.RECORD_AUDIO to R.string.perm_desc_mic,
+        Manifest.permission.READ_PHONE_STATE to R.string.perm_desc_phone_state,
+        Manifest.permission.ACCESS_FINE_LOCATION to R.string.perm_desc_fine_location,
+        Manifest.permission.ACCESS_COARSE_LOCATION to R.string.perm_desc_coarse_location,
+        Manifest.permission.READ_CONTACTS to R.string.perm_desc_contacts,
+        Manifest.permission.READ_CALL_LOG to R.string.perm_desc_call_log,
+        Manifest.permission.READ_SMS to R.string.perm_desc_sms,
+        Manifest.permission.SEND_SMS to R.string.perm_desc_send_sms,
+        "com.termux.permission.RUN_COMMAND" to R.string.perm_desc_termux,
     )
 
     private fun labelOrHumanize(perm: String) = LABELS[perm] ?: humanize(perm)
-    private fun describeRuntime(perm: String) =
-        DESCRIPTIONS[perm] ?: "Runtime permission required by one or more enabled tools."
+
+    private fun describeRuntime(ctx: Context, perm: String): String =
+        DESCRIPTION_IDS[perm]?.let { ctx.getString(it) }
+            ?: ctx.getString(R.string.perm_desc_runtime_fallback)
+
+    private fun autoDesc(ctx: Context) = ctx.getString(R.string.perm_desc_auto_granted)
+    private fun customDesc(ctx: Context) = ctx.getString(R.string.perm_desc_custom)
+
+    private fun overlayDesc(ctx: Context) = ctx.getString(R.string.perm_desc_overlay)
+    private fun writeSettingsDesc(ctx: Context) = ctx.getString(R.string.perm_desc_write_settings)
+    private fun dndDesc(ctx: Context) = ctx.getString(R.string.perm_desc_dnd)
+    private fun batteryDesc(ctx: Context) = ctx.getString(R.string.perm_desc_battery)
+    private fun notificationsDesc(ctx: Context) = ctx.getString(R.string.perm_desc_notifications)
+    private fun accessibilityDesc(ctx: Context) = ctx.getString(R.string.perm_desc_accessibility)
+    private fun notificationListenerDesc(ctx: Context) = ctx.getString(R.string.perm_desc_notification_listener)
 
     private fun humanize(perm: String): String {
         val tail = perm.substringAfterLast('.')

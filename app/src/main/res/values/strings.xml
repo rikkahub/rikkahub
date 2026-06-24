@@ -1323,6 +1323,27 @@
   <string name="setting_page_permissions_status_granted">GRANTED</string>
   <string name="setting_page_permissions_status_auto_granted">AUTO</string>
   <string name="setting_page_permissions_status_denied">TAP TO GRANT</string>
+
+    <string name="perm_desc_camera">Used by take_photo to capture a still image.</string>
+    <string name="perm_desc_mic">Used by record_audio and speech_to_text.</string>
+    <string name="perm_desc_phone_state">Used by get_telephony_info (SIM operator, signal).</string>
+    <string name="perm_desc_fine_location">Used by get_location and get_wifi_info.</string>
+    <string name="perm_desc_coarse_location">Approximate location fallback for get_location.</string>
+    <string name="perm_desc_contacts">Used by search_contacts and list_contacts.</string>
+    <string name="perm_desc_call_log">Used by list_call_log.</string>
+    <string name="perm_desc_sms">Used by list_sms_inbox and search_sms.</string>
+    <string name="perm_desc_send_sms">Used by send_sms to send text messages programmatically.</string>
+    <string name="perm_desc_termux">Lets RikkaHub start commands inside Termux for the termux_run_command tool.</string>
+    <string name="perm_desc_overlay">Lets RikkaHub draw the "agent is working" overlay while automation is in progress.</string>
+    <string name="perm_desc_write_settings">Lets the agent change brightness via set_brightness.</string>
+    <string name="perm_desc_dnd">Lets the agent change ringer mode and per-stream volume.</string>
+    <string name="perm_desc_battery">Keeps the Telegram bot foreground service responsive when the screen is off.</string>
+    <string name="perm_desc_notifications">Required so the bot foreground service and TTS / progress notifications can show.</string>
+    <string name="perm_desc_accessibility">Required for tap, swipe, click_node, screenshot, read_window_tree, set_text and other UI-driving tools.</string>
+    <string name="perm_desc_notification_listener">Lets the agent read incoming notifications and auto-forward whitelisted apps to Telegram.</string>
+    <string name="perm_desc_custom">Custom permission. Owner app may not be installed yet.</string>
+    <string name="perm_desc_runtime_fallback">Runtime permission required by one or more enabled tools.</string>
+    <string name="perm_desc_auto_granted">Auto-granted at install (no user action needed).</string>
   <string name="setting_provider_delete_title">Remove provider?</string>
   <string name="setting_provider_delete_body">This will permanently remove %1$s and all its configured models. You can re-add it later.</string>
   <string name="setting_provider_delete_confirm">Remove</string>
