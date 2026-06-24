@@ -96,7 +96,9 @@ class ResponseAPI(
         try {
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                if (response.code != 403) {
+                    keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                }
                 throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
             }
 

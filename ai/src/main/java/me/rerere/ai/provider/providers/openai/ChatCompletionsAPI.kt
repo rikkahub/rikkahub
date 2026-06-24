@@ -94,7 +94,9 @@ class ChatCompletionsAPI(
         try {
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                if (response.code != 403) {
+                    keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                }
                 throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
             }
 
@@ -222,7 +224,9 @@ class ChatCompletionsAPI(
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 streamFailed = true
-                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
+                if (response?.code != 403) {
+                    keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
+                }
                 var exception = t
 
                 t?.printStackTrace()

@@ -71,7 +71,7 @@ class OpenAIProvider(
 
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                if (response.code != 403) { keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}") }
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
             keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
@@ -106,7 +106,7 @@ class OpenAIProvider(
             .build()
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+            if (response.code != 403) { keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}") }
             error("Failed to get balance: ${response.code} ${response.body?.string()}")
         }
         keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
@@ -190,7 +190,7 @@ class OpenAIProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+            if (response.code != 403) { keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}") }
             error("Failed to generate embedding: ${response.code} ${response.body?.string()}")
         }
         keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)

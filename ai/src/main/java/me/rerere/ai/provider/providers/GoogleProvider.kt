@@ -160,7 +160,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
                     return@withContext result
                 } else {
-                    keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                    if (response.code != 403) { keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}") }
                     emptyList()
                 }
             } catch (e: Exception) {
@@ -202,7 +202,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         try {
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                if (response.code != 403) { keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}") }
                 throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
             }
             keyRoulette.reportResult(providerSetting.id.toString(), keyConfig.id, true)
