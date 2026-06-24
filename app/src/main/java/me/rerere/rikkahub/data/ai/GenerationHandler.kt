@@ -274,7 +274,6 @@ class GenerationHandler(
     private val providerManager: ProviderManager,
     private val json: Json,
     private val memoryRepo: MemoryRepository,
-    private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
     private val systemPromptBuilder: SystemPromptBuilder,
 ) {
@@ -965,9 +964,8 @@ class GenerationHandler(
             val memoryPrompt = if (assistant.enableMemory) {
                 buildMemoryPrompt(memories = memories)
             } else ""
-            val recentChatsPrompt = if (assistant.enableRecentChatsReference) {
-                buildRecentChatsPrompt(assistant, conversationRepo)
-            } else ""
+            // 最近聊天引用已改为按需调用的对话工具（ConversationTools）
+            val recentChatsPrompt = ""
             val toolPrompts = tools.map { tool -> tool.systemPrompt(model, messages) }
             // Split into stable (assistant + tools) and volatile (memory + recent chats +
             // addendum) so prompt caching survives memory injection: the stable part is the
