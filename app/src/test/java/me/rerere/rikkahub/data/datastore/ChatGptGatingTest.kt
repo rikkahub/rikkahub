@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.datastore
 
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.providers.ANTIGRAVITY_IMAGE_MODEL_ID
 import me.rerere.ai.provider.providers.codexImageModels
@@ -16,14 +17,24 @@ class ChatGptGatingTest {
 
     private val codexImageModelId = codexImageModels().single().modelId
 
+    // ChatGPT is now an OpenAIMode.ChatGPT mode of an OpenAI provider, not its own subtype.
     private fun chatgpt(
         token: String = "sk-codex-tok",
         enabled: Boolean = true,
-    ) = ProviderSetting.ChatGPT(
+        models: List<Model> = emptyList(),
+    ) = ProviderSetting.OpenAI(
         name = "ChatGPT",
+        mode = OpenAIMode.ChatGPT,
         enabled = enabled,
         accessToken = token,
+        models = models,
     )
+
+    private fun ProviderSetting.isChatGptMode() =
+        this is ProviderSetting.OpenAI && this.mode == OpenAIMode.ChatGPT
+
+    private fun ProviderSetting.isStandardOpenAI() =
+        this is ProviderSetting.OpenAI && this.mode == OpenAIMode.Standard
 
     private fun google() = ProviderSetting.Google(
         name = "Gemini",
@@ -39,7 +50,7 @@ class ChatGptGatingTest {
         assertFalse("blank token", settings(chatgpt(token = "")).hasChatGpt())
         assertFalse("disabled", settings(chatgpt(enabled = false)).hasChatGpt())
         assertFalse("no providers", settings().hasChatGpt())
-        assertFalse("only openai", settings(ProviderSetting.OpenAI(name = "x")).hasChatGpt())
+        assertFalse("only standard openai", settings(ProviderSetting.OpenAI(name = "x")).hasChatGpt())
     }
 
     @Test
@@ -53,25 +64,21 @@ class ChatGptGatingTest {
         val openai = ProviderSetting.OpenAI(name = "x")
         val out = settings(chatgpt(), openai).withChatGptImageModels()
 
-        val cg = out.first { it is ProviderSetting.ChatGPT }
+        val cg = out.first { it.isChatGptMode() }
         val img = cg.models.singleOrNull { it.modelId == codexImageModelId }
         assertTrue("chatgpt provider gains the image model", img != null)
         assertEquals(ModelType.IMAGE, img!!.type)
 
-        assertTrue(out.first { it is ProviderSetting.OpenAI }.models.isEmpty())
+        assertTrue("the standard OpenAI provider is untouched", out.first { it.isStandardOpenAI() }.models.isEmpty())
     }
 
     @Test
     fun `image model surfaces even when a chat model shares the driver modelId`() {
         // The codex image model's modelId is the driver slug (e.g. "gpt-5.5"), which a normal chat
         // model also uses. Dedup must be by Model.id, not modelId, or the image model gets dropped.
-        val cg = ProviderSetting.ChatGPT(
-            name = "ChatGPT",
-            accessToken = "sk-codex-tok",
-            models = listOf(Model(modelId = codexImageModelId, displayName = "GPT-5.5")),
-        )
+        val cg = chatgpt(models = listOf(Model(modelId = codexImageModelId, displayName = "GPT-5.5")))
         val out = settings(cg).withChatGptImageModels()
-        val cgOut = out.first { it is ProviderSetting.ChatGPT }
+        val cgOut = out.first { it.isChatGptMode() }
         assertTrue(
             "image model present despite a chat model sharing the modelId",
             cgOut.models.any { it.type == ModelType.IMAGE && it.modelId == codexImageModelId },
@@ -89,11 +96,11 @@ class ChatGptGatingTest {
     fun `withChatGptImageModels is idempotent and a no-op without chatgpt`() {
         val once = settings(chatgpt()).withChatGptImageModels()
         val twice = Settings(providers = once).withChatGptImageModels()
-        val cg = twice.first { it is ProviderSetting.ChatGPT }
+        val cg = twice.first { it.isChatGptMode() }
         assertEquals(1, cg.models.count { it.modelId == codexImageModelId })
 
         val plain = settings(ProviderSetting.OpenAI(name = "x")).withChatGptImageModels()
-        assertTrue(plain.first { it is ProviderSetting.OpenAI }.models.isEmpty())
+        assertTrue(plain.first { it.isStandardOpenAI() }.models.isEmpty())
     }
 
     @Test

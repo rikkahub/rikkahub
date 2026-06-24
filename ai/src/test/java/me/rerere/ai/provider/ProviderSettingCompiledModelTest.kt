@@ -18,7 +18,6 @@ class ProviderSettingCompiledModelTest {
         ProviderSetting.OpenAI::class.java,
         ProviderSetting.Google::class.java,
         ProviderSetting.Claude::class.java,
-        ProviderSetting.ChatGPT::class.java,
     )
 
     @Test

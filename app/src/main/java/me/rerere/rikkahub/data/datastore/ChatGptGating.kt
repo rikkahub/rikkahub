@@ -1,12 +1,16 @@
 package me.rerere.rikkahub.data.datastore
 
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.providers.codexImageModels
 
-/** The configured, usable ChatGPT (Codex) provider (enabled + an access token), if any. */
-fun Settings.chatGptProvider(): ProviderSetting.ChatGPT? =
-    providers.filterIsInstance<ProviderSetting.ChatGPT>()
-        .firstOrNull { it.enabled && it.accessToken.isNotBlank() }
+/**
+ * The configured, usable ChatGPT (Codex) provider (enabled + an access token), if any. ChatGPT is now
+ * an [OpenAIMode.ChatGPT] mode of an [ProviderSetting.OpenAI] record (not its own subtype).
+ */
+fun Settings.chatGptProvider(): ProviderSetting.OpenAI? =
+    providers.filterIsInstance<ProviderSetting.OpenAI>()
+        .firstOrNull { it.enabled && it.mode == OpenAIMode.ChatGPT && it.accessToken.isNotBlank() }
 
 /** True when a ChatGPT provider is configured — gates the Codex search, image-gen + fetch surfaces. */
 fun Settings.hasChatGpt(): Boolean = chatGptProvider() != null
@@ -25,7 +29,7 @@ fun Settings.withChatGptImageModels(): List<ProviderSetting> {
     // Model.id (LazyColumn key + findModelById).
     val targetId = chatGptProvider()?.id ?: return providers
     return providers.map { provider ->
-        if (provider.id == targetId && provider is ProviderSetting.ChatGPT) {
+        if (provider.id == targetId && provider is ProviderSetting.OpenAI && provider.mode == OpenAIMode.ChatGPT) {
             // Dedup by the stable Model.id, NOT modelId: the image model's modelId is the driver slug
             // ("gpt-5.5"), which also names a normal ChatGPT chat model — deduping by modelId would
             // drop the image model whenever that chat model is already in the provider's list, so the

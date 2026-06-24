@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.web.routes
 
 import me.rerere.ai.provider.ClaudeAuthType
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.ai.runtime.mcp.McpCommonOptions
@@ -39,7 +40,7 @@ class SettingsRoutesRedactionTest {
             useServiceAccount = true,
             baseUrl = "https://google.example/v1beta",
         ),
-        ProviderSetting.ChatGPT(
+        ProviderSetting.OpenAI(mode = OpenAIMode.ChatGPT, 
             name = "ChatGPT",
             accessToken = "chatgpt-jwt-secret",
             baseUrl = "https://chatgpt.example/codex",

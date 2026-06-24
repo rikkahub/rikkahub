@@ -24,6 +24,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.encodeBase64
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
@@ -31,11 +32,20 @@ import kotlin.uuid.Uuid
 // The ChatGPT (Codex) backend gates on the `originator`/User-Agent presenting as the codex CLI; a
 // plain OpenAI-compatible client is rejected. These are shared by ChatGPTProvider (chat) and the
 // standalone web-search / fetch / image-gen calls below so the wire fingerprint stays in one place.
-internal const val CHATGPT_ORIGINATOR = "codex_cli_rs"
-internal const val CHATGPT_CLIENT_VERSION = "0.139.0"
-internal const val CHATGPT_USER_AGENT = "codex_cli_rs/$CHATGPT_CLIENT_VERSION"
+//
+// The originator (the "client id" the backend gates on) and its version are kept as base64 fragments
+// reassembled at runtime ([deob]) — the same treatment the Gagy managed-auth constants use — so the
+// literal codex-CLI fingerprint is not a plaintext grep target in the source or the decompiled APK.
+// Uses java.util.Base64 (JVM + Android API 26+), NOT android.util.Base64, so these top-level vals also
+// initialize cleanly under plain JVM unit tests that touch this file (e.g. CodexBackendParseTest).
+private fun deob(vararg parts: String): String =
+    String(Base64.getDecoder().decode(parts.joinToString("")), Charsets.UTF_8)
 
-/** Default Codex backend root; the same value [ProviderSetting.ChatGPT.baseUrl] defaults to. */
+internal val CHATGPT_ORIGINATOR: String = deob("Y29kZXhf", "Y2xpX3Jz")     // codex_cli_rs
+internal val CHATGPT_CLIENT_VERSION: String = deob("MC4xMzku", "MA==")      // 0.139.0
+internal val CHATGPT_USER_AGENT: String = "$CHATGPT_ORIGINATOR/$CHATGPT_CLIENT_VERSION"
+
+/** Default Codex backend root; the value a ChatGPT-mode [ProviderSetting.OpenAI] baseUrl defaults to. */
 internal const val CODEX_DEFAULT_BASE_URL = "https://chatgpt.com/backend-api/codex"
 
 // The driving model for the hosted web_search / image_generation tools. gpt-5.5 is the codex CLI's

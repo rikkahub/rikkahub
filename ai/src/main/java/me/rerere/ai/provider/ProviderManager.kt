@@ -47,10 +47,17 @@ class ProviderManager(
     fun <T : ProviderSetting> getProviderByType(setting: T): Provider<T> {
         @Suppress("UNCHECKED_CAST")
         return when (setting) {
-            is ProviderSetting.OpenAI -> openAI
+            // OpenAI now carries its transport mode: ChatGPT mode routes to the isolated Codex wire
+            // ([chatGPT], which is itself a Provider<OpenAI> reading the accessToken), every other mode
+            // to the standard OpenAI-compatible wire. This is the OpenAI analog of the Google provider's
+            // internal Vertex/Gagy branching.
+            is ProviderSetting.OpenAI -> when (setting.mode) {
+                OpenAIMode.ChatGPT -> chatGPT
+                OpenAIMode.Standard -> openAI
+            }
+
             is ProviderSetting.Google -> google
             is ProviderSetting.Claude -> claude
-            is ProviderSetting.ChatGPT -> chatGPT
         } as Provider<T>
     }
 }

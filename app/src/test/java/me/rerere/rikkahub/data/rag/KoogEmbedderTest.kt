@@ -91,15 +91,15 @@ class KoogEmbedderTest {
         ): Flow<ImageGenerationItem> = emptyFlow()
     }
 
-    private inner class FakeChatGPTProvider : Provider<ProviderSetting.ChatGPT> {
-        override suspend fun listModels(providerSetting: ProviderSetting.ChatGPT): List<Model> = emptyList()
+    private inner class FakeChatGPTProvider : Provider<ProviderSetting.OpenAI> {
+        override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> = emptyList()
         override suspend fun generateText(
-            providerSetting: ProviderSetting.ChatGPT,
+            providerSetting: ProviderSetting.OpenAI,
             messages: List<UIMessage>,
             params: TextGenerationParams,
         ): MessageChunk = error("unused")
         override suspend fun streamText(
-            providerSetting: ProviderSetting.ChatGPT,
+            providerSetting: ProviderSetting.OpenAI,
             messages: List<UIMessage>,
             params: TextGenerationParams,
         ): Flow<MessageChunk> = emptyFlow()

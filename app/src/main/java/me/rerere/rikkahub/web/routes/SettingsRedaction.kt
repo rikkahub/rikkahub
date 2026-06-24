@@ -39,6 +39,8 @@ internal fun Settings.sanitizeForWeb(): Settings = copy(
 internal fun ProviderSetting.redactSecrets(): ProviderSetting = when (this) {
     is ProviderSetting.OpenAI -> copy(
         apiKey = WebSettingsSecretFields.REDACTED_STRING,
+        // accessToken is the ChatGPT/Codex-mode secret (folded into OpenAI); redact it too.
+        accessToken = WebSettingsSecretFields.REDACTED_STRING,
         models = models.map { it.redactSecrets() },
     )
     is ProviderSetting.Google -> copy(
@@ -50,10 +52,6 @@ internal fun ProviderSetting.redactSecrets(): ProviderSetting = when (this) {
     is ProviderSetting.Claude -> copy(
         apiKey = WebSettingsSecretFields.REDACTED_STRING,
         oauthToken = WebSettingsSecretFields.REDACTED_STRING,
-        models = models.map { it.redactSecrets() }
-    )
-    is ProviderSetting.ChatGPT -> copy(
-        accessToken = WebSettingsSecretFields.REDACTED_STRING,
         models = models.map { it.redactSecrets() }
     )
 }

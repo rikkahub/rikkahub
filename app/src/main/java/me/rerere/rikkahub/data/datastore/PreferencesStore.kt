@@ -38,6 +38,7 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV4Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV5Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV6Migration
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV7Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.AutomationSink
@@ -73,6 +74,7 @@ private val Context.settingsStore by preferencesDataStore(
             PreferenceStoreV4Migration(),
             PreferenceStoreV5Migration(),
             PreferenceStoreV6Migration(),
+            PreferenceStoreV7Migration(),
         )
     }
 )
@@ -321,10 +323,6 @@ class SettingsStore(
                         )
 
                         is ProviderSetting.Claude -> provider.copy(
-                            models = provider.models.distinctBy { model -> model.id }
-                        )
-
-                        is ProviderSetting.ChatGPT -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
                     }

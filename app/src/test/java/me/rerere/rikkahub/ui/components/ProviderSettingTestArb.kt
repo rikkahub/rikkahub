@@ -16,6 +16,7 @@ import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import kotlin.uuid.Uuid
 
@@ -69,6 +70,8 @@ object ProviderSettingTestArb {
             chatCompletionsPath = arbShortString.bind(),
             useResponseApi = Arb.boolean().bind(),
             includeHistoryReasoning = Arb.boolean().bind(),
+            mode = Arb.enum<OpenAIMode>().bind(),
+            accessToken = arbShortString.bind(),
         )
     }
 
@@ -107,18 +110,6 @@ object ProviderSettingTestArb {
         )
     }
 
-    private val arbChatGPT: Arb<ProviderSetting.ChatGPT> = arbitrary {
-        ProviderSetting.ChatGPT(
-            id = arbKotlinUuid.bind(),
-            enabled = Arb.boolean().bind(),
-            name = arbShortString.bind(),
-            models = arbModels.bind(),
-            balanceOption = arbBalanceOption.bind(),
-            accessToken = arbShortString.bind(),
-            baseUrl = arbShortString.bind(),
-        )
-    }
-
     val arbProviderSetting: Arb<ProviderSetting> =
-        Arb.choice(arbOpenAI, arbGoogle, arbClaude, arbChatGPT)
+        Arb.choice(arbOpenAI, arbGoogle, arbClaude)
 }

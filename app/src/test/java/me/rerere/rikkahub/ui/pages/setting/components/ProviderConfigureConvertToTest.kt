@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.junit.Assert.assertEquals
@@ -86,26 +87,36 @@ class ProviderConfigureConvertToTest {
     }
 
     @Test
-    fun `convertTo should switch default chatgpt endpoint to target default`() {
-        val original = ProviderSetting.ChatGPT(
-            name = "ChatGPT",
-            baseUrl = "https://chatgpt.com/backend-api/codex"
-        )
-
-        val converted = original.convertTo(ProviderSetting.OpenAI::class) as ProviderSetting.OpenAI
-        assertEquals("https://api.openai.com/v1", converted.baseUrl)
+    fun `convertTo adopts the target default name when the name is still the source default`() {
+        // Default-name fix: a freshly-seeded OpenAI() (name == "OpenAI") converted to another tab must
+        // adopt that tab's default name instead of staying "OpenAI".
+        val seeded = ProviderSetting.OpenAI()
+        assertEquals("Google", (seeded.convertTo(ProviderSetting.Google::class) as ProviderSetting.Google).name)
+        assertEquals("Anthropic", (seeded.convertTo(ProviderSetting.Claude::class) as ProviderSetting.Claude).name)
     }
 
     @Test
-    fun `convertTo should switch official endpoint to chatgpt default`() {
-        val original = ProviderSetting.OpenAI(
-            name = "OpenAI",
-            apiKey = "sk-test",
-            baseUrl = "https://api.openai.com/v1"
-        )
+    fun `reset base url on a ChatGPT-mode provider keeps the Codex backend`() {
+        // The reset/default helpers must be mode-aware: a ChatGPT-mode OpenAI provider's default base
+        // URL is the Codex backend, not api.openai.com — else reset would point Codex at the wrong host.
+        val cg = ProviderSetting.OpenAI(mode = OpenAIMode.ChatGPT, baseUrl = "https://custom.example/codex")
+        val reset = cg.resetBaseUrlToDefault() as ProviderSetting.OpenAI
+        assertEquals("https://chatgpt.com/backend-api/codex", reset.baseUrl)
+        assertEquals(OpenAIMode.ChatGPT, reset.mode)
+    }
 
-        val converted = original.convertTo(ProviderSetting.ChatGPT::class) as ProviderSetting.ChatGPT
-        assertEquals("https://chatgpt.com/backend-api/codex", converted.baseUrl)
+    @Test
+    fun `reset base url on a standard OpenAI provider returns api openai`() {
+        val std = ProviderSetting.OpenAI(baseUrl = "https://custom.example/v1")
+        val reset = std.resetBaseUrlToDefault() as ProviderSetting.OpenAI
+        assertEquals("https://api.openai.com/v1", reset.baseUrl)
+    }
+
+    @Test
+    fun `convertTo preserves a user-typed name across a type switch`() {
+        val original = ProviderSetting.OpenAI(name = "My Gateway")
+        val converted = original.convertTo(ProviderSetting.Google::class) as ProviderSetting.Google
+        assertEquals("My Gateway", converted.name)
     }
 
     @Test

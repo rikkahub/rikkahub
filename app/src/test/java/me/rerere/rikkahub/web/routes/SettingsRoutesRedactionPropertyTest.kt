@@ -13,6 +13,7 @@ import me.rerere.ai.provider.ClaudeAuthType
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.datastore.Settings
@@ -57,7 +58,7 @@ class SettingsRoutesRedactionPropertyTest {
     ): Pair<ProviderSetting, List<String>> {
         if (depth <= 0) {
             val accessSecret = "provider-overwrite-access-$suffix"
-            return ProviderSetting.ChatGPT(
+            return ProviderSetting.OpenAI(mode = OpenAIMode.ChatGPT, 
                 name = "ChatGPT-Overwrite",
                 accessToken = accessSecret,
                 models = emptyList(),
@@ -101,7 +102,7 @@ class SettingsRoutesRedactionPropertyTest {
 
             else -> {
                 val chatgptSecret = "provider-overwrite-access-$suffix"
-                ProviderSetting.ChatGPT(
+                ProviderSetting.OpenAI(mode = OpenAIMode.ChatGPT, 
                     name = "ChatGPT-Overwrite",
                     accessToken = chatgptSecret,
                     models = listOf(overwriteModel),
@@ -177,7 +178,7 @@ class SettingsRoutesRedactionPropertyTest {
                         modelId = "base-model",
                         customHeaders = listOf(CustomHeader("X-Model", "base-model-header")),
                         customBodies = listOf(CustomBody("x-body", JsonPrimitive("base-model-body"))),
-                        providerOverwrite = ProviderSetting.ChatGPT(
+                        providerOverwrite = ProviderSetting.OpenAI(mode = OpenAIMode.ChatGPT, 
                             name = "ChatGPT-base",
                             accessToken = "base-overwrite-token",
                             models = emptyList(),
@@ -259,7 +260,7 @@ class SettingsRoutesRedactionPropertyTest {
                         models = emptyList(),
                     )
 
-                    OverwriteTarget.ACCESS_TOKEN -> ProviderSetting.ChatGPT(accessToken = token, models = emptyList())
+                    OverwriteTarget.ACCESS_TOKEN -> ProviderSetting.OpenAI(mode = OpenAIMode.ChatGPT, accessToken = token, models = emptyList())
                 }
 
                 settings.copy(
@@ -383,7 +384,7 @@ class SettingsRoutesRedactionPropertyTest {
                             modelId = "blank-model",
                             customHeaders = listOf(CustomHeader("X-Model", "")),
                             customBodies = listOf(CustomBody("x-body", JsonNull)),
-                            providerOverwrite = ProviderSetting.ChatGPT(
+                            providerOverwrite = ProviderSetting.OpenAI(mode = OpenAIMode.ChatGPT, 
                                 accessToken = "",
                                 models = emptyList(),
                             ),

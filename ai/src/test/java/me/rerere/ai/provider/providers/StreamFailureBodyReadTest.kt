@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.ResponseAPI
@@ -103,7 +104,8 @@ class StreamFailureBodyReadTest {
         val provider = ChatGPTProvider(client = failingStreamingClient(), context = null)
         val failure = collectFailureFrom {
             provider.streamText(
-                providerSetting = ProviderSetting.ChatGPT(
+                providerSetting = ProviderSetting.OpenAI(
+                    mode = OpenAIMode.ChatGPT,
                     baseUrl = "https://chatgpt.com/backend-api/codex",
                     accessToken = "not-a-valid-jwt",
                 ),

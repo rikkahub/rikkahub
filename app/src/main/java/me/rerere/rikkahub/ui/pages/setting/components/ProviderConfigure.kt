@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudeAuthType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
@@ -65,7 +66,7 @@ fun ProviderConfigure(
                             index = index,
                             count = ProviderSetting.Types.size
                         ),
-                        label = { SegmentedButtonLabel(type.simpleName ?: "") },
+                        label = { SegmentedButtonLabel(providerTypeLabel(type)) },
                         selected = provider::class == type,
                         onClick = { onEdit(provider.convertTo(type)) }
                     )
@@ -77,9 +78,26 @@ fun ProviderConfigure(
             is ProviderSetting.OpenAI -> ProviderConfigureOpenAI(provider, onEdit)
             is ProviderSetting.Google -> ProviderConfigureGoogle(provider, onEdit)
             is ProviderSetting.Claude -> ProviderConfigureClaude(provider, onEdit)
-            is ProviderSetting.ChatGPT -> ProviderConfigureChatGPT(provider, onEdit)
         }
     }
+}
+
+/**
+ * The user-facing tab label for a provider subtype. The Kotlin class is still `Claude` (its
+ * `@SerialName` stays "claude" for wire back-compat), but the brand is surfaced as "Anthropic";
+ * everything else uses the class's own default display name.
+ */
+private fun providerTypeLabel(type: KClass<out ProviderSetting>): String = when (type) {
+    ProviderSetting.Claude::class -> "Anthropic"
+    else -> defaultProviderName(type)
+}
+
+/** The default `name` of a freshly-minted provider of [type] (its data-class default). */
+private fun defaultProviderName(type: KClass<out ProviderSetting>): String = when (type) {
+    ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().name
+    ProviderSetting.Google::class -> ProviderSetting.Google().name
+    ProviderSetting.Claude::class -> ProviderSetting.Claude().name
+    else -> ""
 }
 
 fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSetting {
@@ -89,65 +107,65 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.OpenAI -> this.apiKey
         is ProviderSetting.Google -> this.apiKey
         is ProviderSetting.Claude -> this.apiKey
-        // ChatGPT has no apiKey field; its pasted access token is a distinct credential not carried
-        // across a type switch (different wire format), so it contributes nothing here.
-        is ProviderSetting.ChatGPT -> ""
     }
     val sourceBaseUrl = when (this) {
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
-        is ProviderSetting.ChatGPT -> this.baseUrl
     }
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
         ProviderSetting.Google::class -> ProviderSetting.Google().baseUrl
         ProviderSetting.Claude::class -> ProviderSetting.Claude().baseUrl
-        ProviderSetting.ChatGPT::class -> ProviderSetting.ChatGPT().baseUrl
         else -> error("Unsupported provider type: $type")
     }
     val convertedBaseUrl = sourceBaseUrl.convertToTargetBaseUrl(targetDefaultBaseUrl)
+    // Default-name fix: if the name is still the SOURCE subtype's default (the user never typed one),
+    // adopt the TARGET subtype's default so switching tabs doesn't leave e.g. a Google provider named
+    // "OpenAI". A name the user actually typed (≠ source default) is preserved verbatim.
+    val convertedName = if (this.name == defaultProviderName(this::class)) {
+        defaultProviderName(type)
+    } else {
+        this.name
+    }
 
     return when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
-            id = this.id, enabled = this.enabled, name = this.name, models = this.models,
+            id = this.id, enabled = this.enabled, name = convertedName, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
-            id = this.id, enabled = this.enabled, name = this.name, models = this.models,
+            id = this.id, enabled = this.enabled, name = convertedName, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
-            id = this.id, enabled = this.enabled, name = this.name, models = this.models,
+            id = this.id, enabled = this.enabled, name = convertedName, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             apiKey = apiKey, baseUrl = convertedBaseUrl
-        )
-        ProviderSetting.ChatGPT::class -> ProviderSetting.ChatGPT(
-            id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, builtIn = this.builtIn,
-            baseUrl = convertedBaseUrl
         )
         else -> error("Unsupported provider type: $type")
     }
 }
 
 internal fun ProviderSetting.defaultBaseUrlForReset(): String {
+    // A ChatGPT-mode OpenAI provider's default base URL is the Codex backend, NOT api.openai.com.
+    // Without this, "reset base URL" would point a ChatGPT provider at the Standard OpenAI host while
+    // leaving mode = ChatGPT, so ChatGPTProvider would then build Codex requests against the wrong host.
+    if (this is ProviderSetting.OpenAI && mode == OpenAIMode.ChatGPT) return CHATGPT_CODEX_BASE_URL
     val defaultProvider = DEFAULT_PROVIDERS.find { it.id == id }
     if (defaultProvider != null) {
         when (this) {
             is ProviderSetting.OpenAI -> if (defaultProvider is ProviderSetting.OpenAI) return defaultProvider.baseUrl
             is ProviderSetting.Google -> if (defaultProvider is ProviderSetting.Google) return defaultProvider.baseUrl
             is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
-            is ProviderSetting.ChatGPT -> if (defaultProvider is ProviderSetting.ChatGPT) return defaultProvider.baseUrl
         }
     }
     return when (this) {
         is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().baseUrl
         is ProviderSetting.Google -> ProviderSetting.Google().baseUrl
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
-        is ProviderSetting.ChatGPT -> ProviderSetting.ChatGPT().baseUrl
     }
 }
 
@@ -157,7 +175,6 @@ internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
         is ProviderSetting.OpenAI -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.Google -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
-        is ProviderSetting.ChatGPT -> this.copy(baseUrl = defaultBaseUrl)
     }
 }
 
@@ -166,7 +183,6 @@ internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
-        is ProviderSetting.ChatGPT -> this.baseUrl
     }
     return baseUrl == defaultBaseUrlForReset()
 }
@@ -214,6 +230,25 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
     CHATGPT_OFFICIAL_HOST
 )
 
+/** The Codex backend root a ChatGPT-mode OpenAI provider talks to (same value the wire defaults to). */
+private const val CHATGPT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
+
+/**
+ * Switch an OpenAI provider's [OpenAIMode], re-pointing the base URL to the new mode's default ONLY
+ * when it still holds the other mode's default (so a mode switch doesn't strand the Codex URL on the
+ * Standard path, or vice-versa). A base URL the user customized is preserved.
+ */
+private fun ProviderSetting.OpenAI.switchOpenAIMode(target: OpenAIMode): ProviderSetting.OpenAI {
+    if (mode == target) return this
+    val standardDefault = ProviderSetting.OpenAI().baseUrl
+    val newBaseUrl = when {
+        target == OpenAIMode.ChatGPT && baseUrl == standardDefault -> CHATGPT_CODEX_BASE_URL
+        target == OpenAIMode.Standard && baseUrl == CHATGPT_CODEX_BASE_URL -> standardDefault
+        else -> baseUrl
+    }
+    return copy(mode = target, baseUrl = newBaseUrl)
+}
+
 @Composable
 private fun ProviderConfigureOpenAI(
     provider: ProviderSetting.OpenAI,
@@ -230,79 +265,143 @@ private fun ProviderConfigureOpenAI(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { keyVisible = !keyVisible }) {
-                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+    // Auth/transport mode (the OpenAI-brand analog of the Google provider's Vertex/Gagy modes):
+    // Standard API key vs the ChatGPT (Codex) subscription backend. Hidden on a built-in provider.
+    if (!provider.builtIn) {
+        val modes = listOf(OpenAIMode.Standard, OpenAIMode.ChatGPT)
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            modes.forEachIndexed { index, m ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                    label = {
+                        SegmentedButtonLabel(
+                            when (m) {
+                                OpenAIMode.Standard -> "API Key"
+                                OpenAIMode.ChatGPT -> "ChatGPT"
+                            }
+                        )
+                    },
+                    selected = provider.mode == m,
+                    onClick = { onEdit(provider.switchOpenAIMode(m)) }
+                )
             }
-        },
-    )
-
-    OutlinedTextField(
-        value = provider.baseUrl,
-        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
-        modifier = Modifier.fillMaxWidth(),
-        isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
-    )
-
-    if (!provider.useResponseApi) {
-        OutlinedTextField(
-            value = provider.chatCompletionsPath,
-            onValueChange = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
-            label = { Text(stringResource(R.string.setting_provider_page_api_path)) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !provider.builtIn,
-        )
+        }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(stringResource(R.string.setting_provider_page_enable))
-        Switch(
-            checked = provider.enabled,
-            onCheckedChange = { onEdit(provider.copy(enabled = it)) }
-        )
-    }
+    when (provider.mode) {
+        OpenAIMode.ChatGPT -> {
+            var tokenVisible by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = provider.accessToken,
+                onValueChange = { onEdit(provider.copy(accessToken = it.trim())) },
+                label = { Text("Access Token") },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                        Icon(if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                    }
+                },
+            )
 
-    val responseAPIWarning = stringResource(R.string.setting_provider_page_response_api_warning)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(stringResource(R.string.setting_provider_page_response_api))
-        Switch(
-            checked = provider.useResponseApi,
-            onCheckedChange = {
-                onEdit(provider.copy(useResponseApi = it))
-                if (it && provider.baseUrl.toHttpUrlOrNull()?.host != "api.openai.com") {
-                    toaster.show(message = responseAPIWarning, type = ToastType.Warning)
-                }
+            OutlinedTextField(
+                value = provider.baseUrl,
+                onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+                label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+                modifier = Modifier.fillMaxWidth(),
+                isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.setting_provider_page_enable))
+                Switch(
+                    checked = provider.enabled,
+                    onCheckedChange = { onEdit(provider.copy(enabled = it)) }
+                )
             }
-        )
-    }
+        }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(stringResource(R.string.setting_provider_page_include_history_reasoning))
-        Switch(
-            checked = provider.includeHistoryReasoning,
-            onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }
-        )
+        OpenAIMode.Standard -> {
+            var keyVisible by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = provider.apiKey,
+                onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+                label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { keyVisible = !keyVisible }) {
+                        Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                    }
+                },
+            )
+
+            OutlinedTextField(
+                value = provider.baseUrl,
+                onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+                label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
+                modifier = Modifier.fillMaxWidth(),
+                isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+            )
+
+            if (!provider.useResponseApi) {
+                OutlinedTextField(
+                    value = provider.chatCompletionsPath,
+                    onValueChange = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
+                    label = { Text(stringResource(R.string.setting_provider_page_api_path)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !provider.builtIn,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.setting_provider_page_enable))
+                Switch(
+                    checked = provider.enabled,
+                    onCheckedChange = { onEdit(provider.copy(enabled = it)) }
+                )
+            }
+
+            val responseAPIWarning = stringResource(R.string.setting_provider_page_response_api_warning)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.setting_provider_page_response_api))
+                Switch(
+                    checked = provider.useResponseApi,
+                    onCheckedChange = {
+                        onEdit(provider.copy(useResponseApi = it))
+                        if (it && provider.baseUrl.toHttpUrlOrNull()?.host != "api.openai.com") {
+                            toaster.show(message = responseAPIWarning, type = ToastType.Warning)
+                        }
+                    }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.setting_provider_page_include_history_reasoning))
+                Switch(
+                    checked = provider.includeHistoryReasoning,
+                    onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }
+                )
+            }
+        }
     }
 }
 
@@ -438,57 +537,6 @@ private fun ProviderConfigureClaude(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ProviderConfigureChatGPT(
-    provider: ProviderSetting.ChatGPT,
-    onEdit: (provider: ProviderSetting.ChatGPT) -> Unit
-) {
-    ProviderDescription(provider)
-
-    OutlinedTextField(
-        value = provider.name,
-        onValueChange = { onEdit(provider.copy(name = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_name)) },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-    )
-
-    var tokenVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = provider.accessToken,
-        onValueChange = { onEdit(provider.copy(accessToken = it.trim())) },
-        label = { Text("Access Token") },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-        visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                Icon(if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-            }
-        },
-    )
-
-    OutlinedTextField(
-        value = provider.baseUrl,
-        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
-        modifier = Modifier.fillMaxWidth(),
-        isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
-    )
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(stringResource(R.string.setting_provider_page_enable))
-        Switch(
-            checked = provider.enabled,
-            onCheckedChange = { onEdit(provider.copy(enabled = it)) }
-        )
     }
 }
 

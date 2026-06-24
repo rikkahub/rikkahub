@@ -26,6 +26,7 @@ import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.OpenAIMode
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
@@ -88,25 +89,25 @@ class ChatGPTProvider(
     @Suppress("UNUSED_PARAMETER") context: Context? = null,
     // SSE 使用带有短 readTimeout 的专用客户端，使冻结的后台 socket 快速失败 -> onFailure -> close。
     private val streamClient: OkHttpClient = client,
-) : Provider<ProviderSetting.ChatGPT> {
+) : Provider<ProviderSetting.OpenAI> {
 
     private val responseAPI = ResponseAPI(client, KeyRoulette.default(), streamClient)
 
     // Used verbatim — see KeyRoulette warning above. Delegates to the shared codex header logic
     // (Authorization + originator + User-Agent + a fresh session_id per request).
-    private fun Request.Builder.applyChatGptHeaders(p: ProviderSetting.ChatGPT): Request.Builder =
+    private fun Request.Builder.applyChatGptHeaders(p: ProviderSetting.OpenAI): Request.Builder =
         applyCodexHeaders(p.accessToken)
 
     // Fail closed on a token we can PROVE is expired: throw the typed expiry message before any
     // network call, so the user sees a clear "paste a new one" instead of a raw 401. A non-JWT /
     // unparseable token falls through to the server's own auth error (isChatGptTokenExpired == false).
-    private fun requireNonExpired(p: ProviderSetting.ChatGPT) {
+    private fun requireNonExpired(p: ProviderSetting.OpenAI) {
         if (isChatGptTokenExpired(p.accessToken, Clock.System.now().epochSeconds)) {
             throw HttpException(EXPIRED_TOKEN_MESSAGE)
         }
     }
 
-    override suspend fun listModels(providerSetting: ProviderSetting.ChatGPT): List<Model> =
+    override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
             requireNonExpired(providerSetting)
             val request = Request.Builder()
@@ -131,7 +132,7 @@ class ChatGPTProvider(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
     ): Flow<ImageGenerationItem> = flow {
-        require(providerSetting is ProviderSetting.ChatGPT) { "Expected ChatGPT provider setting" }
+        require(providerSetting is ProviderSetting.OpenAI && providerSetting.mode == OpenAIMode.ChatGPT) { "Expected an OpenAI provider in ChatGPT mode" }
         requireNonExpired(providerSetting)
         val results = withContext(Dispatchers.IO) {
             codexGenerateImage(
@@ -151,7 +152,7 @@ class ChatGPTProvider(
         providerSetting: ProviderSetting,
         params: ImageEditParams
     ): Flow<ImageGenerationItem> = flow {
-        require(providerSetting is ProviderSetting.ChatGPT) { "Expected ChatGPT provider setting" }
+        require(providerSetting is ProviderSetting.OpenAI && providerSetting.mode == OpenAIMode.ChatGPT) { "Expected an OpenAI provider in ChatGPT mode" }
         require(params.images.isNotEmpty()) { "At least one image is required" }
         requireNonExpired(providerSetting)
         val results = withContext(Dispatchers.IO) {
@@ -167,7 +168,7 @@ class ChatGPTProvider(
     }
 
     override suspend fun generateText(
-        providerSetting: ProviderSetting.ChatGPT,
+        providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk = withContext(Dispatchers.IO) {
@@ -196,7 +197,7 @@ class ChatGPTProvider(
     )
 
     override suspend fun streamText(
-        providerSetting: ProviderSetting.ChatGPT,
+        providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
@@ -315,7 +316,7 @@ class ChatGPTProvider(
     }.bufferStreamChunks()
 
     private fun buildRequest(
-        providerSetting: ProviderSetting.ChatGPT,
+        providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Request {
@@ -336,7 +337,7 @@ class ChatGPTProvider(
     // only baseUrl/host from its OpenAI setting (never the apiKey on this path — we attach auth on the
     // Request, not the body), so a throwaway OpenAI setting carrying the ChatGPT baseUrl is safe.
     private fun buildRequestBody(
-        providerSetting: ProviderSetting.ChatGPT,
+        providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): JsonObject {

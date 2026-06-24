@@ -17,7 +17,9 @@ data class ProviderInstances(
     val openAI: Provider<ProviderSetting.OpenAI>,
     val google: Provider<ProviderSetting.Google>,
     val claude: Provider<ProviderSetting.Claude>,
-    val chatGPT: Provider<ProviderSetting.ChatGPT>,
+    // The Codex/ChatGPT wire is isolated in ChatGPTProvider but now reads an OpenAI(mode=ChatGPT) record
+    // (ChatGPT is no longer its own ProviderSetting subtype — it folded into OpenAI as a mode).
+    val chatGPT: Provider<ProviderSetting.OpenAI>,
 ) {
     companion object {
         fun default(
