@@ -167,7 +167,7 @@ class CodexProvider(
             baseUrl = "https://api.openai.com/v1",
             useResponseApi = true,
         )
-        val baseRequestBody = responseApi.createRequestBody(
+        val baseRequestBody = responseApi.buildRequestBody(
             providerSetting = syntheticSetting,
             messages = messages,
             params = params,

@@ -307,6 +307,8 @@ sealed class ProviderSetting {
         override var name: String = "AICore (on-device)",
         override var models: List<Model> = AICORE_DEFAULT_MODELS,
         override val balanceOption: BalanceOption = BalanceOption(),
+        override var apiKeys: List<ApiKeyConfig> = emptyList(),
+        override var keyManagement: KeyManagementConfig = KeyManagementConfig(),
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -329,12 +331,18 @@ sealed class ProviderSetting {
             })
         }
 
+        override fun getLegacyApiKey(): String = ""
+        override fun setLegacyApiKey(key: String) {}
+        override fun syncApiKeyString() {}
+
         override fun copyProvider(
             id: Uuid,
             enabled: Boolean,
             name: String,
             models: List<Model>,
             balanceOption: BalanceOption,
+            apiKeys: List<ApiKeyConfig>,
+            keyManagement: KeyManagementConfig,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
@@ -344,6 +352,8 @@ sealed class ProviderSetting {
                 enabled = enabled,
                 name = name,
                 models = models,
+                apiKeys = apiKeys,
+                keyManagement = keyManagement,
                 builtIn = builtIn,
                 description = description,
                 shortDescription = shortDescription,
@@ -360,10 +370,15 @@ sealed class ProviderSetting {
         override var name: String = "Local · LiteRT",
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
+        override var apiKeys: List<ApiKeyConfig> = emptyList(),
+        override var keyManagement: KeyManagementConfig = KeyManagementConfig(),
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
     ) : ProviderSetting() {
+        override fun getLegacyApiKey(): String = ""
+        override fun setLegacyApiKey(key: String) {}
+        override fun syncApiKeyString() {}
         override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
         override fun editModel(model: Model): ProviderSetting =
             copy(models = models.map { if (it.id == model.id) model else it })
@@ -377,11 +392,14 @@ sealed class ProviderSetting {
             name: String,
             models: List<Model>,
             balanceOption: BalanceOption,
+            apiKeys: List<ApiKeyConfig>,
+            keyManagement: KeyManagementConfig,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
+            apiKeys = apiKeys, keyManagement = keyManagement,
             builtIn = builtIn, description = description, shortDescription = shortDescription,
             balanceOption = balanceOption,
         )
@@ -395,10 +413,15 @@ sealed class ProviderSetting {
         override var name: String = "Codex",
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
+        override var apiKeys: List<ApiKeyConfig> = emptyList(),
+        override var keyManagement: KeyManagementConfig = KeyManagementConfig(),
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
     ) : ProviderSetting() {
+        override fun getLegacyApiKey(): String = ""
+        override fun setLegacyApiKey(key: String) {}
+        override fun syncApiKeyString() {}
         override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
 
         override fun editModel(model: Model): ProviderSetting =
@@ -420,6 +443,8 @@ sealed class ProviderSetting {
             name: String,
             models: List<Model>,
             balanceOption: BalanceOption,
+            apiKeys: List<ApiKeyConfig>,
+            keyManagement: KeyManagementConfig,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
@@ -429,6 +454,8 @@ sealed class ProviderSetting {
                 enabled = enabled,
                 name = name,
                 models = models,
+                apiKeys = apiKeys,
+                keyManagement = keyManagement,
                 balanceOption = balanceOption,
                 builtIn = builtIn,
                 description = description,
