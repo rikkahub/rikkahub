@@ -1048,6 +1048,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="theme_name_autumn">秋の黄色</string>
   <string name="theme_name_black">ニュートラルブラック</string>
   <string name="theme_name_ocean">オーシャンブルー</string>
+  <string name="theme_name_tokyo_night">Tokyo Night</string>
   <string name="theme_name_sakura">サクラピンク</string>
   <string name="theme_name_spring">メドウグリーン</string>
   <string name="theme_name_warm">ウォームサンド</string>
