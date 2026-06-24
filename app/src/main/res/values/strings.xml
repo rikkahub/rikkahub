@@ -1838,5 +1838,34 @@
     <!-- SSH & Multi-Key Page -->
     <string name="setting_page_ssh">SSH Hosts</string>
     <string name="setting_page_ssh_desc">Manage saved SSH servers</string>
+
+    <string name="setting_ssh_title">SSH Hosts</string>
+    <string name="setting_ssh_empty">No saved hosts. Tell the AI to save one via chat.</string>
+    <string name="setting_ssh_delete">Delete</string>
+    <string name="setting_ssh_delete_confirm">Delete this SSH host?</string>
+    <string name="setting_ssh_add">Add SSH Host</string>
+    <string name="setting_ssh_edit">Edit SSH Host</string>
+    <string name="setting_ssh_test">Test Connection</string>
+    <string name="setting_ssh_testing">Testing connection…</string>
+    <string name="setting_ssh_search">Search hosts</string>
+    <string name="setting_ssh_copy_info">Copy Info</string>
+    <string name="setting_ssh_field_name">Name</string>
+    <string name="setting_ssh_field_host">Host</string>
+    <string name="setting_ssh_field_port">Port</string>
+    <string name="setting_ssh_field_user">User</string>
+    <string name="setting_ssh_field_password">Password</string>
+    <string name="setting_ssh_field_private_key">Private Key</string>
+    <string name="setting_ssh_field_passphrase">Passphrase (optional)</string>
+    <string name="setting_ssh_auth_password">Password</string>
+    <string name="setting_ssh_auth_private_key">Private Key</string>
+    <string name="setting_ssh_test_title">Test: %s</string>
+    <string name="setting_ssh_test_network">Network</string>
+    <string name="setting_ssh_test_handshake">SSH Handshake</string>
+    <string name="setting_ssh_test_fingerprint">Fingerprint</string>
+    <string name="setting_ssh_test_command">Command</string>
+    <string name="setting_ssh_test_success">OK</string>
+    <string name="setting_ssh_test_fail">Failed</string>
+    <string name="setting_ssh_save">Save</string>
+    <string name="setting_ssh_validation_required">%s is required</string>
     <string name="setting_provider_page_keys">Keys</string>
-    </resources>
+</resources>

@@ -319,6 +319,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_notifications)) },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.SettingSsh) },
+                        leadingContent = { Icon(HugeIcons.Connect, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_ssh)) },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.SettingPermissions) },
                         leadingContent = { Icon(HugeIcons.Shield01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_permissions_desc)) },

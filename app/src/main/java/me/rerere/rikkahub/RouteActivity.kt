@@ -128,6 +128,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTelegramPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
+import me.rerere.rikkahub.ui.pages.setting.SettingSshPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
@@ -496,6 +497,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingWebPage()
                             }
 
+                            entry<Screen.SettingSsh> {
+                                SettingSshPage()
+                            }
+
                             entry<Screen.SettingTelegram> {
                                 SettingTelegramPage()
                             }
@@ -759,6 +764,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingWeb : Screen
+
+    @Serializable
+    data object SettingSsh : Screen
 
     @Serializable
     data object SettingTelegram : Screen
