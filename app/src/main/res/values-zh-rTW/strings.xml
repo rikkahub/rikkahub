@@ -112,7 +112,7 @@
   <string name="assistant_page_quick_message_title">標題</string>
   <string name="assistant_page_quick_messages">快速訊息</string>
   <string name="assistant_page_recent_chats">參考歷史聊天記錄</string>
-  <string name="assistant_page_recent_chats_desc">啟用後，助手將參考最近的聊天歷史記錄來提供更有上下文的回應</string>
+  <string name="assistant_page_recent_chats_desc">啟用時，允許助手搜尋過去的對話以獲取相關資訊</string>
   <string name="assistant_page_regex_affecting_scopes">影響範圍：</string>
   <string name="assistant_page_regex_desc">定義正規表示式模式，在傳送或接收前轉換訊息</string>
   <string name="assistant_page_regex_find_regex">尋找正規表示式</string>
@@ -1240,5 +1240,7 @@
   <string name="log_page_record_requests">記錄請求</string>
   <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
   <string name="assistant_page_context_message_truncation_warning">限制上下文可能導致頻繁的上下文截斷，並妨礙提示詞快取</string>
+  <string name="chat_message_tool_recent_chats">查看最近聊天</string>
+  <string name="chat_message_tool_conversation_search">搜尋歷史：%1$s</string>
 </resources>
 

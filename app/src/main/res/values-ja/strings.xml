@@ -112,7 +112,7 @@
   <string name="assistant_page_quick_message_title">タイトル</string>
   <string name="assistant_page_quick_messages">クイックメッセージ</string>
   <string name="assistant_page_recent_chats">最近のチャット履歴を参照</string>
-  <string name="assistant_page_recent_chats_desc">有効にすると、アシスタントは最近のチャット履歴を参照して、より文脈に沿った応答を提供します</string>
+  <string name="assistant_page_recent_chats_desc">有効にすると、アシスタントが過去の会話から関連情報を検索できるようになります</string>
   <string name="assistant_page_regex_affecting_scopes">影響範囲：</string>
   <string name="assistant_page_regex_desc">メッセージの送受信前に変換する正規表現パターンを定義</string>
   <string name="assistant_page_regex_find_regex">正規表現を検索</string>
@@ -1242,5 +1242,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="log_page_record_requests">リクエスト記録</string>
   <string name="log_page_record_requests_desc">リクエストヘッダー、ボディ、レスポンスメタデータをキャプチャします</string>
   <string name="assistant_page_context_message_truncation_warning">コンテキストを制限すると、頻繁なコンテキストの切り詰めが発生し、プロンプトキャッシュが妨げられる可能性があります。</string>
+  <string name="chat_message_tool_recent_chats">最近のチャットを表示</string>
+  <string name="chat_message_tool_conversation_search">検索履歴: %1$s</string>
 </resources>
 

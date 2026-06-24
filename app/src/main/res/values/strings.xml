@@ -112,7 +112,7 @@
   <string name="assistant_page_quick_message_title">Title</string>
   <string name="assistant_page_quick_messages">Quick Messages</string>
   <string name="assistant_page_recent_chats">Reference Recent Chats</string>
-  <string name="assistant_page_recent_chats_desc">When enabled, the assistant will reference recent chat history to provide more contextual responses</string>
+  <string name="assistant_page_recent_chats_desc">When enabled, allows the assistant to search past conversations for relevant information</string>
   <string name="assistant_page_regex_affecting_scopes">Affecting Scopes:</string>
   <string name="assistant_page_regex_desc">Define regex patterns to transform messages before sending/receiving</string>
   <string name="assistant_page_regex_find_regex">Find Regex</string>
@@ -1241,5 +1241,7 @@
   <string name="log_page_record_requests">Record requests</string>
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
   <string name="assistant_page_context_message_truncation_warning">Limiting context may cause frequent context truncation and prevent prompt caching</string>
+  <string name="chat_message_tool_recent_chats">View recent chats</string>
+  <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
 </resources>
 

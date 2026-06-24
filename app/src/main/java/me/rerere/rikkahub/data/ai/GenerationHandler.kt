@@ -45,7 +45,6 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.util.Locale
@@ -68,7 +67,6 @@ class GenerationHandler(
     private val providerManager: ProviderManager,
     private val json: Json,
     private val memoryRepo: MemoryRepository,
-    private val conversationRepo: ConversationRepository,
 ) {
     fun generateText(
         settings: Settings,
@@ -380,11 +378,6 @@ class GenerationHandler(
                     appendLine()
                     append(buildMemoryPrompt(memories = memories))
                 }
-                if (assistant.enableRecentChatsReference) {
-                    appendLine()
-                    append(buildRecentChatsPrompt(assistant, conversationRepo))
-                }
-
                 // 工具prompt
                 tools.forEach { tool ->
                     appendLine()
