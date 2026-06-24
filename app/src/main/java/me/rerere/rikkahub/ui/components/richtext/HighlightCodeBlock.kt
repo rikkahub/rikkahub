@@ -87,7 +87,28 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 
 private const val TAG = "HighlightCodeBlock"
-private const val COLLAPSE_LINES = 10
+internal const val COLLAPSE_LINES = 10
+
+/**
+ * Character budget for auto-collapse. A code block collapses (when the user enables it) once it
+ * exceeds EITHER the line OR the character budget. The char budget catches a block that is few
+ * physical lines but enormous — e.g. a tool result whose pretty-printed JSON holds a whole file as
+ * one escaped string. The line-only check missed that (a handful of physical lines), leaving a single
+ * huge line to render and lag the UI.
+ */
+internal const val COLLAPSE_CHARS = 1000
+
+/** True when a code block of [lineCount] lines / [charCount] chars should auto-collapse. */
+internal fun shouldAutoCollapseCode(lineCount: Int, charCount: Int): Boolean =
+    lineCount > COLLAPSE_LINES || charCount > COLLAPSE_CHARS
+
+/**
+ * Collapsed preview text: the first [COLLAPSE_LINES] lines, further capped to [COLLAPSE_CHARS]
+ * characters so a single very long line can't slip the whole payload through the line cap.
+ */
+internal fun collapsedCodePreview(lines: List<String>): String =
+    lines.take(COLLAPSE_LINES).joinToString("\n").take(COLLAPSE_CHARS)
+
 private val PREVIEWABLE_LANGUAGES = setOf("html", "svg")
 
 @Composable
@@ -191,7 +212,7 @@ fun HighlightCodeBlock(
                 else -> {
                     val textStyle = LocalTextStyle.current.merge(style)
                     val codeLines = remember(code) { code.lines() }
-                    val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
+                    val collapsedCode = remember(codeLines) { collapsedCodePreview(codeLines) }
                     val displayCode = if (isExpanded) code else collapsedCode
                     val displayLines = remember(displayCode) { displayCode.lines() }
 
@@ -221,7 +242,7 @@ fun HighlightCodeBlock(
 
                     Spacer(Modifier.height(4.dp))
                     // 代码折叠按钮
-                    if (settings.displaySetting.codeBlockAutoCollapse && codeLines.size > COLLAPSE_LINES) {
+                    if (settings.displaySetting.codeBlockAutoCollapse && shouldAutoCollapseCode(codeLines.size, code.length)) {
                         Box(
                             modifier = Modifier
                                 .onClick {
