@@ -1,13 +1,10 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
-  <string name="about_page_github">Github</string>
-  <string name="about_page_license">授權條款</string>
   <string name="about_page_system">系統</string>
   <string name="about_page_title">關於</string>
   <string name="about_page_version">版本</string>
-  <string name="about_page_website">官網</string>
   <string name="add">添加</string>
-  <string name="app_name">xcloudz</string>
+  <string name="app_name">Poci</string>
   <string name="asr_button_content_description">語音辨識</string>
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">設定名稱、頭像、模型與參數</string>
@@ -51,12 +48,10 @@
   <string name="assistant_page_background_opacity_desc">調整聊天背景圖片顯示透明度</string>
   <string name="assistant_page_background_opacity_value">透明度：%1$d%%</string>
   <string name="assistant_page_background_set">已設定背景圖片</string>
-  <string name="assistant_page_balanced">平衡</string>
   <string name="assistant_page_body_key">Body Key</string>
   <string name="assistant_page_body_value">Body 值 (JSON)</string>
   <string name="assistant_page_cancel">取消</string>
   <string name="assistant_page_change_background">更換背景圖片</string>
-  <string name="assistant_page_chaotic">混亂 (危險)</string>
   <string name="assistant_page_chat_background">聊天背景</string>
   <string name="assistant_page_chat_background_desc">設定助手聊天頁面的背景圖片</string>
   <string name="assistant_page_chat_model">聊天模型</string>
@@ -67,7 +62,6 @@
   <string name="assistant_page_context_message_desc">控制多少條歷史訊息會被作為上下文發送給模型, 超過此數量的訊息會被忽略，只有最近的N條訊息會被保留，可以節省token</string>
   <string name="assistant_page_context_message_size">上下文訊息數量</string>
   <string name="assistant_page_context_message_unlimited">無限上下文訊息</string>
-  <string name="assistant_page_creative">創造</string>
   <string name="assistant_page_current_assistant">當前助手</string>
   <string name="assistant_page_custom_bodies">自定義 Body</string>
   <string name="assistant_page_custom_headers">自定義 Headers</string>
@@ -128,7 +122,6 @@
   <string name="assistant_page_select_from_gallery">從相簿選擇</string>
   <string name="assistant_page_stream_output">串流輸出</string>
   <string name="assistant_page_stream_output_desc">是否啟用訊息的串流輸出</string>
-  <string name="assistant_page_strict">嚴謹</string>
   <string name="assistant_page_system_prompt">系統提示詞</string>
   <string name="assistant_page_tab_basic">基本設定</string>
   <string name="assistant_page_tab_extensions">擴充功能</string>
@@ -151,7 +144,6 @@
   <string name="assistant_page_time_reminder_desc">自動在時間間隔較大的訊息前插入時間提醒，幫助 AI 理解對話間隔</string>
   <string name="assistant_page_title">助手設定</string>
   <string name="assistant_page_top_p">Top P</string>
-  <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">請不要修改此值, 除非你知道自己在做什麼</string>
   <string name="assistant_page_use_assistant_avatar">使用助手頭像</string>
   <string name="assistant_page_use_assistant_avatar_desc">在聊天中使用助手頭像和名字而不是模型頭像和名字</string>
@@ -320,11 +312,6 @@
   <string name="deep_thinking">深度思考</string>
   <string name="deep_thinking_seconds">思考了 %1$.1f 秒</string>
   <string name="delete">刪除</string>
-  <string name="donate_page_afdian_desc">適用於🇨🇳用戶</string>
-  <string name="donate_page_donation_methods">贊助方式</string>
-  <string name="donate_page_kofi_desc">供全球用戶使用</string>
-  <string name="donate_page_sponsor_list">贊助用戶列表</string>
-  <string name="donate_page_title">贊助</string>
   <string name="edit">編輯</string>
   <string name="editing">編輯中</string>
   <string name="emoji_picker_search_placeholder">搜尋表情符號...</string>
@@ -533,16 +520,10 @@
   <string name="quick_messages_page_empty_title">無快速訊息</string>
   <string name="quick_messages_page_untitled">未命名</string>
   <string name="reasoning_auto">自動</string>
-  <string name="reasoning_auto_desc">讓模型自動決定推理級別。</string>
-  <string name="reasoning_custom">自定義推理預算</string>
   <string name="reasoning_heavy">高</string>
-  <string name="reasoning_heavy_desc">模型將使用大量推理來回答問題。</string>
   <string name="reasoning_light">低</string>
-  <string name="reasoning_light_desc">模型將使用少量推理來回答問題。</string>
   <string name="reasoning_medium">中等</string>
-  <string name="reasoning_medium_desc">模型將使用更多推理來回答問題。</string>
   <string name="reasoning_off">關閉</string>
-  <string name="reasoning_off_desc">關閉推理功能，模型將直接回答問題。</string>
   <string name="reasoning_picker_hint">並非所有模型都支援深度調整。請參閱模型與提供者文件。</string>
   <string name="reasoning_picker_title">調整模型思考深度</string>
   <string name="reasoning_xhigh">超高</string>
@@ -679,13 +660,10 @@
   <string name="setting_display_page_show_thinking_content_title">顯示思考內容</string>
   <string name="setting_display_page_show_token_usage_desc">顯示token用量和消息數量</string>
   <string name="setting_display_page_show_token_usage_title">顯示Token和上下文統計</string>
-  <string name="setting_display_page_show_updates_desc">是否顯示應用更新通知</string>
-  <string name="setting_display_page_show_updates_title">顯示更新</string>
   <string name="setting_display_page_show_user_avatar_desc">是否在聊天消息中顯示用戶頭像</string>
   <string name="setting_display_page_show_user_avatar_title">顯示用戶頭像</string>
   <string name="setting_display_page_skip_crop_image_desc">匯入圖片或拍照後跳過裁剪介面</string>
   <string name="setting_display_page_skip_crop_image_title">跳過圖片編輯</string>
-  <string name="setting_display_page_title">顯示設定</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">啟用後，TTS 只會朗讀引號內的內容</string>
   <string name="setting_display_page_tts_only_read_quoted_title">僅朗讀引用的 TTS 內容</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">使用應用程式圖示動畫取代預設的圓形載入指示器</string>
@@ -782,18 +760,11 @@
   <string name="setting_page_data_settings">資料設定</string>
   <string name="setting_page_default_model">預設模型與提示</string>
   <string name="setting_page_default_model_desc">設定各個功能的預設模型</string>
-  <string name="setting_page_display_setting">顯示設定</string>
-  <string name="setting_page_display_setting_desc">管理顯示設定</string>
-  <string name="setting_page_documentation">使用文檔</string>
-  <string name="setting_page_documentation_desc">查看應用使用說明和幫助文檔</string>
-  <string name="setting_page_donate">贊助</string>
-  <string name="setting_page_donate_desc">如果你喜歡這個應用，請贊助作者的工作</string>
   <string name="setting_page_dynamic_color">動態顏色</string>
   <string name="setting_page_dynamic_color_desc">是否基於桌布動態生成 app 主題配色</string>
   <string name="setting_page_extensions">擴充功能</string>
   <string name="setting_page_extensions_desc">管理提示注入、技能等功能</string>
   <string name="setting_page_general_settings">通用設定</string>
-  <string name="setting_page_interaction_notification_settings">互動與通知</string>
   <string name="setting_page_mcp">MCP</string>
   <string name="setting_page_mcp_desc">配置MCP伺服器</string>
   <string name="setting_page_message_display_settings">訊息顯示</string>
@@ -806,7 +777,6 @@
   <string name="setting_page_search_add_provider">新增提供商</string>
   <string name="setting_page_search_common_options">通用選項</string>
   <string name="setting_page_search_config">設定</string>
-  <string name="setting_page_search_delete_provider">刪除提供商</string>
   <string name="setting_page_search_result_size">結果數量</string>
   <string name="setting_page_search_service">搜尋服務</string>
   <string name="setting_page_search_service_desc">設定搜尋服務</string>
@@ -816,11 +786,7 @@
   <string name="setting_page_search_title">搜尋服務</string>
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP給朋友</string>
-  <string name="setting_page_share_text">xcloudz - 開源安卓AI助手\n\n官網: https://github.com/rdh073/rikkahub</string>
-  <string name="setting_page_sponsor_alert_confirm">捐款</string>
-  <string name="setting_page_sponsor_alert_desc">您已啟動應用程式超過 100 次！如果您喜歡使用它，請考慮支持開發者。</string>
-  <string name="setting_page_sponsor_alert_dismiss">稍後再說</string>
-  <string name="setting_page_sponsor_alert_title">支援開發者</string>
+  <string name="setting_page_share_text">Poci - 開源安卓AI助手\n\n官網: https://github.com/rdh073/rikkahub</string>
   <string name="setting_page_theme_setting">主題</string>
   <string name="setting_page_theme_setting_desc">自訂應用配色方案</string>
   <string name="setting_theme_page_preset_themes">預設主題</string>
@@ -842,7 +808,7 @@
   <string name="setting_page_web_server">Web伺服器</string>
   <string name="setting_page_web_server_address_note">位址備註</string>
   <string name="setting_page_web_server_address_note_desc">LAN 位址：使用裝置 WiFi IP，可供同一網路上的其他裝置存取。行動數據無法使用。\n本機位址：使用 localhost，僅供本裝置存取。\nmDNS 位址：使用 .local 主機名稱，可供同一網路上的其他裝置透過名稱存取，無需知道 IP。</string>
-  <string name="setting_page_web_server_desc">允許您透過網頁存取 xcloudz</string>
+  <string name="setting_page_web_server_desc">允許您透過網頁存取 Poci</string>
   <string name="setting_page_web_server_error">錯誤</string>
   <string name="setting_page_web_server_jwt_enable">啟用身分驗證</string>
   <string name="setting_page_web_server_jwt_enable_desc">存取網頁介面時需要密碼驗證</string>
@@ -858,7 +824,6 @@
   <string name="setting_page_web_server_start">啟動</string>
   <string name="setting_page_web_server_stop">停止</string>
   <string name="setting_provider_page_abilities">能力</string>
-  <string name="setting_provider_page_add">添加</string>
   <string name="setting_provider_page_add_model">添加模型</string>
   <string name="setting_provider_page_add_models_hint">點擊下方按鈕添加模型</string>
   <string name="setting_provider_page_add_new_model">添加新模型</string>
@@ -868,7 +833,6 @@
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">API 路徑</string>
-  <string name="setting_provider_page_avaliable_models">可用模型</string>
   <string name="setting_provider_page_balance_api_path">餘額 API 路徑</string>
   <string name="setting_provider_page_balance_info">取得帳戶餘額</string>
   <string name="setting_provider_page_balance_json_key">結果 JSON 鍵值</string>
@@ -881,14 +845,11 @@
   <string name="setting_provider_page_configuration">配置</string>
   <string name="setting_provider_page_configure_provider_override">配置提供商覆寫</string>
   <string name="setting_provider_page_delete_dialog_text">確定要刪除這個提供商嗎？此操作無法撤銷。</string>
-  <string name="setting_provider_page_deselect_models">取消全選</string>
   <string name="setting_provider_page_disabled">禁用</string>
   <string name="setting_provider_page_edit_model">編輯模型</string>
   <string name="setting_provider_page_embedding_model">嵌入</string>
   <string name="setting_provider_page_enable">是否啟用</string>
   <string name="setting_provider_page_enabled">啟用</string>
-  <string name="setting_provider_page_filter_example">例如：GPT-3.5</string>
-  <string name="setting_provider_page_filter_placeholder">輸入模型名稱篩選</string>
   <string name="setting_provider_page_image">圖片</string>
   <string name="setting_provider_page_image_model">圖像</string>
   <string name="setting_provider_page_image_qr_decode_failed">解析圖片中的二維碼失敗：%s</string>
@@ -924,7 +885,6 @@
   <string name="setting_provider_page_scan_error">錯誤: %s</string>
   <string name="setting_provider_page_scan_qr_code">掃描二維碼</string>
   <string name="setting_provider_page_search_providers">搜尋提供者</string>
-  <string name="setting_provider_page_select_all">全選 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">從相簿選擇</string>
   <string name="setting_provider_page_service_account_email">服務帳戶郵箱</string>
   <string name="setting_provider_page_test">測試</string>
@@ -969,7 +929,6 @@
   <string name="setting_tts_page_speed">語速</string>
   <string name="setting_tts_page_speed_description">語音合成速度 (0.25 - 4.0)</string>
   <string name="setting_tts_page_test_text">你好，這是文字轉語音測試。</string>
-  <string name="setting_tts_page_title">語音合成</string>
   <string name="setting_tts_page_voice">語音</string>
   <string name="setting_tts_page_voice_description">用於語音合成的聲音</string>
   <string name="setting_tts_page_voice_id">語音 ID</string>
@@ -1064,11 +1023,6 @@
   <string name="translator_page_translate">翻譯</string>
   <string name="tts">語音</string>
   <string name="unpin_chat">取消釘選聊天</string>
-  <string name="update_card_check_failed">檢查更新失敗</string>
-  <string name="update_card_close">關閉</string>
-  <string name="update_card_downloading">正在下載，請查看狀態列以瞭解進度</string>
-  <string name="update_card_new_version_found">發現新版本 %s</string>
-  <string name="update_card_unknown_error">未知錯誤</string>
   <string name="upload_file">上傳檔案</string>
   <string name="use_web_search">網路搜尋</string>
   <string name="user_default_name">用戶</string>
@@ -1126,7 +1080,6 @@
   <string name="translator_page_copy_result">複製翻譯結果</string>
   <string name="translator_page_error">錯誤</string>
   <string name="setting_provider_page_discount" formatted="false">10% 優惠</string>
-  <string name="donate_page_afdian_name">Afdian</string>
   <string name="setting_provider_page_test_non_streaming">非串流</string>
   <string name="setting_provider_page_test_streaming">串流</string>
   <string name="setting_provider_page_test_tool_calling">工具呼叫</string>
@@ -1157,14 +1110,14 @@
   <string name="assistant_page_subagent_max_steps">子代理最大步驟</string>
   <string name="assistant_page_subagent_max_steps_desc">此助手作為子代理運行時的最大工具使用步驟。若要使用默認設置，請留空</string>
   <string name="chat_subagent_running">正在執行 %1$s</string>
-  <string name="automation_a11y_service_label">xcloudz 使用者介面自動化</string>
+  <string name="automation_a11y_service_label">Poci 使用者介面自動化</string>
   <string name="automation_a11y_service_description">允許已啟用的助手以只讀方式觀察其他應用程式的螢幕，以幫助您。它無法點擊、輸入或滾動。您可以隨時從浮動的停止按鈕中停止它。</string>
   <string name="automation_kill_switch_stop">停止</string>
   <string name="assistant_page_ui_automation">UI 自動化（螢幕控制）</string>
-  <string name="assistant_page_ui_automation_desc">允許此助手觀察其他應用的螢幕（只讀）。需要在系統設定中啟用 xcloudz 的輔助功能服務。只讀：無法點擊或輸入。</string>
+  <string name="assistant_page_ui_automation_desc">允許此助手觀察其他應用的螢幕（只讀）。需要在系統設定中啟用 Poci 的輔助功能服務。只讀：無法點擊或輸入。</string>
   <string name="assistant_page_gradient_background">漸層背景</string>
   <string name="assistant_page_gradient_background_desc">在聊天頁面上使用動態漸變背景</string>
-  <string name="automation_kill_switch_unavailable">無法啟動自動化：無法顯示「停止」緊急開關。請啟用 xcloudz 的無障礙服務和懸浮視窗權限後重試。</string>
+  <string name="automation_kill_switch_unavailable">無法啟動自動化：無法顯示「停止」緊急開關。請啟用 Poci 的無障礙服務和懸浮視窗權限後重試。</string>
   <string name="chat_status_retrieving_knowledge">正在搜尋知識庫…</string>
   <string name="automation_confirm_prompt">在 %1$s 中確認操作：%2$s %3$s？</string>
   <string name="automation_confirm_allow">確認</string>
@@ -1270,16 +1223,6 @@
   <string name="assistant_page_automation_ttl_label">有效期限（分鐘）</string>
   <string name="assistant_page_automation_steps_label">最大步數</string>
   <string name="assistant_page_automation_limits_desc">授權在達到此分鐘數或此操作次數（以先到者為準）後過期。為零則全部拒絕。</string>
-  <string name="chat_automation_grant_open">授予自動化權限</string>
-  <string name="chat_automation_grant_title">為本次執行授予自動化權限</string>
-  <string name="chat_automation_grant_desc">授權助手在限定時間內讀取並操作目前應用程式。此授權僅涵蓋前景應用程式，並在本次執行結束時清除。</string>
-  <string name="chat_automation_grant_foreground_label">目前應用程式</string>
-  <string name="chat_automation_grant_no_foreground">未偵測到前景應用程式。請先開啟目標應用程式，然後啟用無障礙服務再授權。</string>
-  <string name="chat_automation_grant_actions_label">允許的操作</string>
-  <string name="chat_automation_grant_ttl_label">有效期限</string>
-  <string name="chat_automation_grant_ttl_minutes">%1$d 分鐘</string>
-  <string name="chat_automation_grant_confirm">授予</string>
-  <string name="chat_automation_grant_cancel">取消</string>
   <string name="assistant_page_automation_guardrail_title">工具防護</string>
   <string name="assistant_page_automation_guardrail_enable_title">防護高風險工具</string>
   <string name="assistant_page_automation_guardrail_enable_desc">在每次呼叫前對裝置與自動化工具（開啟應用程式、列出應用程式、螢幕讀取/點擊/輸入/捲動/導覽）進行攔截。</string>

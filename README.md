@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>xcloudz</h1>
+  <h1>Poci</h1>
 
 A native Android LLM chat client that supports switching between different providers for
 conversations 🤖💬☁️
@@ -62,6 +62,6 @@ architecture overview.
 This project is licensed under the **GNU AGPL v3.0** (with a segmented commercial-license clause for
 commercial use or larger deployments) — see [LICENSE](LICENSE) for the full terms.
 
-xcloudz is a fork of an open-source AGPL-3.0 project; the upstream license and copyright notices are
+Poci is a fork of an open-source AGPL-3.0 project; the upstream license and copyright notices are
 preserved in [LICENSE](LICENSE). If you redistribute or run this as a network service, you must comply
 with the AGPL (including offering the corresponding source).

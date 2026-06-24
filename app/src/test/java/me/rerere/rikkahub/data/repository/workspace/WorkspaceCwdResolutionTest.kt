@@ -127,7 +127,7 @@ class WorkspaceCwdResolutionTest {
 
     // --- generators (self-contained; :app already has kotest.property) ----------------------------
 
-    private val segments = listOf("a", "b", "src", "main", "project", "build", ".xcloudz", "scratch", ".config")
+    private val segments = listOf("a", "b", "src", "main", "project", "build", ".poci", "scratch", ".config")
 
     /** A clean, normalize-stable FILES-relative path of 1..4 ordinary (incl. dot-prefixed) segments. */
     private fun arbRelativePath(): Arb<String> = arbitrary {

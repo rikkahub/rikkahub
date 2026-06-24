@@ -65,6 +65,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.compose.koinInject
 import java.io.File
+import java.util.Locale
 
 @Composable
 fun SettingFilesPage(
@@ -330,9 +331,9 @@ private fun openManagedFile(context: Context, file: File, mimeType: String, onEr
 private fun formatBytes(bytes: Long): String {
     if (bytes < 1024) return "${bytes}B"
     val kb = bytes / 1024.0
-    if (kb < 1024) return String.format("%.1fKB", kb)
+    if (kb < 1024) return String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1fKB", kb)
     val mb = kb / 1024.0
-    if (mb < 1024) return String.format("%.1fMB", mb)
+    if (mb < 1024) return String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1fMB", mb)
     val gb = mb / 1024.0
-    return String.format("%.1fGB", gb)
+    return String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1fGB", gb)
 }

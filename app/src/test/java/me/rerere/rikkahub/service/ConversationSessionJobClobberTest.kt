@@ -3,6 +3,7 @@ package me.rerere.rikkahub.service
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.InternalForInheritanceCoroutinesApi
 import kotlinx.coroutines.Job
 import me.rerere.rikkahub.data.model.Conversation
 import org.junit.Assert.assertSame
@@ -26,6 +27,10 @@ class ConversationSessionJobClobberTest {
         onIdle = {},
     )
 
+    // OPT-IN: this test deliberately IMPLEMENTS Job (via delegation) to model a generation coroutine
+    // whose cancel() doesn't complete synchronously — exactly the inheritance the marker guards. The
+    // override is the point of the test, so opt in rather than restructure away the scenario.
+    @OptIn(InternalForInheritanceCoroutinesApi::class)
     @Test
     fun `late completion of a superseded job must not clobber the replacement`() {
         val s = session()

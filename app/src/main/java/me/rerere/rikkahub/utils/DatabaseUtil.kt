@@ -6,6 +6,10 @@ import android.util.Log
 private const val TAG = "DatabaseUtil"
 
 object DatabaseUtil {
+    // DiscouragedPrivateApi: reflecting on CursorWindow.sCursorWindowSize is deliberate — it raises the
+    // global cursor-window size so large Room rows don't overflow the default 2 MB window. There is no
+    // public API for this; the reflection is guarded (try/catch) and degrades to the default on failure.
+    @Suppress("DiscouragedPrivateApi")
     fun setCursorWindowSize(size: Int) {
         try {
             val field = CursorWindow::class.java.getDeclaredField("sCursorWindowSize")

@@ -42,6 +42,10 @@ fun BackgroundShellJobsSheet(
     loadTail: suspend (UiBackgroundJob) -> String,
     onCancel: (UiBackgroundJob) -> Unit = {},
 ) {
+    // DEPRECATION: M3 1.5.0-alpha deprecates rememberModalBottomSheetState for rememberBottomSheetState,
+    // but that replacement is itself an unstable alpha API and the swap changes sheet expand behavior;
+    // defer the migration until M3 stabilizes rather than churn UI on a moving target.
+    @Suppress("DEPRECATION")
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val toaster = LocalToaster.current
     var tails by remember { mutableStateOf<Map<String, TailState>>(emptyMap()) }

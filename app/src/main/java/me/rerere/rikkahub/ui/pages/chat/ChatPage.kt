@@ -530,6 +530,9 @@ private fun ChatBoardSheet(
     conversationId: Uuid,
     onDismiss: () -> Unit,
 ) {
+    // DEPRECATION: M3 1.5.0-alpha deprecates rememberModalBottomSheetState for rememberBottomSheetState,
+    // an unstable alpha replacement whose swap changes sheet expand behavior; defer until M3 stabilizes.
+    @Suppress("DEPRECATION")
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     // The conversation id is the BoardViewModel's only runtime parameter (it scopes the board to
     // this conversation); resolved per-conversation so two open chats never share one board VM.

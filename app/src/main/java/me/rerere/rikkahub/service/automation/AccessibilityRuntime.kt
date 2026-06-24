@@ -3,6 +3,7 @@ package me.rerere.rikkahub.service.automation
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.annotation.SuppressLint
 import android.accessibilityservice.InputMethod
 import android.content.pm.ApplicationInfo
 import android.os.Build
@@ -168,6 +169,10 @@ class AccessibilityRuntime : AccessibilityService(), AutomationBackend {
         }
     }
 
+    // SwitchIntDef: the when over event.eventType intentionally handles only the two TYPE_* values this
+    // service subscribes to (serviceInfo.eventTypes), with else -> return for everything else. Enumerating
+    // every AccessibilityEvent constant would be noise; the subset is deliberate and documented inline.
+    @SuppressLint("SwitchIntDef")
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // The eyes-open freshness reducer (spec §8): classify the incoming event and let the pure
         // FreshnessReducer decide whether to bump the monotonic epoch / pulse the settle signal. The

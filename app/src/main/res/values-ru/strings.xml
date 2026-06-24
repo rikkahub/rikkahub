@@ -1,13 +1,10 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
-  <string name="about_page_github">GitHub</string>
-  <string name="about_page_license">Лицензия</string>
   <string name="about_page_system">Система</string>
   <string name="about_page_title">О приложении</string>
   <string name="about_page_version">Версия</string>
-  <string name="about_page_website">Веб-сайт</string>
   <string name="add">Добавить</string>
-  <string name="app_name">xcloudz</string>
+  <string name="app_name">Poci</string>
   <string name="asr_button_content_description">Распознавание речи</string>
   <string name="asr_button_stop">Стоп</string>
   <string name="assistant_detail_basic_desc">Настройте имя, аватар, модель и параметры</string>
@@ -51,12 +48,10 @@
   <string name="assistant_page_background_opacity_desc">Настройте видимость фонового изображения чата</string>
   <string name="assistant_page_background_opacity_value">Прозрачность: %1$d%%</string>
   <string name="assistant_page_background_set">Фоновое изображение установлено</string>
-  <string name="assistant_page_balanced">Сбалансированный</string>
   <string name="assistant_page_body_key">Ключ тела</string>
   <string name="assistant_page_body_value">Значение тела (JSON)</string>
   <string name="assistant_page_cancel">Отмена</string>
   <string name="assistant_page_change_background">Изменить фоновое изображение</string>
-  <string name="assistant_page_chaotic">Хаотичный (Опасный)</string>
   <string name="assistant_page_chat_background">Фон чата</string>
   <string name="assistant_page_chat_background_desc">Установить фоновое изображение для страницы чата с ассистентом</string>
   <string name="assistant_page_chat_model">Модель чата</string>
@@ -67,7 +62,6 @@
   <string name="assistant_page_context_message_desc">Управляет количеством исторических сообщений, отправляемых модели в качестве контекста. Сообщения, превышающие это число, будут игнорироваться; будут сохранены только последние N сообщений, что позволяет экономить токены</string>
   <string name="assistant_page_context_message_size">Размер контекстного сообщения</string>
   <string name="assistant_page_context_message_unlimited">Неограниченные контекстные сообщения</string>
-  <string name="assistant_page_creative">Творческий</string>
   <string name="assistant_page_current_assistant">Текущий ассистент</string>
   <string name="assistant_page_custom_bodies">Пользовательский контекст</string>
   <string name="assistant_page_custom_headers">Пользовательские заголовки</string>
@@ -128,7 +122,6 @@
   <string name="assistant_page_select_from_gallery">Выбрать из галереи</string>
   <string name="assistant_page_stream_output">Потоковый вывод</string>
   <string name="assistant_page_stream_output_desc">Включить потоковый вывод сообщений</string>
-  <string name="assistant_page_strict">Строгий</string>
   <string name="assistant_page_system_prompt">Системный промпт</string>
   <string name="assistant_page_tab_basic">Основные настройки</string>
   <string name="assistant_page_tab_extensions">Расширения</string>
@@ -151,7 +144,6 @@
   <string name="assistant_page_time_reminder_desc">Автоматически добавлять напоминания о времени перед сообщениями с большими интервалами, чтобы помочь ИИ понимать паузы в разговоре</string>
   <string name="assistant_page_title">Настройки ассистента</string>
   <string name="assistant_page_top_p">Top P</string>
-  <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">Пожалуйста, не изменяйте это значение, если не уверены в своих действиях</string>
   <string name="assistant_page_use_assistant_avatar">Использовать аватар ассистента</string>
   <string name="assistant_page_use_assistant_avatar_desc">Использовать аватар и имя ассистента вместо аватара и имени модели в чатах</string>
@@ -320,11 +312,6 @@
   <string name="deep_thinking">Глубокое мышление</string>
   <string name="deep_thinking_seconds">Думал %1$.1f секунд</string>
   <string name="delete">Удалить</string>
-  <string name="donate_page_afdian_desc">Для пользователей 🇨🇳</string>
-  <string name="donate_page_donation_methods">Способы пожертвований</string>
-  <string name="donate_page_kofi_desc">Для пользователей по всему миру</string>
-  <string name="donate_page_sponsor_list">Список спонсоров</string>
-  <string name="donate_page_title">Поддержать</string>
   <string name="edit">Редактировать</string>
   <string name="editing">Редактирование</string>
   <string name="emoji_picker_search_placeholder">Поиск эмодзи...</string>
@@ -533,16 +520,10 @@
   <string name="quick_messages_page_empty_title">Нет быстрых сообщений</string>
   <string name="quick_messages_page_untitled">Без названия</string>
   <string name="reasoning_auto">Авто</string>
-  <string name="reasoning_auto_desc">Позволить модели автоматически определить уровень рассуждений.</string>
-  <string name="reasoning_custom">Пользовательский бюджет рассуждений</string>
   <string name="reasoning_heavy">Высокая</string>
-  <string name="reasoning_heavy_desc">Модель будет использовать большое количество рассуждений для ответа на вопросы.</string>
   <string name="reasoning_light">Низкий</string>
-  <string name="reasoning_light_desc">Модель будет использовать небольшое количество рассуждений для ответа на вопросы.</string>
   <string name="reasoning_medium">Средний</string>
-  <string name="reasoning_medium_desc">Модель будет использовать более глубокое рассуждение для ответа на вопросы.</string>
   <string name="reasoning_off">Выключено</string>
-  <string name="reasoning_off_desc">Отключить функцию обоснования, модель будет отвечать на вопросы напрямую.</string>
   <string name="reasoning_picker_hint">Не все модели поддерживают настройку глубины. См. документацию модели и провайдера.</string>
   <string name="reasoning_picker_title">Настроить глубину мышления модели</string>
   <string name="reasoning_xhigh">Очень высокий</string>
@@ -679,13 +660,10 @@
   <string name="setting_display_page_show_thinking_content_title">Показывать содержание размышлений</string>
   <string name="setting_display_page_show_token_usage_desc">Отображать использование токенов и количество сообщений</string>
   <string name="setting_display_page_show_token_usage_title">Показывать статистику токенов и контекста</string>
-  <string name="setting_display_page_show_updates_desc">Отображать ли уведомления об обновлениях приложения</string>
-  <string name="setting_display_page_show_updates_title">Показывать обновления</string>
   <string name="setting_display_page_show_user_avatar_desc">Отображать аватар пользователя в сообщениях чата</string>
   <string name="setting_display_page_show_user_avatar_title">Показывать аватар пользователя</string>
   <string name="setting_display_page_skip_crop_image_desc">Пропустить обрезку после импорта изображений или съёмки</string>
   <string name="setting_display_page_skip_crop_image_title">Пропустить редактирование изображения</string>
-  <string name="setting_display_page_title">Настройки отображения</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">Если включено, TTS читает только текст в кавычках</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS читать только цитированный контент</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">Использовать анимированный значок приложения вместо стандартного круглого индикатора загрузки</string>
@@ -782,18 +760,11 @@
   <string name="setting_page_data_settings">Настройки данных</string>
   <string name="setting_page_default_model">Модель и промпт по умолчанию</string>
   <string name="setting_page_default_model_desc">Установить модели по умолчанию для каждой функции</string>
-  <string name="setting_page_display_setting">Настройки отображения</string>
-  <string name="setting_page_display_setting_desc">Управление настройками отображения</string>
-  <string name="setting_page_documentation">Документация</string>
-  <string name="setting_page_documentation_desc">Просмотрите инструкции по использованию приложения и справочную документацию</string>
-  <string name="setting_page_donate">Поддержать</string>
-  <string name="setting_page_donate_desc">Если вам нравится, поддержите автора</string>
   <string name="setting_page_dynamic_color">Динамический цвет</string>
   <string name="setting_page_dynamic_color_desc">Динамически создавать цвета темы приложения на основе обоев</string>
   <string name="setting_page_extensions">Расширения</string>
   <string name="setting_page_extensions_desc">Управление внедрением подсказок, навыками и другими возможностями</string>
   <string name="setting_page_general_settings">Общие настройки</string>
-  <string name="setting_page_interaction_notification_settings">Взаимодействие и уведомления</string>
   <string name="setting_page_mcp">MCP</string>
   <string name="setting_page_mcp_desc">Настроить серверы MCP</string>
   <string name="setting_page_message_display_settings">Отображение сообщений</string>
@@ -806,7 +777,6 @@
   <string name="setting_page_search_add_provider">Добавить поставщика</string>
   <string name="setting_page_search_common_options">Общие параметры</string>
   <string name="setting_page_search_config">Конфигурация</string>
-  <string name="setting_page_search_delete_provider">Удалить поставщика</string>
   <string name="setting_page_search_result_size">Размер результата</string>
   <string name="setting_page_search_service">Служба поиска</string>
   <string name="setting_page_search_service_desc">Настроить службу поиска</string>
@@ -816,11 +786,7 @@
   <string name="setting_page_search_title">Служба поиска</string>
   <string name="setting_page_share">Поделиться</string>
   <string name="setting_page_share_desc">Поделиться этим приложением с друзьями</string>
-  <string name="setting_page_share_text">xcloudz — открытый Android-ассистент с ИИ\n\nСайт: https://github.com/rdh073/rikkahub</string>
-  <string name="setting_page_sponsor_alert_confirm">Пожертвовать</string>
-  <string name="setting_page_sponsor_alert_desc">Вы запустили приложение более 100 раз! Если вам нравится им пользоваться, пожалуйста, поддержите разработчика.</string>
-  <string name="setting_page_sponsor_alert_dismiss">Не сейчас</string>
-  <string name="setting_page_sponsor_alert_title">Поддержать разработчика</string>
+  <string name="setting_page_share_text">Poci — открытый Android-ассистент с ИИ\n\nСайт: https://github.com/rdh073/rikkahub</string>
   <string name="setting_page_theme_setting">Тема</string>
   <string name="setting_page_theme_setting_desc">Настроить цветовую схему приложения</string>
   <string name="setting_theme_page_preset_themes">Предустановленные темы</string>
@@ -844,7 +810,7 @@
   <string name="setting_page_web_server_address_note_desc">LAN-адрес: использует IP-адрес устройства в Wi-Fi, доступен другим устройствам в той же сети. Недоступен при использовании мобильных данных.
 Локальный адрес: использует localhost, доступен только на этом устройстве.
 Адрес mDNS: использует имя хоста .local, доступен по имени с других устройств в той же сети без знания IP-адреса.</string>
-  <string name="setting_page_web_server_desc">Разрешить доступ к xcloudz через веб</string>
+  <string name="setting_page_web_server_desc">Разрешить доступ к Poci через веб</string>
   <string name="setting_page_web_server_error">Ошибка</string>
   <string name="setting_page_web_server_jwt_enable">Включить аутентификацию</string>
   <string name="setting_page_web_server_jwt_enable_desc">Требовать проверку пароля при доступе к веб-интерфейсу</string>
@@ -860,7 +826,6 @@
   <string name="setting_page_web_server_start">Запустить</string>
   <string name="setting_page_web_server_stop">Остановить</string>
   <string name="setting_provider_page_abilities">Возможности</string>
-  <string name="setting_provider_page_add">Добавить</string>
   <string name="setting_provider_page_add_model">Добавить модель</string>
   <string name="setting_provider_page_add_models_hint">Нажмите кнопку ниже, чтобы добавить модели</string>
   <string name="setting_provider_page_add_new_model">Добавить новую модель</string>
@@ -870,7 +835,6 @@
   <string name="setting_provider_page_api_base_url">Базовый URL API</string>
   <string name="setting_provider_page_api_key">Ключ API</string>
   <string name="setting_provider_page_api_path">Путь API</string>
-  <string name="setting_provider_page_avaliable_models">Доступные модели</string>
   <string name="setting_provider_page_balance_api_path">Путь API баланса</string>
   <string name="setting_provider_page_balance_info">Получить баланс аккаунта</string>
   <string name="setting_provider_page_balance_json_key">Ключ результата JSON</string>
@@ -883,14 +847,11 @@
   <string name="setting_provider_page_configuration">Конфигурация</string>
   <string name="setting_provider_page_configure_provider_override">Настроить переопределение поставщика</string>
   <string name="setting_provider_page_delete_dialog_text">Вы уверены, что хотите удалить этого поставщика? Это действие нельзя отменить.</string>
-  <string name="setting_provider_page_deselect_models">Снять выделение со всех</string>
   <string name="setting_provider_page_disabled">Отключено</string>
   <string name="setting_provider_page_edit_model">Редактировать модель</string>
   <string name="setting_provider_page_embedding_model">Встраивание</string>
   <string name="setting_provider_page_enable">Включить</string>
   <string name="setting_provider_page_enabled">Включено</string>
-  <string name="setting_provider_page_filter_example">например: GPT-3.5</string>
-  <string name="setting_provider_page_filter_placeholder">Введите название модели для фильтрации</string>
   <string name="setting_provider_page_image">Изображение</string>
   <string name="setting_provider_page_image_model">Изображение</string>
   <string name="setting_provider_page_image_qr_decode_failed">Не удалось распознать QR-код с изображения: %s</string>
@@ -926,7 +887,6 @@
   <string name="setting_provider_page_scan_error">Ошибка: %s</string>
   <string name="setting_provider_page_scan_qr_code">Сканировать QR-код</string>
   <string name="setting_provider_page_search_providers">Поиск поставщиков</string>
-  <string name="setting_provider_page_select_all">Выбрать все (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">Выбрать из галереи</string>
   <string name="setting_provider_page_service_account_email">Электронная почта служебной учётной записи</string>
   <string name="setting_provider_page_test">Тест</string>
@@ -971,7 +931,6 @@
   <string name="setting_tts_page_speed">Скорость</string>
   <string name="setting_tts_page_speed_description">Скорость речи (0,25–4,0)</string>
   <string name="setting_tts_page_test_text">Здравствуйте, это тест преобразования текста в речь.</string>
-  <string name="setting_tts_page_title">Преобразование текста в речь</string>
   <string name="setting_tts_page_voice">Голос</string>
   <string name="setting_tts_page_voice_description">Голос для синтеза речи</string>
   <string name="setting_tts_page_voice_id">ID голоса</string>
@@ -1066,11 +1025,6 @@
   <string name="translator_page_translate">Перевести</string>
   <string name="tts">TTS</string>
   <string name="unpin_chat">Открепить чат</string>
-  <string name="update_card_check_failed">Проверка обновления не удалась</string>
-  <string name="update_card_close">Закрыть</string>
-  <string name="update_card_downloading">Идёт загрузка, следите за прогрессом в строке состояния</string>
-  <string name="update_card_new_version_found">Найдена новая версия %s</string>
-  <string name="update_card_unknown_error">Неизвестная ошибка</string>
   <string name="upload_file">Загрузить файл</string>
   <string name="use_web_search">Веб-поиск</string>
   <string name="user_default_name">Пользователь</string>
@@ -1128,7 +1082,6 @@
   <string name="translator_page_copy_result">Копировать результат перевода</string>
   <string name="translator_page_error">Ошибка</string>
   <string name="setting_provider_page_discount" formatted="false">Скидка 10%</string>
-  <string name="donate_page_afdian_name">Afdian</string>
   <string name="setting_provider_page_test_non_streaming">Без потоковой передачи</string>
   <string name="setting_provider_page_test_streaming">Потоковая передача</string>
   <string name="setting_provider_page_test_tool_calling">Вызов инструмента</string>
@@ -1159,14 +1112,14 @@
   <string name="assistant_page_subagent_max_steps">Макс. шагов подагента</string>
   <string name="assistant_page_subagent_max_steps_desc">Максимальное количество шагов использования инструментов, когда этот ассистент работает как подагент. Оставьте пустым, чтобы использовать по умолчанию</string>
   <string name="chat_subagent_running">Выполняется %1$s</string>
-  <string name="automation_a11y_service_label">Автоматизация интерфейса xcloudz</string>
+  <string name="automation_a11y_service_label">Автоматизация интерфейса Poci</string>
   <string name="automation_a11y_service_description">Позволяет включенному помощнику наблюдать (только для чтения) за экраном других приложений, чтобы помочь вам. Он не может нажимать, вводить текст или прокручивать. Вы можете остановить его в любое время с помощью плавающей кнопки ОСТАНОВИТЬ.</string>
   <string name="automation_kill_switch_stop">СТОП</string>
   <string name="assistant_page_ui_automation">Автоматизация интерфейса (управление экраном)</string>
-  <string name="assistant_page_ui_automation_desc">Разрешите этому ассистенту наблюдать за экраном других приложений (только для чтения). Требуется включение службы доступности xcloudz в системных настройках. Только для чтения: без нажатий или ввода текста.</string>
+  <string name="assistant_page_ui_automation_desc">Разрешите этому ассистенту наблюдать за экраном других приложений (только для чтения). Требуется включение службы доступности Poci в системных настройках. Только для чтения: без нажатий или ввода текста.</string>
   <string name="assistant_page_gradient_background">Градиентный фон</string>
   <string name="assistant_page_gradient_background_desc">Использовать динамический градиентный фон на странице чата</string>
-  <string name="automation_kill_switch_unavailable">Не удалось запустить автоматизацию: не удалось показать аварийный выключатель «СТОП». Включите службу специальных возможностей xcloudz и наложение, затем повторите попытку.</string>
+  <string name="automation_kill_switch_unavailable">Не удалось запустить автоматизацию: не удалось показать аварийный выключатель «СТОП». Включите службу специальных возможностей Poci и наложение, затем повторите попытку.</string>
   <string name="chat_status_retrieving_knowledge">Поиск в базе знаний…</string>
   <string name="automation_confirm_prompt">Подтвердите действие в %1$s: %2$s %3$s?</string>
   <string name="automation_confirm_allow">Подтвердить</string>
@@ -1272,16 +1225,6 @@
   <string name="assistant_page_automation_ttl_label">Время жизни (минуты)</string>
   <string name="assistant_page_automation_steps_label">Макс. число шагов</string>
   <string name="assistant_page_automation_limits_desc">Разрешение истекает по достижении этого числа минут или этого числа действий, в зависимости от того, что наступит раньше. Ноль отклоняет всё.</string>
-  <string name="chat_automation_grant_open">Разрешить автоматизацию</string>
-  <string name="chat_automation_grant_title">Разрешить автоматизацию для этого запуска</string>
-  <string name="chat_automation_grant_desc">Разрешите ассистенту читать и управлять текущим приложением в течение ограниченного времени. Разрешение распространяется только на приложение на переднем плане и снимается по завершении этого запуска.</string>
-  <string name="chat_automation_grant_foreground_label">Текущее приложение</string>
-  <string name="chat_automation_grant_no_foreground">Приложение на переднем плане не обнаружено. Откройте нужное приложение, затем включите службу специальных возможностей перед предоставлением разрешения.</string>
-  <string name="chat_automation_grant_actions_label">Разрешённые действия</string>
-  <string name="chat_automation_grant_ttl_label">Истекает через</string>
-  <string name="chat_automation_grant_ttl_minutes">%1$d мин</string>
-  <string name="chat_automation_grant_confirm">Разрешить</string>
-  <string name="chat_automation_grant_cancel">Отмена</string>
   <string name="assistant_page_automation_guardrail_title">Ограждение инструментов</string>
   <string name="assistant_page_automation_guardrail_enable_title">Защита опасных инструментов</string>
   <string name="assistant_page_automation_guardrail_enable_desc">Проверять инструменты устройства и автоматизации (открытие приложения, список приложений, чтение/нажатие/ввод/прокрутка/навигация по экрану) перед каждым вызовом.</string>

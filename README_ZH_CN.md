@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="应用图标" width="100" />
-  <h1>xcloudz</h1>
+  <h1>Poci</h1>
 
 一款原生 Android 大语言模型聊天客户端，支持在不同的服务商之间切换进行对话 🤖💬☁️
 
@@ -57,4 +57,4 @@
 
 本项目采用 **GNU AGPL v3.0** 许可（针对商业用途或更大规模部署设有分段商业许可条款）——完整条款请见 [LICENSE](LICENSE)。
 
-xcloudz 是一个基于开源 AGPL-3.0 项目的分支（fork）；上游的许可证与版权声明均保留在 [LICENSE](LICENSE) 中。若你重新分发本项目或将其作为网络服务运行，必须遵守 AGPL（包括提供对应的源代码）。
+Poci 是一个基于开源 AGPL-3.0 项目的分支（fork）；上游的许可证与版权声明均保留在 [LICENSE](LICENSE) 中。若你重新分发本项目或将其作为网络服务运行，必须遵守 AGPL（包括提供对应的源代码）。

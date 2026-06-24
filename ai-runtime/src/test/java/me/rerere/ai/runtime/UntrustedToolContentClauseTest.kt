@@ -39,6 +39,10 @@ class UntrustedToolContentClauseTest {
 
     // Issue #356 #4: hasToolOutput is the historical-transcript gate. A clause must fire when prior tool
     // output is in scope even with NO tools exposed this request.
+    // DEPRECATION: deliberately constructs a legacy UIMessagePart.ToolResult — this test PINS that the
+    // gate still detects that deprecated part type in old transcripts, so the deprecated constructor use
+    // is the point of the test, not a migration target.
+    @Suppress("DEPRECATION")
     @Test
     fun `hasToolOutput detects executed tools and legacy tool results only`() {
         val executedTool = UIMessage(

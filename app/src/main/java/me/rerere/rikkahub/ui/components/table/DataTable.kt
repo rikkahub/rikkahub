@@ -71,7 +71,7 @@ fun DataTable(
             val unbounded = Constraints(0, infinity, 0, infinity)
             val minWidthsPx = IntArray(columnCount) { i -> columnMinWidths.getOrNull(i)?.roundToPx() ?: 0 }
             val maxWidthsPx = IntArray(columnCount) { i -> columnMaxWidths.getOrNull(i)?.roundToPx() ?: Int.MAX_VALUE }
-            val colWidths = IntArray(columnCount) { 0 }
+            val colWidths = IntArray(columnCount)
             val headerP1 = arrayOfNulls<Placeable>(columnCount)
             val bodyP1 = arrayOfNulls<Placeable>(rowCount * columnCount)
 

@@ -1,13 +1,10 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
-  <string name="about_page_github">Github</string>
-  <string name="about_page_license">License</string>
   <string name="about_page_system">System</string>
   <string name="about_page_title">About</string>
   <string name="about_page_version">Version</string>
-  <string name="about_page_website">Website</string>
   <string name="add">Add</string>
-  <string name="app_name">xcloudz</string>
+  <string name="app_name">Poci</string>
   <string name="asr_button_content_description">Speech Recognition</string>
   <string name="asr_button_stop">Stop</string>
   <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
@@ -51,12 +48,10 @@
   <string name="assistant_page_background_opacity_desc">Adjust chat background image visibility</string>
   <string name="assistant_page_background_opacity_value">Opacity: %1$d%%</string>
   <string name="assistant_page_background_set">Background image set</string>
-  <string name="assistant_page_balanced">Balanced</string>
   <string name="assistant_page_body_key">Body Key</string>
   <string name="assistant_page_body_value">Body Value (JSON)</string>
   <string name="assistant_page_cancel">Cancel</string>
   <string name="assistant_page_change_background">Change Background Image</string>
-  <string name="assistant_page_chaotic">Chaotic (Dangerous)</string>
   <string name="assistant_page_chat_background">Chat Background</string>
   <string name="assistant_page_chat_background_desc">Set background image for assistant chat page</string>
   <string name="assistant_page_chat_model">Chat Model</string>
@@ -70,7 +65,6 @@
   <string name="assistant_page_auto_compact">Auto compact history</string>
   <string name="assistant_page_auto_compact_desc">Automatically summarize older messages before sending when the conversation approaches the model\'s context window. This rewrites history, so it stays off by default.</string>
   <string name="assistant_page_auto_compact_threshold">Trigger at %d%% of context size</string>
-  <string name="assistant_page_creative">Creative</string>
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
   <string name="assistant_page_custom_headers">Custom Headers</string>
@@ -131,7 +125,6 @@
   <string name="assistant_page_select_from_gallery">Select from Gallery</string>
   <string name="assistant_page_stream_output">Stream Output</string>
   <string name="assistant_page_stream_output_desc">Whether to enable streaming output for messages</string>
-  <string name="assistant_page_strict">Strict</string>
   <string name="assistant_page_system_prompt">System Prompt</string>
   <string name="assistant_page_tab_basic">Basic Settings</string>
   <string name="assistant_page_tab_extensions">Extensions</string>
@@ -154,7 +147,6 @@
   <string name="assistant_page_time_reminder_desc">Automatically inject time reminders before messages with large time gaps to help AI understand conversation intervals</string>
   <string name="assistant_page_title">Assistant Settings</string>
   <string name="assistant_page_top_p">Top P</string>
-  <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">Please don\'t modify this value unless you know what you\'re doing</string>
   <string name="assistant_page_use_assistant_avatar">Use Assistant Avatar</string>
   <string name="assistant_page_use_assistant_avatar_desc">Use assistant avatar and name instead of model avatar and name in chats</string>
@@ -324,11 +316,6 @@
   <string name="deep_thinking">Deep Thinking</string>
   <string name="deep_thinking_seconds">Thought for %1$.1f seconds</string>
   <string name="delete">Delete</string>
-  <string name="donate_page_afdian_desc">For 🇨🇳 users</string>
-  <string name="donate_page_donation_methods">Donation Methods</string>
-  <string name="donate_page_kofi_desc">For Global Users</string>
-  <string name="donate_page_sponsor_list">Sponsor List</string>
-  <string name="donate_page_title">Donate</string>
   <string name="edit">Edit</string>
   <string name="editing">Editing</string>
   <string name="emoji_picker_search_placeholder">Search emojis...</string>
@@ -538,16 +525,10 @@
   <string name="quick_messages_page_empty_title">No Quick Messages</string>
   <string name="quick_messages_page_untitled">Untitled</string>
   <string name="reasoning_auto">Auto</string>
-  <string name="reasoning_auto_desc">Let the model automatically determine reasoning level.</string>
-  <string name="reasoning_custom">Custom reasoning budget</string>
   <string name="reasoning_heavy">High</string>
-  <string name="reasoning_heavy_desc">The model will use a large amount of reasoning to answer questions.</string>
   <string name="reasoning_light">Low</string>
-  <string name="reasoning_light_desc">The model will use a small amount of reasoning to answer questions.</string>
   <string name="reasoning_medium">Medium</string>
-  <string name="reasoning_medium_desc">The model will use more reasoning to answer questions.</string>
   <string name="reasoning_off">Off</string>
-  <string name="reasoning_off_desc">Turn off reasoning functionality, the model will directly answer questions.</string>
   <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>
   <string name="reasoning_picker_title">Adjust Model Thinking Depth</string>
   <string name="reasoning_xhigh">XHigh</string>
@@ -691,13 +672,10 @@
   <string name="setting_display_page_show_thinking_content_title">Show Thinking Content</string>
   <string name="setting_display_page_show_token_usage_desc">Display token usage and message count</string>
   <string name="setting_display_page_show_token_usage_title">Show Token &amp; Context Stats</string>
-  <string name="setting_display_page_show_updates_desc">Whether to display app update notifications</string>
-  <string name="setting_display_page_show_updates_title">Show Updates</string>
   <string name="setting_display_page_show_user_avatar_desc">Whether to display user avatar in chat messages</string>
   <string name="setting_display_page_show_user_avatar_title">Show User Avatar</string>
   <string name="setting_display_page_skip_crop_image_desc">Skip crop interface after importing images or taking photos</string>
   <string name="setting_display_page_skip_crop_image_title">Skip Image Editing</string>
-  <string name="setting_display_page_title">Display Settings</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">When enabled, TTS will only read content within quotation marks</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS Read Quoted Content Only</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">Use the animated app icon instead of the default circular loading indicator</string>
@@ -797,8 +775,6 @@
   <string name="setting_page_data_settings">Data Settings</string>
   <string name="setting_page_default_model">Default Model and Prompt</string>
   <string name="setting_page_default_model_desc">Set default models for each feature</string>
-  <string name="setting_page_display_setting">Display Settings</string>
-  <string name="setting_page_display_setting_desc">Manage display settings</string>
   <string name="setting_page_preferences">Preferences</string>
   <string name="setting_page_preferences_desc">Theme, notifications, UI and general settings</string>
   <string name="setting_page_preferences_theme">Theme</string>
@@ -809,16 +785,11 @@
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
   <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
-  <string name="setting_page_documentation">Documentation</string>
-  <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
-  <string name="setting_page_donate">Donate</string>
-  <string name="setting_page_donate_desc">If you like it, sponsor the author\'s work</string>
   <string name="setting_page_dynamic_color">Dynamic Color</string>
   <string name="setting_page_dynamic_color_desc">Generate the app theme colors dynamically from your wallpaper</string>
   <string name="setting_page_extensions">Extensions</string>
   <string name="setting_page_extensions_desc">Manage prompt injections, skills and more</string>
   <string name="setting_page_general_settings">General Settings</string>
-  <string name="setting_page_interaction_notification_settings">Interaction &amp;amp; Notifications</string>
   <string name="setting_page_mcp">MCP</string>
   <string name="setting_page_mcp_desc">Configure MCP Servers</string>
   <string name="setting_page_message_display_settings">Message Display</string>
@@ -831,7 +802,6 @@
   <string name="setting_page_search_add_provider">Add Provider</string>
   <string name="setting_page_search_common_options">Common Options</string>
   <string name="setting_page_search_config">Configuration</string>
-  <string name="setting_page_search_delete_provider">Delete Provider</string>
   <string name="setting_page_search_result_size">Result Size</string>
   <string name="setting_page_search_service">Search Service</string>
   <string name="setting_page_search_service_desc">Set up search service</string>
@@ -841,11 +811,7 @@
   <string name="setting_page_search_title">Search Service</string>
   <string name="setting_page_share">Share</string>
   <string name="setting_page_share_desc">Share this app with friends</string>
-  <string name="setting_page_share_text">xcloudz - Open Source Android AI Assistant\n\nWebsite: https://github.com/rdh073/rikkahub</string>
-  <string name="setting_page_sponsor_alert_confirm">Donate</string>
-  <string name="setting_page_sponsor_alert_desc">You have launched the app over 100 times! If you enjoy using it, please consider supporting the developer.</string>
-  <string name="setting_page_sponsor_alert_dismiss">Not Now</string>
-  <string name="setting_page_sponsor_alert_title">Support the Developer</string>
+  <string name="setting_page_share_text">Poci - Open Source Android AI Assistant\n\nWebsite: https://github.com/rdh073/rikkahub</string>
   <string name="setting_page_theme_setting">Theme</string>
   <string name="setting_page_theme_setting_desc">Customize app color scheme</string>
   <string name="setting_theme_page_preset_themes">Preset Themes</string>
@@ -870,7 +836,7 @@
   <string name="setting_page_web_server">Web Server</string>
   <string name="setting_page_web_server_address_note">Address Notes</string>
   <string name="setting_page_web_server_address_note_desc">LAN Address: Uses device WiFi IP, accessible to other devices on the same network. Unavailable on mobile data.\nLocal Address: Uses localhost, accessible on this device only.\nmDNS Address: Uses .local hostname, accessible by name from other devices on the same network without knowing the IP.</string>
-  <string name="setting_page_web_server_desc">Allow you access xcloudz via Web</string>
+  <string name="setting_page_web_server_desc">Allow you access Poci via Web</string>
   <string name="setting_page_web_server_error">Error</string>
   <string name="setting_page_web_server_jwt_enable">Enable authentication</string>
   <string name="setting_page_web_server_jwt_enable_desc">Require password verification when accessing the web interface</string>
@@ -886,7 +852,6 @@
   <string name="setting_page_web_server_start">Start</string>
   <string name="setting_page_web_server_stop">Stop</string>
   <string name="setting_provider_page_abilities">Abilities</string>
-  <string name="setting_provider_page_add">Add</string>
   <string name="setting_provider_page_add_model">Add Model</string>
   <string name="setting_provider_page_add_models_hint">Click the button below to add models</string>
   <string name="setting_provider_page_add_new_model">Add New Model</string>
@@ -896,7 +861,6 @@
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">API Path</string>
-  <string name="setting_provider_page_avaliable_models">Avaliable Models</string>
   <string name="setting_provider_page_balance_api_path">Balance API Path</string>
   <string name="setting_provider_page_balance_info">"Get account balance "</string>
   <string name="setting_provider_page_balance_json_key">Result Json Key</string>
@@ -909,14 +873,11 @@
   <string name="setting_provider_page_configuration">Configuration</string>
   <string name="setting_provider_page_configure_provider_override">Configure Provider Override</string>
   <string name="setting_provider_page_delete_dialog_text">Are you sure you want to delete this provider? This action cannot be undone.</string>
-  <string name="setting_provider_page_deselect_models">Deselect All</string>
   <string name="setting_provider_page_disabled">Disabled</string>
   <string name="setting_provider_page_edit_model">Edit Model</string>
   <string name="setting_provider_page_embedding_model">Embedding</string>
   <string name="setting_provider_page_enable">Enable</string>
   <string name="setting_provider_page_enabled">Enabled</string>
-  <string name="setting_provider_page_filter_example">e.g.: GPT-3.5</string>
-  <string name="setting_provider_page_filter_placeholder">Enter model name to filter</string>
   <string name="setting_provider_page_image">Image</string>
   <string name="setting_provider_page_image_model">Image</string>
   <string name="setting_provider_page_image_qr_decode_failed">Failed to parse QR code from image: %s</string>
@@ -952,7 +913,6 @@
   <string name="setting_provider_page_scan_error">Error: %s</string>
   <string name="setting_provider_page_scan_qr_code">Scan QR Code</string>
   <string name="setting_provider_page_search_providers">Search providers</string>
-  <string name="setting_provider_page_select_all">Select All (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">Select from Gallery</string>
   <string name="setting_provider_page_service_account_email">Service Account Email</string>
   <string name="setting_provider_page_test">Test</string>
@@ -997,7 +957,6 @@
   <string name="setting_tts_page_speed">Speed</string>
   <string name="setting_tts_page_speed_description">Speech speed (0.25 - 4.0)</string>
   <string name="setting_tts_page_test_text">Hello, this is a text-to-speech test.</string>
-  <string name="setting_tts_page_title">Text-to-Speech</string>
   <string name="setting_tts_page_voice">Voice</string>
   <string name="setting_tts_page_voice_description">Voice to use for speech synthesis</string>
   <string name="setting_tts_page_voice_id">Voice ID</string>
@@ -1092,11 +1051,6 @@
   <string name="translator_page_translate">Translate</string>
   <string name="tts">TTS</string>
   <string name="unpin_chat">Unpin the Chat</string>
-  <string name="update_card_check_failed">Check update failed</string>
-  <string name="update_card_close">Close</string>
-  <string name="update_card_downloading">Downloading, please check status bar for progress</string>
-  <string name="update_card_new_version_found">New version found %s</string>
-  <string name="update_card_unknown_error">Unknown error</string>
   <string name="upload_file">Upload File</string>
   <string name="use_web_search">Web Search</string>
   <string name="user_default_name">User</string>
@@ -1127,7 +1081,6 @@
   <string name="translator_page_copy_result">Copy translation result</string>
   <string name="translator_page_error">Error</string>
   <string name="setting_provider_page_discount" formatted="false">10% off</string>
-  <string name="donate_page_afdian_name">Afdian</string>
   <string name="setting_provider_page_test_non_streaming">Non-streaming</string>
   <string name="setting_provider_page_test_streaming">Streaming</string>
   <string name="setting_provider_page_test_tool_calling">Tool calling</string>
@@ -1159,14 +1112,14 @@
   <string name="assistant_page_subagent_max_steps_desc">Maximum tool-use steps when this assistant runs as a subagent. Leave empty to use the default</string>
   <string name="chat_subagent_running">Running %1$s</string>
   <string name="chat_board_open">Task board</string>
-  <string name="automation_a11y_service_label">xcloudz UI Automation</string>
+  <string name="automation_a11y_service_label">Poci UI Automation</string>
   <string name="automation_a11y_service_description">Lets an enabled assistant read the screen of other apps and act on it for you: it may tap, type, scroll, and use global navigation (Back/Home/Recents). Actions stay inside the scope you grant. You can stop it any time from the floating STOP button.</string>
   <string name="automation_kill_switch_stop">STOP</string>
   <string name="assistant_page_ui_automation">UI automation (screen control)</string>
-  <string name="assistant_page_ui_automation_desc">Allow this assistant to read and act on the screen of other apps: it may tap, type, scroll, and use global navigation (Back/Home/Recents) within the scope you grant. Requires enabling the xcloudz accessibility service in system settings.</string>
+  <string name="assistant_page_ui_automation_desc">Allow this assistant to read and act on the screen of other apps: it may tap, type, scroll, and use global navigation (Back/Home/Recents) within the scope you grant. Requires enabling the Poci accessibility service in system settings.</string>
   <string name="assistant_page_gradient_background">Gradient Background</string>
   <string name="assistant_page_gradient_background_desc">Use a dynamic gradient background on the chat page</string>
-  <string name="automation_kill_switch_unavailable">Automation could not start: the STOP kill-switch could not be shown. Enable the xcloudz Accessibility service and overlay, then try again.</string>
+  <string name="automation_kill_switch_unavailable">Automation could not start: the STOP kill-switch could not be shown. Enable the Poci Accessibility service and overlay, then try again.</string>
   <string name="automation_confirm_prompt">Confirm action in %1$s: %2$s %3$s?</string>
   <string name="automation_confirm_allow">Confirm</string>
   <string name="automation_confirm_deny">Deny</string>
@@ -1278,15 +1231,5 @@
   <string name="assistant_page_automation_guardrail_mode_ask_desc">Each call is held for your confirmation before it runs.</string>
   <string name="assistant_page_automation_guardrail_mode_deny_desc">Each call is blocked outright; the assistant cannot use these tools.</string>
   <string name="assistant_page_automation_guardrail_needs_review">This assistant arrived with hooks that have not been reviewed. Review and trust them on the Hooks page before enabling the guardrail.</string>
-  <string name="chat_automation_grant_open">Grant automation</string>
-  <string name="chat_automation_grant_title">Grant automation for this run</string>
-  <string name="chat_automation_grant_desc">Authorize the assistant to read and act on the current app for a limited time. The grant covers only the foreground app and is cleared when this run ends.</string>
-  <string name="chat_automation_grant_foreground_label">Current app</string>
-  <string name="chat_automation_grant_no_foreground">No foreground app detected. Open the target app, then enable the accessibility service before granting.</string>
-  <string name="chat_automation_grant_actions_label">Allowed actions</string>
-  <string name="chat_automation_grant_ttl_label">Expires after</string>
-  <string name="chat_automation_grant_ttl_minutes">%1$d min</string>
-  <string name="chat_automation_grant_confirm">Grant</string>
-  <string name="chat_automation_grant_cancel">Cancel</string>
 </resources>
 

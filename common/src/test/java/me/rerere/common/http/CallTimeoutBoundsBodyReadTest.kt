@@ -53,7 +53,7 @@ class CallTimeoutBoundsBodyReadTest {
             try {
                 runBlocking {
                     val response = client.newCall(request).await(callTimeout = 500.milliseconds)
-                    withContext(Dispatchers.IO) { response.body?.string() }
+                    withContext(Dispatchers.IO) { response.body.string() }
                 }
                 fail("stalled body read must be aborted by the per-call timeout")
             } catch (expected: IOException) {

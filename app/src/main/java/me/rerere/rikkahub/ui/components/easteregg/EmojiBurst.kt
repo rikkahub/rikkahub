@@ -7,7 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -34,7 +34,7 @@ fun EmojiBurstHost(
     content: @Composable (onBurst: (Offset) -> Unit) -> Unit
 ) {
     val particles = remember { mutableStateListOf<EmojiParticle>() }
-    var nextId by remember { mutableStateOf(0L) }
+    var nextId by remember { mutableLongStateOf(0L) }
     val density = LocalDensity.current
     val emojiRadiusPx = remember(density) { with(density) { 28.sp.toPx() / 2f } }
     val emojiTextStyle = remember { TextStyle(fontSize = 28.sp) }

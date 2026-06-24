@@ -1,13 +1,10 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
-  <string name="about_page_github">Github</string>
-  <string name="about_page_license">ライセンス</string>
   <string name="about_page_system">システム</string>
   <string name="about_page_title">アプリについて</string>
   <string name="about_page_version">バージョン</string>
-  <string name="about_page_website">ウェブサイト</string>
   <string name="add">追加</string>
-  <string name="app_name">xcloudz</string>
+  <string name="app_name">Poci</string>
   <string name="asr_button_content_description">音声認識</string>
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">名前、アバター、モデル、パラメータを設定</string>
@@ -51,12 +48,10 @@
   <string name="assistant_page_background_opacity_desc">チャット背景画像の表示透明度を調整します</string>
   <string name="assistant_page_background_opacity_value">透明度: %1$d%%</string>
   <string name="assistant_page_background_set">背景画像が設定されました</string>
-  <string name="assistant_page_balanced">バランス</string>
   <string name="assistant_page_body_key">ボディキー</string>
   <string name="assistant_page_body_value">ボディ値 (JSON)</string>
   <string name="assistant_page_cancel">キャンセル</string>
   <string name="assistant_page_change_background">背景画像を変更</string>
-  <string name="assistant_page_chaotic">カオス（危険）</string>
   <string name="assistant_page_chat_background">チャット背景</string>
   <string name="assistant_page_chat_background_desc">アシスタントチャットページの背景画像を設定</string>
   <string name="assistant_page_chat_model">チャットモデル</string>
@@ -67,7 +62,6 @@
   <string name="assistant_page_context_message_desc">モデルに送信される履歴メッセージの数を制御します。この数を超えるメッセージは無視され、最新のN個のメッセージのみが保持されます。これによりトークンを節約できます</string>
   <string name="assistant_page_context_message_size">コンテキストメッセージサイズ</string>
   <string name="assistant_page_context_message_unlimited">無制限のコンテキストメッセージ</string>
-  <string name="assistant_page_creative">創造的</string>
   <string name="assistant_page_current_assistant">現在のアシスタント</string>
   <string name="assistant_page_custom_bodies">カスタムボディ</string>
   <string name="assistant_page_custom_headers">カスタムヘッダー</string>
@@ -128,7 +122,6 @@
   <string name="assistant_page_select_from_gallery">ギャラリーから選択</string>
   <string name="assistant_page_stream_output">ストリーミング出力</string>
   <string name="assistant_page_stream_output_desc">メッセージをストリーミング出力するかどうか</string>
-  <string name="assistant_page_strict">厳密</string>
   <string name="assistant_page_system_prompt">システムプロンプト</string>
   <string name="assistant_page_tab_basic">基本設定</string>
   <string name="assistant_page_tab_extensions">拡張機能</string>
@@ -151,7 +144,6 @@
   <string name="assistant_page_time_reminder_desc">会話の間隔が大きいメッセージの前に自動で時刻リマインダーを挿入し、AIが会話の間隔を理解しやすくします</string>
   <string name="assistant_page_title">アシスタント設定</string>
   <string name="assistant_page_top_p">Top P</string>
-  <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">何をしているのか理解している場合を除き、この値を変更しないでください</string>
   <string name="assistant_page_use_assistant_avatar">アシスタントアバターを使用</string>
   <string name="assistant_page_use_assistant_avatar_desc">チャットでモデルアバターと名前ではなくアシスタントアバターと名前を使用</string>
@@ -320,11 +312,6 @@
   <string name="deep_thinking">深く考える</string>
   <string name="deep_thinking_seconds">%1$.1f 秒間思考中</string>
   <string name="delete">削除</string>
-  <string name="donate_page_afdian_desc">🇨🇳ユーザー向け</string>
-  <string name="donate_page_donation_methods">寄付方法</string>
-  <string name="donate_page_kofi_desc">グローバルユーザー向け</string>
-  <string name="donate_page_sponsor_list">スポンサーリスト</string>
-  <string name="donate_page_title">寄付</string>
   <string name="edit">編集</string>
   <string name="editing">編集中</string>
   <string name="emoji_picker_search_placeholder">絵文字を検索...</string>
@@ -533,16 +520,10 @@
   <string name="quick_messages_page_empty_title">クイックメッセージがありません</string>
   <string name="quick_messages_page_untitled">無題</string>
   <string name="reasoning_auto">自動</string>
-  <string name="reasoning_auto_desc">モデルが推論レベルを自動的に決定します。</string>
-  <string name="reasoning_custom">カスタム推論予算</string>
   <string name="reasoning_heavy">高</string>
-  <string name="reasoning_heavy_desc">モデルは大量の推論を使用して質問に答えます。</string>
   <string name="reasoning_light">低</string>
-  <string name="reasoning_light_desc">モデルは少量の推論を使用して質問に答えます。</string>
   <string name="reasoning_medium">中</string>
-  <string name="reasoning_medium_desc">モデルはより多くの推論を使用して質問に答えます。</string>
   <string name="reasoning_off">オフ</string>
-  <string name="reasoning_off_desc">推論機能を無効にし、モデルは直接質問に答えます。</string>
   <string name="reasoning_picker_hint">すべてのモデルが深さ調整に対応しているわけではありません。モデルおよびプロバイダーのドキュメントを参照してください。</string>
   <string name="reasoning_picker_title">モデルの思考深度を調整</string>
   <string name="reasoning_xhigh">XHigh</string>
@@ -679,13 +660,10 @@
   <string name="setting_display_page_show_thinking_content_title">思考内容を表示</string>
   <string name="setting_display_page_show_token_usage_desc">トークン使用量とメッセージ数を表示</string>
   <string name="setting_display_page_show_token_usage_title">トークンとコンテキスト統計を表示</string>
-  <string name="setting_display_page_show_updates_desc">アプリのアップデート通知を表示するかどうか</string>
-  <string name="setting_display_page_show_updates_title">アップデートを表示</string>
   <string name="setting_display_page_show_user_avatar_desc">チャットメッセージにユーザーアバターを表示するかどうか</string>
   <string name="setting_display_page_show_user_avatar_title">ユーザーアバターを表示</string>
   <string name="setting_display_page_skip_crop_image_desc">画像をインポートするか写真を撮影した後、クロップ画面をスキップ</string>
   <string name="setting_display_page_skip_crop_image_title">画像編集をスキップ</string>
-  <string name="setting_display_page_title">表示設定</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">有効にすると、TTSは引用符内のコンテンツのみを読み上げます</string>
   <string name="setting_display_page_tts_only_read_quoted_title">引用部分のみTTSで読み上げ</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">デフォルトの円形読み込みインジケーターの代わりに、アプリアイコンのアニメーションを使用します</string>
@@ -782,18 +760,11 @@
   <string name="setting_page_data_settings">データ設定</string>
   <string name="setting_page_default_model">デフォルトモデルとプロンプト</string>
   <string name="setting_page_default_model_desc">各機能のデフォルトモデルを設定</string>
-  <string name="setting_page_display_setting">表示設定</string>
-  <string name="setting_page_display_setting_desc">表示設定を管理</string>
-  <string name="setting_page_documentation">ドキュメント</string>
-  <string name="setting_page_documentation_desc">アプリの使用方法とヘルプドキュメントを表示</string>
-  <string name="setting_page_donate">寄付</string>
-  <string name="setting_page_donate_desc">このアプリを気に入った場合は、作者の作品をスポンサーしてください</string>
   <string name="setting_page_dynamic_color">ダイナミックカラー</string>
   <string name="setting_page_dynamic_color_desc">壁紙に基づいてアプリのテーマ配色を動的に生成するかどうか</string>
   <string name="setting_page_extensions">拡張機能</string>
   <string name="setting_page_extensions_desc">プロンプトインジェクション、スキルなどを管理</string>
   <string name="setting_page_general_settings">一般設定</string>
-  <string name="setting_page_interaction_notification_settings">インタラクションと通知</string>
   <string name="setting_page_mcp">MCP</string>
   <string name="setting_page_mcp_desc">MCPサーバーを設定</string>
   <string name="setting_page_message_display_settings">メッセージ表示</string>
@@ -806,7 +777,6 @@
   <string name="setting_page_search_add_provider">プロバイダー追加</string>
   <string name="setting_page_search_common_options">共通オプション</string>
   <string name="setting_page_search_config">設定</string>
-  <string name="setting_page_search_delete_provider">プロバイダー削除</string>
   <string name="setting_page_search_result_size">結果数</string>
   <string name="setting_page_search_service">検索サービス</string>
   <string name="setting_page_search_service_desc">検索サービスを設定</string>
@@ -816,11 +786,7 @@
   <string name="setting_page_search_title">検索サービス</string>
   <string name="setting_page_share">共有</string>
   <string name="setting_page_share_desc">このアプリを友達と共有</string>
-  <string name="setting_page_share_text">xcloudz - オープンソースAndroid AIアシスタント\n\nウェブサイト: https://github.com/rdh073/rikkahub</string>
-  <string name="setting_page_sponsor_alert_confirm">寄付</string>
-  <string name="setting_page_sponsor_alert_desc">アプリを100回以上起動しました！気に入っていただけたら、開発者をサポートしていただけると嬉しいです。</string>
-  <string name="setting_page_sponsor_alert_dismiss">今はしない</string>
-  <string name="setting_page_sponsor_alert_title">開発者を支援する</string>
+  <string name="setting_page_share_text">Poci - オープンソースAndroid AIアシスタント\n\nウェブサイト: https://github.com/rdh073/rikkahub</string>
   <string name="setting_page_theme_setting">テーマ</string>
   <string name="setting_page_theme_setting_desc">アプリの配色をカスタマイズ</string>
   <string name="setting_theme_page_preset_themes">プリセットテーマ</string>
@@ -844,7 +810,7 @@
   <string name="setting_page_web_server_address_note_desc">LANアドレス: デバイスのWiFi IPを使用し、同じネットワーク上の他のデバイスからアクセス可能です。モバイルデータでは利用できません。
 ローカルアドレス: localhostを使用し、このデバイスのみでアクセス可能です。
 mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じネットワーク上の他のデバイスから名前でアクセス可能です。</string>
-  <string name="setting_page_web_server_desc">Web経由でxcloudzにアクセスできるようにする</string>
+  <string name="setting_page_web_server_desc">Web経由でPociにアクセスできるようにする</string>
   <string name="setting_page_web_server_error">エラー</string>
   <string name="setting_page_web_server_jwt_enable">認証を有効にする</string>
   <string name="setting_page_web_server_jwt_enable_desc">Webインターフェースにアクセスする際にパスワード認証が必要</string>
@@ -860,7 +826,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_web_server_start">開始</string>
   <string name="setting_page_web_server_stop">停止</string>
   <string name="setting_provider_page_abilities">能力</string>
-  <string name="setting_provider_page_add">追加</string>
   <string name="setting_provider_page_add_model">モデルを追加</string>
   <string name="setting_provider_page_add_models_hint">下のボタンをクリックしてモデルを追加</string>
   <string name="setting_provider_page_add_new_model">新しいモデルを追加</string>
@@ -870,7 +835,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">APIパス</string>
-  <string name="setting_provider_page_avaliable_models">利用可能なモデル</string>
   <string name="setting_provider_page_balance_api_path">残高APIパス</string>
   <string name="setting_provider_page_balance_info">アカウント残高を取得</string>
   <string name="setting_provider_page_balance_json_key">結果のJsonキー</string>
@@ -883,14 +847,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_configuration">設定</string>
   <string name="setting_provider_page_configure_provider_override">プロバイダーオーバーライドを構成</string>
   <string name="setting_provider_page_delete_dialog_text">このプロバイダーを削除してもよろしいですか？この操作は元に戻せません。</string>
-  <string name="setting_provider_page_deselect_models">すべて選択解除</string>
   <string name="setting_provider_page_disabled">無効</string>
   <string name="setting_provider_page_edit_model">モデルを編集</string>
   <string name="setting_provider_page_embedding_model">埋め込み</string>
   <string name="setting_provider_page_enable">有効にする</string>
   <string name="setting_provider_page_enabled">有効</string>
-  <string name="setting_provider_page_filter_example">例：GPT-3.5</string>
-  <string name="setting_provider_page_filter_placeholder">モデル名を入力してフィルタ</string>
   <string name="setting_provider_page_image">画像</string>
   <string name="setting_provider_page_image_model">画像</string>
   <string name="setting_provider_page_image_qr_decode_failed">画像からのQRコード解析に失敗しました：%s</string>
@@ -926,7 +887,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_scan_error">エラー: %s</string>
   <string name="setting_provider_page_scan_qr_code">QRコードをスキャン</string>
   <string name="setting_provider_page_search_providers">プロバイダーを検索</string>
-  <string name="setting_provider_page_select_all">すべて選択 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">ギャラリーから選択</string>
   <string name="setting_provider_page_service_account_email">サービスアカウントメール</string>
   <string name="setting_provider_page_test">テスト</string>
@@ -971,7 +931,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_tts_page_speed">速度</string>
   <string name="setting_tts_page_speed_description">音声合成の速度 (0.25 - 4.0)</string>
   <string name="setting_tts_page_test_text">こんにちは、これはテキスト読み上げのテストです。</string>
-  <string name="setting_tts_page_title">テキスト読み上げ</string>
   <string name="setting_tts_page_voice">音声</string>
   <string name="setting_tts_page_voice_description">音声合成に使用する声</string>
   <string name="setting_tts_page_voice_id">音声ID</string>
@@ -1066,11 +1025,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="translator_page_translate">翻訳</string>
   <string name="tts">音声</string>
   <string name="unpin_chat">チャットのピン留めを解除</string>
-  <string name="update_card_check_failed">更新チェックに失敗しました</string>
-  <string name="update_card_close">閉じる</string>
-  <string name="update_card_downloading">ダウンロード中です。進捗はステータスバーでご確認ください</string>
-  <string name="update_card_new_version_found">新しいバージョンが見つかりました %s</string>
-  <string name="update_card_unknown_error">不明なエラー</string>
   <string name="upload_file">ファイルをアップロード</string>
   <string name="use_web_search">ウェブ検索を</string>
   <string name="user_default_name">ユーザー</string>
@@ -1128,7 +1082,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="translator_page_copy_result">翻訳結果をコピー</string>
   <string name="translator_page_error">エラー</string>
   <string name="setting_provider_page_discount" formatted="false">10%オフ</string>
-  <string name="donate_page_afdian_name">Afdian</string>
   <string name="setting_provider_page_test_non_streaming">非ストリーミング</string>
   <string name="setting_provider_page_test_streaming">ストリーミング</string>
   <string name="setting_provider_page_test_tool_calling">ツール呼び出し</string>
@@ -1159,14 +1112,14 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_subagent_max_steps">サブエージェントの最大ステップ数</string>
   <string name="assistant_page_subagent_max_steps_desc">このアシスタントがサブエージェントとして実行されるときの最大ツール使用ステップ。デフォルトを使用するには空のままにしてください</string>
   <string name="chat_subagent_running">%1$s を実行中</string>
-  <string name="automation_a11y_service_label">xcloudz UI自動化</string>
+  <string name="automation_a11y_service_label">Poci UI自動化</string>
   <string name="automation_a11y_service_description">有効なアシスタントが他のアプリの画面を（読み取り専用で）観察してあなたを助けます。タップ、入力、スクロールはできません。浮動STOPボタンからいつでも停止できます。</string>
   <string name="automation_kill_switch_stop">停止</string>
   <string name="assistant_page_ui_automation">UI自動化（画面コントロール）</string>
-  <string name="assistant_page_ui_automation_desc">このアシスタントが他のアプリの画面を観察することを許可します（読み取り専用）。システム設定でxcloudzのアクセシビリティサービスを有効にする必要があります。読み取り専用：タップや入力はできません。</string>
+  <string name="assistant_page_ui_automation_desc">このアシスタントが他のアプリの画面を観察することを許可します（読み取り専用）。システム設定でPociのアクセシビリティサービスを有効にする必要があります。読み取り専用：タップや入力はできません。</string>
   <string name="assistant_page_gradient_background">グラデーション背景</string>
   <string name="assistant_page_gradient_background_desc">チャットページで動的なグラデーション背景を使用します</string>
-  <string name="automation_kill_switch_unavailable">自動化を開始できません：「停止」キルスイッチを表示できませんでした。xcloudz のユーザー補助サービスとオーバーレイを有効にして、もう一度お試しください。</string>
+  <string name="automation_kill_switch_unavailable">自動化を開始できません：「停止」キルスイッチを表示できませんでした。Poci のユーザー補助サービスとオーバーレイを有効にして、もう一度お試しください。</string>
   <string name="chat_status_retrieving_knowledge">ナレッジベースを検索中…</string>
   <string name="automation_confirm_prompt">%1$s での操作を確認: %2$s %3$s？</string>
   <string name="automation_confirm_allow">確認</string>
@@ -1272,16 +1225,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_automation_ttl_label">有効時間（分）</string>
   <string name="assistant_page_automation_steps_label">最大ステップ数</string>
   <string name="assistant_page_automation_limits_desc">許可はこの分数またはこの操作回数のいずれか早い方で期限切れになります。ゼロの場合はすべて拒否されます。</string>
-  <string name="chat_automation_grant_open">自動化を許可</string>
-  <string name="chat_automation_grant_title">今回の実行に自動化を許可</string>
-  <string name="chat_automation_grant_desc">現在のアプリを一定時間読み取り・操作することをアシスタントに許可します。この許可はフォアグラウンドのアプリのみを対象とし、今回の実行が終了すると解除されます。</string>
-  <string name="chat_automation_grant_foreground_label">現在のアプリ</string>
-  <string name="chat_automation_grant_no_foreground">フォアグラウンドのアプリが検出されません。対象アプリを開き、ユーザー補助サービスを有効にしてから許可してください。</string>
-  <string name="chat_automation_grant_actions_label">許可する操作</string>
-  <string name="chat_automation_grant_ttl_label">有効期限</string>
-  <string name="chat_automation_grant_ttl_minutes">%1$d 分</string>
-  <string name="chat_automation_grant_confirm">許可</string>
-  <string name="chat_automation_grant_cancel">キャンセル</string>
   <string name="assistant_page_automation_guardrail_title">ツールガードレール</string>
   <string name="assistant_page_automation_guardrail_enable_title">高リスクツールを保護</string>
   <string name="assistant_page_automation_guardrail_enable_desc">デバイス・自動化ツール（アプリの起動、アプリ一覧、画面の読み取り/タップ/入力/スクロール/ナビゲーション）を各呼び出しの前にゲートします。</string>

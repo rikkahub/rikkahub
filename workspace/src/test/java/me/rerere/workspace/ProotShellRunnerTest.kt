@@ -132,7 +132,7 @@ class ProotShellRunnerTest {
         val runner = ProotShellRunner(File("/tmp/native"))
         val proot = File("/tmp/native/libproot_exec.so")
 
-        listOf("", ".xcloudz/scratch", "project/sub").forEach { cwd ->
+        listOf("", ".poci/scratch", "project/sub").forEach { cwd ->
             val argv = runner.buildCommand(context("ls", cwd = cwd), proot)
             val expected = WorkspaceCwdPolicy.toShellPath(cwd)
             val wIndex = argv.indexOf("-w")

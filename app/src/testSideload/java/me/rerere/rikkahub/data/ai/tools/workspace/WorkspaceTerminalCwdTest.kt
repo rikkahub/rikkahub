@@ -50,7 +50,7 @@ class WorkspaceTerminalCwdTest {
     private fun execShellCwd(filesDir: File, workingDir: String): String =
         WorkspaceCwdPolicy.toShellPath(seededRelativeCwd(filesDir, workingDir))
 
-    private val segments = listOf("a", "b", "src", "main", "project", ".xcloudz", "scratch", ".config")
+    private val segments = listOf("a", "b", "src", "main", "project", ".poci", "scratch", ".config")
 
     /** A clean, normalize-stable FILES-relative working_dir (incl. dot-prefixed segments). */
     private fun arbWorkingDir(): Arb<String> = arbitrary {

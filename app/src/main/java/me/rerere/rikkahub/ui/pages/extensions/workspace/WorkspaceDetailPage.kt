@@ -858,6 +858,9 @@ private fun FileViewerSheet(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
 ) {
+    // DEPRECATION: M3 1.5.0-alpha deprecates rememberModalBottomSheetState for rememberBottomSheetState,
+    // an unstable alpha replacement whose swap changes sheet expand behavior; defer until M3 stabilizes.
+    @Suppress("DEPRECATION")
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     // Edit state is keyed to the open file's path so switching files resets it; draft also resets when
     // the persisted content changes (e.g. after a save round-trips through the VM).

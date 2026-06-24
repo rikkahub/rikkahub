@@ -41,6 +41,11 @@ object NotificationUtil {
     /**
      * 检查是否有通知权限
      */
+    // InlinedApi: POST_NOTIFICATIONS is an API 33 constant but compiles to an inlined string, so the
+    // reference is safe on minSdk 26. ContextCompat.checkSelfPermission handles the pre-33 path itself
+    // (it reports DENIED when the user has disabled notifications, GRANTED otherwise), so this call is
+    // correct across API levels; the suppression only silences the inlined-constant version warning.
+    @SuppressLint("InlinedApi")
     fun hasNotificationPermission(context: Context): Boolean {
         return ActivityCompat.checkSelfPermission(
             context,

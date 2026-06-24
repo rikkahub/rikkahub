@@ -95,7 +95,7 @@ class WorkspaceCwdPolicyTest {
 
     // ---- W-I9: a dot-prefixed segment != `.`/`..` survives normalization unchanged ----
     @Test
-    fun `W-I9 dot-prefixed segments like xcloudz survive normalization`() {
+    fun `W-I9 dot-prefixed segments like poci survive normalization`() {
         assertEquals(".config/cache", WorkspaceCwdPolicy.normalize(".config/cache"))
         assertEquals(".hidden", WorkspaceCwdPolicy.normalize(".hidden"))
         runBlocking {
@@ -161,7 +161,7 @@ class WorkspaceCwdPolicyTest {
     fun `W-M5 normalize strips a workspace alias prefix`() {
         assertEquals("", WorkspaceCwdPolicy.normalize("/workspace"))
         assertEquals("", WorkspaceCwdPolicy.normalize("/workspace/"))
-        assertEquals(".xcloudz/scratch", WorkspaceCwdPolicy.normalize("/workspace/.xcloudz/scratch"))
+        assertEquals(".poci/scratch", WorkspaceCwdPolicy.normalize("/workspace/.poci/scratch"))
         runBlocking {
             checkAll(200, arbRelativePath()) { p ->
                 assertEquals(
@@ -177,14 +177,14 @@ class WorkspaceCwdPolicyTest {
         }
     }
 
-    // ---- W-B3: /workspace, /workspace/, /workspace/.xcloudz/scratch alias to root / the scratch dir ----
+    // ---- W-B3: /workspace, /workspace/, /workspace/.poci/scratch alias to root / the scratch dir ----
     @Test
     fun `W-B3 workspace aliases resolve to the files root or the named subpath`() {
         assertEquals("", WorkspaceCwdPolicy.parseShellPath("/workspace"))
         assertEquals("", WorkspaceCwdPolicy.parseShellPath("/workspace/"))
         assertEquals(
-            ".xcloudz/scratch",
-            WorkspaceCwdPolicy.parseShellPath("/workspace/.xcloudz/scratch"),
+            ".poci/scratch",
+            WorkspaceCwdPolicy.parseShellPath("/workspace/.poci/scratch"),
         )
         // As an Explicit cwd ARG, the bare /workspace alias means the files root (W-B2 boundary).
         assertEquals("", WorkspaceCwdPolicy.resolveRelative(CwdOverride.Explicit("/workspace"), workingDir = "x"))
@@ -278,7 +278,7 @@ class WorkspaceCwdPolicyTest {
         }
         // The /workspace mount alias is NOT rejected — it is stripped to its files-relative remainder.
         assertEquals("", WorkspaceCwdPolicy.normalize("/workspace"))
-        assertEquals(".xcloudz/scratch", WorkspaceCwdPolicy.normalize("/workspace/.xcloudz/scratch"))
+        assertEquals(".poci/scratch", WorkspaceCwdPolicy.normalize("/workspace/.poci/scratch"))
         runBlocking {
             // Every generated rootfs-absolute path (never a /workspace alias) is rejected by normalize.
             checkAll(300, arbRootfsAbsolutePath()) { abs ->

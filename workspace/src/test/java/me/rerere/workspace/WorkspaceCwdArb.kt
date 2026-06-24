@@ -17,7 +17,7 @@ import me.rerere.workspace.WorkspaceCwdPolicy.CwdOverride
  *
  * Generator inventory (per the spec testing strategy):
  *  - [arbValidRoot]           a clean, non-empty files-relative path usable as a workspace root subdir.
- *  - [arbSegment]             ONE ordinary path segment, INCLUDING dot-prefixed dirs (`.xcloudz`) so
+ *  - [arbSegment]             ONE ordinary path segment, INCLUDING dot-prefixed dirs (`.poci`) so
  *                             the default-scratch path and user dotdirs are exercised (W-I9).
  *  - [arbRelativePath]        1..4 [arbSegment]s joined with `/` -- a clean files-relative path.
  *  - [arbWorkspaceAliasPath]  `/workspace` or `/workspace/<rel>` -- the shell alias (W-M5/W-I4/W-B3).
@@ -28,10 +28,10 @@ import me.rerere.workspace.WorkspaceCwdPolicy.CwdOverride
  *  - [arbWorkspaceRow]        a stored `working_dir` value: `""` (unset) or a clean relative path.
  */
 
-/** Ordinary segment names, INCLUDING dot-prefixed dirs -- `.xcloudz`/`.hidden` must NOT be stripped. */
+/** Ordinary segment names, INCLUDING dot-prefixed dirs -- `.poci`/`.hidden` must NOT be stripped. */
 private val SEGMENTS = listOf(
     "a", "b", "src", "main", "dir1", "Folder", "node_modules", "build",
-    ".xcloudz", "scratch", ".hidden", ".config", ".git",
+    ".poci", "scratch", ".hidden", ".config", ".git",
 )
 
 /** Rootfs-absolute prefixes that are NOT the `/workspace` mount; resolving a cwd to one is illegal. */

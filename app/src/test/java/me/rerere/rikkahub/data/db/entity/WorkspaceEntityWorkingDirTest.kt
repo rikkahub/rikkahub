@@ -44,7 +44,7 @@ class WorkspaceEntityWorkingDirTest {
     // The mapper carries the field into the domain model unchanged.
     @Test
     fun `toWorkspace carries the working dir into the domain model`() {
-        assertEquals(".xcloudz/scratch", entity(workingDir = ".xcloudz/scratch").toWorkspace().workingDir)
+        assertEquals(".poci/scratch", entity(workingDir = ".poci/scratch").toWorkspace().workingDir)
     }
 
     // An unset entity maps to an unset domain field (not null, not a substituted default).

@@ -20,7 +20,7 @@ import org.junit.Test
 import kotlin.coroutines.coroutineContext
 
 class WorkspaceSheetVMPropertyTest {
-    private val segments = listOf("project", "src", "main", ".xcloudz", "scratch", ".config")
+    private val segments = listOf("project", "src", "main", ".poci", "scratch", ".config")
 
     @Test
     fun `P-WS-LAZY repo is not touched before workspace tab activation`(): Unit = runBlocking {

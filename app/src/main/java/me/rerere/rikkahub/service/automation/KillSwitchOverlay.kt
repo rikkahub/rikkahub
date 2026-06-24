@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.getSystemService
+import androidx.core.graphics.toColorInt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -53,7 +54,7 @@ class KillSwitchOverlay(
         val wm = windowManager ?: return false
         val button = Button(service).apply {
             text = service.getString(R.string.automation_kill_switch_stop)
-            setBackgroundColor(Color.parseColor("#B00020"))
+            setBackgroundColor("#B00020".toColorInt())
             setTextColor(Color.WHITE)
             setOnClickListener { onStop() }
         }
@@ -132,7 +133,7 @@ class KillSwitchOverlay(
         val prompt = service.getString(R.string.automation_confirm_prompt, app, verb, label ?: "")
         return LinearLayout(service).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#1F1F1F"))
+            setBackgroundColor("#1F1F1F".toColorInt())
             setPadding(24, 16, 24, 16)
             addView(
                 TextView(service).apply {
@@ -152,7 +153,7 @@ class KillSwitchOverlay(
                     addView(
                         Button(service).apply {
                             text = service.getString(R.string.automation_confirm_allow)
-                            setBackgroundColor(Color.parseColor("#B00020"))
+                            setBackgroundColor("#B00020".toColorInt())
                             setTextColor(Color.WHITE)
                             setOnClickListener { decision.complete(true) }
                         },

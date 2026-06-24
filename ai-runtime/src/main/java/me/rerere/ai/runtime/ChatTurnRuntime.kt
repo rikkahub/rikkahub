@@ -113,6 +113,11 @@ internal fun activeGoalSection(activeGoal: String?): String =
  * clause: an over-included clause with no tool content present is a harmless no-op instruction, whereas
  * a missing clause over visible tool output is the prompt-injection hole this closes.
  */
+// DEPRECATION: the legacy standalone UIMessagePart.ToolResult is deprecated in favor of
+// UIMessagePart.Tool, but it MUST still be matched here — old persisted transcripts carry standalone
+// ToolResult parts, and dropping the check would un-fence their (untrusted) tool output. The reference
+// is deliberate backward-compat, not a migration target.
+@Suppress("DEPRECATION")
 internal fun List<UIMessage>.hasToolOutput(): Boolean = any { message ->
     message.parts.any { part ->
         (part is UIMessagePart.Tool && part.output.isNotEmpty()) || part is UIMessagePart.ToolResult

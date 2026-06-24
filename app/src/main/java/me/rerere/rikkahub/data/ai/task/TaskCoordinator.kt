@@ -532,6 +532,15 @@ class TaskCoordinator(
                 // KEEP the admission slot held (the backgroundJobs entry) until it finishes, so a second
                 // background run cannot be admitted before this row reaches terminal / releases its
                 // handle. Exactly once: bodyRan partitions this from the body's finally.
+                //
+                // DEPRECATION: launch(NonCancellable) is deliberate here, NOT launch{withContext(...)}.
+                // appScope IS cancelled on app shutdown (RikkaHubApp); a child coroutine
+                // (scope.launch{...}) would be cancelled BEFORE its body dispatches in that race, skipping
+                // the durable close-out and leaking the active row. Passing NonCancellable detaches this
+                // coroutine from appScope's job so the critical cleanup runs regardless — exactly the
+                // "breaks structured concurrency" property the deprecation warns about, which is what we
+                // want for unconditional terminal-state cleanup.
+                @Suppress("DEPRECATION")
                 scope.launch(NonCancellable) {
                     try {
                         store.applyEvent(taskId, TaskEvent.CancelRequested)

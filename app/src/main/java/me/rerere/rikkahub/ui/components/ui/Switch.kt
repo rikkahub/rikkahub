@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 
 enum class SwitchSize {
@@ -109,7 +110,7 @@ fun Switch(
         Box(
             modifier = Modifier
                 .padding(dimensions.thumbPadding)
-                .offset(x = thumbOffset)
+                .offset { IntOffset(x = thumbOffset.roundToPx(), y = 0) }
                 .size(dimensions.thumbSize)
                 .shadow(
                     elevation = if (enabled) 2.dp else 0.dp,

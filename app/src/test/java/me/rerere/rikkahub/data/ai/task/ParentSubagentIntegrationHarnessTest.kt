@@ -175,7 +175,7 @@ class ParentSubagentIntegrationHarnessTest {
             assertEquals("exactly one accepted claim per item: $id", 1, acceptedClaims[id])
             assertTrue(
                 "the final owner is one of the spawned handles: $id",
-                item.ownerHandleId in h.handleIds,
+                item.ownerHandleId?.let { it in h.handleIds } == true,
             )
         }
         // Every child run reached its Succeeded terminal on the REAL persistence path.
@@ -208,7 +208,7 @@ class ParentSubagentIntegrationHarnessTest {
         assertEquals("exactly one racer wins the claim", 1, acceptedBy.size)
         val item = h.board.get(h.conversationId, contested)!!.item
         assertEquals(WorkItemStatus.Completed, item.status)
-        assertTrue("the item is owned by a spawned handle", item.ownerHandleId in h.handleIds)
+        assertTrue("the item is owned by a spawned handle", item.ownerHandleId?.let { it in h.handleIds } == true)
     }
 
     @Test
@@ -228,7 +228,7 @@ class ParentSubagentIntegrationHarnessTest {
         spawn.execute(spawnArgs("hoarder"))
 
         assertEquals("all simultaneous claims belong to the ONE handle", 1, observedOwners.size)
-        assertTrue(observedOwners.single() in h.handleIds)
+        assertTrue(observedOwners.single()?.let { it in h.handleIds } == true)
     }
 
     @Test
