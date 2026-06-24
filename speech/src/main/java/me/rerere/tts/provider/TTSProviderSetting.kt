@@ -207,6 +207,54 @@ sealed class TTSProviderSetting {
         }
     }
 
+    /**
+     * 阶跃星辰 Step TTS (step-tts-mini / step-tts-vivid / stepaudio-2.5-tts)。
+     *
+     * 与 Step ASR 共用同一个 baseUrl 与鉴权方式 (Authorization: Bearer sk-xxx),
+     * 走 OpenAI 兼容的 [POST /v1/audio/speech] 非流式接口, 服务端一次性返回完整音频
+     * 二进制 (默认 mp3, 也可选 wav/pcm/opus/flac)。客户端把整段音频包成一个 AudioChunk
+     * 发出, 由 TtsSynthesizer 统一收集后交给播放器。
+     *
+     * 仅 stepaudio-2.5-tts 模型支持 [instruction] 字段 (全局语境, ≤200 字符), 其它模型
+     * (step-tts-mini / step-tts-vivid / step-tts-2) 会忽略该字段, 留空时不下发。
+     *
+     * 官方文档:
+     * - 模型总览: https://platform.stepfun.com/docs/zh/guides/models/stepaudio-2.5-tts
+     * - 开发指南: https://platform.stepfun.com/docs/zh/guides/developer/tts
+     */
+    @Serializable
+    @SerialName("step")
+    data class Step(
+        override var id: Uuid = Uuid.random(),
+        override var name: String = "Step TTS",
+        val apiKey: String = "",
+        val baseUrl: String = "https://api.stepfun.com",
+        // step-tts-mini | step-tts-vivid | stepaudio-2.5-tts | step-tts-2
+        val model: String = "step-tts-mini",
+        // 完整 voice-id 列表见开发指南; 默认值与官方 SDK 一致
+        val voice: String = "elegantgentle-female",
+        // mp3 | wav | pcm | opus | flac; 注意 StepFun API 使用 camelCase 字段名
+        val responseFormat: String = "mp3",
+        // 0.5 - 2.0, 1.0 为正常语速
+        val speed: Float = 1.0f,
+        // 0.1 - 2.0, 1.0 为正常音量
+        val volume: Float = 1.0f,
+        // 8000 | 16000 | 22050 | 24000
+        val sampleRate: Int = 24000,
+        // 仅 stepaudio-2.5-tts 生效; ≤200 字符, 留空时不下发
+        val instruction: String = "",
+    ) : TTSProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): TTSProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -219,6 +267,7 @@ sealed class TTSProviderSetting {
                 XAI::class,
                 MiMo::class,
                 ElevenLabs::class,
+                Step::class,
             )
         }
     }
