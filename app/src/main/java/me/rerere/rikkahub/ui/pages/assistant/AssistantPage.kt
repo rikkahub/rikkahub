@@ -235,6 +235,8 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     }
                 }
             }
+        }
+    }
 
     AssistantCreationSheet(createState, vm)
 
