@@ -32,6 +32,7 @@ suspend fun assembleBaseTools(
     webSearchEnabled: Boolean,
     managedFetchAvailable: Boolean,
     skillsEnabled: Boolean,
+    skillAuthoringActive: Boolean,
     searchTools: suspend () -> Collection<Tool>,
     fetchTools: suspend () -> Collection<Tool>,
     imageGenTools: suspend () -> Collection<Tool>,
@@ -39,6 +40,7 @@ suspend fun assembleBaseTools(
     workspaceTools: suspend () -> Collection<Tool>,
     uiAutomationTools: suspend () -> Collection<Tool>,
     skillTools: suspend () -> Collection<Tool>,
+    skillAuthoringTools: suspend () -> Collection<Tool>,
 ): List<Tool> = buildList {
     if (webSearchEnabled) addAll(searchTools())
     if (managedFetchAvailable) addAll(fetchTools())
@@ -47,4 +49,7 @@ suspend fun assembleBaseTools(
     addAll(workspaceTools())
     addAll(uiAutomationTools())
     if (skillsEnabled) addAll(skillTools())
+    // Authoring rides its OWN gate, NOT skillsEnabled: the user can author the FIRST skill (none enabled
+    // yet) via /create_skill, and it is a write surface independent of the read-only use_skill tool.
+    if (skillAuthoringActive) addAll(skillAuthoringTools())
 }

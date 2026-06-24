@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai.chatinput
 
+import me.rerere.rikkahub.data.ai.tools.SKILL_AUTHORING_SUPPORTED
 import me.rerere.rikkahub.data.files.SkillMetadata
 
 /**
@@ -35,18 +36,38 @@ internal sealed interface SlashItem {
 
 /**
  * The reserved native commands (#364) surfaced as built-in rows. Listed FIRST in the picker so the
- * two in-session autonomy commands are discoverable above the (possibly long) skill list.
+ * in-session commands are discoverable above the (possibly long) skill list. The skill-authoring
+ * commands are appended only when the flavor actually has the WRITE surface
+ * ([SKILL_AUTHORING_SUPPORTED]) — the Play build must not advertise a command with no tool behind it.
  */
-internal val BUILTIN_SLASH_COMMANDS: List<SlashItem.Builtin> = listOf(
-    SlashItem.Builtin(
-        name = "goal",
-        description = "Work autonomously toward a condition until it's met. /goal clear to stop.",
-    ),
-    SlashItem.Builtin(
-        name = "loop",
-        description = "Re-run a prompt on a durable schedule. /loop clear to stop.",
-    ),
-)
+internal val BUILTIN_SLASH_COMMANDS: List<SlashItem.Builtin> = buildList {
+    add(
+        SlashItem.Builtin(
+            name = "goal",
+            description = "Work autonomously toward a condition until it's met. /goal clear to stop.",
+        )
+    )
+    add(
+        SlashItem.Builtin(
+            name = "loop",
+            description = "Re-run a prompt on a durable schedule. /loop clear to stop.",
+        )
+    )
+    if (SKILL_AUTHORING_SUPPORTED) {
+        add(
+            SlashItem.Builtin(
+                name = "create_skill",
+                description = "Have the assistant author a new skill (asks for approval before writing).",
+            )
+        )
+        add(
+            SlashItem.Builtin(
+                name = "update_skill",
+                description = "Have the assistant modify an existing skill. /update_skill <name>",
+            )
+        )
+    }
+}
 
 /**
  * Filter the combined built-in + skill rows for the slash [query] (the text after "/"). Built-ins lead

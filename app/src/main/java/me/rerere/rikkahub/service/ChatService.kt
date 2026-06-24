@@ -116,6 +116,9 @@ import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createFetchTools
 import me.rerere.rikkahub.data.ai.tools.createImageGenTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
+import me.rerere.rikkahub.data.ai.tools.SkillAuthoringSpec
+import me.rerere.rikkahub.data.ai.tools.createSkillAuthoringTools
+import me.rerere.rikkahub.data.ai.tools.skillAuthoringSpecForToolName
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.getUiAutomationTools
@@ -1314,6 +1317,10 @@ class ChatService(
         // approval turn. Idle-gated + AT_MOST_ONCE make it a no-op when the success
         // path already drained.
         job.invokeOnCompletion {
+            // Catch-all for a skill-authoring lease whose turn errored/cancelled BEFORE handleMessageComplete
+            // consumed it: clear it here so a stale write capability can never be picked up by the next
+            // turn's consume. On the normal path the consume already nulled it, so this is a no-op.
+            session.clearSkillAuthoring()
             appScope.launch { maybeDrainAgentEventsWhenIdle(conversationId) }
         }
         return job
@@ -1323,6 +1330,7 @@ class ChatService(
         conversationId: Uuid,
         content: List<UIMessagePart>,
         answer: Boolean = true,
+        armSkillAuthoring: SkillAuthoringSpec? = null,
     ): Job {
         if (content.isEmptyInputMessage()) return Job().apply { complete() }
 
@@ -1330,6 +1338,13 @@ class ChatService(
             conversationId = conversationId,
             errorTitle = strings.getString(R.string.error_title_send_message),
         ) { session ->
+            // An authoring send (only ChatVM's /create_skill//update_skill) arms the lease for THIS turn;
+            // handleMessageComplete below consumes it when assembling this turn's tool pool. Any other
+            // send arms nothing, so the consume reads null and the write tool is absent. (The lease is a
+            // bare set, not a clear-then-set: a prior turn's lease is already gone — consumed by its own
+            // handleMessageComplete, or cleared by the job-completion catch-all.)
+            if (armSkillAuthoring != null) session.armSkillAuthoring(armSkillAuthoring)
+
             finishInterruptedPendingTools(conversationId)
 
             val currentConversation = session.state.value
@@ -1393,10 +1408,15 @@ class ChatService(
         }
     }
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+    fun sendMessage(
+        conversationId: Uuid,
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+        armSkillAuthoring: SkillAuthoringSpec? = null,
+    ) {
         if (content.isEmptyInputMessage()) return
 
-        sendMessageReturningJob(conversationId, content, answer)
+        sendMessageReturningJob(conversationId, content, answer, armSkillAuthoring)
     }
 
     // Stop fire-point (#200 T8). Runs after the agentic turn handleMessageComplete owns has
@@ -2152,6 +2172,20 @@ class ChatService(
             val updatedConversation = conversation.copy(messageNodes = updatedNodes)
             saveConversation(conversationId, updatedConversation)
 
+            // If the resolved call is an authoring tool, re-arm the lease so the continuation that
+            // executes the approved write re-assembles WITH create_skill/update_skill in the pool (the
+            // arming turn already consumed the original lease; resume runs in this fresh job). Harmless
+            // when denied (the tool is present but never called) or when no continuation runs (the
+            // job-completion catch-all clears it).
+            val resumedToolName = updatedNodes
+                .firstNotNullOfOrNull { node ->
+                    node.currentMessage.parts.firstOrNull {
+                        it is UIMessagePart.Tool && it.toolCallId == toolCallId
+                    } as? UIMessagePart.Tool
+                }
+                ?.toolName
+            resumedToolName?.let { skillAuthoringSpecForToolName(it) }?.let { session.armSkillAuthoring(it) }
+
             // Check if there are still pending tools
             val hasPendingTools = updatedNodes.any { node ->
                 node.currentMessage.parts.any { part ->
@@ -2442,6 +2476,14 @@ class ChatService(
             // start generating
             val session = getOrCreateSession(conversationId)
 
+            // Consume the skill-authoring lease for THIS turn's pool exactly once. handleMessageComplete is
+            // the single tool-assembly seam every turn type reaches (sends, approval-resume, regenerate,
+            // /loop + agent-event drains — some of which run OUTSIDE launchGenerationEntry), so taking the
+            // lease HERE makes the write tool available to precisely the arming turn (and an authoring
+            // approval-resume, which re-arms first) and never bleed into a later autonomous continuation
+            // that merely reuses this session.
+            val turnSkillAuthoring = session.consumeSkillAuthoring()
+
             // UI automation (#187 v1): the per-conversation capability lease + refcounted STOP
             // overlay lifecycle (mint guard → fail-closed activate → identity-guarded release on
             // EVERY terminal path, incl. a throw while assembling generateText's eager arguments) is
@@ -2513,6 +2555,10 @@ class ChatService(
                         // can still reach it. fetch is Codex-only.
                         managedFetchAvailable = settings.hasChatGpt(),
                         skillsEnabled = assistant.enabledSkills.isNotEmpty(),
+                        // Skill-authoring write tools are offered ONLY for the turn that a /create_skill or
+                        // /update_skill slash command armed (the lease was consumed into turnSkillAuthoring
+                        // above), so they are absent on every ordinary or autonomous turn.
+                        skillAuthoringActive = turnSkillAuthoring != null,
                         searchTools = { createSearchTools(settings) },
                         fetchTools = { createFetchTools(settings) },
                         // image-gen works through EITHER managed image provider (Codex gpt-image-2 or Gagy
@@ -2558,6 +2604,13 @@ class ChatService(
                                 allSkills = skillManager.listSkills(),
                                 skillManager = skillManager,
                             )
+                        },
+                        skillAuthoringTools = {
+                            // The lease was consumed into turnSkillAuthoring for this turn; build the
+                            // matching write tool from it (absent on every non-authoring turn).
+                            turnSkillAuthoring?.let { spec ->
+                                createSkillAuthoringTools(spec = spec, skillManager = skillManager)
+                            } ?: emptyList()
                         },
                     )
                 },
@@ -3405,6 +3458,8 @@ class ChatService(
         // loop's charge re-checks identity and bails). The in-flight goal-loop coroutine is a child of
         // this job and is torn down by the cancel below.
         sessionRegistry.get(conversationId)?.clearGoal()
+        // (Skill authoring needs no clear here: a stopped turn never reaches the handleMessageComplete
+        // consume, and the job-completion catch-all clears any lease the cancelled turn left armed.)
         job.cancel()
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)

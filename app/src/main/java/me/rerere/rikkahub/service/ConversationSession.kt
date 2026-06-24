@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.automation.cap.CapabilityGuard
+import me.rerere.rikkahub.data.ai.tools.SkillAuthoringSpec
 import me.rerere.rikkahub.data.model.AutomationGrant
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.ConcurrentHashMap
@@ -116,6 +117,33 @@ class ConversationSession(
      */
     fun compareAndSetGoal(expect: GoalSpec?, update: GoalSpec?): Boolean =
         goalRef.compareAndSet(expect, update)
+
+    // Session-scoped skill-authoring lease (model-facing /create_skill /update_skill). It is the TRANSPORT
+    // for a single turn's write capability: armed by the authoring send at the boundary
+    // (ChatService.sendMessageReturningJob) and re-armed for an authoring approval-resume, then CONSUMED
+    // (read-and-clear) by handleMessageComplete — the one tool-assembly seam every turn type funnels
+    // through. Consuming AT the assembly is what stops the write tool bleeding onto a later autonomous
+    // continuation (a /loop fire, an agent-event drain, the goal loop) that merely reuses the same
+    // session: those turns assemble after the lease was consumed, so they see nothing. The job-completion
+    // catch-all (launchGenerationEntry) clears any lease whose turn errored/cancelled before consuming it.
+    // In-memory only — dies with the session, never persisted — so a process death cannot resurrect a
+    // write-capable mode. A plain AtomicReference suffices; getAndSet makes the consume atomic.
+    private val skillAuthoringRef = AtomicReference<SkillAuthoringSpec?>(null)
+
+    /** Arm skill authoring (a `/create_skill` or `/update_skill`); a fresh arm unconditionally wins. */
+    fun armSkillAuthoring(spec: SkillAuthoringSpec) {
+        skillAuthoringRef.set(spec)
+    }
+
+    /** Atomically take the armed lease for THIS turn's tool pool and clear it, so it cannot be read again
+     *  by a later continuation. Returns the spec to assemble with, or null when none is armed. */
+    fun consumeSkillAuthoring(): SkillAuthoringSpec? = skillAuthoringRef.getAndSet(null)
+
+    /** Disarm skill authoring without consuming (the turn-end catch-all for a turn that never assembled).
+     *  Idempotent. */
+    fun clearSkillAuthoring() {
+        skillAuthoringRef.set(null)
+    }
 
     // Subagent automation guards (Option B): a no-automation PARENT can spawn a subagent that mints
     // its OWN automation lease from the subagent assistant's own grant. That guard is NOT this

@@ -34,6 +34,9 @@ import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
+import me.rerere.rikkahub.data.ai.tools.SKILL_AUTHORING_SUPPORTED
+import me.rerere.rikkahub.data.ai.tools.SkillAuthoringMode
+import me.rerere.rikkahub.data.ai.tools.SkillAuthoringSpec
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -325,6 +328,15 @@ class ChatVM(
             text == "/loop" || text.startsWith("/loop ") -> {
                 handleLoopCommand(text.removePrefix("/loop").trim()); true
             }
+            // Authoring commands exist only where the WRITE surface does (sideload). In Play they are
+            // NOT intercepted (and not in the picker), so a manually-typed one falls through to a normal
+            // send rather than arming a mode with no tool behind it.
+            SKILL_AUTHORING_SUPPORTED && (text == "/create_skill" || text.startsWith("/create_skill ")) -> {
+                handleSkillAuthoringCommand(SkillAuthoringMode.Create, text.removePrefix("/create_skill").trim()); true
+            }
+            SKILL_AUTHORING_SUPPORTED && (text == "/update_skill" || text.startsWith("/update_skill ")) -> {
+                handleSkillAuthoringCommand(SkillAuthoringMode.Update, text.removePrefix("/update_skill").trim()); true
+            }
             else -> false
         }
     }
@@ -336,6 +348,30 @@ class ChatVM(
             chatService.setGoal(_conversationId, arg)
             chatService.sendMessage(_conversationId, listOf(UIMessagePart.Text(arg)), answer = true)
         }
+    }
+
+    /**
+     * Send the user's request as a normal turn that ALSO arms a slash-scoped skill-authoring lease for
+     * exactly this turn — arming and sending are one atomic call at the service send boundary, so any
+     * later ordinary send (which passes no spec) disarms it. The per-turn tool pool then offers
+     * create_skill (Create) or update_skill (Update); a successful write disarms early. For Update the
+     * first token of [arg] is taken as the target skill-name hint surfaced to the model. An empty arg
+     * still sends (and arms) so the model can ask what to author within this turn.
+     */
+    private fun handleSkillAuthoringCommand(mode: SkillAuthoringMode, arg: String) {
+        val target = if (mode == SkillAuthoringMode.Update) arg.substringBefore(' ').takeIf { it.isNotBlank() } else null
+        val prompt = arg.ifBlank {
+            when (mode) {
+                SkillAuthoringMode.Create -> "Help me create a new skill."
+                SkillAuthoringMode.Update -> "Help me update a skill."
+            }
+        }
+        chatService.sendMessage(
+            _conversationId,
+            listOf(UIMessagePart.Text(prompt)),
+            answer = true,
+            armSkillAuthoring = SkillAuthoringSpec(mode, target),
+        )
     }
 
     /**

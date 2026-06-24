@@ -33,6 +33,7 @@ class BaseToolAssemblyTest {
         webSearchEnabled: Boolean = false,
         managedFetchAvailable: Boolean = false,
         skillsEnabled: Boolean = false,
+        skillAuthoringActive: Boolean = false,
         search: Producer = Producer(listOf(tool("search"))),
         fetch: Producer = Producer(listOf(tool("fetch"))),
         imageGen: Producer = Producer(listOf(tool("imagegen"))),
@@ -40,11 +41,13 @@ class BaseToolAssemblyTest {
         workspace: Producer = Producer(listOf(tool("workspace"))),
         uiAutomation: Producer = Producer(listOf(tool("ui"))),
         skills: Producer = Producer(listOf(tool("skill"))),
+        skillAuthoring: Producer = Producer(listOf(tool("skill_authoring"))),
     ): List<Tool> = runBlocking {
         assembleBaseTools(
             webSearchEnabled = webSearchEnabled,
             managedFetchAvailable = managedFetchAvailable,
             skillsEnabled = skillsEnabled,
+            skillAuthoringActive = skillAuthoringActive,
             searchTools = search.producer,
             fetchTools = fetch.producer,
             imageGenTools = imageGen.producer,
@@ -52,6 +55,7 @@ class BaseToolAssemblyTest {
             workspaceTools = workspace.producer,
             uiAutomationTools = uiAutomation.producer,
             skillTools = skills.producer,
+            skillAuthoringTools = skillAuthoring.producer,
         )
     }
 
@@ -95,6 +99,23 @@ class BaseToolAssemblyTest {
     }
 
     @Test
+    fun `skill authoring is gated on its own flag, independent of skillsEnabled`() {
+        // Authoring is offered ONLY while a slash-armed authoring session is active, and rides its OWN
+        // gate — a user can author the FIRST skill (none enabled) so it must NOT depend on skillsEnabled.
+        val off = Producer(listOf(tool("skill_authoring")))
+        assertFalse(
+            "authoring tool absent when not armed",
+            assemble(skillsEnabled = true, skillAuthoringActive = false, skillAuthoring = off).any { it.name == "skill_authoring" },
+        )
+        assertFalse("a disarmed authoring producer must not run (lazy short-circuit)", off.invoked)
+
+        val on = Producer(listOf(tool("skill_authoring")))
+        val armed = assemble(skillsEnabled = false, skillAuthoringActive = true, skillAuthoring = on)
+        assertTrue("authoring tool present when armed even with NO skills enabled", armed.any { it.name == "skill_authoring" })
+        assertTrue(on.invoked)
+    }
+
+    @Test
     fun `ui automation producer is always invoked and contributes nothing when it self-gates to empty`() {
         // The a11y-core null-check lives inside the ChatService producer (single post-workspace
         // snapshot); when the core is absent the producer returns empty. The pure function still
@@ -127,6 +148,7 @@ class BaseToolAssemblyTest {
                 webSearchEnabled = true,
                 managedFetchAvailable = false,
                 skillsEnabled = false,
+                skillAuthoringActive = false,
                 searchTools = { listOf(tool("s1"), tool("s2")) },
                 fetchTools = { emptyList() },
                 imageGenTools = { listOf(tool("i1")) },
@@ -134,6 +156,7 @@ class BaseToolAssemblyTest {
                 workspaceTools = { emptyList() },
                 uiAutomationTools = { emptyList() },
                 skillTools = { emptyList() },
+                skillAuthoringTools = { emptyList() },
             )
         }
         assertEquals(listOf("s1", "s2", "i1", "l1", "l2", "l3"), multi.map { it.name })
