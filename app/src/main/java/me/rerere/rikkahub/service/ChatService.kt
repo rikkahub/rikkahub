@@ -741,11 +741,21 @@ internal class StreamingUiCoalescer<T>(
     private var hasValue = false
     private var lastChunkPublished = false
 
-    /** 处理一个 chunk：记住其合并值，并按窗口节流决定是否立即 publish。 */
-    fun onChunk(now: Long, value: T) {
+    /**
+     * Process one chunk: remember its merged value, and decide by the window throttle whether to publish
+     * it now.
+     *
+     * [force] is the "must-publish" hint for low-frequency SEMANTIC-transition frames (a tool call
+     * assembled but not yet executed, a pending-approval gate, a tool's output arriving): such a frame
+     * must publish immediately even when it lands inside the throttle window — otherwise an in-progress
+     * tool frame emitted right before a same-step `executeTool` suspension is held by the window and then
+     * overwritten by the executed frame, so the running tool is never shown. Per-token streaming frames
+     * pass [force]=false and are throttled as before.
+     */
+    fun onChunk(now: Long, value: T, force: Boolean = false) {
         lastValue = value
         hasValue = true
-        if (shouldPublishStreamingUpdate(lastPublishAt, now, intervalMs)) {
+        if (force || shouldPublishStreamingUpdate(lastPublishAt, now, intervalMs)) {
             lastPublishAt = now
             lastChunkPublished = true
             publish(value)
@@ -777,10 +787,11 @@ internal class StreamingUiCoalescer<T>(
         source: Flow<T>,
         now: () -> Long = { System.currentTimeMillis() },
         sideEffect: suspend (T) -> Unit = {},
+        force: (T) -> Boolean = { false },
     ): Flow<T> = source
         .onEach { value ->
             sideEffect(value)
-            onChunk(now(), value)
+            onChunk(now(), value, force(value))
         }
         .onCompletion { finish() }
 }
@@ -2712,9 +2723,11 @@ class ChatService(
             // CAS（StateFlow.update）把合并 messages 重新合并进**当时的** live StateFlow（而非读一个陈旧快照再写
             // 回），故一次并发的 UI 写入（收藏切换/编辑/标题等非消息字段）不会被覆盖——updateCurrentMessages 经
             // node.copy 重建节点、保留 isFavorite 等非消息字段，last-writer-wins → idempotent merge-onto-current。
-            val uiCoalescer = StreamingUiCoalescer<List<UIMessage>>(
-                publish = { messages ->
-                    publishStreamingMessages(getOrCreateSession(conversationId).state, messages)
+            // Keyed on the whole chunk (not just its messages) so the per-chunk `force` flag — set by the
+            // runtime on semantic tool-boundary emits — reaches the coalescer; publish extracts .messages.
+            val uiCoalescer = StreamingUiCoalescer<GenerationChunk.Messages>(
+                publish = { chunk ->
+                    publishStreamingMessages(getOrCreateSession(conversationId).state, chunk.messages)
                 }
             )
             val effectiveMessages = sliceTurnMessages(conversation.currentMessages, messageRange)
@@ -2761,17 +2774,20 @@ class ChatService(
                 uiCoalescer.coalesce(
                     source = chunkFlow.map { chunk ->
                         when (chunk) {
-                            is GenerationChunk.Messages -> chunk.messages
+                            is GenerationChunk.Messages -> chunk
                         }
                     },
-                    sideEffect = { messages ->
+                    // A semantic tool-boundary frame (force=true) bypasses the throttle so the in-progress
+                    // tool / approval gate / freshly-arrived output always reaches the UI.
+                    force = { it.force },
+                    sideEffect = { chunk ->
                         // 任何流式进展都重置前台服务的 WakeLock 超时，使长 agentic 循环（工具/MCP/搜索跨多段
                         // 子-120s SSE）在息屏下不会在 15 分钟处误超时停机。按时间节流，避免逐 token IPC。
                         foregroundGeneration.onStreamingProgress()
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
-                            messages.lastOrNull()?.parts?.let {
+                            chunk.messages.lastOrNull()?.parts?.let {
                                 notifications.sendLiveUpdate(conversationId, senderName, it)
                             }
                         }

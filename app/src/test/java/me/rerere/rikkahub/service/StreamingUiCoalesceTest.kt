@@ -38,6 +38,7 @@ class StreamingUiCoalesceTest {
     private fun publishesViaCoalescer(
         times: List<Long>,
         values: List<Int>,
+        forced: Set<Int> = emptySet(),
     ): List<Int> = runBlocking {
         require(times.size == values.size)
         val published = mutableListOf<Int>()
@@ -46,6 +47,7 @@ class StreamingUiCoalesceTest {
         coalescer.coalesce(
             source = values.asFlow(),
             now = { times[i++] },
+            force = { it in forced },
         ).collect { /* drain */ }
         published
     }
@@ -182,6 +184,56 @@ class StreamingUiCoalesceTest {
         }
         // finish() publishes the throttled tail (20) before the downstream finalize sees completion.
         assertEquals(listOf("publish-10", "publish-20", "downstream-finalize"), order)
+    }
+
+    // ---- force-publish: a semantic tool-boundary frame must survive the throttle window ----
+
+    @Test
+    fun `a forced semantic frame publishes even inside the throttle window`() {
+        // Models the tool boundary: 10 = text-before-tool (published as the first chunk), 20 = the
+        // IN-PROGRESS tool frame (tool assembled, output empty) landing 1 ms later — inside the window —
+        // but FORCED, then 30 = the executed tool frame 1 ms after that. Without the force flag the
+        // in-progress frame is held and overwritten by the executed frame before the terminal flush
+        // (exactly the runtime's :254 → executeTool → :350 sequence). Force must make 20 reach the UI.
+        // Removing the `force ||` gate in onChunk reddens this assertion.
+        val base = 1_000_000L
+        val times = listOf(base, base + 1, base + 2)
+        val values = listOf(10, 20, 30)
+        val published = publishesViaCoalescer(times, values, forced = setOf(20))
+        assertTrue(
+            "the forced in-progress frame (20) must be published, got $published",
+            published.contains(20)
+        )
+    }
+
+    @Test
+    fun `without force the in-progress frame is coalesced away (the bug being fixed)`() {
+        // The SAME sequence with NOTHING forced reproduces the pre-fix behavior: 20 lands in the window,
+        // is held, and the next held frame (30) overwrites it before the terminal flush, so 20 never
+        // publishes. Pins precisely what the force flag fixes.
+        val base = 1_000_000L
+        val times = listOf(base, base + 1, base + 2)
+        val values = listOf(10, 20, 30)
+        val published = publishesViaCoalescer(times, values, forced = emptySet())
+        assertFalse(
+            "without force, the in-progress frame (20) is coalesced away, got $published",
+            published.contains(20)
+        )
+    }
+
+    @Test
+    fun `a forced frame resets the throttle window for subsequent chunks`() {
+        // After a forced publish, lastPublishAt advances to that frame's time, so an immediately
+        // following non-forced chunk inside the window is still throttled (force does not disable the
+        // throttle for later frames — it only bypasses it for the frame that carries it).
+        val base = 1_000_000L
+        val times = listOf(base, base + 1, base + 2)
+        val values = listOf(10, 20, 30)
+        val published = publishesViaCoalescer(times, values, forced = setOf(20))
+        // 30 lands 1 ms after the forced 20, inside the window → not published by the gate; it only
+        // appears via the terminal flush, so it is the LAST published value exactly once.
+        assertEquals("30 must arrive via the terminal flush as the final value", 30, published.last())
+        assertEquals("30 must not be double-published", 1, published.count { it == 30 })
     }
 
     @Test

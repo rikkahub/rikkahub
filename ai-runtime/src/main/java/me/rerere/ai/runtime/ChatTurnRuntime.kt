@@ -121,8 +121,18 @@ internal fun List<UIMessage>.hasToolOutput(): Boolean = any { message ->
 
 @Serializable
 sealed interface GenerationChunk {
+    /**
+     * @param force a "must-publish" hint for the UI coalescer: true for low-frequency SEMANTIC
+     *   transitions (a tool call assembled but not yet executed, a pending-approval gate, a tool's
+     *   output arriving) that must reach the UI even if they land inside the streaming throttle window,
+     *   false for high-frequency per-token streaming deltas (which the coalescer rightly throttles).
+     *   Without this, an in-progress tool snapshot emitted just before a same-step `executeTool`
+     *   suspension is held by the throttle and then overwritten by the post-execution snapshot, so the
+     *   running tool is never shown — see [me.rerere.ai.runtime.ChatTurnRuntime] tool-loop emits.
+     */
     data class Messages(
-        val messages: List<UIMessage>
+        val messages: List<UIMessage>,
+        val force: Boolean = false,
     ) : GenerationChunk
 }
 
@@ -251,7 +261,11 @@ class ChatTurnRuntime(
                 messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
                     finishedAt = clock.now().toLocalDateTime(clock.timeZone())
                 )
-                emit(GenerationChunk.Messages(messages))
+                // force: this is the IN-PROGRESS tool snapshot (tool call assembled, output still empty
+                // → isExecuted=false). The next emit is the post-execution snapshot (:executed below),
+                // separated only by a same-step executeTool suspension; without force the throttle holds
+                // this frame and the executed frame overwrites it, so the running tool is never shown.
+                emit(GenerationChunk.Messages(messages, force = true))
 
                 val tools = messages.last().getTools().filter { !it.isExecuted }
                 if (tools.isEmpty()) {
@@ -300,7 +314,9 @@ class ChatTurnRuntime(
                         }
                     }
                     messages = messages.dropLast(1) + lastMessage.copy(parts = updatedParts)
-                    emit(GenerationChunk.Messages(messages))
+                    // force: a pending-approval gate is a semantic transition the user must see at once
+                    // (the approval buttons appear here); never coalesce it away.
+                    emit(GenerationChunk.Messages(messages, force = true))
                 }
 
                 // If there are pending approvals, break and wait for user
@@ -347,7 +363,10 @@ class ChatTurnRuntime(
                 } else part
             }
             messages = messages.dropLast(1) + lastMessage.copy(parts = updatedParts)
-            emit(GenerationChunk.Messages(transforms.transformOutput(messages)))
+            // force: tool output just arrived (isExecuted flipped true) — the matching transition to the
+            // in-progress frame above; publish it promptly rather than waiting for a later throttle window
+            // (the next loop iteration may stream more tokens, or the turn may break to a deferred wait).
+            emit(GenerationChunk.Messages(transforms.transformOutput(messages), force = true))
             if (executedTools.any { it.isDeferred }) {
                 logSink.info(TAG, "generateText: paused for deferred tool output")
                 break
