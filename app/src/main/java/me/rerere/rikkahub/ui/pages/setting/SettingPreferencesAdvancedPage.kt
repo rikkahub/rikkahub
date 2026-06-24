@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -58,10 +59,18 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                     modifier = Modifier.padding(horizontal = 8.dp),
                 ) {
                     item(
-                        headlineContent = { Text("Max background subagents") },
+                        headlineContent = {
+                            Text("Max background subagents", style = MaterialTheme.typography.titleMedium)
+                        },
                         supportingContent = {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("How many background subagents may run at the same time. 0 = unlimited.")
+                                Text(
+                                    "How many background subagents can run at the same time. 0 means no " +
+                                        "limit. Each runs detached and reports back when it finishes — a " +
+                                        "higher cap does more work in parallel but uses more memory and battery.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -85,10 +94,18 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
-                        headlineContent = { Text("Max goal iterations") },
+                        headlineContent = {
+                            Text("Max goal iterations", style = MaterialTheme.typography.titleMedium)
+                        },
                         supportingContent = {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("How many times a /goal may auto-continue the agent before it stops. 0 = unlimited. A user-stop always ends it.")
+                                Text(
+                                    "How many times a /goal can automatically continue the agent before it " +
+                                        "stops. 0 means no limit. The agent also stops as soon as the goal is " +
+                                        "met, and a manual stop always ends it immediately.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -120,13 +137,18 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                     title = { Text("Security") },
                 ) {
                     item(
-                        headlineContent = { Text("Untrusted content protection") },
+                        headlineContent = {
+                            Text("Untrusted content protection", style = MaterialTheme.typography.titleMedium)
+                        },
                         supportingContent = {
                             Text(
-                                "Tell the model to treat tool output (shell, files, web pages, MCP results) " +
-                                    "and recalled memory / knowledge as untrusted data, not instructions — a " +
-                                    "defense against prompt injection. On by default. Turn off only if you " +
-                                    "understand the risk (e.g. to cut prompt noise on trusted, local-only use)."
+                                "Tells the model to treat tool output — shell, files, web pages, MCP " +
+                                    "results — and recalled memory or knowledge as untrusted data, not " +
+                                    "instructions. This defends against prompt injection, where content the " +
+                                    "model reads tries to hijack what it does. On by default; turn it off only " +
+                                    "for fully trusted, local-only content to trim prompt size.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         },
                         trailingContent = {
@@ -139,14 +161,19 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
-                        headlineContent = { Text("Allow insecure HTTPS") },
+                        headlineContent = {
+                            Text("Allow insecure HTTPS", style = MaterialTheme.typography.titleMedium)
+                        },
                         supportingContent = {
                             Text(
-                                "Skip TLS certificate & hostname verification for network requests — the " +
-                                    "curl -k / --insecure equivalent. Off by default. Turn on only to reach a " +
-                                    "provider with a self-signed or invalid certificate (a self-hosted endpoint " +
-                                    "or dev proxy). WARNING: while on, connections are not protected against " +
-                                    "man-in-the-middle interception."
+                                "Skip TLS certificate and hostname checks for network requests, so the app " +
+                                    "still connects when a provider's certificate is self-signed, expired, or " +
+                                    "doesn't match its host — typical of a self-hosted server or a local dev " +
+                                    "proxy. Off by default. While on, the connection can be read or modified by " +
+                                    "a man-in-the-middle, so enable it only for endpoints you trust and turn it " +
+                                    "back off afterward.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         },
                         trailingContent = {
@@ -167,13 +194,18 @@ fun SettingPreferencesAdvancedPage(vm: SettingVM = koinViewModel()) {
                     title = { Text("Diagnostics") },
                 ) {
                     item(
-                        headlineContent = { Text("Request log") },
+                        headlineContent = {
+                            Text("Request log", style = MaterialTheme.typography.titleMedium)
+                        },
                         supportingContent = {
                             Text(
-                                "Record per-request network metadata (URL, method, headers, status, " +
-                                    "timing) for the in-app Log page. Off by default. Request bodies are " +
-                                    "never stored — only safe metadata; turn on temporarily to diagnose " +
-                                    "connection issues."
+                                "Record per-request network metadata — URL, method, headers, response " +
+                                    "status, and timing — to the in-app Log page so you can diagnose " +
+                                    "connection or provider problems. Off by default. Request and response " +
+                                    "bodies are never recorded, only this metadata, and credential headers " +
+                                    "are redacted.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         },
                         trailingContent = {
