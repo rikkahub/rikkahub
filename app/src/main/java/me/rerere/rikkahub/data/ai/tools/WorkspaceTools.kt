@@ -19,6 +19,10 @@ import kotlin.uuid.Uuid
 val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_list_files" to false,
     "workspace_read_file" to false,
+    // glob (find files by pattern) + grep (search file contents) are read-only inspect verbs, like
+    // list/read — no-approval, and present in EVERY flavor (not in the sideload write/shell gate).
+    "workspace_glob" to false,
+    "workspace_grep" to false,
     // workspace_shell_tail reads a background run's app-private output by taskId — a read, so it
     // defaults to no-approval like the other read verbs (issue #291).
     "workspace_shell_tail" to false,
@@ -84,6 +88,8 @@ suspend fun createWorkspaceTools(
     return listOf(
         createListFilesTool(workspaceId, projectDir, ::needsApproval, workspaceRepository),
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createGlobTool(workspaceId, ::needsApproval, workspaceRepository),
+        createGrepTool(workspaceId, ::needsApproval, workspaceRepository),
     ) + sideloadWorkspaceTools(workspaceId, conversationId, workspaceRepository, ::needsApproval)
 }
 
@@ -210,6 +216,114 @@ private fun createReadFileTool(
                     put("startLine", window.startLine)
                     put("endLine", window.endLine)
                     if (window.hasMore) put("hasMore", true)
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun createGlobTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_glob",
+    description = """
+        Find files in the assistant's bound workspace files area by glob pattern, recursively from the files root. The pattern is matched against each file's path relative to the files root (the part after /workspace/). Supports * (any run of characters within one path segment, does not cross /), ** (across directories), ? (one character), [abc] character classes, and {a,b} alternation. Examples: **/*.kt, src/**/*.{kt,java}, **/README.md. Returns up to 500 entries (path is the absolute /workspace/... form); use a more specific pattern if truncated.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("pattern", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Glob pattern matched against the files-root-relative path, e.g. **/*.kt or src/**/*.{kt,java}.")
+                })
+            },
+            required = listOf("pattern"),
+        )
+    },
+    needsApproval = needsApproval("workspace_glob"),
+    execute = {
+        val pattern = it.jsonObject.string("pattern") ?: error("pattern is required")
+        val entries = workspaceRepository.glob(workspaceId, pattern)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("entries", buildJsonArray {
+                        entries.forEach { entry ->
+                            add(
+                                buildJsonObject {
+                                    put("path", WorkspaceCwdPolicy.toShellPath(entry.path))
+                                    put("name", entry.name)
+                                    put("isDirectory", entry.isDirectory)
+                                }
+                            )
+                        }
+                    })
+                    put("count", entries.size)
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun createGrepTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_grep",
+    description = """
+        Search file CONTENTS in the assistant's bound workspace files area, recursively from the files root, returning matching lines with their file path and line number. By default the query is a literal substring matched case-insensitively; set regex=true to treat it as a regular expression, or ignore_case=false for a case-sensitive match. Optionally restrict which files are searched with glob (matched against the files-root-relative path, e.g. **/*.kt). Skips files larger than 512 KB and returns up to 100 matches; narrow the query or glob if truncated.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Text to search for: a literal substring by default, or a regular expression when regex=true.")
+                })
+                put("regex", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Treat query as a regular expression. Default false (literal substring).")
+                })
+                put("ignore_case", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Case-insensitive match. Default true.")
+                })
+                put("glob", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional glob to restrict which files are searched, matched against the files-root-relative path, e.g. **/*.kt.")
+                })
+            },
+            required = listOf("query"),
+        )
+    },
+    needsApproval = needsApproval("workspace_grep"),
+    execute = {
+        val params = it.jsonObject
+        val query = params.string("query") ?: error("query is required")
+        // Booleans may arrive as a JSON boolean or a string; .string()?.toBooleanStrictOrNull() accepts
+        // both and falls back to the default on anything else.
+        val regex = params.string("regex")?.toBooleanStrictOrNull() ?: false
+        val ignoreCase = params.string("ignore_case")?.toBooleanStrictOrNull() ?: true
+        val includeGlob = params.string("glob")?.takeIf { g -> g.isNotBlank() }
+        val matches = workspaceRepository.grep(workspaceId, query, regex, ignoreCase, includeGlob)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("matches", buildJsonArray {
+                        matches.forEach { match ->
+                            add(
+                                buildJsonObject {
+                                    put("path", WorkspaceCwdPolicy.toShellPath(match.path))
+                                    put("line", match.line)
+                                    put("text", match.text)
+                                }
+                            )
+                        }
+                    })
+                    put("count", matches.size)
                 }.toString()
             )
         )

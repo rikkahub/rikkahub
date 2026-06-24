@@ -31,6 +31,7 @@ import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceCwdPolicy
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.WorkspaceSearchMatch
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import me.rerere.workspace.seededRelativeCwd
@@ -222,6 +223,34 @@ class WorkspaceRepository(
         val workspace = dao.getById(id) ?: return@withContext emptyList()
         manager.ensureWorkspace(workspace.root)
         manager.listFiles(workspace.root, path, area)
+    }
+
+    /**
+     * Find files in the FILES area by glob [pattern], recursively from the files root. The pattern is
+     * matched against each file's files-root-relative path (so a recursive globstar pattern finds every
+     * Kotlin file). Containment + the result cap live in the file-system layer. FILES area only.
+     */
+    suspend fun glob(id: String, pattern: String): List<WorkspaceFileEntry> = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext emptyList()
+        manager.ensureWorkspace(workspace.root)
+        manager.glob(workspace.root, pattern)
+    }
+
+    /**
+     * Search FILES-area file contents for [query] (literal substring by default, a regex when [regex]).
+     * [includeGlob] optionally restricts which files are searched (matched against the files-root-relative
+     * path). Containment, the per-file size cap, and the result cap live in the file-system layer.
+     */
+    suspend fun grep(
+        id: String,
+        query: String,
+        regex: Boolean,
+        ignoreCase: Boolean,
+        includeGlob: String?,
+    ): List<WorkspaceSearchMatch> = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext emptyList()
+        manager.ensureWorkspace(workspace.root)
+        manager.grep(workspace.root, query, regex = regex, ignoreCase = ignoreCase, includeGlob = includeGlob)
     }
 
     suspend fun resolvedWorkingDir(id: String): String = withContext(Dispatchers.IO) {

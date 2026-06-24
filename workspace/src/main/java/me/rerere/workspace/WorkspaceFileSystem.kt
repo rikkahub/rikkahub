@@ -131,11 +131,11 @@ class WorkspaceFileSystem(
         require(pattern.isNotBlank()) { "Glob pattern is required" }
         val start = resolvePath(root, path)
         require(start.exists()) { "Path does not exist: $path" }
-        val matcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
+        val matches = globPredicate(pattern)
         return walk(start) { paths ->
             paths
                 .filter { (Files.isRegularFile(it) || Files.isDirectory(it)) && staysWithinRoot(it, root) }
-                .filter { matcher.matches(root.toPath().relativize(it).normalizeForMatch()) }
+                .filter { matches(root.toPath().relativize(it).normalizeForMatch()) }
                 .take(config.maxListEntries)
                 .map { it.toFile().toEntry(root) }
                 .toList()
@@ -157,7 +157,7 @@ class WorkspaceFileSystem(
         val matcher = if (regex) Regex(query, options) else Regex(Regex.escape(query), options)
         val includeMatcher = includeGlob
             ?.takeIf { it.isNotBlank() }
-            ?.let { FileSystems.getDefault().getPathMatcher("glob:$it") }
+            ?.let { globPredicate(it) }
 
         val results = mutableListOf<WorkspaceSearchMatch>()
         walk(start) { paths ->
@@ -166,7 +166,7 @@ class WorkspaceFileSystem(
                 .forEach { path ->
                     if (results.size >= config.maxSearchResults) return@forEach
                     if (includeMatcher != null &&
-                        !includeMatcher.matches(root.toPath().relativize(path).normalizeForMatch())
+                        !includeMatcher(root.toPath().relativize(path).normalizeForMatch())
                     ) {
                         return@forEach
                     }
@@ -176,10 +176,17 @@ class WorkspaceFileSystem(
                         lines.forEachIndexed { index, line ->
                             if (results.size >= config.maxSearchResults) return@useLines
                             if (matcher.containsMatchIn(line)) {
+                                // Cap the snippet so a hit inside a minified/single-giant-line file can't
+                                // push a multi-megabyte line into the result (memory + tool-output bound).
+                                val snippet = if (line.length > config.maxSearchLineChars) {
+                                    line.take(config.maxSearchLineChars) + "…(truncated)"
+                                } else {
+                                    line
+                                }
                                 results += WorkspaceSearchMatch(
                                     path = file.relativePath(root),
                                     line = index + 1,
-                                    text = line,
+                                    text = snippet,
                                 )
                             }
                         }
@@ -187,6 +194,18 @@ class WorkspaceFileSystem(
                 }
         }
         return results
+    }
+
+    // A glob predicate over a relative Path. Unlike a raw Java glob PathMatcher, a leading globstar
+    // segment here also matches ZERO leading directories, so a recursive "*.kt" pattern matches a
+    // top-level file as well as a nested one (globset/ripgrep semantics). Java's globstar otherwise
+    // requires at least one directory, which would silently miss top-level files.
+    private fun globPredicate(pattern: String): (Path) -> Boolean {
+        val primary = FileSystems.getDefault().getPathMatcher("glob:$pattern")
+        val zeroDir = pattern.removePrefix("**/")
+            .takeIf { it != pattern && it.isNotEmpty() }
+            ?.let { FileSystems.getDefault().getPathMatcher("glob:$it") }
+        return { path -> primary.matches(path) || zeroDir?.matches(path) == true }
     }
 
     private fun <T> walk(start: File, block: (Sequence<Path>) -> T): T =

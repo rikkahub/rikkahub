@@ -118,6 +118,8 @@ class WorkspaceToolsTest {
         val factoryToolNames = setOf(
             "workspace_list_files",
             "workspace_read_file",
+            "workspace_glob",
+            "workspace_grep",
             "workspace_write_file",
             "workspace_edit_file",
             "workspace_delete_file",

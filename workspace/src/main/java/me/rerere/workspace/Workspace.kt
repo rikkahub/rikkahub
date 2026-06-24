@@ -46,6 +46,10 @@ data class WorkspaceConfig(
     val maxWriteBytes: Long = 2 * 1024 * 1024,
     val maxListEntries: Int = 500,
     val maxSearchResults: Int = 100,
+    // Per-match line cap for grep. A matching line is truncated to this many characters (with a marker)
+    // so a hit inside a minified / single-giant-line file can't push a multi-megabyte snippet into the
+    // result — bounding both the in-memory result set and the serialized tool output.
+    val maxSearchLineChars: Int = 500,
 )
 
 data class WorkspaceFileEntry(
