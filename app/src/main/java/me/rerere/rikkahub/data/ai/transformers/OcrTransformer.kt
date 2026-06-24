@@ -110,13 +110,13 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
                 ),
                 params = TextGenerationParams(
                     model = model,
+                    customHeaders = model.customHeaders,
+                    customBody = model.customBodies,
                 ),
             )
         }
         if (result == null) {
             Log.w(TAG, "performOcr: timed out after ${OCR_TIMEOUT_MS}ms for ${part.url}")
-            // Not cached: a timeout is usually transient/config-related, so a later retry
-            // should be allowed to reach the model again.
             return "[Image: could not be read — the OCR model did not respond in time]"
         }
         val content = result.choices[0].message?.toText() ?: "[ERROR, OCR failed]"

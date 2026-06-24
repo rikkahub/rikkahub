@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.intOrNull
@@ -332,6 +333,69 @@ object UseSkillToolUI : ToolUIRenderer {
         val skillName = context.arguments.getStringContent("name") ?: ""
         val path = context.arguments.getStringContent("path")
         return if (path != null) "Skill: $skillName / $path" else "Skill: $skillName"
+    }
+}
+
+/**
+ * 最近聊天: 标题固定, 摘要列出最近对话的标题
+ */
+object RecentChatsToolUI : ToolUIRenderer {
+    override val toolName: String = "recent_chats"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Message02
+
+    @Composable
+    override fun title(context: ToolUIContext): String =
+        stringResource(R.string.chat_message_tool_recent_chats)
+
+    private fun chats(context: ToolUIContext): List<JsonElement> =
+        (context.content as? JsonArray) ?: emptyList()
+
+    override fun hasSummary(context: ToolUIContext): Boolean = chats(context).isNotEmpty()
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val titles = chats(context).mapNotNull { it.getStringContent("title") }
+        if (titles.isEmpty()) return
+        Text(
+            text = titles.joinToString(", "),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.shimmer(isLoading = context.loading),
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * 对话历史搜索: 标题带查询词, 摘要显示命中数
+ */
+object ConversationSearchToolUI : ToolUIRenderer {
+    override val toolName: String = "conversation_search"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Search01
+
+    @Composable
+    override fun title(context: ToolUIContext): String = stringResource(
+        R.string.chat_message_tool_conversation_search,
+        context.arguments.getStringContent("query") ?: ""
+    )
+
+    private fun results(context: ToolUIContext): List<JsonElement> =
+        (context.content as? JsonArray) ?: emptyList()
+
+    override fun hasSummary(context: ToolUIContext): Boolean = results(context).isNotEmpty()
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val results = results(context)
+        if (results.isEmpty()) return
+        Text(
+            text = stringResource(R.string.chat_message_tool_search_results_count, results.size),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+        )
     }
 }
 

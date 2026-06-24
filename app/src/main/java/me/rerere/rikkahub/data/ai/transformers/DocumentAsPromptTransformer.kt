@@ -25,14 +25,15 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
                         if (documents.isNotEmpty()) {
                             documents.forEach { document ->
                                 val content = readDocumentContent(document)
+                                val path = resolveWorkspacePath(document)
+                                val pathAttr = path?.let { " path=\"$it\"" } ?: ""
                                 val prompt = """
-                  ## user sent a file: ${document.fileName}
-                  <content>
-                  ```
-                  $content
-                  ```
-                  </content>
-                  """.trimMargin()
+                                  <UploadFile name="${document.fileName}"$pathAttr>
+                                  ```
+                                  $content
+                                  ```
+                                  </UploadFile>
+                                  """.trimMargin()
                                 add(0, UIMessagePart.Text(prompt))
                             }
                         }
@@ -56,6 +57,14 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
 
     private fun parseEpubAsText(file: File): String {
         return EpubParser.parse(file)
+    }
+
+    // 上传文件保存在 filesDir/upload 下, 该目录通过 proot 挂载到 workspace 的 /upload
+    // 返回文件在 workspace 内的绝对路径, 便于 AI 用 workspace 工具直接读取原始文件
+    private fun resolveWorkspacePath(document: UIMessagePart.Document): String? {
+        val file = runCatching { document.url.toUri().toFile() }.getOrNull() ?: return null
+        if (file.parentFile?.name != "upload") return null
+        return "/upload/${file.name}"
     }
 
     private fun readDocumentContent(document: UIMessagePart.Document): String {

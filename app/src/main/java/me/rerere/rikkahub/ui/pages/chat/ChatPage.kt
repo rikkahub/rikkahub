@@ -136,6 +136,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val isBigScreen =
         windowAdaptiveInfo.width > windowAdaptiveInfo.height && windowAdaptiveInfo.width >= 1100.dp
 
+    // 进入大屏（永久抽屉）模式时重置抽屉状态为关闭，
+    // 避免从横屏旋转回竖屏后，模态抽屉残留为打开状态且无法关闭（#1304）
+    LaunchedEffect(isBigScreen) {
+        if (isBigScreen && drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+
     val inputState = vm.inputState
 
     // 初始化输入状态（处理传入的 files 和 text 参数）

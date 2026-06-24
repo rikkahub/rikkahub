@@ -396,6 +396,14 @@ internal fun AssistantBasicContent(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
                 )
+
+                if (assistant.contextMessageSize > 0) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_context_message_truncation_warning),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
             HorizontalDivider()
             FormItem(
