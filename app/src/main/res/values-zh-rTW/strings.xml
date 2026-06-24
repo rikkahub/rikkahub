@@ -1201,6 +1201,9 @@
   <string name="workspace_tool_delete_label">刪除檔案</string>
   <string name="workspace_tool_move_label">移動檔案</string>
   <string name="workspace_tool_shell_label">執行命令</string>
+  <string name="workspace_tool_glob_label">尋找檔案</string>
+  <string name="workspace_tool_grep_label">搜尋內容</string>
+  <string name="workspace_tool_shell_tail_label">檢視命令輸出</string>
   <string name="workspace_files_area_files">檔案</string>
   <string name="workspace_files_area_rootfs">Rootfs</string>
   <string name="workspace_files_empty">空目錄</string>

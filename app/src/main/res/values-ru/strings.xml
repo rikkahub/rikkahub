@@ -1203,6 +1203,9 @@
   <string name="workspace_tool_delete_label">Удаление файла</string>
   <string name="workspace_tool_move_label">Перемещение файла</string>
   <string name="workspace_tool_shell_label">Выполнить команду</string>
+  <string name="workspace_tool_glob_label">Поиск файлов</string>
+  <string name="workspace_tool_grep_label">Поиск по содержимому</string>
+  <string name="workspace_tool_shell_tail_label">Вывод команды</string>
   <string name="workspace_files_area_files">Файлы</string>
   <string name="workspace_files_area_rootfs">Rootfs</string>
   <string name="workspace_files_empty">Пустой каталог</string>

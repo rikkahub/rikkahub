@@ -1203,6 +1203,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_tool_delete_label">ファイルを削除</string>
   <string name="workspace_tool_move_label">ファイルを移動</string>
   <string name="workspace_tool_shell_label">コマンドを実行</string>
+  <string name="workspace_tool_glob_label">ファイル検索</string>
+  <string name="workspace_tool_grep_label">内容検索</string>
+  <string name="workspace_tool_shell_tail_label">コマンド出力の表示</string>
   <string name="workspace_files_area_files">ファイル</string>
   <string name="workspace_files_area_rootfs">Rootfs</string>
   <string name="workspace_files_empty">空のディレクトリ</string>

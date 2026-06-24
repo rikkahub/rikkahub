@@ -445,16 +445,40 @@ private fun WorkspaceToolApprovalCard(
     }
 }
 
-@Composable
-private fun workspaceToolApprovalItems(): List<Pair<String, String>> = listOf(
-    "workspace_list_files" to stringResource(R.string.workspace_tool_list_label),
-    "workspace_read_file" to stringResource(R.string.workspace_tool_read_label),
-    "workspace_write_file" to stringResource(R.string.workspace_tool_write_label),
-    "workspace_edit_file" to stringResource(R.string.workspace_tool_edit_label),
-    "workspace_delete_file" to stringResource(R.string.workspace_tool_delete_label),
-    "workspace_move_file" to stringResource(R.string.workspace_tool_move_label),
-    "workspace_shell" to stringResource(R.string.workspace_tool_shell_label),
+// The workspace tools shown in the per-workspace approval UI, in display order. Pinned by
+// WorkspaceApprovalUiToolsTest to cover EXACTLY WorkspaceToolDefaultApprovals, so a newly added
+// workspace tool can't be silently left out of this UI (as workspace_glob / workspace_grep were).
+internal val WORKSPACE_TOOL_APPROVAL_UI_ORDER: List<String> = listOf(
+    "workspace_list_files",
+    "workspace_read_file",
+    "workspace_glob",
+    "workspace_grep",
+    "workspace_write_file",
+    "workspace_edit_file",
+    "workspace_delete_file",
+    "workspace_move_file",
+    "workspace_shell",
+    "workspace_shell_tail",
 )
+
+@Composable
+private fun workspaceToolApprovalItems(): List<Pair<String, String>> =
+    WORKSPACE_TOOL_APPROVAL_UI_ORDER.map { it to workspaceToolLabel(it) }
+
+@Composable
+private fun workspaceToolLabel(toolName: String): String = when (toolName) {
+    "workspace_list_files" -> stringResource(R.string.workspace_tool_list_label)
+    "workspace_read_file" -> stringResource(R.string.workspace_tool_read_label)
+    "workspace_glob" -> stringResource(R.string.workspace_tool_glob_label)
+    "workspace_grep" -> stringResource(R.string.workspace_tool_grep_label)
+    "workspace_write_file" -> stringResource(R.string.workspace_tool_write_label)
+    "workspace_edit_file" -> stringResource(R.string.workspace_tool_edit_label)
+    "workspace_delete_file" -> stringResource(R.string.workspace_tool_delete_label)
+    "workspace_move_file" -> stringResource(R.string.workspace_tool_move_label)
+    "workspace_shell" -> stringResource(R.string.workspace_tool_shell_label)
+    "workspace_shell_tail" -> stringResource(R.string.workspace_tool_shell_tail_label)
+    else -> toolName
+}
 
 @Composable
 private fun WorkspaceInfoRow(

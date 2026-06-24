@@ -1202,6 +1202,9 @@
   <string name="workspace_tool_delete_label">Delete file</string>
   <string name="workspace_tool_move_label">Move file</string>
   <string name="workspace_tool_shell_label">Run command</string>
+  <string name="workspace_tool_glob_label">Find files</string>
+  <string name="workspace_tool_grep_label">Search contents</string>
+  <string name="workspace_tool_shell_tail_label">Tail command output</string>
   <string name="workspace_files_area_files">Files</string>
   <string name="workspace_files_area_rootfs">Rootfs</string>
   <string name="workspace_files_empty">Empty directory</string>
