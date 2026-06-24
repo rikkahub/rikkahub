@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.compose.material3.HorizontalFloatingToolbar
-import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import me.rerere.hugeicons.stroke.Connect
 import androidx.compose.foundation.lazy.items
@@ -67,8 +66,6 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 
-import androidx.compose.material3.HorizontalFloatingToolbar
-import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
@@ -411,7 +408,7 @@ internal fun SettingMultiKeyContent(
             expanded = expanded,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = -FloatingToolbarDefaults.ScreenOffset),
+                .offset(y = -androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset),
         ) {
             Button(
                 onClick = { showAdd = true },

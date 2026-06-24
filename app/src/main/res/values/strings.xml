@@ -1833,4 +1833,10 @@
     <string name="multi_key_test">Test</string>
     <string name="multi_key_manage">Manage Keys</string>
     <string name="multi_key_summary">%d active / %d total</string>
+    
+
+    <!-- SSH & Multi-Key Page -->
+    <string name="setting_page_ssh">SSH Hosts</string>
+    <string name="setting_page_ssh_desc">Manage saved SSH servers</string>
+    <string name="setting_provider_page_keys">Keys</string>
     </resources>
