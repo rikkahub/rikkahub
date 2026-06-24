@@ -18,7 +18,43 @@ import okhttp3.internal.closeQuietly
 import okio.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
+import kotlin.reflect.KClass
 import kotlin.uuid.Uuid
+
+/**
+ * Registry of search services, keyed by the [SearchServiceOptions] subtype each one drives. This
+ * replaces the previous one-`when`-arm-per-service dispatcher in [SearchService.getService]: adding a
+ * search provider is now a single registry entry (plus its options subtype, its UI editor arm, and the
+ * [SearchServiceOptions.TYPES] display-label entry), not a `when` arm that must stay in sync.
+ *
+ * Every service is a stateless `object` (the per-call [Context]/options are passed to `search`/`scrape`),
+ * so referencing the singletons directly is the same lifetime the old `when` had.
+ *
+ * Exhaustiveness moves from the compiler's `when` check to SearchServiceRegistryTest, which asserts the
+ * registry covers exactly [SearchServiceOptions.TYPES] in both directions (no missing service, no orphan).
+ */
+internal val SEARCH_SERVICE_REGISTRY: Map<KClass<out SearchServiceOptions>, SearchService<*>> =
+    mapOf(
+        SearchServiceOptions.BingLocalOptions::class to BingSearchService,
+        SearchServiceOptions.RikkaHubOptions::class to RikkaHubSearchService,
+        SearchServiceOptions.ZhipuOptions::class to ZhipuSearchService,
+        SearchServiceOptions.TavilyOptions::class to TavilySearchService,
+        SearchServiceOptions.ExaOptions::class to ExaSearchService,
+        SearchServiceOptions.SearXNGOptions::class to SearXNGService,
+        SearchServiceOptions.LinkUpOptions::class to LinkUpService,
+        SearchServiceOptions.BraveOptions::class to BraveSearchService,
+        SearchServiceOptions.MetasoOptions::class to MetasoSearchService,
+        SearchServiceOptions.OllamaOptions::class to OllamaSearchService,
+        SearchServiceOptions.PerplexityOptions::class to PerplexitySearchService,
+        SearchServiceOptions.FirecrawlOptions::class to FirecrawlSearchService,
+        SearchServiceOptions.JinaOptions::class to JinaSearchService,
+        SearchServiceOptions.BochaOptions::class to BochaSearchService,
+        SearchServiceOptions.GrokOptions::class to GrokSearchService,
+        SearchServiceOptions.TinyfishOptions::class to TinyfishSearchService,
+        SearchServiceOptions.CustomJsOptions::class to CustomJsSearchService,
+        SearchServiceOptions.GoogleSearchOptions::class to GoogleSearchService,
+        SearchServiceOptions.CodexSearchOptions::class to CodexSearchService,
+    )
 
 interface SearchService<T : SearchServiceOptions> {
     val name: String
@@ -43,29 +79,14 @@ interface SearchService<T : SearchServiceOptions> {
     ): Result<ScrapedResult>
 
     companion object {
+        // The registry is keyed by the EXACT options subtype, so the resolved service's T is the
+        // caller's own options type — the cast is sound by construction (pinned by
+        // SearchServiceRegistryTest). A missing entry can only mean a subtype was added without
+        // wiring its service, so it surfaces loudly instead of returning a wrong service.
         @Suppress("UNCHECKED_CAST")
         fun <T : SearchServiceOptions> getService(options: T): SearchService<T> {
-            return when (options) {
-                is SearchServiceOptions.TavilyOptions -> TavilySearchService
-                is SearchServiceOptions.ExaOptions -> ExaSearchService
-                is SearchServiceOptions.ZhipuOptions -> ZhipuSearchService
-                is SearchServiceOptions.BingLocalOptions -> BingSearchService
-                is SearchServiceOptions.SearXNGOptions -> SearXNGService
-                is SearchServiceOptions.LinkUpOptions -> LinkUpService
-                is SearchServiceOptions.BraveOptions -> BraveSearchService
-                is SearchServiceOptions.MetasoOptions -> MetasoSearchService
-                is SearchServiceOptions.OllamaOptions -> OllamaSearchService
-                is SearchServiceOptions.PerplexityOptions -> PerplexitySearchService
-                is SearchServiceOptions.FirecrawlOptions -> FirecrawlSearchService
-                is SearchServiceOptions.JinaOptions -> JinaSearchService
-                is SearchServiceOptions.BochaOptions -> BochaSearchService
-                is SearchServiceOptions.RikkaHubOptions -> RikkaHubSearchService
-                is SearchServiceOptions.GrokOptions -> GrokSearchService
-                is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
-                is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
-                is SearchServiceOptions.GoogleSearchOptions -> GoogleSearchService
-                is SearchServiceOptions.CodexSearchOptions -> CodexSearchService
-            } as SearchService<T>
+            return (SEARCH_SERVICE_REGISTRY[options::class]
+                ?: error("No search service registered for ${options::class.simpleName}")) as SearchService<T>
         }
 
         @Volatile
