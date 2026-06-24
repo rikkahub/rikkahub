@@ -61,6 +61,13 @@ data class Assistant(
     // through to the LLM whenever in doubt. Per-tool HARDLINE / approval still apply at
     // the dispatch level; v1 only matches read-only tools so approval is a non-issue.
     val fastPathRouterEnabled: Boolean = false,
+    // ===== SillyTavern 兼容字段 =====
+    val alternateGreetings: List<UIMessage> = emptyList(),  // 备用开场白
+    val mesExample: String = "",                            // 示例对话
+    val creatorNotes: String = "",                          // 作者备注
+    val creator: String = "",                               // 作者
+    val characterVersion: String = "",                      // 角色版本
+    val postHistoryInstructions: String = "",                // 历史后指令
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
 )

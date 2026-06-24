@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,32 +34,54 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import kotlinx.serialization.json.jsonArray
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.R
+import kotlin.uuid.Uuid
 import org.koin.compose.koinInject
 
 @Composable
 fun AssistantImporter(
     modifier: Modifier = Modifier,
     onUpdate: (Assistant) -> Unit,
+    onLorebooks: ((List<Lorebook>) -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier,
     ) {
-        SillyTavernImporter(onImport = onUpdate)
+        SillyTavernImporter(
+            onImport = { result ->
+                onUpdate(result.assistant)
+                result.lorebooks.takeIf { it.isNotEmpty() }?.let { books ->
+                    onLorebooks?.invoke(books)
+                }
+            }
+        )
     }
 }
 
+/**
+ * 导入结果，包含 Assistant 和关联的 Lorebook
+ */
+data class TavernImportResult(
+    val assistant: Assistant,
+    val lorebooks: List<Lorebook> = emptyList(),
+)
+
 @Composable
 private fun SillyTavernImporter(
-    onImport: (Assistant) -> Unit
+    onImport: (TavernImportResult) -> Unit
 ) {
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
@@ -150,14 +170,15 @@ private fun SillyTavernImporter(
 
 private interface TavernCardParser {
     val specName: String
-    fun parse(context: Context, json: JsonObject, background: String?): Assistant
+    fun parse(context: Context, json: JsonObject, background: String?): TavernImportResult
 }
 
 private class CharaCardV2Parser : TavernCardParser {
     override val specName: String = "chara_card_v2"
 
-    override fun parse(context: Context, json: JsonObject, background: String?): Assistant {
-        val data = json["data"]?.jsonObject ?: error(context.getString(R.string.assistant_importer_missing_data_field))
+    override fun parse(context: Context, json: JsonObject, background: String?): TavernImportResult {
+        val data = json["data"]?.jsonObject
+            ?: error(context.getString(R.string.assistant_importer_missing_data_field))
         val name = data["name"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: error(context.getString(R.string.assistant_importer_missing_name_field))
         val firstMessage = data["first_mes"]?.jsonPrimitiveOrNull?.contentOrNull
@@ -165,29 +186,44 @@ private class CharaCardV2Parser : TavernCardParser {
         val description = data["description"]?.jsonPrimitiveOrNull?.contentOrNull
         val personality = data["personality"]?.jsonPrimitiveOrNull?.contentOrNull
         val scenario = data["scenario"]?.jsonPrimitiveOrNull?.contentOrNull
+        val mesExample = data["mes_example"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val creatorNotes = data["creator_notes"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val postHistoryInstructions = data["post_history_instructions"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val creator = data["creator"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val characterVersion = data["character_version"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
 
-        val prompt = buildString {
-            appendLine("You are roleplaying as $name.")
-            appendLine()
-            if (!system.isNullOrBlank()) {
-                appendLine(system)
-                appendLine()
+        // 备用开场白
+        val alternateGreetings = mutableListOf<UIMessage>()
+        data["alternate_greetings"]?.jsonArray?.forEach { elem ->
+            elem.jsonPrimitiveOrNull?.contentOrNull?.let { text ->
+                if (text.isNotBlank()) {
+                    alternateGreetings.add(UIMessage.assistant(text))
+                }
             }
-            appendLine("## Description of the character")
-            appendLine(description ?: "Empty")
-            appendLine()
-            appendLine("## Personality of the character")
-            appendLine(personality ?: "Empty")
-            appendLine()
-            appendLine("## Scenario")
-            append(scenario ?: "Empty")
         }
 
-        return Assistant(
+        // 知识库
+        val lorebooks = parseCharacterBook(data)
+
+        val prompt = buildPrompt(name, system, description, personality, scenario)
+
+        val assistant = Assistant(
             name = name,
             presetMessages = if (firstMessage != null) listOf(UIMessage.assistant(firstMessage)) else emptyList(),
+            alternateGreetings = alternateGreetings,
             systemPrompt = prompt,
+            mesExample = mesExample,
+            creatorNotes = creatorNotes,
+            creator = creator,
+            characterVersion = characterVersion,
+            postHistoryInstructions = postHistoryInstructions,
             background = background
+        )
+        return TavernImportResult(
+            assistant = assistant.copy(
+                lorebookIds = lorebooks.map { it.id }.toSet()
+            ),
+            lorebooks = lorebooks
         )
     }
 }
@@ -195,38 +231,170 @@ private class CharaCardV2Parser : TavernCardParser {
 private class CharaCardV3Parser : TavernCardParser {
     override val specName: String = "chara_card_v3"
 
-    override fun parse(context: Context, json: JsonObject, background: String?): Assistant {
-        val data = json["data"]?.jsonObject ?: error(context.getString(R.string.assistant_importer_missing_data_field))
-        val name = data["name"]?.jsonPrimitiveOrNull?.contentOrNull ?: error(context.getString(R.string.assistant_importer_missing_name_field))
-        val description = data["description"]?.jsonPrimitiveOrNull?.contentOrNull
+    override fun parse(context: Context, json: JsonObject, background: String?): TavernImportResult {
+        val data = json["data"]?.jsonObject
+            ?: error(context.getString(R.string.assistant_importer_missing_data_field))
+        val name = data["name"]?.jsonPrimitiveOrNull?.contentOrNull
+            ?: error(context.getString(R.string.assistant_importer_missing_name_field))
         val firstMessage = data["first_mes"]?.jsonPrimitiveOrNull?.contentOrNull
         val system = data["system_prompt"]?.jsonPrimitiveOrNull?.contentOrNull
+        val description = data["description"]?.jsonPrimitiveOrNull?.contentOrNull
         val personality = data["personality"]?.jsonPrimitiveOrNull?.contentOrNull
         val scenario = data["scenario"]?.jsonPrimitiveOrNull?.contentOrNull
+        val mesExample = data["mes_example"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val creatorNotes = data["creator_notes"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val postHistoryInstructions = data["post_history_instructions"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val creator = data["creator"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val characterVersion = data["character_version"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
 
-        val prompt = buildString {
-            appendLine("You are roleplaying as $name.")
-            appendLine()
-            if (!system.isNullOrBlank()) {
-                appendLine(system)
-                appendLine()
+        // 备用开场白
+        val alternateGreetings = mutableListOf<UIMessage>()
+        data["alternate_greetings"]?.jsonArray?.forEach { elem ->
+            elem.jsonPrimitiveOrNull?.contentOrNull?.let { text ->
+                if (text.isNotBlank()) {
+                    alternateGreetings.add(UIMessage.assistant(text))
+                }
             }
-            appendLine("## Description of the character")
-            appendLine(description ?: "Empty")
-            appendLine()
-            appendLine("## Personality of the character")
-            appendLine(personality ?: "Empty")
-            appendLine()
-            appendLine("## Scenario")
-            append(scenario ?: "Empty")
         }
 
-        return Assistant(
+        // 知识库
+        val lorebooks = parseCharacterBook(data)
+
+        val prompt = buildPrompt(name, system, description, personality, scenario)
+
+        val assistant = Assistant(
             name = name,
             presetMessages = if (firstMessage != null) listOf(UIMessage.assistant(firstMessage)) else emptyList(),
+            alternateGreetings = alternateGreetings,
             systemPrompt = prompt,
+            mesExample = mesExample,
+            creatorNotes = creatorNotes,
+            creator = creator,
+            characterVersion = characterVersion,
+            postHistoryInstructions = postHistoryInstructions,
             background = background
         )
+        return TavernImportResult(
+            assistant = assistant.copy(
+                lorebookIds = lorebooks.map { it.id }.toSet()
+            ),
+            lorebooks = lorebooks
+        )
+    }
+}
+
+// ===== 知识库解析 =====
+
+private fun parseCharacterBook(data: JsonObject): List<Lorebook> {
+    val lorebooks = mutableListOf<Lorebook>()
+
+    // 从 character_book 解析
+    data["character_book"]?.jsonObject?.let { book ->
+        val entries = mutableListOf<PromptInjection.RegexInjection>()
+        book["entries"]?.jsonArray?.forEach { entryObj ->
+            entryObj.jsonObject?.let { entry ->
+                entries.add(parseWorldBookEntry(entry))
+            }
+        }
+        if (entries.isNotEmpty()) {
+            val charName = data["name"]?.jsonPrimitive?.contentOrNull ?: "角色"
+            lorebooks.add(
+                Lorebook(
+                    name = "${charName}的知识库",
+                    description = data["description"]?.jsonPrimitive?.contentOrNull ?: "",
+                    entries = entries
+                )
+            )
+        }
+    }
+
+    // 从 extensions.world_book 解析
+    data["extensions"]?.jsonObject?.let { exts ->
+        exts["world_book"]?.jsonObject?.let { wb ->
+            val entries = mutableListOf<PromptInjection.RegexInjection>()
+            wb["entries"]?.jsonArray?.forEach { entryObj ->
+                entryObj.jsonObject?.let { entry ->
+                    entries.add(parseWorldBookEntry(entry))
+                }
+            }
+            if (entries.isNotEmpty()) {
+                lorebooks.add(
+                    Lorebook(
+                        name = "嵌入世界书",
+                        entries = entries
+                    )
+                )
+            }
+        }
+    }
+
+    return lorebooks
+}
+
+/**
+ * 将 SillyTavern position 整数映射为 RikkaHub InjectionPosition
+ */
+private fun mapSillyTavernPosition(position: Int): InjectionPosition {
+    return when (position) {
+        0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+        1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        2 -> InjectionPosition.TOP_OF_CHAT
+        3 -> InjectionPosition.TOP_OF_CHAT // After Examples -> 聊天历史开头
+        4 -> InjectionPosition.AT_DEPTH    // @Depth 模式
+        else -> InjectionPosition.AFTER_SYSTEM_PROMPT
+    }
+}
+
+private fun parseWorldBookEntry(entry: JsonObject): PromptInjection.RegexInjection {
+    val keys = mutableListOf<String>()
+    entry["keys"]?.jsonArray?.forEach { key ->
+        key.jsonPrimitiveOrNull?.contentOrNull?.let { keys.add(it) }
+    }
+    return PromptInjection.RegexInjection(
+        id = Uuid.random(),
+        name = entry["name"]?.jsonPrimitiveOrNull?.contentOrNull ?: "",
+        keywords = keys,
+        content = entry["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: "",
+        priority = entry["priority"]?.jsonPrimitiveOrNull?.let { it.content.toIntOrNull() } ?: 0,
+        position = mapSillyTavernPosition(
+            entry["position"]?.jsonPrimitiveOrNull?.let { it.content.toIntOrNull() } ?: 1
+        ),
+        constantActive = entry["constant"]?.jsonPrimitiveOrNull?.let {
+            it.content.toBoolean()
+        } ?: false,
+        caseSensitive = entry["case_sensitive"]?.jsonPrimitiveOrNull?.let {
+            it.content.toBoolean()
+        } ?: false,
+        enabled = entry["enabled"]?.jsonPrimitiveOrNull?.let {
+            it.content.toBoolean()
+        } ?: true,
+    )
+}
+
+// ===== Prompt 构建 =====
+
+private fun buildPrompt(
+    name: String,
+    system: String?,
+    description: String?,
+    personality: String?,
+    scenario: String?
+): String {
+    return buildString {
+        appendLine("You are roleplaying as $name.")
+        appendLine()
+        if (!system.isNullOrBlank()) {
+            appendLine(system)
+            appendLine()
+        }
+        appendLine("## Description of the character")
+        appendLine(description ?: "Empty")
+        appendLine()
+        appendLine("## Personality of the character")
+        appendLine(personality ?: "Empty")
+        appendLine()
+        appendLine("## Scenario")
+        append(scenario ?: "Empty")
     }
 }
 
@@ -239,7 +407,7 @@ private fun parseAssistantFromJson(
     context: Context,
     json: JsonObject,
     background: String?,
-): Assistant {
+): TavernImportResult {
     val spec = json["spec"]?.jsonPrimitive?.contentOrNull
         ?: error(context.getString(R.string.assistant_importer_missing_spec_field))
     val parser = TAVERN_PARSERS[spec] ?: error(context.getString(R.string.assistant_importer_unsupported_spec, spec))
@@ -251,7 +419,7 @@ private fun parseAssistantFromJson(
 private suspend fun importAssistantFromUri(
     context: Context,
     uri: Uri,
-    onImport: (Assistant) -> Unit,
+    onImport: (TavernImportResult) -> Unit,
     toaster: ToasterState,
     filesManager: FilesManager,
 ) {
@@ -279,8 +447,8 @@ private suspend fun importAssistantFromUri(
             }
         }
         val json = Json.parseToJsonElement(jsonString).jsonObject
-        val assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
-        onImport(assistant)
+        val result = parseAssistantFromJson(context, json, backgroundStr)
+        onImport(result)
     } catch (exception: Exception) {
         exception.printStackTrace()
         toaster.show(
