@@ -3,6 +3,16 @@ package me.rerere.rikkahub.ui.pages.setting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Download04
+import android.content.Context
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -193,13 +203,43 @@ private fun FileItem(
     fileOnDisk: File,
     onDelete: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val toaster = LocalToaster.current
+
+    // SAF "save a copy" — the document picker carries the file's mime type and is launched with the
+    // display name as the suggested filename; on a chosen target we stream the on-disk bytes into it.
+    val downloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(file.mimeType.ifBlank { "*/*" })
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        fileOnDisk.inputStream().use { it.copyTo(out) }
+                    } ?: error("could not open output stream")
+                }.isSuccess
+            }
+            toaster.show(if (ok) "Saved \"${file.displayName}\"" else "Failed to save file")
+        }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor)
     ) {
         Column {
             Box(
-                modifier = Modifier.fillMaxWidth()
+                // Tapping the preview opens the file with an external viewer (FileProvider + ACTION_VIEW),
+                // the same path chat-attachment files use.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                    openManagedFile(context, fileOnDisk, file.mimeType) {
+                        toaster.show("No app can open this file type")
+                    }
+                }
             ) {
                 if (file.mimeType.startsWith("image/")) {
                     AsyncImage(
@@ -223,6 +263,16 @@ private fun FileItem(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+
+                IconButton(
+                    onClick = { downloadLauncher.launch(file.displayName) },
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    Icon(
+                        HugeIcons.Download04,
+                        contentDescription = "Save a copy"
+                    )
                 }
 
                 IconButton(
@@ -260,6 +310,21 @@ private fun FileItem(
             }
         }
     }
+}
+
+/**
+ * Open a managed file with an external viewer via the app's FileProvider (the same ACTION_VIEW path
+ * chat-attachment files use). [onError] fires when no app can handle the type, so the caller can toast
+ * instead of crashing on ActivityNotFoundException.
+ */
+private fun openManagedFile(context: Context, file: File, mimeType: String, onError: () -> Unit) {
+    runCatching {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, mimeType.ifBlank { "*/*" })
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(Intent.createChooser(intent, null))
+    }.onFailure { onError() }
 }
 
 private fun formatBytes(bytes: Long): String {
