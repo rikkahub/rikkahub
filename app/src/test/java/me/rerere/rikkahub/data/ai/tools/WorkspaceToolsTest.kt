@@ -181,4 +181,139 @@ class WorkspaceToolsTest {
         // Empty needle never matches (the execute body separately rejects empty old_text).
         assertEquals(0, countNonOverlappingOccurrences("abc", ""))
     }
+
+    // (E) workspace_read_file line windowing (the fix that stops the tool from dumping a whole large
+    // file). windowTextByLines is the pure seam; these pin its boundary/invariant/metamorphic behavior.
+    private fun linesText(n: Int): String = (1..n).joinToString("\n") { "line$it" }
+
+    // INVARIANT: a file at or under the default limit comes back whole, with no hasMore and the full
+    // [1, total] range reported. This is the unchanged-behavior case for ordinary files.
+    @Test
+    fun `read window returns the whole file when within the default limit`() {
+        val window = windowTextByLines(linesText(10), offset = null, limit = null)
+        assertEquals(linesText(10), window.text)
+        assertEquals(10, window.totalLines)
+        assertEquals(1, window.startLine)
+        assertEquals(10, window.endLine)
+        assertFalse(window.hasMore)
+    }
+
+    // BOUNDARY: an explicit small limit truncates from the top and flags hasMore so the model pages on.
+    @Test
+    fun `read window truncates to limit and flags hasMore`() {
+        val window = windowTextByLines(linesText(100), offset = null, limit = 30)
+        assertEquals(linesText(30), window.text)
+        assertEquals(100, window.totalLines)
+        assertEquals(1, window.startLine)
+        assertEquals(30, window.endLine)
+        assertTrue(window.hasMore)
+    }
+
+    // BOUNDARY: with no explicit limit a file larger than the default is windowed to the default, not
+    // dumped whole — the exact behavior that fixes the UI lag on 1000+ line files.
+    @Test
+    fun `read window caps an oversized file at the default limit`() {
+        val window = windowTextByLines(linesText(DEFAULT_READ_FILE_LINE_LIMIT + 50), offset = null, limit = null)
+        assertEquals(DEFAULT_READ_FILE_LINE_LIMIT, window.endLine)
+        assertEquals(DEFAULT_READ_FILE_LINE_LIMIT + 50, window.totalLines)
+        assertTrue(window.hasMore)
+    }
+
+    // BOUNDARY: a mid-file window honors offset; the last window of a file reports hasMore=false.
+    @Test
+    fun `read window honors offset and clears hasMore on the last window`() {
+        val mid = windowTextByLines(linesText(100), offset = 41, limit = 10)
+        assertEquals(linesText(100).split("\n").subList(40, 50).joinToString("\n"), mid.text)
+        assertEquals(41, mid.startLine)
+        assertEquals(50, mid.endLine)
+        assertTrue(mid.hasMore)
+
+        val tail = windowTextByLines(linesText(100), offset = 91, limit = 50)
+        assertEquals(91, tail.startLine)
+        assertEquals(100, tail.endLine)
+        assertFalse(tail.hasMore)
+    }
+
+    // BOUNDARY: an empty file is zero lines (cat -n style), not a phantom single empty line.
+    @Test
+    fun `read window of an empty file reports zero lines`() {
+        val window = windowTextByLines("", offset = null, limit = null)
+        assertEquals("", window.text)
+        assertEquals(0, window.totalLines)
+        assertEquals(0, window.startLine)
+        assertEquals(0, window.endLine)
+        assertFalse(window.hasMore)
+    }
+
+    // BOUNDARY: an offset past EOF yields an empty window (no throw), with 0/0 range and no hasMore.
+    @Test
+    fun `read window past end of file is empty`() {
+        val window = windowTextByLines(linesText(10), offset = 999, limit = 10)
+        assertEquals("", window.text)
+        assertEquals(10, window.totalLines)
+        assertEquals(0, window.startLine)
+        assertEquals(0, window.endLine)
+        assertFalse(window.hasMore)
+    }
+
+    // BOUNDARY: non-positive offset/limit are clamped to 1 rather than producing an empty/negative slice.
+    @Test
+    fun `read window clamps non-positive offset and limit`() {
+        val window = windowTextByLines(linesText(5), offset = 0, limit = 0)
+        assertEquals(1, window.startLine)
+        assertEquals(1, window.endLine)
+        assertEquals("line1", window.text)
+    }
+
+    // REGRESSION (trailing newline): a file saved with a final newline must not report a phantom extra
+    // empty line. A 2000-real-line file + trailing "\n" must read whole (totalLines=2000, no hasMore),
+    // not come back as 2001 lines truncated. The EOF newline must still be PRESERVED in the returned
+    // text (byte-exact) so an edit touching the file end is derivable from the read output.
+    @Test
+    fun `read window does not count a trailing newline as an extra line but preserves it`() {
+        val window = windowTextByLines(linesText(3) + "\n", offset = null, limit = null)
+        assertEquals(3, window.totalLines)
+        assertEquals("EOF newline preserved (byte-exact)", linesText(3) + "\n", window.text)
+        assertEquals(3, window.endLine)
+        assertFalse(window.hasMore)
+
+        val full = windowTextByLines(linesText(DEFAULT_READ_FILE_LINE_LIMIT) + "\n", offset = null, limit = null)
+        assertEquals(DEFAULT_READ_FILE_LINE_LIMIT, full.totalLines)
+        assertFalse("a 2000-line file with a final newline is not truncated", full.hasMore)
+
+        // A non-EOF window must NOT gain a trailing newline (only the EOF window carries it).
+        val firstPage = windowTextByLines(linesText(10) + "\n", offset = 1, limit = 4)
+        assertEquals(linesText(4), firstPage.text)
+        assertTrue(firstPage.hasMore)
+    }
+
+    // REGRESSION (overflow): a limit near Int.MAX_VALUE must not overflow startIdx + count into an
+    // invalid subList range — it just returns everything from offset to EOF.
+    @Test
+    fun `read window with a huge limit returns to end of file without overflow`() {
+        val window = windowTextByLines(linesText(100), offset = 2, limit = Int.MAX_VALUE)
+        assertEquals(2, window.startLine)
+        assertEquals(100, window.endLine)
+        assertEquals(99, window.text.split("\n").size)
+        assertFalse(window.hasMore)
+    }
+
+    // METAMORPHIC: paging through a file in fixed windows and concatenating reconstructs it exactly —
+    // no line dropped or duplicated at a window seam.
+    @Test
+    fun `sequential read windows reconstruct the whole file`() {
+        val full = linesText(57)
+        val page = 10
+        val rebuilt = StringBuilder()
+        var offset = 1
+        while (true) {
+            val window = windowTextByLines(full, offset, page)
+            if (window.text.isEmpty()) break
+            if (rebuilt.isNotEmpty()) rebuilt.append('\n')
+            rebuilt.append(window.text)
+            if (!window.hasMore) break
+            offset = window.endLine + 1
+        }
+        assertEquals(full, rebuilt.toString())
+    }
 }

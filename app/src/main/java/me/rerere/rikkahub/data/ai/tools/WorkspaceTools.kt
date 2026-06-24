@@ -170,31 +170,108 @@ private fun createReadFileTool(
 ) = Tool(
     name = "workspace_read_file",
     description = """
-        Read a UTF-8 text file from the assistant's bound workspace files area. Paths are relative to the project working directory; use an absolute /workspace/... path to address the files root.
+        Read a UTF-8 text file from the assistant's bound workspace files area. Paths are relative to the project working directory; use an absolute /workspace/... path to address the files root. The file is returned as a line window, not always in full: pass offset (1-based start line) and limit (max lines, default $DEFAULT_READ_FILE_LINE_LIMIT) to page through a large file. The result reports totalLines and, when lines remain past the window, hasMore=true.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 putPathProperty(required = true)
+                put("offset", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Optional 1-based line number to start reading from. Defaults to 1 (start of file).")
+                })
+                put("limit", buildJsonObject {
+                    put("type", "integer")
+                    put(
+                        "description",
+                        "Optional maximum number of lines to return. Defaults to $DEFAULT_READ_FILE_LINE_LIMIT; a larger file is windowed to this many lines (read totalLines/hasMore and page with offset)."
+                    )
+                })
             },
             required = listOf("path"),
         )
     },
     needsApproval = needsApproval("workspace_read_file"),
     execute = {
-        val path = it.jsonObject.string("path") ?: error("path is required")
+        val params = it.jsonObject
+        val path = params.string("path") ?: error("path is required")
+        // Number args may arrive as a JSON number or a string; .string()?.toIntOrNull() accepts both
+        // (the same lenient parse the shell tool uses for `timeout`).
+        val offset = params.string("offset")?.toIntOrNull()
+        val limit = params.string("limit")?.toIntOrNull()
         val resolved = workspaceRepository.resolveFilesPath(workspaceId, path)
-        val text = workspaceRepository.readText(workspaceId, resolved)
+        val window = windowTextByLines(workspaceRepository.readText(workspaceId, resolved), offset, limit)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
                     put("path", WorkspaceCwdPolicy.toShellPath(resolved))
-                    put("text", text)
+                    put("text", window.text)
+                    put("totalLines", window.totalLines)
+                    put("startLine", window.startLine)
+                    put("endLine", window.endLine)
+                    if (window.hasMore) put("hasMore", true)
                 }.toString()
             )
         )
     },
 )
+
+/**
+ * Default maximum number of lines [createReadFileTool] returns when the model does not pass an explicit
+ * `limit`. A larger file is windowed to this many lines (the result carries totalLines + hasMore so the
+ * model can page through with `offset`) instead of dumping the whole file into the tool output — the
+ * whole-file read is what made the tool expensive and lagged the UI on 1000+ line files.
+ */
+internal const val DEFAULT_READ_FILE_LINE_LIMIT = 2000
+
+/** One line window of a file: the sliced [text] plus the metadata the model needs to page through. */
+internal data class ReadFileWindow(
+    val text: String,
+    val totalLines: Int,
+    /** 1-based line number of the first returned line, or 0 when the window is empty. */
+    val startLine: Int,
+    /** 1-based line number of the last returned line, or 0 when the window is empty. */
+    val endLine: Int,
+    /** True when lines remain past this window (i.e. [endLine] < [totalLines]). */
+    val hasMore: Boolean,
+)
+
+/**
+ * Window [text] to at most [limit] lines starting at the 1-based [offset] (both optional; null =>
+ * offset 1 / limit [DEFAULT_READ_FILE_LINE_LIMIT]). An out-of-range offset yields an empty window
+ * rather than throwing. The returned [ReadFileWindow.text] is RAW — no line-number prefixes — so
+ * workspace_edit_file's exact-string matching still works against a read result.
+ */
+internal fun windowTextByLines(text: String, offset: Int?, limit: Int?): ReadFileWindow {
+    // An empty file has zero lines (like `cat -n`), not one empty line — "".split("\n") would otherwise
+    // report a phantom single line. Short-circuit so the metadata stays consistent (0 lines, empty range).
+    if (text.isEmpty()) return ReadFileWindow(text = "", totalLines = 0, startLine = 0, endLine = 0, hasMore = false)
+    // A trailing newline terminates the final line; it must NOT count as an extra empty line, or a
+    // file saved with a final newline would report one line too many (and a full 2000-line file would
+    // wrongly come back as truncated with hasMore=true). This matches conventional `cat -n` counting.
+    val endsWithNewline = text.endsWith("\n")
+    val lines = (if (endsWithNewline) text.dropLast(1) else text).split("\n")
+    val totalLines = lines.size
+    val start = (offset ?: 1).coerceAtLeast(1)
+    val count = (limit ?: DEFAULT_READ_FILE_LINE_LIMIT).coerceAtLeast(1)
+    val startIdx = (start - 1).coerceIn(0, totalLines)
+    // Widen to Long for the end index: a limit near Int.MAX_VALUE would overflow startIdx + count as
+    // Int to a negative value and produce an invalid subList range. totalLines bounds the result.
+    val endIdx = minOf(startIdx.toLong() + count.toLong(), totalLines.toLong()).toInt()
+    val returned = endIdx - startIdx
+    val sliced = if (returned <= 0) "" else lines.subList(startIdx, endIdx).joinToString("\n")
+    // Re-append the file's terminating newline when the window reaches EOF, so the returned text stays a
+    // byte-exact substring of the file: workspace_edit_file matches against raw file content, so an edit
+    // touching the final line/newline must be derivable from the read output.
+    val windowText = if (returned > 0 && endIdx == totalLines && endsWithNewline) sliced + "\n" else sliced
+    return ReadFileWindow(
+        text = windowText,
+        totalLines = totalLines,
+        startLine = if (returned <= 0) 0 else startIdx + 1,
+        endLine = if (returned <= 0) 0 else endIdx,
+        hasMore = endIdx < totalLines,
+    )
+}
 
 /**
  * Counts how many times [needle] occurs in [haystack] using NON-overlapping matching, the same
