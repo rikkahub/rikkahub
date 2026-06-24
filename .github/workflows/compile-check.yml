@@ -1,0 +1,64 @@
+name: Compile Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, extv-master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: jetbrains
+          java-version: 21
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: pnpm cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.local/share/pnpm/store
+            web/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web/package.json', 'web/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install web dependencies
+        run: cd web && pnpm install
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Generate dummy google-services.json
+        run: |
+          echo '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci-dummy","storage_bucket":"rikkahub-ci-dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.jaye.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummy0000000000000000000000000000"}],"services":{"analytics_service":{"status":1},"appinvite_service":{"status":1},"google_cast_service":{"status":1}}}],"configuration_version":"1"}' > app/google-services.json
+
+      - name: Compile check
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:compileReleaseKotlin :ai:compileReleaseKotlin --build-cache

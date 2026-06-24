@@ -6,17 +6,39 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: 'jetbrains'
+          java-version: '21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: pnpm cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.local/share/pnpm/store
+            web/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web/package.json', 'web/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install web dependencies
+        run: cd web && pnpm install
 
       - name: Gradle cache
         uses: actions/cache@v4
@@ -25,25 +47,26 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Prepare build files
         run: |
-          # 解码base64编码的keystore文件
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          
-          # 写入签名配置到local.properties
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          
-          # 写入Google Services配置
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          echo "${{ secrets.SIGNING_CONFIG }}" | base64 -d > local.properties
+          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci-dummy","storage_bucket":"rikkahub-ci-dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.jaye.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummy0000000000000000000000000000"}],"services":{"analytics_service":{"status":1},"appinvite_service":{"status":1},"google_cast_service":{"status":1}}}],"configuration_version":"1"}' > app/google-services.json
+          else
+            echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          fi
 
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --build-cache
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: success()
         with:
           name: artifacts
