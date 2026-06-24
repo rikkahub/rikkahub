@@ -112,7 +112,7 @@
   <string name="assistant_page_quick_message_title">Заголовок</string>
   <string name="assistant_page_quick_messages">Быстрые сообщения</string>
   <string name="assistant_page_recent_chats">Справка: недавние чаты</string>
-  <string name="assistant_page_recent_chats_desc">При включении ассистент будет использовать недавнюю историю чатов для более контекстуальных ответов</string>
+  <string name="assistant_page_recent_chats_desc">Когда включено, позволяет ассистенту искать релевантную информацию в предыдущих разговорах.</string>
   <string name="assistant_page_regex_affecting_scopes">Области действия:</string>
   <string name="assistant_page_regex_desc">Задайте шаблоны регулярных выражений для преобразования сообщений перед отправкой/получением</string>
   <string name="assistant_page_regex_find_regex">Найти регулярное выражение</string>
@@ -969,7 +969,11 @@
   <string name="setting_tts_page_provider_type">Тип поставщика</string>
   <string name="setting_tts_page_provider_type_description">Выберите тип поставщика TTS</string>
   <string name="setting_tts_page_selected">Выбрано</string>
+  <string name="setting_tts_page_similarity_boost">Усиление схожести</string>
+  <string name="setting_tts_page_similarity_boost_description">Управление степенью совпадения голоса с оригиналом (0.0 - 1.0)</string>
   <string name="setting_tts_page_speech_rate">Скорость речи</string>
+  <string name="setting_tts_page_stability">Стабильность</string>
+  <string name="setting_tts_page_stability_description">Контроль стабильности голоса (0.0 - 1.0, ниже — выразительнее)</string>
   <string name="setting_tts_page_speech_rate_description">Управление скоростью речи (0,1–3,0, 1,0 — нормальная скорость)</string>
   <string name="setting_tts_page_speed">Скорость</string>
   <string name="setting_tts_page_speed_description">Скорость речи (0,25–4,0)</string>
@@ -1241,5 +1245,8 @@
   <string name="setting_asr_configure_step_hotwords_desc">Список горячих слов через запятую для повышения точности распознавания имён собственных и терминов предметной области</string>
   <string name="log_page_record_requests">Записывать запросы</string>
   <string name="log_page_record_requests_desc">Записывать заголовки запросов, тела и метаданные ответов</string>
+  <string name="assistant_page_context_message_truncation_warning">Ограничение контекста может привести к частому усечению контекста и предотвратить кэширование промптов</string>
+  <string name="chat_message_tool_recent_chats">Посмотреть недавние чаты</string>
+  <string name="chat_message_tool_conversation_search">История поиска: %1$s</string>
 </resources>
 
