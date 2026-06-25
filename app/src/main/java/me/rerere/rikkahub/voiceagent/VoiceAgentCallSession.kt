@@ -154,7 +154,7 @@ class VoiceAgentCallSession(
                 VoiceAgentLog.w(TAG, "Gemini connect returned with error state sessionId=$currentSessionId")
                 prepareFailedSession(
                     sessionId = currentSessionId,
-                    reason = VoiceSessionStopReason.StartupFailure("gemini_connect_error_state"),
+                    reason = VoiceSessionStopReason.StartupFailure,
                     closeGemini = true,
                 )
                 return
@@ -186,13 +186,14 @@ class VoiceAgentCallSession(
                     TAG,
                     "run session failed sessionId=$currentSessionId detail=${error.toVoiceAgentLogDetail()}",
                 )
+                val startupErrorMessage = error.message ?: error.javaClass.simpleName
                 prepareFailedSession(
                     sessionId = currentSessionId,
-                    reason = VoiceSessionStopReason.StartupFailure(error.toVoiceAgentLogDetail()),
+                    reason = VoiceSessionStopReason.StartupFailure,
                     closeGemini = geminiStarted,
                 )
                 coordinator.updateSessionStatus(
-                    VoiceSessionStatus.Error(error.message ?: error.javaClass.simpleName)
+                    VoiceSessionStatus.Error(startupErrorMessage)
                 )
             }
         } finally {
@@ -446,7 +447,7 @@ private fun GeminiLiveEvent.toSessionStopReason(): VoiceSessionStopReason? =
 private sealed class VoiceSessionStopReason(
     val diagnosticReason: String,
 ) {
-    data class StartupFailure(val detail: String) : VoiceSessionStopReason("startup_failure")
+    data object StartupFailure : VoiceSessionStopReason("startup_failure")
     data object GeminiError : VoiceSessionStopReason("gemini_error")
     data object WebSocketClosed : VoiceSessionStopReason("websocket_closed")
     data object WebSocketFailure : VoiceSessionStopReason("websocket_failure")

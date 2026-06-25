@@ -15,6 +15,7 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
@@ -2714,6 +2715,86 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `session records startup failure diagnostic when capture fails after Gemini starts`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine().apply {
+            startCaptureError = IllegalStateException("capture startup failed")
+        }
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        withTimeout(500) {
+            while (session.state.value.session !is VoiceSessionStatus.Error) {
+                delay(10)
+            }
+        }
+
+        assertEquals(VoiceSessionStatus.Error("capture startup failed"), session.state.value.session)
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=startup_failure, closeGemini=true"
+            }
+        )
+    }
+
+    @Test
+    fun `session records startup failure diagnostic without Gemini close before Gemini starts`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = ThrowingVoiceAgentContextProvider(
+                IllegalStateException("context startup failed")
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        withTimeout(500) {
+            while (session.state.value.session !is VoiceSessionStatus.Error) {
+                delay(10)
+            }
+        }
+
+        assertEquals(VoiceSessionStatus.Error("context startup failed"), session.state.value.session)
+        assertEquals(0, gemini.eventHandlers.size)
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(0, gemini.closeCalls)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=startup_failure, closeGemini=false"
+            }
+        )
+    }
+
+    @Test
     fun `session reconnect records transition diagnostic and preserves cleanup`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()
@@ -2927,6 +3008,57 @@ class VoiceAgentRuntimeTest {
 
         assertEquals(emptyList<Pair<String, String>>(), toolApi.requests)
         assertEquals(VoiceToolStatus.Idle, session.state.value.tool)
+    }
+
+    @Test
+    fun `session ignores stale failure callback from previous Gemini session after reconnect`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        val oldCallback = gemini.eventHandlers.single()
+
+        session.reconnect()
+        gemini.awaitConnectCount(2)
+        val stopCaptureCallsAfterReconnect = audio.stopCaptureCalls
+        val suppressPlaybackCallsAfterReconnect = audio.suppressPlaybackCalls
+        val closeCallsAfterReconnect = gemini.closeCalls
+
+        oldCallback(GeminiLiveEvent.WebSocketFailure(message = "stale failure"))
+        delay(50)
+
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertEquals(stopCaptureCallsAfterReconnect, audio.stopCaptureCalls)
+        assertEquals(suppressPlaybackCallsAfterReconnect, audio.suppressPlaybackCalls)
+        assertEquals(closeCallsAfterReconnect, gemini.closeCalls)
+        assertFalse(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail.contains("stale failure")
+            }
+        )
+        assertFalse(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=websocket_failure, closeGemini=true"
+            }
+        )
     }
 
     @Test
@@ -3362,4 +3494,12 @@ class VoiceAgentRuntimeTest {
     }
 
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
+}
+
+private class ThrowingVoiceAgentContextProvider(
+    private val error: Throwable,
+) : VoiceAgentContextProvider {
+    override fun build(conversation: Conversation): VoiceContext {
+        throw error
+    }
 }
