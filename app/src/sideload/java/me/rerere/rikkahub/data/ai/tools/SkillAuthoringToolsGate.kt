@@ -87,7 +87,7 @@ private fun createCreateSkillTool(
     execute = {
         val files = it.jsonObject.stringMap("files")
         require(files.isNotEmpty()) { "files is required and must be a non-empty object of path -> content" }
-        val skillMd = files["SKILL.md"] ?: error("files must include a \"SKILL.md\" entry")
+        val skillMd = requireSkillMd(files)
         val frontmatter = SkillFrontmatterParser.parse(skillMd)
         val name = frontmatter["name"]?.takeIf { n -> n.isNotBlank() }
             ?: error("SKILL.md frontmatter must set a non-blank `name`")
@@ -181,6 +181,33 @@ private fun createUpdateSkillTool(
         )
     },
 )
+
+// Resolve the bundle's main file, which MUST be keyed EXACTLY "SKILL.md" (case-sensitive — SkillManager
+// looks up that exact filename on a case-sensitive fs). Pure + top-level so the guiding-error behavior is
+// unit-testable (the tool's execute needs an Android-coupled SkillManager). A terse "must include SKILL.md"
+// left the model unable to see it had sent a near-miss key (e.g. "SKILL_md") with the real content under a
+// different key, so on a miss we echo the keys it sent and, when one file IS a valid SKILL.md body, point
+// at it — the model can re-key and retry within the same (single-turn) authoring lease. The near-miss is
+// detected with the SAME parser create_skill validates with (a non-blank name AND description), not merely
+// "starts with ---": a helper that legitimately opens with a horizontal rule or unrelated YAML must not be
+// mistaken for the skill body and send the model down a wrong re-key path.
+internal fun requireSkillMd(files: Map<String, String>): String =
+    files["SKILL.md"] ?: run {
+        val skillMdKey = files.entries.firstOrNull { (_, content) ->
+            val frontmatter = SkillFrontmatterParser.parse(content)
+            frontmatter["name"]?.isNotBlank() == true && frontmatter["description"]?.isNotBlank() == true
+        }?.key
+        val hint = if (skillMdKey != null) {
+            " The \"$skillMdKey\" file already has SKILL.md frontmatter (name + description) — " +
+                "re-key it as exactly \"SKILL.md\"."
+        } else {
+            ""
+        }
+        error(
+            "files must include a \"SKILL.md\" entry (exact filename, case-sensitive) holding the skill's " +
+                "YAML frontmatter and instructions. Got file keys: ${files.keys.joinToString(", ")}.$hint"
+        )
+    }
 
 // A JSON object arg as path -> content. Tolerates a missing key (-> empty) but REJECTS a non-string
 // value loudly: silently dropping e.g. an object-valued `changes` entry could, combined with a same-path
