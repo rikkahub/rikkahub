@@ -2,6 +2,8 @@ package me.rerere.workspace
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -128,6 +130,45 @@ class RootfsInstallerHardeningTest {
         }
 
         assertEquals("keep", canary.readText())
+    }
+
+    @Test
+    fun `stageArchive installs when the workspace base is reached through a symlinked parent`() {
+        // Reproduces the Android shape where the app data dir is reached via `/data/user/0/<pkg>`, a
+        // symlink to `/data/data/<pkg>`: a symlinked parent in the workspace base path. Before the fix
+        // deleteRecursivelyNoFollow canonicalized the root (following the symlink) while each candidate
+        // used NOFOLLOW realpath (keeping it), so every in-tree path looked like it escaped and the
+        // rootfs install failed ("Rootfs path escapes target directory"). Skip where the FS can't symlink.
+        val realBase = Files.createTempDirectory("rootfs-symlink-real").toFile()
+        val linkBase = File(realBase.parentFile, realBase.name + "-link")
+        val linked = runCatching { Files.createSymbolicLink(linkBase.toPath(), realBase.toPath()) }.isSuccess
+        assumeTrue("filesystem supports symlinks", linked)
+
+        val manager = WorkspaceManager(linkBase, shellRunner = HostShellRunner())
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+        // A leftover staging dir from a prior attempt is exactly what makes the pre-extract cleanup walk
+        // (and previously reject) the tree; without it the cleanup early-returns and never trips.
+        val stagingDir = File(manager.tempDir(root), "rootfs-staging").apply { mkdirs() }
+        File(stagingDir, "stale").writeText("x")
+        // A regular file plus an in-tree relative symlink (the shape every real rootfs ships): the
+        // file exercises the pre-extract cleanup containment, the symlink exercises createSymlink's
+        // containment — both had the same canonicalize-only-the-root defect under a symlinked base.
+        val archive = File(manager.tempDir(root), "rootfs.tar.gz").apply {
+            writeBytes(
+                tarGz(
+                    TarTestEntry(name = "hostname", content = "poci".toByteArray(), type = '0'),
+                    TarTestEntry(name = "sh", type = '2', linkName = "hostname"),
+                )
+            )
+        }
+        val installer = RootfsInstaller(manager)
+
+        installer.stageArchive(root, archive)
+
+        val linuxDir = manager.linuxDir(root)
+        assertEquals("poci", File(linuxDir, "hostname").readText())
+        assertTrue(Files.isSymbolicLink(File(linuxDir, "sh").toPath()))
     }
 
     private fun tarGz(vararg entries: TarTestEntry): ByteArray {

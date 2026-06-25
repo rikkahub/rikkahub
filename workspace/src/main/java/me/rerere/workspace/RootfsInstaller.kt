@@ -225,6 +225,10 @@ class RootfsInstaller(
         require(!linkName.contains('\u0000')) { "Symlink target contains invalid character" }
         require(!File(linkName).isAbsolute) { "Symlink target must be relative: $linkName" }
         val linkTargetPath = (target.parentFile ?: root).toPath().resolve(linkName).normalize()
+        // [target] already comes from [safeResolve] (canonicalFile), so [targetPath] resolves into the
+        // same canonicalized space — keep [rootPath] canonical too so both sides match. (The asymmetry
+        // bug was in deleteRecursivelyNoFollow, whose candidates are NOT safeResolved; do not "fix" it
+        // here or a valid in-tree symlink starts looking like an escape under a symlinked base.)
         val rootPath = root.canonicalFile.toPath()
         val targetPath = runCatching { linkTargetPath.toRealPath(LinkOption.NOFOLLOW_LINKS) }
             .getOrElse { linkTargetPath.toAbsolutePath() }
@@ -379,7 +383,13 @@ class RootfsInstaller(
 
     private fun deleteRecursivelyNoFollow(root: File, target: File) {
         if (!target.exists()) return
-        val rootPath = root.canonicalFile.toPath()
+        // Resolve the boundary with the SAME link policy [requirePathUnderRoot] uses for each candidate
+        // (NOFOLLOW_LINKS). canonicalFile would follow symlinks in the path — on Android the app data
+        // dir is reached via `/data/user/0/<pkg>`, a symlink to `/data/data/<pkg>` — so canonicalizing
+        // only the root while candidates keep the un-followed `/data/user/0` form makes every in-tree
+        // path look like it escapes, failing the rootfs install. Both sides must resolve identically.
+        // Callers always pass root == target, which the existence check above already guarantees exists.
+        val rootPath = root.toPath().toRealPath(LinkOption.NOFOLLOW_LINKS)
         Files.walkFileTree(
             target.toPath(),
             object : SimpleFileVisitor<Path>() {
