@@ -14,6 +14,8 @@ import me.rerere.ai.runtime.contract.TurnConfigSource
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
+import me.rerere.rikkahub.data.ai.goal.GoalEvaluator
+import me.rerere.rikkahub.data.ai.goal.LlmGoalEvaluator
 import me.rerere.rikkahub.data.ai.runtime.AndroidLogSink
 import me.rerere.rikkahub.data.ai.runtime.AppModelProviderResolver
 import me.rerere.rikkahub.data.ai.runtime.FilesManagerRuntimeFileStore
@@ -187,6 +189,10 @@ val appModule = module {
     single<RuntimeLogSink> { AndroidLogSink() }
     single<RuntimeClock> { SystemRuntimeClock() }
 
+    // The `/goal` judge (#364). Runs on the assistant's chat model passed in per call, so it never
+    // depends on the settings fast model the old Stop-hook judge required.
+    single<GoalEvaluator> { LlmGoalEvaluator(settingsStore = get(), providerManager = get()) }
+
     single {
         // Platform side-effect collaborators (#360 P1a) are constructed HERE at the composition root
         // (not inside ChatService) and injected as narrow ports, so ChatService stays free of Android
@@ -209,6 +215,7 @@ val appModule = module {
             mcpManager = get(),
             filesManager = get(),
             skillManager = get(),
+            goalEvaluator = get(),
             taskBoardRepository = get(),
             taskScheduleRepository = get(),
             executionHandles = get(),

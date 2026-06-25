@@ -63,9 +63,9 @@ import me.rerere.ai.runtime.hooks.HookConfig
 import me.rerere.ai.runtime.hooks.HookDispatchContext
 import me.rerere.ai.runtime.hooks.HookDispatcher
 import me.rerere.ai.runtime.hooks.HookEvent
-import me.rerere.ai.runtime.hooks.HookHandler
-import me.rerere.ai.runtime.hooks.HookMatcher
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.goal.GoalEvaluator
+import me.rerere.rikkahub.data.ai.goal.GoalVerdict
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.ai.runtime.mcp.McpTool
 import me.rerere.automation.act.AlwaysConfirm
@@ -866,22 +866,6 @@ internal fun invalidateStalePressureAnchor(usage: TokenUsage?): TokenUsage? =
 internal data class StopHookContinuation(val additionalContext: String)
 
 /**
- * The `/goal` judge's verdict (#364), kept as three distinct cases so a JUDGE FAILURE never silently
- * abandons the goal. [ChatHookFirePoints.onStop] collapses "met" / "blank" / "failed" all to a single
- * null; the goal loop needs them apart:
- *  - [Met]          the LLM judged the goal achieved (preventContinuation) -> clear the goal and stop.
- *  - [Continue]     not yet met -> inject [directive] as the next user turn and run one more turn.
- *  - [Inconclusive] the judge produced no usable verdict — a hook/provider/parse failure, a timeout,
- *                   a missing dispatcher/Stop matcher, or an empty answer. PAUSE: keep the goal armed
- *                   so a later manual send can retry; a transient judge failure must never clear it.
- */
-internal sealed interface GoalVerdict {
-    data object Met : GoalVerdict
-    data class Continue(val directive: String) : GoalVerdict
-    data object Inconclusive : GoalVerdict
-}
-
-/**
  * Whether the `/goal` autonomous loop may run another continuation (#364). [maxIterations] <= 0 means
  * UNLIMITED (the user opted out of an iteration cap); otherwise the loop stops once [iteration]
  * reaches the cap. Pure so the bound is JVM-unit-testable independently of the turn machinery; a
@@ -945,31 +929,6 @@ internal class ChatHookFirePoints(
         return StopHookContinuation(context)
     }
 
-    /**
-     * Judge a `/goal` (#364) via the synthetic Stop hook, returning a 3-way [GoalVerdict] rather than
-     * the collapsed nullable [onStop] gives — so the loop can tell "met" (clear the goal) from a judge
-     * FAILURE (pause, keep it armed). A null dispatcher or no configured Stop matcher is
-     * [GoalVerdict.Inconclusive]: with no judge there is no verdict, so the safe move is to pause, never
-     * to clear the goal. A hook/provider/parse failure degrades (fail-open) to an empty aggregate,
-     * which falls through to [GoalVerdict.Inconclusive] for the same reason.
-     */
-    suspend fun judgeGoal(config: HookConfig, lastAssistantText: String?): GoalVerdict {
-        val dispatcher = this.dispatcher ?: return GoalVerdict.Inconclusive
-        if (config.hooks[HookEvent.Stop].isNullOrEmpty()) return GoalVerdict.Inconclusive
-        val result = dispatcher.dispatch(
-            event = HookEvent.Stop,
-            input = buildJsonObject {
-                put("hookEventName", HookEvent.Stop.name)
-                put("lastAssistantMessage", lastAssistantText.orEmpty())
-            }.toString(),
-            ctx = HookDispatchContext(config = config),
-        )
-        return when {
-            result.preventContinuation -> GoalVerdict.Met
-            !result.additionalContext.isNullOrBlank() -> GoalVerdict.Continue(result.additionalContext!!)
-            else -> GoalVerdict.Inconclusive
-        }
-    }
 }
 
 data class ChatError(
@@ -1018,6 +977,10 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
+    // The `/goal` (#364) judge. A port so the goal loop depends on an abstraction; the production
+    // impl runs on the assistant's chat model (the model the turn used), not the settings fast model
+    // the old Stop-hook judge required — see [GoalEvaluator].
+    private val goalEvaluator: GoalEvaluator,
     // Per-conversation work-item board (SPEC.md M3/T7). Board tools delegate through this single
     // repository — the same path the board UI uses (decision #4) — so legality is enforced once.
     private val taskBoardRepository: TaskBoardRepository,
@@ -1485,35 +1448,6 @@ class ChatService(
     }
 
     /**
-     * The synthetic Stop-hook config that JUDGES a goal: an LLM Stop hook whose prompt asks whether
-     * [condition] is achieved. Consumed by [ChatHookFirePoints.judgeGoal]: not-met → the hook returns
-     * `additionalContext` (the next step) → [GoalVerdict.Continue]; met → the hook sets
-     * `preventContinuation` → [GoalVerdict.Met]; a judge failure → [GoalVerdict.Inconclusive].
-     * `trusted = true` because this config is minted in-process from the user's own `/goal`, never
-     * imported. Kept separate from `assistant.hooks` so the user's persisted Stop hooks stay
-     * SINGLE-SHOT — only this goal loop re-enters.
-     */
-    private fun goalStopConfig(condition: String): HookConfig = HookConfig(
-        hooks = mapOf(
-            HookEvent.Stop to listOf(
-                HookMatcher(handlers = listOf(HookHandler.Llm(prompt = goalJudgePrompt(condition)))),
-            ),
-        ),
-        trusted = true,
-    )
-
-    private fun goalJudgePrompt(condition: String): String = """
-        The user set this GOAL for you to accomplish autonomously:
-        "$condition"
-
-        Decide, from the conversation so far, whether the goal is now FULLY achieved.
-        - If it IS fully achieved: set "preventContinuation": true and do not continue.
-        - If it is NOT yet achieved: set "additionalContext" to ONE short directive naming the next
-          concrete step toward the goal. It is injected as the next user turn to keep you working.
-          Leave "preventContinuation" false.
-    """.trimIndent()
-
-    /**
      * The `/goal` re-entrant continuation (#364). Runs at a genuine turn end (after the single-shot
      * `assistant.hooks` Stop continuation, before the agent-event drain). While a goal is armed it asks
      * an LLM whether the goal is met; if not, it injects the next-step directive as a visible user
@@ -1546,9 +1480,17 @@ class ChatService(
             // clearing so the goal (and its used-iteration count) survives for the resume.
             if (lastMessage?.parts?.any { it is UIMessagePart.Tool && it.isPending } == true) return
 
-            val directive = when (val verdict = hookFirePoints.judgeGoal(
-                config = goalStopConfig(goal.condition),
+            // Judge with the assistant's CHAT model — the model this turn just ran on, so it is as
+            // available as the turn itself. The old judge ran on the settings FAST model, which when
+            // unset failed fail-open to Inconclusive and left the goal armed forever (#364 root cause).
+            // A null chat model can't have produced a successful turn; treat as pause, keep armed.
+            val settings = settingsStore.settingsFlow.value
+            val assistant = settings.getAssistantByIdOrCurrent(conversation.assistantId)
+            val judgeModel = settings.getChatModelForAssistant(assistant) ?: return
+            val directive = when (val verdict = goalEvaluator.judge(
+                condition = goal.condition,
                 lastAssistantText = lastMessage?.takeIf { it.role == MessageRole.ASSISTANT }?.toText(),
+                model = judgeModel,
             )) {
                 // LLM judged the goal achieved -> clear and stop. Guarded so a goal re-armed during the
                 // (slow) judge call is not clobbered by this stale "met"; only announce completion when
