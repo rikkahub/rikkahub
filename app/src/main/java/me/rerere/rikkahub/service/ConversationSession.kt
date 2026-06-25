@@ -96,17 +96,32 @@ class ConversationSession(
     // The identity-guarded [compareAndSetGoal] makes those transitions atomic.
     private val goalRef = AtomicReference<GoalSpec?>(null)
 
+    // Observable mirror of [goalRef] for the UI (the chat goal-active icon). [goalRef] stays the CAS
+    // authority — its identity-guarded transitions are what the re-entrant loop relies on — and the
+    // flow is written in lock-step purely so the UI can react.
+    private val _activeGoalFlow = MutableStateFlow<GoalSpec?>(null)
+    val activeGoalFlow: StateFlow<GoalSpec?> = _activeGoalFlow.asStateFlow()
+
+    // Serializes the (goalRef, _activeGoalFlow) pair so a mutation's authority write and its mirror
+    // write are one atomic step. Without it a winning CAS could publish its mirror value AFTER a
+    // concurrent clear had already nulled both, leaving the flow stuck non-null while goalRef is null
+    // (a goal icon that never disappears). The critical sections are non-suspending value writes, so a
+    // plain monitor is correct and cheap; reads via [activeGoal]/[activeGoalFlow] stay lock-free.
+    private val goalLock = Any()
+
     /** The session-scoped autonomous goal (#364), or null if none armed. */
     val activeGoal: GoalSpec? get() = goalRef.get()
 
     /** Arm a fresh goal — a new `/goal` unconditionally wins over any in-flight loop transition. */
-    fun armGoal(spec: GoalSpec) {
+    fun armGoal(spec: GoalSpec) = synchronized(goalLock) {
         goalRef.set(spec)
+        _activeGoalFlow.value = spec
     }
 
     /** Clear the goal (`/goal clear`, user-stop, cleanup). A clear unconditionally wins. Idempotent. */
-    fun clearGoal() {
+    fun clearGoal() = synchronized(goalLock) {
         goalRef.set(null)
+        _activeGoalFlow.value = null
     }
 
     /**
@@ -114,9 +129,15 @@ class ConversationSession(
      * STILL exactly [expect] (the instance the loop read). A concurrent clear (user-stop) or re-arm (a
      * new `/goal`) flips the reference, the CAS fails, and the loop bails — so a stale iteration can
      * never resurrect a cleared goal, overwrite a newer goal, or charge an old count onto it.
+     * Held under [goalLock] together with the mirror write so the UI flow always equals the committed
+     * [goalRef] once the call returns — a concurrent clear either runs fully before (CAS then fails) or
+     * fully after (it nulls both), never between the CAS and its mirror.
      */
-    fun compareAndSetGoal(expect: GoalSpec?, update: GoalSpec?): Boolean =
-        goalRef.compareAndSet(expect, update)
+    fun compareAndSetGoal(expect: GoalSpec?, update: GoalSpec?): Boolean = synchronized(goalLock) {
+        val committed = goalRef.compareAndSet(expect, update)
+        if (committed) _activeGoalFlow.value = update
+        committed
+    }
 
     // Session-scoped skill-authoring lease (model-facing /create_skill /update_skill). It is the TRANSPORT
     // for a single turn's write capability: armed by the authoring send at the boundary

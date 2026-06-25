@@ -1205,6 +1205,12 @@ class ChatService(
         return session.processingStatus
     }
 
+    /** The session-scoped `/goal` (#364) as an observable flow for the chat goal-active icon. */
+    fun getGoalStateFlow(conversationId: Uuid): StateFlow<GoalSpec?> {
+        val session = sessionRegistry.get(conversationId) ?: return MutableStateFlow(null)
+        return session.activeGoalFlow
+    }
+
     // ---- 自动化按运行授权 (#187 v2) ----
 
     /**

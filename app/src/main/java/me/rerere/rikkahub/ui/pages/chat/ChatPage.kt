@@ -8,11 +8,13 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -71,6 +73,7 @@ import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MessageAdd01
+import me.rerere.hugeicons.stroke.Target01
 import me.rerere.hugeicons.stroke.Task01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -115,6 +118,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
     val backgroundJobs by vm.backgroundJobs.collectAsStateWithLifecycle()
+    val activeGoalCondition by vm.activeGoal.collectAsStateWithLifecycle()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -212,6 +216,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     bigScreen = true,
                     errors = errors,
                     backgroundJobs = backgroundJobs,
+                    activeGoalCondition = activeGoalCondition,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
                 )
@@ -251,6 +256,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     bigScreen = false,
                     errors = errors,
                     backgroundJobs = backgroundJobs,
+                    activeGoalCondition = activeGoalCondition,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
                 )
@@ -281,6 +287,7 @@ private fun ChatPageContent(
     enableWebSearch: Boolean,
     errors: List<ChatError>,
     backgroundJobs: List<UiBackgroundJob>,
+    activeGoalCondition: String?,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
 ) {
@@ -362,6 +369,7 @@ private fun ChatPageContent(
                     onOpenBackgroundJobs = {
                         showBackgroundJobs = true
                     },
+                    activeGoalCondition = activeGoalCondition,
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     }
@@ -559,6 +567,7 @@ private fun TopBar(
     onOpenWorkspaceFiles: () -> Unit,
     backgroundJobs: List<UiBackgroundJob>,
     onOpenBackgroundJobs: () -> Unit,
+    activeGoalCondition: String?,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -639,6 +648,22 @@ private fun TopBar(
                         contentDescription = "Background jobs",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.graphicsLayer { this.alpha = alpha },
+                    )
+                }
+            }
+
+            // Goal-active indicator (#364): shown in line with the task board icon only while a
+            // `/goal` is armed for this conversation. A pure status icon (no action) — the 48dp box
+            // matches the sibling IconButtons so it stays aligned in the actions row.
+            if (activeGoalCondition != null) {
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Target01,
+                        contentDescription = "Active goal",
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                 }
             }

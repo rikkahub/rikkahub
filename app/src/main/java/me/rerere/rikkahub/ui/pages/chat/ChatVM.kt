@@ -161,6 +161,14 @@ class ChatVM(
         chatService
             .getProcessingStatusFlow(_conversationId)
 
+    // The active `/goal` condition (#364) for the chat goal-active icon, or null when no goal is armed.
+    // Mapped to the condition text so the UI layer needs no service type; null vs non-null drives the icon.
+    val activeGoal: StateFlow<String?> =
+        chatService
+            .getGoalStateFlow(_conversationId)
+            .map { it?.condition }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     // #92: getConversationJobs() 本身不做错误降级（见 ChatService）。这里在 stateIn 之前加 catch，
     // 使一次上游异常不会永久杀死这条 UI StateFlow 的收集协程——异常被记录、降级为空 map（“无活跃任务”），
     // UI 继续可用。底层是对 in-memory StateFlow 的 combine，正常不会抛；真抛说明是非瞬时的程序错误，
