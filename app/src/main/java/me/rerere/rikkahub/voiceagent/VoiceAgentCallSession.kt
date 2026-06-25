@@ -152,7 +152,11 @@ class VoiceAgentCallSession(
             ensureActiveSession(currentSessionId)
             if (coordinator.state.value.session is VoiceSessionStatus.Error) {
                 VoiceAgentLog.w(TAG, "Gemini connect returned with error state sessionId=$currentSessionId")
-                cleanupFailedStartup(currentSessionId, closeGemini = true)
+                prepareFailedSession(
+                    sessionId = currentSessionId,
+                    reason = VoiceSessionStopReason.StartupFailure("gemini_connect_error_state"),
+                    closeGemini = true,
+                )
                 return
             }
             coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
@@ -182,7 +186,11 @@ class VoiceAgentCallSession(
                     TAG,
                     "run session failed sessionId=$currentSessionId detail=${error.toVoiceAgentLogDetail()}",
                 )
-                cleanupFailedStartup(currentSessionId, closeGemini = geminiStarted)
+                prepareFailedSession(
+                    sessionId = currentSessionId,
+                    reason = VoiceSessionStopReason.StartupFailure(error.toVoiceAgentLogDetail()),
+                    closeGemini = geminiStarted,
+                )
                 coordinator.updateSessionStatus(
                     VoiceSessionStatus.Error(error.message ?: error.javaClass.simpleName)
                 )
@@ -195,25 +203,26 @@ class VoiceAgentCallSession(
     }
 
     private fun handleGeminiEvent(sessionId: Long, event: GeminiLiveEvent) {
-        if (event is GeminiLiveEvent.Error ||
-            event is GeminiLiveEvent.WebSocketClosed ||
-            event is GeminiLiveEvent.WebSocketFailure
-        ) {
+        val stopReason = event.toSessionStopReason()
+        if (stopReason != null) {
             VoiceAgentLog.w(TAG, "Gemini failure event sessionId=$sessionId event=${event::class.simpleName}")
         }
         coordinator.onGeminiEvent(sessionId, event)
-        when (event) {
-            is GeminiLiveEvent.Error,
-            is GeminiLiveEvent.WebSocketClosed,
-            is GeminiLiveEvent.WebSocketFailure,
-                -> cleanupFailedStartup(sessionId, closeGemini = true)
-            else -> Unit
+        if (stopReason != null) {
+            prepareFailedSession(sessionId = sessionId, reason = stopReason, closeGemini = true)
         }
     }
 
-    private fun cleanupFailedStartup(sessionId: Long, closeGemini: Boolean) {
+    private fun prepareFailedSession(sessionId: Long, reason: VoiceSessionStopReason, closeGemini: Boolean) {
         if (!coordinator.isActiveSession(sessionId)) return
-        VoiceAgentLog.d(TAG, "cleanup failed startup sessionId=$sessionId closeGemini=$closeGemini")
+        VoiceAgentLog.d(
+            TAG,
+            "prepare failed session sessionId=$sessionId reason=${reason.diagnosticReason} closeGemini=$closeGemini",
+        )
+        coordinator.recordDiagnostic(
+            name = "session_transition_failed",
+            detail = "reason=${reason.diagnosticReason}, closeGemini=$closeGemini",
+        )
         detachHermesBridge()
         coordinator.prepareForSessionEnd()
         invalidateAudioSessions()
@@ -250,6 +259,10 @@ class VoiceAgentCallSession(
     override fun reconnect() {
         if (ended) return
         val previousJob = startJob
+        coordinator.recordDiagnostic(
+            name = "session_transition_manual_reconnect",
+            detail = "reason=manual_reconnect",
+        )
         detachHermesBridge()
         coordinator.prepareForReconnect()
         invalidateAudioSessions()
@@ -421,3 +434,20 @@ private fun GeminiContentTurn.voiceContextLabel(): String =
         "model" -> "Assistant"
         else -> "User"
     }
+
+private fun GeminiLiveEvent.toSessionStopReason(): VoiceSessionStopReason? =
+    when (this) {
+        is GeminiLiveEvent.Error -> VoiceSessionStopReason.GeminiError
+        is GeminiLiveEvent.WebSocketClosed -> VoiceSessionStopReason.WebSocketClosed
+        is GeminiLiveEvent.WebSocketFailure -> VoiceSessionStopReason.WebSocketFailure
+        else -> null
+    }
+
+private sealed class VoiceSessionStopReason(
+    val diagnosticReason: String,
+) {
+    data class StartupFailure(val detail: String) : VoiceSessionStopReason("startup_failure")
+    data object GeminiError : VoiceSessionStopReason("gemini_error")
+    data object WebSocketClosed : VoiceSessionStopReason("websocket_closed")
+    data object WebSocketFailure : VoiceSessionStopReason("websocket_failure")
+}

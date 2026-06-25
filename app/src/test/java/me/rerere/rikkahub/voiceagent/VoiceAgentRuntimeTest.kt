@@ -2594,6 +2594,165 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `session records transition diagnostic when async Gemini error stops session`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+
+        gemini.eventHandlers.single()(
+            GeminiLiveEvent.Error(message = "Gemini failed", raw = "{}")
+        )
+
+        assertEquals(VoiceSessionStatus.Error("Gemini failed"), session.state.value.session)
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=gemini_error, closeGemini=true"
+            }
+        )
+    }
+
+    @Test
+    fun `session records transition diagnostic when WebSocket close stops session`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+
+        gemini.eventHandlers.single()(
+            GeminiLiveEvent.WebSocketClosed(code = 1001, reason = "going away")
+        )
+
+        assertEquals(
+            VoiceSessionStatus.Error("Gemini WebSocket closed: 1001 going away"),
+            session.state.value.session,
+        )
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=websocket_closed, closeGemini=true"
+            }
+        )
+    }
+
+    @Test
+    fun `session records transition diagnostic when WebSocket failure stops session`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+
+        gemini.eventHandlers.single()(
+            GeminiLiveEvent.WebSocketFailure(message = "network dropped")
+        )
+
+        assertEquals(
+            VoiceSessionStatus.Error("Gemini WebSocket failed: network dropped"),
+            session.state.value.session,
+        )
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=websocket_failure, closeGemini=true"
+            }
+        )
+    }
+
+    @Test
+    fun `session reconnect records transition diagnostic and preserves cleanup`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+
+        session.reconnect()
+        gemini.awaitConnectCount(2)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_manual_reconnect" &&
+                    it.detail == "reason=manual_reconnect"
+            }
+        )
+    }
+
+    @Test
     fun `session reconnect marks in flight tool send stale before outbound invalidation waits`() = runTest {
         val sessionApi = FakeVoiceSessionApi()
         val conversationStore = FakeVoiceConversationStore()
