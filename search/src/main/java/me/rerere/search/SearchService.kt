@@ -304,6 +304,12 @@ sealed class SearchServiceOptions {
         // API key is optional — AnySearch supports an anonymous free tier.
         // Leave blank to use anonymous access (rate-limited per IP).
         val apiKey: String = "",
+        // Optional advanced filters. Empty string means "no filter".
+        // See https://www.anysearch.com/docs for allowed values.
+        val domain: String = "",
+        val contentTypes: String = "",
+        val zone: String = "",
+        val language: String = "",
     ) : SearchServiceOptions()
 
     @Serializable
@@ -311,6 +317,13 @@ sealed class SearchServiceOptions {
     data class QueritOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
+        // Querit advanced filters (sent inside payload.filters).
+        // All optional; empty string / empty list means "no filter".
+        val language: String = "",
+        val country: String = "",
+        val dateRange: String = "",
+        val siteInclude: String = "",
+        val siteExclude: String = "",
     ) : SearchServiceOptions()
 
     @Serializable

@@ -75,6 +75,30 @@ object AnySearchSearchService : SearchService<SearchServiceOptions.AnySearchOpti
             val body = buildJsonObject {
                 put("query", query)
                 put("max_results", commonOptions.resultSize)
+
+                // Optional advanced filters — only include non-empty values so the server
+                // applies its own defaults for fields the user left blank.
+                if (serviceOptions.domain.isNotBlank()) {
+                    put("domain", serviceOptions.domain.trim())
+                }
+                if (serviceOptions.contentTypes.isNotBlank()) {
+                    // content_types is an array in the API; accept comma-separated input
+                    // from the UI for convenience.
+                    val types = serviceOptions.contentTypes.split(",", ";")
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                    if (types.isNotEmpty()) {
+                        put("content_types", kotlinx.serialization.json.JsonArray(
+                            types.map { kotlinx.serialization.json.JsonPrimitive(it) }
+                        ))
+                    }
+                }
+                if (serviceOptions.zone.isNotBlank()) {
+                    put("zone", serviceOptions.zone.trim())
+                }
+                if (serviceOptions.language.isNotBlank()) {
+                    put("language", serviceOptions.language.trim())
+                }
             }
 
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())

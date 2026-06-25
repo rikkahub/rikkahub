@@ -9,9 +9,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.add
 import me.rerere.ai.core.InputSchema
 import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
@@ -29,6 +31,13 @@ import okhttp3.RequestBody.Companion.toRequestBody
  *
  * Free tier: 1,000 requests/month, 1 req/s.
  * Paid tiers start at $4 / 1,000 requests.
+ *
+ * Supported filters (all optional, configured in provider settings):
+ *   - language: english, japanese, korean, german, french, spanish, portuguese
+ *   - country: e.g. "united states"
+ *   - dateRange: d1 (past day) / w1 (past week) / m1 (past month) / y1 (past year)
+ *   - siteInclude: comma-separated domains to include
+ *   - siteExclude: comma-separated domains to exclude
  */
 object QueritSearchService : SearchService<SearchServiceOptions.QueritOptions> {
     private const val ENDPOINT = "https://api.querit.ai/v1/search"
@@ -72,6 +81,13 @@ object QueritSearchService : SearchService<SearchServiceOptions.QueritOptions> {
             val body = buildJsonObject {
                 put("query", query)
                 put("count", commonOptions.resultSize)
+
+                // Build optional filters object. Only include non-empty filters so the
+                // server applies its own defaults for fields the user left blank.
+                val filters = buildFiltersJson(serviceOptions)
+                if (filters.isNotEmpty()) {
+                    put("filters", filters)
+                }
             }
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
@@ -79,6 +95,7 @@ object QueritSearchService : SearchService<SearchServiceOptions.QueritOptions> {
                 .url(ENDPOINT)
                 .post(body.toString().toRequestBody())
                 .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Accept", "application/json")
                 .addHeader("Content-Type", "application/json")
                 .build()
 
@@ -98,6 +115,56 @@ object QueritSearchService : SearchService<SearchServiceOptions.QueritOptions> {
                 return@withContext Result.success(SearchResult(items = items))
             } else {
                 error("Querit search failed with code ${response.code}: ${response.message}")
+            }
+        }
+    }
+
+    /**
+     * Build the `filters` JSON object from the user's provider settings.
+     * Returns an empty object if no filters are configured, so the caller can skip
+     * adding it to the payload entirely.
+     *
+     * Querit filter structure (from official providers.yaml):
+     * {
+     *   "sites": { "include": ["..."], "exclude": ["..."] },
+     *   "timeRange": { "date": "d1|w1|m1|y1" },
+     *   "geo": { "countries": { "include": ["..."] } },
+     *   "languages": { "include": ["..."] }
+     * }
+     */
+    private fun buildFiltersJson(options: SearchServiceOptions.QueritOptions): JsonObject {
+        val sitesInclude = options.siteInclude.split(",", ";").map { it.trim() }.filter { it.isNotEmpty() }
+        val sitesExclude = options.siteExclude.split(",", ";").map { it.trim() }.filter { it.isNotEmpty() }
+        val languages = options.language.split(",", ";").map { it.trim() }.filter { it.isNotEmpty() }
+        val countries = options.country.split(",", ";").map { it.trim() }.filter { it.isNotEmpty() }
+
+        return buildJsonObject {
+            if (sitesInclude.isNotEmpty() || sitesExclude.isNotEmpty()) {
+                put("sites", buildJsonObject {
+                    if (sitesInclude.isNotEmpty()) {
+                        put("include", JsonArray(sitesInclude.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+                    }
+                    if (sitesExclude.isNotEmpty()) {
+                        put("exclude", JsonArray(sitesExclude.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+                    }
+                })
+            }
+            if (options.dateRange.isNotBlank()) {
+                put("timeRange", buildJsonObject {
+                    put("date", options.dateRange.trim())
+                })
+            }
+            if (countries.isNotEmpty()) {
+                put("geo", buildJsonObject {
+                    put("countries", buildJsonObject {
+                        put("include", JsonArray(countries.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+                    })
+                })
+            }
+            if (languages.isNotEmpty()) {
+                put("languages", buildJsonObject {
+                    put("include", JsonArray(languages.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+                })
             }
         }
     }

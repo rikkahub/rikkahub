@@ -616,6 +616,71 @@ internal fun AnySearchOptions(
             modifier = Modifier.fillMaxWidth()
         )
     }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_domain))
+        },
+        description = {
+            Text(stringResource(R.string.search_detail_anysearch_domain_tip))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.domain,
+            onValueChange = {
+                onUpdateOptions(options.copy(domain = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_content_types))
+        },
+        description = {
+            Text(stringResource(R.string.search_detail_anysearch_content_types_tip))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.contentTypes,
+            onValueChange = {
+                onUpdateOptions(options.copy(contentTypes = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_zone))
+        },
+        description = {
+            Text(stringResource(R.string.search_detail_anysearch_zone_tip))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.zone,
+            onValueChange = {
+                onUpdateOptions(options.copy(zone = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_language))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.language,
+            onValueChange = {
+                onUpdateOptions(options.copy(language = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
 @Composable
@@ -632,6 +697,82 @@ internal fun QueritOptions(
             value = options.apiKey,
             onValueChange = {
                 onUpdateOptions(options.copy(apiKey = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_language))
+        },
+        description = {
+            Text(stringResource(R.string.search_detail_querit_language_tip))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.language,
+            onValueChange = {
+                onUpdateOptions(options.copy(language = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_country))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.country,
+            onValueChange = {
+                onUpdateOptions(options.copy(country = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_date_range))
+        },
+        description = {
+            Text(stringResource(R.string.search_detail_querit_date_range_tip))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.dateRange,
+            onValueChange = {
+                onUpdateOptions(options.copy(dateRange = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_site_include))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.siteInclude,
+            onValueChange = {
+                onUpdateOptions(options.copy(siteInclude = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_site_exclude))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.siteExclude,
+            onValueChange = {
+                onUpdateOptions(options.copy(siteExclude = it))
             },
             modifier = Modifier.fillMaxWidth()
         )
