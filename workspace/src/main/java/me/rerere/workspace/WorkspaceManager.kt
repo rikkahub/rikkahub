@@ -12,6 +12,12 @@ class WorkspaceManager(
     // sandbox entirely) — a sandbox-escape if a future caller forgets to inject ProotShellRunner.
     // Production DI wires ProotShellRunner (RepositoryModule); tests pass HostShellRunner explicitly.
     private val shellRunner: WorkspaceShellRunner,
+    // Files-relative default project directory created under every workspace's files root by
+    // [ensureWorkspace]. Injected (the brand-specific value ".poci/scratch" lives in the app layer,
+    // not this generic module) so the seeded/backfilled working_dir always resolves to a real dir —
+    // buildShellContext REQUIRES the working directory to exist. Blank ("") = create nothing (the
+    // historical behaviour; tests construct the manager this way, so the default is opt-in via DI).
+    private val defaultProjectDir: String = "",
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
 
@@ -24,6 +30,13 @@ class WorkspaceManager(
         filesDir(root).mkdirs()
         linuxDir(root).mkdirs()
         tempDir(root).mkdirs()
+        // Materialize the default project dir so a workspace whose (unset) working_dir resolves to it
+        // always has a real cwd; ensureWorkspace runs on every provision path, and buildShellContext
+        // requires the working directory to exist. Goes through the containment-checked [ensureDir]
+        // (not a raw mkdirs) so an in-workspace symlink can't make the create escape the files root.
+        if (defaultProjectDir.isNotBlank()) {
+            fileSystem.ensureDir(filesDir(root), defaultProjectDir)
+        }
         return dir
     }
 

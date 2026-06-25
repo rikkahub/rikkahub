@@ -112,6 +112,7 @@ val repositoryModule = module {
             shellRunner = ProotShellRunner(
                 nativeLibraryDir = File(context.applicationInfo.nativeLibraryDir),
             ),
+            defaultProjectDir = WorkspaceRepository.DEFAULT_PROJECT_DIR,
         )
     }
 

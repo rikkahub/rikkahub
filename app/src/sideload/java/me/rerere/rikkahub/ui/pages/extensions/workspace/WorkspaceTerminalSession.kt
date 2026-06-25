@@ -15,7 +15,9 @@ import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import me.rerere.workspace.RootfsPatchOptions
 import me.rerere.workspace.RootfsPatcher
+import me.rerere.workspace.WorkspaceConfig
 import me.rerere.workspace.WorkspaceCwdPolicy
+import me.rerere.workspace.WorkspaceFileSystem
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.seededRelativeCwd
 import java.io.File
@@ -55,10 +57,18 @@ internal fun createWorkspaceTerminalSession(
         RootfsPatchOptions(nameservers = appContext.activeDnsServers())
     )
 
+    // Materialize the seed working dir so PRoot's `-w` (below) lands in an EXISTING directory: the
+    // default project dir (.poci/scratch) the caller resolves an unset workspace to may not have been
+    // created by a manager-backed op for this workspace yet, and PRoot fails to chdir into a missing
+    // `-w`. Goes through the SAME containment-checked [WorkspaceFileSystem.ensureDir] the manager uses
+    // (not a raw mkdirs) so an in-workspace symlink can't make the create escape the files root; blank
+    // resolves to filesDir (already created above), so it is a no-op then.
+    WorkspaceFileSystem(WorkspaceConfig()).ensureDir(filesDir, workingDir)
+
     // The initial `-w` is the seed resolved through the central policy (W-I6) — NOT a hard-coded
-    // `/workspace`. seededRelativeCwd resolves the working_dir seed (blank => the files root, which
-    // always exists) so the shell lands in an existing directory. The bind-mount target stays the
-    // workspace ROOT alias; only the working directory differs.
+    // `/workspace`. seededRelativeCwd resolves the working_dir seed (blank => the files root) so the
+    // shell lands in an existing directory. The bind-mount target stays the workspace ROOT alias; only
+    // the working directory differs.
     val initialCwd = workspaceTerminalCwd(filesDir, workingDir)
     val args = mutableListOf(
         "--root-id",

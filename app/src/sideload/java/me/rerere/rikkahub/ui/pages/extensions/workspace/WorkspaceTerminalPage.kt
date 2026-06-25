@@ -42,7 +42,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.repository.isShellRunnable
+import me.rerere.rikkahub.data.repository.resolveWorkingDir
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -83,9 +85,13 @@ fun WorkspaceTerminalPage(id: String) {
         WorkspaceTerminalContent(
             root = state.workspace?.root,
             // The terminal seeds its initial cwd from the workspace working_dir so its `-w` matches
-            // the LLM exec `-w` for this workspace (W-I6). An unset row ("") resolves to the scratch
-            // default inside createWorkspaceTerminalSession via the central policy.
-            workingDir = state.workspace?.workingDir.orEmpty(),
+            // the LLM exec `-w` for this workspace (W-I6). An UNSET row ("") resolves to the default
+            // project dir (.poci/scratch) via resolveWorkingDir — the SAME effective base the LLM shell
+            // and file tools use (WorkspaceRepository.effectiveWorkingDir), keeping W-I6 intact.
+            workingDir = resolveWorkingDir(
+                state.workspace?.workingDir.orEmpty(),
+                WorkspaceRepository.DEFAULT_PROJECT_DIR,
+            ),
             shellRunnable = shellRunnable,
             contentPadding = innerPadding,
         )

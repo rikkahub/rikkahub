@@ -79,6 +79,15 @@ class WorkspaceFileSystem(
         return dir.toEntry(root)
     }
 
+    /**
+     * Idempotent, containment-checked directory creation: resolve [path] under [root] through the SAME
+     * canonical-containment guard as [mkdir]/[resolvePath] (so an in-workspace symlink cannot make the
+     * mkdirs escape the root), then mkdirs WITHOUT rejecting an already-existing dir. Used to materialize
+     * the default project dir on every ensureWorkspace, which [mkdir]'s `require(!exists)` would reject
+     * on the second call.
+     */
+    fun ensureDir(root: File, path: String): File = resolvePath(root, path).apply { mkdirs() }
+
     fun delete(root: File, path: String, recursive: Boolean = false): Boolean {
         require(path.isNotBlank() && path != ".") { "Refusing to delete workspace root" }
         val rootFile = root.canonicalFile

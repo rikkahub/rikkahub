@@ -71,6 +71,9 @@ class WorkspaceRepository(
             root = id,
             shellEnabled = false,
             shellStatus = WorkspaceShellStatus.DISABLED.name,
+            // working_dir is left UNSET ("") on create: an unset project dir resolves to the default
+            // [DEFAULT_PROJECT_DIR] at read time ([effectiveWorkingDir]), so clearing it later returns to
+            // the default rather than the bare files root. ensureWorkspace materializes the default dir.
             createdAt = now,
             updatedAt = now,
             lastAccessAt = null,
@@ -151,9 +154,10 @@ class WorkspaceRepository(
     }
 
     /**
-     * Clear the working-directory seed back to the UNSET sentinel `""` (issue #282, W-D4): the
-     * resolver then falls back to the files root (the project working directory default). Resetting
-     * twice is a no-op — `""` is already the unset value — so this is idempotent.
+     * Clear the working-directory seed back to the UNSET sentinel `""` (issue #282, W-D4). An unset
+     * working dir resolves to [DEFAULT_PROJECT_DIR] via [effectiveWorkingDir] (the project working
+     * directory default), so resetting returns to that default rather than the bare files root.
+     * Resetting twice is a no-op — `""` is already the unset value — so this is idempotent.
      */
     suspend fun resetWorkingDir(id: String): Boolean = db.withTransaction {
         val workspace = dao.getById(id) ?: return@withTransaction false
@@ -258,7 +262,7 @@ class WorkspaceRepository(
         manager.ensureWorkspace(workspace.root)
         seededRelativeCwd(
             filesDir = manager.filesDir(workspace.root),
-            workingDir = workspace.workingDir,
+            workingDir = workspace.effectiveWorkingDir(),
         )
     }
 
@@ -268,7 +272,7 @@ class WorkspaceRepository(
      * be resolved against the SAME project dir the shell uses (the unified base), letting a project-dir
      * change in the terminal/sheet take effect without recreating the tool pool.
      */
-    suspend fun workingDirOf(id: String): String = dao.getById(id)?.workingDir.orEmpty()
+    suspend fun workingDirOf(id: String): String = dao.getById(id)?.effectiveWorkingDir().orEmpty()
 
     suspend fun readText(
         id: String,
@@ -364,7 +368,7 @@ class WorkspaceRepository(
             manager.ensureWorkspace(workspace.root)
             // Pass the persisted working_dir SEED so the central policy resolves override > working_dir >
             // files root; an ABSENT (null) cwd here falls through to that seed, an explicit cwd wins.
-            manager.executeCommand(workspace.root, command, cwd, workspace.workingDir, timeoutMillis)
+            manager.executeCommand(workspace.root, command, cwd, workspace.effectiveWorkingDir(), timeoutMillis)
         }
     }
 
@@ -389,7 +393,7 @@ class WorkspaceRepository(
         timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
     ): ShellCwdOutcome {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
-        val floor = WorkspaceCwdPolicy.normalize(workspace.workingDir)
+        val floor = WorkspaceCwdPolicy.normalize(workspace.effectiveWorkingDir())
         // Same I-ENABLE guard as executeCommand, before any process: a disabled/not-ready shell returns
         // the byte-identical "Shell is not enabled" result and never spawns.
         if (!isShellRunnable(workspace.shellEnabled, workspace.shellStatus)) {
@@ -427,7 +431,7 @@ class WorkspaceRepository(
                 workspace.root,
                 command,
                 startCwd,
-                workspace.workingDir,
+                workspace.effectiveWorkingDir(),
                 timeoutMillis,
                 cwdCaptureToken = token,
             )
@@ -499,7 +503,7 @@ class WorkspaceRepository(
                 conversationId = conversationId,
                 command = command,
                 cwd = cwd,
-                workingDir = workspace.workingDir,
+                workingDir = workspace.effectiveWorkingDir(),
                 outputPath = outputFile.absolutePath,
                 detachAfterSeconds = detachAfterSeconds,
                 hardTimeoutMillis = hardTimeoutMillis,
@@ -556,8 +560,21 @@ class WorkspaceRepository(
         return true
     }
 
+    // An UNSET project dir ("") resolves to [DEFAULT_PROJECT_DIR]; an explicitly-set one is used as-is.
+    // Applied at EVERY working_dir read so the shell, the file tools, and the drifting-cwd jail share
+    // one effective project dir — a mismatch would resolve a model's file paths against a different base
+    // than the shell runs in. The stored value stays "" when unset, so clearing returns to the default
+    // rather than the bare files root. WorkspaceManager.ensureWorkspace materializes the default dir.
+    private fun WorkspaceEntity.effectiveWorkingDir(): String = resolveWorkingDir(workingDir, DEFAULT_PROJECT_DIR)
+
     companion object {
         private const val TAG = "WorkspaceRepository"
+
+        // Files-relative default project directory for a workspace's shell/tools. Seeded on create,
+        // backfilled onto pre-existing blank workspaces by Migration_33_34, and materialized by
+        // WorkspaceManager.ensureWorkspace (injected via DI). Dot-prefixed so it stays out of the way
+        // of the user's own files at the workspace root.
+        const val DEFAULT_PROJECT_DIR = ".poci/scratch"
     }
 }
 
@@ -570,6 +587,14 @@ class WorkspaceRepository(
  */
 internal fun isShellRunnable(shellEnabled: Boolean, shellStatus: String): Boolean =
     shellEnabled && shellStatus == WorkspaceShellStatus.READY.name
+
+/**
+ * Pure project-dir resolution (top-level for unit tests, mirroring [isShellRunnable]): an UNSET ("",
+ * or whitespace-only) working dir resolves to [default]; an explicitly-set one is used verbatim. This
+ * is the single rule [WorkspaceRepository.effectiveWorkingDir] applies at every working_dir read so the
+ * shell, the file tools, and the drifting-cwd jail share one effective project dir.
+ */
+internal fun resolveWorkingDir(stored: String, default: String): String = stored.ifBlank { default }
 
 /**
  * The tail-scoping chokepoint (issue #291): the only file a `workspace_shell_tail` read may touch is

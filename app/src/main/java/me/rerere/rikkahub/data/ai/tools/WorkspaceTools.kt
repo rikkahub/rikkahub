@@ -12,6 +12,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.repository.resolveWorkingDir
 import me.rerere.workspace.WorkspaceCwdPolicy
 import me.rerere.workspace.WorkspaceStorageArea
 import kotlin.uuid.Uuid
@@ -75,7 +76,14 @@ suspend fun createWorkspaceTools(
     // per-turn snapshot (the pool is rebuilt each turn); the tools THEMSELVES resolve against the current
     // working_dir live, so a mid-turn project-dir change takes effect in tool behavior immediately and is
     // reflected in this note on the next turn.
-    val projectDir = WorkspaceCwdPolicy.toShellPath(WorkspaceCwdPolicy.normalize(workspace.workingDir))
+    // Resolve through the SAME default as the file tools / shell (resolveWorkingDir): an unset working_dir
+    // resolves to .poci/scratch, so the note tells the model the cwd its relative paths ACTUALLY land in,
+    // not /workspace (which would mislead it for an unset workspace).
+    val projectDir = WorkspaceCwdPolicy.toShellPath(
+        WorkspaceCwdPolicy.normalize(
+            resolveWorkingDir(workspace.workingDir, WorkspaceRepository.DEFAULT_PROJECT_DIR)
+        )
+    )
 
     // SECURITY GATE (issue #197 design-gate §C / design note security-model-design:197 §4.1 Option A,
     // §3 I-FLAVOR): the write-capable and shell verbs (workspace_write_file/edit_file/delete_file/
