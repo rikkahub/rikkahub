@@ -85,7 +85,9 @@ class RootfsInstallerHardeningTest {
     }
 
     @Test
-    fun `stageArchive rejects absolute symlink targets before deleting existing entries`() {
+    fun `stageArchive rejects an absolute symlink target that escapes the rootfs before deleting existing entries`() {
+        // An absolute target is remapped under the rootfs root (PRoot semantics), but one that climbs
+        // out with `..` must STILL be rejected, and before the existing linux dir is cleared.
         val baseDir = Files.createTempDirectory("rootfs-hardening-absolute-link").toFile()
         val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
         val root = "test-workspace"
@@ -95,7 +97,7 @@ class RootfsInstallerHardeningTest {
         val archive = File(manager.tempDir(root), "rootfs.tar.gz").apply {
             writeBytes(
                 tarGz(
-                    TarTestEntry(name = "link", type = '2', linkName = "/abs"),
+                    TarTestEntry(name = "link", type = '2', linkName = "/../escape"),
                 )
             )
         }
@@ -106,6 +108,33 @@ class RootfsInstallerHardeningTest {
         }
 
         assertEquals("keep", canary.readText())
+    }
+
+    @Test
+    fun `stageArchive remaps an in-tree absolute symlink target under the rootfs root`() {
+        // Real rootfs images are full of absolute symlinks (e.g. /usr/bin/awk -> /usr/bin/mawk). They
+        // must install, remapped relative to the link's own directory so the on-disk link is never
+        // host-absolute, and resolve in-tree.
+        val baseDir = Files.createTempDirectory("rootfs-abs-symlink").toFile()
+        val manager = WorkspaceManager(baseDir, shellRunner = HostShellRunner())
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+        val archive = File(manager.tempDir(root), "rootfs.tar.gz").apply {
+            writeBytes(
+                tarGz(
+                    TarTestEntry(name = "usr/bin/mawk", content = "awk!".toByteArray(), type = '0'),
+                    TarTestEntry(name = "usr/bin/awk", type = '2', linkName = "/usr/bin/mawk"),
+                )
+            )
+        }
+        val installer = RootfsInstaller(manager)
+
+        installer.stageArchive(root, archive)
+
+        val link = File(manager.linuxDir(root), "usr/bin/awk")
+        assertTrue(Files.isSymbolicLink(link.toPath()))
+        assertEquals("mawk", Files.readSymbolicLink(link.toPath()).toString())
+        assertEquals("awk!", link.readText())
     }
 
     @Test

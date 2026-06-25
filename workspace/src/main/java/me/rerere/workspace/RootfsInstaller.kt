@@ -223,19 +223,29 @@ class RootfsInstaller(
     private fun createSymlink(root: File, target: File, linkName: String) {
         if (linkName.isBlank()) return
         require(!linkName.contains('\u0000')) { "Symlink target contains invalid character" }
-        require(!File(linkName).isAbsolute) { "Symlink target must be relative: $linkName" }
-        val linkTargetPath = (target.parentFile ?: root).toPath().resolve(linkName).normalize()
-        // [target] already comes from [safeResolve] (canonicalFile), so [targetPath] resolves into the
-        // same canonicalized space — keep [rootPath] canonical too so both sides match. (The asymmetry
-        // bug was in deleteRecursivelyNoFollow, whose candidates are NOT safeResolved; do not "fix" it
-        // here or a valid in-tree symlink starts looking like an escape under a symlinked base.)
+        // [rootPath]/[base] stay canonical: [target] comes from [safeResolve] (canonicalFile), so
+        // resolution and the containment check share one space — and a symlinked base path (Android's
+        // `/data/user/0` -> `/data/data`) does not make an in-tree target look like an escape.
         val rootPath = root.canonicalFile.toPath()
+        val base = (target.parentFile ?: root).toPath()
+        // Resolve the target the SAME way normalizeTarPath/safeResolve resolve every other tar path:
+        // an ABSOLUTE target inside a rootfs is relative to the rootfs ROOT (PRoot remaps `/` to the
+        // rootfs), so strip the leading slash and resolve it under [rootPath] instead of letting it
+        // point at the host filesystem — a real rootfs is full of these (e.g. /usr/bin/awk ->
+        // /usr/bin/mawk). A RELATIVE target resolves against the link's own directory. Either way the
+        // result must stay inside the rootfs (checked below) and is STORED relativized, so the on-disk
+        // link is never host-absolute and survives the staging->linux move.
+        val linkTargetPath = if (File(linkName).isAbsolute) {
+            rootPath.resolve(linkName.trimStart('/')).normalize()
+        } else {
+            base.resolve(linkName).normalize()
+        }
         val targetPath = runCatching { linkTargetPath.toRealPath(LinkOption.NOFOLLOW_LINKS) }
             .getOrElse { linkTargetPath.toAbsolutePath() }
         require(targetPath == rootPath || targetPath.startsWith(rootPath)) {
             "Symlink escapes rootfs: ${target.name}"
         }
-        val linkTarget = (target.parentFile ?: root).toPath().relativize(linkTargetPath).toFile()
+        val linkTarget = base.relativize(linkTargetPath).toFile()
         target.delete()
         Files.createSymbolicLink(target.toPath(), linkTarget.toPath())
     }
