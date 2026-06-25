@@ -62,6 +62,8 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.GrokOptions -> GrokSearchService
                 is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
                 is SearchServiceOptions.SerperOptions -> SerperSearchService
+                is SearchServiceOptions.AnySearchOptions -> AnySearchSearchService
+                is SearchServiceOptions.QueritOptions -> QueritSearchService
                 is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
             } as SearchService<T>
         }
@@ -156,6 +158,8 @@ sealed class SearchServiceOptions {
             GrokOptions::class to "Grok",
             TinyfishOptions::class to "Tinyfish",
             SerperOptions::class to "Serper",
+            AnySearchOptions::class to "AnySearch",
+            QueritOptions::class to "Querit",
             CustomJsOptions::class to "Custom JS",
         )
     }
@@ -289,6 +293,22 @@ sealed class SearchServiceOptions {
     @Serializable
     @SerialName("serper")
     data class SerperOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("anysearch")
+    data class AnySearchOptions(
+        override val id: Uuid = Uuid.random(),
+        // API key is optional — AnySearch supports an anonymous free tier.
+        // Leave blank to use anonymous access (rate-limited per IP).
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("querit")
+    data class QueritOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
     ) : SearchServiceOptions()

@@ -564,6 +564,7 @@
   <string name="search_ability_scrape">Scrape</string>
   <string name="search_ability_search">Search</string>
   <string name="search_detail_api_key">API Key</string>
+  <string name="search_detail_anysearch_api_key_tip">Optional. Leave blank to use the anonymous free tier (rate-limited per IP).</string>
   <string name="search_detail_api_url">API URL</string>
   <string name="search_detail_custom_search_placeholder">My Custom Search</string>
   <string name="search_detail_custom_url">Custom URL</string>

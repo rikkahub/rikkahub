@@ -560,6 +560,7 @@
   <string name="search_ability_scrape">스크래핑</string>
   <string name="search_ability_search">검색</string>
   <string name="search_detail_api_key">API 키</string>
+  <string name="search_detail_anysearch_api_key_tip">선택 사항. 비워두면 익명 무료 할당량(IP별 속도 제한)이 사용됩니다.</string>
   <string name="search_detail_api_url">API URL</string>
   <string name="search_detail_custom_search_placeholder">내 맞춤 검색</string>
   <string name="search_detail_custom_url">사용자 지정 URL</string>

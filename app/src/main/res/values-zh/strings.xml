@@ -562,6 +562,7 @@
   <string name="search_ability_scrape">抓取</string>
   <string name="search_ability_search">搜索</string>
   <string name="search_detail_api_key">API密钥</string>
+  <string name="search_detail_anysearch_api_key_tip">可选。留空则使用匿名免费额度（按 IP 限速）。</string>
   <string name="search_detail_api_url">API URL</string>
   <string name="search_detail_custom_search_placeholder">我的自定义搜索</string>
   <string name="search_detail_custom_url">自定义网址</string>

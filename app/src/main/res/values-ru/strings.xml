@@ -560,6 +560,7 @@
   <string name="search_ability_scrape">Собрать</string>
   <string name="search_ability_search">Поиск</string>
   <string name="search_detail_api_key">Ключ API</string>
+  <string name="search_detail_anysearch_api_key_tip">Необязательно. Если пусто — используется анонимный бесплатный тариф (ограничение по IP).</string>
   <string name="search_detail_api_url">URL API</string>
   <string name="search_detail_custom_search_placeholder">Мой поиск</string>
   <string name="search_detail_custom_url">Пользовательский URL</string>

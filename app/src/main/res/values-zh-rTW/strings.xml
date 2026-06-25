@@ -560,6 +560,7 @@
   <string name="search_ability_scrape">爬取</string>
   <string name="search_ability_search">搜尋</string>
   <string name="search_detail_api_key">API 金鑰</string>
+  <string name="search_detail_anysearch_api_key_tip">選填。留空則使用匿名免費額度（依 IP 限速）。</string>
   <string name="search_detail_api_url">API URL</string>
   <string name="search_detail_custom_search_placeholder">我的自訂搜尋</string>
   <string name="search_detail_custom_url">自訂網址</string>

@@ -560,6 +560,7 @@
   <string name="search_ability_scrape">スクレイピング</string>
   <string name="search_ability_search">検索</string>
   <string name="search_detail_api_key">APIキー</string>
+  <string name="search_detail_anysearch_api_key_tip">任意。空欄の場合は匿名無料枠（IPごとに制限）を使用します。</string>
   <string name="search_detail_api_url">API URL</string>
   <string name="search_detail_custom_search_placeholder">マイカスタム検索</string>
   <string name="search_detail_custom_url">カスタムURL</string>

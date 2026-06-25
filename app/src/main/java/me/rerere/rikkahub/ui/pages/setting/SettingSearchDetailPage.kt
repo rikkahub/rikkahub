@@ -220,6 +220,12 @@ private fun SearchServiceOptionsEditor(
         is SearchServiceOptions.SerperOptions -> {
             SerperOptions(options) { onUpdateOptions(it) }
         }
+        is SearchServiceOptions.AnySearchOptions -> {
+            AnySearchOptions(options) { onUpdateOptions(it) }
+        }
+        is SearchServiceOptions.QueritOptions -> {
+            QueritOptions(options) { onUpdateOptions(it) }
+        }
         is SearchServiceOptions.CustomJsOptions -> {
             CustomJsOptions(options) { onUpdateOptions(it) }
         }
@@ -573,6 +579,49 @@ internal fun BraveOptions(
 internal fun SerperOptions(
     options: SearchServiceOptions.SerperOptions,
     onUpdateOptions: (SearchServiceOptions.SerperOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_api_key))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(options.copy(apiKey = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+internal fun AnySearchOptions(
+    options: SearchServiceOptions.AnySearchOptions,
+    onUpdateOptions: (SearchServiceOptions.AnySearchOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text(stringResource(R.string.search_detail_api_key))
+        },
+        description = {
+            Text(stringResource(R.string.search_detail_anysearch_api_key_tip))
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(options.copy(apiKey = it))
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+internal fun QueritOptions(
+    options: SearchServiceOptions.QueritOptions,
+    onUpdateOptions: (SearchServiceOptions.QueritOptions) -> Unit
 ) {
     FormItem(
         label = {
