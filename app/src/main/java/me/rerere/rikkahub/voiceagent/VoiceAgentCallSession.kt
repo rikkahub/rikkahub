@@ -259,10 +259,15 @@ class VoiceAgentCallSession(
 
     override fun reconnect() {
         if (ended) return
+        val previousJob = prepareManualReconnect()
+        startJob = startReconnectedSession(previousJob)
+    }
+
+    private fun prepareManualReconnect(): Job? {
         val previousJob = startJob
         coordinator.recordDiagnostic(
             name = "session_transition_manual_reconnect",
-            detail = "reason=manual_reconnect",
+            detail = "reason=${VoiceSessionStopReason.ManualReconnect.diagnosticReason}",
         )
         detachHermesBridge()
         coordinator.prepareForReconnect()
@@ -270,15 +275,16 @@ class VoiceAgentCallSession(
         audio.stopCapture()
         audio.suppressPlayback()
         gemini.close()
-        val reconnectJob = scope.launch {
-            previousJob?.cancelAndJoin()
-            if (ended) return@launch
-            coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
-            val currentSessionId = coordinator.nextSessionId()
-            sessionId = currentSessionId
-            runSession(currentSessionId)
-        }
-        startJob = reconnectJob
+        return previousJob
+    }
+
+    private fun startReconnectedSession(previousJob: Job?): Job = scope.launch {
+        previousJob?.cancelAndJoin()
+        if (ended) return@launch
+        coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+        val currentSessionId = coordinator.nextSessionId()
+        sessionId = currentSessionId
+        runSession(currentSessionId)
     }
 
     override fun end() {
@@ -448,6 +454,7 @@ private sealed class VoiceSessionStopReason(
     val diagnosticReason: String,
 ) {
     data object StartupFailure : VoiceSessionStopReason("startup_failure")
+    data object ManualReconnect : VoiceSessionStopReason("manual_reconnect")
     data object GeminiError : VoiceSessionStopReason("gemini_error")
     data object WebSocketClosed : VoiceSessionStopReason("websocket_closed")
     data object WebSocketFailure : VoiceSessionStopReason("websocket_failure")
