@@ -291,8 +291,17 @@ class SettingsStore(
             // defaults.
             val assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
             DEFAULT_ASSISTANTS.forEach { defaultAssistant ->
-                if (assistants.none { it.id == defaultAssistant.id }) {
+                val existingIndex = assistants.indexOfFirst { it.id == defaultAssistant.id }
+                if (existingIndex < 0) {
                     assistants.add(defaultAssistant.copy())
+                } else if (defaultAssistant.description.isNotBlank() &&
+                    assistants[existingIndex].description.isBlank()
+                ) {
+                    // Backfill the machine-facing subagent description onto a built-in that predates it
+                    // (e.g. the UI Automation subagent), so existing installs advertise it on dispatch.
+                    // Blank-only: never clobbers a description the user set themselves.
+                    assistants[existingIndex] = assistants[existingIndex]
+                        .copy(description = defaultAssistant.description)
                 }
             }
             val ttsProviders = it.ttsProviders.ifEmpty { DEFAULT_TTS_PROVIDERS }.toMutableList()
@@ -843,6 +852,10 @@ internal val DEFAULT_ASSISTANTS = listOf(
     Assistant(
         id = Uuid.parse("a17a0a55-7e2d-4c3b-9f1e-0d2c3b4a5e6f"),
         name = "UI Automation",
+        description = "Operates the Android device UI on behalf of the calling agent: observes the " +
+            "on-screen targets, then taps, types, scrolls, and navigates. Delegate device/on-screen " +
+            "tasks here. Acts only within the device scope the user has granted (or YOLO); otherwise it " +
+            "reports what it could not do rather than guessing.",
         spawnable = true,
         uiAutomationEnabled = true,
         automationGrant = AutomationGrant(

@@ -79,6 +79,7 @@ import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
 import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
 import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantCapabilityPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
@@ -375,6 +376,10 @@ class RouteActivity : ComponentActivity() {
                                 AssistantBasicPage(key.id)
                             }
 
+                            entry<Screen.AssistantCapability> { key ->
+                                AssistantCapabilityPage(key.id)
+                            }
+
                             entry<Screen.AssistantPrompt> { key ->
                                 AssistantPromptPage(key.id)
                             }
@@ -649,6 +654,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class AssistantBasic(val id: String) : Screen
+
+    @Serializable
+    data class AssistantCapability(val id: String) : Screen
 
     @Serializable
     data class AssistantPrompt(val id: String) : Screen
