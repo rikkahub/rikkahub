@@ -140,7 +140,8 @@ fun buildBoardTools(board: TaskBoardPort): List<Tool> = listOf(
     Tool(
         name = "task_update",
         description = """
-            Update a work item on this conversation's task board. Only the provided fields change.
+            Update a work item on this conversation's task board. Only the provided fields change:
+            omit a field to leave it unchanged; send an empty string only to intentionally clear it.
             - `subject` / `description` / `activeForm`: edit the item's text fields.
             - `action`: change the item's status — one of
               `claim` (pending -> in_progress, take ownership), `complete` (in_progress -> completed),

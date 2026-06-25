@@ -300,8 +300,8 @@ private fun createShellTool(
         (persisted/unchanged/reverted/unknown).
         Set detachAfterSeconds to auto-background a long-running command after that many seconds: the tool then
         returns {taskId, status: running, outputRef, tail} immediately, keeps running, and notifies you when it
-        completes; read its output later with workspace_shell_tail. Omit detachAfterSeconds for the
-        default blocking run.
+        completes; read its output later with workspace_shell_tail. Omit detachAfterSeconds, or pass 0 /
+        a non-positive value, for the default blocking run; only a positive integer enables background mode.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -331,7 +331,8 @@ private fun createShellTool(
                     put(
                         "description",
                         "Optional. Auto-background the command after this many seconds if it has not finished. " +
-                            "Omit (the default) to run blocking and return the full result inline."
+                            "Omit, or pass 0 / a non-positive value (the default), to run blocking and return " +
+                            "the full result inline; only a positive integer enables background mode."
                     )
                 })
             },

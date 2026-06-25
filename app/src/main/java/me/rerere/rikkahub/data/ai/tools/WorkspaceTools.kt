@@ -126,6 +126,8 @@ private fun createListFilesTool(
         For the files area, path is relative to the project working directory (use an absolute
         /workspace/... path for the files root) and each entries[].path is returned as an absolute
         /workspace/... path.
+        For the linux area, path is relative to the installed Rootfs root (e.g. "" or "etc"); these
+        entries[].path values are reported rootfs-relative, unchanged.
         Entries are returned directories first, then files, each sorted case-insensitively by name; use workspace_glob for recursive pattern search.
         Response format: entries[].path, name, isDirectory, sizeBytes, updatedAt.
     """.trimIndent().replace("\n", " "),
