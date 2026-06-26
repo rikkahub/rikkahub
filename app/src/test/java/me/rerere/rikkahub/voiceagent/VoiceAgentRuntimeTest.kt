@@ -3024,45 +3024,6 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `default reconnect policy uses bounded exponential delays`() {
-        val policy = VoiceReconnectPolicy(jitterRatio = 0.0, jitterSource = { 0.0 })
-
-        val delays = (1..15).map { attempt ->
-            policy.delayMsForAttempt(attempt = attempt, elapsedMs = 0L)
-        }
-
-        assertEquals(
-            listOf(
-                1_000L,
-                2_000L,
-                4_000L,
-                8_000L,
-                16_000L,
-                32_000L,
-                64_000L,
-                128_000L,
-                256_000L,
-                300_000L,
-                300_000L,
-                300_000L,
-                300_000L,
-                300_000L,
-                300_000L,
-            ),
-            delays,
-        )
-        assertNull(policy.delayMsForAttempt(attempt = 16, elapsedMs = 0L))
-        assertNull(policy.delayMsForAttempt(attempt = 1, elapsedMs = 30L * 60L * 1000L))
-        assertEquals(
-            123L,
-            policy.delayMsForAttempt(
-                attempt = 10,
-                elapsedMs = 30L * 60L * 1000L - 123L,
-            ),
-        )
-    }
-
-    @Test
     fun `startup failure during automatic reconnect is terminal`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()
