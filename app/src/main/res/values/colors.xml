@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Splash window background: dark so the neon-gradient splash icon reads. -->
-  <color name="splash_background">#1A1D23</color>
+  <!-- Splash colors follow the device dark/light theme: this file is the LIGHT variant; values-night
+       supplies the dark one. Light splash = light background + a dark robot tint. -->
+  <color name="splash_background">#FFFFFF</color>
+  <color name="splash_icon_tint">#212833</color>
+
+  <!-- Adaptive launcher icon background: a flat white (no circle) behind the dark robot foreground. -->
+  <color name="ic_launcher_background">#FFFFFF</color>
 </resources>

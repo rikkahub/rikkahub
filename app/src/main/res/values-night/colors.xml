@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Dark variant of the splash colors (device in dark mode): dark background + a light robot tint. -->
+  <color name="splash_background">#1A1D23</color>
+  <color name="splash_icon_tint">#FFFFFF</color>
+</resources>

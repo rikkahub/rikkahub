@@ -3,11 +3,16 @@
 
 <style name="Theme.Rikkahub" parent="Theme.Material3.DayNight.NoActionBar" />
 
-<!-- Android 12+ / core-splashscreen launch theme: the neon robot (transparent bg) centered on a dark
-     window background, handing off to the app theme once content is ready. -->
+<!-- Android 12+ / core-splashscreen launch theme: the Poci robot centered on a theme-following window
+     background (splash_background + splash_icon_tint resolve light/dark via values / values-night), handing
+     off to the app theme once content is ready. -->
 <style name="Theme.Rikkahub.Splash" parent="Theme.SplashScreen">
     <item name="windowSplashScreenBackground">@color/splash_background</item>
     <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+    <!-- Force the predictable "icon with background" layout: the icon's circular backing matches the
+         splash background (per-theme), so the system places the robot inside its safe-zone circle without
+         the OEM mask clipping the lower half. The circle is invisible because it equals the splash bg. -->
+    <item name="windowSplashScreenIconBackgroundColor">@color/splash_background</item>
     <item name="postSplashScreenTheme">@style/Theme.Rikkahub</item>
 </style>
 </resources>
