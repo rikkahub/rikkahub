@@ -1249,5 +1249,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_context_message_truncation_warning">コンテキストを制限すると、頻繁なコンテキストの切り詰めが発生し、プロンプトキャッシュが妨げられる可能性があります。</string>
   <string name="chat_message_tool_recent_chats">最近のチャットを表示</string>
   <string name="chat_message_tool_conversation_search">検索履歴: %1$s</string>
+  <string name="assistant_page_local_tools_screen_time_title">スクリーンタイム</string>
+  <string name="assistant_page_local_tools_screen_time_desc">AIにアプリの画面使用時間を読み取らせます</string>
+  <string name="assistant_page_local_tools_screen_time_permission_required">スクリーンタイムを使用するには、設定で「使用状況へのアクセス」許可を付与してください</string>
+  <string name="chat_message_tool_screen_time">スクリーンタイムを読み取る</string>
+  <string name="tool_ui_screen_time_total">総画面時間</string>
 </resources>
 

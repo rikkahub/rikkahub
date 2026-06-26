@@ -1249,5 +1249,10 @@
   <string name="assistant_page_context_message_truncation_warning">Ограничение контекста может привести к частому усечению контекста и предотвратить кэширование промптов</string>
   <string name="chat_message_tool_recent_chats">Посмотреть недавние чаты</string>
   <string name="chat_message_tool_conversation_search">История поиска: %1$s</string>
+  <string name="assistant_page_local_tools_screen_time_title">Экранное время</string>
+  <string name="assistant_page_local_tools_screen_time_desc">Позвольте ИИ прочитать время использования экрана вашего приложения</string>
+  <string name="assistant_page_local_tools_screen_time_permission_required">Пожалуйста, предоставьте разрешение Доступ к использованию в настройках, чтобы использовать экранное время</string>
+  <string name="chat_message_tool_screen_time">Чтение экранного времени</string>
+  <string name="tool_ui_screen_time_total">Общее время экрана</string>
 </resources>
 

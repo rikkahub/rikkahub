@@ -1248,5 +1248,10 @@
   <string name="assistant_page_context_message_truncation_warning">Limiting context may cause frequent context truncation and prevent prompt caching</string>
   <string name="chat_message_tool_recent_chats">View recent chats</string>
   <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
+  <string name="assistant_page_local_tools_screen_time_title">Screen Time</string>
+  <string name="assistant_page_local_tools_screen_time_desc">Let the AI read your app screen usage time</string>
+  <string name="assistant_page_local_tools_screen_time_permission_required">Please grant the Usage access permission in settings to use screen time</string>
+  <string name="chat_message_tool_screen_time">Read screen time</string>
+  <string name="tool_ui_screen_time_total">Total screen time</string>
 </resources>
 

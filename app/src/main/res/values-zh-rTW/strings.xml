@@ -1247,5 +1247,10 @@
   <string name="assistant_page_context_message_truncation_warning">限制上下文可能導致頻繁的上下文截斷，並妨礙提示詞快取</string>
   <string name="chat_message_tool_recent_chats">查看最近聊天</string>
   <string name="chat_message_tool_conversation_search">搜尋歷史：%1$s</string>
+  <string name="assistant_page_local_tools_screen_time_title">螢幕使用時間</string>
+  <string name="assistant_page_local_tools_screen_time_desc">讓 AI 讀取您的應用程式螢幕使用時間</string>
+  <string name="assistant_page_local_tools_screen_time_permission_required">請在設定中授予「使用記錄存取權」權限，以使用螢幕時間</string>
+  <string name="chat_message_tool_screen_time">讀取螢幕時間</string>
+  <string name="tool_ui_screen_time_total">總螢幕使用時間</string>
 </resources>
 
