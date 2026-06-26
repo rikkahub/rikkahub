@@ -2777,6 +2777,100 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `post connected WebSocket close automatically reconnects without terminal error`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        val firstCallback = gemini.eventHandlers.single()
+
+        firstCallback(GeminiLiveEvent.WebSocketClosed(code = 1001, reason = "going away"))
+        gemini.awaitConnectCount(2)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertNull(session.state.value.error)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "gemini_ws_closed" &&
+                    it.detail == "code=1001, reason=going away"
+            }
+        )
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_scheduled" &&
+                    it.detail == "reason=websocket_closed, attempt=1, maxAttempts=3, delayMs=1"
+            }
+        )
+        assertFalse(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=websocket_closed, closeGemini=true"
+            }
+        )
+    }
+
+    @Test
+    fun `post connected Gemini error remains terminal and does not auto reconnect`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        val firstCallback = gemini.eventHandlers.single()
+
+        firstCallback(GeminiLiveEvent.Error(message = "Gemini protocol failed", raw = "{}"))
+
+        assertEquals(1, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Error("Gemini protocol failed"), session.state.value.session)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=gemini_error, closeGemini=true"
+            }
+        )
+        assertFalse(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_scheduled"
+            }
+        )
+    }
+
+    @Test
     fun `post connected WebSocket failure during connected publish automatically reconnects`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()
