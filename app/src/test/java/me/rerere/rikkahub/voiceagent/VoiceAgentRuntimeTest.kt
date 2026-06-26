@@ -3981,6 +3981,49 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `stale WebSocket failure after automatic reconnect does not schedule another reconnect`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        val oldCallback = gemini.eventHandlers.single()
+
+        oldCallback(GeminiLiveEvent.WebSocketFailure(message = "first drop"))
+        gemini.awaitConnectCount(2)
+        val scheduledAfterReconnect = diagnostics.events.value.count {
+            it.name == "session_reconnect_scheduled"
+        }
+
+        oldCallback(GeminiLiveEvent.WebSocketFailure(message = "stale drop"))
+        delay(50)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertEquals(
+            scheduledAfterReconnect,
+            diagnostics.events.value.count { it.name == "session_reconnect_scheduled" },
+        )
+        assertTrue(diagnostics.events.value.any { it.name == "stale_gemini_event" })
+    }
+
+    @Test
     fun `session reconnect immediately invalidates previous Gemini callback`() = runTest {
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()
