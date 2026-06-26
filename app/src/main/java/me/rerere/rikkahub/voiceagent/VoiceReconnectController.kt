@@ -251,24 +251,6 @@ internal class VoiceReconnectController(
         }
 }
 
-internal sealed class VoiceReconnectDecision {
-    data object Ignore : VoiceReconnectDecision()
-    data object AlreadyPlanned : VoiceReconnectDecision()
-    data object DeferredForActivation : VoiceReconnectDecision()
-    data class Schedule(val plan: AutomaticReconnectPlan) : VoiceReconnectDecision()
-    data class Exhausted(
-        val reason: VoiceSessionStopReason,
-        val attempts: Int,
-        val elapsedMs: Long,
-        val event: GeminiLiveEvent,
-    ) : VoiceReconnectDecision()
-}
-
-internal data class VoiceReconnectCancellation(
-    val job: Job?,
-    val hadAutomaticReconnect: Boolean,
-)
-
 private sealed class VoiceReconnectState {
     data object Idle : VoiceReconnectState()
     data class Eligible(
@@ -304,11 +286,4 @@ private sealed class VoiceReconnectState {
 private data class VoiceReconnectRetry(
     val attempts: Int,
     val firstFailureAtMs: Long,
-)
-
-internal data class AutomaticReconnectPlan(
-    val event: GeminiLiveEvent,
-    val reason: VoiceSessionStopReason,
-    val attempt: Int,
-    val delayMs: Long,
 )
