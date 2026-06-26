@@ -254,7 +254,7 @@ class VoiceAgentCoordinator(
         if (shouldIgnoreEventAfterClose(event)) return
         when (event) {
             GeminiLiveEvent.SetupComplete -> {
-                diagnostics.record("gemini_setup_complete")
+                recordSetupComplete()
                 updateSessionStatus(VoiceSessionStatus.Connected)
             }
             is GeminiLiveEvent.InputTranscript -> {
@@ -288,6 +288,10 @@ class VoiceAgentCoordinator(
             is GeminiLiveEvent.Events,
                 -> Unit
         }
+    }
+
+    fun recordSetupComplete() {
+        diagnostics.record("gemini_setup_complete")
     }
 
     suspend fun awaitToolJobs() {
@@ -377,6 +381,14 @@ class VoiceAgentCoordinator(
                 tool = VoiceToolStatus.Idle,
                 toolCalls = emptyMap(),
             )
+        }
+    }
+
+    fun prepareForAutomaticReconnect() {
+        diagnostics.record("prepare_for_automatic_reconnect")
+        invalidateActiveSession()
+        synchronized(playbackSuppressionLock) {
+            outputAudioSuppressed = false
         }
     }
 
