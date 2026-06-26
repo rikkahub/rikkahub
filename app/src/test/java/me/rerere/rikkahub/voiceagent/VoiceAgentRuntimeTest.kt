@@ -2834,6 +2834,53 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `setup complete does not publish connected before resources activate`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val gemini = FakeGeminiLiveVoiceClient().also {
+            it.connectEvent = GeminiLiveEvent.SetupComplete
+        }
+        val audio = FakeVoiceAudioEngine()
+        val blockedStartCapture = audio.blockNextStartCapture()
+        val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = sessionScope,
+        )
+
+        try {
+            session.start()
+            gemini.awaitConnect()
+            assertTrue(blockedStartCapture.started.await(500, TimeUnit.MILLISECONDS))
+
+            assertTrue(diagnostics.events.value.any { it.name == "gemini_setup_complete" })
+            assertFalse(
+                "Visible Connected must wait until connected resources activate",
+                session.state.value.session == VoiceSessionStatus.Connected,
+            )
+
+            blockedStartCapture.release.countDown()
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        } finally {
+            blockedStartCapture.release.countDown()
+            sessionScope.cancel()
+        }
+    }
+
+    @Test
     fun `connected status waits until connected resources activate`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()

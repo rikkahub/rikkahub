@@ -339,18 +339,36 @@ class VoiceAgentCallSession internal constructor(
     }
 
     private fun handleGeminiEvent(sessionId: Long, event: GeminiLiveEvent) {
-        val stopReason = event.toSessionStopReason()
+        val coordinatorEvent = event.withoutSetupCompleteForCoordinator() ?: return
+        val stopReason = coordinatorEvent.toSessionStopReason()
         if (stopReason != null) {
-            VoiceAgentLog.w(TAG, "Gemini failure event sessionId=$sessionId event=${event::class.simpleName}")
+            VoiceAgentLog.w(TAG, "Gemini failure event sessionId=$sessionId event=${coordinatorEvent::class.simpleName}")
         }
-        if (stopReason != null && scheduleAutomaticReconnectIfEligible(sessionId, event, stopReason)) {
+        if (stopReason != null && scheduleAutomaticReconnectIfEligible(sessionId, coordinatorEvent, stopReason)) {
             return
         }
-        coordinator.onGeminiEvent(sessionId, event)
+        coordinator.onGeminiEvent(sessionId, coordinatorEvent)
         if (stopReason != null) {
             prepareFailedSession(sessionId = sessionId, reason = stopReason, closeGemini = true)
         }
     }
+
+    private fun GeminiLiveEvent.withoutSetupCompleteForCoordinator(): GeminiLiveEvent? =
+        when (this) {
+            GeminiLiveEvent.SetupComplete -> {
+                coordinator.recordDiagnostic("gemini_setup_complete")
+                null
+            }
+            is GeminiLiveEvent.Events -> {
+                val filteredEvents = events.mapNotNull { it.withoutSetupCompleteForCoordinator() }
+                if (filteredEvents.isEmpty()) {
+                    null
+                } else {
+                    copy(events = filteredEvents)
+                }
+            }
+            else -> this
+        }
 
     private fun scheduleAutomaticReconnectIfEligible(
         failedSessionId: Long,
