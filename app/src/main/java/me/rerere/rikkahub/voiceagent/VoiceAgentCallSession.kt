@@ -174,6 +174,7 @@ class VoiceAgentCallSession internal constructor(
             }
             currentSessionConnected.set(true)
             coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
+            ensureActiveSession(currentSessionId)
             if (reconnectAttemptInProgress) {
                 reconnectState?.attempts?.let { attempt ->
                     coordinator.recordDiagnostic(

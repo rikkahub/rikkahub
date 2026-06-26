@@ -2810,6 +2810,7 @@ class VoiceAgentRuntimeTest {
         gemini.awaitConnectCount(2)
 
         assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(1, audio.startCaptureCalls)
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
         assertNull(session.state.value.error)
         assertTrue(
