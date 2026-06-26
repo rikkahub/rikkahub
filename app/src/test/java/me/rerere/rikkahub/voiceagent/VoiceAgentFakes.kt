@@ -743,9 +743,16 @@ class BlockedUpdate {
 class FakeVoiceSessionApi : VoiceSessionApi {
     val createdSessions = mutableListOf<String>()
     private val blockedSessions = mutableListOf<BlockedSession>()
+    private val sessionFailures = ArrayDeque<Throwable>()
 
     override suspend fun createSession(modelId: String): MobileVoiceSessionResponse {
         createdSessions += modelId
+        val failure = synchronized(sessionFailures) {
+            sessionFailures.removeFirstOrNull()
+        }
+        if (failure != null) {
+            throw failure
+        }
         val blocked = synchronized(blockedSessions) {
             blockedSessions.removeFirstOrNull()
         }
@@ -770,6 +777,12 @@ class FakeVoiceSessionApi : VoiceSessionApi {
             synchronized(blockedSessions) {
                 blockedSessions += blocked
             }
+        }
+    }
+
+    fun failNextSession(error: Throwable) {
+        synchronized(sessionFailures) {
+            sessionFailures += error
         }
     }
 }

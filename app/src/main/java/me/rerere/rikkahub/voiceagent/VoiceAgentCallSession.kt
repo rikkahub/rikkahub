@@ -229,7 +229,6 @@ class VoiceAgentCallSession internal constructor(
                     if (reconnectAttemptInProgress) {
                         reconnectAttemptInProgress = false
                         val attempt = reconnectState?.attempts
-                        reconnectState = null
                         reconnectJob = null
                         attempt
                     } else {
@@ -272,6 +271,12 @@ class VoiceAgentCallSession internal constructor(
                     "run session failed sessionId=$currentSessionId detail=${error.toVoiceAgentLogDetail()}",
                 )
                 val startupErrorMessage = error.message ?: error.javaClass.simpleName
+                synchronized(reconnectLock) {
+                    reconnectAttemptInProgress = false
+                    reconnectState = null
+                    reconnectJob = null
+                    pendingActivationReconnect = null
+                }
                 prepareFailedSession(
                     sessionId = currentSessionId,
                     reason = VoiceSessionStopReason.StartupFailure,
@@ -377,6 +382,9 @@ class VoiceAgentCallSession internal constructor(
     ): Boolean {
         var reconnectPlan: AutomaticReconnectPlan? = null
         var deferredForActivation = false
+        var exhaustedReason: VoiceSessionStopReason? = null
+        var exhaustedAttempts = 0
+        var exhaustedElapsedMs = 0L
         synchronized(reconnectLock) {
             if (!reason.autoReconnectEligible || ended) return false
             if (pendingActivationReconnect?.sessionId == failedSessionId) return true
@@ -391,7 +399,17 @@ class VoiceAgentCallSession internal constructor(
             val attempt = currentState.attempts + 1
             val elapsedMs = now - currentState.firstFailureAtMs
             val delayMs = reconnectPolicy.delayMsForAttempt(attempt = attempt, elapsedMs = elapsedMs)
-                ?: return false
+            if (delayMs == null) {
+                exhaustedReason = reason
+                exhaustedAttempts = currentState.attempts
+                exhaustedElapsedMs = elapsedMs
+                reconnectState = null
+                reconnectJob = null
+                reconnectAttemptInProgress = false
+                pendingActivationReconnect = null
+                currentSessionReconnectEligible.set(false)
+                return@synchronized
+            }
             val nextState = currentState.copy(attempts = attempt)
             reconnectState = nextState
             currentSessionReconnectEligible.set(false)
@@ -412,6 +430,15 @@ class VoiceAgentCallSession internal constructor(
                 coordinator.prepareForAutomaticReconnect()
                 reconnectPlan = plan
             }
+        }
+        exhaustedReason?.let { exhausted ->
+            recordRetryableTransportDiagnostic(event)
+            coordinator.recordDiagnostic(
+                name = "session_reconnect_exhausted",
+                detail = "reason=${exhausted.diagnosticReason}, attempts=$exhaustedAttempts, " +
+                    "elapsedMs=$exhaustedElapsedMs",
+            )
+            return false
         }
         if (deferredForActivation) return true
         scheduleAutomaticReconnect(
@@ -458,7 +485,7 @@ class VoiceAgentCallSession internal constructor(
 
     private fun restoreReconnectingStatusIfAutomaticReconnectPending() {
         val reconnectPending = synchronized(reconnectLock) {
-            reconnectState != null || reconnectJob != null
+            reconnectJob != null || reconnectAttemptInProgress || pendingActivationReconnect != null
         }
         if (reconnectPending && !ended) {
             coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
