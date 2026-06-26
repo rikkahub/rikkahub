@@ -186,22 +186,42 @@ class VoiceAgentCallSession internal constructor(
             afterReconnectCompletionGuardForTest()
             var reconnectCompletionSessionStale = false
             var restoreReconnectingAfterCompletion = false
+            var activatedConnectedResources = false
             val completedReconnectAttempt = synchronized(reconnectLock) {
                 if (!coordinator.isActiveSession(currentSessionId)) {
                     reconnectCompletionSessionStale = true
                     restoreReconnectingAfterCompletion = reconnectState != null || reconnectJob != null
                     null
-                } else if (reconnectAttemptInProgress) {
-                    reconnectAttemptInProgress = false
-                    val attempt = reconnectState?.attempts
-                    reconnectState = null
-                    reconnectJob = null
-                    attempt
                 } else {
-                    null
+                    afterConnectedResourceGuardForTest()
+                    if (!coordinator.isActiveSession(currentSessionId)) {
+                        reconnectCompletionSessionStale = true
+                        restoreReconnectingAfterCompletion = reconnectState != null || reconnectJob != null
+                        null
+                    } else {
+                        gemini.activateOutboundSession(currentSessionId)
+                        val bridge = coordinator.createHermesSessionBridge(currentSessionId)
+                        hermesBridge = bridge
+                        coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)
+                        coordinator.resumeHermesJobs()
+                        audio.activatePlaybackSession(currentSessionId)
+                        if (!muted) {
+                            startCapture(currentSessionId)
+                        }
+                        activatedConnectedResources = true
+                        if (reconnectAttemptInProgress) {
+                            reconnectAttemptInProgress = false
+                            val attempt = reconnectState?.attempts
+                            reconnectState = null
+                            reconnectJob = null
+                            attempt
+                        } else {
+                            null
+                        }
+                    }
                 }
             }
-            if (reconnectCompletionSessionStale) {
+            if (reconnectCompletionSessionStale || !activatedConnectedResources) {
                 if (restoreReconnectingAfterCompletion && !ended) {
                     coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
                 }
@@ -222,35 +242,6 @@ class VoiceAgentCallSession internal constructor(
                     "providerModel" to session.providerModel,
                 ),
             )
-            if (!coordinator.isActiveSession(currentSessionId)) {
-                restoreReconnectingStatusIfAutomaticReconnectPending()
-                return
-            }
-            afterConnectedResourceGuardForTest()
-            var activatedConnectedResources = false
-            var restoreReconnectingStatus = false
-            synchronized(reconnectLock) {
-                if (!coordinator.isActiveSession(currentSessionId)) {
-                    restoreReconnectingStatus = reconnectState != null || reconnectJob != null
-                    return@synchronized
-                }
-                gemini.activateOutboundSession(currentSessionId)
-                val bridge = coordinator.createHermesSessionBridge(currentSessionId)
-                hermesBridge = bridge
-                coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)
-                coordinator.resumeHermesJobs()
-                audio.activatePlaybackSession(currentSessionId)
-                if (!muted) {
-                    startCapture(currentSessionId)
-                }
-                activatedConnectedResources = true
-            }
-            if (!activatedConnectedResources) {
-                if (restoreReconnectingStatus && !ended) {
-                    coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
-                }
-                return
-            }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
