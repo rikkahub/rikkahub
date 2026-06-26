@@ -2635,7 +2635,9 @@ class VoiceAgentRuntimeTest {
     @Test
     fun `session records transition diagnostic when WebSocket close stops session`() = runTest {
         val diagnostics = VoiceDiagnostics()
-        val gemini = FakeGeminiLiveVoiceClient()
+        val gemini = FakeGeminiLiveVoiceClient().apply {
+            connectEvent = GeminiLiveEvent.WebSocketClosed(code = 1001, reason = "going away")
+        }
         val audio = FakeVoiceAudioEngine()
         val session = VoiceAgentCallSession(
             modelId = "gemini-flash",
@@ -2653,10 +2655,6 @@ class VoiceAgentRuntimeTest {
 
         session.start()
         gemini.awaitConnect()
-
-        gemini.eventHandlers.single()(
-            GeminiLiveEvent.WebSocketClosed(code = 1001, reason = "going away")
-        )
 
         assertEquals(
             VoiceSessionStatus.Error("Gemini WebSocket closed: 1001 going away"),
