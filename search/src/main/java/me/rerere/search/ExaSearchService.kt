@@ -105,7 +105,8 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                                 url = it.url,
                                 text = it.text ?: ""
                             )
-                        }
+                        },
+                        images = response.results.mapNotNull { it.image?.takeIf { url -> url.isNotBlank() } },
                     ))
             } else {
                 println(response.body.string())
@@ -176,5 +177,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         val author: String?,
         @SerialName("text")
         val text: String? = null,
+        @SerialName("image")
+        val image: String? = null,
     )
 }

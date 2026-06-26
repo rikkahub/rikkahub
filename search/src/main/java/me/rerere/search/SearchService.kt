@@ -100,6 +100,7 @@ data class SearchCommonOptions(
 data class SearchResult(
     val answer: String? = null,
     val items: List<SearchResultItem>,
+    val images: List<String> = emptyList(),
 ) {
     @Serializable
     data class SearchResultItem(
