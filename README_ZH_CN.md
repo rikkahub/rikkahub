@@ -1,15 +1,13 @@
 <div align="center">
-  <img src="docs/icon.png" alt="应用图标" width="100" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/icon-dark.png" />
+    <img src="docs/icon.png" alt="Poci" width="100" />
+  </picture>
   <h1>Poci</h1>
 
 一款原生 Android 大语言模型聊天客户端，支持在不同的服务商之间切换进行对话 🤖💬☁️
 
 简体中文 | [繁體中文](README_ZH_TW.md) | [English](README.md)
-</div>
-
-<div align="center">
-  <img src="docs/img/chat.png" alt="聊天界面" width="150" />
-  <img src="docs/img/desktop.png" alt="模型选择器" width="450" />
 </div>
 
 ## ✨ 功能特性
@@ -53,8 +51,12 @@
 
 构建/测试命令、模块结构与架构概览，请参见 [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)。
 
+## 🙏 致谢
+
+Poci 是 [**RikkaHub**](https://github.com/rikkahub/rikkahub)（由上游 RikkaHub 作者开发）的一个分支（fork），即本项目所基于的原始项目。上游的版权与许可证声明均原样保留在 [LICENSE](LICENSE) 中；本分支中的应用图标与 Poci 品牌为其自有。
+
 ## 📄 许可证
 
 本项目采用 **GNU AGPL v3.0** 许可（针对商业用途或更大规模部署设有分段商业许可条款）——完整条款请见 [LICENSE](LICENSE)。
 
-Poci 是一个基于开源 AGPL-3.0 项目的分支（fork）；上游的许可证与版权声明均保留在 [LICENSE](LICENSE) 中。若你重新分发本项目或将其作为网络服务运行，必须遵守 AGPL（包括提供对应的源代码）。
+作为一个 AGPL-3.0 项目的分支（fork），上游的许可证与版权声明均原样保留在 [LICENSE](LICENSE) 中。若你重新分发本项目或将其作为网络服务运行，必须遵守 AGPL（包括提供对应的源代码）。

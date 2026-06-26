@@ -1,16 +1,14 @@
 <div align="center">
-  <img src="docs/icon.png" alt="App Icon" width="100" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/icon-dark.png" />
+    <img src="docs/icon.png" alt="Poci" width="100" />
+  </picture>
   <h1>Poci</h1>
 
 A native Android LLM chat client that supports switching between different providers for
 conversations 🤖💬☁️
 
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
-</div>
-
-<div align="center">
-  <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
 
 ## ✨ Features
@@ -57,11 +55,17 @@ Technology stack:
 See [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) for the build/test commands, module layout, and
 architecture overview.
 
+## 🙏 Credits
+
+Poci is a fork of [**RikkaHub**](https://github.com/rikkahub/rikkahub) by the upstream RikkaHub authors —
+the original project this is built on. All upstream copyright and license notices are preserved in
+[LICENSE](LICENSE); the app icon and Poci branding in this fork are its own.
+
 ## 📄 License
 
 This project is licensed under the **GNU AGPL v3.0** (with a segmented commercial-license clause for
 commercial use or larger deployments) — see [LICENSE](LICENSE) for the full terms.
 
-Poci is a fork of an open-source AGPL-3.0 project; the upstream license and copyright notices are
-preserved in [LICENSE](LICENSE). If you redistribute or run this as a network service, you must comply
-with the AGPL (including offering the corresponding source).
+As a fork of an AGPL-3.0 project, the upstream license and copyright notices are preserved unchanged in
+[LICENSE](LICENSE). If you redistribute or run this as a network service, you must comply with the AGPL
+(including offering the corresponding source).
