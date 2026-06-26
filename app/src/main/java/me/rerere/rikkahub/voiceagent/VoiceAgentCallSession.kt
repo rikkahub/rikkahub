@@ -495,6 +495,10 @@ class VoiceAgentCallSession internal constructor(
                 sessionId = currentSessionId
             }
             currentCoroutineContext().ensureActive()
+            synchronized(reconnectLock) {
+                if (reconnectJob !== job) return@launch
+                if (ended) return@launch
+            }
             coordinator.recordDiagnostic(
                 name = "session_reconnect_attempting",
                 detail = "attempt=${plan.attempt}",
@@ -825,7 +829,9 @@ class VoiceAgentCallSession internal constructor(
                 }
             },
         )
-        coordinator.updateAudioStatus(VoiceAudioStatus.Listening)
+        if (isSessionOpenAndActive(currentSessionId)) {
+            coordinator.updateAudioStatus(VoiceAudioStatus.Listening)
+        }
     }
 
     private fun invalidateAudioSessions() {
