@@ -29,10 +29,20 @@ class NsdServiceRegistrar(
     private var jmdns: JmDNS? = null
     private var multicastLock: WifiManager.MulticastLock? = null
 
+    /**
+     * Register an mDNS service. The machine HOST label ([hostLabel] -> `<hostLabel>.local`) is kept
+     * SEPARATE from the human SERVICE-INSTANCE name ([instanceName], shown in mDNS browsers) and from the
+     * DNS-SD [txt] hints. The defaults make the legacy single-name call (web server) byte-identical:
+     * `register(port)` -> host=instance="poci", description="Poci Web Server", no TXT — exactly as before.
+     */
     suspend fun register(
         port: Int,
         serviceName: String = DEFAULT_SERVICE_NAME,
+        hostLabel: String = serviceName,
+        instanceName: String = serviceName,
         serviceType: String = DEFAULT_SERVICE_TYPE,
+        description: String = "Poci Web Server",
+        txt: Map<String, String> = emptyMap(),
         onRegistered: ((RegisteredServiceInfo) -> Unit)? = null
     ) = withContext(Dispatchers.IO) {
         if (jmdns != null) {
@@ -51,34 +61,37 @@ class NsdServiceRegistrar(
             val address = getLocalIpAddress()
             if (address == null) {
                 Log.e(TAG, "Failed to get local IP address")
+                // Release the multicast lock acquired above — there is no service to register, so an
+                // early return without cleanup would leak the lock until a later stop/restart.
+                cleanup()
                 return@withContext
             }
 
-            Log.i(TAG, "Creating JmDNS with hostname=$serviceName, address=$address")
+            Log.i(TAG, "Creating JmDNS with hostname=$hostLabel, address=$address")
 
             // Create JmDNS instance with custom hostname
-            // This will register hostname.local -> IP address
-            val mdns = JmDNS.create(address, serviceName)
+            // This will register hostLabel.local -> IP address
+            val mdns = JmDNS.create(address, hostLabel)
             jmdns = mdns
 
-            // Register HTTP service
-            val serviceInfo = ServiceInfo.create(
-                serviceType,
-                serviceName,
-                port,
-                "Poci Web Server"
-            )
+            // Register the service. TXT hints (when present) ride the DNS-SD record; the legacy path
+            // with no hints keeps the plain (type, name, port, description) form unchanged.
+            val serviceInfo = if (txt.isEmpty()) {
+                ServiceInfo.create(serviceType, instanceName, port, description)
+            } else {
+                ServiceInfo.create(serviceType, instanceName, port, 0, 0, txt)
+            }
             mdns.registerService(serviceInfo)
 
             Log.i(
                 TAG,
-                "Service registered: $serviceName.$serviceType port=$port, hostname=$serviceName.local"
+                "Service registered: $instanceName.$serviceType port=$port, hostname=$hostLabel.local"
             )
 
             onRegistered?.invoke(
                 RegisteredServiceInfo(
-                    serviceName = serviceName,
-                    hostname = "$serviceName.local",
+                    serviceName = instanceName,
+                    hostname = "$hostLabel.local",
                     port = port,
                     address = address
                 )

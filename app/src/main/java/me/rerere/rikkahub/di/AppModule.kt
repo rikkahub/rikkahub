@@ -249,6 +249,7 @@ val appModule = module {
 
     single {
         A2aServerManager(
+            context = get(),
             appScope = get(),
             chatService = get(),
             settingsStore = get(),

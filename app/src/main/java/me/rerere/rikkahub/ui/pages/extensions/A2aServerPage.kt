@@ -278,11 +278,32 @@ fun A2aServerPage() {
                         },
                     )
                     if (serverState.isRunning) {
-                        val rpcUrl = "${serverState.url ?: "http://localhost:${serverState.port}"}/a2a"
+                        val port = serverState.port
+                        // In LAN mode, surface the reachable A2A RPC endpoints (mirrors the web server's
+                        // LAN/mDNS/local rows). mDNS host is device-unique so multiple devices don't clash.
+                        if (!serverState.localhostOnly) {
+                            serverState.address?.let { addr ->
+                                val lanUrl = "http://$addr:$port/a2a"
+                                item(
+                                    onClick = { copyUrl(lanUrl) },
+                                    headlineContent = { Text("LAN endpoint") },
+                                    supportingContent = { Text(lanUrl) },
+                                )
+                            }
+                            serverState.hostname?.let { host ->
+                                val mdnsUrl = "http://$host:$port/a2a"
+                                item(
+                                    onClick = { copyUrl(mdnsUrl) },
+                                    headlineContent = { Text("mDNS endpoint") },
+                                    supportingContent = { Text(mdnsUrl) },
+                                )
+                            }
+                        }
+                        val localUrl = "http://localhost:$port/a2a"
                         item(
-                            onClick = { copyUrl(rpcUrl) },
-                            headlineContent = { Text("A2A endpoint") },
-                            supportingContent = { Text(rpcUrl) },
+                            onClick = { copyUrl(localUrl) },
+                            headlineContent = { Text("Local endpoint") },
+                            supportingContent = { Text(localUrl) },
                         )
                     }
                     item(
