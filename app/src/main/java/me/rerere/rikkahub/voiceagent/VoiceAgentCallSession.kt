@@ -452,20 +452,21 @@ class VoiceAgentCallSession internal constructor(
         plan: AutomaticReconnectPlan,
         cleanupResources: Boolean,
     ) {
-        lateinit var job: Job
-        job = scope.launch(start = CoroutineStart.LAZY) {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             delay(plan.delayMs)
-            if (ended) return@launch
+            val job = currentCoroutineContext()[Job]
+            val currentSessionId: Long
+            synchronized(reconnectLock) {
+                if (reconnectJob !== job) return@launch
+                if (ended) return@launch
+                reconnectAttemptInProgress = true
+                currentSessionId = coordinator.nextSessionId()
+                sessionId = currentSessionId
+            }
             coordinator.recordDiagnostic(
                 name = "session_reconnect_attempting",
                 detail = "attempt=${plan.attempt}",
             )
-            val currentSessionId = coordinator.nextSessionId()
-            sessionId = currentSessionId
-            synchronized(reconnectLock) {
-                if (reconnectJob !== job) return@launch
-                reconnectAttemptInProgress = true
-            }
             runSession(currentSessionId)
         }
         synchronized(reconnectLock) {
@@ -687,8 +688,7 @@ class VoiceAgentCallSession internal constructor(
         if (shouldRecordEnd) {
             ended = true
         }
-        val automaticReconnectJob = cancelAutomaticReconnect(reason = "close")
-        automaticReconnectJob?.cancel()
+        cancelAutomaticReconnect(reason = "close")
         startJob?.cancel()
         detachHermesBridge()
         coordinator.prepareForSessionEnd()

@@ -3061,6 +3061,8 @@ class VoiceAgentRuntimeTest {
         )
         delay(300)
         assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(2, gemini.eventHandlers.size)
+        assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
     }
 
     @Test
@@ -3092,6 +3094,7 @@ class VoiceAgentRuntimeTest {
 
         assertEquals(1, sessionApi.createdSessions.size)
         assertEquals(1, gemini.eventHandlers.size)
+        assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
         assertTrue(
             diagnostics.events.value.any {
                 it.name == "session_reconnect_cancelled" &&
@@ -3129,6 +3132,7 @@ class VoiceAgentRuntimeTest {
 
         assertEquals(1, sessionApi.createdSessions.size)
         assertEquals(1, gemini.eventHandlers.size)
+        assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
         assertTrue(
             diagnostics.events.value.any {
                 it.name == "session_reconnect_cancelled" &&
