@@ -2923,7 +2923,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `post connected WebSocket failure after active guard does not activate stale resources`() = runTest {
+    fun `post connected WebSocket failure after final guard does not activate stale resources`() = runTest {
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()
@@ -2939,11 +2939,11 @@ class VoiceAgentRuntimeTest {
                 VoiceContext(systemInstruction = "system", turns = emptyList())
             ),
             reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
-            afterConnectedResourceGuardForTest = {
+            beforeConnectedResourceActivationForTest = {
                 if (!failureInjected) {
                     failureInjected = true
                     gemini.eventHandlers.single()(
-                        GeminiLiveEvent.WebSocketFailure(message = "drop after active guard")
+                        GeminiLiveEvent.WebSocketFailure(message = "drop after final guard")
                     )
                 }
             },
