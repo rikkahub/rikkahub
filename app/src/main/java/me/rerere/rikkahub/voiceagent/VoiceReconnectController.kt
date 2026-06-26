@@ -37,7 +37,11 @@ internal class VoiceReconnectController(
         if (current.sessionId != sessionId) return@synchronized null
         val pending = current.pending
         if (pending != null) {
-            state = VoiceReconnectState.Idle
+            state = VoiceReconnectState.Planned(
+                failedSessionId = sessionId,
+                retry = current.retry,
+                plan = pending,
+            )
         }
         pending
     }
@@ -48,7 +52,11 @@ internal class VoiceReconnectController(
         state = if (current.pending == null) {
             VoiceReconnectState.Eligible(sessionId = sessionId, retry = current.retry, job = current.job)
         } else {
-            VoiceReconnectState.Idle
+            VoiceReconnectState.Planned(
+                failedSessionId = sessionId,
+                retry = current.retry,
+                plan = current.pending,
+            )
         }
         current.pending
     }

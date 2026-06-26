@@ -162,6 +162,63 @@ class VoiceReconnectControllerTest {
     }
 
     @Test
+    fun `consumed activation deferred reconnect preserves completed attempt`() {
+        val controller = VoiceReconnectController(
+            policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),
+            nowMs = { 1_000L },
+        )
+        val job = Job()
+
+        controller.markEligible(sessionId = 7L)
+        assertTrue(controller.reserveActivation(sessionId = 7L))
+        val decision = controller.planReconnect(
+            failedSessionId = 7L,
+            event = GeminiLiveEvent.WebSocketClosed(code = 1001, reason = "going away"),
+            reason = VoiceSessionStopReason.WebSocketClosed,
+        )
+
+        assertSame(VoiceReconnectDecision.DeferredForActivation, decision)
+        val pending = controller.consumePendingActivation(sessionId = 7L)
+        assertEquals(1, pending?.attempt)
+        controller.setScheduled(job = job)
+        assertTrue(controller.beginAttempt(job = job, newSessionId = 8L))
+
+        assertEquals(1, controller.completeAttempt(job = job))
+    }
+
+    @Test
+    fun `finished activation deferred reconnect failure advances retry attempt`() {
+        val controller = VoiceReconnectController(
+            policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),
+            nowMs = { 1_000L },
+        )
+        val job = Job()
+
+        controller.markEligible(sessionId = 7L)
+        assertTrue(controller.reserveActivation(sessionId = 7L))
+        val decision = controller.planReconnect(
+            failedSessionId = 7L,
+            event = GeminiLiveEvent.WebSocketClosed(code = 1001, reason = "going away"),
+            reason = VoiceSessionStopReason.WebSocketClosed,
+        )
+
+        assertSame(VoiceReconnectDecision.DeferredForActivation, decision)
+        val pending = controller.finishActivation(sessionId = 7L)
+        assertEquals(1, pending?.attempt)
+        controller.setScheduled(job = job)
+        assertTrue(controller.beginAttempt(job = job, newSessionId = 8L))
+        val retryDecision = controller.planReconnect(
+            failedSessionId = 8L,
+            event = GeminiLiveEvent.WebSocketFailure("retry failed"),
+            reason = VoiceSessionStopReason.WebSocketFailure,
+        )
+
+        assertTrue(retryDecision is VoiceReconnectDecision.Schedule)
+        retryDecision as VoiceReconnectDecision.Schedule
+        assertEquals(2, retryDecision.plan.attempt)
+    }
+
+    @Test
     fun `successful activation keeps session eligible for later reconnect`() {
         val controller = VoiceReconnectController(
             policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),
