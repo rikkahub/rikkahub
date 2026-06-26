@@ -70,9 +70,14 @@ class SkillsVM(
 
     private fun loadSkills() {
         viewModelScope.launch(Dispatchers.IO) {
-            _skills.value = skillManager.listSkills()
+            _skills.value = visibleUserSkills()
         }
     }
+
+    // The management list shows USER skills only. Builtins are read-only (no user dir behind them), so
+    // keeping them out here prevents a delete/edit from silently no-op'ing on them; they still appear in
+    // the slash picker and the per-assistant enable toggles (which list all skills via listSkills()).
+    private fun visibleUserSkills() = skillManager.listSkills().filter { !it.builtin }
 
     fun saveSkill(name: String, content: String, token: Long) {
         launchEmitting(
@@ -81,7 +86,7 @@ class SkillsVM(
             onError = { SkillsEvent.SaveFailed(token) },
         ) {
             val result = skillManager.saveSkill(name, content)
-            _skills.value = skillManager.listSkills()
+            _skills.value = visibleUserSkills()
             _events.send(if (result != null) SkillsEvent.SaveDone(token) else SkillsEvent.SaveFailed(token))
         }
     }
@@ -89,7 +94,7 @@ class SkillsVM(
     fun deleteSkill(name: String) {
         viewModelScope.launch(Dispatchers.IO) {
             skillManager.deleteSkill(name)
-            _skills.value = skillManager.listSkills()
+            _skills.value = visibleUserSkills()
         }
     }
 
@@ -131,7 +136,7 @@ class SkillsVM(
                 importSkillMarkdown(bytes)
             }
 
-            _skills.value = skillManager.listSkills()
+            _skills.value = visibleUserSkills()
             _events.send(SkillsEvent.ImportDone(SkillImportSource.FILE, importedNames.joinToString()))
         }
     }
@@ -233,7 +238,7 @@ class SkillsVM(
                 return@launchEmitting
             }
 
-            _skills.value = skillManager.listSkills()
+            _skills.value = visibleUserSkills()
             _events.send(SkillsEvent.ImportDone(SkillImportSource.GITHUB, name))
         }
     }

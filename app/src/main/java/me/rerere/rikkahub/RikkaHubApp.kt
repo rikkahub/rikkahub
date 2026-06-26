@@ -31,6 +31,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.ai.task.StartupRecoveryRunner
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.A2aServerService
 import me.rerere.rikkahub.service.WebServerService
@@ -74,6 +75,9 @@ class RikkaHubApp : Application() {
 
         // sync upload files to DB
         syncManagedFiles()
+
+        // extract app-bundled (builtin) skills from assets (version-gated; lazy fallback on first read)
+        extractBuiltinSkills()
 
         // recover interrupted tasks, THEN re-enqueue overdue schedules + clear orphan running
         // markers — strictly ordered in one coroutine (SPEC M6 / SC#4 + task T11)
@@ -126,6 +130,16 @@ class RikkaHubApp : Application() {
                 get<FilesManager>().syncFolder()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
+            }
+        }
+    }
+
+    private fun extractBuiltinSkills() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<SkillManager>().ensureBuiltinsExtracted()
+            }.onFailure {
+                Log.e(TAG, "extractBuiltinSkills failed", it)
             }
         }
     }

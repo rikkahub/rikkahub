@@ -17,32 +17,40 @@ class SkillManager(
         private const val TAG = "SkillManager"
     }
 
+    // App-bundled (builtin) skills, extracted from assets into their OWN read-only root. Kept separate
+    // from [getSkillsDir] (the mutable user root) so a mutation can never write into a builtin.
+    private val bundledSkillSource = BundledSkillSource(context)
+
+    /** Warm the builtin-skill extraction (called once at app start; otherwise lazy on first read). */
+    fun ensureBuiltinsExtracted() {
+        bundledSkillSource.ensureExtracted()
+    }
+
+    /** The mutable USER skills root. Every mutation resolves under this; builtins are never here. */
     fun getSkillsDir(): File {
         val dir = context.filesDir.resolve(FileFolders.SKILLS)
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
 
-    fun listSkills(): List<SkillMetadata> {
-        val skillsDir = getSkillsDir()
-        return skillsDir.listFiles()
-            ?.filter { it.isDirectory }
-            ?.mapNotNull { dir ->
-                val skillFile = dir.resolve("SKILL.md")
-                if (!skillFile.exists()) return@mapNotNull null
-                parseSkillFile(skillFile, dir)
-            }
-            ?: emptyList()
-    }
+    /**
+     * All skills the user can see: the mutable user skills FIRST, then the read-only builtins not
+     * shadowed by a same-named user skill (so a user can fork/override a builtin by creating one with
+     * the same name). Each [SkillMetadata] carries its origin via [SkillMetadata.builtin].
+     */
+    fun listSkills(): List<SkillMetadata> = mergeSkillLayers(
+        user = listSkillsInRoot(getSkillsDir(), builtin = false),
+        builtin = listSkillsInRoot(bundledSkillSource.ensureExtracted(), builtin = true),
+    )
 
     fun readSkillBody(skillName: String): String? {
-        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
+        val skillFile = resolveReadable(skillName)?.resolve("SKILL.md") ?: return null
         if (!skillFile.exists()) return null
         return SkillFrontmatterParser.extractBody(skillFile.readText())
     }
 
     fun readSkillContent(skillName: String): String? {
-        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
+        val skillFile = resolveReadable(skillName)?.resolve("SKILL.md") ?: return null
         if (!skillFile.exists()) return null
         return skillFile.readText()
     }
@@ -52,7 +60,7 @@ class SkillManager(
         skillDir.mkdirs()
         val skillFile = skillDir.resolve("SKILL.md")
         skillFile.writeText(content)
-        return parseSkillFile(skillFile, skillDir)
+        return parseSkillMetadata(skillFile, skillDir, builtin = false)
     }
 
     suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
@@ -74,13 +82,15 @@ class SkillManager(
         deleted
     }
 
-    fun getSkillDir(skillName: String): File? = resolveSkillDir(skillName)
+    fun getSkillDir(skillName: String): File? = resolveReadable(skillName)
 
-    /** True iff a skill with [skillName] already exists on disk (its SKILL.md is present). Used by
-     *  create_skill to refuse clobbering an existing skill — create is for NEW skills only, and the
-     *  atomic save would otherwise replace the whole directory, silently dropping its helper files. */
+    /** True iff a SKILL.md FILE is present for [skillName] in EITHER root. Used by create_skill to refuse
+     *  clobbering — create is for NEW skills only. Deliberately keys off FILE PRESENCE, not validity, so
+     *  create won't overwrite even a malformed existing user skill dir (the user may be repairing it);
+     *  builtins count too, so create can't shadow a builtin with a same-named user skill. */
     fun skillExists(skillName: String): Boolean =
-        resolveSkillDir(skillName)?.resolve("SKILL.md")?.exists() == true
+        skillMdExistsInRoot(getSkillsDir(), skillName) ||
+            skillMdExistsInRoot(bundledSkillSource.ensureExtracted(), skillName)
 
     fun saveSkillFile(skillName: String, relativePath: String, content: String): Boolean {
         val skillDir = resolveSkillDir(skillName) ?: return false
@@ -199,13 +209,19 @@ class SkillManager(
     }
 
     fun resolveSkillFile(skillName: String, relativePath: String): File? {
-        val skillDir = resolveSkillDir(skillName) ?: return null
+        val skillDir = resolveReadable(skillName) ?: return null
         return SkillPaths.resolveSkillFile(skillDir, relativePath)
     }
 
+    /** User-only skill dir resolver — every MUTATION goes through this, so writes never touch a builtin. */
     private fun resolveSkillDir(skillName: String): File? {
         return SkillPaths.resolveSkillDir(getSkillsDir(), skillName)
     }
+
+    /** Layered READ resolver: the user skill if present, else the builtin. Returns the dir whose
+     *  SKILL.md exists, or null. Triggers (cheap, idempotent) builtin extraction so a builtin read works. */
+    private fun resolveReadable(skillName: String): File? =
+        resolveReadableSkillDir(getSkillsDir(), bundledSkillSource.ensureExtracted(), skillName)
 
     private fun createTempSkillDir(skillsRoot: File, skillName: String, suffix: String): File? {
         repeat(100) { attempt ->
@@ -217,24 +233,6 @@ class SkillManager(
         return null
     }
 
-    private fun parseSkillFile(skillFile: File, skillDir: File): SkillMetadata? {
-        return runCatching {
-            val content = skillFile.readText()
-            val frontmatter = SkillFrontmatterParser.parse(content)
-            val name = frontmatter["name"]?.takeIf { it.isNotBlank() } ?: return null
-            val description = frontmatter["description"]?.takeIf { it.isNotBlank() } ?: return null
-            SkillMetadata(
-                name = name,
-                description = description,
-                compatibility = frontmatter["compatibility"],
-                allowedTools = frontmatter["allowed-tools"]?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
-                skillDir = skillDir,
-            )
-        }.getOrElse {
-            Log.w(TAG, "parseSkillFile: Failed to parse ${skillFile.absolutePath}", it)
-            null
-        }
-    }
 }
 
 data class SkillMetadata(
@@ -242,10 +240,73 @@ data class SkillMetadata(
     val description: String,
     val compatibility: String? = null,
     val allowedTools: List<String> = emptyList(),
+    // True for app-bundled (read-only) skills extracted from assets; false for user skills on disk. The
+    // management UI uses this to keep builtins out of the deletable/editable list (they are read-only).
+    val builtin: Boolean = false,
     val skillDir: File,
 ) {
     val skillFile: File get() = skillDir.resolve("SKILL.md")
 }
+
+/** All skills with a valid SKILL.md directly under [root], stamped with [builtin]. Top-level + root-
+ *  parameterized so it serves both the user root and the builtin root and is JVM-unit-testable. */
+internal fun listSkillsInRoot(root: File, builtin: Boolean): List<SkillMetadata> =
+    root.listFiles()
+        ?.filter { it.isDirectory }
+        ?.mapNotNull { dir ->
+            val skillFile = dir.resolve("SKILL.md")
+            if (!skillFile.exists()) return@mapNotNull null
+            parseSkillMetadata(skillFile, dir, builtin)
+        }
+        ?: emptyList()
+
+/** Parse one SKILL.md into [SkillMetadata] (null if its frontmatter lacks a non-blank name/description),
+ *  stamping [builtin]. Top-level so [listSkillsInRoot] and [SkillManager.saveSkill] share one parser. */
+internal fun parseSkillMetadata(skillFile: File, skillDir: File, builtin: Boolean): SkillMetadata? =
+    runCatching {
+        val content = skillFile.readText()
+        val frontmatter = SkillFrontmatterParser.parse(content)
+        val name = frontmatter["name"]?.takeIf { it.isNotBlank() } ?: return null
+        val description = frontmatter["description"]?.takeIf { it.isNotBlank() } ?: return null
+        SkillMetadata(
+            name = name,
+            description = description,
+            compatibility = frontmatter["compatibility"],
+            allowedTools = frontmatter["allowed-tools"]?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
+            builtin = builtin,
+            skillDir = skillDir,
+        )
+    }.getOrElse { null }
+
+/** Merge the two skill layers: user skills FIRST, then builtins NOT shadowed by a user skill. Shadowing
+ *  is by DIRECTORY name ([SkillMetadata.skillDir]'s name) — the SAME key [resolveReadableSkillDir]
+ *  resolves by — so a listed user skill and a read of that name agree on which dir wins (a same-named
+ *  user dir overrides the builtin). For a well-formed skill the directory name equals the frontmatter
+ *  name (create_skill enforces that). Pure so the precedence is unit-testable. */
+internal fun mergeSkillLayers(user: List<SkillMetadata>, builtin: List<SkillMetadata>): List<SkillMetadata> {
+    val userDirNames = user.mapTo(HashSet()) { it.skillDir.name }
+    return user + builtin.filter { it.skillDir.name !in userDirNames }
+}
+
+/** Layered read resolver: the [name] skill dir under [userRoot] if it is a VALID skill, else under
+ *  [builtinRoot] if valid, else null. Validity is the SAME gate [listSkillsInRoot] applies (frontmatter
+ *  parses to a non-blank name+description), so a malformed user dir cannot hijack a read of a builtin
+ *  while the listing still shows the builtin — listing and reads agree. Root-parameterized + top-level
+ *  so the user-wins fallthrough is JVM-unit-testable. */
+internal fun resolveReadableSkillDir(userRoot: File, builtinRoot: File, name: String): File? {
+    resolveValidSkillDir(userRoot, name)?.let { return it }
+    return resolveValidSkillDir(builtinRoot, name)
+}
+
+private fun resolveValidSkillDir(root: File, name: String): File? =
+    SkillPaths.resolveSkillDir(root, name)
+        ?.takeIf { parseSkillMetadata(it.resolve("SKILL.md"), it, builtin = false) != null }
+
+/** Whether a SKILL.md FILE is present for [name] directly under [root], regardless of whether it parses.
+ *  The create-clobber guard ([SkillManager.skillExists]) keys off file presence (not validity) so create
+ *  refuses to overwrite ANY existing skill dir — even a malformed one. Top-level so it is unit-testable. */
+internal fun skillMdExistsInRoot(root: File, name: String): Boolean =
+    SkillPaths.resolveSkillDir(root, name)?.resolve("SKILL.md")?.exists() == true
 
 /**
  * Pure bundle merge for [SkillManager.updateSkillBundle]: apply [changes] (write/overwrite) and
@@ -269,8 +330,8 @@ internal fun mergeSkillBundle(
 /**
  * After an update merge, the resulting SKILL.md must still describe the SAME skill we are writing back:
  * a non-blank `name` equal to [expectedName] (the on-disk directory id — renaming via frontmatter would
- * orphan the skill) and a non-blank `description` (without it [SkillManager.parseSkillFile] returns null
- * and the skill silently disappears from discovery). Pure so update_skill's validity gate is unit-tested.
+ * orphan the skill) and a non-blank `description` (without it [parseSkillMetadata] returns null and the
+ * skill silently disappears from discovery). Pure so update_skill's validity gate is unit-tested.
  */
 internal fun mergedSkillIsValid(merged: Map<String, String>, expectedName: String): Boolean {
     val skillMd = merged["SKILL.md"] ?: return false
