@@ -2777,6 +2777,56 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `post connected WebSocket failure during connected publish automatically reconnects`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        var failureInjected = false
+        diagnostics.addListener { event ->
+            if (!failureInjected && event.name == "session_status" && event.detail == "connected") {
+                failureInjected = true
+                gemini.eventHandlers.single()(
+                    GeminiLiveEvent.WebSocketFailure(message = "drop during connected publish")
+                )
+            }
+        }
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(2)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertNull(session.state.value.error)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_scheduled" &&
+                    it.detail == "reason=websocket_failure, attempt=1, maxAttempts=3, delayMs=1"
+            }
+        )
+        assertFalse(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=websocket_failure, closeGemini=true"
+            }
+        )
+    }
+
+    @Test
     fun `automatic reconnect clears prior playback suppression for the new session`() = runTest {
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()

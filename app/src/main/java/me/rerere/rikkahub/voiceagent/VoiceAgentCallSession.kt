@@ -21,6 +21,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToLong
 import kotlin.random.Random
 
@@ -87,7 +88,7 @@ class VoiceAgentCallSession internal constructor(
     private var hermesBridge: HermesSessionBridge? = null
     private var reconnectJob: Job? = null
     private var reconnectState: VoiceReconnectState? = null
-    private var currentSessionConnected = false
+    private val currentSessionConnected = AtomicBoolean(false)
     private var reconnectAttemptInProgress = false
 
     override val state: StateFlow<VoiceAgentUiState> = coordinator.state
@@ -114,7 +115,7 @@ class VoiceAgentCallSession internal constructor(
     private suspend fun runSession(currentSessionId: Long) {
         val sessionJob = currentCoroutineContext()[Job]
         startJob = sessionJob
-        currentSessionConnected = false
+        currentSessionConnected.set(false)
         var geminiStarted = false
         try {
             coordinator.updateSessionStatus(VoiceSessionStatus.PreparingContext)
@@ -171,8 +172,8 @@ class VoiceAgentCallSession internal constructor(
                 )
                 return
             }
+            currentSessionConnected.set(true)
             coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
-            currentSessionConnected = true
             if (reconnectAttemptInProgress) {
                 reconnectState?.attempts?.let { attempt ->
                     coordinator.recordDiagnostic(
@@ -249,7 +250,7 @@ class VoiceAgentCallSession internal constructor(
         event: GeminiLiveEvent,
         reason: VoiceSessionStopReason,
     ): Boolean {
-        if (!reason.autoReconnectEligible || !currentSessionConnected || ended) return false
+        if (!reason.autoReconnectEligible || !currentSessionConnected.get() || ended) return false
         if (!coordinator.isActiveSession(failedSessionId)) return false
 
         val now = nowMs()
@@ -264,7 +265,7 @@ class VoiceAgentCallSession internal constructor(
             ?: return false
         val nextState = currentState.copy(attempts = attempt, latestReason = reason)
         reconnectState = nextState
-        currentSessionConnected = false
+        currentSessionConnected.set(false)
         recordRetryableTransportDiagnostic(event)
         prepareAutomaticReconnect(failedSessionId)
         coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
