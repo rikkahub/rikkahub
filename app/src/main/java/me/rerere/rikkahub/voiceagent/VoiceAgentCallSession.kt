@@ -673,17 +673,10 @@ class VoiceAgentCallSession internal constructor(
         }
 
     private fun cleanupAutomaticReconnectResources(job: Job): Boolean {
-        if (!isAutomaticReconnectCurrent(job)) return false
-        resourceCleaner.detachHermesBridge()
-        if (!isAutomaticReconnectCurrent(job)) return false
-        resourceCleaner.invalidateAudioSessions()
-        if (!isAutomaticReconnectCurrent(job)) return false
-        audio.stopCapture()
-        if (!isAutomaticReconnectCurrent(job)) return false
-        audio.suppressPlayback()
-        if (!isAutomaticReconnectCurrent(job)) return false
-        gemini.close()
-        return isAutomaticReconnectCurrent(job)
+        return resourceCleaner.cleanupForAutomaticReconnect(
+            closeGemini = true,
+            shouldContinue = { isAutomaticReconnectCurrent(job) },
+        )
     }
 
     private fun recordRetryableTransportDiagnostic(event: GeminiLiveEvent) {

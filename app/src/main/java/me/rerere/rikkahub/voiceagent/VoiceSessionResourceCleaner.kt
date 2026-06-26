@@ -32,14 +32,23 @@ internal class VoiceSessionResourceCleaner(
         }
     }
 
-    fun cleanupForAutomaticReconnect(closeGemini: Boolean) {
+    fun cleanupForAutomaticReconnect(
+        closeGemini: Boolean,
+        shouldContinue: () -> Boolean = { true },
+    ): Boolean {
+        if (!shouldContinue()) return false
         detachHermesBridge()
+        if (!shouldContinue()) return false
         invalidateAudioSessions()
+        if (!shouldContinue()) return false
         audio.stopCapture()
+        if (!shouldContinue()) return false
         audio.suppressPlayback()
+        if (!shouldContinue()) return false
         if (closeGemini) {
             gemini.close()
         }
+        return shouldContinue()
     }
 
     fun cleanupForFailure(closeGemini: Boolean) {
