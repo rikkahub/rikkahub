@@ -763,8 +763,8 @@ private data class AutomaticReconnectPlan(
 private fun GeminiLiveEvent.toSessionStopReason(): VoiceSessionStopReason? =
     when (this) {
         is GeminiLiveEvent.Error -> VoiceSessionStopReason.GeminiError
-        is GeminiLiveEvent.WebSocketClosed -> VoiceSessionStopReason.WebSocketClosed(code = code, reason = reason)
-        is GeminiLiveEvent.WebSocketFailure -> VoiceSessionStopReason.WebSocketFailure(message)
+        is GeminiLiveEvent.WebSocketClosed -> VoiceSessionStopReason.WebSocketClosed
+        is GeminiLiveEvent.WebSocketFailure -> VoiceSessionStopReason.WebSocketFailure
         else -> null
     }
 
@@ -775,8 +775,6 @@ private sealed class VoiceSessionStopReason(
     data object StartupFailure : VoiceSessionStopReason("startup_failure")
     data object ManualReconnect : VoiceSessionStopReason("manual_reconnect")
     data object GeminiError : VoiceSessionStopReason("gemini_error")
-    data class WebSocketClosed(val code: Int, val reason: String) :
-        VoiceSessionStopReason("websocket_closed", autoReconnectEligible = true)
-    data class WebSocketFailure(val message: String) :
-        VoiceSessionStopReason("websocket_failure", autoReconnectEligible = true)
+    data object WebSocketClosed : VoiceSessionStopReason("websocket_closed", autoReconnectEligible = true)
+    data object WebSocketFailure : VoiceSessionStopReason("websocket_failure", autoReconnectEligible = true)
 }
