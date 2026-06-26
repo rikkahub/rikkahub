@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent
 
+import android.os.SystemClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +23,6 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import java.util.Base64
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToLong
 import kotlin.random.Random
 
@@ -39,7 +39,7 @@ class VoiceAgentCallSession internal constructor(
     private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
     private val voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
     private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
-    private val nowMs: () -> Long = { System.currentTimeMillis() },
+    private val nowMs: () -> Long = ::defaultReconnectClockMs,
     private val afterConnectedResourceGuardForTest: () -> Unit = {},
     private val beforeConnectedResourceActivationForTest: () -> Unit = {},
     private val afterReconnectCompletionGuardForTest: () -> Unit = {},
@@ -69,7 +69,7 @@ class VoiceAgentCallSession internal constructor(
         traceContext = newVoiceTraceContext(),
         voiceE2EArtifacts = voiceE2EArtifacts,
         reconnectPolicy = VoiceReconnectPolicy(),
-        nowMs = { System.currentTimeMillis() },
+        nowMs = ::defaultReconnectClockMs,
         scope = scope,
     )
 
@@ -93,7 +93,7 @@ class VoiceAgentCallSession internal constructor(
     private var reconnectJob: Job? = null
     private var reconnectState: VoiceReconnectState? = null
     private val reconnectLock = Any()
-    private val currentSessionReconnectEligible = AtomicBoolean(false)
+    private var reconnectEligibleSessionId: Long? = null
     private var reconnectAttemptInProgress = false
     private var activatingConnectedSessionId: Long? = null
     private var pendingActivationReconnect: PendingActivationReconnect? = null
@@ -127,7 +127,7 @@ class VoiceAgentCallSession internal constructor(
         coroutineContext.ensureActive()
         val sessionJob = coroutineContext[Job]
         startJob = sessionJob
-        currentSessionReconnectEligible.set(false)
+        clearReconnectEligibility()
         var geminiStarted = false
         try {
             if (!updateSessionStatusIfActive(
@@ -205,7 +205,7 @@ class VoiceAgentCallSession internal constructor(
                 )
                 return
             }
-            currentSessionReconnectEligible.set(true)
+            if (!markReconnectEligible(currentSessionId, automaticReconnectJob)) return
             ensureActiveSession(currentSessionId, automaticReconnectJob)
             afterConnectedResourceGuardForTest()
             if (!coordinator.isActiveSession(currentSessionId)) {
@@ -240,13 +240,13 @@ class VoiceAgentCallSession internal constructor(
                     startCapture(currentSessionId)
                 }
             } catch (error: Throwable) {
-                abortConnectedResourceActivation(currentSessionId)?.let { pending ->
+                takePendingActivationReconnect(currentSessionId)?.let { pending ->
                     activatePendingReconnect(pending)
                     return
                 }
                 throw error
             }
-            completeConnectedResourceActivation(currentSessionId)?.let { pending ->
+            takePendingActivationReconnect(currentSessionId)?.let { pending ->
                 activatePendingReconnect(pending)
                 return
             }
@@ -316,7 +316,7 @@ class VoiceAgentCallSession internal constructor(
                     reason = VoiceSessionStopReason.StartupFailure,
                     closeGemini = geminiStarted,
                 )
-                currentSessionReconnectEligible.set(false)
+                clearReconnectEligibility()
                 updateSessionStatusIfNotEnded(VoiceSessionStatus.Error(startupErrorMessage))
             }
         } finally {
@@ -349,16 +349,7 @@ class VoiceAgentCallSession internal constructor(
             pending
         }
 
-    private fun completeConnectedResourceActivation(sessionId: Long): PendingActivationReconnect? =
-        synchronized(reconnectLock) {
-            if (activatingConnectedSessionId != sessionId) return@synchronized null
-            activatingConnectedSessionId = null
-            pendingActivationReconnect?.takeIf { it.sessionId == sessionId }?.also {
-                pendingActivationReconnect = null
-            }
-        }
-
-    private fun abortConnectedResourceActivation(sessionId: Long): PendingActivationReconnect? =
+    private fun takePendingActivationReconnect(sessionId: Long): PendingActivationReconnect? =
         synchronized(reconnectLock) {
             if (activatingConnectedSessionId != sessionId) return@synchronized null
             activatingConnectedSessionId = null
@@ -393,7 +384,7 @@ class VoiceAgentCallSession internal constructor(
     private fun GeminiLiveEvent.withoutSetupCompleteForCoordinator(): GeminiLiveEvent? =
         when (this) {
             GeminiLiveEvent.SetupComplete -> {
-                coordinator.recordDiagnostic("gemini_setup_complete")
+                coordinator.recordSetupComplete()
                 null
             }
             is GeminiLiveEvent.Events -> {
@@ -420,8 +411,9 @@ class VoiceAgentCallSession internal constructor(
         synchronized(reconnectLock) {
             if (!reason.autoReconnectEligible || ended) return false
             if (pendingActivationReconnect?.sessionId == failedSessionId) return true
-            if (!currentSessionReconnectEligible.get()) return false
             if (!coordinator.isActiveSession(failedSessionId)) return false
+            val failureBelongsToReconnectAttempt = reconnectAttemptInProgress && sessionId == failedSessionId
+            if (reconnectEligibleSessionId != failedSessionId && !failureBelongsToReconnectAttempt) return false
 
             val now = nowMs()
             val currentState = reconnectState ?: VoiceReconnectState(
@@ -439,12 +431,12 @@ class VoiceAgentCallSession internal constructor(
                 reconnectJob = null
                 reconnectAttemptInProgress = false
                 pendingActivationReconnect = null
-                currentSessionReconnectEligible.set(false)
+                reconnectEligibleSessionId = null
                 return@synchronized
             }
             val nextState = currentState.copy(attempts = attempt)
             reconnectState = nextState
-            currentSessionReconnectEligible.set(false)
+            reconnectEligibleSessionId = null
             reconnectJob?.cancel()
             val plan = AutomaticReconnectPlan(
                 event = event,
@@ -568,7 +560,7 @@ class VoiceAgentCallSession internal constructor(
             reconnectState = null
             reconnectAttemptInProgress = false
             pendingActivationReconnect = null
-            currentSessionReconnectEligible.set(false)
+            reconnectEligibleSessionId = null
             if (job != null && startJob === job) {
                 startJob = null
             }
@@ -625,6 +617,24 @@ class VoiceAgentCallSession internal constructor(
         return !ended &&
             coordinator.isActiveSession(sessionId) &&
             (automaticReconnectJob == null || reconnectJob === automaticReconnectJob)
+    }
+
+    private fun clearReconnectEligibility() {
+        synchronized(reconnectLock) {
+            reconnectEligibleSessionId = null
+        }
+    }
+
+    private fun markReconnectEligible(
+        sessionId: Long,
+        automaticReconnectJob: Job?,
+    ): Boolean = synchronized(reconnectLock) {
+        if (!isSessionOpenAndActiveLocked(sessionId, automaticReconnectJob)) {
+            false
+        } else {
+            reconnectEligibleSessionId = sessionId
+            true
+        }
     }
 
     private fun markEnded(): Boolean =
@@ -787,7 +797,7 @@ class VoiceAgentCallSession internal constructor(
     }
 
     override fun closeNow() {
-        val shouldRecordEnd = markEnded()
+        markEnded()
         cancelAutomaticReconnect(reason = "close")
         startJob?.cancel()
         detachHermesBridge()
@@ -898,6 +908,10 @@ private fun GeminiContentTurn.voiceContextLabel(): String =
         "model" -> "Assistant"
         else -> "User"
     }
+
+private fun defaultReconnectClockMs(): Long =
+    runCatching { SystemClock.elapsedRealtime() }
+        .getOrElse { System.nanoTime() / 1_000_000L }
 
 internal data class VoiceReconnectPolicy(
     val maxAttempts: Int = 15,

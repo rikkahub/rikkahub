@@ -254,7 +254,7 @@ class VoiceAgentCoordinator(
         if (shouldIgnoreEventAfterClose(event)) return
         when (event) {
             GeminiLiveEvent.SetupComplete -> {
-                diagnostics.record("gemini_setup_complete")
+                recordSetupComplete()
                 updateSessionStatus(VoiceSessionStatus.Connected)
             }
             is GeminiLiveEvent.InputTranscript -> {
@@ -288,6 +288,10 @@ class VoiceAgentCoordinator(
             is GeminiLiveEvent.Events,
                 -> Unit
         }
+    }
+
+    fun recordSetupComplete() {
+        diagnostics.record("gemini_setup_complete")
     }
 
     suspend fun awaitToolJobs() {
