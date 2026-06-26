@@ -2677,6 +2677,7 @@ class VoiceAgentRuntimeTest {
     fun `session records transition diagnostic when WebSocket failure stops session`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val gemini = FakeGeminiLiveVoiceClient()
+        val blockedConnect = gemini.blockNextConnectCompletion()
         val audio = FakeVoiceAudioEngine()
         val session = VoiceAgentCallSession(
             modelId = "gemini-flash",
@@ -2698,6 +2699,7 @@ class VoiceAgentRuntimeTest {
         gemini.eventHandlers.single()(
             GeminiLiveEvent.WebSocketFailure(message = "network dropped")
         )
+        blockedConnect.release.complete(Unit)
 
         assertEquals(
             VoiceSessionStatus.Error("Gemini WebSocket failed: network dropped"),
@@ -2707,6 +2709,68 @@ class VoiceAgentRuntimeTest {
         assertEquals(1, audio.suppressPlaybackCalls)
         assertEquals(1, gemini.closeCalls)
         assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_failed" &&
+                    it.detail == "reason=websocket_failure, closeGemini=true"
+            }
+        )
+    }
+
+    @Test
+    fun `post connected WebSocket failure automatically reconnects without terminal error`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        val firstCallback = gemini.eventHandlers.single()
+
+        firstCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
+        gemini.awaitConnectCount(2)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(2, audio.startCaptureCalls)
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertNull(session.state.value.error)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_scheduled" &&
+                    it.detail == "reason=websocket_failure, attempt=1, maxAttempts=3, delayMs=1"
+            }
+        )
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_attempting" &&
+                    it.detail == "attempt=1"
+            }
+        )
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_connected" &&
+                    it.detail == "attempt=1"
+            }
+        )
+        assertFalse(
             diagnostics.events.value.any {
                 it.name == "session_transition_failed" &&
                     it.detail == "reason=websocket_failure, closeGemini=true"
@@ -3495,6 +3559,16 @@ class VoiceAgentRuntimeTest {
 
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
 }
+
+private fun fastReconnectPolicy(maxAttempts: Int = 3, delayMs: Long = 1L): VoiceReconnectPolicy =
+    VoiceReconnectPolicy(
+        maxAttempts = maxAttempts,
+        maxElapsedMs = 60_000L,
+        baseDelayMs = delayMs,
+        maxDelayMs = delayMs,
+        jitterRatio = 0.0,
+        jitterSource = { 0.0 },
+    )
 
 private class ThrowingVoiceAgentContextProvider(
     private val error: Throwable,

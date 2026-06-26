@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -20,8 +21,10 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import java.util.Base64
+import kotlin.math.roundToLong
+import kotlin.random.Random
 
-class VoiceAgentCallSession(
+class VoiceAgentCallSession internal constructor(
     private val modelId: String,
     private val sessionApi: VoiceSessionApi,
     private val toolApi: VoiceToolApi,
@@ -33,6 +36,8 @@ class VoiceAgentCallSession(
     private val observability: VoiceObservability = NoOpVoiceObservability,
     private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
     private val voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
+    private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
+    private val nowMs: () -> Long = { System.currentTimeMillis() },
     private val scope: CoroutineScope,
 ) : ManagedVoiceCallSession {
     constructor(
@@ -58,6 +63,8 @@ class VoiceAgentCallSession(
         observability = NoOpVoiceObservability,
         traceContext = newVoiceTraceContext(),
         voiceE2EArtifacts = voiceE2EArtifacts,
+        reconnectPolicy = VoiceReconnectPolicy(),
+        nowMs = { System.currentTimeMillis() },
         scope = scope,
     )
 
@@ -78,6 +85,10 @@ class VoiceAgentCallSession(
     private var ended = false
     private var sessionEndedRecorded = false
     private var hermesBridge: HermesSessionBridge? = null
+    private var reconnectJob: Job? = null
+    private var reconnectState: VoiceReconnectState? = null
+    private var currentSessionConnected = false
+    private var reconnectAttemptInProgress = false
 
     override val state: StateFlow<VoiceAgentUiState> = coordinator.state
     private val conversation = conversationStore.conversation
@@ -103,6 +114,7 @@ class VoiceAgentCallSession(
     private suspend fun runSession(currentSessionId: Long) {
         val sessionJob = currentCoroutineContext()[Job]
         startJob = sessionJob
+        currentSessionConnected = false
         var geminiStarted = false
         try {
             coordinator.updateSessionStatus(VoiceSessionStatus.PreparingContext)
@@ -160,6 +172,18 @@ class VoiceAgentCallSession(
                 return
             }
             coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
+            currentSessionConnected = true
+            if (reconnectAttemptInProgress) {
+                reconnectState?.attempts?.let { attempt ->
+                    coordinator.recordDiagnostic(
+                        name = "session_reconnect_connected",
+                        detail = "attempt=$attempt",
+                    )
+                }
+                reconnectAttemptInProgress = false
+                reconnectState = null
+                reconnectJob = null
+            }
             VoiceAgentLog.d(TAG, "session connected sessionId=$currentSessionId")
             recordEventSafely(
                 name = "voicelab.mobile.session.connected",
@@ -200,6 +224,9 @@ class VoiceAgentCallSession(
             if (startJob === sessionJob) {
                 startJob = null
             }
+            if (reconnectJob === sessionJob) {
+                reconnectJob = null
+            }
         }
     }
 
@@ -208,9 +235,83 @@ class VoiceAgentCallSession(
         if (stopReason != null) {
             VoiceAgentLog.w(TAG, "Gemini failure event sessionId=$sessionId event=${event::class.simpleName}")
         }
+        if (stopReason != null && scheduleAutomaticReconnectIfEligible(sessionId, event, stopReason)) {
+            return
+        }
         coordinator.onGeminiEvent(sessionId, event)
         if (stopReason != null) {
             prepareFailedSession(sessionId = sessionId, reason = stopReason, closeGemini = true)
+        }
+    }
+
+    private fun scheduleAutomaticReconnectIfEligible(
+        failedSessionId: Long,
+        event: GeminiLiveEvent,
+        reason: VoiceSessionStopReason,
+    ): Boolean {
+        if (!reason.autoReconnectEligible || !currentSessionConnected || ended) return false
+        if (!coordinator.isActiveSession(failedSessionId)) return false
+
+        val now = nowMs()
+        val currentState = reconnectState ?: VoiceReconnectState(
+            attempts = 0,
+            firstFailureAtMs = now,
+            latestReason = reason,
+        )
+        val attempt = currentState.attempts + 1
+        val elapsedMs = now - currentState.firstFailureAtMs
+        val delayMs = reconnectPolicy.delayMsForAttempt(attempt = attempt, elapsedMs = elapsedMs)
+            ?: return false
+        val nextState = currentState.copy(attempts = attempt, latestReason = reason)
+        reconnectState = nextState
+        currentSessionConnected = false
+        recordRetryableTransportDiagnostic(event)
+        prepareAutomaticReconnect(failedSessionId)
+        coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+        coordinator.recordDiagnostic(
+            name = "session_reconnect_scheduled",
+            detail = "reason=${reason.diagnosticReason}, attempt=$attempt, " +
+                "maxAttempts=${reconnectPolicy.maxAttempts}, delayMs=$delayMs",
+        )
+        reconnectJob?.cancel()
+        val job = scope.launch {
+            delay(delayMs)
+            if (ended) return@launch
+            coordinator.recordDiagnostic(
+                name = "session_reconnect_attempting",
+                detail = "attempt=$attempt",
+            )
+            val currentSessionId = coordinator.nextSessionId()
+            sessionId = currentSessionId
+            reconnectAttemptInProgress = true
+            runSession(currentSessionId)
+        }
+        reconnectJob = job
+        startJob = job
+        return true
+    }
+
+    private fun prepareAutomaticReconnect(sessionId: Long) {
+        if (!coordinator.isActiveSession(sessionId)) return
+        detachHermesBridge()
+        coordinator.invalidateActiveSession()
+        invalidateAudioSessions()
+        audio.stopCapture()
+        audio.suppressPlayback()
+        gemini.close()
+    }
+
+    private fun recordRetryableTransportDiagnostic(event: GeminiLiveEvent) {
+        when (event) {
+            is GeminiLiveEvent.WebSocketClosed -> coordinator.recordDiagnostic(
+                name = "gemini_ws_closed",
+                detail = "code=${event.code}, reason=${event.reason}",
+            )
+            is GeminiLiveEvent.WebSocketFailure -> coordinator.recordDiagnostic(
+                name = "gemini_ws_failure",
+                detail = event.message,
+            )
+            else -> Unit
         }
     }
 
@@ -442,20 +543,57 @@ private fun GeminiContentTurn.voiceContextLabel(): String =
         else -> "User"
     }
 
+internal data class VoiceReconnectPolicy(
+    val maxAttempts: Int = 15,
+    val maxElapsedMs: Long = 30L * 60L * 1000L,
+    val baseDelayMs: Long = 1_000L,
+    val maxDelayMs: Long = 5L * 60L * 1000L,
+    val jitterRatio: Double = 0.2,
+    val jitterSource: () -> Double = { Random.nextDouble(from = -1.0, until = 1.0) },
+) {
+    fun delayMsForAttempt(attempt: Int, elapsedMs: Long): Long? {
+        if (attempt > maxAttempts) return null
+        val remainingMs = maxElapsedMs - elapsedMs
+        if (remainingMs <= 0L) return null
+        val exponentialDelay = exponentialDelayMs(attempt)
+        val jitterMs = (exponentialDelay * jitterRatio * jitterSource()).roundToLong()
+        return (exponentialDelay + jitterMs)
+            .coerceAtLeast(0L)
+            .coerceAtMost(remainingMs)
+    }
+
+    private fun exponentialDelayMs(attempt: Int): Long {
+        var delayMs = baseDelayMs
+        repeat((attempt - 1).coerceAtLeast(0)) {
+            delayMs = (delayMs * 2L).coerceAtMost(maxDelayMs)
+        }
+        return delayMs.coerceAtMost(maxDelayMs)
+    }
+}
+
+private data class VoiceReconnectState(
+    val attempts: Int,
+    val firstFailureAtMs: Long,
+    val latestReason: VoiceSessionStopReason,
+)
+
 private fun GeminiLiveEvent.toSessionStopReason(): VoiceSessionStopReason? =
     when (this) {
-        is GeminiLiveEvent.Error -> VoiceSessionStopReason.GeminiError
-        is GeminiLiveEvent.WebSocketClosed -> VoiceSessionStopReason.WebSocketClosed
-        is GeminiLiveEvent.WebSocketFailure -> VoiceSessionStopReason.WebSocketFailure
+        is GeminiLiveEvent.Error -> VoiceSessionStopReason.GeminiError(message)
+        is GeminiLiveEvent.WebSocketClosed -> VoiceSessionStopReason.WebSocketClosed(code = code, reason = reason)
+        is GeminiLiveEvent.WebSocketFailure -> VoiceSessionStopReason.WebSocketFailure(message)
         else -> null
     }
 
 private sealed class VoiceSessionStopReason(
     val diagnosticReason: String,
+    val autoReconnectEligible: Boolean = false,
 ) {
     data object StartupFailure : VoiceSessionStopReason("startup_failure")
     data object ManualReconnect : VoiceSessionStopReason("manual_reconnect")
-    data object GeminiError : VoiceSessionStopReason("gemini_error")
-    data object WebSocketClosed : VoiceSessionStopReason("websocket_closed")
-    data object WebSocketFailure : VoiceSessionStopReason("websocket_failure")
+    data class GeminiError(val message: String) : VoiceSessionStopReason("gemini_error")
+    data class WebSocketClosed(val code: Int, val reason: String) :
+        VoiceSessionStopReason("websocket_closed", autoReconnectEligible = true)
+    data class WebSocketFailure(val message: String) :
+        VoiceSessionStopReason("websocket_failure", autoReconnectEligible = true)
 }
