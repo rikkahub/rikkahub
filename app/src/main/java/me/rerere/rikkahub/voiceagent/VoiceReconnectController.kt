@@ -109,14 +109,15 @@ internal class VoiceReconnectController(
         }
     }
 
-    fun setScheduled(job: Job) = synchronized(lock) {
-        val planned = state as? VoiceReconnectState.Planned
+    fun setScheduled(job: Job): Boolean = synchronized(lock) {
+        val planned = state as? VoiceReconnectState.Planned ?: return@synchronized false
         state = VoiceReconnectState.Scheduled(
-            failedSessionId = planned?.failedSessionId,
-            retry = planned?.retry ?: retryFrom(state),
-            plan = planned?.plan,
+            failedSessionId = planned.failedSessionId,
+            retry = planned.retry,
+            plan = planned.plan,
             job = job,
         )
+        true
     }
 
     fun isCurrentJob(job: Job): Boolean = synchronized(lock) {

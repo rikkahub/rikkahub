@@ -425,7 +425,10 @@ class VoiceAgentCallSession internal constructor(
             currentCoroutineContext().ensureActive()
             runSession(currentSessionId, automaticReconnectJob = job)
         }
-        reconnectController.setScheduled(job)
+        if (!reconnectController.setScheduled(job)) {
+            job.cancel()
+            return
+        }
         synchronized(sessionLock) {
             startJob = job
         }

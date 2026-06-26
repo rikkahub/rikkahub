@@ -104,13 +104,42 @@ class VoiceReconnectControllerTest {
         val job = Job()
 
         controller.markEligible(sessionId = 7L)
-        controller.setScheduled(job = job)
+        val decision = controller.planReconnect(
+            failedSessionId = 7L,
+            event = GeminiLiveEvent.WebSocketFailure("drop"),
+            reason = VoiceSessionStopReason.WebSocketFailure,
+        )
+        assertTrue(decision is VoiceReconnectDecision.Schedule)
+        assertTrue(controller.setScheduled(job = job))
         val cancellation = controller.cancel()
 
         assertSame(job, cancellation.job)
         assertTrue(cancellation.hadAutomaticReconnect)
         assertFalse(controller.hasPendingReconnect())
         assertTrue(job.isCancelled)
+    }
+
+    @Test
+    fun `cancelled planned reconnect cannot be scheduled later`() {
+        val controller = VoiceReconnectController(
+            policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),
+            nowMs = { 1_000L },
+        )
+        val job = Job()
+
+        controller.markEligible(sessionId = 7L)
+        val decision = controller.planReconnect(
+            failedSessionId = 7L,
+            event = GeminiLiveEvent.WebSocketFailure("drop"),
+            reason = VoiceSessionStopReason.WebSocketFailure,
+        )
+        assertTrue(decision is VoiceReconnectDecision.Schedule)
+        val cancellation = controller.cancel()
+
+        assertNull(cancellation.job)
+        assertTrue(cancellation.hadAutomaticReconnect)
+        assertFalse(controller.setScheduled(job = job))
+        assertFalse(controller.isCurrentJob(job))
     }
 
     @Test
@@ -180,7 +209,7 @@ class VoiceReconnectControllerTest {
         assertSame(VoiceReconnectDecision.DeferredForActivation, decision)
         val pending = controller.consumePendingActivation(sessionId = 7L)
         assertEquals(1, pending?.attempt)
-        controller.setScheduled(job = job)
+        assertTrue(controller.setScheduled(job = job))
         assertTrue(controller.beginAttempt(job = job, newSessionId = 8L))
 
         assertEquals(1, controller.completeAttempt(job = job))
@@ -205,7 +234,7 @@ class VoiceReconnectControllerTest {
         assertSame(VoiceReconnectDecision.DeferredForActivation, decision)
         val pending = controller.finishActivation(sessionId = 7L)
         assertEquals(1, pending?.attempt)
-        controller.setScheduled(job = job)
+        assertTrue(controller.setScheduled(job = job))
         assertTrue(controller.beginAttempt(job = job, newSessionId = 8L))
         val retryDecision = controller.planReconnect(
             failedSessionId = 8L,
@@ -252,7 +281,7 @@ class VoiceReconnectControllerTest {
             reason = VoiceSessionStopReason.WebSocketFailure,
         )
         assertTrue(decision is VoiceReconnectDecision.Schedule)
-        controller.setScheduled(job)
+        assertTrue(controller.setScheduled(job))
         assertTrue(controller.beginAttempt(job = job, newSessionId = 8L))
         controller.markEligible(sessionId = 8L)
         assertTrue(controller.reserveActivation(sessionId = 8L))
