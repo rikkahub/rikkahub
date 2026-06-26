@@ -452,7 +452,8 @@ class VoiceAgentCallSession internal constructor(
         plan: AutomaticReconnectPlan,
         cleanupResources: Boolean,
     ) {
-        val job = scope.launch(start = CoroutineStart.LAZY) {
+        lateinit var job: Job
+        job = scope.launch(start = CoroutineStart.LAZY) {
             delay(plan.delayMs)
             if (ended) return@launch
             coordinator.recordDiagnostic(
@@ -462,6 +463,7 @@ class VoiceAgentCallSession internal constructor(
             val currentSessionId = coordinator.nextSessionId()
             sessionId = currentSessionId
             synchronized(reconnectLock) {
+                if (reconnectJob !== job) return@launch
                 reconnectAttemptInProgress = true
             }
             runSession(currentSessionId)
@@ -482,6 +484,50 @@ class VoiceAgentCallSession internal constructor(
         )
         job.start()
     }
+
+    private fun resetAutomaticReconnectForManualReconnect(): Job? {
+        val cancellation = clearAutomaticReconnectState()
+        if (cancellation.hadAutomaticReconnect) {
+            coordinator.recordDiagnostic(
+                name = "session_reconnect_reset",
+                detail = "reason=manual_reconnect",
+            )
+        }
+        return cancellation.job
+    }
+
+    private fun cancelAutomaticReconnect(reason: String): Job? {
+        val cancellation = clearAutomaticReconnectState()
+        if (cancellation.hadAutomaticReconnect) {
+            coordinator.recordDiagnostic(
+                name = "session_reconnect_cancelled",
+                detail = "reason=$reason",
+            )
+        }
+        return cancellation.job
+    }
+
+    private fun clearAutomaticReconnectState(): AutomaticReconnectCancellation =
+        synchronized(reconnectLock) {
+            val job = reconnectJob
+            val hadAutomaticReconnect = reconnectJob != null ||
+                reconnectState != null ||
+                reconnectAttemptInProgress ||
+                pendingActivationReconnect != null
+            job?.cancel()
+            reconnectJob = null
+            reconnectState = null
+            reconnectAttemptInProgress = false
+            pendingActivationReconnect = null
+            currentSessionReconnectEligible.set(false)
+            if (job != null && startJob === job) {
+                startJob = null
+            }
+            AutomaticReconnectCancellation(
+                job = job,
+                hadAutomaticReconnect = hadAutomaticReconnect,
+            )
+        }
 
     private fun restoreReconnectingStatusIfAutomaticReconnectPending() {
         val reconnectPending = synchronized(reconnectLock) {
@@ -559,8 +605,9 @@ class VoiceAgentCallSession internal constructor(
 
     override fun reconnect() {
         if (ended) return
+        val automaticReconnectJob = resetAutomaticReconnectForManualReconnect()
         val previousJob = prepareManualReconnect()
-        startJob = startReconnectedSession(previousJob)
+        startJob = startReconnectedSession(previousJob ?: automaticReconnectJob)
     }
 
     private fun prepareManualReconnect(): Job? {
@@ -610,7 +657,8 @@ class VoiceAgentCallSession internal constructor(
     private fun beginEnd(): EndPreparation? {
         if (ended) return null
         ended = true
-        val previousJob = startJob
+        val automaticReconnectJob = cancelAutomaticReconnect(reason = "end")
+        val previousJob = startJob ?: automaticReconnectJob
         detachHermesBridge()
         coordinator.prepareForSessionEnd()
         invalidateAudioSessions()
@@ -639,6 +687,8 @@ class VoiceAgentCallSession internal constructor(
         if (shouldRecordEnd) {
             ended = true
         }
+        val automaticReconnectJob = cancelAutomaticReconnect(reason = "close")
+        automaticReconnectJob?.cancel()
         startJob?.cancel()
         detachHermesBridge()
         coordinator.prepareForSessionEnd()
@@ -694,6 +744,11 @@ class VoiceAgentCallSession internal constructor(
 
     private data class EndPreparation(
         val previousJob: Job?,
+    )
+
+    private data class AutomaticReconnectCancellation(
+        val job: Job?,
+        val hadAutomaticReconnect: Boolean,
     )
 
     private fun recordEventSafely(name: String, attributes: Map<String, Any?> = emptyMap()) {

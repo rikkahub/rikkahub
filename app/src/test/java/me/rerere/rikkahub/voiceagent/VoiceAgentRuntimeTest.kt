@@ -3023,6 +3023,121 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `manual reconnect cancels pending automatic reconnect and starts immediately`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        gemini.eventHandlers.single()(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
+        assertEquals(VoiceSessionStatus.Reconnecting, session.state.value.session)
+
+        session.reconnect()
+        gemini.awaitConnectCount(2)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_reset" &&
+                    it.detail == "reason=manual_reconnect"
+            }
+        )
+        delay(300)
+        assertEquals(2, sessionApi.createdSessions.size)
+    }
+
+    @Test
+    fun `end cancels pending automatic reconnect without reopening Gemini`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        gemini.eventHandlers.single()(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
+
+        session.end()
+        delay(300)
+
+        assertEquals(1, sessionApi.createdSessions.size)
+        assertEquals(1, gemini.eventHandlers.size)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_cancelled" &&
+                    it.detail == "reason=end"
+            }
+        )
+    }
+
+    @Test
+    fun `closeNow cancels pending automatic reconnect without reopening Gemini`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        gemini.eventHandlers.single()(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
+
+        session.closeNow()
+        delay(300)
+
+        assertEquals(1, sessionApi.createdSessions.size)
+        assertEquals(1, gemini.eventHandlers.size)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_cancelled" &&
+                    it.detail == "reason=close"
+            }
+        )
+    }
+
+    @Test
     fun `post connected WebSocket failure during connected publish automatically reconnects`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()
