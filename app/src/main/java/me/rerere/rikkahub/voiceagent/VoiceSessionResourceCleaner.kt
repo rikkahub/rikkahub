@@ -11,17 +11,19 @@ internal class VoiceSessionResourceCleaner(
     private val hermesBridgeProvider: () -> HermesSessionBridge?,
     private val clearHermesBridge: () -> Unit,
 ) {
-    fun invalidateAudioSessions() {
+    private val cleanupLock = Any()
+
+    private fun invalidateAudioSessions() {
         gemini.invalidateOutboundSession()
         audio.invalidatePlaybackSession()
     }
 
-    fun detachHermesBridge() {
+    private fun detachHermesBridge() {
         hermesBridgeProvider()?.let(coordinator::detachHermesBridge)
         clearHermesBridge()
     }
 
-    fun cleanupForReconnect(closeGemini: Boolean) {
+    fun cleanupForReconnect(closeGemini: Boolean) = synchronized(cleanupLock) {
         detachHermesBridge()
         coordinator.prepareForReconnect()
         invalidateAudioSessions()
@@ -35,7 +37,7 @@ internal class VoiceSessionResourceCleaner(
     fun cleanupForAutomaticReconnect(
         closeGemini: Boolean,
         shouldContinue: () -> Boolean = { true },
-    ): Boolean {
+    ): Boolean = synchronized(cleanupLock) {
         if (!shouldContinue()) return false
         detachHermesBridge()
         if (!shouldContinue()) return false
@@ -51,7 +53,7 @@ internal class VoiceSessionResourceCleaner(
         return shouldContinue()
     }
 
-    fun cleanupForFailure(closeGemini: Boolean) {
+    fun cleanupForFailure(closeGemini: Boolean) = synchronized(cleanupLock) {
         detachHermesBridge()
         coordinator.prepareForSessionEnd()
         invalidateAudioSessions()
@@ -62,7 +64,7 @@ internal class VoiceSessionResourceCleaner(
         }
     }
 
-    fun cleanupForEnd(closeGemini: Boolean) {
+    fun cleanupForEnd(closeGemini: Boolean) = synchronized(cleanupLock) {
         detachHermesBridge()
         coordinator.prepareForSessionEnd()
         invalidateAudioSessions()

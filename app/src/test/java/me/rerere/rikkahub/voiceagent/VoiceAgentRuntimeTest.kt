@@ -3445,7 +3445,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `stale automatic reconnect cleanup does not overwrite manual reconnect`() = runTest {
+    fun `manual reconnect waits for stale automatic cleanup before opening replacement session`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()
@@ -3474,20 +3474,40 @@ class VoiceAgentRuntimeTest {
         }
         assertTrue(blockedStopCapture.started.await(500, TimeUnit.MILLISECONDS))
 
-        session.reconnect()
-        gemini.awaitConnectCount(2)
-        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
-        val stopCaptureCallsAfterManualReconnect = audio.stopCaptureCalls
-        val suppressPlaybackCallsAfterManualReconnect = audio.suppressPlaybackCalls
-        val closeCallsAfterManualReconnect = gemini.closeCalls
+        val blockedManualSession = sessionApi.blockNextSession()
+        val manualReconnect = launch(Dispatchers.Default) {
+            session.reconnect()
+        }
+        try {
+            delay(100)
+            assertFalse(
+                "Manual reconnect must not open a replacement session while stale cleanup is blocked",
+                blockedManualSession.started.isCompleted,
+            )
+            assertEquals(1, sessionApi.createdSessions.size)
+            assertEquals(1, gemini.eventHandlers.size)
 
-        blockedStopCapture.release.countDown()
-        automaticFailure.join()
+            blockedStopCapture.release.countDown()
+            automaticFailure.join()
+            manualReconnect.join()
+            withTimeout(500) {
+                blockedManualSession.started.await()
+            }
+            assertEquals(2, sessionApi.createdSessions.size)
+            assertEquals(1, audio.suppressPlaybackCalls)
+            assertEquals(1, gemini.closeCalls)
+
+            blockedManualSession.release.complete(Unit)
+        } finally {
+            blockedStopCapture.release.countDown()
+            blockedManualSession.release.complete(Unit)
+        }
+        gemini.awaitConnectCount(2)
         delay(300)
 
-        assertEquals(stopCaptureCallsAfterManualReconnect + 1, audio.stopCaptureCalls)
-        assertEquals(suppressPlaybackCallsAfterManualReconnect, audio.suppressPlaybackCalls)
-        assertEquals(closeCallsAfterManualReconnect, gemini.closeCalls)
+        assertEquals(2, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
         assertEquals(2, sessionApi.createdSessions.size)
         assertEquals(2, gemini.eventHandlers.size)
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
