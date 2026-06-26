@@ -120,7 +120,9 @@ class VoiceAgentCallSession internal constructor(
     }
 
     private suspend fun runSession(currentSessionId: Long) {
-        val sessionJob = currentCoroutineContext()[Job]
+        val coroutineContext = currentCoroutineContext()
+        coroutineContext.ensureActive()
+        val sessionJob = coroutineContext[Job]
         startJob = sessionJob
         currentSessionReconnectEligible.set(false)
         var geminiStarted = false
@@ -463,10 +465,12 @@ class VoiceAgentCallSession internal constructor(
                 currentSessionId = coordinator.nextSessionId()
                 sessionId = currentSessionId
             }
+            currentCoroutineContext().ensureActive()
             coordinator.recordDiagnostic(
                 name = "session_reconnect_attempting",
                 detail = "attempt=${plan.attempt}",
             )
+            currentCoroutineContext().ensureActive()
             runSession(currentSessionId)
         }
         synchronized(reconnectLock) {
