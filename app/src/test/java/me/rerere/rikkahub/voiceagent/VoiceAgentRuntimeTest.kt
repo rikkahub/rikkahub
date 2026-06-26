@@ -3122,6 +3122,45 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `manual reconnect uses one cleanup sequence before new session starts`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+
+        session.reconnect()
+        gemini.awaitConnectCount(2)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(1, audio.stopCaptureCalls)
+        assertEquals(1, audio.suppressPlaybackCalls)
+        assertEquals(1, gemini.closeCalls)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_transition_manual_reconnect" &&
+                    it.detail == "reason=manual_reconnect"
+            }
+        )
+    }
+
+    @Test
     fun `end cancels pending automatic reconnect without reopening Gemini`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()

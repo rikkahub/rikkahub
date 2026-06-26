@@ -81,6 +81,13 @@ class VoiceAgentCallSession internal constructor(
         writeVoiceE2EArtifact = voiceE2EArtifacts::write,
         scope = scope,
     )
+    private val resourceCleaner = VoiceSessionResourceCleaner(
+        coordinator = coordinator,
+        gemini = gemini,
+        audio = audio,
+        hermesBridgeProvider = { hermesBridge },
+        clearHermesBridge = { hermesBridge = null },
+    )
     private var startJob: Job? = null
     private var muted = false
     private var sessionId = 0L
@@ -667,9 +674,9 @@ class VoiceAgentCallSession internal constructor(
 
     private fun cleanupAutomaticReconnectResources(job: Job): Boolean {
         if (!isAutomaticReconnectCurrent(job)) return false
-        detachHermesBridge()
+        resourceCleaner.detachHermesBridge()
         if (!isAutomaticReconnectCurrent(job)) return false
-        invalidateAudioSessions()
+        resourceCleaner.invalidateAudioSessions()
         if (!isAutomaticReconnectCurrent(job)) return false
         audio.stopCapture()
         if (!isAutomaticReconnectCurrent(job)) return false
@@ -703,14 +710,7 @@ class VoiceAgentCallSession internal constructor(
             name = "session_transition_failed",
             detail = "reason=${reason.diagnosticReason}, closeGemini=$closeGemini",
         )
-        detachHermesBridge()
-        coordinator.prepareForSessionEnd()
-        invalidateAudioSessions()
-        audio.stopCapture()
-        audio.suppressPlayback()
-        if (closeGemini) {
-            gemini.close()
-        }
+        resourceCleaner.cleanupForFailure(closeGemini = closeGemini)
     }
 
     private suspend fun ensureActiveSession(
@@ -752,12 +752,7 @@ class VoiceAgentCallSession internal constructor(
             name = "session_transition_manual_reconnect",
             detail = "reason=${VoiceSessionStopReason.ManualReconnect.diagnosticReason}",
         )
-        detachHermesBridge()
-        coordinator.prepareForReconnect()
-        invalidateAudioSessions()
-        audio.stopCapture()
-        audio.suppressPlayback()
-        gemini.close()
+        resourceCleaner.cleanupForReconnect(closeGemini = true)
         return previousJob
     }
 
@@ -797,12 +792,7 @@ class VoiceAgentCallSession internal constructor(
         if (!markEnded()) return null
         val automaticReconnectJob = cancelAutomaticReconnect(reason = "end")
         val previousJob = startJob ?: automaticReconnectJob
-        detachHermesBridge()
-        coordinator.prepareForSessionEnd()
-        invalidateAudioSessions()
-        audio.stopCapture()
-        audio.suppressPlayback()
-        gemini.close()
+        resourceCleaner.cleanupForEnd(closeGemini = true)
         return EndPreparation(previousJob = previousJob)
     }
 
@@ -824,11 +814,7 @@ class VoiceAgentCallSession internal constructor(
         markEnded()
         cancelAutomaticReconnect(reason = "close")
         startJob?.cancel()
-        detachHermesBridge()
-        coordinator.prepareForSessionEnd()
-        invalidateAudioSessions()
-        audio.stopCapture()
-        audio.suppressPlayback()
+        resourceCleaner.cleanupForEnd(closeGemini = false)
         coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
         coordinator.close(waitForStartedSends = false)
         recordSessionEndedSafely()
@@ -866,16 +852,6 @@ class VoiceAgentCallSession internal constructor(
         if (isSessionOpenAndActive(currentSessionId)) {
             coordinator.updateAudioStatus(VoiceAudioStatus.Listening)
         }
-    }
-
-    private fun invalidateAudioSessions() {
-        gemini.invalidateOutboundSession()
-        audio.invalidatePlaybackSession()
-    }
-
-    private fun detachHermesBridge() {
-        hermesBridge?.let(coordinator::detachHermesBridge)
-        hermesBridge = null
     }
 
     private data class EndPreparation(
