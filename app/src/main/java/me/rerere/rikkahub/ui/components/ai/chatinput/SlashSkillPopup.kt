@@ -26,15 +26,17 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Repeat
 import me.rerere.hugeicons.stroke.Target01
+import me.rerere.rikkahub.data.ai.slash.ReservedCommand
+import me.rerere.rikkahub.data.ai.slash.SlashCommand
 
 /** Render-time icon for a slash row (#364 slice 4): the built-in autonomy commands get a distinct glyph. */
-private fun SlashItem.icon(): ImageVector = when (this) {
-    is SlashItem.Builtin -> when (name) {
-        "goal" -> HugeIcons.Target01
-        "loop" -> HugeIcons.Repeat
-        else -> HugeIcons.Puzzle
+private fun SlashCommand.icon(): ImageVector = when (this) {
+    is SlashCommand.Reserved -> when (command) {
+        ReservedCommand.Goal -> HugeIcons.Target01
+        ReservedCommand.Loop -> HugeIcons.Repeat
+        ReservedCommand.CreateSkill, ReservedCommand.UpdateSkill -> HugeIcons.Puzzle
     }
-    is SlashItem.Skill -> HugeIcons.Puzzle
+    is SlashCommand.Skill -> HugeIcons.Puzzle
 }
 
 /**
@@ -47,8 +49,8 @@ private fun SlashItem.icon(): ImageVector = when (this) {
  */
 @Composable
 internal fun SlashSkillPopup(
-    items: List<SlashItem>,
-    onSelect: (SlashItem) -> Unit,
+    items: List<SlashCommand>,
+    onSelect: (SlashCommand) -> Unit,
     onManage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {

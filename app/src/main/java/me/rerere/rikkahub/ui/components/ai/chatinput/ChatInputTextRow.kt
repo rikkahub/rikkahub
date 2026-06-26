@@ -43,6 +43,10 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.slash.SlashCommand
+import me.rerere.rikkahub.data.ai.slash.filterSlashCommands
+import me.rerere.rikkahub.data.ai.slash.reservedSlashCommands
+import me.rerere.rikkahub.data.ai.tools.SKILL_AUTHORING_SUPPORTED
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
@@ -89,8 +93,11 @@ internal fun TextInputRow(
             }
         }
     }
-    // Built-in reserved commands (#364: /goal, /loop) lead, then the matching skills (filterSlashItems).
-    val slashItems = remember(slashQuery, allSkills) { filterSlashItems(slashQuery, allSkills) }
+    // Built-in reserved commands (#364: /goal, /loop) lead, then the matching skills. One unified
+    // registry (filterSlashCommands) merges the flavor's reserved set with the live skills.
+    val slashItems = remember(slashQuery, allSkills) {
+        filterSlashCommands(slashQuery, reservedSlashCommands(SKILL_AUTHORING_SUPPORTED), allSkills)
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -161,14 +168,14 @@ internal fun TextInputRow(
                 onSelect = { item ->
                     when (item) {
                         // A reserved native command (#364: /goal, /loop) has NO skill behind it: just drop
-                        // "/<name> " into the input. The send path (ChatVM.handleReservedSlashCommand) runs
-                        // it BEFORE skill expansion, so arming a use_skill here would be wrong.
-                        is SlashItem.Builtin -> state.setMessageText("/${item.name} ")
+                        // "/<name> " into the input. The send path (ChatVM resolveSlashCommand) runs it as a
+                        // reserved invocation BEFORE any skill rewrite, so arming a use_skill here would be wrong.
+                        is SlashCommand.Reserved -> state.setMessageText("/${item.name} ")
                         // A skill: arm it on the active assistant NOW (so its use_skill tool is exposed by
                         // the time the message is sent) and drop "/<name> " in for optional params. The send
                         // path then rewrites "/<name> ..." into a use_skill directive (longest-prefix match,
                         // so it also handles names with spaces).
-                        is SlashItem.Skill -> {
+                        is SlashCommand.Skill -> {
                             scope.launch {
                                 settingsStore.update { s ->
                                     s.copy(

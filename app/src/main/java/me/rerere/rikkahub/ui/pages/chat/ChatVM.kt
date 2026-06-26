@@ -33,6 +33,11 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.shellrun.ShellRunStore
+import me.rerere.rikkahub.data.ai.slash.ReservedCommand
+import me.rerere.rikkahub.data.ai.slash.SlashInvocation
+import me.rerere.rikkahub.data.ai.slash.buildUseSkillDirective
+import me.rerere.rikkahub.data.ai.slash.reservedSlashCommands
+import me.rerere.rikkahub.data.ai.slash.resolveSlashCommand
 import me.rerere.rikkahub.data.ai.task.TaskCoordinator
 import me.rerere.rikkahub.data.ai.tools.SKILL_AUTHORING_SUPPORTED
 import me.rerere.rikkahub.data.ai.tools.SkillAuthoringMode
@@ -298,54 +303,40 @@ class ChatVM(
      * @param content 消息内容
      * @param answer 是否触发消息生成，如果为false，则仅添加消息到消息列表中
      */
-    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
+    fun handleMessageSend(content: List<UIMessagePart>, answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
         analytics.logEvent("ai_send_message", null)
 
-        // Reserved native slash commands (#364) are handled BEFORE skill expansion: they perform a
-        // guaranteed side effect (arming/clearing the autonomous goal), not a model-trusted prose send.
-        if (handleReservedSlashCommand(content)) return
-
-        // A leading "/<skill> <param>" slash command (from the input popup) is expanded SYNCHRONOUSLY into
-        // a directive that runs the skill — no coroutine/IO before the send, so the slash send is ordered
-        // exactly like a normal send and can never land after (and cancel) a later turn.
-        chatService.sendMessage(_conversationId, expandSlashSkillCommand(content), answer)
+        // One unified slash registry resolves the typed input (#364, Part B slice 1). resolveSlashCommand
+        // checks RESERVED commands first (a guaranteed side effect — arm/clear goal, schedule a loop, arm
+        // skill-authoring — never a model-trusted send), then a leading "/<enabled skill>" (rewritten into
+        // a "Use the skill" directive), else null = send verbatim. The skill rewrite is synchronous so the
+        // slash send is ordered exactly like a normal send and can never land after (and cancel) a later turn.
+        val idx = content.indexOfLast { it is UIMessagePart.Text }
+        val text = (content.getOrNull(idx) as? UIMessagePart.Text)?.text
+        val enabledSkills = settingsStore.settingsFlow.value
+            .getAssistantByIdOrCurrent(conversation.value.assistantId).enabledSkills
+        when (val invocation = text?.let {
+            resolveSlashCommand(it, reservedSlashCommands(SKILL_AUTHORING_SUPPORTED), enabledSkills)
+        }) {
+            is SlashInvocation.Reserved -> dispatchReservedSlashCommand(invocation.command, invocation.arg)
+            is SlashInvocation.Skill -> {
+                val rewritten = content.toMutableList().also {
+                    it[idx] = UIMessagePart.Text(buildUseSkillDirective(invocation.name, invocation.param))
+                }
+                chatService.sendMessage(_conversationId, rewritten, answer)
+            }
+            null -> chatService.sendMessage(_conversationId, content, answer)
+        }
     }
 
-    /**
-     * Intercept reserved native slash commands (#364) before skill expansion. Returns true iff the
-     * input was a reserved command (and was handled — no message is sent for it).
-     *
-     * - `/goal` or `/goal clear` → clear the active goal.
-     * - `/goal <condition>` → arm the session goal AND kick a turn working toward it (the condition is
-     *   sent as the first user message; the turn-end goal loop then continues until it is met, bounded
-     *   by the maxGoalIterations preference and by user-stop).
-     * - `/loop` or `/loop clear` → clear this conversation's durable loop schedule(s).
-     * - `/loop [interval] <prompt>` → arm a durable recurring schedule that injects `<prompt>` back into
-     *   this conversation every interval (1-minute floor = cron granularity; only sub-minute intervals
-     *   round up, so `5m`/`1h`/`1d` are honored as typed).
-     */
-    private fun handleReservedSlashCommand(content: List<UIMessagePart>): Boolean {
-        val idx = content.indexOfLast { it is UIMessagePart.Text }
-        if (idx < 0) return false
-        val text = (content[idx] as UIMessagePart.Text).text.trim()
-        return when {
-            text == "/goal" || text.startsWith("/goal ") -> {
-                handleGoalCommand(text.removePrefix("/goal").trim()); true
-            }
-            text == "/loop" || text.startsWith("/loop ") -> {
-                handleLoopCommand(text.removePrefix("/loop").trim()); true
-            }
-            // Authoring commands exist only where the WRITE surface does (sideload). In Play they are
-            // NOT intercepted (and not in the picker), so a manually-typed one falls through to a normal
-            // send rather than arming a mode with no tool behind it.
-            SKILL_AUTHORING_SUPPORTED && (text == "/create_skill" || text.startsWith("/create_skill ")) -> {
-                handleSkillAuthoringCommand(SkillAuthoringMode.Create, text.removePrefix("/create_skill").trim()); true
-            }
-            SKILL_AUTHORING_SUPPORTED && (text == "/update_skill" || text.startsWith("/update_skill ")) -> {
-                handleSkillAuthoringCommand(SkillAuthoringMode.Update, text.removePrefix("/update_skill").trim()); true
-            }
-            else -> false
+    /** Run a resolved reserved slash command (#364) — the ONE dispatch site over the command discriminant. */
+    private fun dispatchReservedSlashCommand(command: ReservedCommand, arg: String) {
+        when (command) {
+            ReservedCommand.Goal -> handleGoalCommand(arg)
+            ReservedCommand.Loop -> handleLoopCommand(arg)
+            ReservedCommand.CreateSkill -> handleSkillAuthoringCommand(SkillAuthoringMode.Create, arg)
+            ReservedCommand.UpdateSkill -> handleSkillAuthoringCommand(SkillAuthoringMode.Update, arg)
         }
     }
 
@@ -412,38 +403,6 @@ class ChatVM(
                 )
             }
         }
-    }
-
-    /**
-     * Expand a leading "/<skill> <param>" into a directive the agent actually runs. The skill must already
-     * be armed on the active assistant (the input popup enables it on selection, so its `use_skill` tool is
-     * exposed for the turn); we match the text after "/" against the assistant's enabled skill NAMES by
-     * longest prefix — which also handles skill names that contain spaces — and rewrite the text part into an
-     * explicit "Use the <name> skill." directive plus the param. Anything that doesn't match an enabled
-     * skill (a plain message, or an unknown/not-yet-enabled token) is returned verbatim. Pure & synchronous.
-     */
-    private fun expandSlashSkillCommand(content: List<UIMessagePart>): List<UIMessagePart> {
-        val idx = content.indexOfLast { it is UIMessagePart.Text }
-        if (idx < 0) return content
-        val text = (content[idx] as UIMessagePart.Text).text
-        if (!text.startsWith("/")) return content
-        val afterSlash = text.substring(1)
-        // Match against the assistant that ACTUALLY runs the turn — the conversation-bound one
-        // (ChatService resolves via getAssistantByIdOrCurrent), not the global current assistant — so the
-        // armed skill and the exposed use_skill tool belong to the same assistant.
-        val name = settingsStore.settingsFlow.value
-            .getAssistantByIdOrCurrent(conversation.value.assistantId).enabledSkills
-            .filter { afterSlash == it || afterSlash.startsWith("$it ") || afterSlash.startsWith("$it\n") }
-            .maxByOrNull { it.length } ?: return content
-        val param = afterSlash.removePrefix(name).trim()
-        val directive = buildString {
-            append("Use the \"$name\" skill.")
-            if (param.isNotEmpty()) {
-                append("\n\n")
-                append(param)
-            }
-        }
-        return content.toMutableList().also { it[idx] = UIMessagePart.Text(directive) }
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
