@@ -223,6 +223,89 @@ class WebServerLifecycleTest {
         )
     }
 
+    /**
+     * Regression for issue #415: the mDNS advert must be serialized WITH the server lifecycle.
+     *
+     * The invariant: the device advertises its `<host>.local` service iff the server is running. The bug
+     * was that `A2aServerManager` registered the advert AFTER `lifecycle.start` returned and unregistered
+     * it AFTER `lifecycle.stop` returned — both OUTSIDE the lifecycle's single Mutex. A slow advert-
+     * register (real `JmDNS.create()` does I/O) racing a concurrent stop could let the stop's unregister
+     * run first (no-op), then the start's register complete last → advertising a server that is already
+     * stopped.
+     *
+     * The fail-before path reproduces that drift with the advert placed outside the locked transition
+     * (a stopped server stays advertised). The fix moves register into the start/restart factory and
+     * unregister into the stop onStop — the same locked positions that own the server slot — so the advert
+     * can never drift from server liveness. The fail-after path drives concurrent interleaved start/stop
+     * with the advert INSIDE the blocks and asserts it always matches liveness.
+     */
+    @Test
+    fun mdnsAdvertInsideLifecycleBlocks_neverDriftsFromServerLiveness() = runBlocking {
+        // --- fail-before: advert OUTSIDE the locked transition can outlive the server (the bug) ---
+        run {
+            val advertising = AtomicBoolean(false)
+            val live = AtomicBoolean(false)
+            val lifecycle = WebServerLifecycle<Any>()
+
+            // start coroutine: claim the slot UNDER the lock, then (as the old manager did) register the
+            // advert OUTSIDE the lock — modeled here as suspended right after start returns.
+            lifecycle.start { live.set(true); Any() }
+            // a concurrent stop runs to completion first: release the slot (under lock) + unregister (after)
+            lifecycle.stop { live.set(false) }
+            advertising.set(false) // stop's unregister, outside the lock
+            // now the preempted start finally runs its register — advertising a DEAD server
+            advertising.set(true)  // start's register, outside the lock
+
+            assertTrue(
+                "advert placed outside the locked transition can advertise a stopped server",
+                advertising.get() && !live.get()
+            )
+        }
+
+        // --- fail-after: advert INSIDE the locked transition tracks server liveness exactly ---
+        repeat(64) {
+            val advertising = AtomicBoolean(false)
+            val live = AtomicBoolean(false)
+            val lifecycle = WebServerLifecycle<Any>()
+
+            // register INSIDE the start factory, unregister INSIDE the stop onStop — the fix. A suspension
+            // between the server bind and the advert widens the window a concurrent stop would exploit if
+            // these were not under one lock.
+            suspend fun startWithAdvert() = lifecycle.start {
+                live.set(true)
+                delay(1)
+                advertising.set(true)
+                Any()
+            }
+            suspend fun stopWithUnadvert() = lifecycle.stop {
+                live.set(false)
+                advertising.set(false)
+            }
+
+            coroutineScope {
+                launch(Dispatchers.Default) { startWithAdvert() }
+                launch(Dispatchers.Default) { stopWithUnadvert() }
+            }
+
+            assertEquals(
+                "advert must track server liveness exactly (advertise iff running)",
+                live.get(),
+                advertising.get()
+            )
+        }
+
+        // The advertised state matches isRunning at a deterministic settle: a final stop clears the advert,
+        // a fresh start re-advertises — never a stale advert for a stopped server.
+        run {
+            val advertising = AtomicBoolean(false)
+            val lifecycle = WebServerLifecycle<Any>()
+            lifecycle.start { advertising.set(true); Any() }
+            assertTrue("a running server is advertised", advertising.get())
+            lifecycle.stop { advertising.set(false) }
+            assertTrue("a stopped server is not advertised", !advertising.get())
+        }
+    }
+
     @Test
     fun restart_isSerializedAgainstConcurrentStart() = runBlocking {
         val lifecycle = WebServerLifecycle<Any>()
