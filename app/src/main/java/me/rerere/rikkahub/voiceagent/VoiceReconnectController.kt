@@ -42,6 +42,7 @@ internal class VoiceReconnectController(
                 retry = current.retry,
                 plan = pending,
             )
+            current.job?.cancel()
         }
         pending
     }
@@ -57,6 +58,9 @@ internal class VoiceReconnectController(
                 retry = current.retry,
                 plan = current.pending,
             )
+        }
+        if (current.pending != null) {
+            current.job?.cancel()
         }
         current.pending
     }
@@ -94,6 +98,7 @@ internal class VoiceReconnectController(
             delayMs = delayMs,
         )
         val nextRetry = currentRetry.copy(attempts = attempt)
+        val currentState = state
         state = when (val current = state) {
             is VoiceReconnectState.Activating -> current.copy(retry = nextRetry, pending = plan)
             else -> VoiceReconnectState.Planned(
@@ -102,6 +107,9 @@ internal class VoiceReconnectController(
                 plan = plan,
             )
         }
+        if (currentState !is VoiceReconnectState.Activating) {
+            jobFrom(currentState)?.cancel()
+        }
         if (state is VoiceReconnectState.Activating) {
             VoiceReconnectDecision.DeferredForActivation
         } else {
@@ -109,12 +117,13 @@ internal class VoiceReconnectController(
         }
     }
 
-    fun setScheduled(job: Job): Boolean = synchronized(lock) {
+    fun setScheduled(plan: AutomaticReconnectPlan, job: Job): Boolean = synchronized(lock) {
         val planned = state as? VoiceReconnectState.Planned ?: return@synchronized false
+        if (planned.plan !== plan) return@synchronized false
         state = VoiceReconnectState.Scheduled(
             failedSessionId = planned.failedSessionId,
             retry = planned.retry,
-            plan = planned.plan,
+            plan = plan,
             job = job,
         )
         true
@@ -127,16 +136,17 @@ internal class VoiceReconnectController(
             (state as? VoiceReconnectState.Activating)?.job === job
     }
 
-    fun beginAttempt(job: Job, newSessionId: Long): Boolean = synchronized(lock) {
-        val scheduled = state as? VoiceReconnectState.Scheduled ?: return@synchronized false
-        if (scheduled.job !== job) return@synchronized false
+    fun beginAttempt(job: Job, allocateSessionId: () -> Long): Long? = synchronized(lock) {
+        val scheduled = state as? VoiceReconnectState.Scheduled ?: return@synchronized null
+        if (scheduled.job !== job) return@synchronized null
+        val sessionId = allocateSessionId()
         state = VoiceReconnectState.Attempting(
             retry = scheduled.retry,
             plan = scheduled.plan,
             job = job,
-            sessionId = newSessionId,
+            sessionId = sessionId,
         )
-        true
+        sessionId
     }
 
     fun completeAttempt(job: Job): Int? = synchronized(lock) {
