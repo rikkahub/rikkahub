@@ -229,6 +229,7 @@ class VoiceAgentCallSession internal constructor(
                     if (reconnectAttemptInProgress) {
                         reconnectAttemptInProgress = false
                         val attempt = reconnectState?.attempts
+                        reconnectState = null
                         reconnectJob = null
                         attempt
                     } else {
@@ -432,7 +433,6 @@ class VoiceAgentCallSession internal constructor(
             }
         }
         exhaustedReason?.let { exhausted ->
-            recordRetryableTransportDiagnostic(event)
             coordinator.recordDiagnostic(
                 name = "session_reconnect_exhausted",
                 detail = "reason=${exhausted.diagnosticReason}, attempts=$exhaustedAttempts, " +

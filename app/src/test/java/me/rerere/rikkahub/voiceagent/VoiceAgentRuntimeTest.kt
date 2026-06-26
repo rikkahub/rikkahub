@@ -2887,26 +2887,22 @@ class VoiceAgentRuntimeTest {
                 VoiceContext(systemInstruction = "system", turns = emptyList())
             ),
             diagnostics = diagnostics,
-            reconnectPolicy = fastReconnectPolicy(maxAttempts = 2, delayMs = 1),
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 0, delayMs = 1),
             scope = this,
         )
 
         session.start()
         gemini.awaitConnectCount(1)
 
-        gemini.eventHandlers[0](GeminiLiveEvent.WebSocketFailure(message = "drop-1"))
-        gemini.awaitConnectCount(2)
-        gemini.eventHandlers[1](GeminiLiveEvent.WebSocketFailure(message = "drop-2"))
-        gemini.awaitConnectCount(3)
-        gemini.eventHandlers[2](GeminiLiveEvent.WebSocketFailure(message = "drop-3"))
+        gemini.eventHandlers.single()(GeminiLiveEvent.WebSocketFailure(message = "drop-1"))
 
-        assertEquals(3, sessionApi.createdSessions.size)
-        assertEquals(VoiceSessionStatus.Error("Gemini WebSocket failed: drop-3"), session.state.value.session)
+        assertEquals(1, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Error("Gemini WebSocket failed: drop-1"), session.state.value.session)
         assertTrue(
             diagnostics.events.value.any {
                 it.name == "session_reconnect_exhausted" &&
                     it.detail.contains("reason=websocket_failure") &&
-                    it.detail.contains("attempts=2")
+                    it.detail.contains("attempts=0")
             }
         )
         assertTrue(
@@ -2915,6 +2911,60 @@ class VoiceAgentRuntimeTest {
                     it.detail == "reason=websocket_failure, closeGemini=true"
             }
         )
+        assertEquals(
+            1,
+            diagnostics.events.value.count {
+                it.name == "gemini_ws_failure" && it.detail == "drop-1"
+            },
+        )
+        delay(50)
+        assertEquals(1, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Error("Gemini WebSocket failed: drop-1"), session.state.value.session)
+        assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_scheduled" })
+        assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
+    }
+
+    @Test
+    fun `successful automatic reconnect resets retry budget for later drop`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 1, delayMs = 1),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+
+        gemini.eventHandlers[0](GeminiLiveEvent.WebSocketFailure(message = "first drop"))
+        gemini.awaitConnectCount(2)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+
+        gemini.eventHandlers[1](GeminiLiveEvent.WebSocketFailure(message = "second drop"))
+        gemini.awaitConnectCount(3)
+
+        assertEquals(3, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertEquals(
+            2,
+            diagnostics.events.value.count {
+                it.name == "session_reconnect_scheduled" &&
+                    it.detail == "reason=websocket_failure, attempt=1, maxAttempts=1, delayMs=1"
+            },
+        )
+        assertFalse(diagnostics.events.value.any { it.name == "session_reconnect_exhausted" })
+        assertFalse(session.state.value.session is VoiceSessionStatus.Error)
     }
 
     @Test
@@ -2961,6 +3011,15 @@ class VoiceAgentRuntimeTest {
             }
         )
         assertEquals(1, diagnostics.events.value.count { it.name == "session_reconnect_scheduled" })
+        assertEquals(1, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
+        delay(50)
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(
+            VoiceSessionStatus.Error("token mint failed during reconnect"),
+            session.state.value.session,
+        )
+        assertEquals(1, diagnostics.events.value.count { it.name == "session_reconnect_scheduled" })
+        assertEquals(1, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
     }
 
     @Test
