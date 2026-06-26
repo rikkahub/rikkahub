@@ -41,6 +41,7 @@ class VoiceAgentCallSession internal constructor(
     private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
     private val nowMs: () -> Long = { System.currentTimeMillis() },
     private val afterConnectedResourceGuardForTest: () -> Unit = {},
+    private val afterReconnectCompletionGuardForTest: () -> Unit = {},
     private val scope: CoroutineScope,
 ) : ManagedVoiceCallSession {
     constructor(
@@ -182,8 +183,15 @@ class VoiceAgentCallSession internal constructor(
                 return
             }
             ensureActiveSession(currentSessionId)
+            afterReconnectCompletionGuardForTest()
+            var reconnectCompletionSessionStale = false
+            var restoreReconnectingAfterCompletion = false
             val completedReconnectAttempt = synchronized(reconnectLock) {
-                if (reconnectAttemptInProgress) {
+                if (!coordinator.isActiveSession(currentSessionId)) {
+                    reconnectCompletionSessionStale = true
+                    restoreReconnectingAfterCompletion = reconnectState != null || reconnectJob != null
+                    null
+                } else if (reconnectAttemptInProgress) {
                     reconnectAttemptInProgress = false
                     val attempt = reconnectState?.attempts
                     reconnectState = null
@@ -192,6 +200,12 @@ class VoiceAgentCallSession internal constructor(
                 } else {
                     null
                 }
+            }
+            if (reconnectCompletionSessionStale) {
+                if (restoreReconnectingAfterCompletion && !ended) {
+                    coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+                }
+                return
             }
             completedReconnectAttempt?.let { attempt ->
                 coordinator.recordDiagnostic(
