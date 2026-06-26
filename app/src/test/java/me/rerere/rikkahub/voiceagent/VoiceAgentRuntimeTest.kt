@@ -21,8 +21,11 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceAttributes
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
 import org.junit.Assert.assertEquals
@@ -2831,6 +2834,68 @@ class VoiceAgentRuntimeTest {
                     it.detail == "reason=websocket_failure, closeGemini=true"
             }
         )
+    }
+
+    @Test
+    fun `post connected WebSocket failure after active guard does not activate stale resources`() = runTest {
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        var failureInjected = false
+        val observability = object : VoiceObservability {
+            override fun recordEvent(
+                name: String,
+                trace: VoiceTraceContext,
+                attributes: VoiceAttributes,
+            ) {
+                if (!failureInjected && name == "voicelab.mobile.session.connected") {
+                    failureInjected = true
+                    gemini.eventHandlers.single()(
+                        GeminiLiveEvent.WebSocketFailure(message = "drop after active guard")
+                    )
+                }
+            }
+
+            override suspend fun <T> withSpan(
+                name: String,
+                trace: VoiceTraceContext,
+                block: suspend (VoiceSpan) -> T,
+            ): T = error("unexpected span")
+
+            override fun captureException(
+                throwable: Throwable,
+                trace: VoiceTraceContext,
+                attributes: VoiceAttributes,
+            ) = Unit
+        }
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        delay(50)
+
+        assertEquals(VoiceSessionStatus.Reconnecting, session.state.value.session)
+        assertEquals(0, audio.startCaptureCalls)
+
+        gemini.awaitConnectCount(2)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(1, audio.startCaptureCalls)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertNull(session.state.value.error)
     }
 
     @Test

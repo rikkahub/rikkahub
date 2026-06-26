@@ -207,6 +207,10 @@ class VoiceAgentCallSession internal constructor(
                     "providerModel" to session.providerModel,
                 ),
             )
+            if (!coordinator.isActiveSession(currentSessionId)) {
+                restoreReconnectingStatusIfAutomaticReconnectPending()
+                return
+            }
             gemini.activateOutboundSession(currentSessionId)
             val bridge = coordinator.createHermesSessionBridge(currentSessionId)
             hermesBridge = bridge
@@ -613,7 +617,7 @@ private data class VoiceReconnectState(
 
 private fun GeminiLiveEvent.toSessionStopReason(): VoiceSessionStopReason? =
     when (this) {
-        is GeminiLiveEvent.Error -> VoiceSessionStopReason.GeminiError(message)
+        is GeminiLiveEvent.Error -> VoiceSessionStopReason.GeminiError
         is GeminiLiveEvent.WebSocketClosed -> VoiceSessionStopReason.WebSocketClosed(code = code, reason = reason)
         is GeminiLiveEvent.WebSocketFailure -> VoiceSessionStopReason.WebSocketFailure(message)
         else -> null
@@ -625,7 +629,7 @@ private sealed class VoiceSessionStopReason(
 ) {
     data object StartupFailure : VoiceSessionStopReason("startup_failure")
     data object ManualReconnect : VoiceSessionStopReason("manual_reconnect")
-    data class GeminiError(val message: String) : VoiceSessionStopReason("gemini_error")
+    data object GeminiError : VoiceSessionStopReason("gemini_error")
     data class WebSocketClosed(val code: Int, val reason: String) :
         VoiceSessionStopReason("websocket_closed", autoReconnectEligible = true)
     data class WebSocketFailure(val message: String) :
