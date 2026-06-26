@@ -294,7 +294,7 @@ class VoiceAgentCallSession internal constructor(
     private fun prepareAutomaticReconnect(sessionId: Long) {
         if (!coordinator.isActiveSession(sessionId)) return
         detachHermesBridge()
-        coordinator.invalidateActiveSession()
+        coordinator.prepareForAutomaticReconnect()
         invalidateAudioSessions()
         audio.stopCapture()
         audio.suppressPlayback()

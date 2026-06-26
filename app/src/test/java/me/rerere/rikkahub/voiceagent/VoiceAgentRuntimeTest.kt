@@ -2777,6 +2777,44 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `automatic reconnect clears prior playback suppression for the new session`() = runTest {
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        val firstCallback = gemini.eventHandlers.single()
+
+        session.interrupt()
+        audio.awaitSuppressPlaybackCalls(1)
+
+        firstCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
+        gemini.awaitConnectCount(2)
+        val secondCallback = gemini.eventHandlers.last()
+
+        secondCallback(GeminiLiveEvent.OutputAudio("reconnected-audio"))
+
+        assertEquals(listOf("reconnected-audio"), audio.playedPcm16)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertEquals(2, sessionApi.createdSessions.size)
+    }
+
+    @Test
     fun `session records startup failure diagnostic when capture fails after Gemini starts`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val gemini = FakeGeminiLiveVoiceClient()

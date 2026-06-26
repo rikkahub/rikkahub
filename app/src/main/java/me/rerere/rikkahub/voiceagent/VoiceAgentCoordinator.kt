@@ -380,6 +380,14 @@ class VoiceAgentCoordinator(
         }
     }
 
+    fun prepareForAutomaticReconnect() {
+        diagnostics.record("prepare_for_automatic_reconnect")
+        invalidateActiveSession()
+        synchronized(playbackSuppressionLock) {
+            outputAudioSuppressed = false
+        }
+    }
+
     fun prepareForSessionEnd() {
         diagnostics.record("prepare_for_session_end")
         invalidateActiveSession()
