@@ -5,8 +5,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.plugins.origin
-import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondOutputStream
@@ -224,16 +222,21 @@ internal fun classifyA2aArtifactDelta(
 
 fun Route.a2aAgentCardRoute(
     settingsStore: SettingsStore,
+    cardBaseUrl: () -> String,
 ) {
     // The current A2A spec serves the card at /.well-known/agent-card.json, but
     // many clients (incl. the Hermes A2A plugin) still fetch the older
     // /.well-known/agent.json. Serve both so any A2A-compliant peer discovers us
     // — and so a peer's POST lands on the card-advertised `$base/a2a` URL.
-    get("/.well-known/agent-card.json") { respondA2aAgentCard(call, settingsStore) }
-    get("/.well-known/agent.json") { respondA2aAgentCard(call, settingsStore) }
+    get("/.well-known/agent-card.json") { respondA2aAgentCard(call, settingsStore, cardBaseUrl) }
+    get("/.well-known/agent.json") { respondA2aAgentCard(call, settingsStore, cardBaseUrl) }
 }
 
-private suspend fun respondA2aAgentCard(call: ApplicationCall, settingsStore: SettingsStore) {
+private suspend fun respondA2aAgentCard(
+    call: ApplicationCall,
+    settingsStore: SettingsStore,
+    cardBaseUrl: () -> String,
+) {
     val settings = settingsStore.settingsFlow.value
     val tokenBlank = settings.a2aServerToken.isBlank()
     val bearerMatch = a2aBearerMatches(call.request.headers[HttpHeaders.Authorization], settings.a2aServerToken)
@@ -248,8 +251,7 @@ private suspend fun respondA2aAgentCard(call: ApplicationCall, settingsStore: Se
         A2aAccessResult.DISABLED -> call.respond(HttpStatusCode.NotFound)
         A2aAccessResult.FORBIDDEN -> call.respond(HttpStatusCode.Forbidden)
         A2aAccessResult.ALLOWED -> {
-            val baseUrl = buildA2aBaseUrl(call.request)
-            call.respond(settings.toA2aAgentCard(baseUrl = baseUrl, bearerRequired = !tokenBlank))
+            call.respond(settings.toA2aAgentCard(baseUrl = cardBaseUrl(), bearerRequired = !tokenBlank))
         }
     }
 }
@@ -1055,11 +1057,24 @@ private data class ChatFlowSignalPair(
 
 private class A2aStreamFinished : RuntimeException(null, null, false, false)
 
-private fun buildA2aBaseUrl(request: ApplicationRequest): String {
-    val scheme = request.origin.scheme.ifBlank { "http" }
-    val host = request.origin.serverHost
-    val port = request.origin.serverPort
-    return "$scheme://$host:$port"
+/**
+ * The base URL advertised in the agent card's `url` (the RPC endpoint clients POST to). It is derived
+ * ONLY from the server's own bind config — never from the inbound `Host` header. Reflecting the raw Host
+ * into `card.url` let an attacker who controls the Host a client sends (DNS rebinding / a proxy in the
+ * middle) poison the card so a token-bearing client POSTs its task + bearer to the attacker's host
+ * (card-url poisoning → token exfiltration / SSRF). The A2A server is plain HTTP, so the scheme is fixed.
+ *
+ * - localhost-only bind → `127.0.0.1`.
+ * - LAN bind → the device's resolved LAN IP; if it is not (yet) known, fall back to `127.0.0.1` rather
+ *   than ever emitting an externally-influenced host (a degraded-but-safe value, never an attacker's).
+ */
+internal fun a2aCardBaseUrl(localhostOnly: Boolean, lanIp: String?, port: Int): String {
+    val host = if (localhostOnly) {
+        "127.0.0.1"
+    } else {
+        lanIp?.takeIf { it.isNotBlank() } ?: "127.0.0.1"
+    }
+    return "http://$host:$port"
 }
 
 private fun extractA2aBearerToken(authorizationHeader: String?): String? {

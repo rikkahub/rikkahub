@@ -23,6 +23,7 @@ fun Application.configureA2aApi(
     chatService: ChatService,
     settingsStore: SettingsStore,
     a2aTaskRegistry: A2aTaskRegistry,
+    cardBaseUrl: () -> String,
 ) {
     install(ContentNegotiation) {
         json(JsonInstant)
@@ -40,7 +41,7 @@ fun Application.configureA2aApi(
     }
 
     routing {
-        a2aAgentCardRoute(settingsStore = settingsStore)
+        a2aAgentCardRoute(settingsStore = settingsStore, cardBaseUrl = cardBaseUrl)
         a2aRpcRoute(
             appScope = appScope,
             chatService = chatService,

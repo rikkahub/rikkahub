@@ -12,6 +12,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.a2a.A2aTaskRegistry
+import me.rerere.rikkahub.web.a2a.a2aCardBaseUrl
 import java.net.ServerSocket
 
 private const val TAG = "A2aServerManager"
@@ -81,6 +82,9 @@ class A2aServerManager(
                             chatService = chatService,
                             settingsStore = settingsStore,
                             a2aTaskRegistry = a2aTaskRegistry,
+                            // The agent card's RPC url is derived from THIS server's bind config — never the
+                            // inbound Host header — so a poisoned Host can't redirect a token-bearing client.
+                            cardBaseUrl = { a2aCardBaseUrl(localhostOnly = localhostOnly, lanIp = _state.value.address, port = port) },
                         )
                     }.start(wait = false)
                     val registered = registerNsd(port, localhostOnly)
@@ -177,6 +181,8 @@ class A2aServerManager(
                                 chatService = chatService,
                                 settingsStore = settingsStore,
                                 a2aTaskRegistry = a2aTaskRegistry,
+                                // Card url from THIS server's bind config, never the inbound Host header.
+                                cardBaseUrl = { a2aCardBaseUrl(localhostOnly = localhostOnly, lanIp = _state.value.address, port = port) },
                             )
                         }.start(wait = false)
                         // Register the advert AND publish the running state INSIDE the locked transition
