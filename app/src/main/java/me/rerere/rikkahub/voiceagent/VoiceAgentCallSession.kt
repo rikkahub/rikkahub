@@ -675,7 +675,7 @@ class VoiceAgentCallSession internal constructor(
     private fun cleanupAutomaticReconnectResources(job: Job): Boolean {
         return resourceCleaner.cleanupForAutomaticReconnect(
             closeGemini = true,
-            shouldContinue = { isAutomaticReconnectCurrent(job) },
+            isAutomaticReconnectCurrentUnderCleanupLock = { isAutomaticReconnectCurrent(job) },
         )
     }
 

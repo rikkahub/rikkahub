@@ -23,55 +23,61 @@ internal class VoiceSessionResourceCleaner(
         clearHermesBridge()
     }
 
-    fun cleanupForReconnect(closeGemini: Boolean) = synchronized(cleanupLock) {
+    private fun runCleanupSequence(
+        closeGemini: Boolean,
+        prepare: () -> Unit = {},
+        isAutomaticReconnectCurrentUnderCleanupLock: () -> Boolean = { true },
+    ): Boolean {
+        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
         detachHermesBridge()
-        coordinator.prepareForReconnect()
+        prepare()
+        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
         invalidateAudioSessions()
+        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
         audio.stopCapture()
+        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
         audio.suppressPlayback()
+        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
         if (closeGemini) {
             gemini.close()
+        }
+        return isAutomaticReconnectCurrentUnderCleanupLock()
+    }
+
+    fun cleanupForReconnect(closeGemini: Boolean) {
+        synchronized(cleanupLock) {
+            runCleanupSequence(
+                closeGemini = closeGemini,
+                prepare = coordinator::prepareForReconnect,
+            )
         }
     }
 
     fun cleanupForAutomaticReconnect(
         closeGemini: Boolean,
-        shouldContinue: () -> Boolean = { true },
+        isAutomaticReconnectCurrentUnderCleanupLock: () -> Boolean = { true },
     ): Boolean = synchronized(cleanupLock) {
-        if (!shouldContinue()) return false
-        detachHermesBridge()
-        if (!shouldContinue()) return false
-        invalidateAudioSessions()
-        if (!shouldContinue()) return false
-        audio.stopCapture()
-        if (!shouldContinue()) return false
-        audio.suppressPlayback()
-        if (!shouldContinue()) return false
-        if (closeGemini) {
-            gemini.close()
-        }
-        return shouldContinue()
+        runCleanupSequence(
+            closeGemini = closeGemini,
+            isAutomaticReconnectCurrentUnderCleanupLock = isAutomaticReconnectCurrentUnderCleanupLock,
+        )
     }
 
-    fun cleanupForFailure(closeGemini: Boolean) = synchronized(cleanupLock) {
-        detachHermesBridge()
-        coordinator.prepareForSessionEnd()
-        invalidateAudioSessions()
-        audio.stopCapture()
-        audio.suppressPlayback()
-        if (closeGemini) {
-            gemini.close()
+    fun cleanupForFailure(closeGemini: Boolean) {
+        synchronized(cleanupLock) {
+            runCleanupSequence(
+                closeGemini = closeGemini,
+                prepare = coordinator::prepareForSessionEnd,
+            )
         }
     }
 
-    fun cleanupForEnd(closeGemini: Boolean) = synchronized(cleanupLock) {
-        detachHermesBridge()
-        coordinator.prepareForSessionEnd()
-        invalidateAudioSessions()
-        audio.stopCapture()
-        audio.suppressPlayback()
-        if (closeGemini) {
-            gemini.close()
+    fun cleanupForEnd(closeGemini: Boolean) {
+        synchronized(cleanupLock) {
+            runCleanupSequence(
+                closeGemini = closeGemini,
+                prepare = coordinator::prepareForSessionEnd,
+            )
         }
     }
 }
