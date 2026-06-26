@@ -2811,12 +2811,12 @@ class VoiceAgentRuntimeTest {
         delay(50)
 
         assertEquals(VoiceSessionStatus.Reconnecting, session.state.value.session)
-        assertEquals(0, audio.startCaptureCalls)
+        assertEquals(1, audio.startCaptureCalls)
 
         gemini.awaitConnectCount(2)
 
         assertEquals(2, sessionApi.createdSessions.size)
-        assertEquals(1, audio.startCaptureCalls)
+        assertEquals(2, audio.startCaptureCalls)
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
         assertNull(session.state.value.error)
         assertTrue(
@@ -2831,6 +2831,95 @@ class VoiceAgentRuntimeTest {
                     it.detail == "reason=websocket_failure, closeGemini=true"
             }
         )
+    }
+
+    @Test
+    fun `connected status waits until connected resources activate`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val blockedStartCapture = audio.blockNextStartCapture()
+        val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            scope = sessionScope,
+        )
+
+        try {
+            session.start()
+            gemini.awaitConnect()
+            assertTrue(blockedStartCapture.started.await(500, TimeUnit.MILLISECONDS))
+
+            assertFalse(
+                "Visible Connected must wait until capture startup completes",
+                session.state.value.session == VoiceSessionStatus.Connected,
+            )
+
+            blockedStartCapture.release.countDown()
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        } finally {
+            blockedStartCapture.release.countDown()
+            sessionScope.cancel()
+        }
+    }
+
+    @Test
+    fun `automatic reconnect cleanup does not hold reconnect state lock during blocking resource cleanup`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val blockedStopCapture = audio.blockNextStopCapture()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        val firstCallback = gemini.eventHandlers.single()
+
+        val firstFailure = launch(Dispatchers.Default) {
+            firstCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped one"))
+        }
+        assertTrue(blockedStopCapture.started.await(500, TimeUnit.MILLISECONDS))
+
+        val secondFailureReturned = CountDownLatch(1)
+        val secondFailure = launch(Dispatchers.Default) {
+            firstCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped two"))
+            secondFailureReturned.countDown()
+        }
+
+        try {
+            assertTrue(
+                "Reconnect state decisions must not wait behind blocking cleanup",
+                secondFailureReturned.await(100, TimeUnit.MILLISECONDS),
+            )
+        } finally {
+            blockedStopCapture.release.countDown()
+            firstFailure.join()
+            secondFailure.join()
+        }
     }
 
     @Test

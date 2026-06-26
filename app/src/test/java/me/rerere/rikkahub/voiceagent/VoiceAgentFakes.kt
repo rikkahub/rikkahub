@@ -546,6 +546,8 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     private var playbackSessionId: Long? = null
     private var captureCallback: ((ByteArray) -> Unit)? = null
     private var debugInjectionCompleteCallback: (() -> Unit)? = null
+    private val blockedStartCaptures = mutableListOf<BlockedPlayback>()
+    private val blockedStopCaptures = mutableListOf<BlockedPlayback>()
     private val blockedPlaybacks = mutableListOf<BlockedPlayback>()
     private val blockedSuppressions = mutableListOf<BlockedPlayback>()
 
@@ -556,11 +558,21 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
         startCaptureCalls += 1
         startCaptureError?.let { throw it }
+        val blocked = synchronized(blockedStartCaptures) { blockedStartCaptures.removeFirstOrNull() }
+        if (blocked != null) {
+            blocked.started.countDown()
+            blocked.release.await(500, TimeUnit.MILLISECONDS)
+        }
         captureCallback = onPcm16
         debugInjectionCompleteCallback = onDebugInjectionComplete
     }
 
     override fun stopCapture() {
+        val blocked = synchronized(blockedStopCaptures) { blockedStopCaptures.removeFirstOrNull() }
+        if (blocked != null) {
+            blocked.started.countDown()
+            blocked.release.await(500, TimeUnit.MILLISECONDS)
+        }
         stopCaptureCalls += 1
         captureCallback = null
         debugInjectionCompleteCallback = null
@@ -610,6 +622,22 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         return BlockedPlayback().also { blocked ->
             synchronized(blockedPlaybacks) {
                 blockedPlaybacks += blocked
+            }
+        }
+    }
+
+    fun blockNextStartCapture(): BlockedPlayback {
+        return BlockedPlayback().also { blocked ->
+            synchronized(blockedStartCaptures) {
+                blockedStartCaptures += blocked
+            }
+        }
+    }
+
+    fun blockNextStopCapture(): BlockedPlayback {
+        return BlockedPlayback().also { blocked ->
+            synchronized(blockedStopCaptures) {
+                blockedStopCaptures += blocked
             }
         }
     }

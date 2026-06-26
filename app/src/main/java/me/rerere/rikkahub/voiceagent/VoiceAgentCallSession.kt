@@ -92,7 +92,7 @@ class VoiceAgentCallSession internal constructor(
     private var reconnectJob: Job? = null
     private var reconnectState: VoiceReconnectState? = null
     private val reconnectLock = Any()
-    private val currentSessionConnected = AtomicBoolean(false)
+    private val currentSessionReconnectEligible = AtomicBoolean(false)
     private var reconnectAttemptInProgress = false
 
     override val state: StateFlow<VoiceAgentUiState> = coordinator.state
@@ -119,7 +119,7 @@ class VoiceAgentCallSession internal constructor(
     private suspend fun runSession(currentSessionId: Long) {
         val sessionJob = currentCoroutineContext()[Job]
         startJob = sessionJob
-        currentSessionConnected.set(false)
+        currentSessionReconnectEligible.set(false)
         var geminiStarted = false
         try {
             coordinator.updateSessionStatus(VoiceSessionStatus.PreparingContext)
@@ -176,55 +176,59 @@ class VoiceAgentCallSession internal constructor(
                 )
                 return
             }
-            currentSessionConnected.set(true)
-            coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
+            currentSessionReconnectEligible.set(true)
+            val activationReserved = synchronized(reconnectLock) {
+                coordinator.isActiveSession(currentSessionId)
+            }
+            if (!activationReserved) {
+                restoreReconnectingStatusIfAutomaticReconnectPending()
+                return
+            }
+            ensureActiveSession(currentSessionId)
+            afterConnectedResourceGuardForTest()
             if (!coordinator.isActiveSession(currentSessionId)) {
                 restoreReconnectingStatusIfAutomaticReconnectPending()
                 return
             }
             ensureActiveSession(currentSessionId)
+            gemini.activateOutboundSession(currentSessionId)
+            val bridge = coordinator.createHermesSessionBridge(currentSessionId)
+            hermesBridge = bridge
+            coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)
+            coordinator.resumeHermesJobs()
+            audio.activatePlaybackSession(currentSessionId)
+            if (!muted) {
+                startCapture(currentSessionId)
+            }
             afterReconnectCompletionGuardForTest()
-            var reconnectCompletionSessionStale = false
-            var restoreReconnectingAfterCompletion = false
-            var activatedConnectedResources = false
+            var connectedSessionStale = false
+            var restoreReconnectingAfterCommit = false
             val completedReconnectAttempt = synchronized(reconnectLock) {
                 if (!coordinator.isActiveSession(currentSessionId)) {
-                    reconnectCompletionSessionStale = true
-                    restoreReconnectingAfterCompletion = reconnectState != null || reconnectJob != null
+                    connectedSessionStale = true
+                    restoreReconnectingAfterCommit = reconnectState != null || reconnectJob != null
                     null
                 } else {
-                    afterConnectedResourceGuardForTest()
-                    if (!coordinator.isActiveSession(currentSessionId)) {
-                        reconnectCompletionSessionStale = true
-                        restoreReconnectingAfterCompletion = reconnectState != null || reconnectJob != null
-                        null
+                    if (reconnectAttemptInProgress) {
+                        reconnectAttemptInProgress = false
+                        val attempt = reconnectState?.attempts
+                        reconnectState = null
+                        reconnectJob = null
+                        attempt
                     } else {
-                        gemini.activateOutboundSession(currentSessionId)
-                        val bridge = coordinator.createHermesSessionBridge(currentSessionId)
-                        hermesBridge = bridge
-                        coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)
-                        coordinator.resumeHermesJobs()
-                        audio.activatePlaybackSession(currentSessionId)
-                        if (!muted) {
-                            startCapture(currentSessionId)
-                        }
-                        activatedConnectedResources = true
-                        if (reconnectAttemptInProgress) {
-                            reconnectAttemptInProgress = false
-                            val attempt = reconnectState?.attempts
-                            reconnectState = null
-                            reconnectJob = null
-                            attempt
-                        } else {
-                            null
-                        }
+                        null
                     }
                 }
             }
-            if (reconnectCompletionSessionStale || !activatedConnectedResources) {
-                if (restoreReconnectingAfterCompletion && !ended) {
+            if (connectedSessionStale) {
+                if (restoreReconnectingAfterCommit && !ended) {
                     coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
                 }
+                return
+            }
+            coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
+            if (!coordinator.isActiveSession(currentSessionId)) {
+                restoreReconnectingStatusIfAutomaticReconnectPending()
                 return
             }
             completedReconnectAttempt?.let { attempt ->
@@ -256,6 +260,7 @@ class VoiceAgentCallSession internal constructor(
                     reason = VoiceSessionStopReason.StartupFailure,
                     closeGemini = geminiStarted,
                 )
+                currentSessionReconnectEligible.set(false)
                 coordinator.updateSessionStatus(
                     VoiceSessionStatus.Error(startupErrorMessage)
                 )
@@ -291,35 +296,30 @@ class VoiceAgentCallSession internal constructor(
     ): Boolean {
         var scheduledAttempt = 0
         var scheduledDelayMs = 0L
+        var shouldScheduleReconnect = false
         synchronized(reconnectLock) {
-            if (!reason.autoReconnectEligible || !currentSessionConnected.get() || ended) return false
+            if (!reason.autoReconnectEligible || !currentSessionReconnectEligible.get() || ended) return false
             if (!coordinator.isActiveSession(failedSessionId)) return false
 
             val now = nowMs()
             val currentState = reconnectState ?: VoiceReconnectState(
                 attempts = 0,
                 firstFailureAtMs = now,
-                latestReason = reason,
             )
             val attempt = currentState.attempts + 1
             val elapsedMs = now - currentState.firstFailureAtMs
             val delayMs = reconnectPolicy.delayMsForAttempt(attempt = attempt, elapsedMs = elapsedMs)
                 ?: return false
-            val nextState = currentState.copy(attempts = attempt, latestReason = reason)
+            val nextState = currentState.copy(attempts = attempt)
             reconnectState = nextState
-            currentSessionConnected.set(false)
+            currentSessionReconnectEligible.set(false)
             reconnectJob?.cancel()
-            prepareAutomaticReconnect(failedSessionId)
-            recordRetryableTransportDiagnostic(event)
-            coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
-            coordinator.recordDiagnostic(
-                name = "session_reconnect_scheduled",
-                detail = "reason=${reason.diagnosticReason}, attempt=$attempt, " +
-                    "maxAttempts=${reconnectPolicy.maxAttempts}, delayMs=$delayMs",
-            )
+            coordinator.prepareForAutomaticReconnect()
             scheduledAttempt = attempt
             scheduledDelayMs = delayMs
+            shouldScheduleReconnect = true
         }
+        if (!shouldScheduleReconnect) return false
         val job = scope.launch(start = CoroutineStart.LAZY) {
             delay(scheduledDelayMs)
             if (ended) return@launch
@@ -338,6 +338,14 @@ class VoiceAgentCallSession internal constructor(
             reconnectJob = job
             startJob = job
         }
+        cleanupAutomaticReconnectResources()
+        recordRetryableTransportDiagnostic(event)
+        coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+        coordinator.recordDiagnostic(
+            name = "session_reconnect_scheduled",
+            detail = "reason=${reason.diagnosticReason}, attempt=$scheduledAttempt, " +
+                "maxAttempts=${reconnectPolicy.maxAttempts}, delayMs=$scheduledDelayMs",
+        )
         job.start()
         return true
     }
@@ -351,10 +359,8 @@ class VoiceAgentCallSession internal constructor(
         }
     }
 
-    private fun prepareAutomaticReconnect(sessionId: Long) {
-        if (!coordinator.isActiveSession(sessionId)) return
+    private fun cleanupAutomaticReconnectResources() {
         detachHermesBridge()
-        coordinator.prepareForAutomaticReconnect()
         invalidateAudioSessions()
         audio.stopCapture()
         audio.suppressPlayback()
@@ -634,7 +640,6 @@ internal data class VoiceReconnectPolicy(
 private data class VoiceReconnectState(
     val attempts: Int,
     val firstFailureAtMs: Long,
-    val latestReason: VoiceSessionStopReason,
 )
 
 private fun GeminiLiveEvent.toSessionStopReason(): VoiceSessionStopReason? =
