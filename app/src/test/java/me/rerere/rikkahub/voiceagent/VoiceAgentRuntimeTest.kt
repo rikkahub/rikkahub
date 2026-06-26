@@ -3430,6 +3430,50 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `stale automatic reconnect cleanup does not overwrite manual reconnect`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val blockedStopCapture = audio.blockNextStopCapture()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        val firstCallback = gemini.eventHandlers.single()
+        val automaticFailure = launch(Dispatchers.Default) {
+            firstCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
+        }
+        assertTrue(blockedStopCapture.started.await(500, TimeUnit.MILLISECONDS))
+
+        session.reconnect()
+        gemini.awaitConnectCount(2)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+
+        blockedStopCapture.release.countDown()
+        automaticFailure.join()
+        delay(300)
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(2, gemini.eventHandlers.size)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
+    }
+
+    @Test
     fun `post connected WebSocket failure after final guard does not activate stale resources`() = runTest {
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()

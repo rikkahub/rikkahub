@@ -503,9 +503,13 @@ class VoiceAgentCallSession internal constructor(
             startJob = job
         }
         if (cleanupResources) {
-            cleanupAutomaticReconnectResources()
+            if (!cleanupAutomaticReconnectResources(job)) {
+                return
+            }
+        } else if (!isAutomaticReconnectCurrent(job)) {
+            return
         }
-        if (!updateSessionStatusIfNotEnded(VoiceSessionStatus.Reconnecting)) {
+        if (!updateAutomaticReconnectStatusIfCurrent(job)) {
             job.cancel()
             synchronized(reconnectLock) {
                 if (reconnectJob === job) {
@@ -517,12 +521,14 @@ class VoiceAgentCallSession internal constructor(
             }
             return
         }
+        if (!isAutomaticReconnectCurrent(job)) return
         recordRetryableTransportDiagnostic(plan.event)
         coordinator.recordDiagnostic(
             name = "session_reconnect_scheduled",
             detail = "reason=${plan.reason.diagnosticReason}, attempt=${plan.attempt}, " +
                 "maxAttempts=${reconnectPolicy.maxAttempts}, delayMs=${plan.delayMs}",
         )
+        if (!isAutomaticReconnectCurrent(job)) return
         job.start()
     }
 
@@ -602,6 +608,16 @@ class VoiceAgentCallSession internal constructor(
             }
         }
 
+    private fun updateAutomaticReconnectStatusIfCurrent(job: Job): Boolean =
+        synchronized(reconnectLock) {
+            if (ended || reconnectJob !== job) {
+                false
+            } else {
+                coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+                true
+            }
+        }
+
     private fun isSessionOpenAndActive(
         sessionId: Long,
         automaticReconnectJob: Job? = null,
@@ -618,6 +634,11 @@ class VoiceAgentCallSession internal constructor(
             coordinator.isActiveSession(sessionId) &&
             (automaticReconnectJob == null || reconnectJob === automaticReconnectJob)
     }
+
+    private fun isAutomaticReconnectCurrent(job: Job): Boolean =
+        synchronized(reconnectLock) {
+            !ended && reconnectJob === job
+        }
 
     private fun clearReconnectEligibility() {
         synchronized(reconnectLock) {
@@ -647,12 +668,18 @@ class VoiceAgentCallSession internal constructor(
             }
         }
 
-    private fun cleanupAutomaticReconnectResources() {
+    private fun cleanupAutomaticReconnectResources(job: Job): Boolean {
+        if (!isAutomaticReconnectCurrent(job)) return false
         detachHermesBridge()
+        if (!isAutomaticReconnectCurrent(job)) return false
         invalidateAudioSessions()
+        if (!isAutomaticReconnectCurrent(job)) return false
         audio.stopCapture()
+        if (!isAutomaticReconnectCurrent(job)) return false
         audio.suppressPlayback()
+        if (!isAutomaticReconnectCurrent(job)) return false
         gemini.close()
+        return isAutomaticReconnectCurrent(job)
     }
 
     private fun recordRetryableTransportDiagnostic(event: GeminiLiveEvent) {
