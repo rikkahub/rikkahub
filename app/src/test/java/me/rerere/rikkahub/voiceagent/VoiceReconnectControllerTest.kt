@@ -33,6 +33,31 @@ class VoiceReconnectControllerTest {
     }
 
     @Test
+    fun `duplicate failure for planned session is coalesced without another retry attempt`() {
+        val controller = VoiceReconnectController(
+            policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),
+            nowMs = { 1_000L },
+        )
+        controller.markEligible(sessionId = 7L)
+
+        val firstDecision = controller.planReconnect(
+            failedSessionId = 7L,
+            event = GeminiLiveEvent.WebSocketFailure("drop one"),
+            reason = VoiceSessionStopReason.WebSocketFailure,
+        )
+        val secondDecision = controller.planReconnect(
+            failedSessionId = 7L,
+            event = GeminiLiveEvent.WebSocketFailure("drop two"),
+            reason = VoiceSessionStopReason.WebSocketFailure,
+        )
+
+        assertTrue(firstDecision is VoiceReconnectDecision.Schedule)
+        assertSame(VoiceReconnectDecision.AlreadyPlanned, secondDecision)
+        assertEquals(1, controller.retryAttempt())
+        assertFalse(controller.hasPendingReconnect())
+    }
+
+    @Test
     fun `ineligible stale failure is ignored`() {
         val controller = VoiceReconnectController(
             policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),

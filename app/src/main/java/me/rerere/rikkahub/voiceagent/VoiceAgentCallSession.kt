@@ -379,6 +379,7 @@ class VoiceAgentCallSession internal constructor(
             )
         ) {
             VoiceReconnectDecision.Ignore -> false
+            VoiceReconnectDecision.AlreadyPlanned -> true
             VoiceReconnectDecision.DeferredForActivation -> true
             is VoiceReconnectDecision.Exhausted -> {
                 coordinator.recordDiagnostic(
