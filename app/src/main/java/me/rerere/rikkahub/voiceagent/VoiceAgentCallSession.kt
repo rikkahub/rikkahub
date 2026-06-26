@@ -37,9 +37,6 @@ class VoiceAgentCallSession internal constructor(
     private val voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
     private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
     private val nowMs: () -> Long = ::defaultReconnectClockMs,
-    private val afterConnectedResourceGuardForTest: () -> Unit = {},
-    private val beforeConnectedResourceActivationForTest: () -> Unit = {},
-    private val afterReconnectCompletionGuardForTest: () -> Unit = {},
     private val scope: CoroutineScope,
 ) : ManagedVoiceCallSession {
     constructor(
@@ -209,7 +206,6 @@ class VoiceAgentCallSession internal constructor(
             }
             if (!markReconnectEligible(currentSessionId, automaticReconnectJob)) return
             ensureActiveSession(currentSessionId, automaticReconnectJob)
-            afterConnectedResourceGuardForTest()
             if (!coordinator.isActiveSession(currentSessionId)) {
                 restoreReconnectingStatusIfAutomaticReconnectPending()
                 return
@@ -219,7 +215,6 @@ class VoiceAgentCallSession internal constructor(
                 restoreReconnectingStatusIfAutomaticReconnectPending()
                 return
             }
-            beforeConnectedResourceActivationForTest()
             ensureActiveSession(currentSessionId, automaticReconnectJob)
             consumePendingActivationReconnect(currentSessionId)?.let { pending ->
                 activatePendingReconnect(pending)
@@ -252,7 +247,6 @@ class VoiceAgentCallSession internal constructor(
                 activatePendingReconnect(pending)
                 return
             }
-            afterReconnectCompletionGuardForTest()
             var connectedSessionStale = false
             var restoreReconnectingAfterCommit = false
             val completedReconnectAttempt = synchronized(sessionLock) {
