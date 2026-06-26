@@ -1119,7 +1119,6 @@
   <string name="assistant_page_ui_automation_desc">Allow this assistant to read and act on the screen of other apps: it may tap, type, scroll, and use global navigation (Back/Home/Recents) within the scope you grant. Requires enabling the Poci accessibility service in system settings.</string>
   <string name="assistant_page_gradient_background">Gradient Background</string>
   <string name="assistant_page_gradient_background_desc">Use a dynamic gradient background on the chat page</string>
-  <string name="automation_kill_switch_unavailable">Automation could not start: the STOP kill-switch could not be shown. Enable the Poci Accessibility service and overlay, then try again.</string>
   <string name="automation_confirm_prompt">Confirm action in %1$s: %2$s %3$s?</string>
   <string name="automation_confirm_allow">Confirm</string>
   <string name="automation_confirm_deny">Deny</string>

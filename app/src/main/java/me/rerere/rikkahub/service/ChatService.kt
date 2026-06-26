@@ -347,6 +347,35 @@ internal suspend fun <R> openSubagentAutomationLeaseOnSession(
     }
 }
 
+/**
+ * Decide the automation guard the MAIN turn's [ChatService.withAutomationLease] block runs with, applying
+ * the fail-closed-but-DEGRADE policy (mirrors [openSubagentAutomationLeaseOnSession]'s onNoKillSwitch).
+ * The caller has already minted [mintedGuard] and registered it as [session].activeAutomationGuard
+ * (guard-before-activate, so a kill-switch tap in the activation window sees it). Then:
+ *  - no guard to begin with ⇒ return null (no automation; nothing to activate).
+ *  - guard + STOP overlay activates ⇒ return the guard (the turn gets ui_* tools).
+ *  - guard but the STOP overlay CANNOT be shown ⇒ DEGRADE: clear the lease state (which also drops the
+ *    per-run grant, so a one-run authorization can't leak onto a later turn) + revoke the guard, and
+ *    return null. The turn then runs WITHOUT ui_* tools instead of throwing and failing entirely — so a
+ *    non-automation prompt (and a headless A2A turn, which can't show the overlay from the background)
+ *    still completes, while ui_* is still NEVER exposed without a reachable kill switch.
+ *
+ * Non-inline + collaborator-injected so the degrade/teardown invariant is JVM-testable.
+ */
+internal fun resolveMainAutomationGuard(
+    session: ConversationSession,
+    mintedGuard: CapabilityGuard?,
+    conversationId: Uuid,
+    activation: AutomationActivationTracker,
+): CapabilityGuard? {
+    if (mintedGuard != null && !activation.activate(conversationId)) {
+        if (session.activeAutomationGuard === mintedGuard) session.clearAutomationLeaseState()
+        mintedGuard.revoke()
+        return null
+    }
+    return mintedGuard
+}
+
 internal fun conversationHasPendingToolApproval(conversation: Conversation): Boolean =
     conversation.currentMessages.any { message ->
         message.parts.any { it is UIMessagePart.Tool && it.isPending }
@@ -2228,8 +2257,9 @@ class ChatService(
     // the 1→0 deactivate when IT terminates. (sendMessage's join() makes the old finally run before
     // the new activate, so identity holds there too.)
     //
-    // [inline] so a non-local return/throw out of [block] (incl. CancellationException and the
-    // automation_kill_switch_unavailable throw) propagates exactly as it did inline.
+    // [inline] so a non-local return/throw out of [block] (incl. a CancellationException from Stop or a
+    // superseding turn) propagates exactly as it did inline. An unreachable STOP overlay no longer throws
+    // here — [resolveMainAutomationGuard] DEGRADES to a null guard (no ui_* tools) and the turn runs on.
     private inline fun <R> withAutomationLease(
         conversationId: Uuid,
         assistant: Assistant,
@@ -2254,7 +2284,9 @@ class ChatService(
         // empty/absent grant ⇒ `effectiveAutomationCapability` returns null ⇒ NO guard is minted ⇒ the
         // guard-closed-over tools still DENY (no regression). SUBMIT is stripped inside the derivation
         // (submit-class stays the stricter, separate opt-in), so a grant can never bypass the confirm
-        // gate. The STOP overlay below remains mandatory for ANY minted guard.
+        // gate. A minted guard still REQUIRES a reachable STOP overlay to expose ui_* tools — but an
+        // unreachable overlay now DEGRADES the guard to null (no ui_* tools) instead of failing the turn
+        // (see [resolveMainAutomationGuard]).
         //
         // Finding 1: `uiAutomationEnabled` is passed into the derivation as the single master gate
         // for BOTH grant sources. A per-run grant can override the standing grant only after that gate
@@ -2274,15 +2306,19 @@ class ChatService(
             // state can never mint an unrestricted capability there (the empty UI seam is not enough).
             yoloSupported = AUTOMATION_YOLO_SUPPORTED,
         )
-        val automationGuard: CapabilityGuard? = capability?.let { cap ->
+        // Mint + register the guard BEFORE activating the STOP overlay (guard-before-activate, so a
+        // kill-switch tap in the activation window already sees it). Then DEGRADE — not throw — when the
+        // overlay cannot be shown: [resolveMainAutomationGuard] tears the guard + per-run grant down and
+        // returns null, so the turn runs WITHOUT ui_* tools instead of failing entirely. A non-automation
+        // prompt (and a headless A2A turn, which can't show the overlay from the background) thus still
+        // completes; ui_* is still NEVER exposed without a reachable kill switch (null guard ⇒ no ui_*
+        // tools). Mirrors [openSubagentAutomationLeaseOnSession]'s onNoKillSwitch path.
+        val mintedGuard: CapabilityGuard? = capability?.let { cap ->
             CapabilityGuard(capability = cap, clock = trustClock)
                 .also { guard -> session.activeAutomationGuard = guard }
         }
-        if (automationGuard != null && !automationActivation.activate(conversationId)) {
-            if (session.activeAutomationGuard === automationGuard) session.clearAutomationLeaseState()
-            automationGuard.revoke()
-            throw IllegalStateException(strings.getString(R.string.automation_kill_switch_unavailable))
-        }
+        val automationGuard: CapabilityGuard? =
+            resolveMainAutomationGuard(session, mintedGuard, conversationId, automationActivation)
         // Tracks a NORMAL return from [block] vs an exceptional exit. Only a normal completion that
         // PAUSED on an approval is a resumable break; a CancellationException (Stop, or a newer entry
         // superseding this job via the previousJob.join barrier) is a turn ABANDON, after which the
