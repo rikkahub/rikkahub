@@ -3477,11 +3477,17 @@ class VoiceAgentRuntimeTest {
         session.reconnect()
         gemini.awaitConnectCount(2)
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        val stopCaptureCallsAfterManualReconnect = audio.stopCaptureCalls
+        val suppressPlaybackCallsAfterManualReconnect = audio.suppressPlaybackCalls
+        val closeCallsAfterManualReconnect = gemini.closeCalls
 
         blockedStopCapture.release.countDown()
         automaticFailure.join()
         delay(300)
 
+        assertEquals(stopCaptureCallsAfterManualReconnect + 1, audio.stopCaptureCalls)
+        assertEquals(suppressPlaybackCallsAfterManualReconnect, audio.suppressPlaybackCalls)
+        assertEquals(closeCallsAfterManualReconnect, gemini.closeCalls)
         assertEquals(2, sessionApi.createdSessions.size)
         assertEquals(2, gemini.eventHandlers.size)
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
