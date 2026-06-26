@@ -127,9 +127,10 @@ class VoiceAgentCallSession internal constructor(
         currentSessionReconnectEligible.set(false)
         var geminiStarted = false
         try {
-            coordinator.updateSessionStatus(VoiceSessionStatus.PreparingContext)
+            if (!updateSessionStatusIfActive(currentSessionId, VoiceSessionStatus.PreparingContext)) return
             VoiceAgentLog.d(TAG, "preparing context sessionId=$currentSessionId")
             val voiceContext = contextProvider.build(conversation.value).withTurnsFoldedIntoSystemInstruction()
+            ensureActiveSession(currentSessionId)
             VoiceAgentLog.d(
                 TAG,
                 "context prepared sessionId=$currentSessionId turns=${voiceContext.turns.size} " +
@@ -139,10 +140,10 @@ class VoiceAgentCallSession internal constructor(
                 name = "voice_context_prepared",
                 detail = "turns=${voiceContext.turns.size}, systemInstructionChars=${voiceContext.systemInstruction.length}",
             )
-            ensureActiveSession(currentSessionId)
-            coordinator.updateSessionStatus(VoiceSessionStatus.RequestingToken)
+            if (!updateSessionStatusIfActive(currentSessionId, VoiceSessionStatus.RequestingToken)) return
             VoiceAgentLog.d(TAG, "requesting voice session sessionId=$currentSessionId modelId=$modelId")
             val session = sessionApi.createSession(modelId = modelId)
+            ensureActiveSession(currentSessionId)
             VoiceAgentLog.d(
                 TAG,
                 "voice session created sessionId=$currentSessionId modelId=${session.modelId} " +
@@ -154,8 +155,7 @@ class VoiceAgentCallSession internal constructor(
                 detail = "modelId=${session.modelId}, providerModel=${session.providerModel}, " +
                     "inputSampleRate=${session.inputSampleRate}, outputSampleRate=${session.outputSampleRate}",
             )
-            ensureActiveSession(currentSessionId)
-            coordinator.updateSessionStatus(VoiceSessionStatus.ConnectingGemini)
+            if (!updateSessionStatusIfActive(currentSessionId, VoiceSessionStatus.ConnectingGemini)) return
             geminiStarted = true
             VoiceAgentLog.d(
                 TAG,
@@ -241,11 +241,11 @@ class VoiceAgentCallSession internal constructor(
             }
             if (connectedSessionStale) {
                 if (restoreReconnectingAfterCommit && !ended) {
-                    coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+                    updateSessionStatusIfNotEnded(VoiceSessionStatus.Reconnecting)
                 }
                 return
             }
-            coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
+            if (!updateSessionStatusIfActive(currentSessionId, VoiceSessionStatus.Connected)) return
             if (!coordinator.isActiveSession(currentSessionId)) {
                 restoreReconnectingStatusIfAutomaticReconnectPending()
                 return
@@ -268,7 +268,7 @@ class VoiceAgentCallSession internal constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            if (coordinator.isActiveSession(currentSessionId)) {
+            if (isSessionOpenAndActive(currentSessionId)) {
                 VoiceAgentLog.w(
                     TAG,
                     "run session failed sessionId=$currentSessionId detail=${error.toVoiceAgentLogDetail()}",
@@ -286,9 +286,7 @@ class VoiceAgentCallSession internal constructor(
                     closeGemini = geminiStarted,
                 )
                 currentSessionReconnectEligible.set(false)
-                coordinator.updateSessionStatus(
-                    VoiceSessionStatus.Error(startupErrorMessage)
-                )
+                updateSessionStatusIfActive(currentSessionId, VoiceSessionStatus.Error(startupErrorMessage))
             }
         } finally {
             if (startJob === sessionJob) {
@@ -480,8 +478,19 @@ class VoiceAgentCallSession internal constructor(
         if (cleanupResources) {
             cleanupAutomaticReconnectResources()
         }
+        if (!updateSessionStatusIfNotEnded(VoiceSessionStatus.Reconnecting)) {
+            job.cancel()
+            synchronized(reconnectLock) {
+                if (reconnectJob === job) {
+                    reconnectJob = null
+                }
+                if (startJob === job) {
+                    startJob = null
+                }
+            }
+            return
+        }
         recordRetryableTransportDiagnostic(plan.event)
-        coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
         coordinator.recordDiagnostic(
             name = "session_reconnect_scheduled",
             detail = "reason=${plan.reason.diagnosticReason}, attempt=${plan.attempt}, " +
@@ -539,9 +548,46 @@ class VoiceAgentCallSession internal constructor(
             reconnectJob != null || reconnectAttemptInProgress || pendingActivationReconnect != null
         }
         if (reconnectPending && !ended) {
-            coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+            updateSessionStatusIfNotEnded(VoiceSessionStatus.Reconnecting)
         }
     }
+
+    private fun updateSessionStatusIfActive(
+        sessionId: Long,
+        status: VoiceSessionStatus,
+    ): Boolean = synchronized(reconnectLock) {
+        if (ended || !coordinator.isActiveSession(sessionId)) {
+            false
+        } else {
+            coordinator.updateSessionStatus(status)
+            true
+        }
+    }
+
+    private fun updateSessionStatusIfNotEnded(status: VoiceSessionStatus): Boolean =
+        synchronized(reconnectLock) {
+            if (ended) {
+                false
+            } else {
+                coordinator.updateSessionStatus(status)
+                true
+            }
+        }
+
+    private fun isSessionOpenAndActive(sessionId: Long): Boolean =
+        synchronized(reconnectLock) {
+            !ended && coordinator.isActiveSession(sessionId)
+        }
+
+    private fun markEnded(): Boolean =
+        synchronized(reconnectLock) {
+            if (ended) {
+                false
+            } else {
+                ended = true
+                true
+            }
+        }
 
     private fun cleanupAutomaticReconnectResources() {
         detachHermesBridge()
@@ -587,7 +633,7 @@ class VoiceAgentCallSession internal constructor(
 
     private suspend fun ensureActiveSession(sessionId: Long) {
         currentCoroutineContext().ensureActive()
-        check(coordinator.isActiveSession(sessionId)) { "Voice Agent session is stale" }
+        check(isSessionOpenAndActive(sessionId)) { "Voice Agent session is stale" }
     }
 
     override fun interrupt() {
@@ -632,11 +678,14 @@ class VoiceAgentCallSession internal constructor(
 
     private fun startReconnectedSession(previousJob: Job?): Job = scope.launch {
         previousJob?.cancelAndJoin()
-        if (ended) return@launch
-        coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
-        val currentSessionId = coordinator.nextSessionId()
-        sessionId = currentSessionId
-        runSession(currentSessionId)
+        var currentSessionId: Long? = null
+        synchronized(reconnectLock) {
+            if (!ended) {
+                coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
+                currentSessionId = coordinator.nextSessionId().also { sessionId = it }
+            }
+        }
+        runSession(currentSessionId ?: return@launch)
     }
 
     override fun end() {
@@ -660,8 +709,7 @@ class VoiceAgentCallSession internal constructor(
     }
 
     private fun beginEnd(): EndPreparation? {
-        if (ended) return null
-        ended = true
+        if (!markEnded()) return null
         val automaticReconnectJob = cancelAutomaticReconnect(reason = "end")
         val previousJob = startJob ?: automaticReconnectJob
         detachHermesBridge()
@@ -688,10 +736,7 @@ class VoiceAgentCallSession internal constructor(
     }
 
     override fun closeNow() {
-        val shouldRecordEnd = !ended
-        if (shouldRecordEnd) {
-            ended = true
-        }
+        val shouldRecordEnd = markEnded()
         cancelAutomaticReconnect(reason = "close")
         startJob?.cancel()
         detachHermesBridge()
