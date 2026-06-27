@@ -32,6 +32,7 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     var onBeforeToolResponseRecorded: (() -> Unit)? = null
     var onClose: (() -> Unit)? = null
     var connectEvent: GeminiLiveEvent? = null
+    var activateOutboundSessionEvent: GeminiLiveEvent? = null
     var connectedToken: String? = null
     var connectedWebsocketUrl: String? = null
     var connectedProviderModel: String? = null
@@ -103,6 +104,9 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
 
     override fun activateOutboundSession(sessionId: Long) {
         outboundSessionId = sessionId
+        activateOutboundSessionEvent?.let { event ->
+            eventHandlers.lastOrNull()?.invoke(event)
+        }
     }
 
     override fun sendAudioStreamEnd(sessionId: Long?): Boolean {
