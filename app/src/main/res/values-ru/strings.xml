@@ -1254,5 +1254,13 @@
   <string name="assistant_page_local_tools_screen_time_permission_required">Пожалуйста, предоставьте разрешение Доступ к использованию в настройках, чтобы использовать экранное время</string>
   <string name="chat_message_tool_screen_time">Чтение экранного времени</string>
   <string name="tool_ui_screen_time_total">Общее время экрана</string>
+  <string name="permission_calendar_read">Чтение календаря</string>
+  <string name="permission_calendar_read_desc">Чтение событий календаря для ответов на вопросы о вашем расписании.</string>
+  <string name="permission_calendar_write">Запись в календарь</string>
+  <string name="permission_calendar_write_desc">Создавать события календаря от вашего имени</string>
+  <string name="assistant_page_local_tools_calendar_title">Календарь</string>
+  <string name="assistant_page_local_tools_calendar_desc">Позволяет ИИ запрашивать и создавать события календаря</string>
+  <string name="chat_message_tool_calendar_query">Запросить события календаря</string>
+  <string name="chat_message_tool_calendar_create">Создать событие: %1$s</string>
 </resources>
 

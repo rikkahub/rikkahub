@@ -461,6 +461,10 @@
   <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
+  <string name="permission_calendar_read">Read Calendar</string>
+  <string name="permission_calendar_read_desc">Read calendar events to answer your schedule-related questions</string>
+  <string name="permission_calendar_write">Write Calendar</string>
+  <string name="permission_calendar_write_desc">Create calendar events on your behalf</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
   <string name="permission_required">Required</string>
   <string name="photo">Photo</string>
@@ -1253,5 +1257,9 @@
   <string name="assistant_page_local_tools_screen_time_permission_required">Please grant the Usage access permission in settings to use screen time</string>
   <string name="chat_message_tool_screen_time">Read screen time</string>
   <string name="tool_ui_screen_time_total">Total screen time</string>
+  <string name="assistant_page_local_tools_calendar_title">Calendar</string>
+  <string name="assistant_page_local_tools_calendar_desc">Let the AI query and create calendar events</string>
+  <string name="chat_message_tool_calendar_query">Query calendar events</string>
+  <string name="chat_message_tool_calendar_create">Create event: %1$s</string>
 </resources>
 

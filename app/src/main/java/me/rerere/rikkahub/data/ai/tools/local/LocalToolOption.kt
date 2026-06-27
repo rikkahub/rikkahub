@@ -28,4 +28,8 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("screen_time")
     data object ScreenTime : LocalToolOption()
+
+    @Serializable
+    @SerialName("calendar")
+    data object Calendar : LocalToolOption()
 }

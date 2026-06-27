@@ -97,6 +97,8 @@ object ToolUIRegistry {
         ClipboardToolUI,
         TextToSpeechToolUI,
         GetScreenTimeToolUI,
+        CalendarQueryToolUI,
+        CalendarCreateToolUI,
         UseSkillToolUI,
         RecentChatsToolUI,
         ConversationSearchToolUI,

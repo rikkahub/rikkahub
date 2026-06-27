@@ -1254,5 +1254,13 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_screen_time_permission_required">スクリーンタイムを使用するには、設定で「使用状況へのアクセス」許可を付与してください</string>
   <string name="chat_message_tool_screen_time">スクリーンタイムを読み取る</string>
   <string name="tool_ui_screen_time_total">総画面時間</string>
+  <string name="permission_calendar_read">カレンダーの読み取り</string>
+  <string name="permission_calendar_read_desc">カレンダーのイベントを読み取り、スケジュール関連の質問に回答します。</string>
+  <string name="permission_calendar_write">カレンダーへの書き込み</string>
+  <string name="permission_calendar_write_desc">あなたに代わってカレンダーイベントを作成します</string>
+  <string name="assistant_page_local_tools_calendar_title">カレンダー</string>
+  <string name="assistant_page_local_tools_calendar_desc">AIにカレンダーイベントの検索と作成を許可します</string>
+  <string name="chat_message_tool_calendar_query">カレンダーイベントを照会</string>
+  <string name="chat_message_tool_calendar_create">イベントを作成: %1$s</string>
 </resources>
 

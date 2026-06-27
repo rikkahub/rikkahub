@@ -1252,5 +1252,13 @@
   <string name="assistant_page_local_tools_screen_time_permission_required">請在設定中授予「使用記錄存取權」權限，以使用螢幕時間</string>
   <string name="chat_message_tool_screen_time">讀取螢幕時間</string>
   <string name="tool_ui_screen_time_total">總螢幕使用時間</string>
+  <string name="permission_calendar_read">讀取日曆</string>
+  <string name="permission_calendar_read_desc">讀取日曆事件，以回答您與行程相關的問題</string>
+  <string name="permission_calendar_write">寫入日曆</string>
+  <string name="permission_calendar_write_desc">代您建立日曆活動</string>
+  <string name="assistant_page_local_tools_calendar_title">日曆</string>
+  <string name="assistant_page_local_tools_calendar_desc">讓AI查詢和建立行事曆事件</string>
+  <string name="chat_message_tool_calendar_query">查詢日曆事件</string>
+  <string name="chat_message_tool_calendar_create">建立事件: %1$s</string>
 </resources>
 
