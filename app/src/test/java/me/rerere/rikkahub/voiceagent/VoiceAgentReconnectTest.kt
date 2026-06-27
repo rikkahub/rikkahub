@@ -283,6 +283,65 @@ class VoiceAgentReconnectTest {
     }
 
     @Test
+    fun `WebSocket failure during automatic reconnect activation schedules next retry without publishing connected`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = reconnectSession(
+            sessionApi = sessionApi,
+            gemini = gemini,
+            audio = audio,
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 250),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        val firstCallback = gemini.eventHandlers.single()
+        gemini.activateOutboundSessionEvent =
+            GeminiLiveEvent.WebSocketFailure(message = "drop during reconnect activation")
+
+        firstCallback(GeminiLiveEvent.WebSocketFailure(message = "first drop"))
+        gemini.awaitConnectCount(2)
+        withTimeout(500) {
+            while (
+                diagnostics.events.value.none {
+                    it.name == "session_reconnect_scheduled" &&
+                        it.detail == "reason=websocket_failure, attempt=2, maxAttempts=3, delayMs=250"
+                }
+            ) {
+                delay(10)
+            }
+        }
+
+        assertEquals(1, audio.startCaptureCalls)
+        assertEquals(VoiceSessionStatus.Reconnecting, session.state.value.session)
+        assertFalse(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_connected" &&
+                    it.detail == "attempt=1"
+            }
+        )
+
+        gemini.activateOutboundSessionEvent = null
+        delay(300)
+
+        gemini.awaitConnectCount(3)
+        assertEquals(3, sessionApi.createdSessions.size)
+        assertEquals(2, audio.startCaptureCalls)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertNull(session.state.value.error)
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_connected" &&
+                    it.detail == "attempt=2"
+            }
+        )
+    }
+
+    @Test
     fun `manual reconnect cancels pending automatic reconnect and starts immediately`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()

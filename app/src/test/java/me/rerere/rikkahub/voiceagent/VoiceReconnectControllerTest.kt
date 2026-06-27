@@ -53,7 +53,6 @@ class VoiceReconnectControllerTest {
 
         assertTrue(firstDecision is VoiceReconnectDecision.Schedule)
         assertSame(VoiceReconnectDecision.AlreadyPlanned, secondDecision)
-        assertEquals(1, controller.retryAttempt())
         assertFalse(controller.hasPendingReconnect())
     }
 
@@ -81,7 +80,6 @@ class VoiceReconnectControllerTest {
         )
 
         assertSame(VoiceReconnectDecision.AlreadyPlanned, secondDecision)
-        assertEquals(1, controller.retryAttempt())
         assertTrue(controller.isCurrentJob(job))
     }
 
@@ -107,7 +105,6 @@ class VoiceReconnectControllerTest {
 
         assertSame(VoiceReconnectDecision.DeferredForActivation, firstDecision)
         assertSame(VoiceReconnectDecision.AlreadyPlanned, secondDecision)
-        assertEquals(1, controller.retryAttempt())
         val pending = controller.consumePendingActivation(sessionId = 7L)
         assertEquals(1, pending?.attempt)
     }
@@ -469,7 +466,6 @@ class VoiceReconnectControllerTest {
 
         assertEquals(1, controller.completeAttempt(job = job))
         assertFalse(controller.isCurrentJob(job))
-        assertNull(controller.retryAttempt())
         assertFalse(controller.hasPendingReconnect())
         assertFalse(controller.cancel().hadAutomaticReconnect)
     }

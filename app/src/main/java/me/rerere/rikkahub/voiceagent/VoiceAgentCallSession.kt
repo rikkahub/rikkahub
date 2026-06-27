@@ -223,18 +223,24 @@ class VoiceAgentCallSession internal constructor(
             try {
                 ensureActiveSession(currentSessionId, automaticReconnectJob)
                 gemini.activateOutboundSession(currentSessionId)
+                if (consumePendingActivationReconnectIfAny(currentSessionId)) return
                 ensureActiveSession(currentSessionId, automaticReconnectJob)
                 val bridge = coordinator.createHermesSessionBridge(currentSessionId)
                 hermesBridge = bridge
+                if (consumePendingActivationReconnectIfAny(currentSessionId)) return
                 ensureActiveSession(currentSessionId, automaticReconnectJob)
                 coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)
+                if (consumePendingActivationReconnectIfAny(currentSessionId)) return
                 ensureActiveSession(currentSessionId, automaticReconnectJob)
                 coordinator.resumeHermesJobs()
+                if (consumePendingActivationReconnectIfAny(currentSessionId)) return
                 ensureActiveSession(currentSessionId, automaticReconnectJob)
                 audio.activatePlaybackSession(currentSessionId)
+                if (consumePendingActivationReconnectIfAny(currentSessionId)) return
                 if (!muted) {
                     ensureActiveSession(currentSessionId, automaticReconnectJob)
                     startCapture(currentSessionId)
+                    if (consumePendingActivationReconnectIfAny(currentSessionId)) return
                 }
             } catch (error: Throwable) {
                 takePendingActivationReconnect(currentSessionId)?.let { pending ->
@@ -324,6 +330,12 @@ class VoiceAgentCallSession internal constructor(
             plan = plan,
             cleanupResources = true,
         )
+    }
+
+    private fun consumePendingActivationReconnectIfAny(sessionId: Long): Boolean {
+        val pending = consumePendingActivationReconnect(sessionId) ?: return false
+        activatePendingReconnect(pending)
+        return true
     }
 
     private fun handleGeminiEvent(sessionId: Long, event: GeminiLiveEvent) {

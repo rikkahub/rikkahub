@@ -189,10 +189,6 @@ internal class VoiceReconnectController(
         state.hasPendingReconnect()
     }
 
-    fun retryAttempt(): Int? = synchronized(lock) {
-        retryFrom(state)?.attempts
-    }
-
     private fun belongsToActiveSession(sessionId: Long): Boolean =
         when (val current = state) {
             is VoiceReconnectState.Eligible -> current.sessionId == sessionId
@@ -205,8 +201,8 @@ internal class VoiceReconnectController(
 
     private fun hasReconnectPlanFor(sessionId: Long): Boolean =
         when (val current = state) {
-            is VoiceReconnectState.Planned -> current.failedSessionId == sessionId && current.plan != null
-            is VoiceReconnectState.Scheduled -> current.failedSessionId == sessionId && current.plan != null
+            is VoiceReconnectState.Planned -> current.failedSessionId == sessionId
+            is VoiceReconnectState.Scheduled -> current.failedSessionId == sessionId
             is VoiceReconnectState.Activating -> current.sessionId == sessionId && current.pending != null
             else -> false
         }
@@ -261,17 +257,17 @@ private sealed class VoiceReconnectState {
     data class Planned(
         val failedSessionId: Long?,
         val retry: VoiceReconnectRetry?,
-        val plan: AutomaticReconnectPlan?,
+        val plan: AutomaticReconnectPlan,
     ) : VoiceReconnectState()
     data class Scheduled(
         val failedSessionId: Long?,
         val retry: VoiceReconnectRetry?,
-        val plan: AutomaticReconnectPlan?,
+        val plan: AutomaticReconnectPlan,
         val job: Job,
     ) : VoiceReconnectState()
     data class Attempting(
         val retry: VoiceReconnectRetry?,
-        val plan: AutomaticReconnectPlan?,
+        val plan: AutomaticReconnectPlan,
         val job: Job,
         val sessionId: Long,
     ) : VoiceReconnectState()
