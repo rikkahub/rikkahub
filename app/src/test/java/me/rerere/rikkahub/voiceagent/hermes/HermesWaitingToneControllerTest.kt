@@ -38,9 +38,13 @@ class HermesWaitingToneControllerTest {
         assertEquals(emptyList<String>(), audio.playedPcm16)
         assertEquals(2, audio.playedLocalCuePcm16.size)
         assertTrue(audio.playedLocalCuePcm16.all { it.isNotBlank() })
+        assertTrue(audio.playedLocalCueSessionIds.all { it == audio.playedLocalCueSessionIds.first() })
         Base64.getDecoder().decode(audio.playedLocalCuePcm16.first())
 
+        val activeCueSessionId = audio.playedLocalCueSessionIds.first()
         controller.stop()
+
+        assertEquals(listOf(activeCueSessionId), audio.invalidatedLocalCueSessionIds)
     }
 
     @Test
@@ -377,7 +381,7 @@ class HermesWaitingToneControllerTest {
             return true
         }
 
-        override fun invalidateLocalCuePlayback() {
+        override fun invalidateLocalCuePlayback(sessionId: Long?) {
             localCueGeneration += 1
         }
 

@@ -544,12 +544,14 @@ class PendingHermesJob(
 class FakeVoiceAudioEngine : VoiceAudioEngine {
     val playedPcm16 = CopyOnWriteArrayList<String>()
     val playedLocalCuePcm16 = CopyOnWriteArrayList<String>()
+    val playedLocalCueSessionIds = CopyOnWriteArrayList<Long?>()
     var failLocalCuePlayback = false
     var localCuePlaybackError: Throwable? = null
     var localCueInvalidationError: Throwable? = null
     private val localCuePlaybackAttemptCount = AtomicInteger()
     val localCuePlaybackAttempts: Int
         get() = localCuePlaybackAttemptCount.get()
+    val invalidatedLocalCueSessionIds = CopyOnWriteArrayList<Long?>()
     var invalidateLocalCuePlaybackCalls = 0
     var suppressPlaybackCalls = 0
     var releaseCalls = 0
@@ -617,15 +619,14 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         if (failLocalCuePlayback) {
             return false
         }
-        if (sessionId != null && playbackSessionId != sessionId) {
-            return false
-        }
+        playedLocalCueSessionIds += sessionId
         playedLocalCuePcm16 += base64Pcm16
         return true
     }
 
-    override fun invalidateLocalCuePlayback() {
+    override fun invalidateLocalCuePlayback(sessionId: Long?) {
         invalidateLocalCuePlaybackCalls += 1
+        invalidatedLocalCueSessionIds += sessionId
         localCueInvalidationError?.let { throw it }
     }
 

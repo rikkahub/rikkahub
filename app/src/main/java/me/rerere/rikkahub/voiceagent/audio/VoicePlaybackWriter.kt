@@ -80,6 +80,7 @@ internal class VoicePlaybackWriter(
     private var activeSessionId: Long? = null
     private var generation = 0L
     private var localCueGeneration = 0L
+    private var highestInvalidatedLocalCueSessionId: Long? = null
     private var assistantSink: VoicePcm16Sink? = null
     private var localCueSink: VoicePcm16Sink? = null
     private var activeWrite: ActiveWrite? = null
@@ -115,15 +116,19 @@ internal class VoicePlaybackWriter(
         val command = synchronized(lock) {
             if (released) {
                 null
-            } else if (sessionId != null && activeSessionId != sessionId) {
+            } else if (source == VoicePlaybackSource.Assistant && sessionId != null && activeSessionId != sessionId) {
                 staleActiveGeneration = generation
                 staleActiveSessionId = activeSessionId
+                null
+            } else if (source == VoicePlaybackSource.LocalCue && isLocalCueSessionInvalidatedLocked(sessionId)) {
+                staleActiveGeneration = generation
                 null
             } else {
                 PlaybackCommand.Play(
                     pcm16 = pcm16,
                     generation = generation,
                     localCueGeneration = localCueGeneration,
+                    localCueSessionId = sessionId,
                     source = source,
                 )
             }
@@ -193,12 +198,18 @@ internal class VoicePlaybackWriter(
         onDiagnostic(VoicePlaybackDiagnostic.PlaybackSuppressed(result.generation))
     }
 
-    fun invalidateLocalCues() {
+    fun invalidateLocalCues(sessionId: Long? = null) {
         synchronized(lock) {
             if (released) {
                 return
             }
             localCueGeneration += 1
+            sessionId?.let { invalidatedSessionId ->
+                highestInvalidatedLocalCueSessionId = maxOf(
+                    highestInvalidatedLocalCueSessionId ?: invalidatedSessionId,
+                    invalidatedSessionId,
+                )
+            }
             localCueSink?.pauseAndFlush()
             localCueSink = null
         }
@@ -379,9 +390,15 @@ internal class VoicePlaybackWriter(
             generation == command.generation &&
             (
                 command.source != VoicePlaybackSource.LocalCue ||
-                    localCueGeneration == command.localCueGeneration
+                    (
+                        localCueGeneration == command.localCueGeneration &&
+                            !isLocalCueSessionInvalidatedLocked(command.localCueSessionId)
+                        )
                 )
     }
+
+    private fun isLocalCueSessionInvalidatedLocked(sessionId: Long?): Boolean =
+        sessionId != null && highestInvalidatedLocalCueSessionId?.let { sessionId <= it } == true
 
     private fun isCurrentSink(command: PlaybackCommand.Play, sink: VoicePcm16Sink): Boolean = synchronized(lock) {
         isCurrentLocked(command) && sinkForLocked(command.source) === sink
@@ -464,6 +481,7 @@ internal class VoicePlaybackWriter(
             val pcm16: ByteArray,
             val generation: Long,
             val localCueGeneration: Long,
+            val localCueSessionId: Long?,
             val source: VoicePlaybackSource,
         ) : PlaybackCommand
     }

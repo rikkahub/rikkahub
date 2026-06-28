@@ -428,6 +428,46 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `local cue invalidation rejects later enqueue with invalidated session token`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        var sinkCreations = 0
+        val sink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { _ ->
+                sinkCreations += 1
+                sink
+            },
+            onDiagnostic = diagnostics::add,
+        )
+
+        writer.invalidateLocalCues(sessionId = 10L)
+
+        assertFalse(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = 10L,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertEquals(0, sinkCreations)
+        assertTrue(diagnostics.any { it is VoicePlaybackDiagnostic.StaleChunkRejected })
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "BAUG",
+                sessionId = 11L,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(sink.awaitWrites(2))
+        assertEquals(listOf(listOf<Byte>(4, 5, 6)), sink.writes)
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `local cue invalidation interrupts active local cue without suppressing assistant playback`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()

@@ -39,18 +39,20 @@ class HermesWaitingToneController(
     }
 
     fun stop() {
+        var stoppedGeneration: Long? = null
         val job = locked {
             waiting = false
+            stoppedGeneration = generation
             generation += 1
             loopJob.also {
                 loopJob = null
             }
         }
         job?.cancel()
-        waitForActivePlaybackCalls()
         val invalidationError = runCatching {
-            audio.invalidateLocalCuePlayback()
+            audio.invalidateLocalCuePlayback(sessionId = stoppedGeneration)
         }.exceptionOrNull()
+        waitForActivePlaybackCalls()
         invalidationError?.let { error ->
             safeRecordDiagnostic(
                 "hermes_waiting_tone_failed",
@@ -94,7 +96,7 @@ class HermesWaitingToneController(
         }
         val playbackResult = try {
             runCatching {
-                audio.playLocalCuePcm16(base64Pcm16 = toneBase64Pcm16, sessionId = null)
+                audio.playLocalCuePcm16(base64Pcm16 = toneBase64Pcm16, sessionId = loopGeneration)
             }
         } finally {
             finishPlayback()
