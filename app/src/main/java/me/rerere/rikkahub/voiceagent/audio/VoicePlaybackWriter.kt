@@ -83,6 +83,7 @@ internal class VoicePlaybackWriter(
     private var highestInvalidatedLocalCueSessionId: Long? = null
     private var assistantSink: VoicePcm16Sink? = null
     private var localCueSink: VoicePcm16Sink? = null
+    private var retiredLocalCueSink: VoicePcm16Sink? = null
     private var released = false
 
     fun playBase64(base64Pcm16: String, sessionId: Long?): Boolean {
@@ -198,9 +199,9 @@ internal class VoicePlaybackWriter(
     }
 
     fun invalidateLocalCues(sessionId: Long? = null) {
-        val sink = synchronized(lock) {
+        val result = synchronized(lock) {
             if (released) {
-                null
+                InvalidateLocalCuesResult()
             } else {
                 localCueGeneration += 1
                 sessionId?.let { invalidatedSessionId ->
@@ -209,12 +210,21 @@ internal class VoicePlaybackWriter(
                         invalidatedSessionId,
                     )
                 }
-                localCueSink.also {
-                    localCueSink = null
+                val sinkToFlush = localCueSink
+                val sinkToRelease = if (sinkToFlush != null && retiredLocalCueSink !== sinkToFlush) {
+                    retiredLocalCueSink
+                } else {
+                    null
                 }
+                if (sinkToFlush != null) {
+                    localCueSink = null
+                    retiredLocalCueSink = sinkToFlush
+                }
+                InvalidateLocalCuesResult(sinkToFlush = sinkToFlush, sinkToRelease = sinkToRelease)
             }
         }
-        sink?.pauseAndFlush()
+        result.sinkToRelease?.stopAndRelease()
+        result.sinkToFlush?.pauseAndFlush()
     }
 
     fun release() {
@@ -274,7 +284,9 @@ internal class VoicePlaybackWriter(
                 )
             }
             VoicePcm16Sink.WriteResult.Interrupted -> {
-                clearSink(sink)
+                if (clearSink(sink)) {
+                    sink.stopAndRelease()
+                }
                 emitStale(command.generation, command.source)
             }
         }
@@ -416,6 +428,10 @@ internal class VoicePlaybackWriter(
             localCueSink = null
             cleared = true
         }
+        if (retiredLocalCueSink === sink) {
+            retiredLocalCueSink = null
+            cleared = true
+        }
         return cleared
     }
 
@@ -432,9 +448,14 @@ internal class VoicePlaybackWriter(
     }
 
     private fun retireSinksLocked(): RetiredSinks {
-        val retired = RetiredSinks(assistant = assistantSink, localCue = localCueSink)
+        val retired = RetiredSinks(
+            assistant = assistantSink,
+            localCue = localCueSink,
+            retiredLocalCue = retiredLocalCueSink,
+        )
         assistantSink = null
         localCueSink = null
+        retiredLocalCueSink = null
         return retired
     }
 
@@ -467,14 +488,23 @@ internal class VoicePlaybackWriter(
         val generation: Long,
     )
 
+    private data class InvalidateLocalCuesResult(
+        val sinkToFlush: VoicePcm16Sink? = null,
+        val sinkToRelease: VoicePcm16Sink? = null,
+    )
+
     private data class RetiredSinks(
         val assistant: VoicePcm16Sink?,
         val localCue: VoicePcm16Sink?,
+        val retiredLocalCue: VoicePcm16Sink?,
     ) {
         fun stopAndRelease() {
             assistant?.stopAndRelease()
             if (localCue !== assistant) {
                 localCue?.stopAndRelease()
+            }
+            if (retiredLocalCue !== assistant && retiredLocalCue !== localCue) {
+                retiredLocalCue?.stopAndRelease()
             }
         }
     }

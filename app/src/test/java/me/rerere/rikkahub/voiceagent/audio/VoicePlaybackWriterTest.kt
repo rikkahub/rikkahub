@@ -526,10 +526,36 @@ class VoicePlaybackWriterTest {
         assertEquals(0, assistantSink.pauseAndFlushCalls)
         assertEquals(1, localCueSink.pauseAndFlushCalls)
         assertEquals(0, assistantSink.stopAndReleaseCalls)
-        assertEquals(0, localCueSink.stopAndReleaseCalls)
+        assertEquals(1, localCueSink.stopAndReleaseCalls)
         assertFalse(diagnostics.any { it is VoicePlaybackDiagnostic.PlaybackSuppressed })
 
         writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `release stops invalidated local cue sink before another local cue plays`() {
+        val scope = testScope()
+        val localCueSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { _ -> localCueSink },
+        )
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(localCueSink.awaitWrites(2))
+
+        writer.invalidateLocalCues()
+        writer.release()
+
+        assertEquals(1, localCueSink.pauseAndFlushCalls)
+        assertEquals(1, localCueSink.stopAndReleaseCalls)
         scope.cancel()
     }
 
@@ -589,6 +615,8 @@ class VoicePlaybackWriterTest {
         assertEquals(0, secondLocalCueSink.pauseAndFlushCalls)
 
         writer.release()
+        assertEquals(1, firstLocalCueSink.stopAndReleaseCalls)
+        assertEquals(1, secondLocalCueSink.stopAndReleaseCalls)
         scope.cancel()
     }
 
@@ -803,7 +831,7 @@ class VoicePlaybackWriterTest {
 
         assertTrue(staleRejectedLatch.await(2, TimeUnit.SECONDS))
         assertFalse(diagnostics.any { it is VoicePlaybackDiagnostic.SinkWriteFailed })
-        assertEquals(0, sink.stopAndReleaseCalls)
+        assertEquals(1, sink.stopAndReleaseCalls)
 
         writer.release()
         scope.cancel()
