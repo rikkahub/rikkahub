@@ -79,6 +79,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private var hasAudioFocus = false
     private var captureGeneration = 0L
     private var errorHandler: ((String) -> Unit)? = null
+    private var localCueErrorHandler: ((String) -> Unit)? = null
     private var released = false
     private val bluetoothProfileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
@@ -108,6 +109,12 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         synchronized(lock) {
             errorHandler = onError
+        }
+    }
+
+    override fun setLocalCueErrorHandler(onError: ((String) -> Unit)?) {
+        synchronized(lock) {
+            localCueErrorHandler = onError
         }
     }
 
@@ -857,6 +864,13 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         handler?.invoke(message)
     }
 
+    private fun notifyLocalCueError(message: String) {
+        val handler = synchronized(lock) {
+            if (released) null else localCueErrorHandler
+        }
+        handler?.invoke(message)
+    }
+
     private fun logCaptureLevelIfNeeded(chunk: Int, pcm16: ByteArray) {
         if (chunk != 1 && chunk % CAPTURE_LEVEL_LOG_INTERVAL_CHUNKS != 0) {
             return
@@ -914,6 +928,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             is VoicePlaybackDiagnostic.SinkStartFailed -> {
                 if (diagnostic.source == VoicePlaybackSource.LocalCue) {
                     Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
+                    notifyLocalCueError("AudioTrack start failed: ${diagnostic.message}")
                 } else {
                     Log.w(TAG, "Voice playback start failed: ${diagnostic.message}")
                 }
@@ -922,6 +937,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             is VoicePlaybackDiagnostic.SinkWriteFailed -> {
                 if (diagnostic.source == VoicePlaybackSource.LocalCue) {
                     Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
+                    notifyLocalCueError("AudioTrack write failed: ${diagnostic.message}")
                 } else {
                     Log.w(TAG, "Voice playback write failed: ${diagnostic.message}")
                 }

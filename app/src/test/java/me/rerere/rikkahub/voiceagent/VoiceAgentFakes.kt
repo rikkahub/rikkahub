@@ -559,6 +559,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     var stopCaptureCalls = 0
     var startCaptureError: Throwable? = null
     private var errorHandler: ((String) -> Unit)? = null
+    private var localCueErrorHandler: ((String) -> Unit)? = null
     private var playbackSessionId: Long? = null
     private var captureCallback: ((ByteArray) -> Unit)? = null
     private var debugInjectionCompleteCallback: (() -> Unit)? = null
@@ -569,6 +570,10 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         errorHandler = onError
+    }
+
+    override fun setLocalCueErrorHandler(onError: ((String) -> Unit)?) {
+        localCueErrorHandler = onError
     }
 
     override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
@@ -701,6 +706,10 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     fun emitError(message: String) {
         errorHandler?.invoke(message)
+    }
+
+    fun emitLocalCueError(message: String) {
+        localCueErrorHandler?.invoke(message)
     }
 }
 

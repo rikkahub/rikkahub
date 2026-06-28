@@ -271,6 +271,21 @@ class HermesWaitingToneControllerTest {
     }
 
     @Test
+    fun `local cue sink failure records waiting tone diagnostic`() = runTest {
+        val diagnostics = mutableListOf<Pair<String, String>>()
+        val audio = FakeVoiceAudioEngine()
+        HermesWaitingToneController(
+            audio = audio,
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+
+        audio.emitLocalCueError("AudioTrack start failed")
+
+        assertEquals(listOf("hermes_waiting_tone_failed" to "AudioTrack start failed"), diagnostics)
+    }
+
+    @Test
     fun `throwing local cue invalidation records diagnostic and stop returns`() = runTest {
         val diagnostics = mutableListOf<Pair<String, String>>()
         val audio = FakeVoiceAudioEngine().apply {

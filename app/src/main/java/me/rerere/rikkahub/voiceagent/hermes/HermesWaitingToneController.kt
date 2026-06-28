@@ -30,6 +30,12 @@ class HermesWaitingToneController(
     private var loopJob: Job? = null
     private var activePlaybackCalls = 0
 
+    init {
+        audio.setLocalCueErrorHandler { detail ->
+            safeRecordDiagnostic("hermes_waiting_tone_failed", detail)
+        }
+    }
+
     fun setWaiting(active: Boolean) {
         if (active) {
             start()
