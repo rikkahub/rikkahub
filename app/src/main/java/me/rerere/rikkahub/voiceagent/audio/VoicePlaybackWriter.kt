@@ -199,10 +199,7 @@ internal class VoicePlaybackWriter(
                 return
             }
             localCueGeneration += 1
-            activeWrite
-                ?.takeIf { it.source == VoicePlaybackSource.LocalCue }
-                ?.sink
-                ?.pauseAndFlush()
+            localCueSink?.pauseAndFlush()
         }
     }
 

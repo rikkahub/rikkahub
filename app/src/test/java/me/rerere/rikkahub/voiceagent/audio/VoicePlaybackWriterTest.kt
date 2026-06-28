@@ -493,6 +493,49 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `local cue invalidation flushes buffered local cue without flushing assistant sink`() {
+        val scope = testScope()
+        val assistantSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val localCueSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { source ->
+                when (source) {
+                    VoicePlaybackSource.Assistant -> assistantSink
+                    VoicePlaybackSource.LocalCue -> localCueSink
+                }
+            },
+        )
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = null,
+                source = VoicePlaybackSource.Assistant,
+            ),
+        )
+        assertTrue(assistantSink.awaitWrites(2))
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "BAUG",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(localCueSink.awaitWrites(2))
+
+        writer.invalidateLocalCues()
+
+        assertEquals(0, assistantSink.pauseAndFlushCalls)
+        assertEquals(1, localCueSink.pauseAndFlushCalls)
+        assertEquals(listOf(listOf<Byte>(1, 2, 3)), assistantSink.writes)
+        assertEquals(listOf(listOf<Byte>(4, 5, 6)), localCueSink.writes)
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `local cue sink failures do not map to fatal audio errors`() {
         assertEquals(
             null,
