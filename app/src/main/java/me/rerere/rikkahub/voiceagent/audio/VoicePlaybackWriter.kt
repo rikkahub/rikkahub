@@ -6,8 +6,8 @@ import kotlinx.coroutines.launch
 import java.util.Base64
 
 internal interface VoicePcm16Sink {
-    fun start(): StartResult
-    fun writeFully(pcm16: ByteArray): WriteResult
+    fun start(source: VoicePlaybackSource): StartResult
+    fun writeFully(pcm16: ByteArray, source: VoicePlaybackSource): WriteResult
     fun pauseAndFlush()
     fun stopAndRelease()
 
@@ -221,7 +221,7 @@ internal class VoicePlaybackWriter(
             return
         }
 
-        when (val result = sink.writeFully(command.pcm16)) {
+        when (val result = sink.writeFully(command.pcm16, command.source)) {
             is VoicePcm16Sink.WriteResult.Written -> {
                 if (isCurrentSink(command.generation, sink)) {
                     onDiagnostic(
@@ -298,7 +298,7 @@ internal class VoicePlaybackWriter(
         }
 
         val startResult = try {
-            newSink.start()
+            newSink.start(source)
         } catch (e: Exception) {
             newSink.stopAndRelease()
             onDiagnostic(

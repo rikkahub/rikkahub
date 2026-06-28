@@ -9,6 +9,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class HermesWaitingToneControllerTest {
@@ -84,6 +87,71 @@ class HermesWaitingToneControllerTest {
     }
 
     @Test
+    fun `stop waits for in flight playback before returning`() = runTest {
+        val audio = BlockingLocalCueAudioEngine()
+        val delays = ManualDelays()
+        val controller = HermesWaitingToneController(
+            audio = audio,
+            scope = this,
+            graceDelayMs = 2_000L,
+            repeatIntervalMs = 4_000L,
+            delayFn = delays::delay,
+        )
+
+        controller.setWaiting(true)
+        delays.awaitDelay(2_000L)
+        delays.releaseNext()
+        assertTrue(audio.awaitPlaybackEntered())
+
+        val stopReturned = CountDownLatch(1)
+        val stopThread = Thread {
+            controller.stop()
+            stopReturned.countDown()
+        }
+        stopThread.start()
+
+        try {
+            assertEquals(false, stopReturned.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            audio.releasePlayback()
+            assertTrue(stopReturned.await(2, TimeUnit.SECONDS))
+            stopThread.join(2_000L)
+        }
+        val cueCountWhenStopReturned = audio.playedLocalCuePcm16.size
+        kotlinx.coroutines.delay(50)
+
+        assertEquals(cueCountWhenStopReturned, audio.playedLocalCuePcm16.size)
+    }
+
+    @Test
+    fun `quick stop start does not let old loop play inside new grace period`() = runTest {
+        val audio = FakeVoiceAudioEngine()
+        val delays = ManualDelays()
+        val controller = HermesWaitingToneController(
+            audio = audio,
+            scope = this,
+            graceDelayMs = 2_000L,
+            repeatIntervalMs = 4_000L,
+            delayFn = delays::delay,
+            beforePlayFn = delays::delayBeforePlay,
+        )
+
+        controller.setWaiting(true)
+        delays.awaitDelay(2_000L)
+        delays.releaseNext()
+        delays.awaitBeforePlay()
+
+        controller.stop()
+        controller.setWaiting(true)
+        delays.releaseBeforePlay()
+        kotlinx.coroutines.delay(50)
+
+        assertEquals(emptyList<String>(), audio.playedLocalCuePcm16)
+
+        controller.stop()
+    }
+
+    @Test
     fun `set waiting true twice starts only one repeat loop`() = runTest {
         val audio = FakeVoiceAudioEngine()
         val delays = ManualDelays()
@@ -129,6 +197,7 @@ class HermesWaitingToneControllerTest {
         delays.releaseNext()
         delays.awaitDelay(4_000L)
 
+        assertEquals(2, diagnostics.size)
         assertTrue(diagnostics.all { it.second.contains("playback rejected") })
 
         controller.stop()
@@ -191,6 +260,7 @@ class HermesWaitingToneControllerTest {
         delays.awaitDelay(4_000L)
 
         assertEquals(2, audio.localCuePlaybackAttempts)
+        assertEquals(2, diagnostics.size)
         assertTrue(diagnostics.all { it.first == "hermes_waiting_tone_failed" })
         assertTrue(diagnostics.all { it.second == "cue sink exploded" })
 
@@ -236,6 +306,48 @@ class HermesWaitingToneControllerTest {
 
         fun releaseBeforePlay() {
             beforePlay.release()
+        }
+    }
+
+    private class BlockingLocalCueAudioEngine : VoiceAudioEngine {
+        val playedLocalCuePcm16 = ConcurrentLinkedQueue<String>()
+        private val playbackEntered = CountDownLatch(1)
+        private val releasePlayback = CountDownLatch(1)
+        private val released = AtomicBoolean(false)
+
+        override fun setErrorHandler(onError: ((String) -> Unit)?) = Unit
+
+        override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) = Unit
+
+        override fun stopCapture() = Unit
+
+        override fun playPcm16(base64Pcm16: String) = Unit
+
+        override fun playPcm16(base64Pcm16: String, sessionId: Long?) = Unit
+
+        override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+            playbackEntered.countDown()
+            releasePlayback.await(2, TimeUnit.SECONDS)
+            if (!released.get()) {
+                playedLocalCuePcm16 += base64Pcm16
+            }
+            return true
+        }
+
+        override fun activatePlaybackSession(sessionId: Long) = Unit
+
+        override fun invalidatePlaybackSession() = Unit
+
+        override fun suppressPlayback() = Unit
+
+        override fun release() {
+            released.set(true)
+        }
+
+        fun awaitPlaybackEntered(): Boolean = playbackEntered.await(2, TimeUnit.SECONDS)
+
+        fun releasePlayback() {
+            releasePlayback.countDown()
         }
     }
 

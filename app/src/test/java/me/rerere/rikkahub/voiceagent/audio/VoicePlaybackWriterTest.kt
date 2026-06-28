@@ -306,6 +306,55 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `reused assistant sink writes local cue with local cue source`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val writeFailedLatch = CountDownLatch(1)
+        val sink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
+            writeResultForSource = { source ->
+                if (source == VoicePlaybackSource.LocalCue) {
+                    VoicePcm16Sink.WriteResult.Failed("local cue write failed")
+                } else {
+                    null
+                }
+            },
+        )
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { _ -> sink },
+            onDiagnostic = { diagnostic ->
+                diagnostics += diagnostic
+                if (diagnostic is VoicePlaybackDiagnostic.SinkWriteFailed) {
+                    writeFailedLatch.countDown()
+                }
+            },
+        )
+
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64(base64Pcm16 = "AQID", sessionId = 100L))
+        assertTrue(sink.awaitWrites(1))
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "BAUG",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(writeFailedLatch.await(2, TimeUnit.SECONDS))
+
+        assertEquals(listOf(VoicePlaybackSource.Assistant), sink.startSources)
+        assertEquals(listOf(VoicePlaybackSource.Assistant, VoicePlaybackSource.LocalCue), sink.writeSources)
+        val diagnostic = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.SinkWriteFailed>().single()
+        assertEquals(VoicePlaybackSource.LocalCue, diagnostic.source)
+        assertEquals(null, diagnostic.audioErrorMessageOrNull())
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `local cue sink failures do not map to fatal audio errors`() {
         assertEquals(
             null,
@@ -462,6 +511,7 @@ class VoicePlaybackWriterTest {
         private val blockFirstWrite: Boolean = false,
         private val startException: RuntimeException? = null,
         private val writeResult: VoicePcm16Sink.WriteResult? = null,
+        private val writeResultForSource: (VoicePlaybackSource) -> VoicePcm16Sink.WriteResult? = { writeResult },
     ) : VoicePcm16Sink {
         private val writesLatch = CountDownLatch(expectedWrites)
         private val writeStartedLatch = CountDownLatch(1)
@@ -470,6 +520,8 @@ class VoicePlaybackWriterTest {
         private val pauseAndFlushCallCount = AtomicInteger()
         private val stopAndReleaseCallCount = AtomicInteger()
         val writes = mutableListOf<List<Byte>>()
+        val startSources = CopyOnWriteArrayList<VoicePlaybackSource>()
+        val writeSources = CopyOnWriteArrayList<VoicePlaybackSource>()
 
         val startCalls: Int
             get() = startCallCount.get()
@@ -480,18 +532,20 @@ class VoicePlaybackWriterTest {
         val stopAndReleaseCalls: Int
             get() = stopAndReleaseCallCount.get()
 
-        override fun start(): VoicePcm16Sink.StartResult {
+        override fun start(source: VoicePlaybackSource): VoicePcm16Sink.StartResult {
+            startSources += source
             startCallCount.incrementAndGet()
             startException?.let { throw it }
             return VoicePcm16Sink.StartResult.Started
         }
 
-        override fun writeFully(pcm16: ByteArray): VoicePcm16Sink.WriteResult {
+        override fun writeFully(pcm16: ByteArray, source: VoicePlaybackSource): VoicePcm16Sink.WriteResult {
+            writeSources += source
             writeStartedLatch.countDown()
             if (blockFirstWrite && writes.isEmpty()) {
                 assertTrue(releaseBlockedWriteLatch.await(2, TimeUnit.SECONDS))
             }
-            val result = writeResult ?: VoicePcm16Sink.WriteResult.Written(pcm16.size)
+            val result = writeResultForSource(source) ?: VoicePcm16Sink.WriteResult.Written(pcm16.size)
             if (result is VoicePcm16Sink.WriteResult.Written) {
                 writes += pcm16.toList()
             }

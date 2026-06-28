@@ -652,7 +652,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
 
     private fun createAudioTrackSinkOrNull(source: VoicePlaybackSource): VoicePcm16Sink? {
         val track = getOrCreatePlaybackTrack(source) ?: return null
-        return AndroidAudioTrackSink(track = track, source = source)
+        return AndroidAudioTrackSink(track = track)
     }
 
     private fun getOrCreatePlaybackTrack(source: VoicePlaybackSource): AudioTrack? {
@@ -918,11 +918,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
 
     private inner class AndroidAudioTrackSink(
         private val track: AudioTrack,
-        private val source: VoicePlaybackSource,
     ) : VoicePcm16Sink {
         private val interrupted = AtomicBoolean(false)
 
-        override fun start(): VoicePcm16Sink.StartResult {
+        override fun start(source: VoicePlaybackSource): VoicePcm16Sink.StartResult {
             interrupted.set(false)
             return if (track.playSafely(source)) {
                 VoicePcm16Sink.StartResult.Started
@@ -931,7 +930,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             }
         }
 
-        override fun writeFully(pcm16: ByteArray): VoicePcm16Sink.WriteResult {
+        override fun writeFully(pcm16: ByteArray, source: VoicePlaybackSource): VoicePcm16Sink.WriteResult {
             if (interrupted.get()) {
                 return VoicePcm16Sink.WriteResult.Interrupted
             }

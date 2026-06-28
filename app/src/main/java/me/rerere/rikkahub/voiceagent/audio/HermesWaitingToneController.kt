@@ -77,12 +77,15 @@ class HermesWaitingToneController(
 
     private suspend fun playCue(loopGeneration: Long) {
         beforePlayFn()
-        if (!isWaiting(loopGeneration)) {
-            return
+        val playbackResult = synchronized(lock) {
+            if (!isWaitingLocked(loopGeneration)) {
+                return
+            }
+            runCatching {
+                audio.playLocalCuePcm16(base64Pcm16 = toneBase64Pcm16, sessionId = null)
+            }
         }
-        val accepted = runCatching {
-            audio.playLocalCuePcm16(base64Pcm16 = toneBase64Pcm16, sessionId = null)
-        }.getOrElse { error ->
+        val accepted = playbackResult.getOrElse { error ->
             safeRecordDiagnostic(
                 "hermes_waiting_tone_failed",
                 error.message ?: error.javaClass.simpleName,
@@ -101,8 +104,11 @@ class HermesWaitingToneController(
     }
 
     private fun isWaiting(loopGeneration: Long): Boolean = synchronized(lock) {
-        waiting && generation == loopGeneration
+        isWaitingLocked(loopGeneration)
     }
+
+    private fun isWaitingLocked(loopGeneration: Long): Boolean =
+        waiting && generation == loopGeneration
 
     companion object {
         const val DEFAULT_GRACE_DELAY_MS = 2_000L
