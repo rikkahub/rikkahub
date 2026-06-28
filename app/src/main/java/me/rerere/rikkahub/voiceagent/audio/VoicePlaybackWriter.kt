@@ -198,20 +198,23 @@ internal class VoicePlaybackWriter(
     }
 
     fun invalidateLocalCues(sessionId: Long? = null) {
-        synchronized(lock) {
+        val sink = synchronized(lock) {
             if (released) {
-                return
+                null
+            } else {
+                localCueGeneration += 1
+                sessionId?.let { invalidatedSessionId ->
+                    highestInvalidatedLocalCueSessionId = maxOf(
+                        highestInvalidatedLocalCueSessionId ?: invalidatedSessionId,
+                        invalidatedSessionId,
+                    )
+                }
+                localCueSink.also {
+                    localCueSink = null
+                }
             }
-            localCueGeneration += 1
-            sessionId?.let { invalidatedSessionId ->
-                highestInvalidatedLocalCueSessionId = maxOf(
-                    highestInvalidatedLocalCueSessionId ?: invalidatedSessionId,
-                    invalidatedSessionId,
-                )
-            }
-            localCueSink?.pauseAndFlush()
-            localCueSink = null
         }
+        sink?.pauseAndFlush()
     }
 
     fun release() {

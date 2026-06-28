@@ -50,6 +50,24 @@ internal fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (
     -> null
 }
 
+internal fun VoicePlaybackDiagnostic.localCueErrorMessageOrNull(): String? = when (this) {
+    is VoicePlaybackDiagnostic.SinkStartFailed -> when (source) {
+        VoicePlaybackSource.Assistant -> null
+        VoicePlaybackSource.LocalCue -> "AudioTrack start failed: $message"
+    }
+    is VoicePlaybackDiagnostic.SinkWriteFailed -> when (source) {
+        VoicePlaybackSource.Assistant -> null
+        VoicePlaybackSource.LocalCue -> "AudioTrack write failed: $message"
+    }
+    is VoicePlaybackDiagnostic.ChunkQueued,
+    is VoicePlaybackDiagnostic.ChunkWritten,
+    is VoicePlaybackDiagnostic.StaleChunkRejected,
+    is VoicePlaybackDiagnostic.MalformedChunk,
+    is VoicePlaybackDiagnostic.PlaybackSuppressed,
+    VoicePlaybackDiagnostic.Released,
+    -> null
+}
+
 class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private val context = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -928,19 +946,19 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             is VoicePlaybackDiagnostic.SinkStartFailed -> {
                 if (diagnostic.source == VoicePlaybackSource.LocalCue) {
                     Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-                    notifyLocalCueError("AudioTrack start failed: ${diagnostic.message}")
                 } else {
                     Log.w(TAG, "Voice playback start failed: ${diagnostic.message}")
                 }
+                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
                 diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
             }
             is VoicePlaybackDiagnostic.SinkWriteFailed -> {
                 if (diagnostic.source == VoicePlaybackSource.LocalCue) {
                     Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-                    notifyLocalCueError("AudioTrack write failed: ${diagnostic.message}")
                 } else {
                     Log.w(TAG, "Voice playback write failed: ${diagnostic.message}")
                 }
+                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
                 diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
             }
             is VoicePlaybackDiagnostic.PlaybackSuppressed -> {

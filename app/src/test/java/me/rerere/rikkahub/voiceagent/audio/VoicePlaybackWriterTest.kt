@@ -611,6 +611,24 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `local cue sink failures map to local cue error messages`() {
+        assertEquals(
+            "AudioTrack start failed: start failed",
+            VoicePlaybackDiagnostic.SinkStartFailed(
+                message = "start failed",
+                source = VoicePlaybackSource.LocalCue,
+            ).localCueErrorMessageOrNull(),
+        )
+        assertEquals(
+            "AudioTrack write failed: write failed",
+            VoicePlaybackDiagnostic.SinkWriteFailed(
+                message = "write failed",
+                source = VoicePlaybackSource.LocalCue,
+            ).localCueErrorMessageOrNull(),
+        )
+    }
+
+    @Test
     fun `assistant sink failures still map to fatal audio errors`() {
         assertEquals(
             "AudioTrack start failed: start failed",
@@ -625,6 +643,24 @@ class VoicePlaybackWriterTest {
                 message = "write failed",
                 source = VoicePlaybackSource.Assistant,
             ).audioErrorMessageOrNull(),
+        )
+    }
+
+    @Test
+    fun `assistant sink failures do not map to local cue error messages`() {
+        assertEquals(
+            null,
+            VoicePlaybackDiagnostic.SinkStartFailed(
+                message = "start failed",
+                source = VoicePlaybackSource.Assistant,
+            ).localCueErrorMessageOrNull(),
+        )
+        assertEquals(
+            null,
+            VoicePlaybackDiagnostic.SinkWriteFailed(
+                message = "write failed",
+                source = VoicePlaybackSource.Assistant,
+            ).localCueErrorMessageOrNull(),
         )
     }
 

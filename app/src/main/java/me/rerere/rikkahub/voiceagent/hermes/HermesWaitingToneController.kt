@@ -22,7 +22,7 @@ class HermesWaitingToneController(
     private val toneBase64Pcm16: String = defaultToneBase64Pcm16(),
     private val recordDiagnostic: (String, String) -> Unit = { _, _ -> },
     private val delayFn: suspend (Long) -> Unit = { delay(it) },
-) {
+) : AutoCloseable {
     private val lock = ReentrantLock()
     private val activePlaybackFinished = lock.newCondition()
     private var waiting = false
@@ -65,6 +65,11 @@ class HermesWaitingToneController(
                 error.message ?: error.javaClass.simpleName,
             )
         }
+    }
+
+    override fun close() {
+        stop()
+        audio.setLocalCueErrorHandler(null)
     }
 
     private fun start() {
