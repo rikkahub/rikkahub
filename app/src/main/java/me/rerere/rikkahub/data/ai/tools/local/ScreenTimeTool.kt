@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.tools.local
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -133,8 +134,9 @@ internal fun buildScreenTimeTool(context: Context, eventBus: AppEventBus): Tool 
         val pm = context.packageManager
 
         // 通过逐个前台/后台事件配对计算真实前台时长, 比 queryAndAggregateUsageStats
-        // 更接近系统"屏幕使用时间", 避免统计桶溢出导致的范围偏差.
-        val foregroundMs = computeForegroundTime(usageStatsManager, startMs, endMs)
+        // 更接近系统"屏幕使用时间", 避免统计桶溢出导致的范围偏差; 排除桌面 launcher.
+        val launcherPackages = resolveLauncherPackages(pm)
+        val foregroundMs = computeForegroundTime(usageStatsManager, startMs, endMs, launcherPackages)
 
         val sorted = foregroundMs.entries
             .filter { entry -> entry.value > 0 }
@@ -178,6 +180,7 @@ private const val LOOKBACK_MS = 12L * 60 * 60 * 1000
  *   据此还原区间开始时刻正在前台的 App; 结算时把累加区间裁剪到 [startMs, endMs], startMs
  *   之前的部分自动被裁掉, 既补回开头那段使用又不会高估.
  * - 区间结束时仍在前台的 App, 以 endMs 截断.
+ * - [excludedPackages] 中的包(如桌面 launcher)不计入结果, 其停留时间视为"无 App 前台".
  */
 @Suppress(
     "DEPRECATION", // MOVE_TO_FOREGROUND/BACKGROUND 与 API29 的 ACTIVITY_RESUMED/PAUSED 值相同, 兼容 minSdk 26
@@ -187,6 +190,7 @@ private fun computeForegroundTime(
     usageStatsManager: UsageStatsManager,
     startMs: Long,
     endMs: Long,
+    excludedPackages: Set<String>,
 ): Map<String, Long> {
     val foregroundMs = HashMap<String, Long>()
     // 向前回看一段时间以捕获"区间开始前就进入前台"的事件; 累加时再裁剪回 [startMs, endMs]
@@ -199,13 +203,14 @@ private fun computeForegroundTime(
 
     // 结算当前前台段: 把 [currentStart, until) 与 [startMs, endMs] 的交集累加给 currentPkg
     fun settle(until: Long) {
-        val pkg = currentPkg ?: return
+        val pkg = currentPkg
+        currentPkg = null
+        if (pkg == null || pkg in excludedPackages) return // 排除的包不计入, 但仍清空计时状态
         val from = maxOf(currentStart, startMs) // 裁掉 startMs 之前的部分
         val duration = until - from
         if (duration > 0) {
             foregroundMs[pkg] = (foregroundMs[pkg] ?: 0L) + duration
         }
-        currentPkg = null
     }
 
     while (events.hasNextEvent()) {
@@ -235,6 +240,19 @@ private fun computeForegroundTime(
     // 区间结束时仍在前台的 App, 用 endMs 截断
     settle(endMs)
     return foregroundMs
+}
+
+/**
+ * 解析设备上所有桌面(HOME)应用的包名, 用于在屏幕使用时间里排除 launcher.
+ * 查询所有响应 HOME intent 的 Activity, 覆盖默认及其他已安装的桌面应用.
+ */
+private fun resolveLauncherPackages(pm: PackageManager): Set<String> {
+    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+    return runCatching {
+        pm.queryIntentActivities(intent, 0)
+            .mapNotNull { it.activityInfo?.packageName }
+            .toSet()
+    }.getOrDefault(emptySet())
 }
 
 private fun resolveAppName(pm: PackageManager, packageName: String): String {

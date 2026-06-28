@@ -34,6 +34,11 @@
       <action android:name="android.intent.action.MAIN" />
       <category android:name="android.intent.category.LAUNCHER" />
     </intent>
+    <!-- 用于识别桌面 launcher 以便在屏幕使用时间中排除 -->
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.HOME" />
+    </intent>
   </queries>
 
   <application
