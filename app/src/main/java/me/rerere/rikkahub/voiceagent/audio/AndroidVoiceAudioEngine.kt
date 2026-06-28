@@ -65,6 +65,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private var captureJob: Job? = null
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
+    private var localCueAudioTrack: AudioTrack? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private var hasSelectedCommunicationDevice = false
     private var hasStartedBluetoothSco = false
@@ -660,20 +661,20 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     private fun getOrCreatePlaybackTrack(source: VoicePlaybackSource): AudioTrack? {
-        val existingTrack = synchronized(lock) { audioTrack }
+        val existingTrack = synchronized(lock) { playbackTrackForLocked(source) }
         if (existingTrack != null) {
-            return currentPlaybackTrack(existingTrack)
+            return currentPlaybackTrack(existingTrack, source)
         }
 
         val newTrack = createAudioTrackOrNull(source) ?: return null
         var selectedTrack: AudioTrack? = null
         var shouldReleaseNewTrack = false
         synchronized(lock) {
-            val currentTrack = audioTrack
+            val currentTrack = playbackTrackForLocked(source)
             if (released) {
                 shouldReleaseNewTrack = true
             } else if (currentTrack == null) {
-                audioTrack = newTrack
+                setPlaybackTrackForLocked(source, newTrack)
                 selectedTrack = newTrack
             } else {
                 selectedTrack = currentTrack
@@ -684,14 +685,26 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         if (shouldReleaseNewTrack) {
             newTrack.releaseSafely()
         }
-        return currentPlaybackTrack(selectedTrack ?: return null)
+        return currentPlaybackTrack(selectedTrack ?: return null, source)
     }
 
-    private fun currentPlaybackTrack(track: AudioTrack): AudioTrack? = synchronized(lock) {
-        if (!released && audioTrack === track) {
+    private fun currentPlaybackTrack(track: AudioTrack, source: VoicePlaybackSource): AudioTrack? = synchronized(lock) {
+        if (!released && playbackTrackForLocked(source) === track) {
             track
         } else {
             null
+        }
+    }
+
+    private fun playbackTrackForLocked(source: VoicePlaybackSource): AudioTrack? = when (source) {
+        VoicePlaybackSource.Assistant -> audioTrack
+        VoicePlaybackSource.LocalCue -> localCueAudioTrack
+    }
+
+    private fun setPlaybackTrackForLocked(source: VoicePlaybackSource, track: AudioTrack?) {
+        when (source) {
+            VoicePlaybackSource.Assistant -> audioTrack = track
+            VoicePlaybackSource.LocalCue -> localCueAudioTrack = track
         }
     }
 
@@ -831,6 +844,9 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             if (audioTrack === track) {
                 audioTrack = null
             }
+            if (localCueAudioTrack === track) {
+                localCueAudioTrack = null
+            }
         }
     }
 
@@ -944,7 +960,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
 
             var offset = 0
             var zeroWrites = 0
-            while (offset < pcm16.size && !interrupted.get() && currentPlaybackTrack(track) != null) {
+            while (offset < pcm16.size && !interrupted.get() && currentPlaybackTrack(track, source) != null) {
                 val remaining = pcm16.size - offset
                 val writeResult = try {
                     track.write(pcm16, offset, remaining, AudioTrack.WRITE_BLOCKING)

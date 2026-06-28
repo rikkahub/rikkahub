@@ -315,11 +315,12 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
-    fun `reused assistant sink writes local cue with local cue source`() {
+    fun `local cue uses separate sink from assistant playback`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
         val writeFailedLatch = CountDownLatch(1)
-        val sink = FakeVoicePcm16Sink(
+        val assistantSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val localCueSink = FakeVoicePcm16Sink(
             expectedWrites = 1,
             writeResultForSource = { source ->
                 if (source == VoicePlaybackSource.LocalCue) {
@@ -331,7 +332,12 @@ class VoicePlaybackWriterTest {
         )
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { _ -> sink },
+            createSink = { source ->
+                when (source) {
+                    VoicePlaybackSource.Assistant -> assistantSink
+                    VoicePlaybackSource.LocalCue -> localCueSink
+                }
+            },
             onDiagnostic = { diagnostic ->
                 diagnostics += diagnostic
                 if (diagnostic is VoicePlaybackDiagnostic.SinkWriteFailed) {
@@ -342,7 +348,7 @@ class VoicePlaybackWriterTest {
 
         writer.activateSession(100L)
         assertTrue(writer.playBase64(base64Pcm16 = "AQID", sessionId = 100L))
-        assertTrue(sink.awaitWrites(1))
+        assertTrue(assistantSink.awaitWrites(1))
 
         assertTrue(
             writer.playBase64(
@@ -353,8 +359,10 @@ class VoicePlaybackWriterTest {
         )
         assertTrue(writeFailedLatch.await(2, TimeUnit.SECONDS))
 
-        assertEquals(listOf(VoicePlaybackSource.Assistant), sink.startSources)
-        assertEquals(listOf(VoicePlaybackSource.Assistant, VoicePlaybackSource.LocalCue), sink.writeSources)
+        assertEquals(listOf(VoicePlaybackSource.Assistant), assistantSink.startSources)
+        assertEquals(listOf(VoicePlaybackSource.Assistant), assistantSink.writeSources)
+        assertEquals(listOf(VoicePlaybackSource.LocalCue), localCueSink.startSources)
+        assertEquals(listOf(VoicePlaybackSource.LocalCue), localCueSink.writeSources)
         val diagnostic = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.SinkWriteFailed>().single()
         assertEquals(VoicePlaybackSource.LocalCue, diagnostic.source)
         assertEquals(null, diagnostic.audioErrorMessageOrNull())
@@ -424,14 +432,20 @@ class VoicePlaybackWriterTest {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
         val staleLocalCueLatch = CountDownLatch(1)
-        val sink = FakeVoicePcm16Sink(
-            expectedWrites = 2,
+        val assistantSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val localCueSink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
             blockFirstWriteForSource = VoicePlaybackSource.LocalCue,
             interruptBlockedWriteOnPause = true,
         )
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { _ -> sink },
+            createSink = { source ->
+                when (source) {
+                    VoicePlaybackSource.Assistant -> assistantSink
+                    VoicePlaybackSource.LocalCue -> localCueSink
+                }
+            },
             onDiagnostic = { diagnostic ->
                 diagnostics += diagnostic
                 if (
@@ -445,29 +459,33 @@ class VoicePlaybackWriterTest {
 
         assertTrue(
             writer.playBase64(
-                base64Pcm16 = "AQID",
-                sessionId = null,
-                source = VoicePlaybackSource.LocalCue,
-            ),
-        )
-        assertTrue(sink.awaitWriteStarted())
-
-        writer.invalidateLocalCues()
-        sink.releaseBlockedWrite()
-
-        assertTrue(
-            writer.playBase64(
                 base64Pcm16 = "BAUG",
                 sessionId = null,
                 source = VoicePlaybackSource.Assistant,
             ),
         )
+        assertTrue(assistantSink.awaitWrites(2))
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(localCueSink.awaitWriteStarted())
+
+        writer.invalidateLocalCues()
+        localCueSink.releaseBlockedWrite()
 
         assertTrue(staleLocalCueLatch.await(2, TimeUnit.SECONDS))
-        assertTrue(sink.awaitWrites(2))
-        assertEquals(listOf(listOf<Byte>(4, 5, 6)), sink.writes)
-        assertEquals(1, sink.pauseAndFlushCalls)
-        assertEquals(0, sink.stopAndReleaseCalls)
+        assertTrue(localCueSink.awaitWrites(2))
+        assertEquals(listOf(listOf<Byte>(4, 5, 6)), assistantSink.writes)
+        assertEquals(emptyList<List<Byte>>(), localCueSink.writes)
+        assertEquals(0, assistantSink.pauseAndFlushCalls)
+        assertEquals(1, localCueSink.pauseAndFlushCalls)
+        assertEquals(0, assistantSink.stopAndReleaseCalls)
+        assertEquals(0, localCueSink.stopAndReleaseCalls)
         assertFalse(diagnostics.any { it is VoicePlaybackDiagnostic.PlaybackSuppressed })
 
         writer.release()
