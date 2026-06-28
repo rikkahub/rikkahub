@@ -255,7 +255,6 @@ sealed class TTSProviderSetting {
         }
     }
 
->>>>>>> upstream/master
     companion object {
         val Types by lazy {
             listOf(
@@ -268,7 +267,7 @@ sealed class TTSProviderSetting {
                 XAI::class,
                 MiMo::class,
                 ElevenLabs::class,
-            Step::class,
+                Step::class,
             )
         }
     }
