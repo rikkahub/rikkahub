@@ -37,14 +37,24 @@ class HermesWaitingToneController(
     }
 
     fun stop() {
+        var invalidationError: Throwable? = null
         val job = synchronized(lock) {
             waiting = false
             generation += 1
+            invalidationError = runCatching {
+                audio.invalidateLocalCuePlayback()
+            }.exceptionOrNull()
             loopJob.also {
                 loopJob = null
             }
         }
         job?.cancel()
+        invalidationError?.let { error ->
+            safeRecordDiagnostic(
+                "hermes_waiting_tone_failed",
+                error.message ?: error.javaClass.simpleName,
+            )
+        }
     }
 
     private fun start() {

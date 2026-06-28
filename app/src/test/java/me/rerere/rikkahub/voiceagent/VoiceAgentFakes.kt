@@ -549,6 +549,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     private val localCuePlaybackAttemptCount = AtomicInteger()
     val localCuePlaybackAttempts: Int
         get() = localCuePlaybackAttemptCount.get()
+    var invalidateLocalCuePlaybackCalls = 0
     var suppressPlaybackCalls = 0
     var releaseCalls = 0
     var startCaptureCalls = 0
@@ -620,6 +621,10 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         }
         playedLocalCuePcm16 += base64Pcm16
         return true
+    }
+
+    override fun invalidateLocalCuePlayback() {
+        invalidateLocalCuePlaybackCalls += 1
     }
 
     override fun activatePlaybackSession(sessionId: Long) {

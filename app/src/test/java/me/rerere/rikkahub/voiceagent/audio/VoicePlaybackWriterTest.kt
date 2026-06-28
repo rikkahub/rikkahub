@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent.audio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -359,6 +361,62 @@ class VoicePlaybackWriterTest {
 
         writer.release()
         scope.cancel()
+    }
+
+    @Test
+    fun `local cue invalidation skips queued local cue without suppressing queued assistant playback`() {
+        val executor = Executors.newSingleThreadExecutor()
+        val dispatcher = executor.asCoroutineDispatcher()
+        val workerBlocked = CountDownLatch(1)
+        val releaseWorker = CountDownLatch(1)
+        executor.execute {
+            workerBlocked.countDown()
+            releaseWorker.await(2, TimeUnit.SECONDS)
+        }
+        assertTrue(workerBlocked.await(2, TimeUnit.SECONDS))
+
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val staleRejectedLatch = CountDownLatch(1)
+        val sink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { _ -> sink },
+            onDiagnostic = { diagnostic ->
+                diagnostics += diagnostic
+                if (
+                    diagnostic is VoicePlaybackDiagnostic.StaleChunkRejected &&
+                    diagnostic.source == VoicePlaybackSource.LocalCue
+                ) {
+                    staleRejectedLatch.countDown()
+                }
+            },
+        )
+
+        try {
+            writer.activateSession(100L)
+            assertTrue(writer.playBase64(base64Pcm16 = "AQID", sessionId = 100L))
+            assertTrue(
+                writer.playBase64(
+                    base64Pcm16 = "BAUG",
+                    sessionId = null,
+                    source = VoicePlaybackSource.LocalCue,
+                ),
+            )
+
+            writer.invalidateLocalCues()
+            releaseWorker.countDown()
+
+            assertTrue(sink.awaitWrites(2))
+            assertTrue(staleRejectedLatch.await(2, TimeUnit.SECONDS))
+            assertEquals(listOf(listOf<Byte>(1, 2, 3)), sink.writes)
+            assertEquals(listOf(VoicePlaybackSource.Assistant), sink.writeSources)
+        } finally {
+            writer.release()
+            scope.cancel()
+            dispatcher.close()
+            executor.shutdownNow()
+        }
     }
 
     @Test

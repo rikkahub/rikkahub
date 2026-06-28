@@ -125,6 +125,29 @@ class HermesWaitingToneControllerTest {
     }
 
     @Test
+    fun `stop invalidates accepted local cue before queued writer processes it`() = runTest {
+        val audio = QueuedLocalCueAudioEngine()
+        val delays = ManualDelays()
+        val controller = HermesWaitingToneController(
+            audio = audio,
+            scope = this,
+            graceDelayMs = 2_000L,
+            repeatIntervalMs = 4_000L,
+            delayFn = delays::delay,
+        )
+
+        controller.setWaiting(true)
+        delays.awaitDelay(2_000L)
+        delays.releaseNext()
+        audio.awaitQueuedCue()
+
+        controller.stop()
+        audio.processQueuedCues()
+
+        assertEquals(emptyList<String>(), audio.playedLocalCuePcm16.toList())
+    }
+
+    @Test
     fun `quick stop start does not let old loop play inside new grace period`() = runTest {
         val audio = FakeVoiceAudioEngine()
         val delays = ManualDelays()
@@ -350,6 +373,57 @@ class HermesWaitingToneControllerTest {
         fun releasePlayback() {
             releasePlayback.countDown()
         }
+    }
+
+    private class QueuedLocalCueAudioEngine : VoiceAudioEngine {
+        val playedLocalCuePcm16 = ConcurrentLinkedQueue<String>()
+        private val queuedCue = ConcurrentLinkedQueue<QueuedCue>()
+        private val queuedCueLatch = CountDownLatch(1)
+        private var localCueGeneration = 0L
+
+        override fun setErrorHandler(onError: ((String) -> Unit)?) = Unit
+
+        override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) = Unit
+
+        override fun stopCapture() = Unit
+
+        override fun playPcm16(base64Pcm16: String) = Unit
+
+        override fun playPcm16(base64Pcm16: String, sessionId: Long?) = Unit
+
+        override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+            queuedCue += QueuedCue(base64Pcm16, localCueGeneration)
+            queuedCueLatch.countDown()
+            return true
+        }
+
+        override fun invalidateLocalCuePlayback() {
+            localCueGeneration += 1
+        }
+
+        override fun activatePlaybackSession(sessionId: Long) = Unit
+
+        override fun invalidatePlaybackSession() = Unit
+
+        override fun suppressPlayback() = Unit
+
+        override fun release() = Unit
+
+        fun awaitQueuedCue(): Boolean = queuedCueLatch.await(2, TimeUnit.SECONDS)
+
+        fun processQueuedCues() {
+            while (true) {
+                val cue = queuedCue.poll() ?: return
+                if (cue.localCueGeneration == localCueGeneration) {
+                    playedLocalCuePcm16 += cue.base64Pcm16
+                }
+            }
+        }
+
+        private data class QueuedCue(
+            val base64Pcm16: String,
+            val localCueGeneration: Long,
+        )
     }
 
     private class DelayRequest(val ms: Long) {

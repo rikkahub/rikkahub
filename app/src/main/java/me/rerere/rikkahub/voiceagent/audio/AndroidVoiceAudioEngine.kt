@@ -287,6 +287,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         )
     }
 
+    override fun invalidateLocalCuePlayback() {
+        playbackWriter.invalidateLocalCues()
+    }
+
     override fun activatePlaybackSession(sessionId: Long) {
         playbackWriter.activateSession(sessionId)
     }
