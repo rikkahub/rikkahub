@@ -83,7 +83,6 @@ internal class VoicePlaybackWriter(
     private var highestInvalidatedLocalCueSessionId: Long? = null
     private var assistantSink: VoicePcm16Sink? = null
     private var localCueSink: VoicePcm16Sink? = null
-    private var activeWrite: ActiveWrite? = null
     private var released = false
 
     fun playBase64(base64Pcm16: String, sessionId: Long?): Boolean {
@@ -244,11 +243,7 @@ internal class VoicePlaybackWriter(
             return
         }
 
-        val result = try {
-            sink.writeFully(command.pcm16, command.source)
-        } finally {
-            finishWrite(command, sink)
-        }
+        val result = sink.writeFully(command.pcm16, command.source)
 
         when (result) {
             is VoicePcm16Sink.WriteResult.Written -> {
@@ -405,29 +400,7 @@ internal class VoicePlaybackWriter(
     }
 
     private fun beginWrite(command: PlaybackCommand.Play, sink: VoicePcm16Sink): Boolean = synchronized(lock) {
-        if (isCurrentLocked(command) && sinkForLocked(command.source) === sink) {
-            activeWrite = ActiveWrite(
-                sink = sink,
-                source = command.source,
-                generation = command.generation,
-                localCueGeneration = command.localCueGeneration,
-            )
-            true
-        } else {
-            false
-        }
-    }
-
-    private fun finishWrite(command: PlaybackCommand.Play, sink: VoicePcm16Sink) = synchronized(lock) {
-        val active = activeWrite
-        if (
-            active?.sink === sink &&
-            active.generation == command.generation &&
-            active.localCueGeneration == command.localCueGeneration &&
-            active.source == command.source
-        ) {
-            activeWrite = null
-        }
+        isCurrentLocked(command) && sinkForLocked(command.source) === sink
     }
 
     private fun clearSink(sink: VoicePcm16Sink): Boolean = synchronized(lock) {
@@ -502,11 +475,4 @@ internal class VoicePlaybackWriter(
             }
         }
     }
-
-    private data class ActiveWrite(
-        val sink: VoicePcm16Sink,
-        val source: VoicePlaybackSource,
-        val generation: Long,
-        val localCueGeneration: Long,
-    )
 }

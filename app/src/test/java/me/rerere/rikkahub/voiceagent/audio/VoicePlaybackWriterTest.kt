@@ -265,6 +265,7 @@ class VoicePlaybackWriterTest {
             ),
         )
         assertTrue(sink.awaitWrites(1))
+        assertTrue(waitForDiagnostic(diagnostics) { it is VoicePlaybackDiagnostic.ChunkWritten })
 
         val queued = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.ChunkQueued>().single()
         val written = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.ChunkWritten>().single()
@@ -773,6 +774,20 @@ class VoicePlaybackWriterTest {
     }
 
     private fun testScope() = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private fun waitForDiagnostic(
+        diagnostics: List<VoicePlaybackDiagnostic>,
+        predicate: (VoicePlaybackDiagnostic) -> Boolean,
+    ): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(500)
+        while (System.nanoTime() < deadline) {
+            if (diagnostics.any(predicate)) {
+                return true
+            }
+            Thread.sleep(1)
+        }
+        return diagnostics.any(predicate)
+    }
 
     private class FakeVoicePcm16Sink(
         expectedWrites: Int = 0,
