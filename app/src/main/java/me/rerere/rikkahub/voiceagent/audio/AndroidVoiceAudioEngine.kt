@@ -686,6 +686,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     private fun getOrCreatePlaybackTrack(source: VoicePlaybackSource): AudioTrack? {
+        if (source == VoicePlaybackSource.LocalCue) {
+            return createLocalCuePlaybackTrack()
+        }
+
         val existingTrack = synchronized(lock) { playbackTrackForLocked(source) }
         if (existingTrack != null) {
             return currentPlaybackTrack(existingTrack, source)
@@ -711,6 +715,23 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             newTrack.releaseSafely()
         }
         return currentPlaybackTrack(selectedTrack ?: return null, source)
+    }
+
+    private fun createLocalCuePlaybackTrack(): AudioTrack? {
+        val newTrack = createAudioTrackOrNull(VoicePlaybackSource.LocalCue) ?: return null
+        var shouldReleaseNewTrack = false
+        synchronized(lock) {
+            if (released) {
+                shouldReleaseNewTrack = true
+            } else {
+                localCueAudioTrack = newTrack
+            }
+        }
+        if (shouldReleaseNewTrack) {
+            newTrack.releaseSafely()
+            return null
+        }
+        return currentPlaybackTrack(newTrack, VoicePlaybackSource.LocalCue)
     }
 
     private fun currentPlaybackTrack(track: AudioTrack, source: VoicePlaybackSource): AudioTrack? = synchronized(lock) {
