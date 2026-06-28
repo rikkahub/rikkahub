@@ -18,7 +18,9 @@ import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
@@ -540,9 +542,12 @@ class PendingHermesJob(
 }
 
 class FakeVoiceAudioEngine : VoiceAudioEngine {
-    val playedPcm16 = mutableListOf<String>()
-    val playedLocalCuePcm16 = mutableListOf<String>()
+    val playedPcm16 = CopyOnWriteArrayList<String>()
+    val playedLocalCuePcm16 = CopyOnWriteArrayList<String>()
     var failLocalCuePlayback = false
+    private val localCuePlaybackAttemptCount = AtomicInteger()
+    val localCuePlaybackAttempts: Int
+        get() = localCuePlaybackAttemptCount.get()
     var suppressPlaybackCalls = 0
     var releaseCalls = 0
     var startCaptureCalls = 0
@@ -604,6 +609,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     }
 
     override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+        localCuePlaybackAttemptCount.incrementAndGet()
         if (failLocalCuePlayback) {
             return false
         }

@@ -205,6 +205,78 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `local cue sink start failure diagnostic keeps local cue source`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val startFailedLatch = CountDownLatch(1)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = {
+                FakeVoicePcm16Sink(
+                    startException = IllegalStateException("start exploded"),
+                )
+            },
+            onDiagnostic = { diagnostic ->
+                diagnostics += diagnostic
+                if (diagnostic is VoicePlaybackDiagnostic.SinkStartFailed) {
+                    startFailedLatch.countDown()
+                }
+            },
+        )
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(startFailedLatch.await(2, TimeUnit.SECONDS))
+
+        val diagnostic = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.SinkStartFailed>().single()
+        assertEquals(VoicePlaybackSource.LocalCue, diagnostic.source)
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `local cue sink write failure diagnostic keeps local cue source`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val writeFailedLatch = CountDownLatch(1)
+        val sink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
+            writeResult = VoicePcm16Sink.WriteResult.Failed("write failed"),
+        )
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { sink },
+            onDiagnostic = { diagnostic ->
+                diagnostics += diagnostic
+                if (diagnostic is VoicePlaybackDiagnostic.SinkWriteFailed) {
+                    writeFailedLatch.countDown()
+                }
+            },
+        )
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(writeFailedLatch.await(2, TimeUnit.SECONDS))
+
+        val diagnostic = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.SinkWriteFailed>().single()
+        assertEquals(VoicePlaybackSource.LocalCue, diagnostic.source)
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `release stops sink and rejects future playback`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()

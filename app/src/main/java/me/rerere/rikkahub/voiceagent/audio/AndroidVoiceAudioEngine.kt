@@ -259,7 +259,11 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
-        return playbackWriter.playBase64(base64Pcm16 = base64Pcm16, sessionId = sessionId)
+        return playbackWriter.playBase64(
+            base64Pcm16 = base64Pcm16,
+            sessionId = sessionId,
+            source = VoicePlaybackSource.LocalCue,
+        )
     }
 
     override fun activatePlaybackSession(sessionId: Long) {
@@ -852,11 +856,19 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             }
             is VoicePlaybackDiagnostic.SinkStartFailed -> {
                 Log.w(TAG, "Voice playback start failed: ${diagnostic.message}")
-                notifyAudioError("AudioTrack start failed: ${diagnostic.message}")
+                if (diagnostic.source == VoicePlaybackSource.LocalCue) {
+                    notifyAudioError("Hermes waiting tone failed: AudioTrack start failed: ${diagnostic.message}")
+                } else {
+                    notifyAudioError("AudioTrack start failed: ${diagnostic.message}")
+                }
             }
             is VoicePlaybackDiagnostic.SinkWriteFailed -> {
                 Log.w(TAG, "Voice playback write failed: ${diagnostic.message}")
-                notifyAudioError("AudioTrack write failed: ${diagnostic.message}")
+                if (diagnostic.source == VoicePlaybackSource.LocalCue) {
+                    notifyAudioError("Hermes waiting tone failed: AudioTrack write failed: ${diagnostic.message}")
+                } else {
+                    notifyAudioError("AudioTrack write failed: ${diagnostic.message}")
+                }
             }
             is VoicePlaybackDiagnostic.PlaybackSuppressed -> {
                 Log.d(TAG, "Voice playback suppressed: generation=${diagnostic.generation}")

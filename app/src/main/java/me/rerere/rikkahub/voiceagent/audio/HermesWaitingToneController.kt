@@ -62,7 +62,7 @@ class HermesWaitingToneController(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            recordDiagnostic(
+            safeRecordDiagnostic(
                 "hermes_waiting_tone_failed",
                 error.message ?: error.javaClass.simpleName,
             )
@@ -73,14 +73,20 @@ class HermesWaitingToneController(
         val accepted = runCatching {
             audio.playLocalCuePcm16(base64Pcm16 = toneBase64Pcm16, sessionId = null)
         }.getOrElse { error ->
-            recordDiagnostic(
+            safeRecordDiagnostic(
                 "hermes_waiting_tone_failed",
                 error.message ?: error.javaClass.simpleName,
             )
             return
         }
         if (!accepted) {
-            recordDiagnostic("hermes_waiting_tone_failed", "playback rejected")
+            safeRecordDiagnostic("hermes_waiting_tone_failed", "playback rejected")
+        }
+    }
+
+    private fun safeRecordDiagnostic(name: String, detail: String) {
+        runCatching {
+            recordDiagnostic(name, detail)
         }
     }
 

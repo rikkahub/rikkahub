@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicInteger
 
 class HermesWaitingToneControllerTest {
     @Test
@@ -103,6 +104,36 @@ class HermesWaitingToneControllerTest {
         }
 
         assertTrue(diagnostics.all { it.second.contains("playback rejected") })
+
+        controller.stop()
+    }
+
+    @Test
+    fun `throwing diagnostic during local cue failure does not stop repeat loop`() = runTest {
+        val diagnosticAttempts = AtomicInteger()
+        val audio = FakeVoiceAudioEngine().apply {
+            failLocalCuePlayback = true
+        }
+        val controller = HermesWaitingToneController(
+            audio = audio,
+            scope = this,
+            graceDelayMs = 20L,
+            repeatIntervalMs = 30L,
+            recordDiagnostic = { _, _ ->
+                diagnosticAttempts.incrementAndGet()
+                throw IllegalStateException("diagnostic sink failed")
+            },
+        )
+
+        controller.setWaiting(true)
+
+        withTimeout(500) {
+            while (audio.localCuePlaybackAttempts < 2) {
+                delay(10)
+            }
+        }
+
+        assertTrue(diagnosticAttempts.get() >= 2)
 
         controller.stop()
     }
