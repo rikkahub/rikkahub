@@ -64,30 +64,6 @@ class HermesWaitingToneControllerTest {
     }
 
     @Test
-    fun `stop after grace delay but before playback keeps cue silent`() = runTest {
-        val audio = FakeVoiceAudioEngine()
-        val beforePlay = ManualDelays()
-        val controller = HermesWaitingToneController(
-            audio = audio,
-            scope = this,
-            graceDelayMs = 2_000L,
-            repeatIntervalMs = 4_000L,
-            delayFn = beforePlay::delay,
-            beforePlayFn = beforePlay::delayBeforePlay,
-        )
-
-        controller.setWaiting(true)
-        beforePlay.awaitDelay(2_000L)
-        beforePlay.releaseNext()
-        beforePlay.awaitBeforePlay()
-
-        controller.stop()
-        beforePlay.releaseBeforePlay()
-
-        assertEquals(emptyList<String>(), audio.playedLocalCuePcm16)
-    }
-
-    @Test
     fun `stop waits for in flight playback before returning`() = runTest {
         val audio = BlockingLocalCueAudioEngine()
         val delays = ManualDelays()
@@ -149,7 +125,7 @@ class HermesWaitingToneControllerTest {
 
     @Test
     fun `quick stop start does not let old loop play inside new grace period`() = runTest {
-        val audio = FakeVoiceAudioEngine()
+        val audio = QueuedLocalCueAudioEngine()
         val delays = ManualDelays()
         val controller = HermesWaitingToneController(
             audio = audio,
@@ -157,20 +133,19 @@ class HermesWaitingToneControllerTest {
             graceDelayMs = 2_000L,
             repeatIntervalMs = 4_000L,
             delayFn = delays::delay,
-            beforePlayFn = delays::delayBeforePlay,
         )
 
         controller.setWaiting(true)
         delays.awaitDelay(2_000L)
         delays.releaseNext()
-        delays.awaitBeforePlay()
+        audio.awaitQueuedCue()
 
         controller.stop()
         controller.setWaiting(true)
-        delays.releaseBeforePlay()
+        audio.processQueuedCues()
         kotlinx.coroutines.delay(50)
 
-        assertEquals(emptyList<String>(), audio.playedLocalCuePcm16)
+        assertEquals(emptyList<String>(), audio.playedLocalCuePcm16.toList())
 
         controller.stop()
     }
@@ -291,21 +266,38 @@ class HermesWaitingToneControllerTest {
         controller.stop()
     }
 
+    @Test
+    fun `throwing local cue invalidation records diagnostic and stop returns`() = runTest {
+        val diagnostics = mutableListOf<Pair<String, String>>()
+        val audio = FakeVoiceAudioEngine().apply {
+            localCueInvalidationError = IllegalStateException("invalidation failed")
+        }
+        val controller = HermesWaitingToneController(
+            audio = audio,
+            scope = this,
+            graceDelayMs = 2_000L,
+            repeatIntervalMs = 4_000L,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+
+        controller.setWaiting(true)
+
+        withTimeout(500) {
+            controller.stop()
+        }
+
+        assertEquals(listOf("hermes_waiting_tone_failed" to "invalidation failed"), diagnostics)
+    }
+
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
 
     private class ManualDelays {
         private val delays = ConcurrentLinkedQueue<DelayRequest>()
-        private val beforePlay = DelayRequest(0L)
 
         suspend fun delay(ms: Long) {
             val request = DelayRequest(ms)
             delays += request
             request.awaitRelease()
-        }
-
-        suspend fun delayBeforePlay() {
-            beforePlay.started.incrementAndGet()
-            beforePlay.awaitRelease()
         }
 
         suspend fun awaitDelay(ms: Long) {
@@ -316,20 +308,8 @@ class HermesWaitingToneControllerTest {
             }
         }
 
-        suspend fun awaitBeforePlay() {
-            withTimeout(500) {
-                while (beforePlay.started.get() == 0) {
-                    kotlinx.coroutines.delay(1)
-                }
-            }
-        }
-
         fun releaseNext() {
             delays.remove().release()
-        }
-
-        fun releaseBeforePlay() {
-            beforePlay.release()
         }
     }
 

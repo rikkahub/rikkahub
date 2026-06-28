@@ -420,6 +420,61 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `local cue invalidation interrupts active local cue without suppressing assistant playback`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val staleLocalCueLatch = CountDownLatch(1)
+        val sink = FakeVoicePcm16Sink(
+            expectedWrites = 2,
+            blockFirstWriteForSource = VoicePlaybackSource.LocalCue,
+            interruptBlockedWriteOnPause = true,
+        )
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { _ -> sink },
+            onDiagnostic = { diagnostic ->
+                diagnostics += diagnostic
+                if (
+                    diagnostic is VoicePlaybackDiagnostic.StaleChunkRejected &&
+                    diagnostic.source == VoicePlaybackSource.LocalCue
+                ) {
+                    staleLocalCueLatch.countDown()
+                }
+            },
+        )
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(sink.awaitWriteStarted())
+
+        writer.invalidateLocalCues()
+        sink.releaseBlockedWrite()
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "BAUG",
+                sessionId = null,
+                source = VoicePlaybackSource.Assistant,
+            ),
+        )
+
+        assertTrue(staleLocalCueLatch.await(2, TimeUnit.SECONDS))
+        assertTrue(sink.awaitWrites(2))
+        assertEquals(listOf(listOf<Byte>(4, 5, 6)), sink.writes)
+        assertEquals(1, sink.pauseAndFlushCalls)
+        assertEquals(0, sink.stopAndReleaseCalls)
+        assertFalse(diagnostics.any { it is VoicePlaybackDiagnostic.PlaybackSuppressed })
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `local cue sink failures do not map to fatal audio errors`() {
         assertEquals(
             null,
@@ -505,6 +560,37 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `malformed local cue base64 is rejected without creating sink or fatal audio error`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        var sinkCreations = 0
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { _ ->
+                sinkCreations += 1
+                FakeVoicePcm16Sink()
+            },
+            onDiagnostic = diagnostics::add,
+        )
+
+        assertFalse(
+            writer.playBase64(
+                base64Pcm16 = "not-base64%",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+
+        assertEquals(0, sinkCreations)
+        val diagnostic = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.MalformedChunk>().single()
+        assertEquals(VoicePlaybackSource.LocalCue, diagnostic.source)
+        assertEquals(null, diagnostic.audioErrorMessageOrNull())
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `null sink factory reports start failure and worker accepts later playback`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
@@ -574,9 +660,11 @@ class VoicePlaybackWriterTest {
     private class FakeVoicePcm16Sink(
         expectedWrites: Int = 0,
         private val blockFirstWrite: Boolean = false,
+        private val blockFirstWriteForSource: VoicePlaybackSource? = null,
         private val startException: RuntimeException? = null,
         private val writeResult: VoicePcm16Sink.WriteResult? = null,
         private val writeResultForSource: (VoicePlaybackSource) -> VoicePcm16Sink.WriteResult? = { writeResult },
+        private val interruptBlockedWriteOnPause: Boolean = false,
     ) : VoicePcm16Sink {
         private val writesLatch = CountDownLatch(expectedWrites)
         private val writeStartedLatch = CountDownLatch(1)
@@ -607,8 +695,17 @@ class VoicePlaybackWriterTest {
         override fun writeFully(pcm16: ByteArray, source: VoicePlaybackSource): VoicePcm16Sink.WriteResult {
             writeSources += source
             writeStartedLatch.countDown()
-            if (blockFirstWrite && writes.isEmpty()) {
+            val shouldBlock = (blockFirstWrite && writes.isEmpty()) || source == blockFirstWriteForSource
+            if (shouldBlock) {
                 assertTrue(releaseBlockedWriteLatch.await(2, TimeUnit.SECONDS))
+            }
+            if (
+                interruptBlockedWriteOnPause &&
+                source == VoicePlaybackSource.LocalCue &&
+                pauseAndFlushCallCount.get() > 0
+            ) {
+                writesLatch.countDown()
+                return VoicePcm16Sink.WriteResult.Interrupted
             }
             val result = writeResultForSource(source) ?: VoicePcm16Sink.WriteResult.Written(pcm16.size)
             if (result is VoicePcm16Sink.WriteResult.Written) {

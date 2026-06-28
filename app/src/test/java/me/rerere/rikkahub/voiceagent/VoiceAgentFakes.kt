@@ -546,6 +546,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     val playedLocalCuePcm16 = CopyOnWriteArrayList<String>()
     var failLocalCuePlayback = false
     var localCuePlaybackError: Throwable? = null
+    var localCueInvalidationError: Throwable? = null
     private val localCuePlaybackAttemptCount = AtomicInteger()
     val localCuePlaybackAttempts: Int
         get() = localCuePlaybackAttemptCount.get()
@@ -625,6 +626,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     override fun invalidateLocalCuePlayback() {
         invalidateLocalCuePlaybackCalls += 1
+        localCueInvalidationError?.let { throw it }
     }
 
     override fun activatePlaybackSession(sessionId: Long) {

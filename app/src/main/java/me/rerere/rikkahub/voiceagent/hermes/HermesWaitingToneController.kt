@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import java.util.Base64
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -21,12 +22,13 @@ class HermesWaitingToneController(
     private val toneBase64Pcm16: String = defaultToneBase64Pcm16(),
     private val recordDiagnostic: (String, String) -> Unit = { _, _ -> },
     private val delayFn: suspend (Long) -> Unit = { delay(it) },
-    private val beforePlayFn: suspend () -> Unit = {},
 ) {
-    private val lock = Any()
+    private val lock = ReentrantLock()
+    private val activePlaybackFinished = lock.newCondition()
     private var waiting = false
     private var generation = 0L
     private var loopJob: Job? = null
+    private var activePlaybackCalls = 0
 
     fun setWaiting(active: Boolean) {
         if (active) {
@@ -37,18 +39,18 @@ class HermesWaitingToneController(
     }
 
     fun stop() {
-        var invalidationError: Throwable? = null
-        val job = synchronized(lock) {
+        val job = locked {
             waiting = false
             generation += 1
-            invalidationError = runCatching {
-                audio.invalidateLocalCuePlayback()
-            }.exceptionOrNull()
             loopJob.also {
                 loopJob = null
             }
         }
         job?.cancel()
+        waitForActivePlaybackCalls()
+        val invalidationError = runCatching {
+            audio.invalidateLocalCuePlayback()
+        }.exceptionOrNull()
         invalidationError?.let { error ->
             safeRecordDiagnostic(
                 "hermes_waiting_tone_failed",
@@ -58,7 +60,7 @@ class HermesWaitingToneController(
     }
 
     private fun start() {
-        synchronized(lock) {
+        locked {
             waiting = true
             if (loopJob?.isActive == true) return
             generation += 1
@@ -87,14 +89,15 @@ class HermesWaitingToneController(
     }
 
     private suspend fun playCue(loopGeneration: Long) {
-        beforePlayFn()
-        val playbackResult = synchronized(lock) {
-            if (!isWaitingLocked(loopGeneration)) {
-                return
-            }
+        if (!beginPlayback(loopGeneration)) {
+            return
+        }
+        val playbackResult = try {
             runCatching {
                 audio.playLocalCuePcm16(base64Pcm16 = toneBase64Pcm16, sessionId = null)
             }
+        } finally {
+            finishPlayback()
         }
         val accepted = playbackResult.getOrElse { error ->
             safeRecordDiagnostic(
@@ -114,12 +117,50 @@ class HermesWaitingToneController(
         }
     }
 
-    private fun isWaiting(loopGeneration: Long): Boolean = synchronized(lock) {
+    private fun isWaiting(loopGeneration: Long): Boolean = locked {
         isWaitingLocked(loopGeneration)
+    }
+
+    private fun beginPlayback(loopGeneration: Long): Boolean = locked {
+        if (!isWaitingLocked(loopGeneration)) {
+            false
+        } else {
+            activePlaybackCalls += 1
+            true
+        }
+    }
+
+    private fun finishPlayback() {
+        locked {
+            activePlaybackCalls -= 1
+            activePlaybackFinished.signalAll()
+        }
+    }
+
+    private fun waitForActivePlaybackCalls() {
+        locked {
+            while (activePlaybackCalls > 0) {
+                try {
+                    activePlaybackFinished.await()
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
+            }
+        }
     }
 
     private fun isWaitingLocked(loopGeneration: Long): Boolean =
         waiting && generation == loopGeneration
+
+    private inline fun <T> locked(block: () -> T): T {
+        lock.lock()
+        try {
+            return block()
+        } finally {
+            lock.unlock()
+        }
+    }
 
     companion object {
         const val DEFAULT_GRACE_DELAY_MS = 2_000L
