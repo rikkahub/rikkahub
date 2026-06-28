@@ -1,9 +1,10 @@
-package me.rerere.rikkahub.voiceagent.audio
+package me.rerere.rikkahub.voiceagent.hermes
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.voiceagent.FakeVoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

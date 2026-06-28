@@ -244,10 +244,14 @@ class VoicePlaybackWriterTest {
     fun `local cue queued and written diagnostics keep local cue source`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val sinkSources = CopyOnWriteArrayList<VoicePlaybackSource>()
         val sink = FakeVoicePcm16Sink(expectedWrites = 1)
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { _ -> sink },
+            createSink = { source ->
+                sinkSources += source
+                sink
+            },
             onDiagnostic = diagnostics::add,
         )
 
@@ -262,6 +266,9 @@ class VoicePlaybackWriterTest {
 
         val queued = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.ChunkQueued>().single()
         val written = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.ChunkWritten>().single()
+        assertEquals(listOf(VoicePlaybackSource.LocalCue), sinkSources)
+        assertEquals(listOf(VoicePlaybackSource.LocalCue), sink.startSources)
+        assertEquals(listOf(VoicePlaybackSource.LocalCue), sink.writeSources)
         assertEquals(VoicePlaybackSource.LocalCue, queued.source)
         assertEquals(VoicePlaybackSource.LocalCue, written.source)
 

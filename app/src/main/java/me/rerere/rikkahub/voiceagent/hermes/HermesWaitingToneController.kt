@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.voiceagent.audio
+package me.rerere.rikkahub.voiceagent.hermes
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import java.util.Base64
 import kotlin.math.PI
 import kotlin.math.sin
