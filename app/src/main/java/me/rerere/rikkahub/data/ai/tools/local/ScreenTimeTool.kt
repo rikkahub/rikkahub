@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -130,14 +131,17 @@ internal fun buildScreenTimeTool(context: Context, eventBus: AppEventBus): Tool 
         val usageStatsManager =
             context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val pm = context.packageManager
-        val stats = usageStatsManager.queryAndAggregateUsageStats(startMs, endMs)
 
-        val apps = stats.values
-            .filter { stat -> stat.totalTimeInForeground > 0 }
-            .sortedByDescending { stat -> stat.totalTimeInForeground }
-            .take(top)
+        // 通过逐个前台/后台事件配对计算真实前台时长, 比 queryAndAggregateUsageStats
+        // 更接近系统"屏幕使用时间", 避免统计桶溢出导致的范围偏差.
+        val foregroundMs = computeForegroundTime(usageStatsManager, startMs, endMs)
 
-        val totalMs = stats.values.sumOf { stat -> stat.totalTimeInForeground }
+        val sorted = foregroundMs.entries
+            .filter { entry -> entry.value > 0 }
+            .sortedByDescending { entry -> entry.value }
+
+        val totalMs = sorted.sumOf { entry -> entry.value }
+        val apps = sorted.take(top)
 
         val payload = buildJsonObject {
             put("range", if (isCustom) "custom" else rangePreset)
@@ -146,12 +150,12 @@ internal fun buildScreenTimeTool(context: Context, eventBus: AppEventBus): Tool 
             put("total_ms", totalMs)
             put("total_minutes", totalMs / 60000)
             put("apps", buildJsonArray {
-                apps.forEach { stat ->
+                apps.forEach { entry ->
                     add(buildJsonObject {
-                        put("package", stat.packageName)
-                        put("app_name", resolveAppName(pm, stat.packageName))
-                        put("total_ms", stat.totalTimeInForeground)
-                        put("total_minutes", stat.totalTimeInForeground / 60000)
+                        put("package", entry.key)
+                        put("app_name", resolveAppName(pm, entry.key))
+                        put("total_ms", entry.value)
+                        put("total_minutes", entry.value / 60000)
                     })
                 }
             })
@@ -159,6 +163,79 @@ internal fun buildScreenTimeTool(context: Context, eventBus: AppEventBus): Tool 
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
+
+// 计算屏幕时间时向前回看的窗口(12h), 用于还原区间开始时刻已在前台的 App;
+// 取值需覆盖典型的一次连续使用时长, 过小会漏算开头, 过大只是多遍历些事件.
+private const val LOOKBACK_MS = 12L * 60 * 60 * 1000
+
+/**
+ * 用"全局单一前台"模型计算 [startMs, endMs) 区间内每个 App 的前台时长(毫秒).
+ *
+ * 任意时刻只有一个 App 处于计时状态: 新 App 进入前台时先结算上一个前台 App, 息屏时停止计时.
+ * 这样各 App 时段串行不重叠, 不会出现 per-app 配对那种因前台时段重叠相加而偏大的问题, 结果
+ * 与系统"屏幕使用时间"口径基本一致. 边界处理:
+ * - 为正确处理"区间开始前已进入前台、区间内继续使用"的 App, 查询起点向前回看 [LOOKBACK_MS],
+ *   据此还原区间开始时刻正在前台的 App; 结算时把累加区间裁剪到 [startMs, endMs], startMs
+ *   之前的部分自动被裁掉, 既补回开头那段使用又不会高估.
+ * - 区间结束时仍在前台的 App, 以 endMs 截断.
+ */
+@Suppress(
+    "DEPRECATION", // MOVE_TO_FOREGROUND/BACKGROUND 与 API29 的 ACTIVITY_RESUMED/PAUSED 值相同, 兼容 minSdk 26
+    "NewApi" // SCREEN_NON_INTERACTIVE 是编译期常量, 低版本设备不会产生该事件, 引用安全
+)
+private fun computeForegroundTime(
+    usageStatsManager: UsageStatsManager,
+    startMs: Long,
+    endMs: Long,
+): Map<String, Long> {
+    val foregroundMs = HashMap<String, Long>()
+    // 向前回看一段时间以捕获"区间开始前就进入前台"的事件; 累加时再裁剪回 [startMs, endMs]
+    val events = usageStatsManager.queryEvents(startMs - LOOKBACK_MS, endMs)
+    val event = UsageEvents.Event()
+
+    // 当前正在计时的前台包及其起始时间; null 表示当前无 App 在前台(如停留桌面/息屏)
+    var currentPkg: String? = null
+    var currentStart = 0L
+
+    // 结算当前前台段: 把 [currentStart, until) 与 [startMs, endMs] 的交集累加给 currentPkg
+    fun settle(until: Long) {
+        val pkg = currentPkg ?: return
+        val from = maxOf(currentStart, startMs) // 裁掉 startMs 之前的部分
+        val duration = until - from
+        if (duration > 0) {
+            foregroundMs[pkg] = (foregroundMs[pkg] ?: 0L) + duration
+        }
+        currentPkg = null
+    }
+
+    while (events.hasNextEvent()) {
+        events.getNextEvent(event)
+        when (event.eventType) {
+            UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                if (event.packageName != currentPkg) {
+                    settle(event.timeStamp)         // 先结算上一个前台 App
+                    currentPkg = event.packageName  // 再开始为新 App 计时
+                    currentStart = event.timeStamp
+                }
+            }
+
+            UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                // 只结算当前正在计时的前台包; 其他包的 background 一律忽略(避免重叠/高估)
+                if (event.packageName == currentPkg) {
+                    settle(event.timeStamp)
+                }
+            }
+
+            // 息屏: 停止计时, 系统在息屏期间同样不计入屏幕使用时间
+            UsageEvents.Event.SCREEN_NON_INTERACTIVE -> {
+                settle(event.timeStamp)
+            }
+        }
+    }
+    // 区间结束时仍在前台的 App, 用 endMs 截断
+    settle(endMs)
+    return foregroundMs
+}
 
 private fun resolveAppName(pm: PackageManager, packageName: String): String {
     return runCatching {
