@@ -112,7 +112,7 @@
   <string name="assistant_page_quick_message_title">Title</string>
   <string name="assistant_page_quick_messages">Quick Messages</string>
   <string name="assistant_page_recent_chats">Reference Recent Chats</string>
-  <string name="assistant_page_recent_chats_desc">When enabled, the assistant will reference recent chat history to provide more contextual responses</string>
+  <string name="assistant_page_recent_chats_desc">When enabled, allows the assistant to search past conversations for relevant information</string>
   <string name="assistant_page_regex_affecting_scopes">Affecting Scopes:</string>
   <string name="assistant_page_regex_desc">Define regex patterns to transform messages before sending/receiving</string>
   <string name="assistant_page_regex_find_regex">Find Regex</string>
@@ -418,9 +418,9 @@
   <string name="language_french">🇫🇷 Français</string>
   <string name="language_german">🇩🇪 Deutsch</string>
   <string name="language_italian">🇮🇹 Italiano</string>
-  <string name="language_japanese">🇯🇵 日本語</string>
-  <string name="language_korean">🇰🇷 한국어</string>
-  <string name="language_simplified_chinese">🇨🇳 简体中文</string>
+  <string name="language_japanese">🇯🇵 日本�?/string>
+  <string name="language_korean">🇰🇷 한국�?/string>
+  <string name="language_simplified_chinese">🇨🇳 简体中�?/string>
   <string name="language_spanish">🇪🇸 Español</string>
   <string name="language_traditional_chinese">🇨🇳 繁體中文</string>
   <string name="mcp_picker_syncing">Syncing MCP servers...</string>
@@ -465,6 +465,10 @@
   <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
+  <string name="permission_calendar_read">Read Calendar</string>
+  <string name="permission_calendar_read_desc">Read calendar events to answer your schedule-related questions</string>
+  <string name="permission_calendar_write">Write Calendar</string>
+  <string name="permission_calendar_write_desc">Create calendar events on your behalf</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
   <string name="permission_required">Required</string>
   <string name="photo">Photo</string>
@@ -650,7 +654,7 @@
   <string name="setting_asr_configure_step_sample_rate_desc">PCM recording sample rate in Hz, 16000 is recommended for ASR</string>
   <string name="setting_asr_configure_step_segment_desc">Auto-flush buffered audio every N seconds during recording. 0 disables auto-segmentation (single request on stop)</string>
   <string name="setting_asr_configure_step_itn">Enable ITN</string>
-  <string name="setting_asr_configure_step_itn_desc">Inverse Text Normalization: convert spoken numbers to digits (e.g. 三百 → 300)</string>
+  <string name="setting_asr_configure_step_itn_desc">Inverse Text Normalization: convert spoken numbers to digits (e.g. 三百 �?300)</string>
   <string name="setting_asr_configure_step_timestamp">Enable Timestamps</string>
   <string name="setting_asr_configure_step_timestamp_desc">Return word-level timestamps in delta events. Disabled by default to save tokens (rikkahub does not consume them yet)</string>
   <string name="setting_asr_configure_step_hotwords">Hotwords</string>
@@ -691,7 +695,7 @@
   <string name="setting_display_page_enable_latex_rendering_title">Enable LaTeX Rendering</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">Enable haptic feedback when messages are being generated</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Message Generation Haptic Effect</string>
-  <string name="setting_display_page_font_size_preview">At four in the morning, I saw the begonia flowers still awake. I am often like this — lying awake alone in the quiet night, thinking: if someone is thinking of me at this moment, that would be wonderful.</string>
+  <string name="setting_display_page_font_size_preview">At four in the morning, I saw the begonia flowers still awake. I am often like this �?lying awake alone in the quiet night, thinking: if someone is thinking of me at this moment, that would be wonderful.</string>
   <string name="setting_display_page_font_size_title">Chat Font Size</string>
   <string name="setting_display_page_live_update_notification">Live Update Notification</string>
   <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
@@ -865,7 +869,7 @@
   <string name="setting_page_search_service">Search Service</string>
   <string name="setting_page_search_service_desc">Set up search service</string>
   <string name="setting_page_search_test">Test Search</string>
-  <string name="setting_page_search_test_query_hint">Enter test query…</string>
+  <string name="setting_page_search_test_query_hint">Enter test query�?/string>
   <string name="setting_page_search_test_run">Run Test</string>
   <string name="setting_page_search_title">Search Service</string>
   <string name="setting_page_share">Share</string>
@@ -981,6 +985,7 @@
   <string name="setting_provider_page_scan_error">Error: %s</string>
   <string name="setting_provider_page_scan_qr_code">Scan QR Code</string>
   <string name="setting_provider_page_search_providers">Search providers</string>
+  <string name="setting_provider_page_recommend">Recommended providers</string>
   <string name="setting_provider_page_select_all">Select All (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">Select from Gallery</string>
   <string name="setting_provider_page_service_account_email">Service Account Email</string>
@@ -1202,7 +1207,7 @@
   <string name="workspace_terminal_title">Terminal</string>
   <string name="workspace_terminal_title_with_name">%s · Terminal</string>
   <string name="workspace_terminal_not_installed">Please install Rootfs first</string>
-  <string name="workspace_terminal_loading">Loading workspace…</string>
+  <string name="workspace_terminal_loading">Loading workspace�?/string>
   <string name="workspace_terminal_exited">Terminal exited</string>
   <string name="extensions_page_workspace">Workspace</string>
   <string name="extensions_page_workspace_desc">Manage local working directories accessible by Agent</string>
@@ -1252,7 +1257,8 @@
   <string name="log_page_record_requests">Record requests</string>
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
 
-  <!-- Ta的来信 -->
+
+  <!-- Ta的来�?-->
   <string name="assistant_page_tab_ta_message">Ta\'s Message</string>
   <string name="assistant_detail_ta_message_desc">Configure Ta\'s Message related settings</string>
   <string name="ta_message_enable_label">Ta\'s Message</string>
@@ -1264,5 +1270,18 @@
   <string name="ta_message_clear_time">Clear set time</string>
   <string name="ta_message_prompt_label">Ta\'s Message Prompt</string>
   <string name="ta_message_decision_prompt_label">Decision Time Prompt</string>
+
+  <string name="assistant_page_context_message_truncation_warning">Limiting context may cause frequent context truncation and prevent prompt caching</string>
+  <string name="chat_message_tool_recent_chats">View recent chats</string>
+  <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
+  <string name="assistant_page_local_tools_screen_time_title">Screen Time</string>
+  <string name="assistant_page_local_tools_screen_time_desc">Let the AI read your app screen usage time</string>
+  <string name="assistant_page_local_tools_screen_time_permission_required">Please grant the Usage access permission in settings to use screen time</string>
+  <string name="chat_message_tool_screen_time">Read screen time</string>
+  <string name="tool_ui_screen_time_total">Total screen time</string>
+  <string name="assistant_page_local_tools_calendar_title">Calendar</string>
+  <string name="assistant_page_local_tools_calendar_desc">Let the AI query and create calendar events</string>
+  <string name="chat_message_tool_calendar_query">Query calendar events</string>
+  <string name="chat_message_tool_calendar_create">Create event: %1$s</string>
 </resources>
 

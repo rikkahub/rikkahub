@@ -245,6 +245,32 @@ val DEFAULT_PROVIDERS = listOf(
         useResponseApi = true,
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("aecf04fd-cb5c-4582-aed2-e8bf393923fd"),
+        name = "随想AI网关",
+        baseUrl = "https://sui-xiang.com/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("可靠高效的 API 中继服务，提供 Claude、Codex、Gemini 等中继服务。注重隐私·无数据倒卖·无模型掺水，充值额度 1:1，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。\n")
+                    append("官网：")
+                    withLink(LinkAnnotation.Url("https://sui-xiang.com")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("https://sui-xiang.com")
+                        }
+                    }
+                }
+            )
+        },
+        shortDescription = {
+            Text(
+                text = "Claude、Codex、Gemini 等中继服务，1:1 充值"
+            )
+        },
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("53027b08-1b58-43d5-90ed-29173203e3d8"),
         name = "AckAI",
         baseUrl = "https://ackai.fun/v1",

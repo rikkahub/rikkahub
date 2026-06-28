@@ -12,6 +12,11 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+  <uses-permission
+    android:name="android.permission.PACKAGE_USAGE_STATS"
+    tools:ignore="ProtectedPermissions" />
+  <uses-permission android:name="android.permission.READ_CALENDAR" />
+  <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
   <!-- 「Ta 的来信」到点唤醒所需权限 -->
   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -29,6 +34,16 @@
   <queries>
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
+    </intent>
+    <!-- 用于解析屏幕使用时间里各 App 的名称(可见性受 Android 11+ 包可见性限制) -->
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
+    <!-- 用于识别桌面 launcher 以便在屏幕使用时间中排除 -->
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.HOME" />
     </intent>
   </queries>
 
