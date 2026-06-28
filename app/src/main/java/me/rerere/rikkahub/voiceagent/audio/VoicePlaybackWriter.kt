@@ -64,7 +64,7 @@ internal enum class VoicePlaybackSource {
 
 internal class VoicePlaybackWriter(
     scope: CoroutineScope,
-    private val createSink: () -> VoicePcm16Sink?,
+    private val createSink: (VoicePlaybackSource) -> VoicePcm16Sink?,
     private val onDiagnostic: (VoicePlaybackDiagnostic) -> Unit = {},
 ) {
     private val lock = Any()
@@ -278,7 +278,7 @@ internal class VoicePlaybackWriter(
         }
 
         val newSink = try {
-            createSink()
+            createSink(source)
         } catch (e: Exception) {
             onDiagnostic(
                 VoicePlaybackDiagnostic.SinkStartFailed(

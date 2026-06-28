@@ -545,6 +545,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     val playedPcm16 = CopyOnWriteArrayList<String>()
     val playedLocalCuePcm16 = CopyOnWriteArrayList<String>()
     var failLocalCuePlayback = false
+    var localCuePlaybackError: Throwable? = null
     private val localCuePlaybackAttemptCount = AtomicInteger()
     val localCuePlaybackAttempts: Int
         get() = localCuePlaybackAttemptCount.get()
@@ -610,6 +611,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
         localCuePlaybackAttemptCount.incrementAndGet()
+        localCuePlaybackError?.let { throw it }
         if (failLocalCuePlayback) {
             return false
         }

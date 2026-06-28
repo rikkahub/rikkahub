@@ -21,7 +21,7 @@ class VoicePlaybackWriterTest {
         val sink = FakeVoicePcm16Sink(expectedWrites = 2)
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { sink },
+            createSink = { _ -> sink },
             onDiagnostic = diagnostics::add,
         )
 
@@ -47,7 +47,7 @@ class VoicePlaybackWriterTest {
         var sinkCreations = 0
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = {
+            createSink = { _ ->
                 sinkCreations += 1
                 FakeVoicePcm16Sink()
             },
@@ -79,7 +79,7 @@ class VoicePlaybackWriterTest {
         )
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { sink },
+            createSink = { _ -> sink },
             onDiagnostic = { diagnostic ->
                 diagnostics += diagnostic
                 if (diagnostic is VoicePlaybackDiagnostic.StaleChunkRejected) {
@@ -114,7 +114,7 @@ class VoicePlaybackWriterTest {
         val sink = FakeVoicePcm16Sink(expectedWrites = 1)
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { sink },
+            createSink = { _ -> sink },
             onDiagnostic = diagnostics::add,
         )
 
@@ -145,7 +145,7 @@ class VoicePlaybackWriterTest {
         )
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { sink },
+            createSink = { _ -> sink },
             onDiagnostic = { diagnostic ->
                 diagnostics += diagnostic
                 if (diagnostic is VoicePlaybackDiagnostic.SinkWriteFailed) {
@@ -180,7 +180,7 @@ class VoicePlaybackWriterTest {
         val sinkIndex = AtomicInteger()
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = {
+            createSink = { _ ->
                 if (sinkIndex.getAndIncrement() == 0) firstSink else secondSink
             },
             onDiagnostic = { diagnostic ->
@@ -211,7 +211,7 @@ class VoicePlaybackWriterTest {
         val startFailedLatch = CountDownLatch(1)
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = {
+            createSink = { _ ->
                 FakeVoicePcm16Sink(
                     startException = IllegalStateException("start exploded"),
                 )
@@ -241,6 +241,35 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `local cue queued and written diagnostics keep local cue source`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val sink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { _ -> sink },
+            onDiagnostic = diagnostics::add,
+        )
+
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQID",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(sink.awaitWrites(1))
+
+        val queued = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.ChunkQueued>().single()
+        val written = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.ChunkWritten>().single()
+        assertEquals(VoicePlaybackSource.LocalCue, queued.source)
+        assertEquals(VoicePlaybackSource.LocalCue, written.source)
+
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `local cue sink write failure diagnostic keeps local cue source`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
@@ -251,7 +280,7 @@ class VoicePlaybackWriterTest {
         )
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { sink },
+            createSink = { _ -> sink },
             onDiagnostic = { diagnostic ->
                 diagnostics += diagnostic
                 if (diagnostic is VoicePlaybackDiagnostic.SinkWriteFailed) {
@@ -277,13 +306,49 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `local cue sink failures do not map to fatal audio errors`() {
+        assertEquals(
+            null,
+            VoicePlaybackDiagnostic.SinkStartFailed(
+                message = "start failed",
+                source = VoicePlaybackSource.LocalCue,
+            ).audioErrorMessageOrNull(),
+        )
+        assertEquals(
+            null,
+            VoicePlaybackDiagnostic.SinkWriteFailed(
+                message = "write failed",
+                source = VoicePlaybackSource.LocalCue,
+            ).audioErrorMessageOrNull(),
+        )
+    }
+
+    @Test
+    fun `assistant sink failures still map to fatal audio errors`() {
+        assertEquals(
+            "AudioTrack start failed: start failed",
+            VoicePlaybackDiagnostic.SinkStartFailed(
+                message = "start failed",
+                source = VoicePlaybackSource.Assistant,
+            ).audioErrorMessageOrNull(),
+        )
+        assertEquals(
+            "AudioTrack write failed: write failed",
+            VoicePlaybackDiagnostic.SinkWriteFailed(
+                message = "write failed",
+                source = VoicePlaybackSource.Assistant,
+            ).audioErrorMessageOrNull(),
+        )
+    }
+
+    @Test
     fun `release stops sink and rejects future playback`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
         val sink = FakeVoicePcm16Sink(expectedWrites = 1)
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { sink },
+            createSink = { _ -> sink },
             onDiagnostic = diagnostics::add,
         )
 
@@ -307,7 +372,7 @@ class VoicePlaybackWriterTest {
         var sinkCreations = 0
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = {
+            createSink = { _ ->
                 sinkCreations += 1
                 FakeVoicePcm16Sink()
             },
@@ -334,7 +399,7 @@ class VoicePlaybackWriterTest {
         val sinkIndex = AtomicInteger()
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = {
+            createSink = { _ ->
                 if (sinkIndex.getAndIncrement() == 0) null else sink
             },
             onDiagnostic = { diagnostic ->
@@ -369,7 +434,7 @@ class VoicePlaybackWriterTest {
         )
         val writer = VoicePlaybackWriter(
             scope = scope,
-            createSink = { sink },
+            createSink = { _ -> sink },
             onDiagnostic = { diagnostic ->
                 diagnostics += diagnostic
                 if (diagnostic is VoicePlaybackDiagnostic.StaleChunkRejected) {

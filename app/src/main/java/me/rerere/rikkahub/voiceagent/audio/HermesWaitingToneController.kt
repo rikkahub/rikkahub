@@ -19,9 +19,12 @@ class HermesWaitingToneController(
     private val repeatIntervalMs: Long = DEFAULT_REPEAT_INTERVAL_MS,
     private val toneBase64Pcm16: String = defaultToneBase64Pcm16(),
     private val recordDiagnostic: (String, String) -> Unit = { _, _ -> },
+    private val delayFn: suspend (Long) -> Unit = { delay(it) },
+    private val beforePlayFn: suspend () -> Unit = {},
 ) {
     private val lock = Any()
     private var waiting = false
+    private var generation = 0L
     private var loopJob: Job? = null
 
     fun setWaiting(active: Boolean) {
@@ -35,6 +38,7 @@ class HermesWaitingToneController(
     fun stop() {
         val job = synchronized(lock) {
             waiting = false
+            generation += 1
             loopJob.also {
                 loopJob = null
             }
@@ -46,18 +50,20 @@ class HermesWaitingToneController(
         synchronized(lock) {
             waiting = true
             if (loopJob?.isActive == true) return
+            generation += 1
+            val loopGeneration = generation
             loopJob = scope.launch(dispatcher) {
-                runLoop()
+                runLoop(loopGeneration)
             }
         }
     }
 
-    private suspend fun runLoop() {
+    private suspend fun runLoop(loopGeneration: Long) {
         try {
-            delay(graceDelayMs)
-            while (isWaiting()) {
-                playCue()
-                delay(repeatIntervalMs)
+            delayFn(graceDelayMs)
+            while (isWaiting(loopGeneration)) {
+                playCue(loopGeneration)
+                delayFn(repeatIntervalMs)
             }
         } catch (error: CancellationException) {
             throw error
@@ -69,7 +75,11 @@ class HermesWaitingToneController(
         }
     }
 
-    private fun playCue() {
+    private suspend fun playCue(loopGeneration: Long) {
+        beforePlayFn()
+        if (!isWaiting(loopGeneration)) {
+            return
+        }
         val accepted = runCatching {
             audio.playLocalCuePcm16(base64Pcm16 = toneBase64Pcm16, sessionId = null)
         }.getOrElse { error ->
@@ -90,7 +100,9 @@ class HermesWaitingToneController(
         }
     }
 
-    private fun isWaiting(): Boolean = synchronized(lock) { waiting }
+    private fun isWaiting(loopGeneration: Long): Boolean = synchronized(lock) {
+        waiting && generation == loopGeneration
+    }
 
     companion object {
         const val DEFAULT_GRACE_DELAY_MS = 2_000L
