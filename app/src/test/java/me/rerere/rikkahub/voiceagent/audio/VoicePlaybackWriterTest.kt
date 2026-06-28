@@ -496,13 +496,19 @@ class VoicePlaybackWriterTest {
     fun `local cue invalidation flushes buffered local cue without flushing assistant sink`() {
         val scope = testScope()
         val assistantSink = FakeVoicePcm16Sink(expectedWrites = 1)
-        val localCueSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val firstLocalCueSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val secondLocalCueSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val localCueSinkIndex = AtomicInteger()
         val writer = VoicePlaybackWriter(
             scope = scope,
             createSink = { source ->
                 when (source) {
                     VoicePlaybackSource.Assistant -> assistantSink
-                    VoicePlaybackSource.LocalCue -> localCueSink
+                    VoicePlaybackSource.LocalCue -> if (localCueSinkIndex.getAndIncrement() == 0) {
+                        firstLocalCueSink
+                    } else {
+                        secondLocalCueSink
+                    }
                 }
             },
         )
@@ -522,14 +528,24 @@ class VoicePlaybackWriterTest {
                 source = VoicePlaybackSource.LocalCue,
             ),
         )
-        assertTrue(localCueSink.awaitWrites(2))
+        assertTrue(firstLocalCueSink.awaitWrites(2))
 
         writer.invalidateLocalCues()
 
         assertEquals(0, assistantSink.pauseAndFlushCalls)
-        assertEquals(1, localCueSink.pauseAndFlushCalls)
+        assertEquals(1, firstLocalCueSink.pauseAndFlushCalls)
         assertEquals(listOf(listOf<Byte>(1, 2, 3)), assistantSink.writes)
-        assertEquals(listOf(listOf<Byte>(4, 5, 6)), localCueSink.writes)
+        assertEquals(listOf(listOf<Byte>(4, 5, 6)), firstLocalCueSink.writes)
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "BwgJ",
+                sessionId = null,
+                source = VoicePlaybackSource.LocalCue,
+            ),
+        )
+        assertTrue(secondLocalCueSink.awaitWrites(2))
+        assertEquals(listOf(listOf<Byte>(7, 8, 9)), secondLocalCueSink.writes)
+        assertEquals(0, secondLocalCueSink.pauseAndFlushCalls)
 
         writer.release()
         scope.cancel()

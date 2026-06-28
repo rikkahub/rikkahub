@@ -200,6 +200,7 @@ internal class VoicePlaybackWriter(
             }
             localCueGeneration += 1
             localCueSink?.pauseAndFlush()
+            localCueSink = null
         }
     }
 
