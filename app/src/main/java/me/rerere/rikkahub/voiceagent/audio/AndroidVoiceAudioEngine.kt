@@ -258,6 +258,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         playbackWriter.playBase64(base64Pcm16 = base64Pcm16, sessionId = sessionId)
     }
 
+    override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+        return playbackWriter.playBase64(base64Pcm16 = base64Pcm16, sessionId = sessionId)
+    }
+
     override fun activatePlaybackSession(sessionId: Long) {
         playbackWriter.activateSession(sessionId)
     }

@@ -8,6 +8,10 @@ interface VoiceAudioEngine {
     fun playPcm16(base64Pcm16: String, sessionId: Long?) {
         playPcm16(base64Pcm16)
     }
+    fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long? = null): Boolean {
+        playPcm16(base64Pcm16 = base64Pcm16, sessionId = sessionId)
+        return true
+    }
     fun activatePlaybackSession(sessionId: Long) = Unit
     fun invalidatePlaybackSession() = Unit
     fun suppressPlayback()
