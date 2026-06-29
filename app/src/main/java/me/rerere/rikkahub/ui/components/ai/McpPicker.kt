@@ -65,7 +65,7 @@ fun McpPickerButton(
 ) {
     var showMcpPicker by remember { mutableStateOf(false) }
     val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
-    val loading = status.values.any { it == McpStatus.Connecting }
+    val loading = status.values.any { it == McpStatus.Connecting || it == McpStatus.Authorizing }
     val enabledServers = servers.fastFilter {
         it.commonOptions.enable && assistant.mcpServers.contains(it.id)
     }
@@ -169,7 +169,7 @@ fun McpPickerListItem(
 ) {
     var showMcpPicker by remember { mutableStateOf(false) }
     val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
-    val loading = status.values.any { it == McpStatus.Connecting }
+    val loading = status.values.any { it == McpStatus.Connecting || it == McpStatus.Authorizing }
     val enabledServers = servers.fastFilter {
         it.commonOptions.enable && assistant.mcpServers.contains(it.id)
     }
@@ -295,6 +295,10 @@ fun McpPicker(
                 ) {
                     when (status) {
                         McpStatus.Idle -> Icon(HugeIcons.Icon1stBracket, null)
+                        McpStatus.Authorizing -> CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
                         McpStatus.Connecting -> CircularProgressIndicator(
                             modifier = Modifier.size(
                                 24.dp
@@ -318,6 +322,7 @@ fun McpPicker(
                         Text(
                             text = when (val s = status) {
                                 is McpStatus.Idle -> "Idle"
+                                is McpStatus.Authorizing -> "Authorizing"
                                 is McpStatus.Connecting -> "Connecting"
                                 is McpStatus.Connected -> "Connected"
                                 is McpStatus.Reconnecting -> "Reconnecting (${s.attempt}/${s.maxAttempts})"

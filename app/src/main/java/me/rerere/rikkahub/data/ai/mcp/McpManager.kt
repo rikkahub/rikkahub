@@ -7,6 +7,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.sse.SSE
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.http.HttpHeaders
 import io.ktor.util.StringValues
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
@@ -55,6 +56,7 @@ class McpManager(
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
     private val filesManager: FilesManager,
+    private val oAuthManager: McpOAuthManager,
 ) {
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -100,14 +102,16 @@ class McpManager(
                         toAdd.forEach { cfg ->
                             appScope.launch {
                                 runCatching { addClient(cfg) }
-                                    .onFailure { it.printStackTrace() }
+                                    .onFailure {
+                                        Log.w(TAG, "Failed to add MCP client ${cfg.commonOptions.name}: ${it.safeLogMessage()}")
+                                    }
                             }
                         }
                         toRemove.forEach { cfg ->
                             appScope.launch { removeClient(cfg) }
                         }
                     }.onFailure {
-                        it.printStackTrace()
+                        Log.w(TAG, "Failed to update MCP configs: ${it.safeLogMessage()}")
                     }
                 }
         }
@@ -138,16 +142,37 @@ class McpManager(
         val config = entry.key
         Log.i(TAG, "callTool: $toolName / $args (server: ${config.commonOptions.name})")
 
+        if (!ensureOAuthTokenForConnect(config)) {
+            return listOf(UIMessagePart.Text("MCP server needs OAuth authorization. Please authorize it in settings."))
+        }
         if (client.transport == null) client.connect(getTransport(config))
-        val result = client.callTool(
-            request = CallToolRequest(
-                params = CallToolRequestParams(
-                    name = toolName,
-                    arguments = args,
+        val result = runCatching {
+            client.callTool(
+                request = CallToolRequest(
+                    params = CallToolRequestParams(
+                        name = toolName,
+                        arguments = args,
+                    ),
                 ),
-            ),
-            options = RequestOptions(timeout = 120.seconds),
-        )
+                options = RequestOptions(timeout = 120.seconds),
+            )
+        }.getOrElse { error ->
+            if (handleOAuthFailure(config, error)) {
+                client.callTool(
+                    request = CallToolRequest(
+                        params = CallToolRequestParams(
+                            name = toolName,
+                            arguments = args,
+                        ),
+                    ),
+                    options = RequestOptions(timeout = 120.seconds),
+                )
+            } else if (error.isOAuthAuthorizationError(config)) {
+                return listOf(UIMessagePart.Text("MCP OAuth authorization is required or needs more permissions. Please authorize this server in MCP settings."))
+            } else {
+                throw error
+            }
+        }
         return result.content.map {
             when(it) {
                 is TextContent -> UIMessagePart.Text(it.text)
@@ -178,9 +203,7 @@ class McpManager(
                 client = client,
                 requestBuilder = {
                     headers.appendAll(StringValues.build {
-                        config.commonOptions.headers.forEach {
-                            append(it.first, it.second)
-                        }
+                        config.commonOptions.headers.forEach { append(it.first, it.second) }
                     })
                 },
             )
@@ -192,8 +215,14 @@ class McpManager(
                 client = client,
                 requestBuilder = {
                     headers.appendAll(StringValues.build {
-                        config.commonOptions.headers.forEach {
-                            append(it.first, it.second)
+                        if (config.oauth?.enabled == true) {
+                            oAuthManager.getCachedAccessToken(config.id)?.let {
+                                append(HttpHeaders.Authorization, "Bearer $it")
+                            }
+                        } else {
+                            config.commonOptions.headers.forEach {
+                                append(it.first, it.second)
+                            }
                         }
                     })
                 }
@@ -205,6 +234,8 @@ class McpManager(
         removeClient(config) // Remove first
         cancelReconnect(config.id)
         reconnectAttempts[config.id] = 0
+
+        if (!ensureOAuthTokenForConnect(config)) return@withContext
 
         val transport = getTransport(config)
         val client = Client(
@@ -225,7 +256,7 @@ class McpManager(
         }
 
         transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.safeLogMessage()}")
             val currentStatus = syncingStatus.value[config.id]
             // 只有在已连接状态下才触发重连
             if (currentStatus == McpStatus.Connected) {
@@ -242,8 +273,32 @@ class McpManager(
             reconnectAttempts[config.id] = 0 // 重置重连计数
             Log.i(TAG, "addClient: connected ${config.commonOptions.name}")
         }.onFailure {
-            it.printStackTrace()
-            setStatus(config = config, status = McpStatus.Error(it.message ?: it.javaClass.name))
+            Log.w(TAG, "Failed to connect MCP client ${config.commonOptions.name}: ${it.safeLogMessage()}")
+            if (handleOAuthFailure(config, it)) {
+                if (!retryConnectAfterOAuth(config)) {
+                    setStatus(config = config, status = McpStatus.Error(it.message ?: it.javaClass.name))
+                }
+            } else if (!it.isOAuthAuthorizationError(config)) {
+                setStatus(config = config, status = McpStatus.Error(it.message ?: it.javaClass.name))
+            }
+        }
+    }
+
+    fun authorize(config: McpServerConfig.StreamableHTTPServer): Job {
+        return appScope.launch(Dispatchers.IO) {
+            setStatus(config, McpStatus.Authorizing)
+            when (val result = oAuthManager.authorize(config.id, config.url)) {
+                is OAuthResult.Success -> addClient(config)
+                is OAuthResult.Error -> setStatus(config, McpStatus.Error(result.message))
+            }
+        }
+    }
+
+    fun revokeAuthorization(config: McpServerConfig.StreamableHTTPServer): Job {
+        return appScope.launch(Dispatchers.IO) {
+            oAuthManager.revoke(config.id)
+            removeClient(config)
+            setStatus(config, McpStatus.Idle)
         }
     }
 
@@ -251,6 +306,7 @@ class McpManager(
         val client = clients[config] ?: return
 
         setStatus(config = config, status = McpStatus.Connecting)
+        if (!ensureOAuthTokenForConnect(config)) return
 
         // Update tools
         if (client.transport == null) {
@@ -317,7 +373,7 @@ class McpManager(
             runCatching {
                 sync(config)
             }.onFailure {
-                it.printStackTrace()
+                Log.w(TAG, "Failed to sync MCP client ${config.commonOptions.name}: ${it.safeLogMessage()}")
                 setStatus(config, McpStatus.Error(it.message ?: it.javaClass.name))
             }
         }
@@ -330,7 +386,7 @@ class McpManager(
             runCatching {
                 entry.value.close()
             }.onFailure {
-                it.printStackTrace()
+                Log.w(TAG, "Failed to close MCP client ${entry.key.commonOptions.name}: ${it.safeLogMessage()}")
             }
             clients.remove(entry.key)
             syncingStatus.emit(syncingStatus.value.toMutableMap().apply { remove(entry.key.id) })
@@ -380,7 +436,7 @@ class McpManager(
                 Log.i(TAG, "Reconnect cancelled for ${config.commonOptions.name}")
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Reconnect failed for ${config.commonOptions.name}", e)
+                Log.e(TAG, "Reconnect failed for ${config.commonOptions.name}: ${e.safeLogMessage()}")
                 // 继续尝试重连
                 scheduleReconnect(config)
             }
@@ -399,10 +455,15 @@ class McpManager(
     }
 
     private suspend fun reconnectClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
+        if (!ensureOAuthTokenForConnect(config)) return@withContext
+
         // 先关闭旧客户端
         val oldEntry = clients.entries.find { it.key.id == config.id }
         if (oldEntry != null) {
-            runCatching { oldEntry.value.close() }.onFailure { it.printStackTrace() }
+            runCatching { oldEntry.value.close() }
+                .onFailure {
+                    Log.w(TAG, "Failed to close old MCP client ${config.commonOptions.name}: ${it.safeLogMessage()}")
+                }
             clients.remove(oldEntry.key)
         }
 
@@ -424,7 +485,7 @@ class McpManager(
         }
 
         transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.safeLogMessage()}")
             val currentStatus = syncingStatus.value[config.id]
             if (currentStatus == McpStatus.Connected) {
                 scheduleReconnect(config)
@@ -433,11 +494,53 @@ class McpManager(
 
         clients[config] = client
         setStatus(config, McpStatus.Connecting)
-        client.connect(transport)
-        sync(config)
-        setStatus(config, McpStatus.Connected)
-        reconnectAttempts[config.id] = 0 // 重置重连计数
-        Log.i(TAG, "Reconnected successfully: ${config.commonOptions.name}")
+        runCatching {
+            client.connect(transport)
+            sync(config)
+            setStatus(config, McpStatus.Connected)
+            reconnectAttempts[config.id] = 0 // 重置重连计数
+            Log.i(TAG, "Reconnected successfully: ${config.commonOptions.name}")
+        }.onFailure {
+            if (!handleOAuthFailure(config, it) && !it.isOAuthAuthorizationError(config)) throw it
+        }
+    }
+
+    private suspend fun ensureOAuthTokenForConnect(config: McpServerConfig): Boolean {
+        if (config !is McpServerConfig.StreamableHTTPServer || config.oauth?.enabled != true) return true
+        val token = oAuthManager.ensureValidToken(config.id)
+        return if (token == null) {
+            setStatus(config, McpStatus.Error("This MCP server requires OAuth authorization. Please tap Authorize."))
+            false
+        } else {
+            true
+        }
+    }
+
+    private suspend fun handleOAuthFailure(config: McpServerConfig, error: Throwable): Boolean {
+        if (config !is McpServerConfig.StreamableHTTPServer || config.oauth?.enabled != true) return false
+        val statusCode = error.httpStatusCode() ?: return false
+        return oAuthManager.handleAuthFailure(config.id, statusCode, error.wwwAuthenticate())
+    }
+
+    private suspend fun retryConnectAfterOAuth(config: McpServerConfig): Boolean {
+        if (config !is McpServerConfig.StreamableHTTPServer || config.oauth?.enabled != true) return false
+        val transport = getTransport(config)
+        val client = Client(
+            clientInfo = Implementation(
+                name = config.commonOptions.name,
+                version = "1.0",
+            )
+        )
+        clients[config] = client
+        return runCatching {
+            setStatus(config = config, status = McpStatus.Connecting)
+            client.connect(transport)
+            sync(config)
+            setStatus(config = config, status = McpStatus.Connected)
+            true
+        }.getOrElse {
+            false
+        }
     }
 
     private suspend fun setStatus(config: McpServerConfig, status: McpStatus) {
@@ -463,4 +566,45 @@ internal val McpJson: Json by lazy {
 
 private fun ToolSchema.toSchema(): InputSchema {
     return InputSchema.Obj(properties = this.properties ?: JsonObject(emptyMap()), required = this.required)
+}
+
+private fun Throwable.httpStatusCode(): Int? {
+    val response = runCatching {
+        this::class.java.methods.firstOrNull { it.name == "getResponse" }?.invoke(this)
+    }.getOrNull()
+    val status = runCatching {
+        response?.javaClass?.methods?.firstOrNull { it.name == "getStatus" }?.invoke(response)
+    }.getOrNull()
+    val value = runCatching {
+        status?.javaClass?.methods?.firstOrNull { it.name == "getValue" }?.invoke(status) as? Int
+    }.getOrNull()
+    if (value != null) return value
+    val code = runCatching {
+        this::class.java.methods.firstOrNull { it.name == "getCode" }?.invoke(this) as? Int
+    }.getOrNull()
+    if (code != null) return code
+    return Regex("""\b(401|403)\b""").find(message.orEmpty())?.value?.toIntOrNull()
+}
+
+private fun Throwable.wwwAuthenticate(): String? {
+    val response = runCatching {
+        this::class.java.methods.firstOrNull { it.name == "getResponse" }?.invoke(this)
+    }.getOrNull()
+    val headers = runCatching {
+        response?.javaClass?.methods?.firstOrNull { it.name == "getHeaders" }?.invoke(response)
+    }.getOrNull()
+    return runCatching {
+        headers?.javaClass?.methods
+            ?.firstOrNull { it.name == "get" && it.parameterTypes.size == 1 }
+            ?.invoke(headers, "WWW-Authenticate") as? String
+    }.getOrNull()
+}
+
+private fun Throwable.isOAuthAuthorizationError(config: McpServerConfig): Boolean {
+    if (config !is McpServerConfig.StreamableHTTPServer || config.oauth?.enabled != true) return false
+    return httpStatusCode() == 401 || httpStatusCode() == 403
+}
+
+private fun Throwable.safeLogMessage(): String {
+    return "${this::class.java.simpleName}: ${message?.take(160).orEmpty()}"
 }

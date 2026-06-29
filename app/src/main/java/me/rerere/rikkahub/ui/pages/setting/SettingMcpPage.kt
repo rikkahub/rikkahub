@@ -89,6 +89,9 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.McpOAuthConfig
+import me.rerere.rikkahub.data.ai.mcp.McpOAuthManager
+import me.rerere.rikkahub.data.ai.mcp.McpOAuthStatus
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
 import me.rerere.rikkahub.data.ai.mcp.McpStatus
@@ -166,7 +169,7 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
         val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
         val scope = rememberCoroutineScope()
         val state = rememberPullToRefreshState()
-        val loading = status.values.any { it == McpStatus.Connecting || it is McpStatus.Reconnecting }
+        val loading = status.values.any { it == McpStatus.Connecting || it == McpStatus.Authorizing || it is McpStatus.Reconnecting }
         PullToRefreshBox(
             isRefreshing = loading,
             onRefresh = {
@@ -284,6 +287,10 @@ private fun McpServerItem(
             ) {
                 when (status) {
                     McpStatus.Idle -> Icon(HugeIcons.MessageBlocked, null)
+                    McpStatus.Authorizing -> CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
                     McpStatus.Connecting -> CircularProgressIndicator(
                         modifier = Modifier.size(
                             24.dp
@@ -446,6 +453,9 @@ private fun McpCommonOptionsConfigure(
     config: McpServerConfig,
     update: (McpServerConfig) -> Unit
 ) {
+    val mcpManager = koinInject<McpManager>()
+    val oAuthManager = koinInject<McpOAuthManager>()
+    val oAuthStatusMap by oAuthManager.status.collectAsStateWithLifecycle()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -630,79 +640,205 @@ private fun McpCommonOptionsConfigure(
 
         HorizontalDivider()
 
-        // 请求头配置
-        FormItem(
-            label = {
-                Text(stringResource(R.string.setting_mcp_page_custom_headers))
-            },
-            description = {
-                Text(stringResource(R.string.setting_mcp_page_custom_headers_desc))
-            }
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        if (config is McpServerConfig.StreamableHTTPServer) {
+            FormItem(
+                label = {
+                    Text("Authentication")
+                },
+                description = {
+                    Text("Choose how this MCP server signs in.")
+                }
             ) {
-                config.commonOptions.headers.forEachIndexed { index, header ->
-                    var headerName by remember(header.first) { mutableStateOf(header.first) }
-                    var headerValue by remember(header.second) { mutableStateOf(header.second) }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            OutlinedTextField(
-                                value = headerName,
-                                onValueChange = {
-                                    headerName = it
-                                    val updatedHeaders =
-                                        config.commonOptions.headers.toMutableList()
-                                    updatedHeaders[index] =
-                                        it.trim() to updatedHeaders[index].second
+                val authTypes = listOf("None", "Headers", "OAuth")
+                val oauthStatus = oAuthStatusMap[config.id] ?: McpOAuthStatus.Idle
+                val currentAuthIndex = when {
+                    config.oauth?.enabled == true -> 2
+                    config.commonOptions.headers.isNotEmpty() -> 1
+                    else -> 0
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        authTypes.forEachIndexed { index, type ->
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index, authTypes.size),
+                                onClick = {
                                     update(
-                                        when (config) {
-                                            is McpServerConfig.SseTransportServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                        when (index) {
+                                            0 -> config.copy(
+                                                oauth = null,
+                                                commonOptions = config.commonOptions.copy(headers = emptyList())
                                             )
 
-                                            is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                            1 -> config.copy(oauth = null)
+                                            2 -> config.copy(
+                                                oauth = McpOAuthConfig(),
+                                                commonOptions = config.commonOptions.copy(headers = emptyList())
                                             )
+                                            else -> config
                                         }
                                     )
                                 },
-                                label = { Text(stringResource(R.string.setting_mcp_page_header_name)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_name_placeholder)) }
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = headerValue,
-                                onValueChange = {
-                                    headerValue = it
-                                    val updatedHeaders =
-                                        config.commonOptions.headers.toMutableList()
-                                    updatedHeaders[index] = updatedHeaders[index].first to it.trim()
-                                    update(
-                                        when (config) {
-                                            is McpServerConfig.SseTransportServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-
-                                            is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-                                        }
-                                    )
-                                },
-                                label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) }
-                            )
+                                selected = index == currentAuthIndex
+                            ) {
+                                Text(type, maxLines = 1)
+                            }
                         }
-                        IconButton(onClick = {
+                    }
+                    if (config.oauth?.enabled == true) {
+                        Text(
+                            text = "Authorize in your browser, then return to RikkaHub.",
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = when (val status = oauthStatus) {
+                                McpOAuthStatus.Idle -> "Not authorized yet."
+                                McpOAuthStatus.Authorizing -> "Authorizing..."
+                                McpOAuthStatus.Authorized -> "Authorized."
+                                is McpOAuthStatus.Error -> status.message
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = when (oauthStatus) {
+                                is McpOAuthStatus.Error -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    mcpManager.revokeAuthorization(config)
+                                },
+                                enabled = oauthStatus != McpOAuthStatus.Authorizing,
+                            ) {
+                                Text("Cancel authorization")
+                            }
+                            Button(
+                                onClick = {
+                                    mcpManager.authorize(config)
+                                },
+                                enabled = config.url.isNotBlank() && oauthStatus != McpOAuthStatus.Authorizing,
+                            ) {
+                                if (oauthStatus == McpOAuthStatus.Authorizing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Text("Authorize")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider()
+        }
+
+        // 请求头配置
+        if (config !is McpServerConfig.StreamableHTTPServer || config.oauth?.enabled != true) {
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.setting_mcp_page_custom_headers))
+                },
+                description = {
+                    Text(stringResource(R.string.setting_mcp_page_custom_headers_desc))
+                }
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    config.commonOptions.headers.forEachIndexed { index, header ->
+                        var headerName by remember(header.first) { mutableStateOf(header.first) }
+                        var headerValue by remember(header.second) { mutableStateOf(header.second) }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                OutlinedTextField(
+                                    value = headerName,
+                                    onValueChange = {
+                                        headerName = it
+                                        val updatedHeaders =
+                                            config.commonOptions.headers.toMutableList()
+                                        updatedHeaders[index] =
+                                            it.trim() to updatedHeaders[index].second
+                                        update(
+                                            when (config) {
+                                                is McpServerConfig.SseTransportServer -> config.copy(
+                                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                                )
+
+                                                is McpServerConfig.StreamableHTTPServer -> config.copy(
+                                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                                )
+                                            }
+                                        )
+                                    },
+                                    label = { Text(stringResource(R.string.setting_mcp_page_header_name)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text(stringResource(R.string.setting_mcp_page_header_name_placeholder)) }
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = headerValue,
+                                    onValueChange = {
+                                        headerValue = it
+                                        val updatedHeaders =
+                                            config.commonOptions.headers.toMutableList()
+                                        updatedHeaders[index] = updatedHeaders[index].first to it.trim()
+                                        update(
+                                            when (config) {
+                                                is McpServerConfig.SseTransportServer -> config.copy(
+                                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                                )
+
+                                                is McpServerConfig.StreamableHTTPServer -> config.copy(
+                                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                                )
+                                            }
+                                        )
+                                    },
+                                    label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) }
+                                )
+                            }
+                            IconButton(onClick = {
+                                val updatedHeaders = config.commonOptions.headers.toMutableList()
+                                updatedHeaders.removeAt(index)
+                                update(
+                                    when (config) {
+                                        is McpServerConfig.SseTransportServer -> config.copy(
+                                            commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                        )
+
+                                        is McpServerConfig.StreamableHTTPServer -> config.copy(
+                                            commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                        )
+                                    }
+                                )
+                            }) {
+                                Icon(
+                                    HugeIcons.Delete01,
+                                    contentDescription = stringResource(R.string.setting_mcp_page_delete_header)
+                                )
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = {
                             val updatedHeaders = config.commonOptions.headers.toMutableList()
-                            updatedHeaders.removeAt(index)
+                            updatedHeaders.add("" to "")
                             update(
                                 when (config) {
                                     is McpServerConfig.SseTransportServer -> config.copy(
@@ -714,39 +850,16 @@ private fun McpCommonOptionsConfigure(
                                     )
                                 }
                             )
-                        }) {
-                            Icon(
-                                HugeIcons.Delete01,
-                                contentDescription = stringResource(R.string.setting_mcp_page_delete_header)
-                            )
-                        }
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        val updatedHeaders = config.commonOptions.headers.toMutableList()
-                        updatedHeaders.add("" to "")
-                        update(
-                            when (config) {
-                                is McpServerConfig.SseTransportServer -> config.copy(
-                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                )
-
-                                is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                )
-                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            HugeIcons.Add01,
+                            contentDescription = stringResource(R.string.setting_mcp_page_add_header)
                         )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        HugeIcons.Add01,
-                        contentDescription = stringResource(R.string.setting_mcp_page_add_header)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.setting_mcp_page_add_header))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.setting_mcp_page_add_header))
+                    }
                 }
             }
         }

@@ -23,6 +23,11 @@ data class McpTool(
 )
 
 @Serializable
+data class McpOAuthConfig(
+    val enabled: Boolean = true,
+)
+
+@Serializable
 sealed class McpServerConfig {
     abstract val id: Uuid
     abstract val commonOptions: McpCommonOptions
@@ -50,6 +55,7 @@ sealed class McpServerConfig {
         override val id: Uuid = Uuid.random(),
         override val commonOptions: McpCommonOptions = McpCommonOptions(),
         val url: String = "",
+        val oauth: McpOAuthConfig? = null,
     ) : McpServerConfig() {
         override fun clone(id: Uuid, commonOptions: McpCommonOptions): McpServerConfig {
             return copy(id = id, commonOptions = commonOptions)

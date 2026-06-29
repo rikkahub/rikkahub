@@ -13,6 +13,7 @@ import io.requery.android.database.sqlite.SQLiteCustomExtension
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
@@ -31,12 +32,15 @@ import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.db.migrations.Migration_15_16
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.McpOAuthManager
+import me.rerere.rikkahub.data.ai.mcp.McpOAuthTokenStore
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -146,7 +150,43 @@ val dataSourceModule = module {
         MessageFtsManager(get())
     }
 
-    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get()) }
+    single { McpOAuthTokenStore(context = get(), json = get()) }
+
+    single<OkHttpClient>(named("mcpOAuth")) {
+        val acceptLang = AcceptLanguageBuilder.fromAndroid(get())
+            .build()
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .followSslRedirects(true)
+            .followRedirects(true)
+            .retryOnConnectionFailure(true)
+            .addInterceptor { chain ->
+                val originalRequest = chain.request()
+                val requestBuilder = originalRequest.newBuilder()
+                    .addHeader(HttpHeaders.AcceptLanguage, acceptLang)
+
+                if (originalRequest.header(HttpHeaders.UserAgent) == null) {
+                    requestBuilder.addHeader(HttpHeaders.UserAgent, "RikkaHub-Android/${BuildConfig.VERSION_NAME}")
+                }
+
+                chain.proceed(requestBuilder.build())
+            }
+            .build()
+    }
+
+    single {
+        McpOAuthManager(
+            context = get(),
+            scope = get<AppScope>(),
+            client = get<OkHttpClient>(named("mcpOAuth")),
+            store = get(),
+            json = get(),
+        )
+    }
+
+    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get(), oAuthManager = get()) }
 
     single {
         GenerationHandler(
