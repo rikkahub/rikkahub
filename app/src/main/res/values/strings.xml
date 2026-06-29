@@ -1262,25 +1262,25 @@
   <string name="chat_message_tool_calendar_query">Query calendar events</string>
   <string name="chat_message_tool_calendar_create">Create event: %1$s</string>
 
-
-  <!-- Fork additions: Ta Message & Memory Tool Prompt -->
-  <string name="assistant_page_memory_tool_prompt">Memory Tool Prompt</string>
-  <string name="assistant_page_memory_tool_prompt_desc">Customize the behavioral instructions for the memory tool</string>
-  <string name="assistant_page_memory_tool_prompt_vars">Variables: {当前日期} (dynamically filled with today&amp;#39;s date at runtime)</string>
-  <string name="notification_channel_ta_message">Ta&amp;#39;s Message</string>
-  <string name="assistant_page_tab_ta_message">Ta&amp;#39;s Message</string>
-  <string name="assistant_detail_ta_message_desc">Configure Ta&amp;#39;s Message related settings</string>
-  <string name="ta_message_enable_label">Ta&amp;#39;s Message</string>
+  <!-- Fork additions -->
+  <string name="notification_channel_ta_message">Ta\'s Message</string>
+  <string name="assistant_page_tab_ta_message">Ta\'s Message</string>
+  <string name="assistant_detail_ta_message_desc">Configure Ta\'s Message related settings</string>
+  <string name="ta_message_enable_label">Ta\'s Message</string>
   <string name="ta_message_enable_desc">When enabled, the assistant can proactively send messages to the user at a set time</string>
   <string name="ta_message_next_time_label">Next Proactive Message Time</string>
   <string name="ta_message_next_time_not_set">Not set</string>
   <string name="ta_message_select_date">Select Date</string>
   <string name="ta_message_select_time">Select Time</string>
   <string name="ta_message_clear_time">Clear set time</string>
-  <string name="ta_message_prompt_label">Ta&amp;#39;s Message Prompt</string>
+  <string name="ta_message_prompt_label">Ta\'s Message Prompt</string>
   <string name="ta_message_decision_prompt_label">Decision Time Prompt</string>
-  <string name="setting_model_page_ta_message_model">Ta&amp;#39;s Message Model</string>
-  <string name="setting_model_page_ta_message_model_desc">Model used for Ta&amp;#39;s message time decision. If not set, uses the fast model</string>
-  <string name="setting_model_page_ta_message_prompt_note">Ta&amp;#39;s message prompt can be configured in each assistant&amp;#39;s detail page.</string>
+  <string name="setting_model_page_ta_message_model">Ta\'s Message Model</string>
+  <string name="setting_model_page_ta_message_model_desc">Model used for Ta\'s message time decision. If not set, uses the fast model</string>
+  <string name="setting_model_page_ta_message_prompt_note">Ta\'s message prompt can be configured in each assistant\'s detail page.</string>
+  <string name="assistant_page_memory_tool_prompt">Memory Tool Prompt</string>
+  <string name="assistant_page_memory_tool_prompt_desc">Customize the behavioral instructions for the memory tool</string>
+  <string name="assistant_page_memory_tool_prompt_vars">Variables: {当前日期} (dynamically filled with today\'s date at runtime)</string>
+
 </resources>
 

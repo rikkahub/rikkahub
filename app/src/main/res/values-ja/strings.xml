@@ -1263,13 +1263,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_message_tool_calendar_query">カレンダーイベントを照会</string>
   <string name="chat_message_tool_calendar_create">イベントを作成: %1$s</string>
 
-
-  <!-- Fork additions: Ta Message & Memory Tool Prompt -->
+  <!-- Fork additions -->
   <string name="notification_channel_ta_message">Taからのメッセージ</string>
   <string name="assistant_page_tab_ta_message">Taからのメッセージ</string>
   <string name="assistant_detail_ta_message_desc">Taからのメッセージ関連の設定</string>
   <string name="ta_message_enable_label">Taからのメッセージ</string>
-  <string name="ta_message_enable_desc">有効にすると、アシスタントが設定した時間にユーザーにメッセージを送信できます</string>
+  <string name="ta_message_enable_desc">有効にすると,アシスタントが設定した時間にユーザーにメッセージを送信できます</string>
   <string name="ta_message_next_time_label">次回の自発的メッセージ送信時間</string>
   <string name="ta_message_next_time_not_set">未設定</string>
   <string name="ta_message_select_date">日付選択</string>
@@ -1278,7 +1277,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="ta_message_prompt_label">Taからのメッセージプロンプト</string>
   <string name="ta_message_decision_prompt_label">決定時間機能説明プロンプト</string>
   <string name="setting_model_page_ta_message_model">Taの手紙 時間決定モデル</string>
-  <string name="setting_model_page_ta_message_model_desc">Taの手紙の時間決定に使用するモデル。未設定の場合は高速モデルを使用します</string>
-  <string name="setting_model_page_ta_message_prompt_note">Taの手紙の時間決定プロンプトは、各アシスタントの詳細ページで設定できます。</string>
+  <string name="setting_model_page_ta_message_model_desc">Taの手紙の時間決定に使用するモデル.未設定の場合は高速モデルを使用します</string>
+  <string name="setting_model_page_ta_message_prompt_note">Taの手紙の時間決定プロンプトは,各アシスタントの詳細ページで設定できます.</string>
+
 </resources>
 

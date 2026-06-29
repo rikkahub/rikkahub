@@ -1263,11 +1263,10 @@
   <string name="chat_message_tool_calendar_query">Запросить события календаря</string>
   <string name="chat_message_tool_calendar_create">Создать событие: %1$s</string>
 
-
-  <!-- Fork additions: Ta Message & Memory Tool Prompt -->
+  <!-- Fork additions -->
   <string name="notification_channel_ta_message">Сообщение от Ta</string>
   <string name="assistant_page_tab_ta_message">Сообщение от Ta</string>
-  <string name="assistant_detail_ta_message_desc">Настройки, связанные с сообщением от Ta</string>
+  <string name="assistant_detail_ta_message_desc">Настройки,связанные с сообщением от Ta</string>
   <string name="ta_message_enable_label">Сообщение от Ta</string>
   <string name="ta_message_enable_desc">При включении помощник может отправлять сообщения в установленное время</string>
   <string name="ta_message_next_time_label">Время следующего сообщения</string>
@@ -1278,7 +1277,8 @@
   <string name="ta_message_prompt_label">Подсказка сообщения от Ta</string>
   <string name="ta_message_decision_prompt_label">Подсказка функции времени решения</string>
   <string name="setting_model_page_ta_message_model">Модель времени сообщений Ta</string>
-  <string name="setting_model_page_ta_message_model_desc">Модель для принятия решений о времени сообщений Ta. Если не задана, используется быстрая модель</string>
+  <string name="setting_model_page_ta_message_model_desc">Модель для принятия решений о времени сообщений Ta.Если не задана,используется быстрая модель</string>
   <string name="setting_model_page_ta_message_prompt_note">Промпт времени сообщений Ta можно настроить на странице настроек каждого ассистента.</string>
+
 </resources>
 

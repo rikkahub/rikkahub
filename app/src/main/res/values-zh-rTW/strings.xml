@@ -1261,13 +1261,12 @@
   <string name="chat_message_tool_calendar_query">查詢日曆事件</string>
   <string name="chat_message_tool_calendar_create">建立事件: %1$s</string>
 
-
-  <!-- Fork additions: Ta Message & Memory Tool Prompt -->
+  <!-- Fork additions -->
   <string name="notification_channel_ta_message">Ta 的來信</string>
   <string name="assistant_page_tab_ta_message">Ta的來信</string>
   <string name="assistant_detail_ta_message_desc">配置Ta的來信相關設定</string>
   <string name="ta_message_enable_label">Ta的來信</string>
-  <string name="ta_message_enable_desc">開啟後，助手可在設定時間主動向使用者發送訊息</string>
+  <string name="ta_message_enable_desc">開啟後,助手可在設定時間主動向使用者發送訊息</string>
   <string name="ta_message_next_time_label">下次助手主動發送訊息時間</string>
   <string name="ta_message_next_time_not_set">未設定</string>
   <string name="ta_message_select_date">選擇日期</string>
@@ -1276,7 +1275,8 @@
   <string name="ta_message_prompt_label">Ta的來信提示詞</string>
   <string name="ta_message_decision_prompt_label">決策時間功能說明提示詞</string>
   <string name="setting_model_page_ta_message_model">Ta的來信 時間決策模型</string>
-  <string name="setting_model_page_ta_message_model_desc">用於Ta的來信時間決策的模型。未設定時使用快速模型</string>
-  <string name="setting_model_page_ta_message_prompt_note">Ta的來信時間決策提示詞可在每個助手的詳情頁中單獨設定。</string>
+  <string name="setting_model_page_ta_message_model_desc">用於Ta的來信時間決策的模型.未設定時使用快速模型</string>
+  <string name="setting_model_page_ta_message_prompt_note">Ta的來信時間決策提示詞可在每個助手的詳情頁中單獨設定.</string>
+
 </resources>
 
