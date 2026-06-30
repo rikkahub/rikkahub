@@ -5,66 +5,25 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.util.Base64
 
-internal interface VoicePcm16Sink {
-    fun start(source: VoicePlaybackSource): StartResult
-    fun writeFully(pcm16: ByteArray, source: VoicePlaybackSource): WriteResult
-    fun pauseAndFlush()
-    fun stopAndRelease()
-
-    sealed interface StartResult {
-        data object Started : StartResult
-        data class Failed(val message: String) : StartResult
-    }
-
-    sealed interface WriteResult {
-        data class Written(val bytes: Int) : WriteResult
-        data class Failed(val message: String) : WriteResult
-        data object Interrupted : WriteResult
-    }
-}
-
 internal sealed interface VoicePlaybackDiagnostic {
-    data class ChunkQueued(
-        val bytes: Int,
-        val generation: Long,
-        val source: VoicePlaybackSource = VoicePlaybackSource.Assistant,
-    ) : VoicePlaybackDiagnostic
-    data class ChunkWritten(
-        val bytes: Int,
-        val generation: Long,
-        val source: VoicePlaybackSource = VoicePlaybackSource.Assistant,
-    ) : VoicePlaybackDiagnostic
+    data class ChunkQueued(val bytes: Int, val generation: Long) : VoicePlaybackDiagnostic
+    data class ChunkWritten(val bytes: Int, val generation: Long) : VoicePlaybackDiagnostic
     data class StaleChunkRejected(
         val generation: Long,
         val activeGeneration: Long,
         val rejectedSessionId: Long? = null,
         val activeSessionId: Long? = null,
-        val source: VoicePlaybackSource = VoicePlaybackSource.Assistant,
     ) : VoicePlaybackDiagnostic
-    data class MalformedChunk(
-        val message: String,
-        val source: VoicePlaybackSource = VoicePlaybackSource.Assistant,
-    ) : VoicePlaybackDiagnostic
-    data class SinkStartFailed(
-        val message: String,
-        val source: VoicePlaybackSource = VoicePlaybackSource.Assistant,
-    ) : VoicePlaybackDiagnostic
-    data class SinkWriteFailed(
-        val message: String,
-        val source: VoicePlaybackSource = VoicePlaybackSource.Assistant,
-    ) : VoicePlaybackDiagnostic
+    data class MalformedChunk(val message: String) : VoicePlaybackDiagnostic
+    data class SinkStartFailed(val message: String) : VoicePlaybackDiagnostic
+    data class SinkWriteFailed(val message: String) : VoicePlaybackDiagnostic
     data class PlaybackSuppressed(val generation: Long) : VoicePlaybackDiagnostic
     data object Released : VoicePlaybackDiagnostic
 }
 
-internal enum class VoicePlaybackSource {
-    Assistant,
-    LocalCue,
-}
-
 internal class VoicePlaybackWriter(
     scope: CoroutineScope,
-    private val createSink: (VoicePlaybackSource) -> VoicePcm16Sink?,
+    private val createSink: () -> VoicePcm16Sink?,
     private val onDiagnostic: (VoicePlaybackDiagnostic) -> Unit = {},
 ) {
     private val lock = Any()
@@ -79,35 +38,18 @@ internal class VoicePlaybackWriter(
 
     private var activeSessionId: Long? = null
     private var generation = 0L
-    private var localCueGeneration = 0L
-    private var highestInvalidatedLocalCueSessionId: Long? = null
-    private var assistantSink: VoicePcm16Sink? = null
-    private var localCueSink: VoicePcm16Sink? = null
-    private var retiredLocalCueSink: VoicePcm16Sink? = null
+    private var activeSink: VoicePcm16Sink? = null
     private var released = false
 
     fun playBase64(base64Pcm16: String, sessionId: Long?): Boolean {
-        return playBase64(
-            base64Pcm16 = base64Pcm16,
-            sessionId = sessionId,
-            source = VoicePlaybackSource.Assistant,
-        )
-    }
-
-    fun playBase64(base64Pcm16: String, sessionId: Long?, source: VoicePlaybackSource): Boolean {
         val pcm16 = try {
             Base64.getDecoder().decode(base64Pcm16)
         } catch (e: IllegalArgumentException) {
-            onDiagnostic(
-                VoicePlaybackDiagnostic.MalformedChunk(
-                    message = e.message ?: "Malformed playback chunk",
-                    source = source,
-                ),
-            )
+            onDiagnostic(VoicePlaybackDiagnostic.MalformedChunk(e.message ?: "Malformed playback chunk"))
             return false
         }
         if (pcm16.isEmpty()) {
-            onDiagnostic(VoicePlaybackDiagnostic.MalformedChunk(message = "Empty playback chunk", source = source))
+            onDiagnostic(VoicePlaybackDiagnostic.MalformedChunk("Empty playback chunk"))
             return false
         }
 
@@ -116,21 +58,12 @@ internal class VoicePlaybackWriter(
         val command = synchronized(lock) {
             if (released) {
                 null
-            } else if (source == VoicePlaybackSource.Assistant && sessionId != null && activeSessionId != sessionId) {
+            } else if (sessionId != null && activeSessionId != sessionId) {
                 staleActiveGeneration = generation
                 staleActiveSessionId = activeSessionId
                 null
-            } else if (source == VoicePlaybackSource.LocalCue && isLocalCueSessionInvalidatedLocked(sessionId)) {
-                staleActiveGeneration = generation
-                null
             } else {
-                PlaybackCommand.Play(
-                    pcm16 = pcm16,
-                    generation = generation,
-                    localCueGeneration = localCueGeneration,
-                    localCueSessionId = sessionId,
-                    source = source,
-                )
+                PlaybackCommand.Play(pcm16 = pcm16, generation = generation)
             }
         }
         if (command == null) {
@@ -141,7 +74,6 @@ internal class VoicePlaybackWriter(
                         activeGeneration = activeGeneration,
                         rejectedSessionId = sessionId,
                         activeSessionId = staleActiveSessionId,
-                        source = source,
                     ),
                 )
             }
@@ -152,38 +84,36 @@ internal class VoicePlaybackWriter(
             return false
         }
 
-        onDiagnostic(
-            VoicePlaybackDiagnostic.ChunkQueued(
-                bytes = pcm16.size,
-                generation = command.generation,
-                source = source,
-            ),
-        )
+        onDiagnostic(VoicePlaybackDiagnostic.ChunkQueued(bytes = pcm16.size, generation = command.generation))
         return true
     }
 
     fun activateSession(sessionId: Long) {
-        val sinks = synchronized(lock) {
+        val sink = synchronized(lock) {
             if (released) {
                 return
             }
             activeSessionId = sessionId
             generation += 1
-            retireSinksLocked()
+            activeSink.also {
+                activeSink = null
+            }
         }
-        sinks.stopAndRelease()
+        sink?.stopAndRelease()
     }
 
     fun invalidateSession() {
-        val sinks = synchronized(lock) {
+        val sink = synchronized(lock) {
             if (released) {
                 return
             }
             activeSessionId = null
             generation += 1
-            retireSinksLocked()
+            activeSink.also {
+                activeSink = null
+            }
         }
-        sinks.stopAndRelease()
+        sink?.stopAndRelease()
     }
 
     fun suppress() {
@@ -192,122 +122,97 @@ internal class VoicePlaybackWriter(
                 return
             }
             generation += 1
-            SuppressResult(sinks = retireSinksLocked(), generation = generation)
+            SuppressResult(sink = activeSink, generation = generation).also {
+                activeSink = null
+            }
         }
-        result.sinks.stopAndRelease()
+        result.sink?.stopAndRelease()
         onDiagnostic(VoicePlaybackDiagnostic.PlaybackSuppressed(result.generation))
     }
 
-    fun invalidateLocalCues(sessionId: Long? = null) {
-        val result = synchronized(lock) {
-            if (released) {
-                InvalidateLocalCuesResult()
-            } else {
-                localCueGeneration += 1
-                sessionId?.let { invalidatedSessionId ->
-                    highestInvalidatedLocalCueSessionId = maxOf(
-                        highestInvalidatedLocalCueSessionId ?: invalidatedSessionId,
-                        invalidatedSessionId,
-                    )
-                }
-                val sinkToFlush = localCueSink
-                val sinkToRelease = if (sinkToFlush != null && retiredLocalCueSink !== sinkToFlush) {
-                    retiredLocalCueSink
-                } else {
-                    null
-                }
-                if (sinkToFlush != null) {
-                    localCueSink = null
-                    retiredLocalCueSink = sinkToFlush
-                }
-                InvalidateLocalCuesResult(sinkToFlush = sinkToFlush, sinkToRelease = sinkToRelease)
-            }
-        }
-        result.sinkToRelease?.stopAndRelease()
-        result.sinkToFlush?.pauseAndFlush()
-    }
-
     fun release() {
-        val sinks = synchronized(lock) {
+        val sink = synchronized(lock) {
             if (released) {
                 return
             }
             released = true
             generation += 1
-            localCueGeneration += 1
             activeSessionId = null
-            retireSinksLocked()
+            activeSink.also {
+                activeSink = null
+            }
         }
-        sinks.stopAndRelease()
+        sink?.stopAndRelease()
         commands.close()
         worker.cancel()
         onDiagnostic(VoicePlaybackDiagnostic.Released)
     }
 
     private fun playCommand(command: PlaybackCommand.Play) {
-        if (!isCurrent(command)) {
-            emitStale(command.generation, command.source)
+        if (!isCurrent(command.generation)) {
+            emitStale(command.generation)
             return
         }
 
-        val sink = getOrCreateSink(command) ?: return
-        if (!beginWrite(command, sink)) {
-            emitStale(command.generation, command.source)
+        val sink = getOrCreateSink(command.generation) ?: return
+        if (!isCurrentSink(command.generation, sink)) {
+            emitStale(command.generation)
             return
         }
 
-        val result = sink.writeFully(command.pcm16, command.source)
+        val result = try {
+            sink.writeFully(command.pcm16)
+        } catch (e: Exception) {
+            if (clearSink(sink)) {
+                sink.stopAndRelease()
+            }
+            onDiagnostic(VoicePlaybackDiagnostic.SinkWriteFailed(e.message ?: e.javaClass.simpleName))
+            return
+        }
 
         when (result) {
             is VoicePcm16Sink.WriteResult.Written -> {
-                if (isCurrentSink(command, sink)) {
+                if (isCurrentSink(command.generation, sink)) {
                     onDiagnostic(
                         VoicePlaybackDiagnostic.ChunkWritten(
                             bytes = result.bytes,
                             generation = command.generation,
-                            source = command.source,
                         ),
                     )
                 } else {
-                    emitStale(command.generation, command.source)
+                    emitStale(command.generation)
                 }
             }
             is VoicePcm16Sink.WriteResult.Failed -> {
                 if (clearSink(sink)) {
                     sink.stopAndRelease()
                 }
-                onDiagnostic(
-                    VoicePlaybackDiagnostic.SinkWriteFailed(
-                        message = result.message,
-                        source = command.source,
-                    ),
-                )
+                onDiagnostic(VoicePlaybackDiagnostic.SinkWriteFailed(result.message))
             }
             VoicePcm16Sink.WriteResult.Interrupted -> {
                 if (clearSink(sink)) {
                     sink.stopAndRelease()
                 }
-                emitStale(command.generation, command.source)
+                emitStale(command.generation)
             }
         }
     }
 
-    private fun getOrCreateSink(command: PlaybackCommand.Play): VoicePcm16Sink? {
+    private fun getOrCreateSink(commandGeneration: Long): VoicePcm16Sink? {
         var staleActiveGeneration: Long? = null
         val currentSink = synchronized(lock) {
-            if (!isCurrentLocked(command)) {
+            if (released || generation != commandGeneration) {
                 staleActiveGeneration = generation
                 null
             } else {
-                sinkForLocked(command.source)
+                activeSink
             }
         }
         if (staleActiveGeneration != null) {
             onDiagnostic(
                 VoicePlaybackDiagnostic.StaleChunkRejected(
-                    generation = command.generation,
+                    generation = commandGeneration,
                     activeGeneration = staleActiveGeneration,
-                    source = command.source,
                 ),
             )
             return null
@@ -317,35 +222,20 @@ internal class VoicePlaybackWriter(
         }
 
         val newSink = try {
-            createSink(command.source)
+            createSink()
         } catch (e: Exception) {
-            onDiagnostic(
-                VoicePlaybackDiagnostic.SinkStartFailed(
-                    message = e.message ?: e.javaClass.simpleName,
-                    source = command.source,
-                ),
-            )
+            onDiagnostic(VoicePlaybackDiagnostic.SinkStartFailed(e.message ?: e.javaClass.simpleName))
             return null
         } ?: run {
-            onDiagnostic(
-                VoicePlaybackDiagnostic.SinkStartFailed(
-                    message = "Playback sink creation failed",
-                    source = command.source,
-                ),
-            )
+            onDiagnostic(VoicePlaybackDiagnostic.SinkStartFailed("Playback sink creation failed"))
             return null
         }
 
         val startResult = try {
-            newSink.start(command.source)
+            newSink.start()
         } catch (e: Exception) {
             newSink.stopAndRelease()
-            onDiagnostic(
-                VoicePlaybackDiagnostic.SinkStartFailed(
-                    message = e.message ?: e.javaClass.simpleName,
-                    source = command.source,
-                ),
-            )
+            onDiagnostic(VoicePlaybackDiagnostic.SinkStartFailed(e.message ?: e.javaClass.simpleName))
             return null
         }
 
@@ -353,23 +243,18 @@ internal class VoicePlaybackWriter(
             VoicePcm16Sink.StartResult.Started -> Unit
             is VoicePcm16Sink.StartResult.Failed -> {
                 newSink.stopAndRelease()
-                onDiagnostic(
-                    VoicePlaybackDiagnostic.SinkStartFailed(
-                        message = startResult.message,
-                        source = command.source,
-                    ),
-                )
+                onDiagnostic(VoicePlaybackDiagnostic.SinkStartFailed(startResult.message))
                 return null
             }
         }
 
         var staleGeneration: Long? = null
         val selectedSink = synchronized(lock) {
-            if (!isCurrentLocked(command)) {
+            if (released || generation != commandGeneration) {
                 staleGeneration = generation
                 null
             } else {
-                sinkForLocked(command.source) ?: newSink.also { setSinkForLocked(command.source, it) }
+                activeSink ?: newSink.also { activeSink = it }
             }
         }
 
@@ -377,9 +262,8 @@ internal class VoicePlaybackWriter(
             newSink.stopAndRelease()
             onDiagnostic(
                 VoicePlaybackDiagnostic.StaleChunkRejected(
-                    generation = command.generation,
+                    generation = commandGeneration,
                     activeGeneration = staleGeneration ?: currentGeneration(),
-                    source = command.source,
                 ),
             )
             return null
@@ -391,80 +275,28 @@ internal class VoicePlaybackWriter(
         return selectedSink
     }
 
-    private fun isCurrent(command: PlaybackCommand.Play): Boolean = synchronized(lock) {
-        isCurrentLocked(command)
+    private fun isCurrent(commandGeneration: Long): Boolean = synchronized(lock) {
+        !released && generation == commandGeneration
     }
 
-    private fun isCurrentLocked(command: PlaybackCommand.Play): Boolean {
-        return !released &&
-            generation == command.generation &&
-            (
-                command.source != VoicePlaybackSource.LocalCue ||
-                    (
-                        localCueGeneration == command.localCueGeneration &&
-                            !isLocalCueSessionInvalidatedLocked(command.localCueSessionId)
-                        )
-                )
-    }
-
-    private fun isLocalCueSessionInvalidatedLocked(sessionId: Long?): Boolean =
-        sessionId != null && highestInvalidatedLocalCueSessionId?.let { sessionId <= it } == true
-
-    private fun isCurrentSink(command: PlaybackCommand.Play, sink: VoicePcm16Sink): Boolean = synchronized(lock) {
-        isCurrentLocked(command) && sinkForLocked(command.source) === sink
-    }
-
-    private fun beginWrite(command: PlaybackCommand.Play, sink: VoicePcm16Sink): Boolean = synchronized(lock) {
-        isCurrentLocked(command) && sinkForLocked(command.source) === sink
+    private fun isCurrentSink(commandGeneration: Long, sink: VoicePcm16Sink): Boolean = synchronized(lock) {
+        !released && generation == commandGeneration && activeSink === sink
     }
 
     private fun clearSink(sink: VoicePcm16Sink): Boolean = synchronized(lock) {
-        var cleared = false
-        if (assistantSink === sink) {
-            assistantSink = null
-            cleared = true
-        }
-        if (localCueSink === sink) {
-            localCueSink = null
-            cleared = true
-        }
-        if (retiredLocalCueSink === sink) {
-            retiredLocalCueSink = null
-            cleared = true
-        }
-        return cleared
-    }
-
-    private fun sinkForLocked(source: VoicePlaybackSource): VoicePcm16Sink? = when (source) {
-        VoicePlaybackSource.Assistant -> assistantSink
-        VoicePlaybackSource.LocalCue -> localCueSink
-    }
-
-    private fun setSinkForLocked(source: VoicePlaybackSource, sink: VoicePcm16Sink) {
-        when (source) {
-            VoicePlaybackSource.Assistant -> assistantSink = sink
-            VoicePlaybackSource.LocalCue -> localCueSink = sink
+        if (activeSink === sink) {
+            activeSink = null
+            true
+        } else {
+            false
         }
     }
 
-    private fun retireSinksLocked(): RetiredSinks {
-        val retired = RetiredSinks(
-            assistant = assistantSink,
-            localCue = localCueSink,
-            retiredLocalCue = retiredLocalCueSink,
-        )
-        assistantSink = null
-        localCueSink = null
-        retiredLocalCueSink = null
-        return retired
-    }
-
-    private fun emitStale(commandGeneration: Long, source: VoicePlaybackSource) {
+    private fun emitStale(commandGeneration: Long) {
         onDiagnostic(
             VoicePlaybackDiagnostic.StaleChunkRejected(
                 generation = commandGeneration,
                 activeGeneration = currentGeneration(),
-                source = source,
             ),
         )
     }
@@ -477,35 +309,11 @@ internal class VoicePlaybackWriter(
         data class Play(
             val pcm16: ByteArray,
             val generation: Long,
-            val localCueGeneration: Long,
-            val localCueSessionId: Long?,
-            val source: VoicePlaybackSource,
         ) : PlaybackCommand
     }
 
     private data class SuppressResult(
-        val sinks: RetiredSinks,
+        val sink: VoicePcm16Sink?,
         val generation: Long,
     )
-
-    private data class InvalidateLocalCuesResult(
-        val sinkToFlush: VoicePcm16Sink? = null,
-        val sinkToRelease: VoicePcm16Sink? = null,
-    )
-
-    private data class RetiredSinks(
-        val assistant: VoicePcm16Sink?,
-        val localCue: VoicePcm16Sink?,
-        val retiredLocalCue: VoicePcm16Sink?,
-    ) {
-        fun stopAndRelease() {
-            assistant?.stopAndRelease()
-            if (localCue !== assistant) {
-                localCue?.stopAndRelease()
-            }
-            if (retiredLocalCue !== assistant && retiredLocalCue !== localCue) {
-                retiredLocalCue?.stopAndRelease()
-            }
-        }
-    }
 }
