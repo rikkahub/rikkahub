@@ -38,13 +38,13 @@ class HermesWaitingToneControllerTest {
         assertEquals(emptyList<String>(), audio.playedPcm16)
         assertEquals(2, audio.playedLocalCuePcm16.size)
         assertTrue(audio.playedLocalCuePcm16.all { it.isNotBlank() })
-        assertTrue(audio.playedLocalCueSessionIds.all { it == audio.playedLocalCueSessionIds.first() })
+        assertTrue(audio.playedLocalCueTokens.all { it == audio.playedLocalCueTokens.first() })
         Base64.getDecoder().decode(audio.playedLocalCuePcm16.first())
 
-        val activeCueSessionId = audio.playedLocalCueSessionIds.first()
+        val activeCueToken = audio.playedLocalCueTokens.first()
         controller.stop()
 
-        assertEquals(listOf(activeCueSessionId), audio.invalidatedLocalCueSessionIds)
+        assertEquals(listOf(activeCueToken), audio.invalidatedLocalCueTokens)
     }
 
     @Test
@@ -364,7 +364,7 @@ class HermesWaitingToneControllerTest {
 
         override fun playPcm16(base64Pcm16: String, sessionId: Long?) = Unit
 
-        override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+        override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
             playbackEntered.countDown()
             releasePlayback.await(2, TimeUnit.SECONDS)
             if (!released.get()) {
@@ -406,13 +406,13 @@ class HermesWaitingToneControllerTest {
 
         override fun playPcm16(base64Pcm16: String, sessionId: Long?) = Unit
 
-        override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+        override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
             queuedCue += QueuedCue(base64Pcm16, localCueGeneration)
             queuedCueLatch.countDown()
             return true
         }
 
-        override fun invalidateLocalCuePlayback(sessionId: Long?) {
+        override fun invalidateLocalCuePlayback(cueToken: Long?) {
             localCueGeneration += 1
         }
 

@@ -27,7 +27,7 @@ class VoiceLocalCuePlayerTest {
             onDiagnostic = diagnostics::add,
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(sink.awaitWrites(1))
         assertTrue(waitForDiagnostic(diagnostics) { it is VoiceLocalCueDiagnostic.ChunkWritten })
 
@@ -63,11 +63,11 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(startFailedLatch.await(2, TimeUnit.SECONDS))
 
         assertEquals(1, firstSink.stopAndReleaseCalls)
-        assertTrue(player.playBase64(base64Pcm16 = "BAUG", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
         assertTrue(secondSink.awaitWrites(1))
         assertEquals(listOf(listOf<Byte>(4, 5, 6)), secondSink.writes)
         assertTrue(diagnostics.any { it is VoiceLocalCueDiagnostic.SinkStartFailed })
@@ -95,7 +95,7 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(startFailedLatch.await(2, TimeUnit.SECONDS))
 
         assertEquals(1, sink.startCalls)
@@ -127,7 +127,7 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(writeFailedLatch.await(2, TimeUnit.SECONDS))
 
         val diagnostic = diagnostics.filterIsInstance<VoiceLocalCueDiagnostic.SinkWriteFailed>().single()
@@ -158,11 +158,11 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(writeFailedLatch.await(2, TimeUnit.SECONDS))
 
         assertEquals(1, firstSink.stopAndReleaseCalls)
-        assertTrue(player.playBase64(base64Pcm16 = "BAUG", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
         assertTrue(secondSink.awaitWrites(1))
         assertEquals(listOf(listOf<Byte>(4, 5, 6)), secondSink.writes)
 
@@ -198,7 +198,7 @@ class VoiceLocalCuePlayerTest {
         )
 
         try {
-            assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+            assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
             player.invalidate()
             releaseWorker.countDown()
 
@@ -232,8 +232,8 @@ class VoiceLocalCuePlayerTest {
         )
 
         try {
-            assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
-            assertTrue(player.playBase64(base64Pcm16 = "BAUG", token = null))
+            assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
+            assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
 
             releaseWorker.countDown()
 
@@ -262,13 +262,13 @@ class VoiceLocalCuePlayerTest {
             onDiagnostic = diagnostics::add,
         )
 
-        player.invalidate(token = 10L)
+        player.invalidate(cueToken = 10L)
 
-        assertFalse(player.playBase64(base64Pcm16 = "AQID", token = 10L))
+        assertFalse(player.playBase64(base64Pcm16 = "AQID", cueToken = 10L))
         assertEquals(0, sinkCreations)
         assertTrue(diagnostics.any { it is VoiceLocalCueDiagnostic.StaleCueRejected })
 
-        assertTrue(player.playBase64(base64Pcm16 = "BAUG", token = 11L))
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = 11L))
         assertTrue(sink.awaitWrites(1))
         assertEquals(listOf(listOf<Byte>(4, 5, 6)), sink.writes)
 
@@ -297,7 +297,7 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(sink.awaitWriteStarted())
 
         player.invalidate()
@@ -322,7 +322,7 @@ class VoiceLocalCuePlayerTest {
             createSink = { sink },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(sink.awaitWrites(1))
 
         player.invalidate()
@@ -346,14 +346,14 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(firstSink.awaitWrites(1))
 
         player.invalidate()
 
         assertEquals(1, firstSink.pauseAndFlushCalls)
         assertEquals(0, firstSink.stopAndReleaseCalls)
-        assertTrue(player.playBase64(base64Pcm16 = "BAUG", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
         assertTrue(secondSink.awaitWrites(1))
 
         player.invalidate()
@@ -383,7 +383,7 @@ class VoiceLocalCuePlayerTest {
             onDiagnostic = diagnostics::add,
         )
 
-        assertFalse(player.playBase64(base64Pcm16 = "not-base64%", token = null))
+        assertFalse(player.playBase64(base64Pcm16 = "not-base64%", cueToken = null))
 
         assertEquals(0, sinkCreations)
         val diagnostic = diagnostics.filterIsInstance<VoiceLocalCueDiagnostic.MalformedCue>().single()
@@ -413,10 +413,10 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(startFailedLatch.await(2, TimeUnit.SECONDS))
 
-        assertTrue(player.playBase64(base64Pcm16 = "BAUG", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
         assertTrue(sink.awaitWrites(1))
         assertEquals(listOf(listOf<Byte>(4, 5, 6)), sink.writes)
         assertTrue(diagnostics.any { it is VoiceLocalCueDiagnostic.SinkStartFailed })
@@ -449,10 +449,10 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(startFailedLatch.await(2, TimeUnit.SECONDS))
 
-        assertTrue(player.playBase64(base64Pcm16 = "BAUG", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
         assertTrue(sink.awaitWrites(1))
         assertEquals(listOf(listOf<Byte>(4, 5, 6)), sink.writes)
         assertTrue(diagnostics.any { it is VoiceLocalCueDiagnostic.SinkStartFailed })
@@ -481,7 +481,7 @@ class VoiceLocalCuePlayerTest {
             },
         )
 
-        assertTrue(player.playBase64(base64Pcm16 = "AQID", token = null))
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
         assertTrue(sink.awaitWrites(1))
 
         assertTrue(staleRejectedLatch.await(2, TimeUnit.SECONDS))

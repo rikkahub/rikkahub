@@ -12,7 +12,7 @@ internal sealed interface VoiceLocalCueDiagnostic {
     data class StaleCueRejected(
         val generation: Long,
         val activeGeneration: Long,
-        val rejectedToken: Long? = null,
+        val rejectedCueToken: Long? = null,
     ) : VoiceLocalCueDiagnostic
     data class MalformedCue(val message: String) : VoiceLocalCueDiagnostic
     data class SinkStartFailed(val message: String) : VoiceLocalCueDiagnostic
@@ -44,7 +44,7 @@ internal class VoiceLocalCuePlayer(
     private var retiredSink: VoicePcm16Sink? = null
     private var released = false
 
-    fun playBase64(base64Pcm16: String, token: Long?): Boolean {
+    fun playBase64(base64Pcm16: String, cueToken: Long?): Boolean {
         val pcm16 = try {
             Base64.getDecoder().decode(base64Pcm16)
         } catch (e: IllegalArgumentException) {
@@ -60,14 +60,14 @@ internal class VoiceLocalCuePlayer(
         val command = synchronized(lock) {
             if (released) {
                 null
-            } else if (isTokenInvalidatedLocked(token)) {
+            } else if (isCueTokenInvalidatedLocked(cueToken)) {
                 rejectedGeneration = generation
                 null
             } else {
                 PlaybackCommand.Play(
                     pcm16 = pcm16,
                     generation = generation,
-                    token = token,
+                    cueToken = cueToken,
                 )
             }
         }
@@ -78,7 +78,7 @@ internal class VoiceLocalCuePlayer(
                     VoiceLocalCueDiagnostic.StaleCueRejected(
                         generation = activeGeneration,
                         activeGeneration = activeGeneration,
-                        rejectedToken = token,
+                        rejectedCueToken = cueToken,
                     ),
                 )
             }
@@ -98,13 +98,13 @@ internal class VoiceLocalCuePlayer(
         return true
     }
 
-    fun invalidate(token: Long? = null) {
+    fun invalidate(cueToken: Long? = null) {
         val result = synchronized(lock) {
             if (released) {
                 InvalidateResult()
             } else {
                 generation += 1
-                token?.let { invalidatedToken ->
+                cueToken?.let { invalidatedToken ->
                     highestInvalidatedToken = maxOf(
                         highestInvalidatedToken ?: invalidatedToken,
                         invalidatedToken,
@@ -211,7 +211,7 @@ internal class VoiceLocalCuePlayer(
                 VoiceLocalCueDiagnostic.StaleCueRejected(
                     generation = command.generation,
                     activeGeneration = staleGeneration,
-                    rejectedToken = command.token,
+                    rejectedCueToken = command.cueToken,
                 ),
             )
             return null
@@ -263,7 +263,7 @@ internal class VoiceLocalCuePlayer(
                 VoiceLocalCueDiagnostic.StaleCueRejected(
                     generation = command.generation,
                     activeGeneration = selectedStaleGeneration ?: currentGeneration(),
-                    rejectedToken = command.token,
+                    rejectedCueToken = command.cueToken,
                 ),
             )
             return null
@@ -282,11 +282,11 @@ internal class VoiceLocalCuePlayer(
     private fun isCurrentLocked(command: PlaybackCommand.Play): Boolean {
         return !released &&
             generation == command.generation &&
-            !isTokenInvalidatedLocked(command.token)
+            !isCueTokenInvalidatedLocked(command.cueToken)
     }
 
-    private fun isTokenInvalidatedLocked(token: Long?): Boolean =
-        token != null && highestInvalidatedToken?.let { token <= it } == true
+    private fun isCueTokenInvalidatedLocked(cueToken: Long?): Boolean =
+        cueToken != null && highestInvalidatedToken?.let { cueToken <= it } == true
 
     private fun isCurrentSink(command: PlaybackCommand.Play, sink: VoicePcm16Sink): Boolean = synchronized(lock) {
         isCurrentLocked(command) && activeSink === sink
@@ -322,7 +322,7 @@ internal class VoiceLocalCuePlayer(
         data class Play(
             val pcm16: ByteArray,
             val generation: Long,
-            val token: Long?,
+            val cueToken: Long?,
         ) : PlaybackCommand
     }
 

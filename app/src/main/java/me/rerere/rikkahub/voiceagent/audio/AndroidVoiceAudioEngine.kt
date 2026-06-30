@@ -299,12 +299,12 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         playbackWriter.playBase64(base64Pcm16 = base64Pcm16, sessionId = sessionId)
     }
 
-    override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
-        return localCuePlayer.playBase64(base64Pcm16 = base64Pcm16, token = sessionId)
+    override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
+        return localCuePlayer.playBase64(base64Pcm16 = base64Pcm16, cueToken = cueToken)
     }
 
-    override fun invalidateLocalCuePlayback(sessionId: Long?) {
-        localCuePlayer.invalidate(token = sessionId)
+    override fun invalidateLocalCuePlayback(cueToken: Long?) {
+        localCuePlayer.invalidate(cueToken = cueToken)
     }
 
     override fun activatePlaybackSession(sessionId: Long) {
@@ -987,7 +987,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
                 Log.d(
                     TAG,
                     "Local cue stale chunk rejected: generation=${diagnostic.generation} " +
-                        "active=${diagnostic.activeGeneration} token=${diagnostic.rejectedToken}",
+                        "active=${diagnostic.activeGeneration} cueToken=${diagnostic.rejectedCueToken}",
                 )
             }
             is VoiceLocalCueDiagnostic.MalformedCue -> {
