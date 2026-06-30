@@ -248,7 +248,7 @@ class VoiceLocalCuePlayerTest {
     }
 
     @Test
-    fun `invalidation rejects later enqueue with invalidated token`() {
+    fun `invalidation rejects later enqueue with invalidated and older tokens`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoiceLocalCueDiagnostic>()
         var sinkCreations = 0
@@ -265,8 +265,13 @@ class VoiceLocalCuePlayerTest {
         player.invalidate(cueToken = 10L)
 
         assertFalse(player.playBase64(base64Pcm16 = "AQID", cueToken = 10L))
+        assertFalse(player.playBase64(base64Pcm16 = "AQID", cueToken = 9L))
         assertEquals(0, sinkCreations)
-        assertTrue(diagnostics.any { it is VoiceLocalCueDiagnostic.StaleCueRejected })
+        assertEquals(
+            listOf(10L, 9L),
+            diagnostics.filterIsInstance<VoiceLocalCueDiagnostic.StaleCueRejected>()
+                .map { it.rejectedCueToken },
+        )
 
         assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = 11L))
         assertTrue(sink.awaitWrites(1))
