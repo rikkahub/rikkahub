@@ -73,6 +73,22 @@ class VoicePcm16SinkLifecycleTest {
     }
 
     @Test
+    fun `createStarted maps thrown start exception without message to failed class name`() {
+        val sink = FakeVoicePcm16Sink(
+            startException = IllegalStateException(),
+        )
+
+        val outcome = VoicePcm16SinkLifecycle.createStarted(
+            createSink = { sink },
+            nullSinkMessage = "sink missing",
+        )
+
+        assertEquals(VoicePcm16SinkLifecycle.StartOutcome.Failed("IllegalStateException"), outcome)
+        assertEquals(1, sink.startCalls)
+        assertEquals(1, sink.stopAndReleaseCalls)
+    }
+
+    @Test
     fun `writeFully maps written result`() {
         val sink = FakeVoicePcm16Sink()
 
@@ -134,47 +150,10 @@ class VoicePcm16SinkLifecycleTest {
 
         VoicePcm16SinkLifecycle.pauseAndFlushSafely(sink)
         VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
-        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = sink, second = sink)
         VoicePcm16SinkLifecycle.pauseAndFlushSafely(null)
         VoicePcm16SinkLifecycle.stopAndReleaseSafely(null)
-        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = null, second = null)
 
         assertEquals(1, sink.pauseAndFlushCalls)
-        assertEquals(2, sink.stopAndReleaseCalls)
-    }
-
-    @Test
-    fun `stopAndReleaseDistinct releases distinct sinks in order`() {
-        val releases = mutableListOf<String>()
-        val first = FakeVoicePcm16Sink(onStopAndRelease = { releases += "first" })
-        val second = FakeVoicePcm16Sink(onStopAndRelease = { releases += "second" })
-
-        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first, second)
-
-        assertEquals(listOf("first", "second"), releases)
-        assertEquals(1, first.stopAndReleaseCalls)
-        assertEquals(1, second.stopAndReleaseCalls)
-    }
-
-    @Test
-    fun `stopAndReleaseDistinct releases retired sink once when active sink throws`() {
-        val active = FakeVoicePcm16Sink(
-            releaseException = IllegalStateException("release exploded"),
-        )
-        val retired = FakeVoicePcm16Sink()
-
-        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = active, second = retired)
-
-        assertEquals(1, active.stopAndReleaseCalls)
-        assertEquals(1, retired.stopAndReleaseCalls)
-    }
-
-    @Test
-    fun `stopAndReleaseDistinct releases second sink once when first is null`() {
-        val sink = FakeVoicePcm16Sink()
-
-        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = null, second = sink)
-
         assertEquals(1, sink.stopAndReleaseCalls)
     }
 
@@ -185,7 +164,6 @@ class VoicePcm16SinkLifecycleTest {
         private val writeException: RuntimeException? = null,
         private val pauseException: RuntimeException? = null,
         private val releaseException: RuntimeException? = null,
-        private val onStopAndRelease: () -> Unit = {},
     ) : VoicePcm16Sink {
         var startCalls = 0
             private set
@@ -212,7 +190,6 @@ class VoicePcm16SinkLifecycleTest {
 
         override fun stopAndRelease() {
             stopAndReleaseCalls += 1
-            onStopAndRelease()
             releaseException?.let { throw it }
         }
     }

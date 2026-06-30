@@ -139,7 +139,10 @@ internal class VoiceLocalCuePlayer(
                 retiredSink = null
             }
         }
-        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(retired.active, retired.retired)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(retired.active)
+        if (retired.active !== retired.retired) {
+            VoicePcm16SinkLifecycle.stopAndReleaseSafely(retired.retired)
+        }
         commands.close()
         worker.cancel()
         onDiagnostic(VoiceLocalCueDiagnostic.Released)

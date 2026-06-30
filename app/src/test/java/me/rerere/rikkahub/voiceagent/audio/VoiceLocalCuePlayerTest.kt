@@ -370,6 +370,37 @@ class VoiceLocalCuePlayerTest {
     }
 
     @Test
+    fun `release stops retired sink when active sink release throws`() {
+        val scope = testScope()
+        val retiredSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val activeSink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
+            releaseException = IllegalStateException("release exploded"),
+        )
+        val sinkIndex = AtomicInteger()
+        val player = VoiceLocalCuePlayer(
+            scope = scope,
+            createSink = {
+                if (sinkIndex.getAndIncrement() == 0) retiredSink else activeSink
+            },
+        )
+
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
+        assertTrue(retiredSink.awaitWrites(1))
+
+        player.invalidate()
+
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
+        assertTrue(activeSink.awaitWrites(1))
+
+        player.release()
+
+        assertEquals(1, activeSink.stopAndReleaseCalls)
+        assertEquals(1, retiredSink.stopAndReleaseCalls)
+        scope.cancel()
+    }
+
+    @Test
     fun `malformed base64 is rejected without creating sink`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoiceLocalCueDiagnostic>()
@@ -516,6 +547,7 @@ class VoiceLocalCuePlayerTest {
         private val writeResult: VoicePcm16Sink.WriteResult? = null,
         private val writeException: RuntimeException? = null,
         private val interruptBlockedWriteOnPause: Boolean = false,
+        private val releaseException: RuntimeException? = null,
     ) : VoicePcm16Sink {
         private val writesLatch = CountDownLatch(expectedWrites)
         private val writeStartedLatch = CountDownLatch(1)
@@ -564,6 +596,7 @@ class VoiceLocalCuePlayerTest {
 
         override fun stopAndRelease() {
             stopAndReleaseCallCount.incrementAndGet()
+            releaseException?.let { throw it }
         }
 
         fun awaitWrites(seconds: Long): Boolean = writesLatch.await(seconds, TimeUnit.SECONDS)

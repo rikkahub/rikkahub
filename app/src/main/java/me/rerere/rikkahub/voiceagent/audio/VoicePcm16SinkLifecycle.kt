@@ -52,13 +52,6 @@ internal object VoicePcm16SinkLifecycle {
         }
     }
 
-    fun stopAndReleaseDistinct(first: VoicePcm16Sink?, second: VoicePcm16Sink?) {
-        stopAndReleaseSafely(first)
-        if (first !== second) {
-            stopAndReleaseSafely(second)
-        }
-    }
-
     private fun Exception.failureMessage(): String {
         return message ?: javaClass.simpleName
     }
