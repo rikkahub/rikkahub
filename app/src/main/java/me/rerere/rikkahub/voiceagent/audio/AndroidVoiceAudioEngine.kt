@@ -329,6 +329,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             audioRecord = null
             unregisterDebugCaptureLocked()
         }
+        playbackTracks.markReleased()
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
         playbackWriter.release()

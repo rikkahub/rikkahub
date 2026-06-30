@@ -32,13 +32,16 @@ internal class AndroidVoicePlaybackTracks(
         )
     }
 
+    fun markReleased() {
+        synchronized(lock) {
+            released = true
+        }
+    }
+
     fun releaseAll() {
         val assistant: AudioTrack?
         val localCue: AudioTrack?
         synchronized(lock) {
-            if (released) {
-                return
-            }
             released = true
             assistant = assistantAudioTrack
             localCue = localCueAudioTrack
