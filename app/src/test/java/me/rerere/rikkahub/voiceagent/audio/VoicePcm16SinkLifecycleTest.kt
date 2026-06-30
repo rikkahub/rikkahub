@@ -142,7 +142,7 @@ class VoicePcm16SinkLifecycleTest {
     }
 
     @Test
-    fun `release helpers ignore sink exceptions and do not double release same sink`() {
+    fun `release helpers ignore sink exceptions and null sinks`() {
         val sink = FakeVoicePcm16Sink(
             pauseException = IllegalStateException("pause exploded"),
             releaseException = IllegalStateException("release exploded"),
