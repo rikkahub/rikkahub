@@ -20,12 +20,12 @@ internal object VoicePcm16SinkLifecycle {
             when (val result = sink.start()) {
                 VoicePcm16Sink.StartResult.Started -> StartOutcome.Started(sink)
                 is VoicePcm16Sink.StartResult.Failed -> {
-                    stopAndRelease(sink)
+                    stopAndReleaseSafely(sink)
                     StartOutcome.Failed(result.message)
                 }
             }
         } catch (e: Exception) {
-            stopAndRelease(sink)
+            stopAndReleaseSafely(sink)
             StartOutcome.Failed(e.failureMessage())
         }
     }
@@ -38,14 +38,14 @@ internal object VoicePcm16SinkLifecycle {
         }
     }
 
-    fun pauseAndFlush(sink: VoicePcm16Sink?) {
+    fun pauseAndFlushSafely(sink: VoicePcm16Sink?) {
         try {
             sink?.pauseAndFlush()
         } catch (_: Exception) {
         }
     }
 
-    fun stopAndRelease(sink: VoicePcm16Sink?) {
+    fun stopAndReleaseSafely(sink: VoicePcm16Sink?) {
         try {
             sink?.stopAndRelease()
         } catch (_: Exception) {
@@ -53,9 +53,9 @@ internal object VoicePcm16SinkLifecycle {
     }
 
     fun stopAndReleaseDistinct(first: VoicePcm16Sink?, second: VoicePcm16Sink?) {
-        stopAndRelease(first)
+        stopAndReleaseSafely(first)
         if (first !== second) {
-            stopAndRelease(second)
+            stopAndReleaseSafely(second)
         }
     }
 

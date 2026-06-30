@@ -123,8 +123,8 @@ internal class VoiceLocalCuePlayer(
                 InvalidateResult(sinkToFlush = sinkToFlush, sinkToRelease = sinkToRelease)
             }
         }
-        VoicePcm16SinkLifecycle.stopAndRelease(result.sinkToRelease)
-        VoicePcm16SinkLifecycle.pauseAndFlush(result.sinkToFlush)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(result.sinkToRelease)
+        VoicePcm16SinkLifecycle.pauseAndFlushSafely(result.sinkToFlush)
     }
 
     fun release() {
@@ -172,13 +172,13 @@ internal class VoiceLocalCuePlayer(
             }
             is VoicePcm16Sink.WriteResult.Failed -> {
                 if (clearSink(sink)) {
-                    VoicePcm16SinkLifecycle.stopAndRelease(sink)
+                    VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
                 }
                 onDiagnostic(VoiceLocalCueDiagnostic.SinkWriteFailed(result.message))
             }
             VoicePcm16Sink.WriteResult.Interrupted -> {
                 if (clearSink(sink)) {
-                    VoicePcm16SinkLifecycle.stopAndRelease(sink)
+                    VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
                 }
                 emitStale(command.generation)
             }
@@ -234,7 +234,7 @@ internal class VoiceLocalCuePlayer(
         }
 
         if (selectedSink == null) {
-            VoicePcm16SinkLifecycle.stopAndRelease(newSink)
+            VoicePcm16SinkLifecycle.stopAndReleaseSafely(newSink)
             onDiagnostic(
                 VoiceLocalCueDiagnostic.StaleCueRejected(
                     generation = command.generation,
@@ -246,7 +246,7 @@ internal class VoiceLocalCuePlayer(
         }
 
         if (selectedSink !== newSink) {
-            VoicePcm16SinkLifecycle.stopAndRelease(newSink)
+            VoicePcm16SinkLifecycle.stopAndReleaseSafely(newSink)
         }
         return selectedSink
     }

@@ -132,11 +132,11 @@ class VoicePcm16SinkLifecycleTest {
             releaseException = IllegalStateException("release exploded"),
         )
 
-        VoicePcm16SinkLifecycle.pauseAndFlush(sink)
-        VoicePcm16SinkLifecycle.stopAndRelease(sink)
+        VoicePcm16SinkLifecycle.pauseAndFlushSafely(sink)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
         VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = sink, second = sink)
-        VoicePcm16SinkLifecycle.pauseAndFlush(null)
-        VoicePcm16SinkLifecycle.stopAndRelease(null)
+        VoicePcm16SinkLifecycle.pauseAndFlushSafely(null)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(null)
         VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = null, second = null)
 
         assertEquals(1, sink.pauseAndFlushCalls)

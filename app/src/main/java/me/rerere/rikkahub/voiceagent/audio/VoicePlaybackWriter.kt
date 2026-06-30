@@ -99,7 +99,7 @@ internal class VoicePlaybackWriter(
                 activeSink = null
             }
         }
-        VoicePcm16SinkLifecycle.stopAndRelease(sink)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
     }
 
     fun invalidateSession() {
@@ -113,7 +113,7 @@ internal class VoicePlaybackWriter(
                 activeSink = null
             }
         }
-        VoicePcm16SinkLifecycle.stopAndRelease(sink)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
     }
 
     fun suppress() {
@@ -126,7 +126,7 @@ internal class VoicePlaybackWriter(
                 activeSink = null
             }
         }
-        VoicePcm16SinkLifecycle.stopAndRelease(result.sink)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(result.sink)
         onDiagnostic(VoicePlaybackDiagnostic.PlaybackSuppressed(result.generation))
     }
 
@@ -142,7 +142,7 @@ internal class VoicePlaybackWriter(
                 activeSink = null
             }
         }
-        VoicePcm16SinkLifecycle.stopAndRelease(sink)
+        VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
         commands.close()
         worker.cancel()
         onDiagnostic(VoicePlaybackDiagnostic.Released)
@@ -175,13 +175,13 @@ internal class VoicePlaybackWriter(
             }
             is VoicePcm16Sink.WriteResult.Failed -> {
                 if (clearSink(sink)) {
-                    VoicePcm16SinkLifecycle.stopAndRelease(sink)
+                    VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
                 }
                 onDiagnostic(VoicePlaybackDiagnostic.SinkWriteFailed(result.message))
             }
             VoicePcm16Sink.WriteResult.Interrupted -> {
                 if (clearSink(sink)) {
-                    VoicePcm16SinkLifecycle.stopAndRelease(sink)
+                    VoicePcm16SinkLifecycle.stopAndReleaseSafely(sink)
                 }
                 emitStale(command.generation)
             }
@@ -235,7 +235,7 @@ internal class VoicePlaybackWriter(
         }
 
         if (selectedSink == null) {
-            VoicePcm16SinkLifecycle.stopAndRelease(newSink)
+            VoicePcm16SinkLifecycle.stopAndReleaseSafely(newSink)
             onDiagnostic(
                 VoicePlaybackDiagnostic.StaleChunkRejected(
                     generation = commandGeneration,
@@ -246,7 +246,7 @@ internal class VoicePlaybackWriter(
         }
 
         if (selectedSink !== newSink) {
-            VoicePcm16SinkLifecycle.stopAndRelease(newSink)
+            VoicePcm16SinkLifecycle.stopAndReleaseSafely(newSink)
         }
         return selectedSink
     }
