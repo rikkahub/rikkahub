@@ -63,12 +63,12 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     )
     private val playbackWriter = VoicePlaybackWriter(
         scope = scope,
-        createSink = playbackTracks::createAssistantAudioTrackSinkOrNull,
+        createSink = playbackTracks::createAssistantSinkOrNull,
         onDiagnostic = ::handlePlaybackDiagnostic,
     )
     private val localCuePlayer = VoiceLocalCuePlayer(
         scope = scope,
-        createSink = playbackTracks::createLocalCueAudioTrackSinkOrNull,
+        createSink = playbackTracks::createLocalCueSinkOrNull,
         onDiagnostic = ::handleLocalCueDiagnostic,
     )
     private var captureJob: Job? = null

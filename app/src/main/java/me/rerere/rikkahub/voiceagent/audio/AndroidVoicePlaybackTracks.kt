@@ -16,7 +16,7 @@ internal class AndroidVoicePlaybackTracks(
     private var localCueAudioTrack: AudioTrack? = null
     private var released = false
 
-    fun createAssistantAudioTrackSinkOrNull(): VoicePcm16Sink? {
+    fun createAssistantSinkOrNull(): VoicePcm16Sink? {
         val track = getOrCreatePlaybackTrack(AndroidPlaybackTrackOwner.Assistant) ?: return null
         return AndroidAudioTrackSink(
             track = track,
@@ -24,7 +24,7 @@ internal class AndroidVoicePlaybackTracks(
         )
     }
 
-    fun createLocalCueAudioTrackSinkOrNull(): VoicePcm16Sink? {
+    fun createLocalCueSinkOrNull(): VoicePcm16Sink? {
         val track = createLocalCuePlaybackTrack() ?: return null
         return AndroidAudioTrackSink(
             track = track,
@@ -33,19 +33,23 @@ internal class AndroidVoicePlaybackTracks(
     }
 
     fun releaseAll() {
-        val tracks = synchronized(lock) {
+        val assistant: AudioTrack?
+        val localCue: AudioTrack?
+        synchronized(lock) {
             if (released) {
                 return
             }
             released = true
-            listOfNotNull(assistantAudioTrack, localCueAudioTrack).also {
-                assistantAudioTrack = null
-                localCueAudioTrack = null
-            }
+            assistant = assistantAudioTrack
+            localCue = localCueAudioTrack
+            assistantAudioTrack = null
+            localCueAudioTrack = null
         }
-        tracks.forEach { track ->
-            track.stopSafely()
-            track.releaseSafely()
+        assistant?.stopSafely()
+        assistant?.releaseSafely()
+        if (localCue !== assistant) {
+            localCue?.stopSafely()
+            localCue?.releaseSafely()
         }
     }
 
@@ -278,7 +282,7 @@ internal class AndroidVoicePlaybackTracks(
     }
 
     private companion object {
-        const val TAG = "AndroidVoiceAudioEngine"
+        const val TAG = "AndroidVoicePlaybackTracks"
         const val PLAYBACK_SAMPLE_RATE = 24_000
         const val MIN_PLAYBACK_BUFFER_BYTES = 4_800
         const val MAX_BLOCKING_ZERO_WRITES = 16
