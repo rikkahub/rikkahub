@@ -78,7 +78,7 @@ class VoicePcm16SinkLifecycleTest {
 
         val outcome = VoicePcm16SinkLifecycle.writeFully(sink, byteArrayOf(1, 2, 3))
 
-        assertEquals(VoicePcm16SinkLifecycle.WriteOutcome.Written(3), outcome)
+        assertEquals(VoicePcm16Sink.WriteResult.Written(3), outcome)
     }
 
     @Test
@@ -89,7 +89,7 @@ class VoicePcm16SinkLifecycleTest {
 
         val outcome = VoicePcm16SinkLifecycle.writeFully(sink, byteArrayOf(1, 2, 3))
 
-        assertEquals(VoicePcm16SinkLifecycle.WriteOutcome.Failed("write failed"), outcome)
+        assertEquals(VoicePcm16Sink.WriteResult.Failed("write failed"), outcome)
     }
 
     @Test
@@ -100,7 +100,7 @@ class VoicePcm16SinkLifecycleTest {
 
         val outcome = VoicePcm16SinkLifecycle.writeFully(sink, byteArrayOf(1, 2, 3))
 
-        assertEquals(VoicePcm16SinkLifecycle.WriteOutcome.Interrupted, outcome)
+        assertEquals(VoicePcm16Sink.WriteResult.Interrupted, outcome)
     }
 
     @Test
@@ -111,7 +111,7 @@ class VoicePcm16SinkLifecycleTest {
 
         val outcome = VoicePcm16SinkLifecycle.writeFully(sink, byteArrayOf(1, 2, 3))
 
-        assertEquals(VoicePcm16SinkLifecycle.WriteOutcome.Failed("write exploded"), outcome)
+        assertEquals(VoicePcm16Sink.WriteResult.Failed("write exploded"), outcome)
     }
 
     @Test
@@ -122,7 +122,7 @@ class VoicePcm16SinkLifecycleTest {
 
         val outcome = VoicePcm16SinkLifecycle.writeFully(sink, byteArrayOf(1, 2, 3))
 
-        assertEquals(VoicePcm16SinkLifecycle.WriteOutcome.Failed("IllegalStateException"), outcome)
+        assertEquals(VoicePcm16Sink.WriteResult.Failed("IllegalStateException"), outcome)
     }
 
     @Test
@@ -154,6 +154,19 @@ class VoicePcm16SinkLifecycleTest {
         assertEquals(listOf("first", "second"), releases)
         assertEquals(1, first.stopAndReleaseCalls)
         assertEquals(1, second.stopAndReleaseCalls)
+    }
+
+    @Test
+    fun `stopAndReleaseDistinct releases retired sink once when active sink throws`() {
+        val active = FakeVoicePcm16Sink(
+            releaseException = IllegalStateException("release exploded"),
+        )
+        val retired = FakeVoicePcm16Sink()
+
+        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = active, second = retired)
+
+        assertEquals(1, active.stopAndReleaseCalls)
+        assertEquals(1, retired.stopAndReleaseCalls)
     }
 
     @Test

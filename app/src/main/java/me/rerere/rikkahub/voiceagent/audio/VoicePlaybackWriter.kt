@@ -161,7 +161,7 @@ internal class VoicePlaybackWriter(
         }
 
         when (val result = VoicePcm16SinkLifecycle.writeFully(sink, command.pcm16)) {
-            is VoicePcm16SinkLifecycle.WriteOutcome.Written -> {
+            is VoicePcm16Sink.WriteResult.Written -> {
                 if (isCurrentSink(command.generation, sink)) {
                     onDiagnostic(
                         VoicePlaybackDiagnostic.ChunkWritten(
@@ -173,13 +173,13 @@ internal class VoicePlaybackWriter(
                     emitStale(command.generation)
                 }
             }
-            is VoicePcm16SinkLifecycle.WriteOutcome.Failed -> {
+            is VoicePcm16Sink.WriteResult.Failed -> {
                 if (clearSink(sink)) {
                     VoicePcm16SinkLifecycle.stopAndRelease(sink)
                 }
                 onDiagnostic(VoicePlaybackDiagnostic.SinkWriteFailed(result.message))
             }
-            VoicePcm16SinkLifecycle.WriteOutcome.Interrupted -> {
+            VoicePcm16Sink.WriteResult.Interrupted -> {
                 if (clearSink(sink)) {
                     VoicePcm16SinkLifecycle.stopAndRelease(sink)
                 }

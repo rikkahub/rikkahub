@@ -6,12 +6,6 @@ internal object VoicePcm16SinkLifecycle {
         data class Failed(val message: String) : StartOutcome
     }
 
-    sealed interface WriteOutcome {
-        data class Written(val bytes: Int) : WriteOutcome
-        data class Failed(val message: String) : WriteOutcome
-        data object Interrupted : WriteOutcome
-    }
-
     fun createStarted(
         createSink: () -> VoicePcm16Sink?,
         nullSinkMessage: String,
@@ -36,15 +30,11 @@ internal object VoicePcm16SinkLifecycle {
         }
     }
 
-    fun writeFully(sink: VoicePcm16Sink, pcm16: ByteArray): WriteOutcome {
+    fun writeFully(sink: VoicePcm16Sink, pcm16: ByteArray): VoicePcm16Sink.WriteResult {
         return try {
-            when (val result = sink.writeFully(pcm16)) {
-                is VoicePcm16Sink.WriteResult.Written -> WriteOutcome.Written(result.bytes)
-                is VoicePcm16Sink.WriteResult.Failed -> WriteOutcome.Failed(result.message)
-                VoicePcm16Sink.WriteResult.Interrupted -> WriteOutcome.Interrupted
-            }
+            sink.writeFully(pcm16)
         } catch (e: Exception) {
-            WriteOutcome.Failed(e.failureMessage())
+            VoicePcm16Sink.WriteResult.Failed(e.failureMessage())
         }
     }
 
