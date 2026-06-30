@@ -29,19 +29,15 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
-internal fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
-    is VoicePlaybackDiagnostic.MalformedChunk -> when (source) {
-        VoicePlaybackSource.Assistant -> "Malformed playback chunk: $message"
-        VoicePlaybackSource.LocalCue -> null
-    }
-    is VoicePlaybackDiagnostic.SinkStartFailed -> when (source) {
-        VoicePlaybackSource.Assistant -> "AudioTrack start failed: $message"
-        VoicePlaybackSource.LocalCue -> null
-    }
-    is VoicePlaybackDiagnostic.SinkWriteFailed -> when (source) {
-        VoicePlaybackSource.Assistant -> "AudioTrack write failed: $message"
-        VoicePlaybackSource.LocalCue -> null
-    }
+private enum class AndroidPlaybackTrackOwner {
+    Assistant,
+    LocalCue,
+}
+
+private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
+    is VoicePlaybackDiagnostic.MalformedChunk -> "Malformed playback chunk: $message"
+    is VoicePlaybackDiagnostic.SinkStartFailed -> "AudioTrack start failed: $message"
+    is VoicePlaybackDiagnostic.SinkWriteFailed -> "AudioTrack write failed: $message"
     is VoicePlaybackDiagnostic.ChunkQueued,
     is VoicePlaybackDiagnostic.ChunkWritten,
     is VoicePlaybackDiagnostic.StaleChunkRejected,
@@ -50,21 +46,14 @@ internal fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (
     -> null
 }
 
-internal fun VoicePlaybackDiagnostic.localCueErrorMessageOrNull(): String? = when (this) {
-    is VoicePlaybackDiagnostic.SinkStartFailed -> when (source) {
-        VoicePlaybackSource.Assistant -> null
-        VoicePlaybackSource.LocalCue -> "AudioTrack start failed: $message"
-    }
-    is VoicePlaybackDiagnostic.SinkWriteFailed -> when (source) {
-        VoicePlaybackSource.Assistant -> null
-        VoicePlaybackSource.LocalCue -> "AudioTrack write failed: $message"
-    }
-    is VoicePlaybackDiagnostic.ChunkQueued,
-    is VoicePlaybackDiagnostic.ChunkWritten,
-    is VoicePlaybackDiagnostic.StaleChunkRejected,
-    is VoicePlaybackDiagnostic.MalformedChunk,
-    is VoicePlaybackDiagnostic.PlaybackSuppressed,
-    VoicePlaybackDiagnostic.Released,
+private fun VoiceLocalCueDiagnostic.localCueErrorMessageOrNull(): String? = when (this) {
+    is VoiceLocalCueDiagnostic.SinkStartFailed -> "AudioTrack start failed: $message"
+    is VoiceLocalCueDiagnostic.SinkWriteFailed -> "AudioTrack write failed: $message"
+    is VoiceLocalCueDiagnostic.ChunkQueued,
+    is VoiceLocalCueDiagnostic.ChunkWritten,
+    is VoiceLocalCueDiagnostic.StaleCueRejected,
+    is VoiceLocalCueDiagnostic.MalformedCue,
+    VoiceLocalCueDiagnostic.Released,
     -> null
 }
 
@@ -77,8 +66,13 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val playbackWriter = VoicePlaybackWriter(
         scope = scope,
-        createSink = ::createAudioTrackSinkOrNull,
+        createSink = ::createAssistantAudioTrackSinkOrNull,
         onDiagnostic = ::handlePlaybackDiagnostic,
+    )
+    private val localCuePlayer = VoiceLocalCuePlayer(
+        scope = scope,
+        createSink = ::createLocalCueAudioTrackSinkOrNull,
+        onDiagnostic = ::handleLocalCueDiagnostic,
     )
     private var captureJob: Job? = null
     private var audioRecord: AudioRecord? = null
@@ -306,15 +300,11 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
-        return playbackWriter.playBase64(
-            base64Pcm16 = base64Pcm16,
-            sessionId = sessionId,
-            source = VoicePlaybackSource.LocalCue,
-        )
+        return localCuePlayer.playBase64(base64Pcm16 = base64Pcm16, token = sessionId)
     }
 
     override fun invalidateLocalCuePlayback(sessionId: Long?) {
-        playbackWriter.invalidateLocalCues(sessionId)
+        localCuePlayer.invalidate(token = sessionId)
     }
 
     override fun activatePlaybackSession(sessionId: Long) {
@@ -347,6 +337,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
         playbackWriter.release()
+        localCuePlayer.release()
         clearVoiceCommunicationRoutingBestEffort()
         closeBluetoothHeadsetProxy()
         abandonAudioFocus()
@@ -680,30 +671,37 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         bluetoothVoiceRecognitionDevice = null
     }
 
-    private fun createAudioTrackSinkOrNull(source: VoicePlaybackSource): VoicePcm16Sink? {
-        val track = getOrCreatePlaybackTrack(source) ?: return null
-        return AndroidAudioTrackSink(track = track)
+    private fun createAssistantAudioTrackSinkOrNull(): VoicePcm16Sink? {
+        val track = getOrCreatePlaybackTrack(AndroidPlaybackTrackOwner.Assistant) ?: return null
+        return AndroidAudioTrackSink(
+            track = track,
+            owner = AndroidPlaybackTrackOwner.Assistant,
+        )
     }
 
-    private fun getOrCreatePlaybackTrack(source: VoicePlaybackSource): AudioTrack? {
-        if (source == VoicePlaybackSource.LocalCue) {
-            return createLocalCuePlaybackTrack()
-        }
+    private fun createLocalCueAudioTrackSinkOrNull(): VoicePcm16Sink? {
+        val track = createLocalCuePlaybackTrack() ?: return null
+        return AndroidAudioTrackSink(
+            track = track,
+            owner = AndroidPlaybackTrackOwner.LocalCue,
+        )
+    }
 
-        val existingTrack = synchronized(lock) { playbackTrackForLocked(source) }
+    private fun getOrCreatePlaybackTrack(owner: AndroidPlaybackTrackOwner): AudioTrack? {
+        val existingTrack = synchronized(lock) { playbackTrackForLocked(owner) }
         if (existingTrack != null) {
-            return currentPlaybackTrack(existingTrack, source)
+            return currentPlaybackTrack(existingTrack, owner)
         }
 
-        val newTrack = createAudioTrackOrNull(source) ?: return null
+        val newTrack = createAudioTrackOrNull(owner) ?: return null
         var selectedTrack: AudioTrack? = null
         var shouldReleaseNewTrack = false
         synchronized(lock) {
-            val currentTrack = playbackTrackForLocked(source)
+            val currentTrack = playbackTrackForLocked(owner)
             if (released) {
                 shouldReleaseNewTrack = true
             } else if (currentTrack == null) {
-                setPlaybackTrackForLocked(source, newTrack)
+                setPlaybackTrackForLocked(owner, newTrack)
                 selectedTrack = newTrack
             } else {
                 selectedTrack = currentTrack
@@ -714,11 +712,11 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         if (shouldReleaseNewTrack) {
             newTrack.releaseSafely()
         }
-        return currentPlaybackTrack(selectedTrack ?: return null, source)
+        return currentPlaybackTrack(selectedTrack ?: return null, owner)
     }
 
     private fun createLocalCuePlaybackTrack(): AudioTrack? {
-        val newTrack = createAudioTrackOrNull(VoicePlaybackSource.LocalCue) ?: return null
+        val newTrack = createAudioTrackOrNull(AndroidPlaybackTrackOwner.LocalCue) ?: return null
         var shouldReleaseNewTrack = false
         synchronized(lock) {
             if (released) {
@@ -731,30 +729,30 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             newTrack.releaseSafely()
             return null
         }
-        return currentPlaybackTrack(newTrack, VoicePlaybackSource.LocalCue)
+        return currentPlaybackTrack(newTrack, AndroidPlaybackTrackOwner.LocalCue)
     }
 
-    private fun currentPlaybackTrack(track: AudioTrack, source: VoicePlaybackSource): AudioTrack? = synchronized(lock) {
-        if (!released && playbackTrackForLocked(source) === track) {
+    private fun currentPlaybackTrack(track: AudioTrack, owner: AndroidPlaybackTrackOwner): AudioTrack? = synchronized(lock) {
+        if (!released && playbackTrackForLocked(owner) === track) {
             track
         } else {
             null
         }
     }
 
-    private fun playbackTrackForLocked(source: VoicePlaybackSource): AudioTrack? = when (source) {
-        VoicePlaybackSource.Assistant -> audioTrack
-        VoicePlaybackSource.LocalCue -> localCueAudioTrack
+    private fun playbackTrackForLocked(owner: AndroidPlaybackTrackOwner): AudioTrack? = when (owner) {
+        AndroidPlaybackTrackOwner.Assistant -> audioTrack
+        AndroidPlaybackTrackOwner.LocalCue -> localCueAudioTrack
     }
 
-    private fun setPlaybackTrackForLocked(source: VoicePlaybackSource, track: AudioTrack?) {
-        when (source) {
-            VoicePlaybackSource.Assistant -> audioTrack = track
-            VoicePlaybackSource.LocalCue -> localCueAudioTrack = track
+    private fun setPlaybackTrackForLocked(owner: AndroidPlaybackTrackOwner, track: AudioTrack?) {
+        when (owner) {
+            AndroidPlaybackTrackOwner.Assistant -> audioTrack = track
+            AndroidPlaybackTrackOwner.LocalCue -> localCueAudioTrack = track
         }
     }
 
-    private fun createAudioTrackOrNull(source: VoicePlaybackSource): AudioTrack? {
+    private fun createAudioTrackOrNull(owner: AndroidPlaybackTrackOwner): AudioTrack? {
         val bufferSize = playbackBufferSizeOrNull() ?: return null
         val attributes = voiceAudioAttributes()
         val format = AudioFormat.Builder()
@@ -772,7 +770,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             )
         }.onFailure {
             Log.w(TAG, "AudioTrack creation failed", it)
-            if (source == VoicePlaybackSource.LocalCue) {
+            if (owner == AndroidPlaybackTrackOwner.LocalCue) {
                 Log.w(TAG, "Local cue playback failed: AudioTrack creation failed")
             } else {
                 notifyAudioError("AudioTrack creation failed: ${it.message ?: it.javaClass.simpleName}")
@@ -781,7 +779,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
 
         if (track.state != AudioTrack.STATE_INITIALIZED) {
             Log.w(TAG, "AudioTrack initialization failed: state=${track.state}")
-            if (source == VoicePlaybackSource.LocalCue) {
+            if (owner == AndroidPlaybackTrackOwner.LocalCue) {
                 Log.w(TAG, "Local cue playback failed: AudioTrack initialization failed")
             } else {
                 notifyAudioError("AudioTrack initialization failed: state=${track.state}")
@@ -922,7 +920,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         )
     }
 
-    private fun AudioTrack.playSafely(source: VoicePlaybackSource): Boolean {
+    private fun AudioTrack.playSafely(owner: AndroidPlaybackTrackOwner): Boolean {
         return runCatching {
             if (playState != AudioTrack.PLAYSTATE_PLAYING) {
                 play()
@@ -930,7 +928,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             true
         }.onFailure {
             Log.w(TAG, "AudioTrack play failed", it)
-            if (source == VoicePlaybackSource.LocalCue) {
+            if (owner == AndroidPlaybackTrackOwner.LocalCue) {
                 Log.w(TAG, "Local cue playback failed: AudioTrack play failed")
             } else {
                 notifyAudioError("AudioTrack play failed: ${it.message ?: it.javaClass.simpleName}")
@@ -957,29 +955,15 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
                 )
             }
             is VoicePlaybackDiagnostic.MalformedChunk -> {
-                if (diagnostic.source == VoicePlaybackSource.LocalCue) {
-                    Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-                } else {
-                    Log.w(TAG, "Dropping malformed playback chunk: ${diagnostic.message}")
-                }
+                Log.w(TAG, "Dropping malformed playback chunk: ${diagnostic.message}")
                 diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
             }
             is VoicePlaybackDiagnostic.SinkStartFailed -> {
-                if (diagnostic.source == VoicePlaybackSource.LocalCue) {
-                    Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-                } else {
-                    Log.w(TAG, "Voice playback start failed: ${diagnostic.message}")
-                }
-                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
+                Log.w(TAG, "Voice playback start failed: ${diagnostic.message}")
                 diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
             }
             is VoicePlaybackDiagnostic.SinkWriteFailed -> {
-                if (diagnostic.source == VoicePlaybackSource.LocalCue) {
-                    Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-                } else {
-                    Log.w(TAG, "Voice playback write failed: ${diagnostic.message}")
-                }
-                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
+                Log.w(TAG, "Voice playback write failed: ${diagnostic.message}")
                 diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
             }
             is VoicePlaybackDiagnostic.PlaybackSuppressed -> {
@@ -991,31 +975,64 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         }
     }
 
+    private fun handleLocalCueDiagnostic(diagnostic: VoiceLocalCueDiagnostic) {
+        when (diagnostic) {
+            is VoiceLocalCueDiagnostic.ChunkQueued -> {
+                Log.d(TAG, "Local cue playback queued: bytes=${diagnostic.bytes} generation=${diagnostic.generation}")
+            }
+            is VoiceLocalCueDiagnostic.ChunkWritten -> {
+                Log.d(TAG, "Local cue playback wrote: bytes=${diagnostic.bytes} generation=${diagnostic.generation}")
+            }
+            is VoiceLocalCueDiagnostic.StaleCueRejected -> {
+                Log.d(
+                    TAG,
+                    "Local cue stale chunk rejected: generation=${diagnostic.generation} " +
+                        "active=${diagnostic.activeGeneration} token=${diagnostic.rejectedToken}",
+                )
+            }
+            is VoiceLocalCueDiagnostic.MalformedCue -> {
+                Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
+            }
+            is VoiceLocalCueDiagnostic.SinkStartFailed -> {
+                Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
+                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
+            }
+            is VoiceLocalCueDiagnostic.SinkWriteFailed -> {
+                Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
+                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
+            }
+            VoiceLocalCueDiagnostic.Released -> {
+                Log.d(TAG, "Local cue playback released")
+            }
+        }
+    }
+
     private inner class AndroidAudioTrackSink(
         private val track: AudioTrack,
+        private val owner: AndroidPlaybackTrackOwner,
     ) : VoicePcm16Sink {
         private val interrupted = AtomicBoolean(false)
 
-        override fun start(source: VoicePlaybackSource): VoicePcm16Sink.StartResult {
+        override fun start(): VoicePcm16Sink.StartResult {
             interrupted.set(false)
-            return if (track.playSafely(source)) {
+            return if (track.playSafely(owner)) {
                 VoicePcm16Sink.StartResult.Started
             } else {
                 VoicePcm16Sink.StartResult.Failed("AudioTrack play failed")
             }
         }
 
-        override fun writeFully(pcm16: ByteArray, source: VoicePlaybackSource): VoicePcm16Sink.WriteResult {
+        override fun writeFully(pcm16: ByteArray): VoicePcm16Sink.WriteResult {
             if (interrupted.get()) {
                 return VoicePcm16Sink.WriteResult.Interrupted
             }
-            if (!track.playSafely(source)) {
+            if (!track.playSafely(owner)) {
                 return VoicePcm16Sink.WriteResult.Failed("AudioTrack play failed")
             }
 
             var offset = 0
             var zeroWrites = 0
-            while (offset < pcm16.size && !interrupted.get() && currentPlaybackTrack(track, source) != null) {
+            while (offset < pcm16.size && !interrupted.get() && currentPlaybackTrack(track, owner) != null) {
                 val remaining = pcm16.size - offset
                 val writeResult = try {
                     track.write(pcm16, offset, remaining, AudioTrack.WRITE_BLOCKING)
