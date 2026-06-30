@@ -108,6 +108,32 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `suppress emits diagnostic when sink cleanup throws`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val sink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
+            releaseException = IllegalStateException("release exploded"),
+        )
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { sink },
+            onDiagnostic = diagnostics::add,
+        )
+
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64(base64Pcm16 = "AQID", sessionId = 100L))
+        assertTrue(sink.awaitWrites(1))
+
+        writer.suppress()
+
+        assertEquals(1, sink.stopAndReleaseCalls)
+        assertTrue(diagnostics.any { it is VoicePlaybackDiagnostic.PlaybackSuppressed })
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `invalidate session flushes sink and rejects previous session playback`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
@@ -165,6 +191,31 @@ class VoicePlaybackWriterTest {
         assertEquals(1, sink.stopAndReleaseCalls)
         assertTrue(diagnostics.any { it is VoicePlaybackDiagnostic.Released })
 
+        scope.cancel()
+    }
+
+    @Test
+    fun `release emits diagnostic when sink cleanup throws`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val sink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
+            releaseException = IllegalStateException("release exploded"),
+        )
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { sink },
+            onDiagnostic = diagnostics::add,
+        )
+
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64(base64Pcm16 = "AQID", sessionId = 100L))
+        assertTrue(sink.awaitWrites(1))
+
+        writer.release()
+
+        assertEquals(1, sink.stopAndReleaseCalls)
+        assertTrue(diagnostics.any { it is VoicePlaybackDiagnostic.Released })
         scope.cancel()
     }
 
@@ -360,6 +411,7 @@ class VoicePlaybackWriterTest {
         private val startException: RuntimeException? = null,
         private val writeResult: VoicePcm16Sink.WriteResult? = null,
         private val writeException: RuntimeException? = null,
+        private val releaseException: RuntimeException? = null,
     ) : VoicePcm16Sink {
         private val writesLatch = CountDownLatch(expectedWrites)
         private val writeStartedLatch = CountDownLatch(1)
@@ -404,6 +456,7 @@ class VoicePlaybackWriterTest {
 
         override fun stopAndRelease() {
             stopAndReleaseCallCount.incrementAndGet()
+            releaseException?.let { throw it }
         }
 
         fun awaitWrites(seconds: Long): Boolean = writesLatch.await(seconds, TimeUnit.SECONDS)

@@ -370,6 +370,39 @@ class VoiceLocalCuePlayerTest {
     }
 
     @Test
+    fun `invalidation flushes active sink when retired sink release throws`() {
+        val scope = testScope()
+        val retiredSink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
+            releaseException = IllegalStateException("release exploded"),
+        )
+        val activeSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val sinkIndex = AtomicInteger()
+        val player = VoiceLocalCuePlayer(
+            scope = scope,
+            createSink = {
+                if (sinkIndex.getAndIncrement() == 0) retiredSink else activeSink
+            },
+        )
+
+        assertTrue(player.playBase64(base64Pcm16 = "AQID", cueToken = null))
+        assertTrue(retiredSink.awaitWrites(1))
+
+        player.invalidate()
+
+        assertTrue(player.playBase64(base64Pcm16 = "BAUG", cueToken = null))
+        assertTrue(activeSink.awaitWrites(1))
+
+        player.invalidate()
+
+        assertEquals(1, retiredSink.stopAndReleaseCalls)
+        assertEquals(1, activeSink.pauseAndFlushCalls)
+        assertEquals(0, activeSink.stopAndReleaseCalls)
+        player.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `release stops retired sink when active sink release throws`() {
         val scope = testScope()
         val retiredSink = FakeVoicePcm16Sink(expectedWrites = 1)
