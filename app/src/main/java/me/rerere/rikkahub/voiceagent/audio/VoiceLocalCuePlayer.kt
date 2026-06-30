@@ -123,8 +123,8 @@ internal class VoiceLocalCuePlayer(
                 InvalidateResult(sinkToFlush = sinkToFlush, sinkToRelease = sinkToRelease)
             }
         }
-        result.sinkToRelease?.stopAndRelease()
-        result.sinkToFlush?.pauseAndFlush()
+        VoicePcm16SinkLifecycle.stopAndRelease(result.sinkToRelease)
+        VoicePcm16SinkLifecycle.pauseAndFlush(result.sinkToFlush)
     }
 
     fun release() {
@@ -139,7 +139,7 @@ internal class VoiceLocalCuePlayer(
                 retiredSink = null
             }
         }
-        retired.stopAndRelease()
+        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(retired.active, retired.retired)
         commands.close()
         worker.cancel()
         onDiagnostic(VoiceLocalCueDiagnostic.Released)
@@ -157,18 +157,8 @@ internal class VoiceLocalCuePlayer(
             return
         }
 
-        val result = try {
-            sink.writeFully(command.pcm16)
-        } catch (e: Exception) {
-            if (clearSink(sink)) {
-                sink.stopAndRelease()
-            }
-            onDiagnostic(VoiceLocalCueDiagnostic.SinkWriteFailed(e.message ?: e.javaClass.simpleName))
-            return
-        }
-
-        when (result) {
-            is VoicePcm16Sink.WriteResult.Written -> {
+        when (val result = VoicePcm16SinkLifecycle.writeFully(sink, command.pcm16)) {
+            is VoicePcm16SinkLifecycle.WriteOutcome.Written -> {
                 if (isCurrentSink(command, sink)) {
                     onDiagnostic(
                         VoiceLocalCueDiagnostic.ChunkWritten(
@@ -180,15 +170,15 @@ internal class VoiceLocalCuePlayer(
                     emitStale(command.generation)
                 }
             }
-            is VoicePcm16Sink.WriteResult.Failed -> {
+            is VoicePcm16SinkLifecycle.WriteOutcome.Failed -> {
                 if (clearSink(sink)) {
-                    sink.stopAndRelease()
+                    VoicePcm16SinkLifecycle.stopAndRelease(sink)
                 }
                 onDiagnostic(VoiceLocalCueDiagnostic.SinkWriteFailed(result.message))
             }
-            VoicePcm16Sink.WriteResult.Interrupted -> {
+            VoicePcm16SinkLifecycle.WriteOutcome.Interrupted -> {
                 if (clearSink(sink)) {
-                    sink.stopAndRelease()
+                    VoicePcm16SinkLifecycle.stopAndRelease(sink)
                 }
                 emitStale(command.generation)
             }
@@ -220,29 +210,15 @@ internal class VoiceLocalCuePlayer(
             return currentSink
         }
 
-        val newSink = try {
-            createSink()
-        } catch (e: Exception) {
-            onDiagnostic(VoiceLocalCueDiagnostic.SinkStartFailed(e.message ?: e.javaClass.simpleName))
-            return null
-        } ?: run {
-            onDiagnostic(VoiceLocalCueDiagnostic.SinkStartFailed("Local cue sink creation failed"))
-            return null
-        }
-
-        val startResult = try {
-            newSink.start()
-        } catch (e: Exception) {
-            newSink.stopAndRelease()
-            onDiagnostic(VoiceLocalCueDiagnostic.SinkStartFailed(e.message ?: e.javaClass.simpleName))
-            return null
-        }
-
-        when (startResult) {
-            VoicePcm16Sink.StartResult.Started -> Unit
-            is VoicePcm16Sink.StartResult.Failed -> {
-                newSink.stopAndRelease()
-                onDiagnostic(VoiceLocalCueDiagnostic.SinkStartFailed(startResult.message))
+        val newSink = when (
+            val outcome = VoicePcm16SinkLifecycle.createStarted(
+                createSink = createSink,
+                nullSinkMessage = "Local cue sink creation failed",
+            )
+        ) {
+            is VoicePcm16SinkLifecycle.StartOutcome.Started -> outcome.sink
+            is VoicePcm16SinkLifecycle.StartOutcome.Failed -> {
+                onDiagnostic(VoiceLocalCueDiagnostic.SinkStartFailed(outcome.message))
                 return null
             }
         }
@@ -258,7 +234,7 @@ internal class VoiceLocalCuePlayer(
         }
 
         if (selectedSink == null) {
-            newSink.stopAndRelease()
+            VoicePcm16SinkLifecycle.stopAndRelease(newSink)
             onDiagnostic(
                 VoiceLocalCueDiagnostic.StaleCueRejected(
                     generation = command.generation,
@@ -270,7 +246,7 @@ internal class VoiceLocalCuePlayer(
         }
 
         if (selectedSink !== newSink) {
-            newSink.stopAndRelease()
+            VoicePcm16SinkLifecycle.stopAndRelease(newSink)
         }
         return selectedSink
     }
@@ -334,12 +310,5 @@ internal class VoiceLocalCuePlayer(
     private data class RetiredSinks(
         val active: VoicePcm16Sink?,
         val retired: VoicePcm16Sink?,
-    ) {
-        fun stopAndRelease() {
-            active?.stopAndRelease()
-            if (retired !== active) {
-                retired?.stopAndRelease()
-            }
-        }
-    }
+    )
 }

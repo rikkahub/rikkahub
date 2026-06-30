@@ -115,6 +115,17 @@ class VoicePcm16SinkLifecycleTest {
     }
 
     @Test
+    fun `writeFully maps thrown exception without message to failed class name`() {
+        val sink = FakeVoicePcm16Sink(
+            writeException = IllegalStateException(),
+        )
+
+        val outcome = VoicePcm16SinkLifecycle.writeFully(sink, byteArrayOf(1, 2, 3))
+
+        assertEquals(VoicePcm16SinkLifecycle.WriteOutcome.Failed("IllegalStateException"), outcome)
+    }
+
+    @Test
     fun `release helpers ignore sink exceptions and do not double release same sink`() {
         val sink = FakeVoicePcm16Sink(
             pauseException = IllegalStateException("pause exploded"),
@@ -143,6 +154,15 @@ class VoicePcm16SinkLifecycleTest {
         assertEquals(listOf("first", "second"), releases)
         assertEquals(1, first.stopAndReleaseCalls)
         assertEquals(1, second.stopAndReleaseCalls)
+    }
+
+    @Test
+    fun `stopAndReleaseDistinct releases second sink once when first is null`() {
+        val sink = FakeVoicePcm16Sink()
+
+        VoicePcm16SinkLifecycle.stopAndReleaseDistinct(first = null, second = sink)
+
+        assertEquals(1, sink.stopAndReleaseCalls)
     }
 
     private class FakeVoicePcm16Sink(
