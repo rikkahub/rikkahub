@@ -13,3 +13,4 @@ local.properties
 .kotlin
 docs/run/
 docs/tool-output/
+.worktrees/
