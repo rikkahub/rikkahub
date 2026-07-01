@@ -679,6 +679,50 @@ class VoiceAgentReconnectTest {
     }
 
     @Test
+    fun `accepted output audio made stale by reconnect is not recorded as queued`() = runTest {
+        val observability = RecordingVoiceObservability()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = reconnectSession(
+            sessionApi = sessionApi,
+            gemini = gemini,
+            audio = audio,
+            observability = observability,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        withTimeout(500) {
+            while (session.state.value.session != VoiceSessionStatus.Connected) {
+                delay(10)
+            }
+        }
+        val firstCallback = gemini.eventHandlers.single()
+        val blockedAfterAccepted = audio.blockAfterNextAcceptedPlayback()
+
+        val staleAudioJob = launch(Dispatchers.Default) {
+            firstCallback(GeminiLiveEvent.OutputAudio("accepted-stale-audio"))
+        }
+        assertTrue(blockedAfterAccepted.started.await(500, TimeUnit.MILLISECONDS))
+
+        session.reconnect()
+        gemini.awaitConnectCount(2)
+        blockedAfterAccepted.release.countDown()
+        staleAudioJob.join()
+
+        assertEquals(listOf("accepted-stale-audio"), audio.playedPcm16)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertFalse(session.state.value.audio == VoiceAudioStatus.AssistantSpeaking)
+        assertTrue(
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .isEmpty()
+        )
+    }
+
+    @Test
     fun `accepted output audio suppressed by interrupt is not recorded as queued`() = runTest {
         val observability = RecordingVoiceObservability()
         val sessionApi = FakeVoiceSessionApi()

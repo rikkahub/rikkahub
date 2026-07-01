@@ -566,6 +566,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     private val blockedStartCaptures = mutableListOf<BlockedPlayback>()
     private val blockedStopCaptures = mutableListOf<BlockedPlayback>()
     private val blockedPlaybacks = mutableListOf<BlockedPlayback>()
+    private val blockedAfterAcceptedPlaybacks = mutableListOf<BlockedPlayback>()
     private val blockedSuppressions = mutableListOf<BlockedPlayback>()
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
@@ -612,6 +613,13 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
             return false
         }
         playedPcm16 += base64Pcm16
+        val blockedAfterAccepted = synchronized(blockedAfterAcceptedPlaybacks) {
+            blockedAfterAcceptedPlaybacks.removeFirstOrNull()
+        }
+        if (blockedAfterAccepted != null) {
+            blockedAfterAccepted.started.countDown()
+            blockedAfterAccepted.release.await(500, TimeUnit.MILLISECONDS)
+        }
         return true
     }
 
@@ -657,6 +665,14 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         return BlockedPlayback().also { blocked ->
             synchronized(blockedPlaybacks) {
                 blockedPlaybacks += blocked
+            }
+        }
+    }
+
+    fun blockAfterNextAcceptedPlayback(): BlockedPlayback {
+        return BlockedPlayback().also { blocked ->
+            synchronized(blockedAfterAcceptedPlaybacks) {
+                blockedAfterAcceptedPlaybacks += blocked
             }
         }
     }

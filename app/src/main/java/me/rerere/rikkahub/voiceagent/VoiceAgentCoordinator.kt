@@ -612,13 +612,32 @@ class VoiceAgentCoordinator(
             )
             return
         }
-        synchronized(playbackSuppressionLock) {
+        if (sessionId != null && !isActiveSession(sessionId)) {
+            diagnostics.record("stale_output_audio_state_suppressed")
+            return
+        }
+        if (synchronized(playbackSuppressionLock) { outputAudioSuppressed }) {
+            diagnostics.record("output_audio_accepted_suppressed_after_interruption")
+            return
+        }
+        hermesWaitingToneController.stop()
+        var skippedQueuedAudioDiagnostic: String? = null
+        val queued = synchronized(playbackSuppressionLock) {
             if (outputAudioSuppressed) {
-                diagnostics.record("output_audio_accepted_suppressed_after_interruption")
-                return
+                skippedQueuedAudioDiagnostic = "output_audio_state_suppressed_after_interruption"
+                false
+            } else if (sessionId != null && !isActiveSession(sessionId)) {
+                skippedQueuedAudioDiagnostic = "stale_output_audio_state_suppressed"
+                false
+            } else {
+                assistantOutputAudioActive.set(true)
+                _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
+                true
             }
-            assistantOutputAudioActive.set(true)
-            hermesWaitingToneController.stop()
+        }
+        if (!queued) {
+            skippedQueuedAudioDiagnostic?.let(diagnostics::record)
+        } else {
             recordEventSafely(
                 name = "voicelab.mobile.audio.playback_queued",
                 attributes = mapOf(
@@ -626,17 +645,6 @@ class VoiceAgentCoordinator(
                     "audio.output.base64_chars" to base64Pcm16.length,
                 ),
             )
-        }
-        if (sessionId != null && !isActiveSession(sessionId)) {
-            diagnostics.record("stale_output_audio_state_suppressed")
-            return
-        }
-        synchronized(playbackSuppressionLock) {
-            if (outputAudioSuppressed) {
-                diagnostics.record("output_audio_state_suppressed_after_interruption")
-                return
-            }
-            _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
         }
     }
 
