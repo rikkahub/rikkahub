@@ -12,7 +12,6 @@ class VoiceAgentCallContractTest {
         assertEquals("me.rerere.rikkahub.voiceagent.action.START", VoiceAgentCallContract.ACTION_START)
         assertEquals("me.rerere.rikkahub.voiceagent.action.END", VoiceAgentCallContract.ACTION_END)
         assertEquals("conversationId", VoiceAgentCallContract.EXTRA_CONVERSATION_ID)
-        assertEquals("enableVoiceE2EArtifacts", VoiceAgentCallContract.EXTRA_ENABLE_VOICE_E2E_ARTIFACTS)
         assertEquals(2401, VoiceAgentCallContract.NOTIFICATION_ID)
     }
 

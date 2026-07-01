@@ -557,12 +557,11 @@ if adb_cmd shell rm -f "$DEVICE_TMP_PCM" >/dev/null 2>&1; then
   DEVICE_TMP_PCM_CLEANUP_NEEDED=0
 fi
 
-printf 'Starting Voice Agent foreground service with E2E artifacts enabled...\n'
+printf 'Starting Voice Agent foreground service...\n'
 adb_cmd shell am start-foreground-service \
   -n "$SERVICE_COMPONENT" \
   -a "$CALL_START_ACTION" \
-  --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" \
-  --ez enableVoiceE2EArtifacts true >/dev/null
+  --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" >/dev/null
 CALL_STARTED=1
 
 wait_for_log "Gemini setup complete" 'VoiceAgentGemini.*event kind=SetupComplete' 120

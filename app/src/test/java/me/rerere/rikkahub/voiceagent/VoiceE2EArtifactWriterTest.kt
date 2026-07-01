@@ -13,7 +13,6 @@ import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileCredentials
 
 class VoiceE2EArtifactWriterTest {
     @Test
@@ -396,22 +395,20 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
-    fun `default factory writer boundary keeps artifacts disabled unless launch config enables them`() = runBlocking {
-        val root = Files.createTempDirectory("voice-e2e-factory-disabled").toFile()
+    fun `default factory writer boundary keeps artifacts enabled even if launch config disables them`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-factory-always-enabled").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         try {
             val writer = createDefaultVoiceE2EArtifactWriter(
-                config = launchConfig(enableVoiceE2EArtifacts = false),
                 noBackupFilesDir = root,
                 traceContext = VoiceTraceContext(traceId = "trace-test", voiceSessionId = "session-test"),
                 scope = scope,
             )
 
             writer(VoiceE2EArtifact.HermesAnswer, "private answer")
-            delay(100)
+            writer.drain()
 
-            assertFalse(File(root, "voice-e2e/trace-test/hermes-answer.txt").exists())
-            assertFalse(File(root, "voice-e2e/hermes-answer.txt").exists())
+            assertEquals("private answer", File(root, "voice-e2e/trace-test/hermes-answer.txt").readText())
         } finally {
             scope.cancel()
             root.deleteRecursively()
@@ -424,7 +421,6 @@ class VoiceE2EArtifactWriterTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         try {
             val writer = createDefaultVoiceE2EArtifactWriter(
-                config = launchConfig(enableVoiceE2EArtifacts = true),
                 noBackupFilesDir = root,
                 traceContext = VoiceTraceContext(traceId = "trace-test", voiceSessionId = "session-test"),
                 scope = scope,
@@ -447,7 +443,6 @@ class VoiceE2EArtifactWriterTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         try {
             val writer = createDefaultVoiceE2EArtifactWriter(
-                config = launchConfig(enableVoiceE2EArtifacts = true),
                 noBackupFilesDir = root,
                 traceContext = VoiceTraceContext(traceId = "trace-456", voiceSessionId = "session-456"),
                 scope = scope,
@@ -462,43 +457,6 @@ class VoiceE2EArtifactWriterTest {
             root.deleteRecursively()
         }
     }
-
-    @Test
-    fun `service start config enables voice e2e artifacts from start extra`() {
-        val config = voiceAgentServiceStartConfig(
-            resolvedConfig = launchConfig(enableVoiceE2EArtifacts = false),
-            readBooleanExtra = { name, default ->
-                assertEquals(VoiceAgentCallContract.EXTRA_ENABLE_VOICE_E2E_ARTIFACTS, name)
-                assertFalse(default)
-                true
-            },
-        )
-
-        assertTrue(config.enableVoiceE2EArtifacts)
-    }
-
-    @Test
-    fun `service start config keeps voice e2e artifacts disabled by default`() {
-        val config = voiceAgentServiceStartConfig(
-            resolvedConfig = launchConfig(enableVoiceE2EArtifacts = true),
-            readBooleanExtra = { name, default ->
-                assertEquals(VoiceAgentCallContract.EXTRA_ENABLE_VOICE_E2E_ARTIFACTS, name)
-                assertFalse(default)
-                false
-            },
-        )
-
-        assertFalse(config.enableVoiceE2EArtifacts)
-    }
-
-    private fun launchConfig(enableVoiceE2EArtifacts: Boolean) = VoiceAgentLaunchConfig(
-        voiceLabBaseUrl = "https://voice.test",
-        credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
-        voiceModelId = "gemini-flash",
-        assistantName = "Hermes",
-        assistantPrompt = "system",
-        enableVoiceE2EArtifacts = enableVoiceE2EArtifacts,
-    )
 
     private fun createTraceArtifactDirectory(
         root: File,

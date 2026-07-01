@@ -259,7 +259,7 @@ LOGS
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-queue/hermes-answer.txt")
     ;;
-  "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1 --ez enableVoiceE2EArtifacts true")
+  "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1")
     rm -f "${FAKE_ADB_END_MARKER:?}"
     rm -f "${FAKE_ADB_DRAINED_MARKER:?}"
     ;;
