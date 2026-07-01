@@ -544,14 +544,14 @@ class PendingHermesJob(
 class FakeVoiceAudioEngine : VoiceAudioEngine {
     val playedPcm16 = CopyOnWriteArrayList<String>()
     val playedLocalCuePcm16 = CopyOnWriteArrayList<String>()
-    val playedLocalCueSessionIds = CopyOnWriteArrayList<Long?>()
+    val playedLocalCueTokens = CopyOnWriteArrayList<Long?>()
     var failLocalCuePlayback = false
     var localCuePlaybackError: Throwable? = null
     var localCueInvalidationError: Throwable? = null
     private val localCuePlaybackAttemptCount = AtomicInteger()
     val localCuePlaybackAttempts: Int
         get() = localCuePlaybackAttemptCount.get()
-    val invalidatedLocalCueSessionIds = CopyOnWriteArrayList<Long?>()
+    val invalidatedLocalCueTokens = CopyOnWriteArrayList<Long?>()
     var invalidateLocalCuePlaybackCalls = 0
     var suppressPlaybackCalls = 0
     var releaseCalls = 0
@@ -618,20 +618,20 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         playedPcm16 += base64Pcm16
     }
 
-    override fun playLocalCuePcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+    override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
         localCuePlaybackAttemptCount.incrementAndGet()
         localCuePlaybackError?.let { throw it }
         if (failLocalCuePlayback) {
             return false
         }
-        playedLocalCueSessionIds += sessionId
+        playedLocalCueTokens += cueToken
         playedLocalCuePcm16 += base64Pcm16
         return true
     }
 
-    override fun invalidateLocalCuePlayback(sessionId: Long?) {
+    override fun invalidateLocalCuePlayback(cueToken: Long?) {
         invalidateLocalCuePlaybackCalls += 1
-        invalidatedLocalCueSessionIds += sessionId
+        invalidatedLocalCueTokens += cueToken
         localCueInvalidationError?.let { throw it }
     }
 
