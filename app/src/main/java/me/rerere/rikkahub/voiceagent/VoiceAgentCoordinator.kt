@@ -43,7 +43,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnosticEvent
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
+import me.rerere.rikkahub.voiceagent.telemetry.voiceTextMetadata
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
@@ -549,16 +549,16 @@ class VoiceAgentCoordinator(
             }
             activeTranscriptSpeaker = TranscriptSpeaker.User
             inputTurnTranscript += text
-            diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, text=$text")
+            diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, chars=${text.length}")
             recordEventSafely(
                 name = "voicelab.mobile.transcript.input_delta",
-                attributes = mapOf("turnId" to inputTurnId) + voiceTextPayload(key = "text", text = text),
+                attributes = mapOf("turnId" to inputTurnId) + voiceTextMetadata(key = "text", text = text),
             )
             clearOutputAudioSuppressionForNewTurn()
             _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
             val transcript = inputTurnTranscript
             val turnId = inputTurnId
-            persistConversation { conversation ->
+            persistConversation(transform = { conversation ->
                 persister.upsertUserTranscriptTurn(
                     conversation = conversation,
                     text = transcript,
@@ -566,7 +566,7 @@ class VoiceAgentCoordinator(
                     sessionId = voiceArtifactSessionId,
                     status = VoiceTranscriptStatus.Partial,
                 )
-            }
+            })
             transcript
         }
         writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = artifactSnapshot)
@@ -582,10 +582,10 @@ class VoiceAgentCoordinator(
             }
             activeTranscriptSpeaker = TranscriptSpeaker.Assistant
             outputTurnTranscript += text
-            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, text=$text")
+            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
             recordEventSafely(
                 name = "voicelab.mobile.transcript.output_delta",
-                attributes = mapOf("turnId" to outputTurnId) + voiceTextPayload(key = "text", text = text),
+                attributes = mapOf("turnId" to outputTurnId) + voiceTextMetadata(key = "text", text = text),
             )
             _state.update { it.copy(outputTranscript = it.outputTranscript + text) }
             persistAssistantTranscript()
@@ -759,7 +759,7 @@ class VoiceAgentCoordinator(
             outputTurnTranscript = text
             outputTurnId = nextTranscriptTurnId(TranscriptSpeaker.Assistant)
             outputTurnStatus = VoiceTranscriptStatus.Complete
-            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, text=$text")
+            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
             _state.update { current ->
                 current.copy(
                     outputTranscript = if (current.outputTranscript.isBlank()) {
@@ -1148,7 +1148,7 @@ class VoiceAgentCoordinator(
             "turnId" to turnId,
             "speaker" to speaker,
             "status" to status.statusName,
-        ) + voiceTextPayload(key = textKey, text = text)
+        ) + voiceTextMetadata(key = textKey, text = text)
         recordEventSafely(
             name = finalEventName,
             attributes = attributes,

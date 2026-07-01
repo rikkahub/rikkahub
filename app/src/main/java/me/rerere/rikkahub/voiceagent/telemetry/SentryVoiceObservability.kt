@@ -69,8 +69,9 @@ class SentryVoiceObservability : VoiceObservability {
         Sentry.captureMessage(name, SentryLevel.INFO) { scope ->
             applyVoiceTrace(scope, trace, activeTransaction, attributes)
         }
-        if (name == "voicelab.mobile.session.ended") {
-            finishActiveTransaction(trace, SpanStatus.OK)
+        when (name) {
+            "voicelab.mobile.session.ended" -> finishActiveTransaction(trace, SpanStatus.OK)
+            "voicelab.mobile.session.failed" -> finishActiveTransaction(trace, SpanStatus.INTERNAL_ERROR)
         }
     }
 

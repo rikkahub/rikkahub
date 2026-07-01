@@ -145,10 +145,7 @@ class VoiceAgentCallSessionTest {
             listOf(
                 mapOf(
                     "turnId" to "user-1",
-                    "text" to "hello user",
                     "text.chars" to 10,
-                    "text.sha256" to "b371a0ad941d7d294f63e6d0843e5588b62931b48c7f13d9c3e81b77150d1bf1",
-                    "text.truncated" to false,
                 )
             ),
             observability.events
@@ -159,10 +156,7 @@ class VoiceAgentCallSessionTest {
             listOf(
                 mapOf(
                     "turnId" to "assistant-2",
-                    "text" to "hello assistant",
                     "text.chars" to 15,
-                    "text.sha256" to "86babda521bb7aa17c08dcf62f1d281535e61234173e215f45e77a5bba20d78f",
-                    "text.truncated" to false,
                 )
             ),
             observability.events
@@ -175,10 +169,7 @@ class VoiceAgentCallSessionTest {
                     "turnId" to "user-1",
                     "speaker" to "user",
                     "status" to "session-closed-before-final",
-                    "voice.user_transcript" to "hello user",
                     "voice.user_transcript.chars" to 10,
-                    "voice.user_transcript.sha256" to "b371a0ad941d7d294f63e6d0843e5588b62931b48c7f13d9c3e81b77150d1bf1",
-                    "voice.user_transcript.truncated" to false,
                 )
             ),
             observability.events
@@ -191,10 +182,7 @@ class VoiceAgentCallSessionTest {
                     "turnId" to "assistant-2",
                     "speaker" to "assistant",
                     "status" to "complete",
-                    "gemini.output_transcript" to "hello assistant",
                     "gemini.output_transcript.chars" to 15,
-                    "gemini.output_transcript.sha256" to "86babda521bb7aa17c08dcf62f1d281535e61234173e215f45e77a5bba20d78f",
-                    "gemini.output_transcript.truncated" to false,
                 )
             ),
             observability.events
@@ -206,19 +194,13 @@ class VoiceAgentCallSessionTest {
                 "turnId" to "assistant-2",
                 "speaker" to "assistant",
                 "status" to "complete",
-                "gemini.output_transcript" to "hello assistant",
                 "gemini.output_transcript.chars" to 15,
-                "gemini.output_transcript.sha256" to "86babda521bb7aa17c08dcf62f1d281535e61234173e215f45e77a5bba20d78f",
-                "gemini.output_transcript.truncated" to false,
             ),
             mapOf(
                 "turnId" to "user-1",
                 "speaker" to "user",
                 "status" to "session-closed-before-final",
-                "voice.user_transcript" to "hello user",
                 "voice.user_transcript.chars" to 10,
-                "voice.user_transcript.sha256" to "b371a0ad941d7d294f63e6d0843e5588b62931b48c7f13d9c3e81b77150d1bf1",
-                "voice.user_transcript.truncated" to false,
             ),
         )
         assertEquals(
@@ -233,6 +215,18 @@ class VoiceAgentCallSessionTest {
                 .filter { it.name.startsWith("voicelab.mobile.transcript.") }
                 .all { it.trace == trace }
         )
+        val transcriptTelemetry = observability.events
+            .filter {
+                it.name == "voicelab.mobile.transcript.input_delta" ||
+                    it.name == "voicelab.mobile.transcript.output_delta" ||
+                it.name == "voicelab.mobile.transcript.user_final" ||
+                    it.name == "voicelab.mobile.transcript.assistant_final" ||
+                    it.name == "voicelab.mobile.transcript.turn"
+            }
+            .joinToString(separator = "\n") { it.attributes.toString() }
+        assertFalse(transcriptTelemetry.contains("hello user"))
+        assertFalse(transcriptTelemetry.contains("hello assistant"))
+        assertFalse(transcriptTelemetry.contains("sha256"))
     }
 
     @Test
@@ -268,10 +262,7 @@ class VoiceAgentCallSessionTest {
                 "turnId" to "assistant-1",
                 "speaker" to "assistant",
                 "status" to "complete",
-                "gemini.output_transcript" to "recovered assistant",
                 "gemini.output_transcript.chars" to 19,
-                "gemini.output_transcript.sha256" to "8e8ebfa96d4eebba7f7ad88316208ba333f2ac0886896a93adfbd0f48def6c53",
-                "gemini.output_transcript.truncated" to false,
             )
         )
         assertEquals(
@@ -324,10 +315,7 @@ class VoiceAgentCallSessionTest {
                     "turnId" to "assistant-1",
                     "speaker" to "assistant",
                     "status" to "session-closed-before-final",
-                    "gemini.output_transcript" to "unfinished assistant",
                     "gemini.output_transcript.chars" to 20,
-                    "gemini.output_transcript.sha256" to "0c362834d7d8bd15103af70a4e9b5702b6fbee3e62cd0432caf192c94ce0878d",
-                    "gemini.output_transcript.truncated" to false,
                 )
             ),
             assistantFinal,
@@ -374,10 +362,7 @@ class VoiceAgentCallSessionTest {
                 "turnId" to "assistant-1",
                 "speaker" to "assistant",
                 "status" to "interrupted",
-                "gemini.output_transcript" to "partial assistant",
                 "gemini.output_transcript.chars" to 17,
-                "gemini.output_transcript.sha256" to "c14f04516a5b6592dc95504726652043c1376e9dffd5026c22fd3651b84a5633",
-                "gemini.output_transcript.truncated" to false,
             )
         )
         assertEquals(expected, assistantFinal)
@@ -578,6 +563,106 @@ class VoiceAgentCallSessionTest {
                     "session.end_reason" to "startup_failure",
                     "session.failure.kind" to "startup",
                     "session.failure.summary" to "connect rejected",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.failed" }
+                .map { it.attributes },
+        )
+    }
+
+    @Test
+    fun `session failure observability redacts credentials from summary`() = runTest {
+        val privateSummary =
+            "connect failed https://example.test/live?access_token=secret-token " +
+                "Authorization: Bearer private-token github_pat_11_private_token " +
+                "api_key=api-secret password=password-secret secret=plain-secret token=token-secret " +
+                "secretToken: secret-token-2 \"apiKey\":\"json-api-secret\" client_secret: client-secret " +
+                "refresh_token=refresh-secret \"Authorization\":\"Bearer json-bearer-token\" " +
+                "\"Authorization\": \"Basic json-basic-token\" glpat-private-token"
+        val gemini = FakeGeminiLiveVoiceClient().apply {
+            connectEvent = GeminiLiveEvent.Error(message = privateSummary, raw = privateSummary)
+        }
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        withTimeout(500) {
+            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+                delay(10)
+            }
+        }
+
+        val summary = observability.events
+            .single { it.name == "voicelab.mobile.session.failed" }
+            .attributes["session.failure.summary"]
+            .toString()
+        assertTrue(summary.contains("<redacted-url>"))
+        assertTrue(summary.contains("Authorization: Bearer <redacted>"))
+        assertFalse(summary, summary.contains("secret-token"))
+        assertFalse(summary, summary.contains("private-token"))
+        assertFalse(summary, summary.contains("github_pat_11_private_token"))
+        assertFalse(summary, summary.contains("api-secret"))
+        assertFalse(summary, summary.contains("password-secret"))
+        assertFalse(summary, summary.contains("plain-secret"))
+        assertFalse(summary, summary.contains("token-secret"))
+        assertFalse(summary, summary.contains("secret-token-2"))
+        assertFalse(summary, summary.contains("json-api-secret"))
+        assertFalse(summary, summary.contains("client-secret"))
+        assertFalse(summary, summary.contains("refresh-secret"))
+        assertFalse(summary, summary.contains("json-bearer-token"))
+        assertFalse(summary, summary.contains("json-basic-token"))
+        assertFalse(summary, summary.contains("glpat-private-token"))
+    }
+
+    @Test
+    fun `activation failure before connected records startup failure kind`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient().apply {
+            activateOutboundSessionEvent = GeminiLiveEvent.WebSocketFailure(message = "pre-setup drop")
+        }
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            reconnectPolicy = VoiceReconnectPolicy(maxAttempts = 0),
+            scope = this,
+        )
+
+        session.start()
+        withTimeout(500) {
+            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+                delay(10)
+            }
+        }
+
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "startup_failure",
+                    "session.failure.kind" to "startup",
+                    "session.failure.summary" to "pre-setup drop",
                 )
             ),
             observability.events

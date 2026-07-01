@@ -2003,12 +2003,12 @@ class VoiceAgentRuntimeTest {
         assertTrue(tool.output.filterIsInstance<UIMessagePart.Text>().any { it.text == "tool answer" })
         assertTrue(
             coordinator.state.value.diagnostics.any {
-                it.name == "input_transcript_delta" && it.detail.contains("text=hel")
+                it.name == "input_transcript_delta" && it.detail.contains("chars=3")
             }
         )
         assertTrue(
             coordinator.state.value.diagnostics.any {
-                it.name == "output_transcript_delta" && it.detail.contains("text=h")
+                it.name == "output_transcript_delta" && it.detail.contains("chars=1")
             }
         )
         assertTrue(

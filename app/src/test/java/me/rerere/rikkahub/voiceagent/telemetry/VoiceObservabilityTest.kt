@@ -4,6 +4,7 @@ import io.sentry.NoOpTransportFactory
 import io.sentry.Sentry
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
+import io.sentry.SpanStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -113,6 +114,42 @@ class VoiceObservabilityTest {
 
             val secondAgain = observability.withSentryPropagation(secondTrace)
             assertEquals(second.sentryTrace, secondAgain.sentryTrace)
+        } finally {
+            Sentry.close()
+        }
+    }
+
+    @Test
+    fun `sentry observability closes voice transaction on session failed`() {
+        val transactionStatuses = mutableListOf<SpanStatus?>()
+        Sentry.init { options ->
+            options.dsn = "https://public@example.com/1"
+            options.setTransportFactory(NoOpTransportFactory.getInstance())
+            options.tracesSampleRate = 1.0
+            options.setBeforeSendTransaction { transaction, _ ->
+                transactionStatuses += transaction.status
+                transaction
+            }
+        }
+
+        try {
+            val observability = SentryVoiceObservability()
+            val first = observability.withSentryPropagation(trace)
+            val endedTrace = VoiceTraceContext(
+                traceId = "trace-ended",
+                voiceSessionId = "session-ended",
+            )
+            observability.withSentryPropagation(endedTrace)
+
+            observability.recordEvent("voicelab.mobile.session.failed", first)
+            observability.recordEvent("voicelab.mobile.session.ended", endedTrace)
+            Sentry.flush(1_000)
+
+            val afterFailure = observability.withSentryPropagation(trace)
+            assertTrue(afterFailure.sentryTrace.orEmpty().isNotBlank())
+            assertFalse(first.sentryTrace == afterFailure.sentryTrace)
+            assertTrue(transactionStatuses.contains(SpanStatus.INTERNAL_ERROR))
+            assertTrue(transactionStatuses.contains(SpanStatus.OK))
         } finally {
             Sentry.close()
         }

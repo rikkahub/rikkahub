@@ -176,6 +176,12 @@ internal fun voiceTextPayload(
     )
 }
 
+internal fun voiceTextMetadata(
+    key: String,
+    text: String,
+): Map<String, Any> =
+    mapOf("$key.chars" to text.length)
+
 internal fun sha256Hex(value: String): String =
     MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))

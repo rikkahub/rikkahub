@@ -215,7 +215,6 @@ class VoiceAgentCallSession internal constructor(
                 return
             }
             if (!markReconnectEligible(currentSessionId, automaticReconnectJob)) return
-            markRuntimeFailureTelemetryEligible(currentSessionId)
             ensureActiveSession(currentSessionId, automaticReconnectJob)
             if (!coordinator.isActiveSession(currentSessionId)) {
                 restoreReconnectingStatusIfAutomaticReconnectPending()
@@ -272,7 +271,14 @@ class VoiceAgentCallSession internal constructor(
                     restoreReconnectingAfterCommit = reconnectController.hasPendingReconnect()
                     null
                 } else {
-                    automaticReconnectJob?.let(reconnectController::completeAttempt)
+                    val reconnectJobIsCurrent =
+                        automaticReconnectJob?.let(reconnectController::isCurrentJob) == true
+                    if (reconnectJobIsCurrent) {
+                        runtimeFailureTelemetrySessionId = currentSessionId
+                    }
+                    automaticReconnectJob
+                        ?.takeIf { reconnectJobIsCurrent }
+                        ?.let(reconnectController::completeAttempt)
                 }
             }
             if (connectedSessionStale) {
@@ -281,7 +287,7 @@ class VoiceAgentCallSession internal constructor(
                 }
                 return
             }
-            if (!updateSessionStatusIfActive(currentSessionId, VoiceSessionStatus.Connected)) return
+            if (!markConnectedIfActive(currentSessionId)) return
             if (!coordinator.isActiveSession(currentSessionId)) {
                 restoreReconnectingStatusIfAutomaticReconnectPending()
                 return
@@ -365,7 +371,7 @@ class VoiceAgentCallSession internal constructor(
             )
         }
         val automaticReconnectAttemptFailure =
-            stopReason != null && reconnectController.isAttemptSession(sessionId)
+            stopReason != null && reconnectController.isAutomaticReconnectSession(sessionId)
         if (stopReason != null && scheduleAutomaticReconnectIfEligible(sessionId, coordinatorEvent, stopReason)) {
             return
         }
@@ -582,6 +588,16 @@ class VoiceAgentCallSession internal constructor(
             }
         }
 
+    private fun markConnectedIfActive(sessionId: Long): Boolean = synchronized(sessionLock) {
+        if (!isSessionOpenAndActiveLocked(sessionId, automaticReconnectJob = null)) {
+            false
+        } else {
+            coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
+            runtimeFailureTelemetrySessionId = sessionId
+            true
+        }
+    }
+
     private fun updateAutomaticReconnectStatusIfCurrent(job: Job): Boolean =
         synchronized(sessionLock) {
             if (ended || !reconnectController.isCurrentJob(job)) {
@@ -625,10 +641,6 @@ class VoiceAgentCallSession internal constructor(
         } else {
             reconnectController.markEligible(sessionId)
         }
-    }
-
-    private fun markRuntimeFailureTelemetryEligible(sessionId: Long) = synchronized(sessionLock) {
-        runtimeFailureTelemetrySessionId = sessionId
     }
 
     private fun isRuntimeFailureTelemetryEligible(sessionId: Long): Boolean = synchronized(sessionLock) {
@@ -866,7 +878,7 @@ class VoiceAgentCallSession internal constructor(
                 "modelId" to modelId,
                 "session.end_reason" to endReason,
                 "session.failure.kind" to failureKind,
-                "session.failure.summary" to failureSummary,
+                "session.failure.summary" to failureSummary?.let(::sanitizeVoiceFailureSummary),
             ),
         )
     }
@@ -893,7 +905,7 @@ class VoiceAgentCallSession internal constructor(
                 "modelId" to modelId,
                 "session.end_reason" to endReason,
                 "session.failure.kind" to failureKind,
-                "session.failure.summary" to failureSummary,
+                "session.failure.summary" to sanitizeVoiceFailureSummary(failureSummary),
             ),
         )
     }
@@ -941,6 +953,32 @@ private fun GeminiLiveEvent.failureSummary(): String =
         is GeminiLiveEvent.WebSocketFailure -> message
         else -> this::class.simpleName ?: "Gemini terminal event"
     }
+
+private fun sanitizeVoiceFailureSummary(value: String): String =
+    value
+        .replace(Regex("https?://\\S+", RegexOption.IGNORE_CASE), "<redacted-url>")
+        .replace(
+            Regex(
+                """(?i)(["']?\bAuthorization\b["']?\s*:\s*["']?(?:Bearer|Basic)\s+)[^"'\s,;}\]]+""",
+            ),
+            "\$1<redacted>",
+        )
+        .replace(
+            Regex(
+                """(?i)(["']?\b(?:(?:access|refresh|id)_?token|token|api[_-]?key|apiKey|password|secretToken|secret|client[_-]?secret|clientSecret)\b["']?)(\s*[:=]\s*["']?)([^"'\s,;&}\]]+)""",
+            ),
+            "\$1\$2<redacted>",
+        )
+        .replace(
+            Regex(
+                "\\b(?:github_pat_[A-Za-z0-9_]+(?:_[A-Za-z0-9_]+)*|glpat-[A-Za-z0-9_-]{10,}|(?:ghp|gho|ghu|ghs|ghr|sk|ya29)[A-Za-z0-9._-]{10,})\\b",
+                RegexOption.IGNORE_CASE,
+            ),
+            "<redacted-token>",
+        )
+        .replace(Regex("[ \\t\\r\\n]+"), " ")
+        .trim()
+        .take(512)
 
 internal sealed class VoiceSessionStopReason(
     val diagnosticReason: String,
