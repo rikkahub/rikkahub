@@ -152,9 +152,21 @@ class McpManager(
 
     suspend fun callTool(serverId: Uuid, toolName: String, args: JsonObject): List<UIMessagePart> {
         val entry = clients.entries.find { it.key.id == serverId }
-        val client = entry?.value
+        var client = entry?.value
             ?: return listOf(UIMessagePart.Text("Failed to execute tool, because no such mcp client for the tool"))
-        val config = entry.key
+        var config = entry.key
+
+        // 调用前确保 OAuth 令牌新鲜。若发生刷新，已连接的 transport 仍携带过期令牌
+        val freshConfig = ensureFreshToken(config)
+        if (freshConfig.commonOptions.oauth?.accessToken != config.commonOptions.oauth?.accessToken) {
+            Log.i(TAG, "callTool: token refreshed, reconnecting ${config.commonOptions.name}")
+            addClient(freshConfig)
+            val newEntry = clients.entries.find { it.key.id == serverId }
+                ?: return listOf(UIMessagePart.Text("Failed to execute tool, because no such mcp client for the tool"))
+            client = newEntry.value
+            config = newEntry.key
+        }
+
         Log.i(TAG, "callTool: $toolName / $args (server: ${config.commonOptions.name})")
 
         if (client.transport == null) client.connect(getTransport(config))
