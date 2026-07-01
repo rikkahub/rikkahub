@@ -296,7 +296,7 @@ class HermesJobManager(
             recordEventSafely(
                 name = "voicelab.mobile.hermes_tool.submitted",
                 attributes = mapOf("callId" to managedJob.callId) +
-                    voiceTextPayload(key = "prompt", text = managedJob.prompt),
+                    voiceTextPayload(key = "gemini.tool_call.prompt", text = managedJob.prompt),
             )
             if (managedJob.explicitlyCanceled) return
             val submitted = withTimeoutOrNull(managedJob.remainingMs(maxElapsedMs)) {
@@ -477,7 +477,7 @@ class HermesJobManager(
                             "jobId" to jobId,
                             "elapsedMs" to elapsedMs,
                             "serverElapsedMs" to poll.elapsedMs,
-                        ) + voiceTextPayload(key = "answer", text = answer),
+                        ) + voiceTextPayload(key = "hermes.response.answer", text = answer),
                     )
                     safeRecordDiagnostic(
                         "hermes_job_completed",

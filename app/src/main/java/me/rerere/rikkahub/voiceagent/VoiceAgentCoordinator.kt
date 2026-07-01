@@ -606,6 +606,13 @@ class VoiceAgentCoordinator(
             name = "output_audio_chunk",
             detail = "sessionId=${sessionId ?: "none"}, base64Chars=${base64Pcm16.length}",
         )
+        recordEventSafely(
+            name = "voicelab.mobile.audio.playback_queued",
+            attributes = mapOf(
+                "sessionId" to sessionId,
+                "audio.output.base64_chars" to base64Pcm16.length,
+            ),
+        )
         audio.playPcm16(base64Pcm16, sessionId = sessionId)
         if (sessionId != null && !isActiveSession(sessionId)) {
             diagnostics.record("stale_output_audio_state_suppressed")

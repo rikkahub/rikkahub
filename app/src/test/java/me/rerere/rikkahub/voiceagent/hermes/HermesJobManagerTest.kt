@@ -86,7 +86,7 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `submitted job records prompt and answer observability events`() = runTest {
+    fun `submitted job records canonical prompt and answer observability events`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val observability = RecordingVoiceObservability()
@@ -109,17 +109,23 @@ class HermesJobManagerTest {
         val submitted = observability.events.single { it.name == "voicelab.mobile.hermes_tool.submitted" }
         assertEquals(trace, submitted.trace)
         assertEquals("call-1", submitted.attributes["callId"])
-        assertEquals("private prompt", submitted.attributes["prompt"])
-        assertEquals(14, submitted.attributes["prompt.chars"])
-        assertEquals(false, submitted.attributes["prompt.truncated"])
+        assertEquals("private prompt", submitted.attributes["gemini.tool_call.prompt"])
+        assertEquals(14, submitted.attributes["gemini.tool_call.prompt.chars"])
+        assertEquals(false, submitted.attributes["gemini.tool_call.prompt.truncated"])
+        assertFalse(submitted.attributes.containsKey("prompt"))
+        assertFalse(submitted.attributes.containsKey("prompt.chars"))
+        assertFalse(submitted.attributes.containsKey("prompt.truncated"))
 
         val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
         assertEquals(trace, completed.trace)
         assertEquals("call-1", completed.attributes["callId"])
         assertEquals("job-1", completed.attributes["jobId"])
-        assertEquals("private answer", completed.attributes["answer"])
-        assertEquals(14, completed.attributes["answer.chars"])
-        assertEquals(false, completed.attributes["answer.truncated"])
+        assertEquals("private answer", completed.attributes["hermes.response.answer"])
+        assertEquals(14, completed.attributes["hermes.response.answer.chars"])
+        assertEquals(false, completed.attributes["hermes.response.answer.truncated"])
+        assertFalse(completed.attributes.containsKey("answer"))
+        assertFalse(completed.attributes.containsKey("answer.chars"))
+        assertFalse(completed.attributes.containsKey("answer.truncated"))
     }
 
     @Test

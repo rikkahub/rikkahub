@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
+import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,6 +22,7 @@ class VoiceAgentReconnectTest {
     @Test
     fun `post connected WebSocket failure automatically reconnects without terminal error`() = runTest {
         val diagnostics = VoiceDiagnostics()
+        val observability = RecordingVoiceObservability()
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()
@@ -29,6 +31,7 @@ class VoiceAgentReconnectTest {
             gemini = gemini,
             audio = audio,
             diagnostics = diagnostics,
+            observability = observability,
             reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
         )
 
@@ -52,6 +55,19 @@ class VoiceAgentReconnectTest {
                 it.name == "session_reconnect_scheduled" &&
                     it.detail == "reason=websocket_failure, attempt=1, maxAttempts=3, delayMs=1"
             }
+        )
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "session.reconnect.reason" to "websocket_failure",
+                    "session.reconnect.attempt" to 1,
+                    "session.reconnect.delay_ms" to 1L,
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.reconnect_scheduled" }
+                .map { it.attributes },
         )
         assertTrue(
             diagnostics.events.value.any {
@@ -497,6 +513,7 @@ class VoiceAgentReconnectTest {
 
     @Test
     fun `automatic reconnect clears prior playback suppression for the new session`() = runTest {
+        val observability = RecordingVoiceObservability()
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()
@@ -504,6 +521,7 @@ class VoiceAgentReconnectTest {
             sessionApi = sessionApi,
             gemini = gemini,
             audio = audio,
+            observability = observability,
             reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
         )
 
@@ -515,6 +533,14 @@ class VoiceAgentReconnectTest {
         session.interrupt()
         audio.awaitSuppressPlaybackCalls(1)
 
+        firstCallback(GeminiLiveEvent.OutputAudio("suppressed-audio"))
+        assertTrue(audio.playedPcm16.isEmpty())
+        assertTrue(
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .isEmpty()
+        )
+
         firstCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
         gemini.awaitConnectCount(2)
         val secondCallback = gemini.eventHandlers.last()
@@ -522,6 +548,17 @@ class VoiceAgentReconnectTest {
         secondCallback(GeminiLiveEvent.OutputAudio("reconnected-audio"))
 
         assertEquals(listOf("reconnected-audio"), audio.playedPcm16)
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 2L,
+                    "audio.output.base64_chars" to "reconnected-audio".length,
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .map { it.attributes },
+        )
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
         assertEquals(2, sessionApi.createdSessions.size)
     }
@@ -567,6 +604,7 @@ class VoiceAgentReconnectTest {
         gemini: FakeGeminiLiveVoiceClient = FakeGeminiLiveVoiceClient(),
         audio: FakeVoiceAudioEngine = FakeVoiceAudioEngine(),
         diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
+        observability: RecordingVoiceObservability = RecordingVoiceObservability(),
         reconnectPolicy: VoiceReconnectPolicy = fastReconnectPolicy(),
         nowMs: () -> Long = { System.currentTimeMillis() },
     ): VoiceAgentCallSession =
@@ -581,6 +619,7 @@ class VoiceAgentReconnectTest {
                 VoiceContext(systemInstruction = "system", turns = emptyList())
             ),
             diagnostics = diagnostics,
+            observability = observability,
             reconnectPolicy = reconnectPolicy,
             nowMs = nowMs,
             scope = this,

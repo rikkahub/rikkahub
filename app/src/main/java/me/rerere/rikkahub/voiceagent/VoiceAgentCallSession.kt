@@ -197,6 +197,14 @@ class VoiceAgentCallSession internal constructor(
             ensureActiveSession(currentSessionId, automaticReconnectJob)
             if (coordinator.state.value.session is VoiceSessionStatus.Error) {
                 VoiceAgentLog.w(TAG, "Gemini connect returned with error state sessionId=$currentSessionId")
+                val startupErrorMessage = (coordinator.state.value.session as? VoiceSessionStatus.Error)?.message
+                    ?: "Gemini connect failed"
+                recordSessionFailedSafely(
+                    sessionId = currentSessionId,
+                    endReason = VoiceSessionStopReason.StartupFailure.diagnosticReason,
+                    failureKind = "startup",
+                    failureSummary = startupErrorMessage,
+                )
                 prepareFailedSession(
                     sessionId = currentSessionId,
                     reason = VoiceSessionStopReason.StartupFailure,
@@ -300,6 +308,12 @@ class VoiceAgentCallSession internal constructor(
                 )
                 val startupErrorMessage = error.message ?: error.javaClass.simpleName
                 reconnectController.cancel()
+                recordSessionFailedSafely(
+                    sessionId = currentSessionId,
+                    endReason = VoiceSessionStopReason.StartupFailure.diagnosticReason,
+                    failureKind = "startup",
+                    failureSummary = startupErrorMessage,
+                )
                 prepareFailedSession(
                     sessionId = currentSessionId,
                     reason = VoiceSessionStopReason.StartupFailure,
@@ -473,6 +487,15 @@ class VoiceAgentCallSession internal constructor(
             name = "session_reconnect_scheduled",
             detail = "reason=${plan.reason.diagnosticReason}, attempt=${plan.attempt}, " +
                 "maxAttempts=${reconnectPolicy.maxAttempts}, delayMs=${plan.delayMs}",
+        )
+        recordEventSafely(
+            name = "voicelab.mobile.session.reconnect_scheduled",
+            attributes = mapOf(
+                "sessionId" to sessionId,
+                "session.reconnect.reason" to plan.reason.diagnosticReason,
+                "session.reconnect.attempt" to plan.attempt,
+                "session.reconnect.delay_ms" to plan.delayMs,
+            ),
         )
         if (!isAutomaticReconnectCurrent(job)) return
         job.start()
@@ -651,6 +674,14 @@ class VoiceAgentCallSession internal constructor(
         } else if (state.value.session == VoiceSessionStatus.Connected) {
             startCapture(sessionId)
         }
+        recordEventSafely(
+            name = if (muted) {
+                "voicelab.mobile.audio.capture_muted"
+            } else {
+                "voicelab.mobile.audio.capture_unmuted"
+            },
+            attributes = mapOf("sessionId" to sessionId),
+        )
     }
 
     override fun reconnect() {
@@ -716,7 +747,7 @@ class VoiceAgentCallSession internal constructor(
             coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
             coordinator.close()
         } finally {
-            recordSessionEndedSafely()
+            recordSessionEndedSafely(endReason = visibleReason ?: "user_end")
         }
         visibleReason?.let(coordinator::setVisibleError)
         coordinator.awaitPersistenceJobs()
@@ -731,7 +762,7 @@ class VoiceAgentCallSession internal constructor(
         resourceCleaner.cleanupForEnd(closeGemini = false)
         coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
         coordinator.close(waitForStartedSends = false)
-        recordSessionEndedSafely()
+        recordSessionEndedSafely(endReason = "close_now")
         coordinator.launchPersistenceDrain()
     }
 
@@ -763,6 +794,13 @@ class VoiceAgentCallSession internal constructor(
                 }
             },
         )
+        recordEventSafely(
+            name = "voicelab.mobile.audio.capture_started",
+            attributes = mapOf(
+                "sessionId" to currentSessionId,
+                "audio.muted" to muted,
+            ),
+        )
         if (isSessionOpenAndActive(currentSessionId)) {
             coordinator.updateAudioStatus(VoiceAudioStatus.Listening)
         }
@@ -778,14 +816,46 @@ class VoiceAgentCallSession internal constructor(
         }
     }
 
-    private fun recordSessionEndedSafely() {
-        if (sessionEndedRecorded) return
-        sessionEndedRecorded = true
+    private fun recordSessionEndedSafely(
+        endReason: String,
+        failureKind: String = "none",
+        failureSummary: String? = null,
+    ) {
+        val shouldRecord = synchronized(sessionLock) {
+            if (sessionEndedRecorded) {
+                false
+            } else {
+                sessionEndedRecorded = true
+                true
+            }
+        }
+        if (!shouldRecord) return
         recordEventSafely(
             name = "voicelab.mobile.session.ended",
             attributes = mapOf(
                 "sessionId" to sessionId,
                 "modelId" to modelId,
+                "session.end_reason" to endReason,
+                "session.failure.kind" to failureKind,
+                "session.failure.summary" to failureSummary,
+            ),
+        )
+    }
+
+    private fun recordSessionFailedSafely(
+        sessionId: Long,
+        endReason: String,
+        failureKind: String,
+        failureSummary: String,
+    ) {
+        recordEventSafely(
+            name = "voicelab.mobile.session.failed",
+            attributes = mapOf(
+                "sessionId" to sessionId,
+                "modelId" to modelId,
+                "session.end_reason" to endReason,
+                "session.failure.kind" to failureKind,
+                "session.failure.summary" to failureSummary,
             ),
         )
     }

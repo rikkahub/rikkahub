@@ -434,6 +434,100 @@ class VoiceAgentCallSessionTest {
     }
 
     @Test
+    fun `audio capture records started muted and unmuted observability events`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        withTimeout(500) {
+            while (session.state.value.session != VoiceSessionStatus.Connected) {
+                delay(10)
+            }
+        }
+        session.setMuted(true)
+        session.setMuted(false)
+
+        assertEquals(
+            listOf(
+                mapOf("sessionId" to 1L, "audio.muted" to false),
+                mapOf("sessionId" to 1L, "audio.muted" to false),
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.capture_started" }
+                .map { it.attributes },
+        )
+        assertEquals(
+            listOf(mapOf("sessionId" to 1L)),
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.capture_muted" }
+                .map { it.attributes },
+        )
+        assertEquals(
+            listOf(mapOf("sessionId" to 1L)),
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.capture_unmuted" }
+                .map { it.attributes },
+        )
+    }
+
+    @Test
+    fun `startup failure records session failed observability event`() = runTest {
+        val sessionApi = FakeVoiceSessionApi().apply {
+            failNextSession(IllegalStateException("token service unavailable"))
+        }
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = FakeGeminiLiveVoiceClient(),
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        withTimeout(500) {
+            while (session.state.value.session !is VoiceSessionStatus.Error) {
+                delay(10)
+            }
+        }
+
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "startup_failure",
+                    "session.failure.kind" to "startup",
+                    "session.failure.summary" to "token service unavailable",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.failed" }
+                .map { it.attributes },
+        )
+    }
+
+    @Test
     fun `close now records session ended observability event`() = runTest {
         val observability = RecordingVoiceObservability()
         val trace = VoiceTraceContext(traceId = "trace-123", voiceSessionId = "session-456")
@@ -461,6 +555,8 @@ class VoiceAgentCallSessionTest {
                 mapOf(
                     "sessionId" to 1L,
                     "modelId" to "gemini-flash",
+                    "session.end_reason" to "close_now",
+                    "session.failure.kind" to "none",
                 )
             ),
             observability.events
