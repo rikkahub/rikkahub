@@ -151,6 +151,8 @@ class VoiceAgentCoordinator(
     private var transcriptTurnSequence = 0L
     private var inputTurnId = ""
     private var outputTurnId = ""
+    private val finalTranscriptTelemetryLock = Any()
+    private val finalTranscriptTelemetryKeys = mutableSetOf<String>()
     private val voiceArtifactSessionId = Uuid.random().toString()
     private val removeDiagnosticsListener: () -> Unit
     private val hermesWaitingToneSuspended = AtomicBoolean(false)
@@ -1019,6 +1021,7 @@ class VoiceAgentCoordinator(
     private fun persistAssistantTranscript(statusOverride: VoiceTranscriptStatus? = null) {
         val transcript = outputTurnTranscript
         val turnId = outputTurnId
+        if (transcript.isBlank() || turnId.isBlank()) return
         val status = synchronized(playbackSuppressionLock) {
             statusOverride ?: when {
                 outputAudioSuppressed -> VoiceTranscriptStatus.Interrupted
@@ -1035,6 +1038,14 @@ class VoiceAgentCoordinator(
                 status = status,
             )
         }
+        recordFinalTranscriptEventsOnce(
+            finalEventName = "voicelab.mobile.transcript.assistant_final",
+            turnId = turnId,
+            speaker = "assistant",
+            status = status,
+            textKey = "gemini.output_transcript",
+            text = transcript,
+        )
     }
 
     private fun persistAssistantTranscriptForSessionClose() {
@@ -1062,6 +1073,43 @@ class VoiceAgentCoordinator(
                 status = status,
             )
         }
+        recordFinalTranscriptEventsOnce(
+            finalEventName = "voicelab.mobile.transcript.user_final",
+            turnId = turnId,
+            speaker = "user",
+            status = status,
+            textKey = "voice.user_transcript",
+            text = transcript,
+        )
+    }
+
+    private fun recordFinalTranscriptEventsOnce(
+        finalEventName: String,
+        turnId: String,
+        speaker: String,
+        status: VoiceTranscriptStatus,
+        textKey: String,
+        text: String,
+    ) {
+        if (status == VoiceTranscriptStatus.Partial) return
+        val telemetryKey = "$finalEventName|$turnId|${status.statusName}"
+        val shouldRecord = synchronized(finalTranscriptTelemetryLock) {
+            finalTranscriptTelemetryKeys.add(telemetryKey)
+        }
+        if (!shouldRecord) return
+        val attributes = mapOf(
+            "turnId" to turnId,
+            "speaker" to speaker,
+            "status" to status.statusName,
+        ) + voiceTextPayload(key = textKey, text = text)
+        recordEventSafely(
+            name = finalEventName,
+            attributes = attributes,
+        )
+        recordEventSafely(
+            name = "voicelab.mobile.transcript.turn",
+            attributes = attributes,
+        )
     }
 
     private fun nextTranscriptTurnId(speaker: TranscriptSpeaker): String {

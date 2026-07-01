@@ -367,6 +367,23 @@ class VoiceObservabilityTest {
     }
 
     @Test
+    fun `voice domain text payload emits canonical key metadata`() {
+        val attributes = voiceTextPayload(
+            key = "voice.user_transcript",
+            text = "hello private user",
+            previewChars = 8,
+        )
+
+        assertEquals("hello pr", attributes["voice.user_transcript"])
+        assertEquals(true, attributes["voice.user_transcript.truncated"])
+        assertEquals(18, attributes["voice.user_transcript.chars"])
+        assertEquals(
+            "cc9f8ee1eed7d66b232f94d69e0e81d2107343d391e604688c4d636657a61136",
+            attributes["voice.user_transcript.sha256"],
+        )
+    }
+
+    @Test
     fun `voice text payload does not mark short text as truncated`() {
         val attributes = voiceTextPayload(
             key = "answer",

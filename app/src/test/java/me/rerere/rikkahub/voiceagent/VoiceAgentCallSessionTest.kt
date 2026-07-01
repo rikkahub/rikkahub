@@ -121,6 +121,7 @@ class VoiceAgentCallSessionTest {
         gemini.awaitConnect()
         gemini.eventHandlers.single()(GeminiLiveEvent.InputTranscript("hello user"))
         gemini.eventHandlers.single()(GeminiLiveEvent.OutputTranscript("hello assistant"))
+        gemini.eventHandlers.single()(GeminiLiveEvent.GenerationComplete)
 
         session.endAndDrain()
 
@@ -150,6 +151,38 @@ class VoiceAgentCallSessionTest {
             ),
             observability.events
                 .filter { it.name == "voicelab.mobile.transcript.output_delta" }
+                .map { it.attributes },
+        )
+        assertEquals(
+            listOf(
+                mapOf(
+                    "turnId" to "user-1",
+                    "speaker" to "user",
+                    "status" to "session-closed-before-final",
+                    "voice.user_transcript" to "hello user",
+                    "voice.user_transcript.chars" to 10,
+                    "voice.user_transcript.sha256" to "b371a0ad941d7d294f63e6d0843e5588b62931b48c7f13d9c3e81b77150d1bf1",
+                    "voice.user_transcript.truncated" to false,
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.transcript.user_final" }
+                .map { it.attributes },
+        )
+        assertEquals(
+            listOf(
+                mapOf(
+                    "turnId" to "assistant-2",
+                    "speaker" to "assistant",
+                    "status" to "complete",
+                    "gemini.output_transcript" to "hello assistant",
+                    "gemini.output_transcript.chars" to 15,
+                    "gemini.output_transcript.sha256" to "86babda521bb7aa17c08dcf62f1d281535e61234173e215f45e77a5bba20d78f",
+                    "gemini.output_transcript.truncated" to false,
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
                 .map { it.attributes },
         )
         assertTrue(
