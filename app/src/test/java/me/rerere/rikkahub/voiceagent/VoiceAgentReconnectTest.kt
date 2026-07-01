@@ -171,6 +171,7 @@ class VoiceAgentReconnectTest {
     @Test
     fun `automatic reconnect exhaustion surfaces terminal WebSocket failure`() = runTest {
         val diagnostics = VoiceDiagnostics()
+        val observability = RecordingVoiceObservability()
         val sessionApi = FakeVoiceSessionApi()
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()
@@ -179,6 +180,7 @@ class VoiceAgentReconnectTest {
             gemini = gemini,
             audio = audio,
             diagnostics = diagnostics,
+            observability = observability,
             reconnectPolicy = fastReconnectPolicy(maxAttempts = 0, delayMs = 1),
         )
 
@@ -211,6 +213,20 @@ class VoiceAgentReconnectTest {
         delay(50)
         assertEquals(1, sessionApi.createdSessions.size)
         assertEquals(VoiceSessionStatus.Error("Gemini WebSocket failed: drop-1"), session.state.value.session)
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "websocket_failure",
+                    "session.failure.kind" to "websocket_failure",
+                    "session.failure.summary" to "drop-1",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.failed" }
+                .map { it.attributes },
+        )
         assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_scheduled" })
         assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_attempting" })
     }
@@ -295,6 +311,61 @@ class VoiceAgentReconnectTest {
                 it.name == "session_transition_failed" &&
                     it.detail == "reason=websocket_failure, closeGemini=true"
             }
+        )
+    }
+
+    @Test
+    fun `WebSocket failure during automatic reconnect connect exhaustion records terminal failure`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val observability = RecordingVoiceObservability()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val session = reconnectSession(
+            sessionApi = sessionApi,
+            gemini = gemini,
+            diagnostics = diagnostics,
+            observability = observability,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 1, delayMs = 1),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        val firstCallback = gemini.eventHandlers.single()
+        gemini.connectEvent = GeminiLiveEvent.WebSocketFailure(message = "drop during reconnect connect")
+
+        firstCallback(GeminiLiveEvent.WebSocketFailure(message = "first drop"))
+        gemini.awaitConnectCount(2)
+        withTimeout(500) {
+            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+                delay(10)
+            }
+        }
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(
+            VoiceSessionStatus.Error("Gemini WebSocket failed: drop during reconnect connect"),
+            session.state.value.session,
+        )
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "session_reconnect_exhausted" &&
+                    it.detail.contains("reason=websocket_failure") &&
+                    it.detail.contains("attempts=1")
+            }
+        )
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 2L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "websocket_failure",
+                    "session.failure.kind" to "websocket_failure",
+                    "session.failure.summary" to "drop during reconnect connect",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.failed" }
+                .map { it.attributes },
         )
     }
 
@@ -600,6 +671,49 @@ class VoiceAgentReconnectTest {
         assertEquals(2, sessionApi.createdSessions.size)
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
         assertTrue(audio.playedPcm16.isEmpty())
+        assertTrue(
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .isEmpty()
+        )
+    }
+
+    @Test
+    fun `accepted output audio suppressed by interrupt is not recorded as queued`() = runTest {
+        val observability = RecordingVoiceObservability()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = reconnectSession(
+            sessionApi = sessionApi,
+            gemini = gemini,
+            audio = audio,
+            observability = observability,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        withTimeout(500) {
+            while (session.state.value.session != VoiceSessionStatus.Connected) {
+                delay(10)
+            }
+        }
+        val firstCallback = gemini.eventHandlers.single()
+        val blockedPlayback = audio.blockNextPlayback()
+
+        val audioJob = launch {
+            firstCallback(GeminiLiveEvent.OutputAudio("interrupted-audio"))
+        }
+        assertTrue(blockedPlayback.started.await(500, TimeUnit.MILLISECONDS))
+
+        session.interrupt()
+        audio.awaitSuppressPlaybackCalls(1)
+        blockedPlayback.release.countDown()
+        audioJob.join()
+
+        assertEquals(listOf("interrupted-audio"), audio.playedPcm16)
+        assertEquals(VoiceAudioStatus.PlaybackSuppressed, session.state.value.audio)
         assertTrue(
             observability.events
                 .filter { it.name == "voicelab.mobile.audio.playback_queued" }

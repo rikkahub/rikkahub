@@ -136,6 +136,10 @@ internal class VoiceReconnectController(
             (state as? VoiceReconnectState.Activating)?.job === job
     }
 
+    fun isAttemptSession(sessionId: Long): Boolean = synchronized(lock) {
+        isAttemptFor(sessionId)
+    }
+
     fun beginAttempt(job: Job, allocateSessionId: () -> Long): Long? = synchronized(lock) {
         val scheduled = state as? VoiceReconnectState.Scheduled ?: return@synchronized null
         if (scheduled.job !== job) return@synchronized null

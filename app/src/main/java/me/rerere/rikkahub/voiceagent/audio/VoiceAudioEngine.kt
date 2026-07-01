@@ -5,10 +5,7 @@ interface VoiceAudioEngine {
     fun setLocalCueErrorHandler(onError: ((String) -> Unit)?) = Unit
     fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit = {})
     fun stopCapture()
-    fun playPcm16(base64Pcm16: String): Boolean
-    fun playPcm16(base64Pcm16: String, sessionId: Long?): Boolean {
-        return playPcm16(base64Pcm16)
-    }
+    fun playPcm16(base64Pcm16: String, sessionId: Long? = null): Boolean
     fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long? = null): Boolean
     fun invalidateLocalCuePlayback(cueToken: Long? = null) = Unit
     fun activatePlaybackSession(sessionId: Long) = Unit

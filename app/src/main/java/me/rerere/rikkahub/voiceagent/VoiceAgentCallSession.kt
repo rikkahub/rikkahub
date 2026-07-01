@@ -90,8 +90,8 @@ class VoiceAgentCallSession internal constructor(
     private var sessionId = 0L
     private var ended = false
     private var sessionEndedRecorded = false
-    private val sessionFailedRecordedSessionIds = mutableSetOf<Long>()
-    private val runtimeFailureTelemetrySessionIds = mutableSetOf<Long>()
+    private var sessionFailedRecordedSessionId: Long? = null
+    private var runtimeFailureTelemetrySessionId: Long? = null
     private var hermesBridge: HermesSessionBridge? = null
     private val sessionLock = Any()
     private val reconnectController = VoiceReconnectController(
@@ -359,15 +359,20 @@ class VoiceAgentCallSession internal constructor(
         val coordinatorEvent = event.withoutSetupCompleteForCoordinator() ?: return
         val stopReason = coordinatorEvent.toSessionStopReason()
         if (stopReason != null) {
-            VoiceAgentLog.w(TAG, "Gemini failure event sessionId=$sessionId event=${coordinatorEvent::class.simpleName}")
+            VoiceAgentLog.w(
+                TAG,
+                "Gemini failure event sessionId=$sessionId event=${coordinatorEvent::class.simpleName}",
+            )
         }
+        val automaticReconnectAttemptFailure =
+            stopReason != null && reconnectController.isAttemptSession(sessionId)
         if (stopReason != null && scheduleAutomaticReconnectIfEligible(sessionId, coordinatorEvent, stopReason)) {
             return
         }
         coordinator.onGeminiEvent(sessionId, coordinatorEvent)
         if (stopReason != null) {
             if (coordinator.isActiveSession(sessionId)) {
-                val runtimeFailure = isRuntimeFailureTelemetryEligible(sessionId)
+                val runtimeFailure = isRuntimeFailureTelemetryEligible(sessionId) || automaticReconnectAttemptFailure
                 recordSessionFailedSafely(
                     sessionId = sessionId,
                     endReason = if (runtimeFailure) {
@@ -623,11 +628,11 @@ class VoiceAgentCallSession internal constructor(
     }
 
     private fun markRuntimeFailureTelemetryEligible(sessionId: Long) = synchronized(sessionLock) {
-        runtimeFailureTelemetrySessionIds += sessionId
+        runtimeFailureTelemetrySessionId = sessionId
     }
 
     private fun isRuntimeFailureTelemetryEligible(sessionId: Long): Boolean = synchronized(sessionLock) {
-        sessionId in runtimeFailureTelemetrySessionIds
+        runtimeFailureTelemetrySessionId == sessionId
     }
 
     private fun markEnded(): Boolean =
@@ -873,10 +878,10 @@ class VoiceAgentCallSession internal constructor(
         failureSummary: String,
     ) {
         val shouldRecord = synchronized(sessionLock) {
-            if (sessionId in sessionFailedRecordedSessionIds) {
+            if (sessionFailedRecordedSessionId == sessionId) {
                 false
             } else {
-                sessionFailedRecordedSessionIds += sessionId
+                sessionFailedRecordedSessionId = sessionId
                 true
             }
         }

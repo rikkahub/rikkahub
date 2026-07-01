@@ -599,10 +599,6 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         debugInjectionCompleteCallback = null
     }
 
-    override fun playPcm16(base64Pcm16: String): Boolean {
-        return playPcm16(base64Pcm16 = base64Pcm16, sessionId = null)
-    }
-
     override fun playPcm16(base64Pcm16: String, sessionId: Long?): Boolean {
         if (sessionId != null && playbackSessionId != sessionId) {
             return false

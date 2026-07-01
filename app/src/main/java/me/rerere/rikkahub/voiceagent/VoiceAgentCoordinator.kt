@@ -612,15 +612,21 @@ class VoiceAgentCoordinator(
             )
             return
         }
-        assistantOutputAudioActive.set(true)
-        hermesWaitingToneController.stop()
-        recordEventSafely(
-            name = "voicelab.mobile.audio.playback_queued",
-            attributes = mapOf(
-                "sessionId" to sessionId,
-                "audio.output.base64_chars" to base64Pcm16.length,
-            ),
-        )
+        synchronized(playbackSuppressionLock) {
+            if (outputAudioSuppressed) {
+                diagnostics.record("output_audio_accepted_suppressed_after_interruption")
+                return
+            }
+            assistantOutputAudioActive.set(true)
+            hermesWaitingToneController.stop()
+            recordEventSafely(
+                name = "voicelab.mobile.audio.playback_queued",
+                attributes = mapOf(
+                    "sessionId" to sessionId,
+                    "audio.output.base64_chars" to base64Pcm16.length,
+                ),
+            )
+        }
         if (sessionId != null && !isActiveSession(sessionId)) {
             diagnostics.record("stale_output_audio_state_suppressed")
             return
