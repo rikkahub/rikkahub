@@ -599,13 +599,13 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         debugInjectionCompleteCallback = null
     }
 
-    override fun playPcm16(base64Pcm16: String) {
-        playPcm16(base64Pcm16 = base64Pcm16, sessionId = null)
+    override fun playPcm16(base64Pcm16: String): Boolean {
+        return playPcm16(base64Pcm16 = base64Pcm16, sessionId = null)
     }
 
-    override fun playPcm16(base64Pcm16: String, sessionId: Long?) {
+    override fun playPcm16(base64Pcm16: String, sessionId: Long?): Boolean {
         if (sessionId != null && playbackSessionId != sessionId) {
-            return
+            return false
         }
         val blocked = synchronized(blockedPlaybacks) { blockedPlaybacks.removeFirstOrNull() }
         if (blocked != null) {
@@ -613,9 +613,10 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
             blocked.release.await(500, TimeUnit.MILLISECONDS)
         }
         if (sessionId != null && playbackSessionId != sessionId) {
-            return
+            return false
         }
         playedPcm16 += base64Pcm16
+        return true
     }
 
     override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {

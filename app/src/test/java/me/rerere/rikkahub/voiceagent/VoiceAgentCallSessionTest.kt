@@ -12,6 +12,7 @@ import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
@@ -70,6 +71,7 @@ class VoiceAgentCallSessionTest {
     fun `end and drain waits for final transcript persistence`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val conversationStore = FakeVoiceConversationStore()
+        val observability = RecordingVoiceObservability()
         val session = VoiceAgentCallSession(
             modelId = "gemini-flash",
             sessionApi = FakeVoiceSessionApi(),
@@ -80,6 +82,7 @@ class VoiceAgentCallSessionTest {
             contextProvider = FakeVoiceAgentContextProvider(
                 VoiceContext(systemInstruction = "system", turns = emptyList())
             ),
+            observability = observability,
             scope = this,
         )
 
@@ -95,6 +98,19 @@ class VoiceAgentCallSessionTest {
             .single { it.text == "hello" }
         assertEquals("session-closed-before-final", userTranscript.metadata?.get("voice_status")?.jsonPrimitive?.content)
         assertEquals(VoiceSessionStatus.Ended, session.state.value.session)
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "user_end",
+                    "session.failure.kind" to "none",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.ended" }
+                .map { it.attributes },
+        )
     }
 
     @Test
@@ -523,6 +539,147 @@ class VoiceAgentCallSessionTest {
             ),
             observability.events
                 .filter { it.name == "voicelab.mobile.session.failed" }
+                .map { it.attributes },
+        )
+    }
+
+    @Test
+    fun `Gemini connect error records startup session failed observability event once`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient().apply {
+            connectEvent = GeminiLiveEvent.Error(message = "connect rejected", raw = "connect rejected")
+        }
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        withTimeout(500) {
+            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+                delay(10)
+            }
+        }
+
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "startup_failure",
+                    "session.failure.kind" to "startup",
+                    "session.failure.summary" to "connect rejected",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.failed" }
+                .map { it.attributes },
+        )
+    }
+
+    @Test
+    fun `terminal Gemini runtime error records session failed observability event once`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            reconnectPolicy = VoiceReconnectPolicy(maxAttempts = 0),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        withTimeout(500) {
+            while (session.state.value.session != VoiceSessionStatus.Connected) {
+                delay(10)
+            }
+        }
+        gemini.eventHandlers.single()(
+            GeminiLiveEvent.Error(message = "model rejected request", raw = "model rejected request")
+        )
+
+        withTimeout(500) {
+            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+                delay(10)
+            }
+        }
+
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "gemini_error",
+                    "session.failure.kind" to "gemini_error",
+                    "session.failure.summary" to "model rejected request",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.failed" }
+                .map { it.attributes },
+        )
+        assertFalse(
+            observability.events.any { it.name == "voicelab.mobile.session.reconnect_scheduled" }
+        )
+    }
+
+    @Test
+    fun `end records session ended observability event`() = runTest {
+        val observability = RecordingVoiceObservability()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        session.end()
+        withTimeout(500) {
+            while (audio.releaseCalls < 1) {
+                delay(10)
+            }
+        }
+
+        assertEquals(
+            listOf(
+                mapOf(
+                    "sessionId" to 1L,
+                    "modelId" to "gemini-flash",
+                    "session.end_reason" to "user_end",
+                    "session.failure.kind" to "none",
+                )
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.session.ended" }
                 .map { it.attributes },
         )
     }

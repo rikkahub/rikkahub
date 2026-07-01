@@ -600,12 +600,20 @@ class VoiceAgentCoordinator(
             return
         }
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputAudio(base64Pcm16))) return
-        assistantOutputAudioActive.set(true)
-        hermesWaitingToneController.stop()
         diagnostics.record(
             name = "output_audio_chunk",
             detail = "sessionId=${sessionId ?: "none"}, base64Chars=${base64Pcm16.length}",
         )
+        val accepted = audio.playPcm16(base64Pcm16, sessionId = sessionId)
+        if (!accepted) {
+            diagnostics.record(
+                name = "output_audio_chunk_rejected",
+                detail = "sessionId=${sessionId ?: "none"}, base64Chars=${base64Pcm16.length}",
+            )
+            return
+        }
+        assistantOutputAudioActive.set(true)
+        hermesWaitingToneController.stop()
         recordEventSafely(
             name = "voicelab.mobile.audio.playback_queued",
             attributes = mapOf(
@@ -613,7 +621,6 @@ class VoiceAgentCoordinator(
                 "audio.output.base64_chars" to base64Pcm16.length,
             ),
         )
-        audio.playPcm16(base64Pcm16, sessionId = sessionId)
         if (sessionId != null && !isActiveSession(sessionId)) {
             diagnostics.record("stale_output_audio_state_suppressed")
             return

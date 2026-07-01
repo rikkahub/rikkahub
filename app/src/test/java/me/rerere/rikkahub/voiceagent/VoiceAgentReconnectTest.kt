@@ -564,6 +564,50 @@ class VoiceAgentReconnectTest {
     }
 
     @Test
+    fun `stale output audio after reconnect is not played or recorded as queued`() = runTest {
+        val observability = RecordingVoiceObservability()
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = reconnectSession(
+            sessionApi = sessionApi,
+            gemini = gemini,
+            audio = audio,
+            observability = observability,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        withTimeout(500) {
+            while (session.state.value.session != VoiceSessionStatus.Connected) {
+                delay(10)
+            }
+        }
+        val firstCallback = gemini.eventHandlers.single()
+        val blockedPlayback = audio.blockNextPlayback()
+
+        val staleAudioJob = launch {
+            firstCallback(GeminiLiveEvent.OutputAudio("stale-audio"))
+        }
+        assertTrue(blockedPlayback.started.await(500, TimeUnit.MILLISECONDS))
+
+        session.reconnect()
+        gemini.awaitConnectCount(2)
+        blockedPlayback.release.countDown()
+        staleAudioJob.join()
+
+        assertEquals(2, sessionApi.createdSessions.size)
+        assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
+        assertTrue(audio.playedPcm16.isEmpty())
+        assertTrue(
+            observability.events
+                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .isEmpty()
+        )
+    }
+
+    @Test
     fun `stale WebSocket failure after automatic reconnect does not schedule another reconnect`() = runTest {
         val diagnostics = VoiceDiagnostics()
         val sessionApi = FakeVoiceSessionApi()

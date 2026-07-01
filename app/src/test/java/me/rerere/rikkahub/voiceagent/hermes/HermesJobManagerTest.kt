@@ -111,9 +111,14 @@ class HermesJobManagerTest {
         assertEquals("call-1", submitted.attributes["callId"])
         assertEquals("private prompt", submitted.attributes["gemini.tool_call.prompt"])
         assertEquals(14, submitted.attributes["gemini.tool_call.prompt.chars"])
+        assertEquals(
+            "6fe06b970bb77bb96bee521acbebf7e932c2bbc684494ad299a7e1851347fc8e",
+            submitted.attributes["gemini.tool_call.prompt.sha256"],
+        )
         assertEquals(false, submitted.attributes["gemini.tool_call.prompt.truncated"])
         assertFalse(submitted.attributes.containsKey("prompt"))
         assertFalse(submitted.attributes.containsKey("prompt.chars"))
+        assertFalse(submitted.attributes.containsKey("prompt.sha256"))
         assertFalse(submitted.attributes.containsKey("prompt.truncated"))
 
         val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
@@ -122,9 +127,14 @@ class HermesJobManagerTest {
         assertEquals("job-1", completed.attributes["jobId"])
         assertEquals("private answer", completed.attributes["hermes.response.answer"])
         assertEquals(14, completed.attributes["hermes.response.answer.chars"])
+        assertEquals(
+            "58c61586e981a11c4d5fd85b0b03b78c1b686743e5d02f4c6c9c1c677dc7a4da",
+            completed.attributes["hermes.response.answer.sha256"],
+        )
         assertEquals(false, completed.attributes["hermes.response.answer.truncated"])
         assertFalse(completed.attributes.containsKey("answer"))
         assertFalse(completed.attributes.containsKey("answer.chars"))
+        assertFalse(completed.attributes.containsKey("answer.sha256"))
         assertFalse(completed.attributes.containsKey("answer.truncated"))
     }
 
