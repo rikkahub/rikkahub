@@ -724,6 +724,7 @@ class FakeVoiceConversationStore(
     private val updates = mutableListOf<Conversation>()
     private val blockedUpdates = mutableListOf<BlockedUpdate>()
     private val blockedAfterUpdates = mutableListOf<BlockedUpdate>()
+    private val failedUpdates = mutableListOf<Throwable>()
     override val conversation: StateFlow<Conversation> = MutableStateFlow(initialConversation)
 
     override suspend fun update(transform: (Conversation) -> Conversation) {
@@ -732,6 +733,7 @@ class FakeVoiceConversationStore(
             blockedBeforeUpdate.started.countDown()
             blockedBeforeUpdate.release.await(500, TimeUnit.MILLISECONDS)
         }
+        synchronized(failedUpdates) { failedUpdates.removeFirstOrNull() }?.let { throw it }
         val flow = conversation as MutableStateFlow<Conversation>
         flow.value = transform(flow.value)
         synchronized(updates) {
@@ -757,6 +759,12 @@ class FakeVoiceConversationStore(
             synchronized(blockedAfterUpdates) {
                 blockedAfterUpdates += blocked
             }
+        }
+    }
+
+    fun failNextUpdate(error: Throwable = IllegalStateException("update failed")) {
+        synchronized(failedUpdates) {
+            failedUpdates += error
         }
     }
 

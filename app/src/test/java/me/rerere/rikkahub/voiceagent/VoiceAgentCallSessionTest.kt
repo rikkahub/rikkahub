@@ -185,10 +185,168 @@ class VoiceAgentCallSessionTest {
                 .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
                 .map { it.attributes },
         )
+        assertEquals(
+            listOf(
+                mapOf(
+                    "turnId" to "assistant-2",
+                    "speaker" to "assistant",
+                    "status" to "complete",
+                    "gemini.output_transcript" to "hello assistant",
+                    "gemini.output_transcript.chars" to 15,
+                    "gemini.output_transcript.sha256" to "86babda521bb7aa17c08dcf62f1d281535e61234173e215f45e77a5bba20d78f",
+                    "gemini.output_transcript.truncated" to false,
+                ),
+                mapOf(
+                    "turnId" to "user-1",
+                    "speaker" to "user",
+                    "status" to "session-closed-before-final",
+                    "voice.user_transcript" to "hello user",
+                    "voice.user_transcript.chars" to 10,
+                    "voice.user_transcript.sha256" to "b371a0ad941d7d294f63e6d0843e5588b62931b48c7f13d9c3e81b77150d1bf1",
+                    "voice.user_transcript.truncated" to false,
+                ),
+            ),
+            observability.events
+                .filter { it.name == "voicelab.mobile.transcript.turn" }
+                .map { it.attributes },
+        )
         assertTrue(
             observability.events
                 .filter { it.name.startsWith("voicelab.mobile.transcript.") }
                 .all { it.trace == trace }
+        )
+    }
+
+    @Test
+    fun `session close records assistant final as session closed before final`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        gemini.eventHandlers.single()(GeminiLiveEvent.OutputTranscript("unfinished assistant"))
+
+        session.endAndDrain()
+
+        val assistantFinal = observability.events
+            .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
+            .map { it.attributes }
+        assertEquals(
+            listOf(
+                mapOf(
+                    "turnId" to "assistant-1",
+                    "speaker" to "assistant",
+                    "status" to "session-closed-before-final",
+                    "gemini.output_transcript" to "unfinished assistant",
+                    "gemini.output_transcript.chars" to 20,
+                    "gemini.output_transcript.sha256" to "0c362834d7d8bd15103af70a4e9b5702b6fbee3e62cd0432caf192c94ce0878d",
+                    "gemini.output_transcript.truncated" to false,
+                )
+            ),
+            assistantFinal,
+        )
+    }
+
+    @Test
+    fun `interrupted assistant final remains interrupted and deduped when session later closes`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        gemini.eventHandlers.single()(GeminiLiveEvent.OutputTranscript("partial assistant"))
+        gemini.eventHandlers.single()(GeminiLiveEvent.Interrupted())
+        gemini.eventHandlers.single()(GeminiLiveEvent.InputTranscript("next user turn"))
+
+        session.endAndDrain()
+
+        val assistantFinal = observability.events
+            .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
+            .map { it.attributes }
+        val assistantTurns = observability.events
+            .filter { event ->
+                event.name == "voicelab.mobile.transcript.turn" &&
+                    event.attributes["speaker"] == "assistant"
+            }
+            .map { it.attributes }
+        val expected = listOf(
+            mapOf(
+                "turnId" to "assistant-1",
+                "speaker" to "assistant",
+                "status" to "interrupted",
+                "gemini.output_transcript" to "partial assistant",
+                "gemini.output_transcript.chars" to 17,
+                "gemini.output_transcript.sha256" to "c14f04516a5b6592dc95504726652043c1376e9dffd5026c22fd3651b84a5633",
+                "gemini.output_transcript.truncated" to false,
+            )
+        )
+        assertEquals(expected, assistantFinal)
+        assertEquals(expected, assistantTurns)
+    }
+
+    @Test
+    fun `final transcript telemetry is not emitted when persistence fails`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        gemini.eventHandlers.single()(GeminiLiveEvent.OutputTranscript("lost assistant"))
+        conversationStore.awaitUpdateCount(1)
+        conversationStore.failNextUpdate()
+        conversationStore.failNextUpdate()
+        gemini.eventHandlers.single()(GeminiLiveEvent.GenerationComplete)
+
+        session.endAndDrain()
+
+        assertEquals(
+            emptyList<Map<String, Any?>>(),
+            observability.events
+                .filter {
+                    it.name == "voicelab.mobile.transcript.assistant_final" ||
+                        it.name == "voicelab.mobile.transcript.turn"
+                }
+                .map { it.attributes },
         )
     }
 

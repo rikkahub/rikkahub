@@ -244,6 +244,9 @@ class VoiceAgentCoordinator(
         synchronized(playbackSuppressionLock) {
             outputAudioSuppressed = true
             if (outputTurnTranscript.isNotBlank()) {
+                if (outputTurnStatus != VoiceTranscriptStatus.Complete) {
+                    outputTurnStatus = VoiceTranscriptStatus.Interrupted
+                }
                 persistAssistantTranscript()
             }
             _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
@@ -633,7 +636,13 @@ class VoiceAgentCoordinator(
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
         synchronized(playbackSuppressionLock) {
-            if (outputTurnTranscript.isBlank() || outputAudioSuppressed) return
+            if (
+                outputTurnTranscript.isBlank() ||
+                outputAudioSuppressed ||
+                outputTurnStatus == VoiceTranscriptStatus.Interrupted
+            ) {
+                return
+            }
             outputTurnStatus = VoiceTranscriptStatus.Complete
             persistAssistantTranscript()
         }
@@ -1024,27 +1033,32 @@ class VoiceAgentCoordinator(
         if (transcript.isBlank() || turnId.isBlank()) return
         val status = synchronized(playbackSuppressionLock) {
             statusOverride ?: when {
+                outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
                 outputAudioSuppressed -> VoiceTranscriptStatus.Interrupted
                 else -> outputTurnStatus
             }
         }
-        persistConversation { conversation ->
-            persister.upsertAssistantTranscriptTurn(
-                conversation = conversation,
-                text = transcript,
-                interrupted = status == VoiceTranscriptStatus.Interrupted,
-                turnId = turnId,
-                sessionId = voiceArtifactSessionId,
-                status = status,
-            )
-        }
-        recordFinalTranscriptEventsOnce(
-            finalEventName = "voicelab.mobile.transcript.assistant_final",
-            turnId = turnId,
-            speaker = "assistant",
-            status = status,
-            textKey = "gemini.output_transcript",
-            text = transcript,
+        persistConversation(
+            transform = { conversation ->
+                persister.upsertAssistantTranscriptTurn(
+                    conversation = conversation,
+                    text = transcript,
+                    interrupted = status == VoiceTranscriptStatus.Interrupted,
+                    turnId = turnId,
+                    sessionId = voiceArtifactSessionId,
+                    status = status,
+                )
+            },
+            onPersisted = {
+                recordFinalTranscriptEventsOnce(
+                    finalEventName = "voicelab.mobile.transcript.assistant_final",
+                    turnId = turnId,
+                    speaker = "assistant",
+                    status = status,
+                    textKey = "gemini.output_transcript",
+                    text = transcript,
+                )
+            },
         )
     }
 
@@ -1053,6 +1067,7 @@ class VoiceAgentCoordinator(
             when {
                 outputTurnTranscript.isBlank() || outputTurnId.isBlank() -> return
                 outputAudioSuppressed -> VoiceTranscriptStatus.Interrupted
+                outputTurnStatus == VoiceTranscriptStatus.Interrupted -> VoiceTranscriptStatus.Interrupted
                 outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
                 else -> VoiceTranscriptStatus.SessionClosedBeforeFinal
             }
@@ -1064,22 +1079,26 @@ class VoiceAgentCoordinator(
         val transcript = inputTurnTranscript
         val turnId = inputTurnId
         if (transcript.isBlank() || turnId.isBlank()) return
-        persistConversation { conversation ->
-            persister.upsertUserTranscriptTurn(
-                conversation = conversation,
-                text = transcript,
-                turnId = turnId,
-                sessionId = voiceArtifactSessionId,
-                status = status,
-            )
-        }
-        recordFinalTranscriptEventsOnce(
-            finalEventName = "voicelab.mobile.transcript.user_final",
-            turnId = turnId,
-            speaker = "user",
-            status = status,
-            textKey = "voice.user_transcript",
-            text = transcript,
+        persistConversation(
+            transform = { conversation ->
+                persister.upsertUserTranscriptTurn(
+                    conversation = conversation,
+                    text = transcript,
+                    turnId = turnId,
+                    sessionId = voiceArtifactSessionId,
+                    status = status,
+                )
+            },
+            onPersisted = {
+                recordFinalTranscriptEventsOnce(
+                    finalEventName = "voicelab.mobile.transcript.user_final",
+                    turnId = turnId,
+                    speaker = "user",
+                    status = status,
+                    textKey = "voice.user_transcript",
+                    text = transcript,
+                )
+            },
         )
     }
 
@@ -1092,7 +1111,7 @@ class VoiceAgentCoordinator(
         text: String,
     ) {
         if (status == VoiceTranscriptStatus.Partial) return
-        val telemetryKey = "$finalEventName|$turnId|${status.statusName}"
+        val telemetryKey = "$finalEventName|$turnId"
         val shouldRecord = synchronized(finalTranscriptTelemetryLock) {
             finalTranscriptTelemetryKeys.add(telemetryKey)
         }
@@ -1117,7 +1136,10 @@ class VoiceAgentCoordinator(
         return "${speaker.name.lowercase()}-$transcriptTurnSequence"
     }
 
-    private fun persistConversation(transform: (Conversation) -> Conversation) {
+    private fun persistConversation(
+        transform: (Conversation) -> Conversation,
+        onPersisted: () -> Unit = {},
+    ) {
         if (conversationStore == null) return
         val store = sharedConversationStore
         lateinit var job: Job
@@ -1125,7 +1147,7 @@ class VoiceAgentCoordinator(
             val previousJob = lastPersistenceJob
             job = persistenceScope.launch(start = CoroutineStart.LAZY) {
                 previousJob?.join()
-                persistConversationNow(store = store, transform = transform)
+                persistConversationNow(store = store, transform = transform, onPersisted = onPersisted)
             }
             persistenceJobs += job
             lastPersistenceJob = job
@@ -1144,6 +1166,7 @@ class VoiceAgentCoordinator(
     private suspend fun persistConversationNow(
         store: VoiceConversationStore,
         transform: (Conversation) -> Conversation,
+        onPersisted: () -> Unit,
     ) {
         runCatching {
             diagnostics.record("conversation_persist_saving")
@@ -1154,6 +1177,7 @@ class VoiceAgentCoordinator(
         }.onSuccess {
             diagnostics.record("conversation_persist_saved")
             _state.update { it.copy(persistence = VoicePersistenceStatus.Saved) }
+            onPersisted()
         }.onFailure { error ->
             val message = error.message ?: error.javaClass.simpleName
             diagnostics.record("conversation_persist_failed", message)
