@@ -143,6 +143,10 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().folderDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 

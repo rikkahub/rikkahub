@@ -1261,5 +1261,16 @@
   <string name="assistant_page_local_tools_calendar_desc">Let the AI query and create calendar events</string>
   <string name="chat_message_tool_calendar_query">Query calendar events</string>
   <string name="chat_message_tool_calendar_create">Create event: %1$s</string>
+  <string name="chat_page_move_to_folder">Move to Folder</string>
+  <string name="chat_page_remove_from_folder">Remove from Folder</string>
+  <string name="chat_page_create_folder">New Folder</string>
+  <string name="chat_page_folder_name">Folder name</string>
+  <string name="chat_page_rename_folder">Rename Folder</string>
+  <string name="chat_page_delete_folder">Delete Folder</string>
+  <string name="chat_page_rename">Rename</string>
+  <string name="chat_page_folder_default">Chat</string>
+  <string name="chat_page_folder_add">New</string>
+  <string name="chat_page_delete_folder_confirm">Delete folder "%1$s"? Conversations inside will not be deleted, only removed from the folder.</string>
+  <string name="chat_page_delete_folder_generating">Some conversations in this folder are still generating. Please stop them before deleting.</string>
 </resources>
 

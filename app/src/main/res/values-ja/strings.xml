@@ -1262,5 +1262,16 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_calendar_desc">AIにカレンダーイベントの検索と作成を許可します</string>
   <string name="chat_message_tool_calendar_query">カレンダーイベントを照会</string>
   <string name="chat_message_tool_calendar_create">イベントを作成: %1$s</string>
+  <string name="chat_page_move_to_folder">フォルダに移動</string>
+  <string name="chat_page_remove_from_folder">フォルダから削除</string>
+  <string name="chat_page_create_folder">新規フォルダ</string>
+  <string name="chat_page_folder_name">フォルダ名</string>
+  <string name="chat_page_rename_folder">フォルダ名を変更</string>
+  <string name="chat_page_delete_folder">フォルダを削除</string>
+  <string name="chat_page_rename">名前を変更</string>
+  <string name="chat_page_folder_default">チャット</string>
+  <string name="chat_page_folder_add">新規</string>
+  <string name="chat_page_delete_folder_confirm">フォルダ "%1$s" を削除しますか？内部の会話は削除されず、フォルダから取り除かれるだけです。</string>
+  <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
 </resources>
 

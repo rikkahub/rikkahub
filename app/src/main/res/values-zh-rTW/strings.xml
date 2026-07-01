@@ -1260,5 +1260,16 @@
   <string name="assistant_page_local_tools_calendar_desc">讓AI查詢和建立行事曆事件</string>
   <string name="chat_message_tool_calendar_query">查詢日曆事件</string>
   <string name="chat_message_tool_calendar_create">建立事件: %1$s</string>
+  <string name="chat_page_move_to_folder">移至資料夾</string>
+  <string name="chat_page_remove_from_folder">從資料夾移除</string>
+  <string name="chat_page_create_folder">新資料夾</string>
+  <string name="chat_page_folder_name">資料夾名稱</string>
+  <string name="chat_page_rename_folder">重新命名資料夾</string>
+  <string name="chat_page_delete_folder">刪除資料夾</string>
+  <string name="chat_page_rename">重新命名</string>
+  <string name="chat_page_folder_default">聊天</string>
+  <string name="chat_page_folder_add">新增</string>
+  <string name="chat_page_delete_folder_confirm">刪除資料夾「%1$s」？資料夾內的對話不會被刪除，只會從資料夾中移除。</string>
+  <string name="chat_page_delete_folder_generating">此資料夾中的部分對話仍在生成中。請先停止它們再刪除。</string>
 </resources>
 
