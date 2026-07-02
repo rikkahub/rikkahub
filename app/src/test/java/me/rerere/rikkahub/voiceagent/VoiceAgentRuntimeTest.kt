@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.voiceagent
 
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -2520,21 +2519,9 @@ class VoiceAgentRuntimeTest {
                 ),
                 traceContext = VoiceTraceContext(traceId = "VA000123", voiceSessionId = "VA000123"),
                 voiceE2EArtifacts = artifactWriter,
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = "VA000123",
-                    voiceSessionId = "VA000123",
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000123",
                     conversationId = "conversation-123",
-                    packageName = "me.rerere.rikkahub",
-                    versionName = "2.2.6",
-                    versionCode = "162",
-                    debuggable = true,
-                    voiceModelId = "gemini-flash",
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = 1_700_000_000_000,
-                    sentryDsnConfigured = true,
-                    sentryTracingEnabled = true,
-                    sentryPropagationCreated = true,
                 ),
                 nowMs = { 42 },
                 metadataEpochNowMs = { 1_700_000_000_999 },
@@ -2622,21 +2609,9 @@ class VoiceAgentRuntimeTest {
                 ),
                 traceContext = VoiceTraceContext(traceId = "VA000126", voiceSessionId = "VA000126"),
                 voiceE2EArtifacts = artifactWriter,
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = "VA000126",
-                    voiceSessionId = "VA000126",
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000126",
                     conversationId = "conversation-126",
-                    packageName = "me.rerere.rikkahub",
-                    versionName = "2.2.6",
-                    versionCode = "162",
-                    debuggable = true,
-                    voiceModelId = "gemini-flash",
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = 1_700_000_000_000,
-                    sentryDsnConfigured = true,
-                    sentryTracingEnabled = true,
-                    sentryPropagationCreated = true,
                 ),
                 nowMs = { 42 },
                 metadataEpochNowMs = { 1_700_000_006_999 },
@@ -2712,21 +2687,9 @@ class VoiceAgentRuntimeTest {
                 ),
                 traceContext = VoiceTraceContext(traceId = "VA000127", voiceSessionId = "VA000127"),
                 voiceE2EArtifacts = artifactWriter,
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = "VA000127",
-                    voiceSessionId = "VA000127",
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000127",
                     conversationId = "conversation-127",
-                    packageName = "me.rerere.rikkahub",
-                    versionName = "2.2.6",
-                    versionCode = "162",
-                    debuggable = true,
-                    voiceModelId = "gemini-flash",
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = 1_700_000_000_000,
-                    sentryDsnConfigured = true,
-                    sentryTracingEnabled = true,
-                    sentryPropagationCreated = true,
                 ),
                 nowMs = { 42 },
                 metadataEpochNowMs = { 1_700_000_007_999 },
@@ -2791,21 +2754,9 @@ class VoiceAgentRuntimeTest {
                 ),
                 traceContext = VoiceTraceContext(traceId = "VA000124", voiceSessionId = "VA000124"),
                 voiceE2EArtifacts = artifactWriter,
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = "VA000124",
-                    voiceSessionId = "VA000124",
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000124",
                     conversationId = "conversation-124",
-                    packageName = "me.rerere.rikkahub",
-                    versionName = "2.2.6",
-                    versionCode = "162",
-                    debuggable = true,
-                    voiceModelId = "gemini-flash",
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = 1_700_000_000_000,
-                    sentryDsnConfigured = true,
-                    sentryTracingEnabled = true,
-                    sentryPropagationCreated = true,
                 ),
                 nowMs = { 42 },
                 metadataEpochNowMs = { 1_700_000_001_999 },
@@ -2858,21 +2809,9 @@ class VoiceAgentRuntimeTest {
                 ),
                 traceContext = VoiceTraceContext(traceId = "VA000125", voiceSessionId = "VA000125"),
                 voiceE2EArtifacts = artifactWriter,
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = "VA000125",
-                    voiceSessionId = "VA000125",
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000125",
                     conversationId = "conversation-125",
-                    packageName = "me.rerere.rikkahub",
-                    versionName = "2.2.6",
-                    versionCode = "162",
-                    debuggable = true,
-                    voiceModelId = "gemini-flash",
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = 1_700_000_000_000,
-                    sentryDsnConfigured = true,
-                    sentryTracingEnabled = true,
-                    sentryPropagationCreated = true,
                 ),
                 nowMs = { 7 },
                 metadataEpochNowMs = { 1_700_000_002_999 },
@@ -2922,21 +2861,9 @@ class VoiceAgentRuntimeTest {
                 ),
                 traceContext = VoiceTraceContext(traceId = "VA000128", voiceSessionId = "VA000128"),
                 voiceE2EArtifacts = artifactWriter,
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = "VA000128",
-                    voiceSessionId = "VA000128",
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000128",
                     conversationId = "conversation-128",
-                    packageName = "me.rerere.rikkahub",
-                    versionName = "2.2.6",
-                    versionCode = "162",
-                    debuggable = true,
-                    voiceModelId = "gemini-flash",
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = 1_700_000_000_000,
-                    sentryDsnConfigured = true,
-                    sentryTracingEnabled = true,
-                    sentryPropagationCreated = true,
                 ),
                 nowMs = { 8 },
                 metadataEpochNowMs = { metadataNow },
@@ -2993,8 +2920,21 @@ class VoiceAgentRuntimeTest {
     fun `pending failed session metadata write cannot overwrite manual reconnect metadata`() = runTest {
         val root = Files.createTempDirectory("voice-e2e-delayed-failed-session").toFile()
         val artifactScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val originalMove = VoiceE2EAtomicMoveOperation.move
+        val failedWriteStarted = CountDownLatch(1)
+        val releaseFailedWrite = CountDownLatch(1)
         var metadataNow = 1_700_000_009_111
         try {
+            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
+                if (
+                    target.fileName.toString() == "session.json" &&
+                    source.toFile().readText().contains("\"status\":\"failed\"")
+                ) {
+                    failedWriteStarted.countDown()
+                    releaseFailedWrite.await(1, TimeUnit.SECONDS)
+                }
+                originalMove(source, target, atomic)
+            }
             val artifactWriter = VoiceE2EArtifactWriter.create(
                 enabled = true,
                 rootDirectory = root,
@@ -3014,21 +2954,9 @@ class VoiceAgentRuntimeTest {
                 ),
                 traceContext = VoiceTraceContext(traceId = "VA000129", voiceSessionId = "VA000129"),
                 voiceE2EArtifacts = artifactWriter,
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = "VA000129",
-                    voiceSessionId = "VA000129",
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000129",
                     conversationId = "conversation-129",
-                    packageName = "me.rerere.rikkahub",
-                    versionName = "2.2.6",
-                    versionCode = "162",
-                    debuggable = true,
-                    voiceModelId = "gemini-flash",
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = 1_700_000_000_000,
-                    sentryDsnConfigured = true,
-                    sentryTracingEnabled = true,
-                    sentryPropagationCreated = true,
                 ),
                 nowMs = { 9 },
                 metadataEpochNowMs = { metadataNow },
@@ -3046,12 +2974,16 @@ class VoiceAgentRuntimeTest {
             artifactWriter.drain()
             artifactWriter.drainTerminalWrites()
 
-            val blockedFailedWrite = artifactWriter.blockNextTerminalSessionJsonForTest()
             gemini.eventHandlers.single()(
                 GeminiLiveEvent.Error(message = "runtime failed", raw = "{}")
             )
             withTimeout(500) {
                 while (session.state.value.session !is VoiceSessionStatus.Error) {
+                    delay(10)
+                }
+            }
+            withTimeout(1000) {
+                while (failedWriteStarted.count > 0) {
                     delay(10)
                 }
             }
@@ -3065,7 +2997,7 @@ class VoiceAgentRuntimeTest {
             }
             artifactWriter.drain()
 
-            blockedFailedWrite.complete(Unit)
+            releaseFailedWrite.countDown()
             artifactWriter.drainTerminalWrites()
 
             val connected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
@@ -3082,6 +3014,8 @@ class VoiceAgentRuntimeTest {
             assertEquals("user_end", ended.string("closeStatus"))
             assertEquals("1700000009999", ended.getValue("endedAtEpochMs").jsonPrimitive.content)
         } finally {
+            releaseFailedWrite.countDown()
+            VoiceE2EAtomicMoveOperation.move = originalMove
             artifactScope.cancel()
             root.deleteRecursively()
         }
@@ -4552,36 +4486,40 @@ private class ThrowingVoiceAgentContextProvider(
 }
 
 private fun testSessionMetadata(
-    status: String,
+    traceId: String = "VA999999",
+    voiceSessionId: String = traceId,
+    conversationId: String? = "conversation-999",
+    packageName: String = "me.rerere.rikkahub",
+    versionName: String = "2.2.6",
+    versionCode: String = "162",
+    debuggable: Boolean = true,
+    voiceModelId: String = "gemini-flash",
+    providerModel: String? = null,
+    status: String = "created",
+    startedAtEpochMs: Long = 1_700_000_000_000,
+    sentryDsnConfigured: Boolean = true,
+    sentryTracingEnabled: Boolean = true,
+    sentryPropagationCreated: Boolean = true,
     closeStatus: String? = null,
     endedAtEpochMs: Long? = null,
 ): VoiceE2ESessionMetadata = VoiceE2ESessionMetadata(
-    voiceTraceId = "VA999999",
-    voiceSessionId = "VA999999",
-    conversationId = "conversation-999",
-    packageName = "me.rerere.rikkahub",
-    versionName = "2.2.6",
-    versionCode = "162",
-    debuggable = true,
-    voiceModelId = "gemini-flash",
-    providerModel = null,
+    voiceTraceId = traceId,
+    voiceSessionId = voiceSessionId,
+    conversationId = conversationId,
+    packageName = packageName,
+    versionName = versionName,
+    versionCode = versionCode,
+    debuggable = debuggable,
+    voiceModelId = voiceModelId,
+    providerModel = providerModel,
     status = status,
-    startedAtEpochMs = 1_700_000_000_000,
-    sentryDsnConfigured = true,
-    sentryTracingEnabled = true,
-    sentryPropagationCreated = true,
+    startedAtEpochMs = startedAtEpochMs,
+    sentryDsnConfigured = sentryDsnConfigured,
+    sentryTracingEnabled = sentryTracingEnabled,
+    sentryPropagationCreated = sentryPropagationCreated,
     endedAtEpochMs = endedAtEpochMs,
     closeStatus = closeStatus,
 )
 
 private fun VoiceE2ESessionMetadata.string(key: String): String =
     Json.parseToJsonElement(toJson()).jsonObject.getValue(key).jsonPrimitive.content
-
-private fun VoiceE2EArtifactWriter.blockNextTerminalSessionJsonForTest(): CompletableDeferred<Unit> {
-    val blocked = CompletableDeferred<Unit>()
-    val terminalWriteTail = VoiceE2EArtifactWriter::class.java
-        .getDeclaredField("terminalWriteTail")
-        .apply { isAccessible = true }
-    terminalWriteTail.set(this, blocked)
-    return blocked
-}

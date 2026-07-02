@@ -7,9 +7,7 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.AndroidVoiceAudioEngine
-import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.OkHttpGeminiLiveVoiceClient
-import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -87,21 +85,33 @@ class DefaultVoiceAgentCallFactory internal constructor(
         return runCatching {
             VoiceAgentCallSession(
                 modelId = config.voiceModelId,
-                sessionApi = createSessionApi(
-                    config = config,
-                    traceHeaders = traceHeaders,
+                sessionApi = VoiceLabVoiceSessionApi(
+                    api = VoiceLabMobileApi(
+                        baseUrl = config.voiceLabBaseUrl,
+                        credentials = config.credentials,
+                        traceHeaders = traceHeaders,
+                    )
                 ),
-                toolApi = createToolApi(
-                    config = config,
-                    traceHeaders = traceHeaders,
+                toolApi = VoiceLabHermesToolApi(
+                    api = VoiceLabMobileApi(
+                        baseUrl = config.voiceLabBaseUrl,
+                        credentials = config.credentials,
+                        traceHeaders = traceHeaders,
+                    )
                 ),
-                gemini = createGemini(),
-                audio = createAudio(context = context),
-                conversationStore = createConversationStore(conversationId = conversationId),
-                contextProvider = createContextProvider(voiceModelName = config.voiceModelId),
+                gemini = OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient),
+                audio = AndroidVoiceAudioEngine(context = context),
+                conversationStore = ChatServiceVoiceConversationStore(
+                    conversationId = conversationId,
+                    chatService = chatService,
+                ),
+                contextProvider = SettingsVoiceAgentContextProvider(
+                    settingsStore = settingsStore,
+                    voiceModelName = config.voiceModelId,
+                ),
                 observability = observability,
                 traceContext = traceContext,
-                voiceE2EArtifacts = createArtifactWriter(
+                voiceE2EArtifacts = createDefaultVoiceE2EArtifactWriter(
                     noBackupFilesDir = context.noBackupFilesDir,
                     traceContext = traceContext,
                     scope = scope,
@@ -127,57 +137,6 @@ class DefaultVoiceAgentCallFactory internal constructor(
             throw throwable
         }
     }
-
-    private fun createSessionApi(
-        config: VoiceAgentLaunchConfig,
-        traceHeaders: VoiceLabTraceHeaders,
-    ): VoiceSessionApi = VoiceLabVoiceSessionApi(
-        api = VoiceLabMobileApi(
-            baseUrl = config.voiceLabBaseUrl,
-            credentials = config.credentials,
-            traceHeaders = traceHeaders,
-        )
-    )
-
-    private fun createToolApi(
-        config: VoiceAgentLaunchConfig,
-        traceHeaders: VoiceLabTraceHeaders,
-    ): VoiceToolApi = VoiceLabHermesToolApi(
-        api = VoiceLabMobileApi(
-            baseUrl = config.voiceLabBaseUrl,
-            credentials = config.credentials,
-            traceHeaders = traceHeaders,
-        )
-    )
-
-    private fun createGemini(): GeminiLiveVoiceClient =
-        OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient)
-
-    private fun createAudio(context: Context): VoiceAudioEngine = AndroidVoiceAudioEngine(context = context)
-
-    private fun createConversationStore(
-        conversationId: Uuid,
-    ): VoiceConversationStore = ChatServiceVoiceConversationStore(
-        conversationId = conversationId,
-        chatService = chatService,
-    )
-
-    private fun createContextProvider(
-        voiceModelName: String,
-    ): VoiceAgentContextProvider = SettingsVoiceAgentContextProvider(
-        settingsStore = settingsStore,
-        voiceModelName = voiceModelName,
-    )
-
-    private fun createArtifactWriter(
-        noBackupFilesDir: File,
-        traceContext: VoiceTraceContext,
-        scope: CoroutineScope,
-    ): VoiceE2EArtifactWriter = createDefaultVoiceE2EArtifactWriter(
-        noBackupFilesDir = noBackupFilesDir,
-        traceContext = traceContext,
-        scope = scope,
-    )
 }
 
 internal fun buildDefaultVoiceE2ESessionMetadata(
