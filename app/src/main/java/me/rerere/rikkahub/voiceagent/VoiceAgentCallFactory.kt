@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.AndroidVoiceAudioEngine
@@ -91,6 +92,23 @@ class DefaultVoiceAgentCallFactory(
                     noBackupFilesDir = context.noBackupFilesDir,
                     traceContext = traceContext,
                     scope = scope,
+                ),
+                sessionMetadata = VoiceE2ESessionMetadata(
+                    voiceTraceId = traceContext.traceId,
+                    voiceSessionId = traceContext.voiceSessionId,
+                    conversationId = conversationId.toString(),
+                    packageName = context.packageName,
+                    versionName = BuildConfig.VERSION_NAME,
+                    versionCode = BuildConfig.VERSION_CODE,
+                    debuggable = BuildConfig.DEBUG,
+                    voiceModelId = config.voiceModelId,
+                    providerModel = null,
+                    status = "created",
+                    startedAtEpochMs = System.currentTimeMillis(),
+                    sentryDsnConfigured = BuildConfig.VOICE_AGENT_SENTRY_DSN.isNotBlank(),
+                    sentryTracingEnabled = BuildConfig.VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE.toDoubleOrNull()
+                        ?.let { it > 0.0 } ?: false,
+                    sentryPropagationCreated = traceContext.sentryTrace != null,
                 ),
                 scope = scope,
             )

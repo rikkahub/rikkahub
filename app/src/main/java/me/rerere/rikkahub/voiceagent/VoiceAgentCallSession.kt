@@ -36,6 +36,7 @@ class VoiceAgentCallSession internal constructor(
     private val observability: VoiceObservability = NoOpVoiceObservability,
     private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
     private val voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
+    private var sessionMetadata: VoiceE2ESessionMetadata? = null,
     private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
     private val nowMs: () -> Long = ::defaultReconnectClockMs,
     private val scope: CoroutineScope,
@@ -50,6 +51,7 @@ class VoiceAgentCallSession internal constructor(
         contextProvider: VoiceAgentContextProvider,
         diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
         voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
+        sessionMetadata: VoiceE2ESessionMetadata? = null,
         scope: CoroutineScope,
     ) : this(
         modelId = modelId,
@@ -63,6 +65,7 @@ class VoiceAgentCallSession internal constructor(
         observability = NoOpVoiceObservability,
         traceContext = newVoiceTraceContext(),
         voiceE2EArtifacts = voiceE2EArtifacts,
+        sessionMetadata = sessionMetadata,
         reconnectPolicy = VoiceReconnectPolicy(),
         nowMs = ::defaultReconnectClockMs,
         scope = scope,
@@ -108,6 +111,7 @@ class VoiceAgentCallSession internal constructor(
         val currentSessionId = coordinator.nextSessionId()
         sessionId = currentSessionId
         VoiceAgentLog.d(TAG, "start sessionId=$currentSessionId modelId=$modelId")
+        writeSessionMetadata(status = "started")
         recordEventSafely(
             name = "voicelab.mobile.session.started",
             attributes = mapOf(
@@ -475,6 +479,7 @@ class VoiceAgentCallSession internal constructor(
             )
         }
         VoiceAgentLog.d(TAG, "session connected sessionId=$currentSessionId")
+        writeSessionMetadata(status = "connected", providerModel = providerModel)
         recordEventSafely(
             name = "voicelab.mobile.session.connected",
             attributes = mapOf(
@@ -962,6 +967,11 @@ class VoiceAgentCallSession internal constructor(
             }
         }
         if (!shouldRecord) return
+        writeSessionMetadata(
+            status = "ended",
+            closeStatus = endReason,
+            endedAtEpochMs = nowMs(),
+        )
         recordEventSafely(
             name = "voicelab.mobile.session.ended",
             attributes = mapOf(
@@ -989,6 +999,11 @@ class VoiceAgentCallSession internal constructor(
             }
         }
         if (!shouldRecord) return
+        writeSessionMetadata(
+            status = "failed",
+            closeStatus = endReason,
+            endedAtEpochMs = nowMs(),
+        )
         recordEventSafely(
             name = "voicelab.mobile.session.failed",
             attributes = mapOf(
@@ -999,6 +1014,23 @@ class VoiceAgentCallSession internal constructor(
                 "session.failure.summary" to sanitizeVoiceFailureSummary(failureSummary),
             ),
         )
+    }
+
+    private fun writeSessionMetadata(
+        status: String,
+        providerModel: String? = null,
+        closeStatus: String? = null,
+        endedAtEpochMs: Long? = null,
+    ) {
+        val metadata = sessionMetadata ?: return
+        val updated = metadata.copy(
+            providerModel = providerModel ?: metadata.providerModel,
+            status = status,
+            endedAtEpochMs = endedAtEpochMs,
+            closeStatus = closeStatus,
+        )
+        sessionMetadata = updated
+        voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, updated.toJson())
     }
 
     private companion object {

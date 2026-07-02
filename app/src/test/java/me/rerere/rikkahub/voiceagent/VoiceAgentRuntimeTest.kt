@@ -34,6 +34,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 import java.util.Base64
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -2486,6 +2488,97 @@ class VoiceAgentRuntimeTest {
         assertTrue(gemini.closeCalls >= 1)
         assertEquals(1, audio.releaseCalls)
         assertEquals(VoiceSessionStatus.Ended, session.state.value.session)
+    }
+
+    @Test
+    fun `session metadata json is written through start connect and end lifecycle`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-runtime-session").toFile()
+        val artifactScope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000123",
+                scope = artifactScope,
+            )
+            val sessionApi = FakeVoiceSessionApi()
+            val blockedSession = sessionApi.blockNextSession()
+            val session = VoiceAgentCallSession(
+                modelId = "gemini-flash",
+                sessionApi = sessionApi,
+                toolApi = FakeVoiceToolApi(),
+                gemini = FakeGeminiLiveVoiceClient(),
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = "system", turns = emptyList())
+                ),
+                traceContext = VoiceTraceContext(traceId = "VA000123", voiceSessionId = "VA000123"),
+                voiceE2EArtifacts = artifactWriter,
+                sessionMetadata = VoiceE2ESessionMetadata(
+                    voiceTraceId = "VA000123",
+                    voiceSessionId = "VA000123",
+                    conversationId = "conversation-123",
+                    packageName = "me.rerere.rikkahub",
+                    versionName = "2.2.6",
+                    versionCode = "162",
+                    debuggable = true,
+                    voiceModelId = "gemini-flash",
+                    providerModel = null,
+                    status = "created",
+                    startedAtEpochMs = 1_700_000_000_000,
+                    sentryDsnConfigured = true,
+                    sentryTracingEnabled = true,
+                    sentryPropagationCreated = true,
+                ),
+                nowMs = { 1_700_000_000_999 },
+                scope = this,
+            )
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000123/session.json")
+
+            session.start()
+            withTimeout(500) {
+                blockedSession.started.await()
+            }
+            artifactWriter.drain()
+
+            val started = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("started", started.string("status"))
+            assertEquals("VA000123", started.string("voiceTraceId"))
+            assertEquals("VA000123", started.string("voiceSessionId"))
+            assertEquals("conversation-123", started.string("conversationId"))
+            assertEquals("me.rerere.rikkahub", started.string("packageName"))
+            assertEquals("2.2.6", started.string("versionName"))
+            assertEquals("162", started.string("versionCode"))
+            assertTrue(started.boolean("debuggable"))
+            assertEquals("gemini-flash", started.string("voiceModelId"))
+            assertEquals("1700000000000", started.getValue("startedAtEpochMs").jsonPrimitive.content)
+            assertTrue(started.boolean("sentryDsnConfigured"))
+            assertTrue(started.boolean("sentryTracingEnabled"))
+            assertTrue(started.boolean("sentryPropagationCreated"))
+
+            blockedSession.release.complete(Unit)
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+
+            val connected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("connected", connected.string("status"))
+            assertEquals("gemini-live-test", connected.string("providerModel"))
+
+            session.endAndDrain()
+
+            val ended = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("ended", ended.string("status"))
+            assertEquals("user_end", ended.string("closeStatus"))
+            assertEquals("1700000000999", ended.getValue("endedAtEpochMs").jsonPrimitive.content)
+        } finally {
+            artifactScope.cancel()
+            root.deleteRecursively()
+        }
     }
 
     @Test
