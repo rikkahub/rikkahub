@@ -280,20 +280,6 @@ class VoiceLabMobileApi internal constructor(
                 .build()
         )
 
-    private suspend inline fun <reified Res> getJson(path: String): Res =
-        executeJson(
-            requestBuilder(path)
-                .get()
-                .build()
-        )
-
-    private suspend inline fun <reified Res> deleteJson(path: String): Res =
-        executeJson(
-            requestBuilder(path)
-                .delete()
-                .build()
-        )
-
     private fun requestBuilder(path: String): Request.Builder =
         Request.Builder()
             .url(normalizedBaseUrl + path)

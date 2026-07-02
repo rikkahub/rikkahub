@@ -5,7 +5,10 @@ package me.rerere.rikkahub.voiceagent.voicelab
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import me.rerere.rikkahub.utils.JsonInstant
 
 @Serializable
 data class MobileVoiceSessionRequest(
@@ -244,15 +247,17 @@ internal data class MobileHermesJobSnapshotWire(
     val profileId: String? = null,
     val profileLabel: String? = null,
     val elapsedMs: Long? = null,
-    val failure: VoiceFailure? = null,
+    val failure: JsonElement? = null,
 )
 
 internal fun MobileHermesJobSnapshotWire.toHermesJobSnapshot(): HermesJobSnapshot {
     val parsedStatus = status.toHermesJobStatus()
-    val parsedFailure = if (status.isKnownHermesJobStatus()) {
-        failure
-    } else {
+    val parsedFailure = if (!status.isKnownHermesJobStatus()) {
         status.toLegacyVoiceFailure(error = null)
+    } else {
+        failure?.let {
+            runCatching { JsonInstant.decodeFromJsonElement<VoiceFailure>(it) }.getOrNull()
+        }
     }
     return HermesJobSnapshot(
         jobId = jobId,
