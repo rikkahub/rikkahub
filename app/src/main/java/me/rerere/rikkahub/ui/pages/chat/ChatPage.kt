@@ -6,8 +6,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -39,9 +41,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +59,7 @@ import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
@@ -282,6 +288,11 @@ private fun ChatPageContent(
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val softwareKeyboardController = LocalSoftwareKeyboardController.current
+    val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
+    var pendingJumpToMessageIndex by remember { mutableStateOf<Int?>(null) }
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
@@ -293,6 +304,19 @@ private fun ChatPageContent(
                 )
             )
         }.orEmpty()
+    }
+
+    LaunchedEffect(pendingJumpToMessageIndex) {
+        val index = pendingJumpToMessageIndex ?: return@LaunchedEffect
+        focusManager.clearFocus(force = true)
+        softwareKeyboardController?.hide()
+        if (imeInsets.getBottom(density) > 0) {
+            snapshotFlow { imeInsets.getBottom(density) }
+                .first { it == 0 }
+        }
+        previewMode = false
+        chatListState.animateScrollToItem(index)
+        pendingJumpToMessageIndex = null
     }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
@@ -453,10 +477,7 @@ private fun ChatPageContent(
                     vm.clearTranslationField(message.id)
                 },
                 onJumpToMessage = { index ->
-                    previewMode = false
-                    scope.launch {
-                        chatListState.animateScrollToItem(index)
-                    }
+                    pendingJumpToMessageIndex = index
                 },
                 onToolApproval = { toolCallId, approved, reason ->
                     vm.handleToolApproval(toolCallId, approved, reason)
