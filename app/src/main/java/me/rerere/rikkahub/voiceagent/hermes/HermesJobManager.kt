@@ -27,6 +27,8 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
+import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import java.time.Instant
 
 interface HermesSessionBridge {
@@ -329,7 +331,7 @@ class HermesJobManager(
                 prompt = managedJob.prompt,
                 jobId = submitted.jobId,
                 status = submitted.status,
-                error = null,
+                failureMessage = submitted.failure?.safeMessage,
                 shouldPersist = { !managedJob.explicitlyCanceled },
             )
             if (!shouldPoll) return
@@ -346,7 +348,7 @@ class HermesJobManager(
                     type = "job_created",
                     callId = managedJob.callId,
                     jobId = submitted.jobId,
-                    status = submitted.status,
+                    status = submitted.status.wireName,
                 )
             )
             sendQueuedAcknowledgementIfAttached(
@@ -415,8 +417,9 @@ class HermesJobManager(
             }
             pollFailures = 0
 
-            when (poll.status.lowercase()) {
-                "queued" -> {
+            when (poll.status) {
+                HermesJobStatus.Accepted,
+                HermesJobStatus.Queued -> {
                     val persisted = persistActiveIfStillActive(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
@@ -431,7 +434,7 @@ class HermesJobManager(
                     )
                 }
 
-                "running" -> {
+                HermesJobStatus.Running -> {
                     val persisted = persistActiveIfStillActive(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
@@ -449,7 +452,7 @@ class HermesJobManager(
                     )
                 }
 
-                "succeeded" -> {
+                HermesJobStatus.Succeeded -> {
                     val answer = requireNotNull(poll.answer) { "Hermes job succeeded without an answer" }
                     val elapsedMs = managedJob.elapsedMs()
                     val persisted = persistTerminalIfStillActive(
@@ -510,43 +513,44 @@ class HermesJobManager(
                     return
                 }
 
-                "failed" -> {
+                HermesJobStatus.Failed -> {
+                    val failureMessage = poll.failure?.safeMessage ?: DEFAULT_FAILURE_MESSAGE
                     completeFailureStatus(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
                         jobId = jobId,
-                        status = VoiceToolRecordStatus.Failed(poll.error ?: DEFAULT_FAILURE_MESSAGE),
-                        visibleMessage = poll.error ?: DEFAULT_FAILURE_MESSAGE,
+                        status = VoiceToolRecordStatus.Failed(failureMessage),
+                        visibleMessage = failureMessage,
                         shouldPersist = { !managedJob.explicitlyCanceled },
                     )
                     return
                 }
 
-                "expired", "timeout" -> {
+                HermesJobStatus.Expired -> {
+                    val failureMessage = poll.failure?.safeMessage ?: EXPIRED_MESSAGE
                     completeFailureStatus(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
                         jobId = jobId,
-                        status = VoiceToolRecordStatus.Expired(poll.error ?: EXPIRED_MESSAGE),
-                        visibleMessage = poll.error ?: EXPIRED_MESSAGE,
+                        status = VoiceToolRecordStatus.Expired(failureMessage),
+                        visibleMessage = failureMessage,
                         shouldPersist = { !managedJob.explicitlyCanceled },
                     )
                     return
                 }
 
-                "canceled", "cancelled" -> {
+                HermesJobStatus.Canceled -> {
+                    val failureMessage = poll.failure?.safeMessage ?: CANCELED_MESSAGE
                     completeFailureStatus(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
                         jobId = jobId,
-                        status = VoiceToolRecordStatus.Canceled(poll.error ?: CANCELED_MESSAGE),
-                        visibleMessage = poll.error ?: CANCELED_MESSAGE,
+                        status = VoiceToolRecordStatus.Canceled(failureMessage),
+                        visibleMessage = failureMessage,
                         shouldPersist = { !managedJob.explicitlyCanceled },
                     )
                     return
                 }
-
-                else -> throw IllegalStateException("Unknown Hermes job status: ${poll.status}")
             }
 
             delay(pollIntervalMs)
@@ -557,12 +561,12 @@ class HermesJobManager(
         callId: String,
         prompt: String,
         jobId: String,
-        status: String,
-        error: String?,
+        status: HermesJobStatus,
+        failureMessage: String?,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
-        return when (status.lowercase()) {
-            "running" -> {
+        return when (status) {
+            HermesJobStatus.Running -> {
                 val persisted = persistActiveIfStillActive(
                     callId = callId,
                     prompt = prompt,
@@ -575,55 +579,46 @@ class HermesJobManager(
                 true
             }
 
-            "failed" -> {
+            HermesJobStatus.Succeeded -> error("Hermes submit response cannot be succeeded without an answer")
+
+            HermesJobStatus.Failed -> {
                 completeFailureStatus(
                     callId = callId,
                     prompt = prompt,
                     jobId = jobId,
-                    status = VoiceToolRecordStatus.Failed(error ?: DEFAULT_FAILURE_MESSAGE),
-                    visibleMessage = error ?: DEFAULT_FAILURE_MESSAGE,
+                    status = VoiceToolRecordStatus.Failed(failureMessage ?: DEFAULT_FAILURE_MESSAGE),
+                    visibleMessage = failureMessage ?: DEFAULT_FAILURE_MESSAGE,
                     shouldPersist = shouldPersist,
                 )
                 false
             }
 
-            "expired" -> {
+            HermesJobStatus.Expired -> {
                 completeFailureStatus(
                     callId = callId,
                     prompt = prompt,
                     jobId = jobId,
-                    status = VoiceToolRecordStatus.Expired(error ?: EXPIRED_MESSAGE),
-                    visibleMessage = error ?: EXPIRED_MESSAGE,
+                    status = VoiceToolRecordStatus.Expired(failureMessage ?: EXPIRED_MESSAGE),
+                    visibleMessage = failureMessage ?: EXPIRED_MESSAGE,
                     shouldPersist = shouldPersist,
                 )
                 false
             }
 
-            "timeout" -> {
+            HermesJobStatus.Canceled -> {
                 completeFailureStatus(
                     callId = callId,
                     prompt = prompt,
                     jobId = jobId,
-                    status = VoiceToolRecordStatus.Expired(error ?: TIMEOUT_MESSAGE),
-                    visibleMessage = error ?: TIMEOUT_MESSAGE,
+                    status = VoiceToolRecordStatus.Canceled(failureMessage ?: CANCELED_MESSAGE),
+                    visibleMessage = failureMessage ?: CANCELED_MESSAGE,
                     shouldPersist = shouldPersist,
                 )
                 false
             }
 
-            "canceled", "cancelled" -> {
-                completeFailureStatus(
-                    callId = callId,
-                    prompt = prompt,
-                    jobId = jobId,
-                    status = VoiceToolRecordStatus.Canceled(error ?: CANCELED_MESSAGE),
-                    visibleMessage = error ?: CANCELED_MESSAGE,
-                    shouldPersist = shouldPersist,
-                )
-                false
-            }
-
-            else -> {
+            HermesJobStatus.Accepted,
+            HermesJobStatus.Queued -> {
                 val persisted = persistActiveIfStillActive(
                     callId = callId,
                     prompt = prompt,
@@ -1152,13 +1147,20 @@ class HermesJobManager(
         }.toString()
     }
 
+    private val HermesJobStatus.wireName: String
+        get() = when (this) {
+            HermesJobStatus.Accepted -> "accepted"
+            HermesJobStatus.Queued -> "queued"
+            HermesJobStatus.Running -> "running"
+            HermesJobStatus.Succeeded -> "succeeded"
+            HermesJobStatus.Failed -> "failed"
+            HermesJobStatus.Expired -> "expired"
+            HermesJobStatus.Canceled -> "canceled"
+        }
+
     private fun Throwable.isTerminalHermesPollFailure(): Boolean {
-        val statusCode = Regex("Voice Lab request failed (\\d{3})")
-            .find(message.orEmpty())
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toIntOrNull()
-            ?: return false
+        if (this !is VoiceLabHttpException) return false
+        failure?.let { return !it.retryable }
         return statusCode in 400..499 && statusCode != 408 && statusCode != 429
     }
 

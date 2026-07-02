@@ -63,6 +63,46 @@ class VoiceLabMobileApiTest {
     }
 
     @Test
+    fun `voice session response parses config trace metadata`() = runBlocking {
+        val transport = transportFor { request ->
+            responseFor(
+                request = request,
+                body = """
+                {
+                  "token":"session-token",
+                  "modelId":"gemini-flash",
+                  "providerModel":"models/gemini-2.0-flash-live-001",
+                  "apiVersion":"v1alpha",
+                  "websocketUrl":"wss://example.test/live",
+                  "inputSampleRate":16000,
+                  "outputSampleRate":24000,
+                  "liveConnectConfig":{},
+                  "trace":{
+                    "traceId":"trace-1",
+                    "voiceSessionId":"voice-1",
+                    "sentryTrace":"trace-header",
+                    "sentryBaggage":"baggage-header"
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+        val api = VoiceLabMobileApi(
+            baseUrl = "https://voice-lab.example.test",
+            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            transport = transport,
+        )
+
+        val session = api.createSession("gemini-flash")
+
+        assertEquals("session-token", session.token)
+        assertEquals("trace-1", session.trace?.traceId)
+        assertEquals("voice-1", session.trace?.voiceSessionId)
+        assertEquals("trace-header", session.trace?.sentryTrace)
+        assertEquals("baggage-header", session.trace?.sentryBaggage)
+    }
+
+    @Test
     fun `askHermes omits default profileId and parses response`() = runBlocking {
         var seenRequest: Request? = null
         var seenBody = ""
@@ -300,7 +340,7 @@ class VoiceLabMobileApiTest {
         assertTrue(seenBody.contains("\"prompt\":\"status\""))
         assertTrue(seenBody.contains("\"profileId\":\"research\""))
         assertEquals("hj_123", response.jobId)
-        assertEquals("queued", response.status)
+        assertEquals(HermesJobStatus.Queued, response.status)
     }
 
     @Test
@@ -339,9 +379,50 @@ class VoiceLabMobileApiTest {
         assertEquals("GET", request.method)
         assertEquals("/base/api/mobile/hermes/jobs/hj_123", request.url.encodedPath)
         assertEquals("Bearer profile-api-key", request.header("Authorization"))
-        assertEquals("succeeded", response.status)
+        assertEquals(HermesJobStatus.Succeeded, response.status)
         assertEquals("done", response.answer)
         assertEquals(321L, response.elapsedMs)
+    }
+
+    @Test
+    fun `Hermes job snapshot parses typed failure payload`() = runBlocking {
+        val transport = transportFor { request ->
+            responseFor(
+                request = request,
+                body = """
+                {
+                  "jobId":"job-1",
+                  "callId":"call-1",
+                  "prompt":"private prompt",
+                  "status":"failed",
+                  "createdAt":"2026-07-01T00:00:00.000Z",
+                  "completedAt":"2026-07-01T00:00:05.000Z",
+                  "failure":{
+                    "kind":"hermes_failed",
+                    "safeMessage":"Hermes request failed",
+                    "safeSummary":"provider returned a safe summary",
+                    "retryable":false,
+                    "source":"hermes"
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+        val api = VoiceLabMobileApi(
+            baseUrl = "https://voice-lab.example.test",
+            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            transport = transport,
+        )
+
+        val snapshot = api.getHermesJob("job-1")
+
+        assertEquals("job-1", snapshot.jobId)
+        assertEquals("call-1", snapshot.callId)
+        assertEquals("private prompt", snapshot.prompt)
+        assertEquals(HermesJobStatus.Failed, snapshot.status)
+        assertEquals(VoiceFailureKind.HermesFailed, snapshot.failure?.kind)
+        assertEquals("Hermes request failed", snapshot.failure?.safeMessage)
+        assertEquals(false, snapshot.failure?.retryable)
     }
 
     @Test
@@ -356,7 +437,13 @@ class VoiceLabMobileApiTest {
                   "jobId":"hj_123",
                   "callId":"call-1",
                   "status":"canceled",
-                  "error":"Hermes job canceled",
+                  "failure":{
+                    "kind":"canceled",
+                    "safeMessage":"Hermes job canceled",
+                    "safeSummary":"Hermes job canceled",
+                    "retryable":false,
+                    "source":"voice_lab"
+                  },
                   "createdAt":"2026-06-11T00:00:00.000Z",
                   "completedAt":"2026-06-11T00:00:01.000Z"
                 }
@@ -374,8 +461,8 @@ class VoiceLabMobileApiTest {
         val request = requireNotNull(seenRequest)
         assertEquals("DELETE", request.method)
         assertEquals("/base/api/mobile/hermes/jobs/hj_123", request.url.encodedPath)
-        assertEquals("canceled", response.status)
-        assertEquals("Hermes job canceled", response.error)
+        assertEquals(HermesJobStatus.Canceled, response.status)
+        assertEquals("Hermes job canceled", response.failure?.safeMessage)
     }
 
 
@@ -384,7 +471,20 @@ class VoiceLabMobileApiTest {
         val transport = transportFor { request ->
             responseFor(
                 request = request,
-                body = """{"status":"expired","error":"Hermes job not found"}""",
+                body = """
+                {
+                  "jobId":"hj_missing",
+                  "status":"expired",
+                  "createdAt":"2026-06-11T00:00:00.000Z",
+                  "failure":{
+                    "kind":"expired",
+                    "safeMessage":"Hermes job not found",
+                    "safeSummary":"Hermes job not found",
+                    "retryable":false,
+                    "source":"voice_lab"
+                  }
+                }
+                """.trimIndent(),
             )
         }
         val api = VoiceLabMobileApi(
@@ -395,9 +495,9 @@ class VoiceLabMobileApiTest {
 
         val response = api.getHermesJob("hj_missing")
 
-        assertEquals("expired", response.status)
-        assertEquals("Hermes job not found", response.error)
-        assertNull(response.jobId)
+        assertEquals(HermesJobStatus.Expired, response.status)
+        assertEquals("Hermes job not found", response.failure?.safeMessage)
+        assertEquals("hj_missing", response.jobId)
     }
 
     @Test
@@ -410,11 +510,11 @@ class VoiceLabMobileApiTest {
             },
         )
 
-        val transportError = assertThrows(IllegalStateException::class.java) {
+        val transportError = assertThrows(VoiceLabHttpException::class.java) {
             runBlocking { errorApi.getHermesJob("hj_down") }
         }
-        assertTrue(transportError.message.orEmpty().contains("Voice Lab request failed 503"))
-        assertTrue(transportError.message.orEmpty().contains("down"))
+        assertEquals(503, transportError.statusCode)
+        assertTrue(transportError.safePreview.contains("down"))
 
         val decodeApi = VoiceLabMobileApi(
             baseUrl = "https://voice-lab.example.test",
@@ -448,12 +548,45 @@ class VoiceLabMobileApiTest {
             transport = transport,
         )
 
-        val error = assertThrows(IllegalStateException::class.java) {
+        val error = assertThrows(VoiceLabHttpException::class.java) {
             runBlocking { api.createSession("gemini-flash") }
         }
 
-        assertTrue(error.message.orEmpty().contains("503"))
-        assertTrue(error.message.orEmpty().contains("down"))
+        assertEquals(503, error.statusCode)
+        assertTrue(error.safePreview.contains("down"))
+    }
+
+    @Test
+    fun `non successful typed failures are carried by http exception`() {
+        val transport = transportFor { request ->
+            responseFor(
+                request = request,
+                code = 429,
+                message = "Too Many Requests",
+                body = """
+                {
+                  "kind":"rate_limited",
+                  "safeMessage":"Slow down",
+                  "safeSummary":"Hermes is rate limited",
+                  "retryable":true,
+                  "source":"voice_lab"
+                }
+                """.trimIndent(),
+            )
+        }
+        val api = VoiceLabMobileApi(
+            baseUrl = "https://voice-lab.example.test",
+            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            transport = transport,
+        )
+
+        val error = assertThrows(VoiceLabHttpException::class.java) {
+            runBlocking { api.getHermesJob("hj_rate_limited") }
+        }
+
+        assertEquals(429, error.statusCode)
+        assertEquals(VoiceFailureKind.RateLimited, error.failure?.kind)
+        assertEquals(true, error.failure?.retryable)
     }
 
     @Test
@@ -766,7 +899,8 @@ class VoiceLabMobileApiTest {
         val hermesJobPoll = MobileHermesJobPollResponse(
             jobId = "hj_1",
             callId = "call-1",
-            status = "succeeded",
+            status = HermesJobStatus.Succeeded,
+            createdAt = "2026-06-11T00:00:00.000Z",
             answer = "private job answer",
         )
 

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent.voicelab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -138,6 +139,12 @@ private class OkHttpVoiceLabTransport(
             )
         }
 }
+
+class VoiceLabHttpException(
+    val statusCode: Int,
+    val safePreview: String,
+    val failure: VoiceFailure? = null,
+) : IllegalStateException("Voice Lab request failed $statusCode: $safePreview")
 
 class VoiceLabMobileApi internal constructor(
     private val baseUrl: String,
@@ -289,8 +296,11 @@ class VoiceLabMobileApi internal constructor(
         withContext(Dispatchers.IO) {
             transport.execute(request).use { response ->
                 if (!response.isSuccessful) {
-                    throw IllegalStateException(
-                        "Voice Lab request failed ${response.code}: ${response.toErrorPreview()}"
+                    val rawPreview = response.peekBody(ERROR_BODY_PREVIEW_LIMIT + 1).string()
+                    throw VoiceLabHttpException(
+                        statusCode = response.code,
+                        safePreview = response.toErrorPreview(rawPreview),
+                        failure = runCatching { json.decodeFromString<VoiceFailure>(rawPreview) }.getOrNull(),
                     )
                 }
                 val responseText = response.body.string()
@@ -330,8 +340,8 @@ private fun String.isTailscaleIpv4(): Boolean {
         octets[1] in 64..127
 }
 
-private fun Response.toErrorPreview(): String =
-    peekBody(ERROR_BODY_PREVIEW_LIMIT + 1).string().toSanitizedPreview(
+private fun Response.toErrorPreview(rawPreview: String): String =
+    rawPreview.toSanitizedPreview(
         wasTruncated = (body.contentLength() > ERROR_BODY_PREVIEW_LIMIT).takeIf { body.contentLength() >= 0 }
     )
 
