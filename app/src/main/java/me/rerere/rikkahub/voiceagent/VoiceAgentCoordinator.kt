@@ -41,6 +41,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.voiceTextMetadata
+import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
@@ -1062,7 +1063,7 @@ class VoiceAgentCoordinator(
             "turnId" to turnId,
             "speaker" to speaker,
             "status" to status.statusName,
-        ) + voiceTextMetadata(key = textKey, text = text)
+        ) + voiceTextPayload(key = textKey, text = text)
         recordEventSafely(
             name = finalEventName,
             attributes = attributes,

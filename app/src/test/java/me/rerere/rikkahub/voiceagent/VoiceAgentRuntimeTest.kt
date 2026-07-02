@@ -31,6 +31,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
+import me.rerere.rikkahub.voiceagent.telemetry.sha256Hex
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
@@ -246,13 +247,19 @@ class VoiceAgentRuntimeTest {
 
         val userFinal = observability.events.single { it.name == "voicelab.mobile.transcript.user_final" }
         assertEquals("user", userFinal.attributes["speaker"])
+        assertEquals("hello user", userFinal.attributes["voice.user_transcript"])
         assertEquals(10, userFinal.attributes["voice.user_transcript.chars"])
+        assertEquals(false, userFinal.attributes["voice.user_transcript.truncated"])
+        assertEquals(sha256Hex("hello user"), userFinal.attributes["voice.user_transcript.sha256"])
         assertFalse(userFinal.attributes.containsKey("text"))
         assertFalse(userFinal.attributes.containsKey("text.chars"))
 
         val assistantFinal = observability.events.single { it.name == "voicelab.mobile.transcript.assistant_final" }
         assertEquals("assistant", assistantFinal.attributes["speaker"])
+        assertEquals("assistant answer", assistantFinal.attributes["gemini.output_transcript"])
         assertEquals(16, assistantFinal.attributes["gemini.output_transcript.chars"])
+        assertEquals(false, assistantFinal.attributes["gemini.output_transcript.truncated"])
+        assertEquals(sha256Hex("assistant answer"), assistantFinal.attributes["gemini.output_transcript.sha256"])
         assertFalse(assistantFinal.attributes.containsKey("text"))
         assertFalse(assistantFinal.attributes.containsKey("text.chars"))
 
