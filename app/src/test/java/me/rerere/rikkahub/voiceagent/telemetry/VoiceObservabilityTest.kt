@@ -121,21 +121,41 @@ class VoiceObservabilityTest {
                     "existing" to "extra",
                 ),
             )
+            SentryVoiceObservability().recordEvent(
+                name = "voicelab.mobile.hermes_tool.completed",
+                trace = trace,
+                attributes = mapOf(
+                    "conversationId" to "conversation-abc",
+                    "callId" to "call-canonical",
+                    "gemini.tool_call.call_id" to "call-fallback",
+                    "hermes_job_id" to "job-canonical",
+                    "jobId" to "job-fallback",
+                ),
+            )
             Sentry.flush(1_000)
         } finally {
             Sentry.close()
         }
 
-        val event = capturedEvents.single()
-        assertEquals("conversation-123", event.getTag("conversationId"))
-        assertEquals("call-789", event.getTag("callId"))
-        assertEquals("job-456", event.getTag("hermes_job_id"))
-        assertEquals("conversation-123", event.getExtra("conversationId"))
-        assertEquals("call-789", event.getExtra("callId"))
-        assertEquals("call-789", event.getExtra("gemini.tool_call.call_id"))
-        assertEquals("job-456", event.getExtra("jobId"))
-        assertEquals("job-456", event.getExtra("hermes_job_id"))
-        assertEquals("extra", event.getExtra("existing"))
+        val fallbackEvent = capturedEvents.first()
+        assertEquals("conversation-123", fallbackEvent.getTag("conversationId"))
+        assertEquals("call-789", fallbackEvent.getTag("callId"))
+        assertEquals("job-456", fallbackEvent.getTag("hermes_job_id"))
+        assertEquals("conversation-123", fallbackEvent.getExtra("conversationId"))
+        assertEquals("call-789", fallbackEvent.getExtra("callId"))
+        assertEquals("call-789", fallbackEvent.getExtra("gemini.tool_call.call_id"))
+        assertEquals("job-456", fallbackEvent.getExtra("jobId"))
+        assertEquals("job-456", fallbackEvent.getExtra("hermes_job_id"))
+        assertEquals("extra", fallbackEvent.getExtra("existing"))
+
+        val canonicalEvent = capturedEvents.last()
+        assertEquals("conversation-abc", canonicalEvent.getTag("conversationId"))
+        assertEquals("call-canonical", canonicalEvent.getTag("callId"))
+        assertEquals("job-canonical", canonicalEvent.getTag("hermes_job_id"))
+        assertEquals("call-canonical", canonicalEvent.getExtra("callId"))
+        assertEquals("call-fallback", canonicalEvent.getExtra("gemini.tool_call.call_id"))
+        assertEquals("job-canonical", canonicalEvent.getExtra("hermes_job_id"))
+        assertEquals("job-fallback", canonicalEvent.getExtra("jobId"))
     }
 
     @Test

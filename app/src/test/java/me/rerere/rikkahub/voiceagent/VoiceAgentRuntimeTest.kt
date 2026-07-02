@@ -261,6 +261,8 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-observe", submitted.attributes["gemini.tool_call.call_id"])
         assertEquals("private prompt", submitted.attributes["gemini.tool_call.prompt"])
         assertEquals(14, submitted.attributes["gemini.tool_call.prompt.chars"])
+        assertEquals(false, submitted.attributes["gemini.tool_call.prompt.truncated"])
+        assertTrue(submitted.attributes["gemini.tool_call.prompt.sha256"].toString().isNotBlank())
         assertFalse(submitted.attributes.containsKey("prompt"))
 
         val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
@@ -270,6 +272,9 @@ class VoiceAgentRuntimeTest {
         assertEquals("job-1", completed.attributes["hermes_job_id"])
         assertEquals("succeeded", completed.attributes["hermes_job_status"])
         assertEquals("private answer", completed.attributes["hermes.response.answer"])
+        assertEquals(14, completed.attributes["hermes.response.answer.chars"])
+        assertEquals(false, completed.attributes["hermes.response.answer.truncated"])
+        assertTrue(completed.attributes["hermes.response.answer.sha256"].toString().isNotBlank())
         assertFalse(completed.attributes.containsKey("answer"))
 
         val followup = observability.events.single { it.name == "voicelab.mobile.gemini.followup_sent" }
@@ -280,6 +285,9 @@ class VoiceAgentRuntimeTest {
         assertEquals(true, followup.attributes["sent"])
         assertTrue(followup.attributes["gemini.followup_text"].toString().contains("Hermes answer:"))
         assertTrue((followup.attributes["gemini.followup_text.chars"] as Int) > 0)
+        assertEquals(false, followup.attributes["gemini.followup_text.truncated"])
+        assertTrue(followup.attributes["gemini.followup_text.sha256"].toString().isNotBlank())
+        assertEquals(gemini.textTurns.single().second, followup.attributes["gemini.followup_text"])
         assertFalse(followup.attributes.containsKey("followupText"))
     }
 
@@ -319,12 +327,14 @@ class VoiceAgentRuntimeTest {
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
         val diagnostics = VoiceDiagnostics()
+        val observability = RecordingVoiceObservability()
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = FakeVoiceAudioEngine(),
             conversationStore = conversationStore,
             diagnostics = diagnostics,
+            observability = observability,
             scope = this,
         )
 
@@ -345,6 +355,9 @@ class VoiceAgentRuntimeTest {
                 it.name == "hermes_completion_follow_up_failed" &&
                     it.detail.contains("callId=call-follow-up-fails")
             }
+        )
+        assertFalse(
+            observability.events.any { it.name == "voicelab.mobile.gemini.followup_sent" }
         )
         val assistantText = conversationStore.conversation.value.currentMessages
             .flatMap { it.parts }
@@ -2678,6 +2691,32 @@ class VoiceAgentRuntimeTest {
             artifactScope.cancel()
             root.deleteRecursively()
         }
+    }
+
+    @Test
+    fun `session observability events include metadata conversation id`() = runTest {
+        val observability = RecordingVoiceObservability()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = FakeGeminiLiveVoiceClient(),
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = observability,
+            sessionMetadata = testSessionMetadata(conversationId = "conversation-observe"),
+            scope = this,
+        )
+
+        session.start()
+
+        val started = observability.events.single { it.name == "voicelab.mobile.session.started" }
+        assertEquals("conversation-observe", started.attributes["conversationId"])
+        assertEquals(1L, started.attributes["sessionId"])
+        session.closeNow()
     }
 
     @Test

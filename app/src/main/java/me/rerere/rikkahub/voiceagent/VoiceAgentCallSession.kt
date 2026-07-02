@@ -957,9 +957,17 @@ class VoiceAgentCallSession internal constructor(
     )
 
     private fun recordEventSafely(name: String, attributes: Map<String, Any?> = emptyMap()) {
+        val enrichedAttributes = sessionConversationId()
+            ?.takeIf { "conversationId" !in attributes }
+            ?.let { conversationId -> attributes + ("conversationId" to conversationId) }
+            ?: attributes
         runCatching {
-            observability.recordEvent(name = name, trace = traceContext, attributes = attributes)
+            observability.recordEvent(name = name, trace = traceContext, attributes = enrichedAttributes)
         }
+    }
+
+    private fun sessionConversationId(): String? = synchronized(sessionLock) {
+        sessionMetadata?.conversationId
     }
 
     private fun recordSessionEndedSafely(
