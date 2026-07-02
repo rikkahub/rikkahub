@@ -2,8 +2,10 @@ package me.rerere.rikkahub.voiceagent
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -108,7 +110,7 @@ class VoiceE2EArtifactWriter private constructor(
         }
     }
 
-    fun writeTerminalSessionJson(content: String): CompletableDeferred<Unit> {
+    fun writeTerminalSessionJson(content: String): Deferred<Unit> {
         val writerScope = terminalWriteScope ?: return completedWrite()
         synchronized(pendingLock) {
             pendingWrites.remove(VoiceE2EArtifact.SessionJson)
@@ -129,7 +131,9 @@ class VoiceE2EArtifactWriter private constructor(
             }
             completed.complete(Unit)
         }
-        return completed
+        return writerScope.async {
+            completed.await()
+        }
     }
 
     suspend fun drain() {
@@ -338,5 +342,5 @@ private val SAFE_TRACE_DIRECTORY_NAME = Regex("[A-Za-z0-9._-]+")
 private const val MAX_TRACE_ARTIFACT_DIRECTORIES = 10
 private const val TAG = "VoiceE2EArtifactWriter"
 
-private fun completedWrite(): CompletableDeferred<Unit> =
-    CompletableDeferred<Unit>().also { it.complete(Unit) }
+private fun completedWrite(): Deferred<Unit> =
+    CompletableDeferred(Unit)

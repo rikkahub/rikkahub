@@ -2593,6 +2593,90 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `endAndDrain waits for final terminal session metadata write`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-end-drain-session").toFile()
+        val artifactScope = CoroutineScope(SupervisorJob())
+        val originalMove = VoiceE2EAtomicMoveOperation.move
+        val terminalWriteStarted = CountDownLatch(1)
+        val releaseTerminalWrite = CountDownLatch(1)
+        try {
+            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
+                if (target.fileName.toString() == "session.json") {
+                    terminalWriteStarted.countDown()
+                    releaseTerminalWrite.await(1, TimeUnit.SECONDS)
+                }
+                originalMove(source, target, atomic)
+            }
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000126",
+                scope = artifactScope,
+            )
+            val session = VoiceAgentCallSession(
+                modelId = "gemini-flash",
+                sessionApi = FakeVoiceSessionApi(),
+                toolApi = FakeVoiceToolApi(),
+                gemini = FakeGeminiLiveVoiceClient(),
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = "system", turns = emptyList())
+                ),
+                traceContext = VoiceTraceContext(traceId = "VA000126", voiceSessionId = "VA000126"),
+                voiceE2EArtifacts = artifactWriter,
+                sessionMetadata = VoiceE2ESessionMetadata(
+                    voiceTraceId = "VA000126",
+                    voiceSessionId = "VA000126",
+                    conversationId = "conversation-126",
+                    packageName = "me.rerere.rikkahub",
+                    versionName = "2.2.6",
+                    versionCode = "162",
+                    debuggable = true,
+                    voiceModelId = "gemini-flash",
+                    providerModel = null,
+                    status = "created",
+                    startedAtEpochMs = 1_700_000_000_000,
+                    sentryDsnConfigured = true,
+                    sentryTracingEnabled = true,
+                    sentryPropagationCreated = true,
+                ),
+                nowMs = { 42 },
+                metadataEpochNowMs = { 1_700_000_006_999 },
+                scope = this,
+            )
+
+            val endJob = launch {
+                session.endAndDrain()
+            }
+
+            withTimeout(1000) {
+                while (terminalWriteStarted.count > 0) {
+                    delay(10)
+                }
+            }
+            delay(100)
+            assertFalse(endJob.isCompleted)
+
+            releaseTerminalWrite.countDown()
+            withTimeout(1000) {
+                endJob.join()
+            }
+
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000126/session.json")
+            val ended = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("ended", ended.string("status"))
+            assertEquals("user_end", ended.string("closeStatus"))
+            assertEquals("1700000006999", ended.getValue("endedAtEpochMs").jsonPrimitive.content)
+        } finally {
+            releaseTerminalWrite.countDown()
+            VoiceE2EAtomicMoveOperation.move = originalMove
+            artifactScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `closeNow persists final session metadata after writer scope cancellation`() = runTest {
         val root = Files.createTempDirectory("voice-e2e-close-now-session").toFile()
         val artifactScope = CoroutineScope(SupervisorJob())

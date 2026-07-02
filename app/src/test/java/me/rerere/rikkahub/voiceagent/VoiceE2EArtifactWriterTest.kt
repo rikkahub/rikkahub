@@ -14,6 +14,8 @@ import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 
 class VoiceE2EArtifactWriterTest {
@@ -211,6 +213,60 @@ class VoiceE2EArtifactWriterTest {
                     .filter { it.startsWith("session.json.") && it.endsWith(".tmp") },
             )
         } finally {
+            VoiceE2EAtomicMoveOperation.move = originalMove
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `canceling returned terminal write does not corrupt terminal write ordering`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-session-json-cancel-returned").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val originalMove = VoiceE2EAtomicMoveOperation.move
+        val firstWriteStarted = CountDownLatch(1)
+        val releaseFirstWrite = CountDownLatch(1)
+        try {
+            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
+                if (
+                    target.fileName.toString() == "session.json" &&
+                    source.toFile().readText().contains("\"status\":\"started\"")
+                ) {
+                    firstWriteStarted.countDown()
+                    releaseFirstWrite.await(1, TimeUnit.SECONDS)
+                }
+                originalMove(source, target, atomic)
+            }
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000325",
+                scope = scope,
+            )
+            val first = """{"voiceTraceId":"VA000325","status":"started"}"""
+            val second = """{"voiceTraceId":"VA000325","status":"ended"}"""
+
+            val firstWrite = writer.writeTerminalSessionJson(first)
+            withTimeout(1000) {
+                while (firstWriteStarted.count > 0) {
+                    delay(10)
+                }
+            }
+
+            firstWrite.cancel()
+            val secondWrite = writer.writeTerminalSessionJson(second)
+            delay(100)
+            assertFalse(secondWrite.isCompleted)
+
+            releaseFirstWrite.countDown()
+            withTimeout(1000) {
+                secondWrite.await()
+            }
+
+            val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000325")
+            assertEquals(second, File(traceDirectory, "session.json").readText())
+        } finally {
+            releaseFirstWrite.countDown()
             VoiceE2EAtomicMoveOperation.move = originalMove
             scope.cancel()
             root.deleteRecursively()

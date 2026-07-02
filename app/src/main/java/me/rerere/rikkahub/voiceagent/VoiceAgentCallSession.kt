@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.voiceagent
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
@@ -870,16 +872,18 @@ class VoiceAgentCallSession internal constructor(
     }
 
     private suspend fun finishEnd(previousJob: Job?, visibleReason: String?) {
+        var terminalSessionMetadataWrite = completedSessionMetadataWrite()
         try {
             previousJob?.cancelAndJoin()
             coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
             coordinator.close()
         } finally {
-            recordSessionEndedSafely(endReason = visibleReason ?: "user_end")
+            terminalSessionMetadataWrite = recordSessionEndedSafely(endReason = visibleReason ?: "user_end")
         }
         visibleReason?.let(coordinator::setVisibleError)
         coordinator.awaitPersistenceJobs()
         voiceE2EArtifacts.drain()
+        terminalSessionMetadataWrite.await()
         coordinator.stopPersistenceScope()
     }
 
@@ -960,7 +964,7 @@ class VoiceAgentCallSession internal constructor(
         failureKind: String = "none",
         failureSummary: String? = null,
         writeSessionMetadataImmediately: Boolean = false,
-    ) {
+    ): Deferred<Unit> {
         val shouldRecord = synchronized(sessionLock) {
             if (sessionEndedRecorded) {
                 false
@@ -969,8 +973,8 @@ class VoiceAgentCallSession internal constructor(
                 true
             }
         }
-        if (!shouldRecord) return
-        writeSessionMetadata(
+        if (!shouldRecord) return completedSessionMetadataWrite()
+        val metadataWrite = writeSessionMetadata(
             status = "ended",
             closeStatus = endReason,
             endedAtEpochMs = metadataEpochNowMs(),
@@ -986,6 +990,7 @@ class VoiceAgentCallSession internal constructor(
                 "session.failure.summary" to failureSummary?.let(::sanitizeVoiceFailureSummary),
             ),
         )
+        return metadataWrite
     }
 
     private fun recordSessionFailedSafely(
@@ -993,7 +998,7 @@ class VoiceAgentCallSession internal constructor(
         endReason: String,
         failureKind: String,
         failureSummary: String,
-    ) {
+    ): Deferred<Unit> {
         val shouldRecord = synchronized(sessionLock) {
             if (sessionFailedRecordedSessionId == sessionId) {
                 false
@@ -1002,8 +1007,8 @@ class VoiceAgentCallSession internal constructor(
                 true
             }
         }
-        if (!shouldRecord) return
-        writeSessionMetadata(
+        if (!shouldRecord) return completedSessionMetadataWrite()
+        val metadataWrite = writeSessionMetadata(
             status = "failed",
             closeStatus = endReason,
             endedAtEpochMs = metadataEpochNowMs(),
@@ -1018,6 +1023,7 @@ class VoiceAgentCallSession internal constructor(
                 "session.failure.summary" to sanitizeVoiceFailureSummary(failureSummary),
             ),
         )
+        return metadataWrite
     }
 
     private fun writeSessionMetadata(
@@ -1026,23 +1032,24 @@ class VoiceAgentCallSession internal constructor(
         closeStatus: String? = null,
         endedAtEpochMs: Long? = null,
         immediately: Boolean = false,
-    ) {
+    ): Deferred<Unit> {
         val content = synchronized(sessionLock) {
-            val metadata = sessionMetadata ?: return
+            val metadata = sessionMetadata ?: return completedSessionMetadataWrite()
             val updated = metadata.withLifecycleUpdate(
                 status = status,
                 providerModel = providerModel,
                 closeStatus = closeStatus,
                 endedAtEpochMs = endedAtEpochMs,
             )
-            if (updated == metadata) return
+            if (updated == metadata) return completedSessionMetadataWrite()
             sessionMetadata = updated
             updated.toJson()
         }
-        if (immediately || status.isTerminalSessionMetadataStatus()) {
+        return if (immediately || status.isTerminalSessionMetadataStatus()) {
             voiceE2EArtifacts.writeTerminalSessionJson(content)
         } else {
             voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
+            completedSessionMetadataWrite()
         }
     }
 
@@ -1050,6 +1057,9 @@ class VoiceAgentCallSession internal constructor(
         const val TAG = "VoiceAgentCallSession"
     }
 }
+
+private fun completedSessionMetadataWrite(): Deferred<Unit> =
+    CompletableDeferred(Unit)
 
 private fun VoiceContext.withTurnsFoldedIntoSystemInstruction(): VoiceContext {
     if (turns.isEmpty()) return this
