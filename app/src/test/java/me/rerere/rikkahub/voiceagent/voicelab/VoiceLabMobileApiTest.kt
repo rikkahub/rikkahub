@@ -422,6 +422,8 @@ class VoiceLabMobileApiTest {
         assertEquals(HermesJobStatus.Failed, snapshot.status)
         assertEquals(VoiceFailureKind.HermesFailed, snapshot.failure?.kind)
         assertEquals("Hermes request failed", snapshot.failure?.safeMessage)
+        assertEquals("provider returned a safe summary", snapshot.failure?.safeSummary)
+        assertEquals(VoiceFailureSource.Hermes, snapshot.failure?.source)
         assertEquals(false, snapshot.failure?.retryable)
     }
 
