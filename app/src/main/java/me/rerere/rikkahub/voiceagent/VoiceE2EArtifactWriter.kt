@@ -35,6 +35,7 @@ class VoiceE2EArtifactWriter private constructor(
     rootDirectory: File,
     traceId: String?,
     scope: CoroutineScope?,
+    private val atomicMove: (source: Path, target: Path, atomic: Boolean) -> Path,
 ) {
     private val commands = if (enabled) {
         Channel<WriteCommand>(capacity = Channel.UNLIMITED)
@@ -202,7 +203,7 @@ class VoiceE2EArtifactWriter private constructor(
             if (append) {
                 file.appendText("$content\n")
             } else {
-                file.replaceTextAtomically(content)
+                file.replaceTextAtomically(content, atomicMove)
             }
         }.onFailure { error ->
             val message = error.message ?: error.javaClass.simpleName
@@ -254,6 +255,7 @@ class VoiceE2EArtifactWriter private constructor(
             rootDirectory = File(""),
             traceId = null,
             scope = null,
+            atomicMove = ::defaultVoiceE2EAtomicMove,
         )
 
         fun create(
@@ -261,24 +263,29 @@ class VoiceE2EArtifactWriter private constructor(
             rootDirectory: File,
             traceId: String? = null,
             scope: CoroutineScope,
+            atomicMove: ((source: Path, target: Path, atomic: Boolean) -> Path)? = null,
         ): VoiceE2EArtifactWriter = VoiceE2EArtifactWriter(
             enabled = enabled,
             rootDirectory = rootDirectory,
             traceId = traceId,
             scope = scope,
+            atomicMove = atomicMove ?: ::defaultVoiceE2EAtomicMove,
         )
     }
 }
 
-private fun File.replaceTextAtomically(content: String) {
+private fun File.replaceTextAtomically(
+    content: String,
+    atomicMove: (source: Path, target: Path, atomic: Boolean) -> Path,
+) {
     val parent = requireNotNull(parentFile)
     val temp = File.createTempFile("$name.", ".tmp", parent)
     try {
         temp.writeText(content)
         try {
-            VoiceE2EAtomicMoveOperation.move(temp.toPath(), toPath(), true)
+            atomicMove(temp.toPath(), toPath(), true)
         } catch (error: AtomicMoveNotSupportedException) {
-            VoiceE2EAtomicMoveOperation.move(temp.toPath(), toPath(), false)
+            atomicMove(temp.toPath(), toPath(), false)
         }
     } finally {
         if (temp.exists()) {
@@ -287,24 +294,21 @@ private fun File.replaceTextAtomically(content: String) {
     }
 }
 
-internal object VoiceE2EAtomicMoveOperation {
-    var move: (source: Path, target: Path, atomic: Boolean) -> Path = { source, target, atomic ->
-        if (atomic) {
-            Files.move(
-                source,
-                target,
-                StandardCopyOption.ATOMIC_MOVE,
-                StandardCopyOption.REPLACE_EXISTING,
-            )
-        } else {
-            Files.move(
-                source,
-                target,
-                StandardCopyOption.REPLACE_EXISTING,
-            )
-        }
+internal fun defaultVoiceE2EAtomicMove(source: Path, target: Path, atomic: Boolean): Path =
+    if (atomic) {
+        Files.move(
+            source,
+            target,
+            StandardCopyOption.ATOMIC_MOVE,
+            StandardCopyOption.REPLACE_EXISTING,
+        )
+    } else {
+        Files.move(
+            source,
+            target,
+            StandardCopyOption.REPLACE_EXISTING,
+        )
     }
-}
 
 private fun String.containsLineBreak(): Boolean = contains('\n') || contains('\r')
 

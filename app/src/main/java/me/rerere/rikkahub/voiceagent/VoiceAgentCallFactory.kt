@@ -7,6 +7,8 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.AndroidVoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.gemini.OkHttpGeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
@@ -40,11 +42,33 @@ interface VoiceAgentCallFactory {
 
 class DefaultVoiceAgentCallFactory internal constructor(
     private val context: Context,
-    private val chatService: ChatService,
-    private val settingsStore: SettingsStore,
+    private val chatService: ChatService?,
+    private val settingsStore: SettingsStore?,
     private val okHttpClient: OkHttpClient,
     private val observability: VoiceObservability,
     private val metadataEpochNowMs: () -> Long,
+    private val sessionApiFactory: (VoiceLabMobileApi) -> VoiceSessionApi = { VoiceLabVoiceSessionApi(api = it) },
+    private val toolApiFactory: (VoiceLabMobileApi) -> VoiceToolApi = { VoiceLabHermesToolApi(api = it) },
+    private val geminiFactory: () -> GeminiLiveVoiceClient = {
+        OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient)
+    },
+    private val audioFactory: () -> VoiceAudioEngine = {
+        AndroidVoiceAudioEngine(context = context)
+    },
+    private val conversationStoreFactory: (Uuid) -> VoiceConversationStore = { conversationId ->
+        ChatServiceVoiceConversationStore(
+            conversationId = conversationId,
+            chatService = requireNotNull(chatService) { "chatService is required for default conversation store" },
+        )
+    },
+    private val contextProviderFactory: (String) -> VoiceAgentContextProvider = { voiceModelId ->
+        SettingsVoiceAgentContextProvider(
+            settingsStore = requireNotNull(settingsStore) { "settingsStore is required for default context provider" },
+            voiceModelName = voiceModelId,
+        )
+    },
+    private val artifactWriterFactory: (File, VoiceTraceContext, CoroutineScope) -> VoiceE2EArtifactWriter =
+        ::createDefaultVoiceE2EArtifactWriter,
 ) : VoiceAgentCallFactory {
     constructor(
         context: Context,
@@ -83,39 +107,22 @@ class DefaultVoiceAgentCallFactory internal constructor(
             baseTraceContext to VoiceLabTraceHeaders.from(baseTraceContext)
         }
         return runCatching {
+            val mobileApi = VoiceLabMobileApi(
+                baseUrl = config.voiceLabBaseUrl,
+                credentials = config.credentials,
+                traceHeaders = traceHeaders,
+            )
             VoiceAgentCallSession(
                 modelId = config.voiceModelId,
-                sessionApi = VoiceLabVoiceSessionApi(
-                    api = VoiceLabMobileApi(
-                        baseUrl = config.voiceLabBaseUrl,
-                        credentials = config.credentials,
-                        traceHeaders = traceHeaders,
-                    )
-                ),
-                toolApi = VoiceLabHermesToolApi(
-                    api = VoiceLabMobileApi(
-                        baseUrl = config.voiceLabBaseUrl,
-                        credentials = config.credentials,
-                        traceHeaders = traceHeaders,
-                    )
-                ),
-                gemini = OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient),
-                audio = AndroidVoiceAudioEngine(context = context),
-                conversationStore = ChatServiceVoiceConversationStore(
-                    conversationId = conversationId,
-                    chatService = chatService,
-                ),
-                contextProvider = SettingsVoiceAgentContextProvider(
-                    settingsStore = settingsStore,
-                    voiceModelName = config.voiceModelId,
-                ),
+                sessionApi = sessionApiFactory(mobileApi),
+                toolApi = toolApiFactory(mobileApi),
+                gemini = geminiFactory(),
+                audio = audioFactory(),
+                conversationStore = conversationStoreFactory(conversationId),
+                contextProvider = contextProviderFactory(config.voiceModelId),
                 observability = observability,
                 traceContext = traceContext,
-                voiceE2EArtifacts = createDefaultVoiceE2EArtifactWriter(
-                    noBackupFilesDir = context.noBackupFilesDir,
-                    traceContext = traceContext,
-                    scope = scope,
-                ),
+                voiceE2EArtifacts = artifactWriterFactory(context.noBackupFilesDir, traceContext, scope),
                 sessionMetadata = buildDefaultVoiceE2ESessionMetadata(
                     traceContext = traceContext,
                     conversationId = conversationId,

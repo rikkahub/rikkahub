@@ -178,23 +178,22 @@ class VoiceE2EArtifactWriterTest {
     fun `terminal session json write falls back when atomic move is unsupported`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-session-json-atomic-fallback").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val originalMove = VoiceE2EAtomicMoveOperation.move
         var atomicAttempted = false
         var fallbackAttempted = false
         try {
-            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
-                if (atomic) {
-                    atomicAttempted = true
-                    throw AtomicMoveNotSupportedException(source.toString(), target.toString(), "test fallback")
-                }
-                fallbackAttempted = true
-                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
-            }
             val writer = VoiceE2EArtifactWriter.create(
                 enabled = true,
                 rootDirectory = root,
                 traceId = "VA000323",
                 scope = scope,
+                atomicMove = { source, target, atomic ->
+                    if (atomic) {
+                        atomicAttempted = true
+                        throw AtomicMoveNotSupportedException(source.toString(), target.toString(), "test fallback")
+                    }
+                    fallbackAttempted = true
+                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
+                },
             )
             val content = """{"voiceTraceId":"VA000323","status":"ended"}"""
 
@@ -214,7 +213,6 @@ class VoiceE2EArtifactWriterTest {
                     .filter { it.startsWith("session.json.") && it.endsWith(".tmp") },
             )
         } finally {
-            VoiceE2EAtomicMoveOperation.move = originalMove
             scope.cancel()
             root.deleteRecursively()
         }
@@ -224,25 +222,19 @@ class VoiceE2EArtifactWriterTest {
     fun `canceling returned terminal write does not corrupt terminal write ordering`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-session-json-cancel-returned").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val originalMove = VoiceE2EAtomicMoveOperation.move
         val firstWriteStarted = CountDownLatch(1)
         val releaseFirstWrite = CountDownLatch(1)
         try {
-            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
-                if (
-                    target.fileName.toString() == "session.json" &&
-                    source.toFile().readText().contains("\"status\":\"started\"")
-                ) {
-                    firstWriteStarted.countDown()
-                    releaseFirstWrite.await(1, TimeUnit.SECONDS)
-                }
-                originalMove(source, target, atomic)
-            }
             val writer = VoiceE2EArtifactWriter.create(
                 enabled = true,
                 rootDirectory = root,
                 traceId = "VA000325",
                 scope = scope,
+                atomicMove = blockingSessionJsonMove(
+                    status = "started",
+                    started = firstWriteStarted,
+                    release = releaseFirstWrite,
+                ),
             )
             val first = """{"voiceTraceId":"VA000325","status":"started"}"""
             val second = """{"voiceTraceId":"VA000325","status":"ended"}"""
@@ -268,7 +260,6 @@ class VoiceE2EArtifactWriterTest {
             assertEquals(second, File(traceDirectory, "session.json").readText())
         } finally {
             releaseFirstWrite.countDown()
-            VoiceE2EAtomicMoveOperation.move = originalMove
             scope.cancel()
             root.deleteRecursively()
         }
@@ -278,25 +269,19 @@ class VoiceE2EArtifactWriterTest {
     fun `draining terminal writes waits for queued terminal session json writes`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-session-json-drain-terminal").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val originalMove = VoiceE2EAtomicMoveOperation.move
         val firstWriteStarted = CountDownLatch(1)
         val releaseFirstWrite = CountDownLatch(1)
         try {
-            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
-                if (
-                    target.fileName.toString() == "session.json" &&
-                    source.toFile().readText().contains("\"status\":\"started\"")
-                ) {
-                    firstWriteStarted.countDown()
-                    releaseFirstWrite.await(1, TimeUnit.SECONDS)
-                }
-                originalMove(source, target, atomic)
-            }
             val writer = VoiceE2EArtifactWriter.create(
                 enabled = true,
                 rootDirectory = root,
                 traceId = "VA000326",
                 scope = scope,
+                atomicMove = blockingSessionJsonMove(
+                    status = "started",
+                    started = firstWriteStarted,
+                    release = releaseFirstWrite,
+                ),
             )
             val first = """{"voiceTraceId":"VA000326","status":"started"}"""
             val second = """{"voiceTraceId":"VA000326","status":"failed"}"""
@@ -324,7 +309,6 @@ class VoiceE2EArtifactWriterTest {
             assertEquals(second, File(traceDirectory, "session.json").readText())
         } finally {
             releaseFirstWrite.countDown()
-            VoiceE2EAtomicMoveOperation.move = originalMove
             scope.cancel()
             root.deleteRecursively()
         }
@@ -725,7 +709,7 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
-    fun `default factory writer boundary keeps artifacts enabled even if launch config disables them`() = runBlocking {
+    fun `default factory writer boundary persists artifacts under no backup root`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-factory-always-enabled").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         try {
@@ -739,28 +723,6 @@ class VoiceE2EArtifactWriterTest {
             writer.drain()
 
             assertEquals("private answer", File(root, "voice-e2e/trace-test/hermes-answer.txt").readText())
-        } finally {
-            scope.cancel()
-            root.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun `default factory writer boundary uses no backup root when launch config enables artifacts`() = runBlocking {
-        val root = Files.createTempDirectory("voice-e2e-factory-enabled").toFile()
-        val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        try {
-            val writer = createDefaultVoiceE2EArtifactWriter(
-                noBackupFilesDir = root,
-                traceContext = VoiceTraceContext(traceId = "trace-test", voiceSessionId = "session-test"),
-                scope = scope,
-            )
-
-            writer(VoiceE2EArtifact.HermesAnswer, "private answer")
-            writer.drain()
-
-            val answerFile = File(root, "voice-e2e/trace-test/hermes-answer.txt")
-            assertEquals("private answer", answerFile.readText())
         } finally {
             scope.cancel()
             root.deleteRecursively()
@@ -800,3 +762,19 @@ class VoiceE2EArtifactWriterTest {
         return directory
     }
 }
+
+private fun blockingSessionJsonMove(
+    status: String,
+    started: CountDownLatch,
+    release: CountDownLatch,
+): (source: java.nio.file.Path, target: java.nio.file.Path, atomic: Boolean) -> java.nio.file.Path =
+    { source, target, atomic ->
+        if (
+            target.fileName.toString() == "session.json" &&
+            source.toFile().readText().contains(""""status":"$status"""")
+        ) {
+            started.countDown()
+            release.await(1, TimeUnit.SECONDS)
+        }
+        defaultVoiceE2EAtomicMove(source, target, atomic)
+    }
