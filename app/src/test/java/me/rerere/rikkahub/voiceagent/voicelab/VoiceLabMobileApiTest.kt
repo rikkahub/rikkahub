@@ -542,6 +542,41 @@ class VoiceLabMobileApiTest {
     }
 
     @Test
+    fun `Hermes job snapshot with known failed status drops future failure enum values`() = runBlocking {
+        val transport = transportFor { request ->
+            responseFor(
+                request = request,
+                body = """
+                {
+                  "jobId":"job-known-future-failure",
+                  "callId":"call-known-future-failure",
+                  "prompt":"private prompt",
+                  "status":"failed",
+                  "createdAt":"2026-07-02T00:00:00.000Z",
+                  "failure":{
+                    "kind":"future_kind",
+                    "safeMessage":"server future failure",
+                    "safeSummary":"server future failure",
+                    "retryable":true,
+                    "source":"future_source"
+                  }
+                }
+                """.trimIndent(),
+            )
+        }
+        val api = VoiceLabMobileApi(
+            baseUrl = "https://voice-lab.example.test",
+            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            transport = transport,
+        )
+
+        val snapshot = api.getHermesJob("job-known-future-failure")
+
+        assertEquals(HermesJobStatus.Failed, snapshot.status)
+        assertNull(snapshot.failure)
+    }
+
+    @Test
     fun `Hermes in-progress wire statuses decode without fallback failure`() = runBlocking {
         listOf(
             "accepted" to HermesJobStatus.Accepted,
