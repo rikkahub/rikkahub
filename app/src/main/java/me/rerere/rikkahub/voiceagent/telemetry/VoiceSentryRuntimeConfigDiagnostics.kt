@@ -5,6 +5,7 @@ import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactPaths
 
 internal data class VoiceSentryRuntimeConfigDiagnostics(
     val dsnConfigured: Boolean,
@@ -51,7 +52,7 @@ internal fun writeVoiceSentryRuntimeConfigDiagnostics(
     warningLogger: (String) -> Unit = ::logVoiceSentryRuntimeConfigDiagnosticsWarning,
 ) {
     runCatching {
-        val file = File(rootDirectory, "voice-e2e/android-sentry-config.json")
+        val file = VoiceE2EArtifactPaths.sentryConfigDiagnosticsFile(rootDirectory)
         val parentDirectory = file.parentFile
             ?: error("Diagnostics parent directory unavailable")
         if (!parentDirectory.exists() && !parentDirectory.mkdirs()) {

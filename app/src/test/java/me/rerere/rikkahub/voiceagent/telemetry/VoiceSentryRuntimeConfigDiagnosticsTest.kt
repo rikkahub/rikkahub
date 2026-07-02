@@ -8,6 +8,7 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -28,7 +29,7 @@ class VoiceSentryRuntimeConfigDiagnosticsTest {
 
             writeVoiceSentryRuntimeConfigDiagnostics(root, diagnostics)
 
-            val file = File(root, "voice-e2e/android-sentry-config.json")
+            val file = VoiceE2EArtifactPaths.sentryConfigDiagnosticsFile(root)
             assertTrue(file.exists())
             val content = file.readText()
             assertFalse(content.contains("https://public@example.com/1"))
@@ -118,12 +119,76 @@ class VoiceSentryRuntimeConfigDiagnosticsTest {
             )
 
             assertSame(NoOpVoiceObservability, observability)
-            val content = File(root, "voice-e2e/android-sentry-config.json").readText()
+            val content = VoiceE2EArtifactPaths.sentryConfigDiagnosticsFile(root).readText()
             assertFalse(content.contains("https://public@example.com/1"))
             val json = Json.parseToJsonElement(content).jsonObject
             assertEquals(false, json["dsnConfigured"]!!.jsonPrimitive.boolean)
             assertEquals(true, json["environmentConfigured"]!!.jsonPrimitive.boolean)
             assertEquals(1.0, json["tracesSampleRate"]!!.jsonPrimitive.double, 0.0)
+            assertEquals(true, json["tracingEnabled"]!!.jsonPrimitive.boolean)
+            assertEquals("noop", json["observability"]!!.jsonPrimitive.content)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `nonblank dsn sentry factory writes sentry runtime diagnostics`() {
+        val root = Files.createTempDirectory("voice-sentry-factory-sentry").toFile()
+        try {
+            val config = SentryVoiceObservabilityConfig(
+                dsn = "https://public@example.com/1",
+                environment = "production",
+                tracesSampleRate = 0.75,
+            )
+
+            val observability = createSentryVoiceObservability(
+                context = ContextWrapper(null),
+                config = config,
+                diagnosticRootDirectory = root,
+                sentryInitializer = { _, initializedConfig ->
+                    assertEquals(config, initializedConfig)
+                    SentryVoiceObservability()
+                },
+            )
+
+            assertTrue(observability is SentryVoiceObservability)
+            val content = VoiceE2EArtifactPaths.sentryConfigDiagnosticsFile(root).readText()
+            assertFalse(content.contains("https://public@example.com/1"))
+            val json = Json.parseToJsonElement(content).jsonObject
+            assertEquals(true, json["dsnConfigured"]!!.jsonPrimitive.boolean)
+            assertEquals(true, json["environmentConfigured"]!!.jsonPrimitive.boolean)
+            assertEquals(0.75, json["tracesSampleRate"]!!.jsonPrimitive.double, 0.0)
+            assertEquals(true, json["tracingEnabled"]!!.jsonPrimitive.boolean)
+            assertEquals("sentry", json["observability"]!!.jsonPrimitive.content)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `sentry init failure writes noop runtime diagnostics before fallback`() {
+        val root = Files.createTempDirectory("voice-sentry-factory-init-failure").toFile()
+        try {
+            val observability = createSentryVoiceObservability(
+                context = ContextWrapper(null),
+                config = SentryVoiceObservabilityConfig(
+                    dsn = "https://public@example.com/1",
+                    environment = "production",
+                    tracesSampleRate = 0.5,
+                ),
+                diagnosticRootDirectory = root,
+                sentryInitializer = { _, _ -> error("forced init failure") },
+                sentryInitFailureLogger = {},
+            )
+
+            assertSame(NoOpVoiceObservability, observability)
+            val content = VoiceE2EArtifactPaths.sentryConfigDiagnosticsFile(root).readText()
+            assertFalse(content.contains("https://public@example.com/1"))
+            val json = Json.parseToJsonElement(content).jsonObject
+            assertEquals(true, json["dsnConfigured"]!!.jsonPrimitive.boolean)
+            assertEquals(true, json["environmentConfigured"]!!.jsonPrimitive.boolean)
+            assertEquals(0.5, json["tracesSampleRate"]!!.jsonPrimitive.double, 0.0)
             assertEquals(true, json["tracingEnabled"]!!.jsonPrimitive.boolean)
             assertEquals("noop", json["observability"]!!.jsonPrimitive.content)
         } finally {

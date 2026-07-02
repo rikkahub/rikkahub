@@ -31,11 +31,11 @@ class VoiceE2EArtifactWriter private constructor(
         null
     }
     private val activeTraceId = traceId?.takeIf { it.isSafeTraceDirectoryName() }
-    private val baseDirectory = File(rootDirectory, "voice-e2e")
+    private val baseDirectory = VoiceE2EArtifactPaths.rootDirectory(rootDirectory)
     private val directory = activeTraceId
         ?.let { File(baseDirectory, it) }
         ?: baseDirectory
-    private val latestTraceFile = activeTraceId?.let { File(baseDirectory, "latest-trace-id.txt") }
+    private val latestTraceFile = activeTraceId?.let { VoiceE2EArtifactPaths.latestTraceIdFile(rootDirectory) }
     private val pendingLock = Any()
     private val pendingWrites = LinkedHashMap<VoiceE2EArtifact, String>()
     private val pendingAppends = mutableListOf<PendingAppend>()
@@ -216,10 +216,9 @@ private fun String.isSafeTraceDirectoryName(): Boolean =
     isNotBlank() &&
         this != "." &&
         this != ".." &&
-        this != LATEST_TRACE_ID_FILE_NAME &&
+        this != VoiceE2EArtifactPaths.LATEST_TRACE_ID_FILE_NAME &&
         SAFE_TRACE_DIRECTORY_NAME.matches(this)
 
 private val SAFE_TRACE_DIRECTORY_NAME = Regex("[A-Za-z0-9._-]+")
-private const val LATEST_TRACE_ID_FILE_NAME = "latest-trace-id.txt"
 private const val MAX_TRACE_ARTIFACT_DIRECTORIES = 3
 private const val TAG = "VoiceE2EArtifactWriter"

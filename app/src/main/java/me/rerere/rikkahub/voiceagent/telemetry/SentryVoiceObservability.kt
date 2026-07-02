@@ -134,6 +134,20 @@ fun createSentryVoiceObservability(
     context: Context,
     config: SentryVoiceObservabilityConfig,
     diagnosticRootDirectory: File = context.noBackupFilesDir,
+): VoiceObservability =
+    createSentryVoiceObservability(
+        context = context,
+        config = config,
+        diagnosticRootDirectory = diagnosticRootDirectory,
+        sentryInitializer = ::initializeSentryVoiceObservability,
+    )
+
+internal fun createSentryVoiceObservability(
+    context: Context,
+    config: SentryVoiceObservabilityConfig,
+    diagnosticRootDirectory: File,
+    sentryInitializer: (Context, SentryVoiceObservabilityConfig) -> VoiceObservability,
+    sentryInitFailureLogger: (Throwable) -> Unit = ::logSentryInitFailure,
 ): VoiceObservability {
     if (config.dsn.isBlank()) {
         writeVoiceSentryRuntimeConfigDiagnostics(
@@ -144,12 +158,7 @@ fun createSentryVoiceObservability(
     }
 
     return runCatching {
-        SentryAndroid.init(context) { options ->
-            options.dsn = config.dsn
-            options.environment = config.environment.ifBlank { "development" }
-            options.tracesSampleRate = config.tracesSampleRate.coerceIn(0.0, 1.0)
-        }
-        SentryVoiceObservability()
+        sentryInitializer(context, config)
     }.fold(
         onSuccess = { observability ->
             writeVoiceSentryRuntimeConfigDiagnostics(
@@ -159,14 +168,30 @@ fun createSentryVoiceObservability(
             observability
         },
         onFailure = { error ->
-            Log.w(TAG, "Sentry init failed; continuing without voice observability", error)
             writeVoiceSentryRuntimeConfigDiagnostics(
                 rootDirectory = diagnosticRootDirectory,
                 diagnostics = config.toRuntimeDiagnostics(observability = "noop"),
             )
+            sentryInitFailureLogger(error)
             NoOpVoiceObservability
         },
     )
+}
+
+private fun logSentryInitFailure(error: Throwable) {
+    Log.w(TAG, "Sentry init failed; continuing without voice observability", error)
+}
+
+private fun initializeSentryVoiceObservability(
+    context: Context,
+    config: SentryVoiceObservabilityConfig,
+): VoiceObservability {
+    SentryAndroid.init(context) { options ->
+        options.dsn = config.dsn
+        options.environment = config.environment.ifBlank { "development" }
+        options.tracesSampleRate = config.tracesSampleRate.coerceIn(0.0, 1.0)
+    }
+    return SentryVoiceObservability()
 }
 
 private class MutableSentryVoiceSpan(
