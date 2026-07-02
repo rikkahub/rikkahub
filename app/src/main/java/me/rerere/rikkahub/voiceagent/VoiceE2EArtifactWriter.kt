@@ -17,6 +17,7 @@ enum class VoiceE2EArtifact(
     HermesCall("hermes-call.txt"),
     HermesAnswer("hermes-answer.txt"),
     HermesEvents("hermes-events.ndjson", appendOnly = true),
+    SessionJson("session.json"),
 }
 
 class VoiceE2EArtifactWriter private constructor(
@@ -112,7 +113,7 @@ class VoiceE2EArtifactWriter private constructor(
     private fun cleanOldTraceDirectories() {
         val traceId = activeTraceId ?: return
         runCatching {
-            directory.mkdirs()
+            prepareActiveTraceDirectory()
             val traceDirectories = baseDirectory.listFiles()
                 .orEmpty()
                 .filter { child ->
@@ -135,13 +136,17 @@ class VoiceE2EArtifactWriter private constructor(
         }
     }
 
+    private fun prepareActiveTraceDirectory() {
+        directory.mkdirs()
+        latestTraceFile?.let { file ->
+            requireNotNull(file.parentFile).mkdirs()
+            file.writeText(requireNotNull(activeTraceId))
+        }
+    }
+
     private fun writeArtifact(artifact: VoiceE2EArtifact, content: String, append: Boolean) {
         runCatching {
-            directory.mkdirs()
-            latestTraceFile?.let { file ->
-                requireNotNull(file.parentFile).mkdirs()
-                file.writeText(requireNotNull(activeTraceId))
-            }
+            prepareActiveTraceDirectory()
             val file = File(directory, artifact.fileName)
             if (append) {
                 file.appendText("$content\n")
@@ -220,5 +225,5 @@ private fun String.isSafeTraceDirectoryName(): Boolean =
         SAFE_TRACE_DIRECTORY_NAME.matches(this)
 
 private val SAFE_TRACE_DIRECTORY_NAME = Regex("[A-Za-z0-9._-]+")
-private const val MAX_TRACE_ARTIFACT_DIRECTORIES = 3
+private const val MAX_TRACE_ARTIFACT_DIRECTORIES = 10
 private const val TAG = "VoiceE2EArtifactWriter"
