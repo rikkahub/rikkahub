@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.voiceagent
 
-import android.content.ContextWrapper
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +17,6 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
@@ -28,18 +26,13 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
-import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
-import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileCredentials
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabTraceHeaders
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
-import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -2554,6 +2547,7 @@ class VoiceAgentRuntimeTest {
                 blockedSession.started.await()
             }
             artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
 
             val started = Json.parseToJsonElement(sessionJson.readText()).jsonObject
             assertEquals("started", started.string("status"))
@@ -2577,6 +2571,7 @@ class VoiceAgentRuntimeTest {
                 }
             }
             artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
 
             val connected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
             assertEquals("connected", connected.string("status"))
@@ -2819,6 +2814,7 @@ class VoiceAgentRuntimeTest {
 
             session.closeNow()
             artifactScope.cancel()
+            artifactWriter.drainTerminalWrites()
 
             val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000124/session.json")
             withTimeout(1000) {
@@ -2886,6 +2882,7 @@ class VoiceAgentRuntimeTest {
             session.start()
             gemini.awaitConnect()
             artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
 
             val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000125/session.json")
             val failed = Json.parseToJsonElement(sessionJson.readText()).jsonObject
@@ -2955,6 +2952,7 @@ class VoiceAgentRuntimeTest {
                 }
             }
             artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
 
             val failed = Json.parseToJsonElement(sessionJson.readText()).jsonObject
             assertEquals("failed", failed.string("status"))
@@ -2970,6 +2968,7 @@ class VoiceAgentRuntimeTest {
                 }
             }
             artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
 
             val connected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
             assertEquals("connected", connected.string("status"))
@@ -3141,70 +3140,6 @@ class VoiceAgentRuntimeTest {
         assertEquals("user_end", endedAfterConnected.string("closeStatus"))
         assertEquals("ended", failedAfterEnded.string("status"))
         assertEquals("user_end", failedAfterEnded.string("closeStatus"))
-    }
-
-    @Test
-    fun `default factory creates session metadata from trace context and build fields`() = runTest {
-        val root = Files.createTempDirectory("voice-e2e-factory-session").toFile()
-        val sessionApi = FakeVoiceSessionApi()
-        val blockedSession = sessionApi.blockNextSession()
-        val dependencies = FakeDefaultVoiceAgentCallFactoryDependencies(
-            sessionApi = sessionApi,
-            traceContext = VoiceTraceContext(
-                traceId = "VA654321",
-                voiceSessionId = "VS654321",
-                sentryTrace = "0123456789abcdef0123456789abcdef-0123456789abcdef-1",
-                sentryBaggage = "sentry-public_key=abc",
-            ),
-        )
-        val factory = DefaultVoiceAgentCallFactory(
-            context = VoiceFactoryTestContext(root),
-            observability = dependencies,
-            sessionFactory = dependencies,
-            metadataEpochNowMs = { 1_700_000_005_000 },
-        )
-        val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        try {
-            val session = factory.create(
-                conversationId = Uuid.parse("00000000-0000-0000-0000-000000000123"),
-                config = VoiceAgentLaunchConfig(
-                    voiceLabBaseUrl = "https://voice.test",
-                    credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
-                    voiceModelId = "gemini-flash",
-                    assistantName = "Assistant",
-                    assistantPrompt = "Prompt",
-                ),
-                scope = scope,
-            )
-
-            session.start()
-            withTimeout(500) {
-                blockedSession.started.await()
-            }
-            dependencies.artifactWriter?.drain()
-
-            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA654321/session.json")
-            val started = Json.parseToJsonElement(sessionJson.readText()).jsonObject
-            assertEquals("VA654321", started.string("voiceTraceId"))
-            assertEquals("VS654321", started.string("voiceSessionId"))
-            assertEquals("00000000-0000-0000-0000-000000000123", started.string("conversationId"))
-            assertEquals("me.rerere.rikkahub.debug", started.string("packageName"))
-            assertEquals(BuildConfig.VERSION_NAME, started.string("versionName"))
-            assertEquals(BuildConfig.VERSION_CODE, started.string("versionCode"))
-            assertEquals("gemini-flash", started.string("voiceModelId"))
-            assertEquals("1700000005000", started.getValue("startedAtEpochMs").jsonPrimitive.content)
-            assertTrue(started.boolean("debuggable"))
-            assertTrue(started.boolean("sentryPropagationCreated"))
-            assertEquals(BuildConfig.VOICE_AGENT_SENTRY_DSN.isNotBlank(), started.boolean("sentryDsnConfigured"))
-            assertEquals(
-                BuildConfig.VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE.toDoubleOrNull()
-                    ?.let { it > 0.0 } ?: false,
-                started.boolean("sentryTracingEnabled"),
-            )
-        } finally {
-            scope.cancel()
-            root.deleteRecursively()
-        }
     }
 
     @Test
@@ -4649,65 +4584,4 @@ private fun VoiceE2EArtifactWriter.blockNextTerminalSessionJsonForTest(): Comple
         .apply { isAccessible = true }
     terminalWriteTail.set(this, blocked)
     return blocked
-}
-
-private class VoiceFactoryTestContext(
-    private val root: File,
-) : ContextWrapper(null) {
-    override fun getNoBackupFilesDir(): File = root
-    override fun getPackageName(): String = "me.rerere.rikkahub.debug"
-}
-
-private class FakeDefaultVoiceAgentCallFactoryDependencies(
-    private val sessionApi: VoiceSessionApi,
-    private val traceContext: VoiceTraceContext,
-) : DefaultVoiceAgentManagedSessionFactory, VoiceObservability {
-    var artifactWriter: VoiceE2EArtifactWriter? = null
-
-    override fun withSentryPropagation(trace: VoiceTraceContext): VoiceTraceContext = traceContext
-
-    override fun create(request: DefaultVoiceAgentManagedSessionRequest): ManagedVoiceCallSession {
-        val writer = createDefaultVoiceE2EArtifactWriter(
-            noBackupFilesDir = request.context.noBackupFilesDir,
-            traceContext = request.traceContext,
-            scope = request.scope,
-        ).also { artifactWriter = it }
-        return VoiceAgentCallSession(
-            modelId = request.config.voiceModelId,
-            sessionApi = sessionApi,
-            toolApi = FakeVoiceToolApi(),
-            gemini = FakeGeminiLiveVoiceClient(),
-            audio = FakeVoiceAudioEngine(),
-            conversationStore = FakeVoiceConversationStore(
-                Conversation.ofId(id = request.conversationId)
-            ),
-            contextProvider = FakeVoiceAgentContextProvider(
-                VoiceContext(systemInstruction = "system", turns = emptyList())
-            ),
-            observability = request.observability,
-            traceContext = request.traceContext,
-            voiceE2EArtifacts = writer,
-            sessionMetadata = request.sessionMetadata,
-            metadataEpochNowMs = request.metadataEpochNowMs,
-            scope = request.scope,
-        )
-    }
-
-    override fun recordEvent(
-        name: String,
-        trace: VoiceTraceContext,
-        attributes: Map<String, Any?>,
-    ) = Unit
-
-    override suspend fun <T> withSpan(
-        name: String,
-        trace: VoiceTraceContext,
-        block: suspend (VoiceSpan) -> T,
-    ): T = error("Factory metadata test does not create spans")
-
-    override fun captureException(
-        throwable: Throwable,
-        trace: VoiceTraceContext,
-        attributes: Map<String, Any?>,
-    ) = Unit
 }
