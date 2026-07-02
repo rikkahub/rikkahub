@@ -426,6 +426,41 @@ class VoiceLabMobileApiTest {
     }
 
     @Test
+    fun `Hermes job snapshot with unknown wire status maps to failed snapshot`() = runBlocking {
+        val transport = transportFor { request ->
+            responseFor(
+                request = request,
+                body = """
+                {
+                  "jobId":"job-unknown",
+                  "callId":"call-unknown",
+                  "prompt":"private prompt",
+                  "status":"mystery",
+                  "createdAt":"2026-07-02T00:00:00.000Z",
+                  "updatedAt":"2026-07-02T00:00:01.000Z"
+                }
+                """.trimIndent(),
+            )
+        }
+        val api = VoiceLabMobileApi(
+            baseUrl = "https://voice-lab.example.test",
+            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            transport = transport,
+        )
+
+        val snapshot = api.getHermesJob("job-unknown")
+
+        assertEquals("job-unknown", snapshot.jobId)
+        assertEquals("call-unknown", snapshot.callId)
+        assertEquals("private prompt", snapshot.prompt)
+        assertEquals(HermesJobStatus.Failed, snapshot.status)
+        assertEquals(VoiceFailureKind.Internal, snapshot.failure?.kind)
+        assertEquals(VoiceFailureSource.VoiceLab, snapshot.failure?.source)
+        assertEquals("Unknown Hermes job status: mystery", snapshot.failure?.safeMessage)
+        assertEquals(false, snapshot.failure?.retryable)
+    }
+
+    @Test
     fun `cancelHermesJob sends DELETE request and parses canceled response`() = runBlocking {
         var seenRequest: Request? = null
         val transport = transportFor { request ->

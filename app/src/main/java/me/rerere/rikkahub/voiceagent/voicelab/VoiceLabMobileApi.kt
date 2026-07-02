@@ -245,16 +245,33 @@ class VoiceLabMobileApi internal constructor(
         prompt: String,
         profileId: String? = null,
     ): MobileHermesJobSubmitResponse =
-        postJson(
-            path = "/api/mobile/hermes/jobs",
-            body = MobileHermesRequest(callId = callId, prompt = prompt, profileId = profileId),
+        executeHermesJobSnapshot(
+            requestBuilder("/api/mobile/hermes/jobs")
+                .post(
+                    json.encodeToString(
+                        MobileHermesRequest(
+                            callId = callId,
+                            prompt = prompt,
+                            profileId = profileId,
+                        )
+                    ).toRequestBody(JSON_MEDIA_TYPE)
+                )
+                .build()
         )
 
     suspend fun getHermesJob(jobId: String): MobileHermesJobPollResponse =
-        getJson(path = "/api/mobile/hermes/jobs/$jobId")
+        executeHermesJobSnapshot(
+            requestBuilder("/api/mobile/hermes/jobs/$jobId")
+                .get()
+                .build()
+        )
 
     suspend fun cancelHermesJob(jobId: String): MobileHermesJobPollResponse =
-        deleteJson(path = "/api/mobile/hermes/jobs/$jobId")
+        executeHermesJobSnapshot(
+            requestBuilder("/api/mobile/hermes/jobs/$jobId")
+                .delete()
+                .build()
+        )
 
     private suspend inline fun <reified Req, reified Res> postJson(path: String, body: Req): Res =
         executeJson(
@@ -293,6 +310,19 @@ class VoiceLabMobileApi internal constructor(
             }
 
     private suspend inline fun <reified Res> executeJson(request: Request): Res =
+        executeJsonDecoded(request) { responseText ->
+            json.decodeFromString<Res>(responseText)
+        }
+
+    private suspend fun executeHermesJobSnapshot(request: Request): HermesJobSnapshot =
+        executeJsonDecoded(request) { responseText ->
+            json.decodeFromString<MobileHermesJobSnapshotWire>(responseText).toHermesJobSnapshot()
+        }
+
+    private suspend fun <Res> executeJsonDecoded(
+        request: Request,
+        decode: (String) -> Res,
+    ): Res =
         withContext(Dispatchers.IO) {
             transport.execute(request).use { response ->
                 if (!response.isSuccessful) {
@@ -305,7 +335,7 @@ class VoiceLabMobileApi internal constructor(
                 }
                 val responseText = response.body.string()
                 runCatching {
-                    json.decodeFromString<Res>(responseText)
+                    decode(responseText)
                 }.getOrElse { error ->
                     val errorType = error::class.simpleName ?: "unknown"
                     throw IllegalStateException(

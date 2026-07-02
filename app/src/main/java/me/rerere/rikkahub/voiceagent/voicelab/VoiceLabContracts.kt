@@ -229,6 +229,43 @@ data class HermesJobSnapshot(
             ")"
 }
 
+@Serializable
+internal data class MobileHermesJobSnapshotWire(
+    val jobId: String,
+    val callId: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val prompt: String? = null,
+    val status: String,
+    val createdAt: String,
+    val updatedAt: String? = null,
+    val completedAt: String? = null,
+    val answer: String? = null,
+    val model: String? = null,
+    val profileId: String? = null,
+    val profileLabel: String? = null,
+    val elapsedMs: Long? = null,
+    val failure: VoiceFailure? = null,
+)
+
+internal fun MobileHermesJobSnapshotWire.toHermesJobSnapshot(): HermesJobSnapshot {
+    val parsedStatus = status.toHermesJobStatus()
+    return HermesJobSnapshot(
+        jobId = jobId,
+        callId = callId,
+        prompt = prompt,
+        status = parsedStatus,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        completedAt = completedAt,
+        answer = answer,
+        model = model,
+        profileId = profileId,
+        profileLabel = profileLabel,
+        elapsedMs = elapsedMs,
+        failure = failure ?: status.toLegacyVoiceFailure(error = null),
+    )
+}
+
 private fun String.toHermesJobStatus(): HermesJobStatus =
     when (lowercase()) {
         "accepted" -> HermesJobStatus.Accepted
