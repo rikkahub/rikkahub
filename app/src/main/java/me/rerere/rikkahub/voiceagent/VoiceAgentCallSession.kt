@@ -16,6 +16,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
+import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
@@ -129,50 +130,16 @@ class VoiceAgentCallSession internal constructor(
         val sessionJob = coroutineContext[Job]
         startJob = sessionJob
         clearReconnectEligibility()
-        var geminiStarted = false
+        var closeGeminiOnStartupFailure = false
         try {
-            if (!updateSessionStatusIfActive(
-                    sessionId = currentSessionId,
-                    status = VoiceSessionStatus.PreparingContext,
-                    automaticReconnectJob = automaticReconnectJob,
-                )
-            ) {
-                return
-            }
-            VoiceAgentLog.d(TAG, "preparing context sessionId=$currentSessionId")
-            val voiceContext = contextProvider.build(conversation.value).withTurnsFoldedIntoSystemInstruction()
-            ensureActiveSession(currentSessionId, automaticReconnectJob)
-            VoiceAgentLog.d(
-                TAG,
-                "context prepared sessionId=$currentSessionId turns=${voiceContext.turns.size} " +
-                    "systemInstructionChars=${voiceContext.systemInstruction.length}",
-            )
-            coordinator.recordDiagnostic(
-                name = "voice_context_prepared",
-                detail = "turns=${voiceContext.turns.size}, systemInstructionChars=${voiceContext.systemInstruction.length}",
-            )
-            if (!updateSessionStatusIfActive(
-                    sessionId = currentSessionId,
-                    status = VoiceSessionStatus.RequestingToken,
-                    automaticReconnectJob = automaticReconnectJob,
-                )
-            ) {
-                return
-            }
-            VoiceAgentLog.d(TAG, "requesting voice session sessionId=$currentSessionId modelId=$modelId")
-            val session = sessionApi.createSession(modelId = modelId)
-            ensureActiveSession(currentSessionId, automaticReconnectJob)
-            VoiceAgentLog.d(
-                TAG,
-                "voice session created sessionId=$currentSessionId modelId=${session.modelId} " +
-                    "providerModel=${session.providerModel} inputSampleRate=${session.inputSampleRate} " +
-                    "outputSampleRate=${session.outputSampleRate}",
-            )
-            coordinator.recordDiagnostic(
-                name = "voice_session_created",
-                detail = "modelId=${session.modelId}, providerModel=${session.providerModel}, " +
-                    "inputSampleRate=${session.inputSampleRate}, outputSampleRate=${session.outputSampleRate}",
-            )
+            val voiceContext = prepareVoiceContext(
+                currentSessionId = currentSessionId,
+                automaticReconnectJob = automaticReconnectJob,
+            ) ?: return
+            val session = createVoiceSession(
+                currentSessionId = currentSessionId,
+                automaticReconnectJob = automaticReconnectJob,
+            ) ?: return
             if (!updateSessionStatusIfActive(
                     sessionId = currentSessionId,
                     status = VoiceSessionStatus.ConnectingGemini,
@@ -181,37 +148,14 @@ class VoiceAgentCallSession internal constructor(
             ) {
                 return
             }
-            geminiStarted = true
-            VoiceAgentLog.d(
-                TAG,
-                "connecting Gemini sessionId=$currentSessionId providerModel=${session.providerModel}",
-            )
-            gemini.connect(
-                token = session.token,
-                websocketUrl = session.websocketUrl,
-                providerModel = session.providerModel,
-                liveConnectConfig = session.liveConnectConfig,
-                systemInstruction = voiceContext.systemInstruction,
-                contextTurns = voiceContext.turns,
-                onEvent = { event -> handleGeminiEvent(currentSessionId, event) },
-            )
-            VoiceAgentLog.d(TAG, "Gemini connect returned sessionId=$currentSessionId")
-            ensureActiveSession(currentSessionId, automaticReconnectJob)
-            if (coordinator.state.value.session is VoiceSessionStatus.Error) {
-                VoiceAgentLog.w(TAG, "Gemini connect returned with error state sessionId=$currentSessionId")
-                val startupErrorMessage = (coordinator.state.value.session as? VoiceSessionStatus.Error)?.message
-                    ?: "Gemini connect failed"
-                recordSessionFailedSafely(
-                    sessionId = currentSessionId,
-                    endReason = VoiceSessionStopReason.StartupFailure.diagnosticReason,
-                    failureKind = "startup",
-                    failureSummary = startupErrorMessage,
+            closeGeminiOnStartupFailure = true
+            if (!connectGeminiSession(
+                    currentSessionId = currentSessionId,
+                    automaticReconnectJob = automaticReconnectJob,
+                    session = session,
+                    voiceContext = voiceContext,
                 )
-                prepareFailedSession(
-                    sessionId = currentSessionId,
-                    reason = VoiceSessionStopReason.StartupFailure,
-                    closeGemini = true,
-                )
+            ) {
                 return
             }
             if (!markReconnectEligible(currentSessionId, automaticReconnectJob)) return
@@ -317,16 +261,10 @@ class VoiceAgentCallSession internal constructor(
                 )
                 val startupErrorMessage = error.message ?: error.javaClass.simpleName
                 reconnectController.cancel()
-                recordSessionFailedSafely(
+                recordAndPrepareStartupFailure(
                     sessionId = currentSessionId,
-                    endReason = VoiceSessionStopReason.StartupFailure.diagnosticReason,
-                    failureKind = "startup",
-                    failureSummary = startupErrorMessage,
-                )
-                prepareFailedSession(
-                    sessionId = currentSessionId,
-                    reason = VoiceSessionStopReason.StartupFailure,
-                    closeGemini = geminiStarted,
+                    message = startupErrorMessage,
+                    closeGemini = closeGeminiOnStartupFailure,
                 )
                 clearReconnectEligibility()
                 updateSessionStatusIfNotEnded(VoiceSessionStatus.Error(startupErrorMessage))
@@ -336,6 +274,115 @@ class VoiceAgentCallSession internal constructor(
                 startJob = null
             }
         }
+    }
+
+    private suspend fun prepareVoiceContext(
+        currentSessionId: Long,
+        automaticReconnectJob: Job?,
+    ): VoiceContext? {
+        if (!updateSessionStatusIfActive(
+                sessionId = currentSessionId,
+                status = VoiceSessionStatus.PreparingContext,
+                automaticReconnectJob = automaticReconnectJob,
+            )
+        ) {
+            return null
+        }
+        VoiceAgentLog.d(TAG, "preparing context sessionId=$currentSessionId")
+        val voiceContext = contextProvider.build(conversation.value).withTurnsFoldedIntoSystemInstruction()
+        ensureActiveSession(currentSessionId, automaticReconnectJob)
+        VoiceAgentLog.d(
+            TAG,
+            "context prepared sessionId=$currentSessionId turns=${voiceContext.turns.size} " +
+                "systemInstructionChars=${voiceContext.systemInstruction.length}",
+        )
+        coordinator.recordDiagnostic(
+            name = "voice_context_prepared",
+            detail = "turns=${voiceContext.turns.size}, systemInstructionChars=${voiceContext.systemInstruction.length}",
+        )
+        return voiceContext
+    }
+
+    private suspend fun createVoiceSession(
+        currentSessionId: Long,
+        automaticReconnectJob: Job?,
+    ): MobileVoiceSessionResponse? {
+        if (!updateSessionStatusIfActive(
+                sessionId = currentSessionId,
+                status = VoiceSessionStatus.RequestingToken,
+                automaticReconnectJob = automaticReconnectJob,
+            )
+        ) {
+            return null
+        }
+        VoiceAgentLog.d(TAG, "requesting voice session sessionId=$currentSessionId modelId=$modelId")
+        val session = sessionApi.createSession(modelId = modelId)
+        ensureActiveSession(currentSessionId, automaticReconnectJob)
+        VoiceAgentLog.d(
+            TAG,
+            "voice session created sessionId=$currentSessionId modelId=${session.modelId} " +
+                "providerModel=${session.providerModel} inputSampleRate=${session.inputSampleRate} " +
+                "outputSampleRate=${session.outputSampleRate}",
+        )
+        coordinator.recordDiagnostic(
+            name = "voice_session_created",
+            detail = "modelId=${session.modelId}, providerModel=${session.providerModel}, " +
+                "inputSampleRate=${session.inputSampleRate}, outputSampleRate=${session.outputSampleRate}",
+        )
+        return session
+    }
+
+    private suspend fun connectGeminiSession(
+        currentSessionId: Long,
+        automaticReconnectJob: Job?,
+        session: MobileVoiceSessionResponse,
+        voiceContext: VoiceContext,
+    ): Boolean {
+        VoiceAgentLog.d(
+            TAG,
+            "connecting Gemini sessionId=$currentSessionId providerModel=${session.providerModel}",
+        )
+        gemini.connect(
+            token = session.token,
+            websocketUrl = session.websocketUrl,
+            providerModel = session.providerModel,
+            liveConnectConfig = session.liveConnectConfig,
+            systemInstruction = voiceContext.systemInstruction,
+            contextTurns = voiceContext.turns,
+            onEvent = { event -> handleGeminiEvent(currentSessionId, event) },
+        )
+        VoiceAgentLog.d(TAG, "Gemini connect returned sessionId=$currentSessionId")
+        ensureActiveSession(currentSessionId, automaticReconnectJob)
+        if (coordinator.state.value.session is VoiceSessionStatus.Error) {
+            VoiceAgentLog.w(TAG, "Gemini connect returned with error state sessionId=$currentSessionId")
+            val startupErrorMessage = (coordinator.state.value.session as? VoiceSessionStatus.Error)?.message
+                ?: "Gemini connect failed"
+            recordAndPrepareStartupFailure(
+                sessionId = currentSessionId,
+                message = startupErrorMessage,
+                closeGemini = true,
+            )
+            return false
+        }
+        return true
+    }
+
+    private fun recordAndPrepareStartupFailure(
+        sessionId: Long,
+        message: String,
+        closeGemini: Boolean,
+    ) {
+        recordSessionFailedSafely(
+            sessionId = sessionId,
+            endReason = VoiceSessionStopReason.StartupFailure.diagnosticReason,
+            failureKind = "startup",
+            failureSummary = message,
+        )
+        prepareFailedSession(
+            sessionId = sessionId,
+            reason = VoiceSessionStopReason.StartupFailure,
+            closeGemini = closeGemini,
+        )
     }
 
     private fun reserveConnectedResourceActivation(sessionId: Long): Boolean = synchronized(sessionLock) {
