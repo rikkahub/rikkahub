@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -46,6 +47,13 @@ class VoiceE2EArtifactWriter private constructor(
     private val latestTraceFile = activeTraceId?.let { VoiceE2EArtifactPaths.latestTraceIdFile(rootDirectory) }
     private val pendingLock = Any()
     private val flushLock = Any()
+    private val terminalWriteScope = if (enabled) {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    } else {
+        null
+    }
+    private val terminalWriteLock = Any()
+    private var terminalWriteTail = completedWrite()
     private val pendingWrites = LinkedHashMap<VoiceE2EArtifact, String>()
     private val pendingAppends = mutableListOf<PendingAppend>()
     private var flushQueued = false
@@ -100,34 +108,28 @@ class VoiceE2EArtifactWriter private constructor(
         }
     }
 
-    fun writeImmediately(artifact: VoiceE2EArtifact, content: String) {
-        if (commands == null) return
-        if (artifact.appendOnly && content.containsLineBreak()) {
-            VoiceAgentLog.w(TAG, "artifact append rejected multiline name=${artifact.fileName}")
-            return
-        }
+    fun writeTerminalSessionJson(content: String): CompletableDeferred<Unit> {
+        val writerScope = terminalWriteScope ?: return completedWrite()
         synchronized(pendingLock) {
-            if (artifact.appendOnly) {
-                pendingAppends += PendingAppend(artifact, content)
-            } else {
-                pendingWrites[artifact] = content
+            pendingWrites.remove(VoiceE2EArtifact.SessionJson)
+        }
+        val completed = CompletableDeferred<Unit>()
+        val previous = synchronized(terminalWriteLock) {
+            terminalWriteTail.also {
+                terminalWriteTail = completed
             }
         }
-        flushPendingWrites()
-    }
-
-    fun writeArtifactImmediately(artifact: VoiceE2EArtifact, content: String) {
-        if (commands == null) return
-        if (artifact.appendOnly) {
-            VoiceAgentLog.w(TAG, "artifact immediate write rejected append-only name=${artifact.fileName}")
-            return
-        }
-        synchronized(flushLock) {
-            synchronized(pendingLock) {
-                pendingWrites.remove(artifact)
+        writerScope.launch {
+            runCatching { previous.await() }
+            synchronized(flushLock) {
+                synchronized(pendingLock) {
+                    pendingWrites.remove(VoiceE2EArtifact.SessionJson)
+                }
+                writeArtifact(VoiceE2EArtifact.SessionJson, content, append = false)
             }
-            writeArtifact(artifact, content, append = false)
+            completed.complete(Unit)
         }
+        return completed
     }
 
     suspend fun drain() {
@@ -335,3 +337,6 @@ private fun Path.requireUnderTraceDirectory(rootPath: Path) {
 private val SAFE_TRACE_DIRECTORY_NAME = Regex("[A-Za-z0-9._-]+")
 private const val MAX_TRACE_ARTIFACT_DIRECTORIES = 10
 private const val TAG = "VoiceE2EArtifactWriter"
+
+private fun completedWrite(): CompletableDeferred<Unit> =
+    CompletableDeferred<Unit>().also { it.complete(Unit) }

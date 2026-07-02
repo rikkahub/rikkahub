@@ -1040,7 +1040,7 @@ class VoiceAgentCallSession internal constructor(
             updated.toJson()
         }
         if (immediately || status.isTerminalSessionMetadataStatus()) {
-            voiceE2EArtifacts.writeArtifactImmediately(VoiceE2EArtifact.SessionJson, content)
+            voiceE2EArtifacts.writeTerminalSessionJson(content)
         } else {
             voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
         }

@@ -2593,7 +2593,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `closeNow persists final session metadata before writer scope cancellation`() = runTest {
+    fun `closeNow persists final session metadata after writer scope cancellation`() = runTest {
         val root = Files.createTempDirectory("voice-e2e-close-now-session").toFile()
         val artifactScope = CoroutineScope(SupervisorJob())
         try {
@@ -2643,6 +2643,11 @@ class VoiceAgentRuntimeTest {
             artifactScope.cancel()
 
             val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000124/session.json")
+            withTimeout(1000) {
+                while (!sessionJson.isFile) {
+                    delay(10)
+                }
+            }
             val ended = Json.parseToJsonElement(sessionJson.readText()).jsonObject
             assertEquals("ended", ended.string("status"))
             assertEquals("close_now", ended.string("closeStatus"))

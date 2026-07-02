@@ -151,8 +151,10 @@ class VoiceE2EArtifactWriterTest {
             val first = """{"voiceTraceId":"VA000322","status":"started"}"""
             val second = """{"voiceTraceId":"VA000322","status":"ended"}"""
 
-            writer.writeImmediately(VoiceE2EArtifact.SessionJson, first)
-            writer.writeImmediately(VoiceE2EArtifact.SessionJson, second)
+            writer.write(VoiceE2EArtifact.SessionJson, first)
+            writer.drain()
+            writer.write(VoiceE2EArtifact.SessionJson, second)
+            writer.drain()
 
             val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000322")
             assertEquals(second, File(traceDirectory, "session.json").readText())
@@ -170,7 +172,7 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
-    fun `immediate artifact write falls back when atomic move is unsupported`() = runBlocking {
+    fun `terminal session json write falls back when atomic move is unsupported`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-session-json-atomic-fallback").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val originalMove = VoiceE2EAtomicMoveOperation.move
@@ -193,7 +195,9 @@ class VoiceE2EArtifactWriterTest {
             )
             val content = """{"voiceTraceId":"VA000323","status":"ended"}"""
 
-            writer.writeArtifactImmediately(VoiceE2EArtifact.SessionJson, content)
+            withTimeout(1000) {
+                writer.writeTerminalSessionJson(content).await()
+            }
 
             val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000323")
             assertTrue(atomicAttempted)
@@ -214,7 +218,7 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
-    fun `targeted immediate artifact write does not flush unrelated pending artifacts`() = runBlocking {
+    fun `terminal session json write survives caller cancellation without flushing unrelated pending artifacts`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-session-json-targeted").toFile()
         val job = SupervisorJob().also { it.cancel() }
         val scope = CoroutineScope(coroutineContext + job)
@@ -225,14 +229,18 @@ class VoiceE2EArtifactWriterTest {
                 traceId = "VA000324",
                 scope = scope,
             )
+            val stale = """{"voiceTraceId":"VA000324","status":"started"}"""
             val content = """{"voiceTraceId":"VA000324","status":"ended"}"""
 
-            writer.write(VoiceE2EArtifact.InputTranscript, "pending transcript")
-            writer.writeArtifactImmediately(VoiceE2EArtifact.SessionJson, content)
+            writer.write(VoiceE2EArtifact.SessionJson, stale)
+            writer.write(VoiceE2EArtifact.HermesEvents, """{"event":"pending"}""")
+            withTimeout(1000) {
+                writer.writeTerminalSessionJson(content).await()
+            }
 
             val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000324")
             assertEquals(content, File(traceDirectory, "session.json").readText())
-            assertFalse(File(traceDirectory, "input-transcript.txt").exists())
+            assertFalse(File(traceDirectory, "hermes-events.ndjson").exists())
         } finally {
             root.deleteRecursively()
         }
