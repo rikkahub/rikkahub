@@ -1027,7 +1027,7 @@ class VoiceAgentCallSession internal constructor(
         endedAtEpochMs: Long? = null,
         immediately: Boolean = false,
     ) {
-        synchronized(sessionLock) {
+        val content = synchronized(sessionLock) {
             val metadata = sessionMetadata ?: return
             val updated = metadata.withLifecycleUpdate(
                 status = status,
@@ -1037,12 +1037,12 @@ class VoiceAgentCallSession internal constructor(
             )
             if (updated == metadata) return
             sessionMetadata = updated
-            val content = updated.toJson()
-            if (immediately || status.isTerminalSessionMetadataStatus()) {
-                voiceE2EArtifacts.writeImmediately(VoiceE2EArtifact.SessionJson, content)
-            } else {
-                voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
-            }
+            updated.toJson()
+        }
+        if (immediately || status.isTerminalSessionMetadataStatus()) {
+            voiceE2EArtifacts.writeArtifactImmediately(VoiceE2EArtifact.SessionJson, content)
+        } else {
+            voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
         }
     }
 

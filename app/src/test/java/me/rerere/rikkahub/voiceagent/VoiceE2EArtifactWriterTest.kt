@@ -11,7 +11,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 
 class VoiceE2EArtifactWriterTest {
@@ -163,6 +165,75 @@ class VoiceE2EArtifactWriterTest {
             )
         } finally {
             scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `immediate artifact write falls back when atomic move is unsupported`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-session-json-atomic-fallback").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val originalMove = VoiceE2EAtomicMoveOperation.move
+        var atomicAttempted = false
+        var fallbackAttempted = false
+        try {
+            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
+                if (atomic) {
+                    atomicAttempted = true
+                    throw AtomicMoveNotSupportedException(source.toString(), target.toString(), "test fallback")
+                }
+                fallbackAttempted = true
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
+            }
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000323",
+                scope = scope,
+            )
+            val content = """{"voiceTraceId":"VA000323","status":"ended"}"""
+
+            writer.writeArtifactImmediately(VoiceE2EArtifact.SessionJson, content)
+
+            val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000323")
+            assertTrue(atomicAttempted)
+            assertTrue(fallbackAttempted)
+            assertEquals(content, File(traceDirectory, "session.json").readText())
+            assertEquals(
+                emptyList<String>(),
+                traceDirectory.listFiles()
+                    .orEmpty()
+                    .map { it.name }
+                    .filter { it.startsWith("session.json.") && it.endsWith(".tmp") },
+            )
+        } finally {
+            VoiceE2EAtomicMoveOperation.move = originalMove
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `targeted immediate artifact write does not flush unrelated pending artifacts`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-session-json-targeted").toFile()
+        val job = SupervisorJob().also { it.cancel() }
+        val scope = CoroutineScope(coroutineContext + job)
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000324",
+                scope = scope,
+            )
+            val content = """{"voiceTraceId":"VA000324","status":"ended"}"""
+
+            writer.write(VoiceE2EArtifact.InputTranscript, "pending transcript")
+            writer.writeArtifactImmediately(VoiceE2EArtifact.SessionJson, content)
+
+            val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000324")
+            assertEquals(content, File(traceDirectory, "session.json").readText())
+            assertFalse(File(traceDirectory, "input-transcript.txt").exists())
+        } finally {
             root.deleteRecursively()
         }
     }

@@ -116,6 +116,20 @@ class VoiceE2EArtifactWriter private constructor(
         flushPendingWrites()
     }
 
+    fun writeArtifactImmediately(artifact: VoiceE2EArtifact, content: String) {
+        if (commands == null) return
+        if (artifact.appendOnly) {
+            VoiceAgentLog.w(TAG, "artifact immediate write rejected append-only name=${artifact.fileName}")
+            return
+        }
+        synchronized(flushLock) {
+            synchronized(pendingLock) {
+                pendingWrites.remove(artifact)
+            }
+            writeArtifact(artifact, content, append = false)
+        }
+    }
+
     suspend fun drain() {
         val queue = commands ?: return
         val completed = CompletableDeferred<Unit>()
@@ -249,22 +263,32 @@ private fun File.replaceTextAtomically(content: String) {
     try {
         temp.writeText(content)
         try {
-            Files.move(
-                temp.toPath(),
-                toPath(),
-                StandardCopyOption.ATOMIC_MOVE,
-                StandardCopyOption.REPLACE_EXISTING,
-            )
+            VoiceE2EAtomicMoveOperation.move(temp.toPath(), toPath(), true)
         } catch (error: AtomicMoveNotSupportedException) {
-            Files.move(
-                temp.toPath(),
-                toPath(),
-                StandardCopyOption.REPLACE_EXISTING,
-            )
+            VoiceE2EAtomicMoveOperation.move(temp.toPath(), toPath(), false)
         }
     } finally {
         if (temp.exists()) {
             temp.delete()
+        }
+    }
+}
+
+internal object VoiceE2EAtomicMoveOperation {
+    var move: (source: Path, target: Path, atomic: Boolean) -> Path = { source, target, atomic ->
+        if (atomic) {
+            Files.move(
+                source,
+                target,
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } else {
+            Files.move(
+                source,
+                target,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
         }
     }
 }

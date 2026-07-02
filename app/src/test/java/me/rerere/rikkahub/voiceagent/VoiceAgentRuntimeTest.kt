@@ -2768,7 +2768,7 @@ class VoiceAgentRuntimeTest {
         val factory = DefaultVoiceAgentCallFactory(
             context = VoiceFactoryTestContext(root),
             observability = dependencies,
-            dependencies = dependencies,
+            sessionFactory = dependencies,
             metadataEpochNowMs = { 1_700_000_005_000 },
         )
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
@@ -2803,6 +2803,12 @@ class VoiceAgentRuntimeTest {
             assertEquals("1700000005000", started.getValue("startedAtEpochMs").jsonPrimitive.content)
             assertTrue(started.boolean("debuggable"))
             assertTrue(started.boolean("sentryPropagationCreated"))
+            assertEquals(BuildConfig.VOICE_AGENT_SENTRY_DSN.isNotBlank(), started.boolean("sentryDsnConfigured"))
+            assertEquals(
+                BuildConfig.VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE.toDoubleOrNull()
+                    ?.let { it > 0.0 } ?: false,
+                started.boolean("sentryTracingEnabled"),
+            )
         } finally {
             scope.cancel()
             root.deleteRecursively()
@@ -4254,48 +4260,37 @@ private class VoiceFactoryTestContext(
 private class FakeDefaultVoiceAgentCallFactoryDependencies(
     private val sessionApi: VoiceSessionApi,
     private val traceContext: VoiceTraceContext,
-) : DefaultVoiceAgentCallFactoryDependencies, VoiceObservability {
+) : DefaultVoiceAgentManagedSessionFactory, VoiceObservability {
     var artifactWriter: VoiceE2EArtifactWriter? = null
 
     override fun withSentryPropagation(trace: VoiceTraceContext): VoiceTraceContext = traceContext
 
-    override fun createSessionApi(
-        config: VoiceAgentLaunchConfig,
-        traceHeaders: VoiceLabTraceHeaders,
-    ): VoiceSessionApi = sessionApi
-
-    override fun createToolApi(
-        config: VoiceAgentLaunchConfig,
-        traceHeaders: VoiceLabTraceHeaders,
-    ): VoiceToolApi = FakeVoiceToolApi()
-
-    override fun createGemini(okHttpClient: OkHttpClient?): GeminiLiveVoiceClient = FakeGeminiLiveVoiceClient()
-
-    override fun createAudio(context: android.content.Context): VoiceAudioEngine = FakeVoiceAudioEngine()
-
-    override fun createConversationStore(
-        conversationId: Uuid,
-        chatService: me.rerere.rikkahub.service.ChatService?,
-    ): VoiceConversationStore = FakeVoiceConversationStore(
-        Conversation.ofId(id = conversationId)
-    )
-
-    override fun createContextProvider(
-        settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore?,
-        voiceModelName: String,
-    ): VoiceAgentContextProvider = FakeVoiceAgentContextProvider(
-        VoiceContext(systemInstruction = "system", turns = emptyList())
-    )
-
-    override fun createArtifactWriter(
-        noBackupFilesDir: File,
-        traceContext: VoiceTraceContext,
-        scope: CoroutineScope,
-    ): VoiceE2EArtifactWriter = createDefaultVoiceE2EArtifactWriter(
-        noBackupFilesDir = noBackupFilesDir,
-        traceContext = traceContext,
-        scope = scope,
-    ).also { artifactWriter = it }
+    override fun create(request: DefaultVoiceAgentManagedSessionRequest): ManagedVoiceCallSession {
+        val writer = createDefaultVoiceE2EArtifactWriter(
+            noBackupFilesDir = request.context.noBackupFilesDir,
+            traceContext = request.traceContext,
+            scope = request.scope,
+        ).also { artifactWriter = it }
+        return VoiceAgentCallSession(
+            modelId = request.config.voiceModelId,
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = FakeGeminiLiveVoiceClient(),
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(
+                Conversation.ofId(id = request.conversationId)
+            ),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            observability = request.observability,
+            traceContext = request.traceContext,
+            voiceE2EArtifacts = writer,
+            sessionMetadata = request.sessionMetadata,
+            metadataEpochNowMs = request.metadataEpochNowMs,
+            scope = request.scope,
+        )
+    }
 
     override fun recordEvent(
         name: String,

@@ -40,13 +40,10 @@ interface VoiceAgentCallFactory {
     ): ManagedVoiceCallSession
 }
 
-class DefaultVoiceAgentCallFactory private constructor(
+class DefaultVoiceAgentCallFactory internal constructor(
     private val context: Context,
-    private val chatService: ChatService?,
-    private val settingsStore: SettingsStore?,
-    private val okHttpClient: OkHttpClient?,
-    private val observability: VoiceObservability = NoOpVoiceObservability,
-    private val dependencies: DefaultVoiceAgentCallFactoryDependencies = AndroidDefaultVoiceAgentCallFactoryDependencies,
+    private val sessionFactory: DefaultVoiceAgentManagedSessionFactory,
+    private val observability: VoiceObservability,
     private val metadataEpochNowMs: () -> Long = System::currentTimeMillis,
 ) : VoiceAgentCallFactory {
     constructor(
@@ -57,27 +54,13 @@ class DefaultVoiceAgentCallFactory private constructor(
         observability: VoiceObservability = NoOpVoiceObservability,
     ) : this(
         context = context,
-        chatService = chatService,
-        settingsStore = settingsStore,
-        okHttpClient = okHttpClient,
+        sessionFactory = AndroidDefaultVoiceAgentManagedSessionFactory(
+            chatService = chatService,
+            settingsStore = settingsStore,
+            okHttpClient = okHttpClient,
+        ),
         observability = observability,
-        dependencies = AndroidDefaultVoiceAgentCallFactoryDependencies,
         metadataEpochNowMs = System::currentTimeMillis,
-    )
-
-    internal constructor(
-        context: Context,
-        observability: VoiceObservability,
-        dependencies: DefaultVoiceAgentCallFactoryDependencies,
-        metadataEpochNowMs: () -> Long = System::currentTimeMillis,
-    ) : this(
-        context = context,
-        chatService = null,
-        settingsStore = null,
-        okHttpClient = null,
-        observability = observability,
-        dependencies = dependencies,
-        metadataEpochNowMs = metadataEpochNowMs,
     )
 
     override fun create(
@@ -102,52 +85,34 @@ class DefaultVoiceAgentCallFactory private constructor(
             baseTraceContext to VoiceLabTraceHeaders.from(baseTraceContext)
         }
         return runCatching {
-            VoiceAgentCallSession(
-                modelId = config.voiceModelId,
-                sessionApi = dependencies.createSessionApi(
-                    config = config,
-                    traceHeaders = traceHeaders,
-                ),
-                toolApi = dependencies.createToolApi(
-                    config = config,
-                    traceHeaders = traceHeaders,
-                ),
-                gemini = dependencies.createGemini(okHttpClient = okHttpClient),
-                audio = dependencies.createAudio(context = context),
-                conversationStore = dependencies.createConversationStore(
+            sessionFactory.create(
+                DefaultVoiceAgentManagedSessionRequest(
+                    context = context,
                     conversationId = conversationId,
-                    chatService = chatService,
-                ),
-                contextProvider = dependencies.createContextProvider(
-                    settingsStore = settingsStore,
-                    voiceModelName = config.voiceModelId,
-                ),
-                observability = observability,
-                traceContext = traceContext,
-                voiceE2EArtifacts = dependencies.createArtifactWriter(
-                    noBackupFilesDir = context.noBackupFilesDir,
+                    config = config,
                     traceContext = traceContext,
+                    traceHeaders = traceHeaders,
+                    sessionMetadata = VoiceE2ESessionMetadata(
+                        voiceTraceId = traceContext.traceId,
+                        voiceSessionId = traceContext.voiceSessionId,
+                        conversationId = conversationId.toString(),
+                        packageName = context.packageName,
+                        versionName = BuildConfig.VERSION_NAME,
+                        versionCode = BuildConfig.VERSION_CODE,
+                        debuggable = BuildConfig.DEBUG,
+                        voiceModelId = config.voiceModelId,
+                        providerModel = null,
+                        status = "created",
+                        startedAtEpochMs = metadataEpochNowMs(),
+                        sentryDsnConfigured = BuildConfig.VOICE_AGENT_SENTRY_DSN.isNotBlank(),
+                        sentryTracingEnabled = BuildConfig.VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE.toDoubleOrNull()
+                            ?.let { it > 0.0 } ?: false,
+                        sentryPropagationCreated = traceContext.sentryTrace != null,
+                    ),
+                    observability = observability,
+                    metadataEpochNowMs = metadataEpochNowMs,
                     scope = scope,
-                ),
-                sessionMetadata = VoiceE2ESessionMetadata(
-                    voiceTraceId = traceContext.traceId,
-                    voiceSessionId = traceContext.voiceSessionId,
-                    conversationId = conversationId.toString(),
-                    packageName = context.packageName,
-                    versionName = BuildConfig.VERSION_NAME,
-                    versionCode = BuildConfig.VERSION_CODE,
-                    debuggable = BuildConfig.DEBUG,
-                    voiceModelId = config.voiceModelId,
-                    providerModel = null,
-                    status = "created",
-                    startedAtEpochMs = metadataEpochNowMs(),
-                    sentryDsnConfigured = BuildConfig.VOICE_AGENT_SENTRY_DSN.isNotBlank(),
-                    sentryTracingEnabled = BuildConfig.VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE.toDoubleOrNull()
-                        ?.let { it > 0.0 } ?: false,
-                    sentryPropagationCreated = traceContext.sentryTrace != null,
-                ),
-                metadataEpochNowMs = metadataEpochNowMs,
-                scope = scope,
+                )
             )
         }.getOrElse { throwable ->
             runCatching {
@@ -162,40 +127,55 @@ class DefaultVoiceAgentCallFactory private constructor(
     }
 }
 
-internal interface DefaultVoiceAgentCallFactoryDependencies {
-    fun createSessionApi(
-        config: VoiceAgentLaunchConfig,
-        traceHeaders: VoiceLabTraceHeaders,
-    ): VoiceSessionApi
-
-    fun createToolApi(
-        config: VoiceAgentLaunchConfig,
-        traceHeaders: VoiceLabTraceHeaders,
-    ): VoiceToolApi
-
-    fun createGemini(okHttpClient: OkHttpClient?): GeminiLiveVoiceClient
-
-    fun createAudio(context: Context): VoiceAudioEngine
-
-    fun createConversationStore(
-        conversationId: Uuid,
-        chatService: ChatService?,
-    ): VoiceConversationStore
-
-    fun createContextProvider(
-        settingsStore: SettingsStore?,
-        voiceModelName: String,
-    ): VoiceAgentContextProvider
-
-    fun createArtifactWriter(
-        noBackupFilesDir: File,
-        traceContext: VoiceTraceContext,
-        scope: CoroutineScope,
-    ): VoiceE2EArtifactWriter
+internal fun interface DefaultVoiceAgentManagedSessionFactory {
+    fun create(request: DefaultVoiceAgentManagedSessionRequest): ManagedVoiceCallSession
 }
 
-private object AndroidDefaultVoiceAgentCallFactoryDependencies : DefaultVoiceAgentCallFactoryDependencies {
-    override fun createSessionApi(
+internal data class DefaultVoiceAgentManagedSessionRequest(
+    val context: Context,
+    val conversationId: Uuid,
+    val config: VoiceAgentLaunchConfig,
+    val traceContext: VoiceTraceContext,
+    val traceHeaders: VoiceLabTraceHeaders,
+    val sessionMetadata: VoiceE2ESessionMetadata,
+    val observability: VoiceObservability,
+    val metadataEpochNowMs: () -> Long,
+    val scope: CoroutineScope,
+)
+
+private class AndroidDefaultVoiceAgentManagedSessionFactory(
+    private val chatService: ChatService,
+    private val settingsStore: SettingsStore,
+    private val okHttpClient: OkHttpClient,
+) : DefaultVoiceAgentManagedSessionFactory {
+    override fun create(request: DefaultVoiceAgentManagedSessionRequest): ManagedVoiceCallSession =
+        VoiceAgentCallSession(
+            modelId = request.config.voiceModelId,
+            sessionApi = createSessionApi(
+                config = request.config,
+                traceHeaders = request.traceHeaders,
+            ),
+            toolApi = createToolApi(
+                config = request.config,
+                traceHeaders = request.traceHeaders,
+            ),
+            gemini = createGemini(),
+            audio = createAudio(context = request.context),
+            conversationStore = createConversationStore(conversationId = request.conversationId),
+            contextProvider = createContextProvider(voiceModelName = request.config.voiceModelId),
+            observability = request.observability,
+            traceContext = request.traceContext,
+            voiceE2EArtifacts = createArtifactWriter(
+                noBackupFilesDir = request.context.noBackupFilesDir,
+                traceContext = request.traceContext,
+                scope = request.scope,
+            ),
+            sessionMetadata = request.sessionMetadata,
+            metadataEpochNowMs = request.metadataEpochNowMs,
+            scope = request.scope,
+        )
+
+    private fun createSessionApi(
         config: VoiceAgentLaunchConfig,
         traceHeaders: VoiceLabTraceHeaders,
     ): VoiceSessionApi = VoiceLabVoiceSessionApi(
@@ -206,7 +186,7 @@ private object AndroidDefaultVoiceAgentCallFactoryDependencies : DefaultVoiceAge
         )
     )
 
-    override fun createToolApi(
+    private fun createToolApi(
         config: VoiceAgentLaunchConfig,
         traceHeaders: VoiceLabTraceHeaders,
     ): VoiceToolApi = VoiceLabHermesToolApi(
@@ -217,28 +197,26 @@ private object AndroidDefaultVoiceAgentCallFactoryDependencies : DefaultVoiceAge
         )
     )
 
-    override fun createGemini(okHttpClient: OkHttpClient?): GeminiLiveVoiceClient =
-        OkHttpGeminiLiveVoiceClient(httpClient = requireNotNull(okHttpClient))
+    private fun createGemini(): GeminiLiveVoiceClient =
+        OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient)
 
-    override fun createAudio(context: Context): VoiceAudioEngine = AndroidVoiceAudioEngine(context = context)
+    private fun createAudio(context: Context): VoiceAudioEngine = AndroidVoiceAudioEngine(context = context)
 
-    override fun createConversationStore(
+    private fun createConversationStore(
         conversationId: Uuid,
-        chatService: ChatService?,
     ): VoiceConversationStore = ChatServiceVoiceConversationStore(
         conversationId = conversationId,
-        chatService = requireNotNull(chatService),
+        chatService = chatService,
     )
 
-    override fun createContextProvider(
-        settingsStore: SettingsStore?,
+    private fun createContextProvider(
         voiceModelName: String,
     ): VoiceAgentContextProvider = SettingsVoiceAgentContextProvider(
-        settingsStore = requireNotNull(settingsStore),
+        settingsStore = settingsStore,
         voiceModelName = voiceModelName,
     )
 
-    override fun createArtifactWriter(
+    private fun createArtifactWriter(
         noBackupFilesDir: File,
         traceContext: VoiceTraceContext,
         scope: CoroutineScope,
