@@ -178,7 +178,7 @@ class VoiceAgentCallSession internal constructor(
         resourceCleaner.cleanupForEnd(closeGemini = false)
         coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
         coordinator.close(waitForStartedSends = false)
-        recordSessionEndedSafely(endReason = "close_now")
+        recordSessionEndedSafely(endReason = "close_now", writeSessionMetadataImmediately = true)
         coordinator.launchPersistenceDrain()
     }
 
@@ -957,6 +957,7 @@ class VoiceAgentCallSession internal constructor(
         endReason: String,
         failureKind: String = "none",
         failureSummary: String? = null,
+        writeSessionMetadataImmediately: Boolean = false,
     ) {
         val shouldRecord = synchronized(sessionLock) {
             if (sessionEndedRecorded) {
@@ -971,6 +972,7 @@ class VoiceAgentCallSession internal constructor(
             status = "ended",
             closeStatus = endReason,
             endedAtEpochMs = nowMs(),
+            immediately = writeSessionMetadataImmediately,
         )
         recordEventSafely(
             name = "voicelab.mobile.session.ended",
@@ -1021,6 +1023,7 @@ class VoiceAgentCallSession internal constructor(
         providerModel: String? = null,
         closeStatus: String? = null,
         endedAtEpochMs: Long? = null,
+        immediately: Boolean = false,
     ) {
         val metadata = sessionMetadata ?: return
         val updated = metadata.copy(
@@ -1030,7 +1033,12 @@ class VoiceAgentCallSession internal constructor(
             closeStatus = closeStatus,
         )
         sessionMetadata = updated
-        voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, updated.toJson())
+        val content = updated.toJson()
+        if (immediately) {
+            voiceE2EArtifacts.writeImmediately(VoiceE2EArtifact.SessionJson, content)
+        } else {
+            voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
+        }
     }
 
     private companion object {

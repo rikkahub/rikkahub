@@ -2582,6 +2582,66 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `closeNow persists final session metadata before writer scope cancellation`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-close-now-session").toFile()
+        val artifactScope = CoroutineScope(SupervisorJob())
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000124",
+                scope = artifactScope,
+            )
+            val gemini = FakeGeminiLiveVoiceClient().apply {
+                onClose = { artifactScope.cancel() }
+            }
+            val session = VoiceAgentCallSession(
+                modelId = "gemini-flash",
+                sessionApi = FakeVoiceSessionApi(),
+                toolApi = FakeVoiceToolApi(),
+                gemini = gemini,
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = "system", turns = emptyList())
+                ),
+                traceContext = VoiceTraceContext(traceId = "VA000124", voiceSessionId = "VA000124"),
+                voiceE2EArtifacts = artifactWriter,
+                sessionMetadata = VoiceE2ESessionMetadata(
+                    voiceTraceId = "VA000124",
+                    voiceSessionId = "VA000124",
+                    conversationId = "conversation-124",
+                    packageName = "me.rerere.rikkahub",
+                    versionName = "2.2.6",
+                    versionCode = "162",
+                    debuggable = true,
+                    voiceModelId = "gemini-flash",
+                    providerModel = null,
+                    status = "created",
+                    startedAtEpochMs = 1_700_000_000_000,
+                    sentryDsnConfigured = true,
+                    sentryTracingEnabled = true,
+                    sentryPropagationCreated = true,
+                ),
+                nowMs = { 1_700_000_001_999 },
+                scope = this,
+            )
+
+            session.closeNow()
+            artifactScope.cancel()
+
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000124/session.json")
+            val ended = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("ended", ended.string("status"))
+            assertEquals("close_now", ended.string("closeStatus"))
+            assertEquals("1700000001999", ended.getValue("endedAtEpochMs").jsonPrimitive.content)
+        } finally {
+            artifactScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `session does not overwrite Gemini startup error with connected`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient().apply {
             connectEvent = GeminiLiveEvent.Error(message = "Failed to send Gemini setup message", raw = "{}")

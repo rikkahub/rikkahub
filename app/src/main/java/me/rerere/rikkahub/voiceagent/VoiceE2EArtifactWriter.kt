@@ -43,6 +43,7 @@ class VoiceE2EArtifactWriter private constructor(
         ?: baseDirectory
     private val latestTraceFile = activeTraceId?.let { VoiceE2EArtifactPaths.latestTraceIdFile(rootDirectory) }
     private val pendingLock = Any()
+    private val flushLock = Any()
     private val pendingWrites = LinkedHashMap<VoiceE2EArtifact, String>()
     private val pendingAppends = mutableListOf<PendingAppend>()
     private var flushQueued = false
@@ -95,6 +96,22 @@ class VoiceE2EArtifactWriter private constructor(
         if (shouldQueueFlush && queue.trySend(WriteCommand.Flush).isFailure) {
             VoiceAgentLog.w(TAG, "artifact write queue rejected")
         }
+    }
+
+    fun writeImmediately(artifact: VoiceE2EArtifact, content: String) {
+        if (commands == null) return
+        if (artifact.appendOnly && content.containsLineBreak()) {
+            VoiceAgentLog.w(TAG, "artifact append rejected multiline name=${artifact.fileName}")
+            return
+        }
+        synchronized(pendingLock) {
+            if (artifact.appendOnly) {
+                pendingAppends += PendingAppend(artifact, content)
+            } else {
+                pendingWrites[artifact] = content
+            }
+        }
+        flushPendingWrites()
     }
 
     suspend fun drain() {
@@ -165,23 +182,27 @@ class VoiceE2EArtifactWriter private constructor(
     }
 
     private fun flushPendingWrites() {
-        while (true) {
-            val (writeSnapshot, appendSnapshot) = synchronized(pendingLock) {
-                if (pendingWrites.isEmpty() && pendingAppends.isEmpty()) {
-                    flushQueued = false
-                    return
+        synchronized(flushLock) flush@{
+            while (true) {
+                val snapshots = synchronized(pendingLock) {
+                    if (pendingWrites.isEmpty() && pendingAppends.isEmpty()) {
+                        flushQueued = false
+                        null
+                    } else {
+                        val writes = LinkedHashMap(pendingWrites)
+                        val appends = pendingAppends.toList()
+                        pendingWrites.clear()
+                        pendingAppends.clear()
+                        writes to appends
+                    }
+                } ?: return@flush
+                val (writeSnapshot, appendSnapshot) = snapshots
+                writeSnapshot.forEach { (artifact, content) ->
+                    writeArtifact(artifact, content, append = false)
                 }
-                val writes = LinkedHashMap(pendingWrites)
-                val appends = pendingAppends.toList()
-                pendingWrites.clear()
-                pendingAppends.clear()
-                writes to appends
-            }
-            writeSnapshot.forEach { (artifact, content) ->
-                writeArtifact(artifact, content, append = false)
-            }
-            appendSnapshot.forEach { append ->
-                writeArtifact(append.artifact, append.content, append = true)
+                appendSnapshot.forEach { append ->
+                    writeArtifact(append.artifact, append.content, append = true)
+                }
             }
         }
     }
