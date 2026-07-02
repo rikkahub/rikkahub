@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -1009,6 +1008,43 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `retryable typed poll failure retries and persists eventual success`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.submit(callId = "call-retryable-http", prompt = "retryable http request")
+        assertEquals(
+            "call-retryable-http" to "retryable http request",
+            toolApi.awaitRequest("call-retryable-http"),
+        )
+        toolApi.scriptPollFailure(
+            callId = "call-retryable-http",
+            error = VoiceLabHttpException(
+                statusCode = 404,
+                safePreview = "temporary voice lab failure",
+                failure = VoiceFailure(
+                    kind = VoiceFailureKind.HermesUnavailable,
+                    safeMessage = "temporary voice lab failure",
+                    safeSummary = "temporary voice lab failure",
+                    retryable = true,
+                    source = VoiceFailureSource.VoiceLab,
+                ),
+            ),
+        )
+        toolApi.complete(response(callId = "call-retryable-http", answer = "eventual answer"))
+
+        conversationStore.awaitHermesRecord("call-retryable-http") {
+            it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
+        }
+
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-retryable-http" }
+        assertEquals(HermesQueueStatus.Complete, record.status)
+        assertEquals("eventual answer", record.answer)
+    }
+
+    @Test
     fun `terminal poll failure persists failed record without waiting for local timeout`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -1041,6 +1077,44 @@ class HermesJobManagerTest {
         }
 
         val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-terminal-http" }
+        assertEquals(HermesQueueStatus.Failed, record.status)
+        assertEquals("Voice Lab request failed 404: job missing", record.error)
+    }
+
+    @Test
+    fun `terminal poll failure without typed failure persists failed record`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            maxElapsedMs = 10_000L,
+        )
+
+        manager.submit(
+            callId = "call-terminal-status-only",
+            prompt = "terminal status request",
+        )
+        assertEquals(
+            "call-terminal-status-only" to "terminal status request",
+            toolApi.awaitRequest("call-terminal-status-only"),
+        )
+        toolApi.scriptPollFailure(
+            callId = "call-terminal-status-only",
+            error = VoiceLabHttpException(
+                statusCode = 404,
+                safePreview = "job missing",
+                failure = null,
+            ),
+        )
+
+        conversationStore.awaitHermesRecord("call-terminal-status-only") {
+            it.status == HermesQueueStatus.Failed
+        }
+
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-terminal-status-only" }
         assertEquals(HermesQueueStatus.Failed, record.status)
         assertEquals("Voice Lab request failed 404: job missing", record.error)
     }
@@ -1652,53 +1726,117 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `queue store samples session id before waiting for queued persistence update`() = runTest {
-        val conversationStore = SnapshotBeforeBlockConversationStore()
-        var currentSessionId = "session-a"
-        val providerCalls = AtomicInteger(0)
-        val secondSessionSampled = CompletableDeferred<Unit>()
-        val queueStore = HermesQueueStore(
-            conversationStore = conversationStore,
-            persister = persister,
-            persistenceSessionId = {
-                val sessionId = currentSessionId
-                if (providerCalls.incrementAndGet() == 2) {
-                    secondSessionSampled.complete(Unit)
-                }
-                sessionId
-            },
+    fun `queue store samples session id before waiting for every persistence update`() = runTest {
+        val cases = listOf(
+            QueueStoreSessionTimingCase(
+                id = "active",
+                expectedStatus = HermesQueueStatus.Running,
+                persist = { store, callId, prompt ->
+                    store.persistActiveIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                        status = VoiceToolRecordStatus.Running,
+                        jobId = "job-$callId",
+                    )
+                },
+            ),
+            QueueStoreSessionTimingCase(
+                id = "pending",
+                expectedStatus = HermesQueueStatus.Pending,
+                persist = { store, callId, prompt ->
+                    store.persistPendingIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                    )
+                },
+            ),
+            QueueStoreSessionTimingCase(
+                id = "canceled",
+                expectedStatus = HermesQueueStatus.Canceled,
+                persist = { store, callId, prompt ->
+                    store.persistCanceledIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                        jobId = "job-$callId",
+                        message = "canceled",
+                    )
+                },
+            ),
+            QueueStoreSessionTimingCase(
+                id = "terminal",
+                expectedStatus = HermesQueueStatus.Complete,
+                persist = { store, callId, prompt ->
+                    store.persistTerminalIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                        status = VoiceToolRecordStatus.Complete("answer"),
+                        jobId = "job-$callId",
+                    )
+                },
+            ),
         )
-        val blockedUpdate = conversationStore.blockNextUpdate()
 
-        val blockedPersist = launch {
-            queueStore.persistPendingIfStillActive(
-                callId = "call-blocked",
-                prompt = "blocked prompt",
+        cases.forEach { case ->
+            val conversationStore = SnapshotBeforeBlockConversationStore()
+            var currentSessionId = "session-a"
+            val providerCalls = AtomicInteger(0)
+            val secondSessionSampled = CompletableDeferred<Unit>()
+            val queueStore = HermesQueueStore(
+                conversationStore = conversationStore,
+                persister = persister,
+                persistenceSessionId = {
+                    val sessionId = currentSessionId
+                    if (providerCalls.incrementAndGet() == 2) {
+                        secondSessionSampled.complete(Unit)
+                    }
+                    sessionId
+                },
+            )
+            val blockedUpdate = conversationStore.blockNextUpdate()
+
+            val blockedPersist = launch {
+                assertTrue(
+                    case.persist(
+                        queueStore,
+                        "call-blocked-${case.id}",
+                        "blocked ${case.id} prompt",
+                    )
+                )
+            }
+            blockedUpdate.started.await()
+
+            val sampledCallId = "call-sampled-${case.id}"
+            val sampledPersist = launch {
+                assertTrue(
+                    case.persist(
+                        queueStore,
+                        sampledCallId,
+                        "sampled ${case.id} prompt",
+                    )
+                )
+            }
+            withTimeout(500) {
+                secondSessionSampled.await()
+            }
+            currentSessionId = "session-b"
+            blockedUpdate.release.complete(Unit)
+
+            blockedPersist.join()
+            sampledPersist.join()
+
+            val sampledTool = conversationStore.conversation.value.currentMessages
+                .flatMap { it.parts }
+                .filterIsInstance<UIMessagePart.Tool>()
+                .single { it.toolCallId == sampledCallId }
+            val sampledRecord = conversationStore.conversation.value.hermesQueueRecords()
+                .single { it.callId == sampledCallId }
+
+            assertEquals(case.expectedStatus, sampledRecord.status)
+            assertEquals(
+                "session-a",
+                sampledTool.metadata!!["voice_session_id"]!!.jsonPrimitive.content,
             )
         }
-        blockedUpdate.started.await()
-
-        val queuedPersist = launch {
-            queueStore.persistPendingIfStillActive(
-                callId = "call-sampled",
-                prompt = "sampled prompt",
-            )
-        }
-        withTimeoutOrNull(500) {
-            secondSessionSampled.await()
-        }
-        currentSessionId = "session-b"
-        blockedUpdate.release.complete(Unit)
-
-        blockedPersist.join()
-        queuedPersist.join()
-
-        val sampledTool = conversationStore.conversation.value.currentMessages
-            .flatMap { it.parts }
-            .filterIsInstance<UIMessagePart.Tool>()
-            .single { it.toolCallId == "call-sampled" }
-
-        assertEquals("session-a", sampledTool.metadata!!["voice_session_id"]!!.jsonPrimitive.content)
     }
 
     private fun manager(
@@ -1925,6 +2063,12 @@ private class BlockedSnapshotUpdate {
     val started = CompletableDeferred<Unit>()
     val release = CompletableDeferred<Unit>()
 }
+
+private data class QueueStoreSessionTimingCase(
+    val id: String,
+    val expectedStatus: HermesQueueStatus,
+    val persist: suspend (HermesQueueStore, String, String) -> Boolean,
+)
 
 private class BlockingPollVoiceToolApi : VoiceToolApi {
     val firstPollStarted = CompletableDeferred<Unit>()
