@@ -4,12 +4,14 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -28,6 +30,10 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -86,7 +92,7 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `submitted job records prompt and answer observability events`() = runTest {
+    fun `submitted job records canonical prompt and answer observability events`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val observability = RecordingVoiceObservability()
@@ -109,17 +115,33 @@ class HermesJobManagerTest {
         val submitted = observability.events.single { it.name == "voicelab.mobile.hermes_tool.submitted" }
         assertEquals(trace, submitted.trace)
         assertEquals("call-1", submitted.attributes["callId"])
-        assertEquals("private prompt", submitted.attributes["prompt"])
-        assertEquals(14, submitted.attributes["prompt.chars"])
-        assertEquals(false, submitted.attributes["prompt.truncated"])
+        assertEquals("private prompt", submitted.attributes["gemini.tool_call.prompt"])
+        assertEquals(14, submitted.attributes["gemini.tool_call.prompt.chars"])
+        assertEquals(
+            "6fe06b970bb77bb96bee521acbebf7e932c2bbc684494ad299a7e1851347fc8e",
+            submitted.attributes["gemini.tool_call.prompt.sha256"],
+        )
+        assertEquals(false, submitted.attributes["gemini.tool_call.prompt.truncated"])
+        assertFalse(submitted.attributes.containsKey("prompt"))
+        assertFalse(submitted.attributes.containsKey("prompt.chars"))
+        assertFalse(submitted.attributes.containsKey("prompt.sha256"))
+        assertFalse(submitted.attributes.containsKey("prompt.truncated"))
 
         val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
         assertEquals(trace, completed.trace)
         assertEquals("call-1", completed.attributes["callId"])
         assertEquals("job-1", completed.attributes["jobId"])
-        assertEquals("private answer", completed.attributes["answer"])
-        assertEquals(14, completed.attributes["answer.chars"])
-        assertEquals(false, completed.attributes["answer.truncated"])
+        assertEquals("private answer", completed.attributes["hermes.response.answer"])
+        assertEquals(14, completed.attributes["hermes.response.answer.chars"])
+        assertEquals(
+            "58c61586e981a11c4d5fd85b0b03b78c1b686743e5d02f4c6c9c1c677dc7a4da",
+            completed.attributes["hermes.response.answer.sha256"],
+        )
+        assertEquals(false, completed.attributes["hermes.response.answer.truncated"])
+        assertFalse(completed.attributes.containsKey("answer"))
+        assertFalse(completed.attributes.containsKey("answer.chars"))
+        assertFalse(completed.attributes.containsKey("answer.sha256"))
+        assertFalse(completed.attributes.containsKey("answer.truncated"))
     }
 
     @Test
@@ -962,6 +984,67 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `legacy formatted poll failure is transient when it is not typed`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.submit(callId = "call-legacy-message", prompt = "legacy message request")
+        assertEquals("call-legacy-message" to "legacy message request", toolApi.awaitRequest("call-legacy-message"))
+        toolApi.scriptPollFailure(
+            callId = "call-legacy-message",
+            error = IllegalStateException("Voice Lab request failed 404: job missing"),
+        )
+        toolApi.complete(response(callId = "call-legacy-message", answer = "eventual answer"))
+
+        conversationStore.awaitHermesRecord("call-legacy-message") {
+            it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
+        }
+
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-legacy-message" }
+        assertEquals(HermesQueueStatus.Complete, record.status)
+        assertEquals("eventual answer", record.answer)
+    }
+
+    @Test
+    fun `retryable typed poll failure retries and persists eventual success`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.submit(callId = "call-retryable-http", prompt = "retryable http request")
+        assertEquals(
+            "call-retryable-http" to "retryable http request",
+            toolApi.awaitRequest("call-retryable-http"),
+        )
+        toolApi.scriptPollFailure(
+            callId = "call-retryable-http",
+            error = VoiceLabHttpException(
+                statusCode = 404,
+                safePreview = "temporary voice lab failure",
+                failure = VoiceFailure(
+                    kind = VoiceFailureKind.HermesUnavailable,
+                    safeMessage = "temporary voice lab failure",
+                    safeSummary = "temporary voice lab failure",
+                    retryable = true,
+                    source = VoiceFailureSource.VoiceLab,
+                ),
+            ),
+        )
+        toolApi.complete(response(callId = "call-retryable-http", answer = "eventual answer"))
+
+        conversationStore.awaitHermesRecord("call-retryable-http") {
+            it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
+        }
+
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-retryable-http" }
+        assertEquals(HermesQueueStatus.Complete, record.status)
+        assertEquals("eventual answer", record.answer)
+    }
+
+    @Test
     fun `terminal poll failure persists failed record without waiting for local timeout`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -976,7 +1059,17 @@ class HermesJobManagerTest {
         assertEquals("call-terminal-http" to "terminal http request", toolApi.awaitRequest("call-terminal-http"))
         toolApi.scriptPollFailure(
             callId = "call-terminal-http",
-            error = IllegalStateException("Voice Lab request failed 404: job missing"),
+            error = VoiceLabHttpException(
+                statusCode = 404,
+                safePreview = "job missing",
+                failure = VoiceFailure(
+                    kind = VoiceFailureKind.HermesFailed,
+                    safeMessage = "job missing",
+                    safeSummary = "job missing",
+                    retryable = false,
+                    source = VoiceFailureSource.VoiceLab,
+                ),
+            ),
         )
 
         conversationStore.awaitHermesRecord("call-terminal-http") {
@@ -984,6 +1077,44 @@ class HermesJobManagerTest {
         }
 
         val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-terminal-http" }
+        assertEquals(HermesQueueStatus.Failed, record.status)
+        assertEquals("Voice Lab request failed 404: job missing", record.error)
+    }
+
+    @Test
+    fun `terminal poll failure without typed failure persists failed record`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            maxElapsedMs = 10_000L,
+        )
+
+        manager.submit(
+            callId = "call-terminal-status-only",
+            prompt = "terminal status request",
+        )
+        assertEquals(
+            "call-terminal-status-only" to "terminal status request",
+            toolApi.awaitRequest("call-terminal-status-only"),
+        )
+        toolApi.scriptPollFailure(
+            callId = "call-terminal-status-only",
+            error = VoiceLabHttpException(
+                statusCode = 404,
+                safePreview = "job missing",
+                failure = null,
+            ),
+        )
+
+        conversationStore.awaitHermesRecord("call-terminal-status-only") {
+            it.status == HermesQueueStatus.Failed
+        }
+
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-terminal-status-only" }
         assertEquals(HermesQueueStatus.Failed, record.status)
         assertEquals("Voice Lab request failed 404: job missing", record.error)
     }
@@ -1594,6 +1725,120 @@ class HermesJobManagerTest {
         assertEquals(listOf("call-a", "call-b"), records.map { it.callId }.sorted())
     }
 
+    @Test
+    fun `queue store samples session id before waiting for every persistence update`() = runTest {
+        val cases = listOf(
+            QueueStoreSessionTimingCase(
+                id = "active",
+                expectedStatus = HermesQueueStatus.Running,
+                persist = { store, callId, prompt ->
+                    store.persistActiveIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                        status = VoiceToolRecordStatus.Running,
+                        jobId = "job-$callId",
+                    )
+                },
+            ),
+            QueueStoreSessionTimingCase(
+                id = "pending",
+                expectedStatus = HermesQueueStatus.Pending,
+                persist = { store, callId, prompt ->
+                    store.persistPendingIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                    )
+                },
+            ),
+            QueueStoreSessionTimingCase(
+                id = "canceled",
+                expectedStatus = HermesQueueStatus.Canceled,
+                persist = { store, callId, prompt ->
+                    store.persistCanceledIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                        jobId = "job-$callId",
+                        message = "canceled",
+                    )
+                },
+            ),
+            QueueStoreSessionTimingCase(
+                id = "terminal",
+                expectedStatus = HermesQueueStatus.Complete,
+                persist = { store, callId, prompt ->
+                    store.persistTerminalIfStillActive(
+                        callId = callId,
+                        prompt = prompt,
+                        status = VoiceToolRecordStatus.Complete("answer"),
+                        jobId = "job-$callId",
+                    )
+                },
+            ),
+        )
+
+        cases.forEach { case ->
+            val conversationStore = SnapshotBeforeBlockConversationStore()
+            var currentSessionId = "session-a"
+            val providerCalls = AtomicInteger(0)
+            val secondSessionSampled = CompletableDeferred<Unit>()
+            val queueStore = HermesQueueStore(
+                conversationStore = conversationStore,
+                persister = persister,
+                persistenceSessionId = {
+                    val sessionId = currentSessionId
+                    if (providerCalls.incrementAndGet() == 2) {
+                        secondSessionSampled.complete(Unit)
+                    }
+                    sessionId
+                },
+            )
+            val blockedUpdate = conversationStore.blockNextUpdate()
+
+            val blockedPersist = launch {
+                assertTrue(
+                    case.persist(
+                        queueStore,
+                        "call-blocked-${case.id}",
+                        "blocked ${case.id} prompt",
+                    )
+                )
+            }
+            blockedUpdate.started.await()
+
+            val sampledCallId = "call-sampled-${case.id}"
+            val sampledPersist = launch {
+                assertTrue(
+                    case.persist(
+                        queueStore,
+                        sampledCallId,
+                        "sampled ${case.id} prompt",
+                    )
+                )
+            }
+            withTimeout(500) {
+                secondSessionSampled.await()
+            }
+            currentSessionId = "session-b"
+            blockedUpdate.release.complete(Unit)
+
+            blockedPersist.join()
+            sampledPersist.join()
+
+            val sampledTool = conversationStore.conversation.value.currentMessages
+                .flatMap { it.parts }
+                .filterIsInstance<UIMessagePart.Tool>()
+                .single { it.toolCallId == sampledCallId }
+            val sampledRecord = conversationStore.conversation.value.hermesQueueRecords()
+                .single { it.callId == sampledCallId }
+
+            assertEquals(case.expectedStatus, sampledRecord.status)
+            assertEquals(
+                "session-a",
+                sampledTool.metadata!!["voice_session_id"]!!.jsonPrimitive.content,
+            )
+        }
+    }
+
     private fun manager(
         toolApi: VoiceToolApi,
         conversationStore: VoiceConversationStore,
@@ -1818,6 +2063,12 @@ private class BlockedSnapshotUpdate {
     val started = CompletableDeferred<Unit>()
     val release = CompletableDeferred<Unit>()
 }
+
+private data class QueueStoreSessionTimingCase(
+    val id: String,
+    val expectedStatus: HermesQueueStatus,
+    val persist: suspend (HermesQueueStore, String, String) -> Boolean,
+)
 
 private class BlockingPollVoiceToolApi : VoiceToolApi {
     val firstPollStarted = CompletableDeferred<Unit>()

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent.voicelab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -139,6 +140,12 @@ private class OkHttpVoiceLabTransport(
         }
 }
 
+class VoiceLabHttpException(
+    val statusCode: Int,
+    val safePreview: String,
+    val failure: VoiceFailure? = null,
+) : IllegalStateException("Voice Lab request failed $statusCode: $safePreview")
+
 class VoiceLabMobileApi internal constructor(
     private val baseUrl: String,
     private val credentials: VoiceLabMobileCredentials,
@@ -238,35 +245,38 @@ class VoiceLabMobileApi internal constructor(
         prompt: String,
         profileId: String? = null,
     ): MobileHermesJobSubmitResponse =
-        postJson(
-            path = "/api/mobile/hermes/jobs",
-            body = MobileHermesRequest(callId = callId, prompt = prompt, profileId = profileId),
+        executeHermesJobSnapshot(
+            requestBuilder("/api/mobile/hermes/jobs")
+                .post(
+                    json.encodeToString(
+                        MobileHermesRequest(
+                            callId = callId,
+                            prompt = prompt,
+                            profileId = profileId,
+                        )
+                    ).toRequestBody(JSON_MEDIA_TYPE)
+                )
+                .build()
         )
 
     suspend fun getHermesJob(jobId: String): MobileHermesJobPollResponse =
-        getJson(path = "/api/mobile/hermes/jobs/$jobId")
+        executeHermesJobSnapshot(
+            requestBuilder("/api/mobile/hermes/jobs/$jobId")
+                .get()
+                .build()
+        )
 
     suspend fun cancelHermesJob(jobId: String): MobileHermesJobPollResponse =
-        deleteJson(path = "/api/mobile/hermes/jobs/$jobId")
+        executeHermesJobSnapshot(
+            requestBuilder("/api/mobile/hermes/jobs/$jobId")
+                .delete()
+                .build()
+        )
 
     private suspend inline fun <reified Req, reified Res> postJson(path: String, body: Req): Res =
         executeJson(
             requestBuilder(path)
                 .post(json.encodeToString(body).toRequestBody(JSON_MEDIA_TYPE))
-                .build()
-        )
-
-    private suspend inline fun <reified Res> getJson(path: String): Res =
-        executeJson(
-            requestBuilder(path)
-                .get()
-                .build()
-        )
-
-    private suspend inline fun <reified Res> deleteJson(path: String): Res =
-        executeJson(
-            requestBuilder(path)
-                .delete()
                 .build()
         )
 
@@ -286,16 +296,32 @@ class VoiceLabMobileApi internal constructor(
             }
 
     private suspend inline fun <reified Res> executeJson(request: Request): Res =
+        executeJsonDecoded(request) { responseText ->
+            json.decodeFromString<Res>(responseText)
+        }
+
+    private suspend fun executeHermesJobSnapshot(request: Request): HermesJobSnapshot =
+        executeJsonDecoded(request) { responseText ->
+            json.decodeFromString<MobileHermesJobSnapshotWire>(responseText).toHermesJobSnapshot()
+        }
+
+    private suspend fun <Res> executeJsonDecoded(
+        request: Request,
+        decode: (String) -> Res,
+    ): Res =
         withContext(Dispatchers.IO) {
             transport.execute(request).use { response ->
                 if (!response.isSuccessful) {
-                    throw IllegalStateException(
-                        "Voice Lab request failed ${response.code}: ${response.toErrorPreview()}"
+                    val rawPreview = response.peekBody(ERROR_BODY_PREVIEW_LIMIT + 1).string()
+                    throw VoiceLabHttpException(
+                        statusCode = response.code,
+                        safePreview = response.toErrorPreview(rawPreview),
+                        failure = runCatching { json.decodeFromString<VoiceFailure>(rawPreview) }.getOrNull(),
                     )
                 }
                 val responseText = response.body.string()
                 runCatching {
-                    json.decodeFromString<Res>(responseText)
+                    decode(responseText)
                 }.getOrElse { error ->
                     val errorType = error::class.simpleName ?: "unknown"
                     throw IllegalStateException(
@@ -330,8 +356,8 @@ private fun String.isTailscaleIpv4(): Boolean {
         octets[1] in 64..127
 }
 
-private fun Response.toErrorPreview(): String =
-    peekBody(ERROR_BODY_PREVIEW_LIMIT + 1).string().toSanitizedPreview(
+private fun Response.toErrorPreview(rawPreview: String): String =
+    rawPreview.toSanitizedPreview(
         wasTruncated = (body.contentLength() > ERROR_BODY_PREVIEW_LIMIT).takeIf { body.contentLength() >= 0 }
     )
 

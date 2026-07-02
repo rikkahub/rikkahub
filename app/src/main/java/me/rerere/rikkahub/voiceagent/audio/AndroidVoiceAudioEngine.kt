@@ -286,12 +286,8 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         waitForCaptureCallbacks()
     }
 
-    override fun playPcm16(base64Pcm16: String) {
-        playPcm16(base64Pcm16 = base64Pcm16, sessionId = null)
-    }
-
-    override fun playPcm16(base64Pcm16: String, sessionId: Long?) {
-        playbackWriter.playBase64(base64Pcm16 = base64Pcm16, sessionId = sessionId)
+    override fun playPcm16(base64Pcm16: String, sessionId: Long?): Boolean {
+        return playbackWriter.playBase64(base64Pcm16 = base64Pcm16, sessionId = sessionId)
     }
 
     override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {

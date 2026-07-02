@@ -360,9 +360,7 @@ class HermesWaitingToneControllerTest {
 
         override fun stopCapture() = Unit
 
-        override fun playPcm16(base64Pcm16: String) = Unit
-
-        override fun playPcm16(base64Pcm16: String, sessionId: Long?) = Unit
+        override fun playPcm16(base64Pcm16: String, sessionId: Long?) = true
 
         override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
             playbackEntered.countDown()
@@ -402,9 +400,7 @@ class HermesWaitingToneControllerTest {
 
         override fun stopCapture() = Unit
 
-        override fun playPcm16(base64Pcm16: String) = Unit
-
-        override fun playPcm16(base64Pcm16: String, sessionId: Long?) = Unit
+        override fun playPcm16(base64Pcm16: String, sessionId: Long?) = true
 
         override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
             queuedCue += QueuedCue(base64Pcm16, localCueGeneration)

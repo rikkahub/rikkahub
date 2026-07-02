@@ -25,6 +25,10 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -1521,8 +1525,16 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-auth-fail" to "private prompt", toolApi.awaitRequest("call-auth-fail"))
 
         toolApi.fail(
-            IllegalStateException(
-                "Voice Lab request failed 403: {\"prompt\":\"private prompt\",\"answer\":\"private answer\"}"
+            VoiceLabHttpException(
+                statusCode = 403,
+                safePreview = "{\"prompt\":\"private prompt\",\"answer\":\"private answer\"}",
+                failure = VoiceFailure(
+                    kind = VoiceFailureKind.Auth,
+                    safeMessage = "Voice Lab request failed 403",
+                    safeSummary = "Voice Lab request failed 403",
+                    retryable = false,
+                    source = VoiceFailureSource.VoiceLab,
+                ),
             )
         )
         coordinator.awaitToolJobsWithTimeout()
@@ -2003,12 +2015,12 @@ class VoiceAgentRuntimeTest {
         assertTrue(tool.output.filterIsInstance<UIMessagePart.Text>().any { it.text == "tool answer" })
         assertTrue(
             coordinator.state.value.diagnostics.any {
-                it.name == "input_transcript_delta" && it.detail.contains("text=hel")
+                it.name == "input_transcript_delta" && it.detail.contains("chars=3")
             }
         )
         assertTrue(
             coordinator.state.value.diagnostics.any {
-                it.name == "output_transcript_delta" && it.detail.contains("text=h")
+                it.name == "output_transcript_delta" && it.detail.contains("chars=1")
             }
         )
         assertTrue(

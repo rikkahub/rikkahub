@@ -42,9 +42,8 @@ hermes-answer.txt
 output-transcript.txt
 ```
 
-The app writes these files only as debug/E2E artifacts when `enableVoiceE2EArtifacts` is explicitly enabled by the
-runner. Strict hash mode leaves raw artifact capture disabled. These artifacts are not logged to logcat by default. The
-runner clears stale copies before a run and removes app-private copies during cleanup.
+The app writes these files as trace-keyed Voice Agent artifacts for every session. These artifacts are not logged to
+logcat by default. The runner clears stale copies before a run and removes app-private copies during cleanup.
 
 The source text used to generate PCM stays in the local runner artifact `build/voice-agent-e2e/generated-prompt.txt` and
 is not copied into app-private storage. If an operator supplies an existing PCM, the report records `missing` unless

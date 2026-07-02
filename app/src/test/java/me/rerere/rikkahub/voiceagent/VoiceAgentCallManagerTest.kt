@@ -101,12 +101,12 @@ class VoiceAgentCallManagerTest {
 
         val startedFirst = manager.start(
             conversationId = conversationId,
-            config = fakeLaunchConfig(enableVoiceE2EArtifacts = false),
+            config = fakeLaunchConfig(voiceModelId = "gemini-flash"),
             scope = this,
         )
         val startedSecond = manager.start(
             conversationId = conversationId,
-            config = fakeLaunchConfig(enableVoiceE2EArtifacts = true),
+            config = fakeLaunchConfig(voiceModelId = "gemini-pro"),
             scope = this,
         )
 
@@ -114,16 +114,16 @@ class VoiceAgentCallManagerTest {
         assertEquals(true, startedSecond)
         assertEquals(1, first.endCalls)
         assertEquals(1, second.startCalls)
-        assertEquals(true, factory.created.last().second.enableVoiceE2EArtifacts)
+        assertEquals("gemini-pro", factory.created.last().second.voiceModelId)
         assertEquals(conversationId, manager.activeConversationId.value)
     }
 
     @Test
-    fun `starting same conversation with same e2e launch config does not replace existing session`() = runTest {
+    fun `starting same conversation with same launch config does not replace existing session`() = runTest {
         val session = FakeManagedVoiceCallSession()
         val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
         val conversationId = Uuid.parse("77777777-7777-4777-8777-777777777779")
-        val config = fakeLaunchConfig(enableVoiceE2EArtifacts = true)
+        val config = fakeLaunchConfig()
 
         val startedFirst = manager.start(conversationId, config, this)
         val startedDuplicate = manager.start(conversationId, config, this)
@@ -245,13 +245,12 @@ private class FakeVoiceAgentCallFactory(
     }
 }
 
-private fun fakeLaunchConfig(enableVoiceE2EArtifacts: Boolean = false) = VoiceAgentLaunchConfig(
+private fun fakeLaunchConfig(voiceModelId: String = "gemini-flash") = VoiceAgentLaunchConfig(
     voiceLabBaseUrl = "https://voice.test",
     credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
-    voiceModelId = "gemini-flash",
+    voiceModelId = voiceModelId,
     assistantName = "Hermes",
     assistantPrompt = "system",
-    enableVoiceE2EArtifacts = enableVoiceE2EArtifacts,
 )
 
 private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking {

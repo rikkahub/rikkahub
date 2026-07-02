@@ -471,6 +471,33 @@ class VoiceReconnectControllerTest {
     }
 
     @Test
+    fun `post activation eligible reconnect session remains automatic until connected commit`() {
+        val controller = VoiceReconnectController(
+            policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),
+            nowMs = { 1_000L },
+        )
+        val job = Job()
+
+        controller.markEligible(sessionId = 7L)
+        val decision = controller.planReconnect(
+            failedSessionId = 7L,
+            event = GeminiLiveEvent.WebSocketFailure("drop"),
+            reason = VoiceSessionStopReason.WebSocketFailure,
+        )
+        assertTrue(decision is VoiceReconnectDecision.Schedule)
+        val schedule = decision as VoiceReconnectDecision.Schedule
+        assertTrue(controller.setScheduled(plan = schedule.plan, job = job))
+        assertEquals(8L, controller.beginAttempt(job = job) { 8L })
+        controller.markEligible(sessionId = 8L)
+        assertTrue(controller.reserveActivation(sessionId = 8L))
+        assertNull(controller.finishActivation(sessionId = 8L))
+
+        assertTrue(controller.isAutomaticReconnectSession(sessionId = 8L))
+        assertEquals(1, controller.completeAttempt(job = job))
+        assertFalse(controller.isAutomaticReconnectSession(sessionId = 8L))
+    }
+
+    @Test
     fun `attempt belongs to new session as soon as it begins`() {
         val controller = VoiceReconnectController(
             policy = VoiceReconnectPolicy(maxAttempts = 3, baseDelayMs = 10L, maxDelayMs = 10L, jitterRatio = 0.0),

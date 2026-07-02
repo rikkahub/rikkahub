@@ -88,7 +88,6 @@ class DefaultVoiceAgentCallFactory(
                 observability = observability,
                 traceContext = traceContext,
                 voiceE2EArtifacts = createDefaultVoiceE2EArtifactWriter(
-                    config = config,
                     noBackupFilesDir = context.noBackupFilesDir,
                     traceContext = traceContext,
                     scope = scope,
@@ -109,12 +108,11 @@ class DefaultVoiceAgentCallFactory(
 }
 
 internal fun createDefaultVoiceE2EArtifactWriter(
-    config: VoiceAgentLaunchConfig,
     noBackupFilesDir: File,
     traceContext: VoiceTraceContext,
     scope: CoroutineScope,
 ): VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.create(
-    enabled = config.enableVoiceE2EArtifacts,
+    enabled = true,
     rootDirectory = noBackupFilesDir,
     traceId = traceContext.traceId,
     scope = scope,

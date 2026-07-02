@@ -221,7 +221,7 @@ class BlockedCancel {
 }
 
 class FakeVoiceToolApi : VoiceToolApi {
-    val requests = mutableListOf<Pair<String, String>>()
+    val requests = CopyOnWriteArrayList<Pair<String, String>>()
     private val lock = Any()
     private val calls = mutableMapOf<String, PendingHermesJob>()
     private val scriptedPolls = mutableMapOf<String, ArrayDeque<Any>>()
@@ -566,6 +566,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     private val blockedStartCaptures = mutableListOf<BlockedPlayback>()
     private val blockedStopCaptures = mutableListOf<BlockedPlayback>()
     private val blockedPlaybacks = mutableListOf<BlockedPlayback>()
+    private val blockedAfterAcceptedPlaybacks = mutableListOf<BlockedPlayback>()
     private val blockedSuppressions = mutableListOf<BlockedPlayback>()
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
@@ -599,13 +600,9 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         debugInjectionCompleteCallback = null
     }
 
-    override fun playPcm16(base64Pcm16: String) {
-        playPcm16(base64Pcm16 = base64Pcm16, sessionId = null)
-    }
-
-    override fun playPcm16(base64Pcm16: String, sessionId: Long?) {
+    override fun playPcm16(base64Pcm16: String, sessionId: Long?): Boolean {
         if (sessionId != null && playbackSessionId != sessionId) {
-            return
+            return false
         }
         val blocked = synchronized(blockedPlaybacks) { blockedPlaybacks.removeFirstOrNull() }
         if (blocked != null) {
@@ -613,9 +610,17 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
             blocked.release.await(500, TimeUnit.MILLISECONDS)
         }
         if (sessionId != null && playbackSessionId != sessionId) {
-            return
+            return false
         }
         playedPcm16 += base64Pcm16
+        val blockedAfterAccepted = synchronized(blockedAfterAcceptedPlaybacks) {
+            blockedAfterAcceptedPlaybacks.removeFirstOrNull()
+        }
+        if (blockedAfterAccepted != null) {
+            blockedAfterAccepted.started.countDown()
+            blockedAfterAccepted.release.await(500, TimeUnit.MILLISECONDS)
+        }
+        return true
     }
 
     override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
@@ -660,6 +665,14 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         return BlockedPlayback().also { blocked ->
             synchronized(blockedPlaybacks) {
                 blockedPlaybacks += blocked
+            }
+        }
+    }
+
+    fun blockAfterNextAcceptedPlayback(): BlockedPlayback {
+        return BlockedPlayback().also { blocked ->
+            synchronized(blockedAfterAcceptedPlaybacks) {
+                blockedAfterAcceptedPlaybacks += blocked
             }
         }
     }
@@ -724,6 +737,7 @@ class FakeVoiceConversationStore(
     private val updates = mutableListOf<Conversation>()
     private val blockedUpdates = mutableListOf<BlockedUpdate>()
     private val blockedAfterUpdates = mutableListOf<BlockedUpdate>()
+    private val failedUpdates = mutableListOf<Throwable>()
     override val conversation: StateFlow<Conversation> = MutableStateFlow(initialConversation)
 
     override suspend fun update(transform: (Conversation) -> Conversation) {
@@ -732,6 +746,7 @@ class FakeVoiceConversationStore(
             blockedBeforeUpdate.started.countDown()
             blockedBeforeUpdate.release.await(500, TimeUnit.MILLISECONDS)
         }
+        synchronized(failedUpdates) { failedUpdates.removeFirstOrNull() }?.let { throw it }
         val flow = conversation as MutableStateFlow<Conversation>
         flow.value = transform(flow.value)
         synchronized(updates) {
@@ -757,6 +772,12 @@ class FakeVoiceConversationStore(
             synchronized(blockedAfterUpdates) {
                 blockedAfterUpdates += blocked
             }
+        }
+    }
+
+    fun failNextUpdate(error: Throwable = IllegalStateException("update failed")) {
+        synchronized(failedUpdates) {
+            failedUpdates += error
         }
     }
 

@@ -4,6 +4,7 @@ import io.sentry.NoOpTransportFactory
 import io.sentry.Sentry
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
+import io.sentry.SpanStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -113,6 +114,42 @@ class VoiceObservabilityTest {
 
             val secondAgain = observability.withSentryPropagation(secondTrace)
             assertEquals(second.sentryTrace, secondAgain.sentryTrace)
+        } finally {
+            Sentry.close()
+        }
+    }
+
+    @Test
+    fun `sentry observability closes voice transaction on session failed`() {
+        val transactionStatuses = mutableListOf<SpanStatus?>()
+        Sentry.init { options ->
+            options.dsn = "https://public@example.com/1"
+            options.setTransportFactory(NoOpTransportFactory.getInstance())
+            options.tracesSampleRate = 1.0
+            options.setBeforeSendTransaction { transaction, _ ->
+                transactionStatuses += transaction.status
+                transaction
+            }
+        }
+
+        try {
+            val observability = SentryVoiceObservability()
+            val first = observability.withSentryPropagation(trace)
+            val endedTrace = VoiceTraceContext(
+                traceId = "trace-ended",
+                voiceSessionId = "session-ended",
+            )
+            observability.withSentryPropagation(endedTrace)
+
+            observability.recordEvent("voicelab.mobile.session.failed", first)
+            observability.recordEvent("voicelab.mobile.session.ended", endedTrace)
+            Sentry.flush(1_000)
+
+            val afterFailure = observability.withSentryPropagation(trace)
+            assertTrue(afterFailure.sentryTrace.orEmpty().isNotBlank())
+            assertFalse(first.sentryTrace == afterFailure.sentryTrace)
+            assertTrue(transactionStatuses.contains(SpanStatus.INTERNAL_ERROR))
+            assertTrue(transactionStatuses.contains(SpanStatus.OK))
         } finally {
             Sentry.close()
         }
@@ -364,6 +401,23 @@ class VoiceObservabilityTest {
             attributes["prompt.sha256"],
         )
         assertFalse(attributes.containsKey("prompt.normalized"))
+    }
+
+    @Test
+    fun `voice domain text payload emits canonical key metadata`() {
+        val attributes = voiceTextPayload(
+            key = "voice.user_transcript",
+            text = "hello private user",
+            previewChars = 8,
+        )
+
+        assertEquals("hello pr", attributes["voice.user_transcript"])
+        assertEquals(true, attributes["voice.user_transcript.truncated"])
+        assertEquals(18, attributes["voice.user_transcript.chars"])
+        assertEquals(
+            "cc9f8ee1eed7d66b232f94d69e0e81d2107343d391e604688c4d636657a61136",
+            attributes["voice.user_transcript.sha256"],
+        )
     }
 
     @Test

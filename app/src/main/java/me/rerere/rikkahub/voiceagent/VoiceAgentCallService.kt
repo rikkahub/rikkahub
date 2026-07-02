@@ -89,13 +89,9 @@ class VoiceAgentCallService : Service() {
                             "config available voiceModelId=${result.config.voiceModelId} " +
                                 "baseUrl=${result.config.voiceLabBaseUrl}",
                         )
-                        val config = voiceAgentServiceStartConfig(
-                            resolvedConfig = result.config,
-                            readBooleanExtra = intent::getBooleanExtra,
-                        )
                         val startedNewSession = manager.start(
                             conversationId = id,
-                            config = config,
+                            config = result.config,
                             scope = serviceScope,
                         )
                         VoiceAgentLog.d(TAG, "manager start returned startedNewSession=$startedNewSession")
@@ -292,16 +288,6 @@ class VoiceAgentCallService : Service() {
         const val TAG = "VoiceAgentCallService"
     }
 }
-
-internal fun voiceAgentServiceStartConfig(
-    resolvedConfig: VoiceAgentLaunchConfig,
-    readBooleanExtra: (String, Boolean) -> Boolean,
-): VoiceAgentLaunchConfig = resolvedConfig.copy(
-    enableVoiceE2EArtifacts = readBooleanExtra(
-        VoiceAgentCallContract.EXTRA_ENABLE_VOICE_E2E_ARTIFACTS,
-        false,
-    )
-)
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
     activeConversationId != null

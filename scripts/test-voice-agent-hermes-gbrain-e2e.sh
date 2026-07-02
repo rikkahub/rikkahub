@@ -298,9 +298,6 @@ LOGS
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-gbrain/hermes-call.txt")
     ;;
-  "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1 --ez enableVoiceE2EArtifacts true")
-    rm -f "${FAKE_ADB_END_MARKER:?}"
-    ;;
   "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1")
     rm -f "${FAKE_ADB_END_MARKER:?}"
     ;;
@@ -567,7 +564,6 @@ assert_contains "$manual_output" "PIPELINE: passed"
 assert_contains "$manual_output" "CLEANUP: passed"
 assert_contains "$manual_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
 assert_file_contains_exactly "$manual_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
-assert_file_contains "$FAKE_ADB_ARGS_LOG" "--ez enableVoiceE2EArtifacts true"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-answer.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/input-transcript.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/output-transcript.txt"
@@ -1490,9 +1486,6 @@ assert_last_line_after "$FAKE_ADB_ARGS_LOG" \
 strict_log_dir="$TMP_DIR/strict-log"
 strict_success_log_dir="$TMP_DIR/strict-success-log"
 strict_success_report_path="$strict_success_log_dir/report.txt"
-before_strict_success_e2e_artifact_enables="$(
-  grep -c -F -- "--ez enableVoiceE2EArtifacts true" "$FAKE_ADB_ARGS_LOG" || true
-)"
 before_strict_success_report_pulls="$(
   count_report_artifact_pulls
 )"
@@ -1531,18 +1524,6 @@ if [[ "$after_strict_success_report_pulls" != "$before_strict_success_report_pul
   printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
   exit 1
 fi
-after_strict_success_e2e_artifact_enables="$(
-  grep -c -F -- "--ez enableVoiceE2EArtifacts true" "$FAKE_ADB_ARGS_LOG" || true
-)"
-if [[ "$after_strict_success_e2e_artifact_enables" != "$before_strict_success_e2e_artifact_enables" ]]; then
-  printf 'Expected strict success mode not to enable raw E2E artifacts.\n' >&2
-  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
-  exit 1
-fi
-
-before_strict_failure_e2e_artifact_enables="$(
-  grep -c -F -- "--ez enableVoiceE2EArtifacts true" "$FAKE_ADB_ARGS_LOG" || true
-)"
 set +e
 strict_output="$(
   PATH="$TMP_DIR:$PATH" \
@@ -1565,13 +1546,4 @@ if [[ "$strict_status" -eq 0 ]]; then
   exit 1
 fi
 assert_contains "$strict_output" "Missing marker after 5s: Hermes response hash matched"
-after_strict_failure_e2e_artifact_enables="$(
-  grep -c -F -- "--ez enableVoiceE2EArtifacts true" "$FAKE_ADB_ARGS_LOG" || true
-)"
-if [[ "$after_strict_failure_e2e_artifact_enables" != "$before_strict_failure_e2e_artifact_enables" ]]; then
-  printf 'Expected strict failure mode not to enable raw E2E artifacts.\n' >&2
-  printf 'ADB args:\n%s\n' "$(cat "$FAKE_ADB_ARGS_LOG")" >&2
-  exit 1
-fi
-
 printf 'voice-agent-hermes-gbrain-e2e tests passed.\n'
