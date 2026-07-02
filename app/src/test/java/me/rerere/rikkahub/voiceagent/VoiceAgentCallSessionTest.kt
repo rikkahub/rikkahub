@@ -11,6 +11,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
+import me.rerere.rikkahub.voiceagent.telemetry.sha256Hex
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -169,7 +170,10 @@ class VoiceAgentCallSessionTest {
                     "turnId" to "user-1",
                     "speaker" to "user",
                     "status" to "session-closed-before-final",
+                    "voice.user_transcript" to "hello user",
+                    "voice.user_transcript.truncated" to false,
                     "voice.user_transcript.chars" to 10,
+                    "voice.user_transcript.sha256" to sha256Hex("hello user"),
                 )
             ),
             observability.events
@@ -182,7 +186,10 @@ class VoiceAgentCallSessionTest {
                     "turnId" to "assistant-2",
                     "speaker" to "assistant",
                     "status" to "complete",
+                    "gemini.output_transcript" to "hello assistant",
+                    "gemini.output_transcript.truncated" to false,
                     "gemini.output_transcript.chars" to 15,
+                    "gemini.output_transcript.sha256" to sha256Hex("hello assistant"),
                 )
             ),
             observability.events
@@ -194,13 +201,19 @@ class VoiceAgentCallSessionTest {
                 "turnId" to "assistant-2",
                 "speaker" to "assistant",
                 "status" to "complete",
+                "gemini.output_transcript" to "hello assistant",
+                "gemini.output_transcript.truncated" to false,
                 "gemini.output_transcript.chars" to 15,
+                "gemini.output_transcript.sha256" to sha256Hex("hello assistant"),
             ),
             mapOf(
                 "turnId" to "user-1",
                 "speaker" to "user",
                 "status" to "session-closed-before-final",
+                "voice.user_transcript" to "hello user",
+                "voice.user_transcript.truncated" to false,
                 "voice.user_transcript.chars" to 10,
+                "voice.user_transcript.sha256" to sha256Hex("hello user"),
             ),
         )
         assertEquals(
@@ -218,14 +231,13 @@ class VoiceAgentCallSessionTest {
         val transcriptTelemetry = observability.events
             .filter {
                 it.name == "voicelab.mobile.transcript.input_delta" ||
-                    it.name == "voicelab.mobile.transcript.output_delta" ||
-                it.name == "voicelab.mobile.transcript.user_final" ||
-                    it.name == "voicelab.mobile.transcript.assistant_final" ||
-                    it.name == "voicelab.mobile.transcript.turn"
+                    it.name == "voicelab.mobile.transcript.output_delta"
             }
             .joinToString(separator = "\n") { it.attributes.toString() }
         assertFalse(transcriptTelemetry.contains("hello user"))
         assertFalse(transcriptTelemetry.contains("hello assistant"))
+        assertFalse(transcriptTelemetry.contains("voice.user_transcript"))
+        assertFalse(transcriptTelemetry.contains("gemini.output_transcript"))
         assertFalse(transcriptTelemetry.contains("sha256"))
     }
 
@@ -262,7 +274,10 @@ class VoiceAgentCallSessionTest {
                 "turnId" to "assistant-1",
                 "speaker" to "assistant",
                 "status" to "complete",
+                "gemini.output_transcript" to "recovered assistant",
+                "gemini.output_transcript.truncated" to false,
                 "gemini.output_transcript.chars" to 19,
+                "gemini.output_transcript.sha256" to sha256Hex("recovered assistant"),
             )
         )
         assertEquals(
@@ -315,7 +330,10 @@ class VoiceAgentCallSessionTest {
                     "turnId" to "assistant-1",
                     "speaker" to "assistant",
                     "status" to "session-closed-before-final",
+                    "gemini.output_transcript" to "unfinished assistant",
+                    "gemini.output_transcript.truncated" to false,
                     "gemini.output_transcript.chars" to 20,
+                    "gemini.output_transcript.sha256" to sha256Hex("unfinished assistant"),
                 )
             ),
             assistantFinal,
@@ -362,7 +380,10 @@ class VoiceAgentCallSessionTest {
                 "turnId" to "assistant-1",
                 "speaker" to "assistant",
                 "status" to "interrupted",
+                "gemini.output_transcript" to "partial assistant",
+                "gemini.output_transcript.truncated" to false,
                 "gemini.output_transcript.chars" to 17,
+                "gemini.output_transcript.sha256" to sha256Hex("partial assistant"),
             )
         )
         assertEquals(expected, assistantFinal)
