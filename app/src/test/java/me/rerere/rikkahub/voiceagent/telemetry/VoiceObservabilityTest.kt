@@ -519,6 +519,38 @@ class VoiceObservabilityTest {
     }
 
     @Test
+    fun `voice text payload emits privacy metadata for canonical helper keys`() {
+        val cases = listOf(
+            Triple(
+                "gemini.tool_call.prompt",
+                "private prompt",
+                "6fe06b970bb77bb96bee521acbebf7e932c2bbc684494ad299a7e1851347fc8e",
+            ),
+            Triple(
+                "hermes.response.answer",
+                "private answer",
+                "58c61586e981a11c4d5fd85b0b03b78c1b686743e5d02f4c6c9c1c677dc7a4da",
+            ),
+            Triple(
+                "gemini.followup_text",
+                "Hermes answer: private answer",
+                "a0dec9f3f1ddf247fdad4e9bc90f05ee0ab55dc4953a11e6f5746e193b0f90b2",
+            ),
+        )
+
+        cases.forEach { (key, text, sha256) ->
+            val attributes = voiceTextPayload(
+                key = key,
+                text = text,
+                previewChars = 7,
+            )
+
+            assertEquals(true, attributes["$key.truncated"])
+            assertEquals(sha256, attributes["$key.sha256"])
+        }
+    }
+
+    @Test
     fun `voice text payload does not mark short text as truncated`() {
         val attributes = voiceTextPayload(
             key = "answer",
