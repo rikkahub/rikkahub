@@ -121,6 +121,63 @@ class VoiceAgentCallSession internal constructor(
         startJob = job
     }
 
+    override fun interrupt() {
+        if (!ended) {
+            coordinator.suppressPlayback()
+        }
+    }
+
+    override fun setMuted(value: Boolean) {
+        if (ended || muted == value) return
+        muted = value
+        if (muted) {
+            gemini.sendAudioStreamEnd(sessionId)
+            audio.stopCapture()
+            coordinator.updateAudioStatus(VoiceAudioStatus.Muted)
+        } else if (state.value.session == VoiceSessionStatus.Connected) {
+            startCapture(sessionId)
+        }
+        recordEventSafely(
+            name = if (muted) {
+                "voicelab.mobile.audio.capture_muted"
+            } else {
+                "voicelab.mobile.audio.capture_unmuted"
+            },
+            attributes = mapOf("sessionId" to sessionId),
+        )
+    }
+
+    override fun reconnect() {
+        if (ended) return
+        val automaticReconnectJob = resetAutomaticReconnectForManualReconnect()
+        val previousJob = prepareManualReconnect()
+        startJob = startReconnectedSession(previousJob ?: automaticReconnectJob)
+    }
+
+    override fun end() {
+        endWithVisibleReason(visibleReason = null)
+    }
+
+    override suspend fun endAndDrain() {
+        val preparation = beginEnd() ?: return
+        finishEnd(previousJob = preparation.previousJob, visibleReason = null)
+    }
+
+    override fun recordDiagnostic(name: String, detail: String) {
+        coordinator.recordDiagnostic(name = name, detail = detail)
+    }
+
+    override fun closeNow() {
+        markEnded()
+        cancelAutomaticReconnect(reason = "close")
+        startJob?.cancel()
+        resourceCleaner.cleanupForEnd(closeGemini = false)
+        coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
+        coordinator.close(waitForStartedSends = false)
+        recordSessionEndedSafely(endReason = "close_now")
+        coordinator.launchPersistenceDrain()
+    }
+
     private suspend fun runSession(
         currentSessionId: Long,
         automaticReconnectJob: Job? = null,
@@ -755,20 +812,6 @@ class VoiceAgentCallSession internal constructor(
         )
     }
 
-    private fun recordRetryableTransportDiagnostic(event: GeminiLiveEvent) {
-        when (event) {
-            is GeminiLiveEvent.WebSocketClosed -> coordinator.recordDiagnostic(
-                name = "gemini_ws_closed",
-                detail = "code=${event.code}, reason=${event.reason}",
-            )
-            is GeminiLiveEvent.WebSocketFailure -> coordinator.recordDiagnostic(
-                name = "gemini_ws_failure",
-                detail = event.message,
-            )
-            else -> Unit
-        }
-    }
-
     private fun prepareFailedSession(sessionId: Long, reason: VoiceSessionStopReason, closeGemini: Boolean) {
         if (!coordinator.isActiveSession(sessionId)) return
         VoiceAgentLog.d(
@@ -780,47 +823,6 @@ class VoiceAgentCallSession internal constructor(
             detail = "reason=${reason.diagnosticReason}, closeGemini=$closeGemini",
         )
         resourceCleaner.cleanupForFailure(closeGemini = closeGemini)
-    }
-
-    private suspend fun ensureActiveSession(
-        sessionId: Long,
-        automaticReconnectJob: Job? = null,
-    ) {
-        currentCoroutineContext().ensureActive()
-        check(isSessionOpenAndActive(sessionId, automaticReconnectJob)) { "Voice Agent session is stale" }
-    }
-
-    override fun interrupt() {
-        if (!ended) {
-            coordinator.suppressPlayback()
-        }
-    }
-
-    override fun setMuted(value: Boolean) {
-        if (ended || muted == value) return
-        muted = value
-        if (muted) {
-            gemini.sendAudioStreamEnd(sessionId)
-            audio.stopCapture()
-            coordinator.updateAudioStatus(VoiceAudioStatus.Muted)
-        } else if (state.value.session == VoiceSessionStatus.Connected) {
-            startCapture(sessionId)
-        }
-        recordEventSafely(
-            name = if (muted) {
-                "voicelab.mobile.audio.capture_muted"
-            } else {
-                "voicelab.mobile.audio.capture_unmuted"
-            },
-            attributes = mapOf("sessionId" to sessionId),
-        )
-    }
-
-    override fun reconnect() {
-        if (ended) return
-        val automaticReconnectJob = resetAutomaticReconnectForManualReconnect()
-        val previousJob = prepareManualReconnect()
-        startJob = startReconnectedSession(previousJob ?: automaticReconnectJob)
     }
 
     private fun prepareManualReconnect(): Job? {
@@ -843,19 +845,6 @@ class VoiceAgentCallSession internal constructor(
             }
         }
         runSession(currentSessionId ?: return@launch)
-    }
-
-    override fun end() {
-        endWithVisibleReason(visibleReason = null)
-    }
-
-    override suspend fun endAndDrain() {
-        val preparation = beginEnd() ?: return
-        finishEnd(previousJob = preparation.previousJob, visibleReason = null)
-    }
-
-    override fun recordDiagnostic(name: String, detail: String) {
-        coordinator.recordDiagnostic(name = name, detail = detail)
     }
 
     private fun endWithVisibleReason(visibleReason: String?) {
@@ -887,15 +876,26 @@ class VoiceAgentCallSession internal constructor(
         coordinator.stopPersistenceScope()
     }
 
-    override fun closeNow() {
-        markEnded()
-        cancelAutomaticReconnect(reason = "close")
-        startJob?.cancel()
-        resourceCleaner.cleanupForEnd(closeGemini = false)
-        coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
-        coordinator.close(waitForStartedSends = false)
-        recordSessionEndedSafely(endReason = "close_now")
-        coordinator.launchPersistenceDrain()
+    private suspend fun ensureActiveSession(
+        sessionId: Long,
+        automaticReconnectJob: Job? = null,
+    ) {
+        currentCoroutineContext().ensureActive()
+        check(isSessionOpenAndActive(sessionId, automaticReconnectJob)) { "Voice Agent session is stale" }
+    }
+
+    private fun recordRetryableTransportDiagnostic(event: GeminiLiveEvent) {
+        when (event) {
+            is GeminiLiveEvent.WebSocketClosed -> coordinator.recordDiagnostic(
+                name = "gemini_ws_closed",
+                detail = "code=${event.code}, reason=${event.reason}",
+            )
+            is GeminiLiveEvent.WebSocketFailure -> coordinator.recordDiagnostic(
+                name = "gemini_ws_failure",
+                detail = event.message,
+            )
+            else -> Unit
+        }
     }
 
     private fun startCapture(currentSessionId: Long) {
