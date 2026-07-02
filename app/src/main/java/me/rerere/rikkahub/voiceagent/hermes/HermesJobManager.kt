@@ -20,8 +20,10 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
+import me.rerere.rikkahub.voiceagent.isTerminalHermesToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
+import me.rerere.rikkahub.voiceagent.summarizeVoiceToolStatus
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -1059,27 +1061,17 @@ class HermesJobManager(
 
     private fun updateToolStatus(callId: String, status: VoiceToolStatus) {
         val visibleStatus = synchronized(lock) {
-            if (status.isTerminalHermesStatus()) {
+            if (status.isTerminalHermesToolStatus()) {
                 toolCalls.remove(callId)
             } else {
                 toolCalls[callId] = status
             }
-            summarizeToolStatus(toolCalls = toolCalls, fallback = status)
+            summarizeVoiceToolStatus(toolCalls = toolCalls, fallback = status)
         }
         _toolStatus.value = visibleStatus
         runCatching {
             updateToolStatus(status)
         }
-    }
-
-    private fun VoiceToolStatus.isTerminalHermesStatus(): Boolean = when (this) {
-        is VoiceToolStatus.HermesAnswered,
-        is VoiceToolStatus.HermesFailed,
-            -> true
-        VoiceToolStatus.Idle,
-        is VoiceToolStatus.QueuedHermes,
-        is VoiceToolStatus.CallingHermes,
-            -> false
     }
 
     private fun VoiceToolRecordStatus.queueEventStatus(): String = when (this) {
@@ -1090,20 +1082,6 @@ class HermesJobManager(
         is VoiceToolRecordStatus.Failed -> HermesQueueStatus.Failed.wireName
         is VoiceToolRecordStatus.Expired -> HermesQueueStatus.Expired.wireName
         is VoiceToolRecordStatus.Canceled -> HermesQueueStatus.Canceled.wireName
-    }
-
-    private fun summarizeToolStatus(
-        toolCalls: Map<String, VoiceToolStatus>,
-        fallback: VoiceToolStatus,
-    ): VoiceToolStatus {
-        return when (fallback) {
-            is VoiceToolStatus.CallingHermes -> fallback
-            is VoiceToolStatus.QueuedHermes -> fallback
-            else -> toolCalls.values.filterIsInstance<VoiceToolStatus.CallingHermes>().firstOrNull()
-                ?: toolCalls.values.filterIsInstance<VoiceToolStatus.QueuedHermes>().firstOrNull()
-                ?: toolCalls.values.filterIsInstance<VoiceToolStatus.HermesFailed>().firstOrNull()
-                ?: fallback
-        }
     }
 
     private fun currentBridgeAttachment(): BridgeAttachment? = synchronized(lock) {
@@ -1159,10 +1137,19 @@ class HermesJobManager(
         }
 
     private fun Throwable.isTerminalHermesPollFailure(): Boolean {
-        if (this !is VoiceLabHttpException) return false
-        failure?.let { return !it.retryable }
-        return statusCode in 400..499 && statusCode != 408 && statusCode != 429
+        if (this is VoiceLabHttpException) {
+            failure?.let { return !it.retryable }
+            return statusCode.isTerminalVoiceLabStatusCode()
+        }
+        val legacyStatusCode = message
+            ?.substringAfter("Voice Lab request failed ", missingDelimiterValue = "")
+            ?.take(3)
+            ?.toIntOrNull()
+        return legacyStatusCode?.isTerminalVoiceLabStatusCode() == true
     }
+
+    private fun Int.isTerminalVoiceLabStatusCode(): Boolean =
+        this in 400..499 && this != 408 && this != 429
 
     private fun String?.toEpochMillisOrNull(): Long? {
         return this

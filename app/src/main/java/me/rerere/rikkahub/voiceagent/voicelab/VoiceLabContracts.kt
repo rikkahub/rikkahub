@@ -208,15 +208,7 @@ data class HermesJobSnapshot(
         profileId = profileId,
         profileLabel = profileLabel,
         elapsedMs = elapsedMs,
-        failure = error?.let {
-            VoiceFailure(
-                kind = status.toVoiceFailureKind(),
-                safeMessage = it,
-                safeSummary = it,
-                retryable = false,
-                source = VoiceFailureSource.VoiceLab,
-            )
-        },
+        failure = status.toLegacyVoiceFailure(error),
     )
 
     override fun toString(): String =
@@ -240,12 +232,43 @@ data class HermesJobSnapshot(
 private fun String.toHermesJobStatus(): HermesJobStatus =
     when (lowercase()) {
         "accepted" -> HermesJobStatus.Accepted
+        "queued" -> HermesJobStatus.Queued
         "running" -> HermesJobStatus.Running
         "succeeded" -> HermesJobStatus.Succeeded
         "failed" -> HermesJobStatus.Failed
         "expired", "timeout" -> HermesJobStatus.Expired
         "canceled", "cancelled" -> HermesJobStatus.Canceled
-        else -> HermesJobStatus.Queued
+        else -> HermesJobStatus.Failed
+    }
+
+private fun String.toLegacyVoiceFailure(error: String?): VoiceFailure? {
+    val safeMessage = when {
+        !isKnownHermesJobStatus() -> "Unknown Hermes job status: $this"
+        error != null -> error
+        else -> return null
+    }
+    return VoiceFailure(
+        kind = toVoiceFailureKind(),
+        safeMessage = safeMessage,
+        safeSummary = safeMessage,
+        retryable = false,
+        source = VoiceFailureSource.VoiceLab,
+    )
+}
+
+private fun String.isKnownHermesJobStatus(): Boolean =
+    when (lowercase()) {
+        "accepted",
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "expired",
+        "timeout",
+        "canceled",
+        "cancelled",
+            -> true
+        else -> false
     }
 
 private fun String.toVoiceFailureKind(): VoiceFailureKind =

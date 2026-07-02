@@ -827,7 +827,7 @@ class VoiceAgentCoordinator(
         _state.update { current ->
             val toolCalls = current.toolCalls + (callId to status)
             current.copy(
-                tool = summarizeToolStatus(toolCalls, status),
+                tool = summarizeVoiceToolStatus(toolCalls, status),
                 toolCalls = toolCalls,
             )
         }
@@ -839,7 +839,7 @@ class VoiceAgentCoordinator(
             VoiceToolStatus.Idle -> {
                 _state.update { current ->
                     current.copy(
-                        tool = summarizeToolStatus(
+                        tool = summarizeVoiceToolStatus(
                             toolCalls = current.toolCalls,
                             fallback = VoiceToolStatus.Idle,
                         )
@@ -867,7 +867,7 @@ class VoiceAgentCoordinator(
         _state.update { current ->
             val toolCalls = current.toolCalls - callIds.toSet()
             current.copy(
-                tool = summarizeToolStatus(
+                tool = summarizeVoiceToolStatus(
                     toolCalls = toolCalls,
                     fallback = toolCalls.values.lastOrNull() ?: VoiceToolStatus.Idle,
                 ),
@@ -903,20 +903,6 @@ class VoiceAgentCoordinator(
     }
 
     private fun VoiceSessionStatus.allowsHermesWaitingTone(): Boolean = this == VoiceSessionStatus.Connected
-
-    private fun summarizeToolStatus(
-        toolCalls: Map<String, VoiceToolStatus>,
-        fallback: VoiceToolStatus,
-    ): VoiceToolStatus {
-        return when (fallback) {
-            is VoiceToolStatus.CallingHermes -> fallback
-            is VoiceToolStatus.QueuedHermes -> fallback
-            else -> toolCalls.values.filterIsInstance<VoiceToolStatus.CallingHermes>().firstOrNull()
-                ?: toolCalls.values.filterIsInstance<VoiceToolStatus.QueuedHermes>().firstOrNull()
-                ?: toolCalls.values.filterIsInstance<VoiceToolStatus.HermesFailed>().firstOrNull()
-                ?: fallback
-        }
-    }
 
     private fun recordUnsupportedToolCall(call: GeminiLiveEvent.UnsupportedToolCall) {
         diagnostics.record("unsupported_tool_call", "callId=${call.callId}, name=${call.name}")
