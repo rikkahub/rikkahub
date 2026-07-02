@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
@@ -2897,6 +2898,98 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `session metadata recovers from failed after manual reconnect and normal end`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-recovered-failed-session").toFile()
+        val artifactScope = CoroutineScope(coroutineContext + SupervisorJob())
+        var metadataNow = 1_700_000_008_111
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000128",
+                scope = artifactScope,
+            )
+            val gemini = FakeGeminiLiveVoiceClient().apply {
+                connectEvent = GeminiLiveEvent.Error(message = "setup failed", raw = "{}")
+            }
+            val session = VoiceAgentCallSession(
+                modelId = "gemini-flash",
+                sessionApi = FakeVoiceSessionApi(),
+                toolApi = FakeVoiceToolApi(),
+                gemini = gemini,
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = "system", turns = emptyList())
+                ),
+                traceContext = VoiceTraceContext(traceId = "VA000128", voiceSessionId = "VA000128"),
+                voiceE2EArtifacts = artifactWriter,
+                sessionMetadata = VoiceE2ESessionMetadata(
+                    voiceTraceId = "VA000128",
+                    voiceSessionId = "VA000128",
+                    conversationId = "conversation-128",
+                    packageName = "me.rerere.rikkahub",
+                    versionName = "2.2.6",
+                    versionCode = "162",
+                    debuggable = true,
+                    voiceModelId = "gemini-flash",
+                    providerModel = null,
+                    status = "created",
+                    startedAtEpochMs = 1_700_000_000_000,
+                    sentryDsnConfigured = true,
+                    sentryTracingEnabled = true,
+                    sentryPropagationCreated = true,
+                ),
+                nowMs = { 8 },
+                metadataEpochNowMs = { metadataNow },
+                scope = this,
+            )
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000128/session.json")
+
+            session.start()
+            gemini.awaitConnectCount(1)
+            withTimeout(500) {
+                while (session.state.value.session !is VoiceSessionStatus.Error) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+
+            val failed = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("failed", failed.string("status"))
+            assertEquals("startup_failure", failed.string("closeStatus"))
+            assertEquals("1700000008111", failed.getValue("endedAtEpochMs").jsonPrimitive.content)
+
+            gemini.connectEvent = null
+            session.reconnect()
+            gemini.awaitConnectCount(2)
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+
+            val connected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("connected", connected.string("status"))
+            assertEquals("gemini-live-test", connected.string("providerModel"))
+            assertEquals(JsonNull, connected.getValue("closeStatus"))
+            assertEquals(JsonNull, connected.getValue("endedAtEpochMs"))
+
+            metadataNow = 1_700_000_008_999
+            session.endAndDrain()
+
+            val ended = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("ended", ended.string("status"))
+            assertEquals("user_end", ended.string("closeStatus"))
+            assertEquals("1700000008999", ended.getValue("endedAtEpochMs").jsonPrimitive.content)
+        } finally {
+            artifactScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `terminal session metadata rejects stale non terminal updates`() {
         val terminal = testSessionMetadata(status = "ended", endedAtEpochMs = 1_700_000_003_000)
 
@@ -2911,10 +3004,20 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `terminal session metadata ordering is deterministic`() {
+    fun `session metadata treats failed as recoverable and ended as terminal`() {
         val failed = testSessionMetadata(status = "failed", closeStatus = "startup_failure")
 
+        val startedAfterFailed = failed.withLifecycleUpdate(status = "started")
+        val connectedAfterStarted = startedAfterFailed.withLifecycleUpdate(
+            status = "connected",
+            providerModel = "gemini-live-test",
+        )
         val endedAfterFailed = failed.withLifecycleUpdate(
+            status = "ended",
+            closeStatus = "user_end",
+            endedAtEpochMs = 1_700_000_004_000,
+        )
+        val endedAfterConnected = connectedAfterStarted.withLifecycleUpdate(
             status = "ended",
             closeStatus = "user_end",
             endedAtEpochMs = 1_700_000_004_000,
@@ -2926,10 +3029,19 @@ class VoiceAgentRuntimeTest {
                 endedAtEpochMs = 1_700_000_004_000,
             )
 
+        assertEquals("started", startedAfterFailed.string("status"))
+        assertNull(startedAfterFailed.closeStatus)
+        assertNull(startedAfterFailed.endedAtEpochMs)
+        assertEquals("connected", connectedAfterStarted.string("status"))
+        assertEquals("gemini-live-test", connectedAfterStarted.providerModel)
+        assertNull(connectedAfterStarted.closeStatus)
+        assertNull(connectedAfterStarted.endedAtEpochMs)
         assertEquals("failed", endedAfterFailed.string("status"))
         assertEquals("startup_failure", endedAfterFailed.string("closeStatus"))
-        assertEquals("failed", failedAfterEnded.string("status"))
-        assertEquals("runtime_failure", failedAfterEnded.string("closeStatus"))
+        assertEquals("ended", endedAfterConnected.string("status"))
+        assertEquals("user_end", endedAfterConnected.string("closeStatus"))
+        assertEquals("ended", failedAfterEnded.string("status"))
+        assertEquals("user_end", failedAfterEnded.string("closeStatus"))
     }
 
     @Test

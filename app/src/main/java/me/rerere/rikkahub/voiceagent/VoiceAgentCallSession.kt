@@ -846,14 +846,16 @@ class VoiceAgentCallSession internal constructor(
 
     private fun startReconnectedSession(previousJob: Job?): Job = scope.launch {
         previousJob?.cancelAndJoin()
-        var currentSessionId: Long? = null
-        synchronized(sessionLock) {
+        val currentSessionId = synchronized(sessionLock) {
             if (!ended) {
                 coordinator.updateSessionStatus(VoiceSessionStatus.Reconnecting)
-                currentSessionId = coordinator.nextSessionId().also { sessionId = it }
+                coordinator.nextSessionId().also { sessionId = it }
+            } else {
+                null
             }
-        }
-        runSession(currentSessionId ?: return@launch)
+        } ?: return@launch
+        writeSessionMetadata(status = "started")
+        runSession(currentSessionId)
     }
 
     private fun endWithVisibleReason(visibleReason: String?) {

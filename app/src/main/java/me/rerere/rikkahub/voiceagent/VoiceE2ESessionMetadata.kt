@@ -47,10 +47,12 @@ internal fun VoiceE2ESessionMetadata.withLifecycleUpdate(
     closeStatus: String? = null,
     endedAtEpochMs: Long? = null,
 ): VoiceE2ESessionMetadata {
+    if (this.status == "ended") return this
     val currentRank = this.status.lifecycleRank()
     val nextRank = status.lifecycleRank()
-    if (nextRank < currentRank) return this
-    if (nextRank == currentRank && status.isTerminalSessionStatus()) return this
+    val startsRecoveryAfterFailure = this.status == "failed" && status == "started"
+    if (!startsRecoveryAfterFailure && nextRank < currentRank) return this
+    if (status == this.status && status.isTerminalSessionStatus()) return this
     return copy(
         providerModel = providerModel ?: this.providerModel,
         status = status,
