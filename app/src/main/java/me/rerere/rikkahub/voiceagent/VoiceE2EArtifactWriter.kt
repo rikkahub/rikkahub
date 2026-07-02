@@ -143,6 +143,13 @@ class VoiceE2EArtifactWriter private constructor(
         completed.await()
     }
 
+    suspend fun drainTerminalWrites() {
+        val terminalWrite = synchronized(terminalWriteLock) {
+            terminalWriteTail
+        }
+        terminalWrite.await()
+    }
+
     private fun clearAppendOnlyArtifacts() {
         VoiceE2EArtifact.entries.filter { it.appendOnly }.forEach { artifact ->
             runCatching {

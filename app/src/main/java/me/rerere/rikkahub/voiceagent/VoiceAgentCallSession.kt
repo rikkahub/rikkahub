@@ -883,6 +883,7 @@ class VoiceAgentCallSession internal constructor(
         visibleReason?.let(coordinator::setVisibleError)
         coordinator.awaitPersistenceJobs()
         voiceE2EArtifacts.drain()
+        voiceE2EArtifacts.drainTerminalWrites()
         terminalSessionMetadataWrite.await()
         coordinator.stopPersistenceScope()
     }

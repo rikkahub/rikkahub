@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -264,6 +265,62 @@ class VoiceE2EArtifactWriterTest {
             }
 
             val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000325")
+            assertEquals(second, File(traceDirectory, "session.json").readText())
+        } finally {
+            releaseFirstWrite.countDown()
+            VoiceE2EAtomicMoveOperation.move = originalMove
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `draining terminal writes waits for queued terminal session json writes`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-session-json-drain-terminal").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val originalMove = VoiceE2EAtomicMoveOperation.move
+        val firstWriteStarted = CountDownLatch(1)
+        val releaseFirstWrite = CountDownLatch(1)
+        try {
+            VoiceE2EAtomicMoveOperation.move = { source, target, atomic ->
+                if (
+                    target.fileName.toString() == "session.json" &&
+                    source.toFile().readText().contains("\"status\":\"started\"")
+                ) {
+                    firstWriteStarted.countDown()
+                    releaseFirstWrite.await(1, TimeUnit.SECONDS)
+                }
+                originalMove(source, target, atomic)
+            }
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000326",
+                scope = scope,
+            )
+            val first = """{"voiceTraceId":"VA000326","status":"started"}"""
+            val second = """{"voiceTraceId":"VA000326","status":"failed"}"""
+
+            writer.writeTerminalSessionJson(first)
+            withTimeout(1000) {
+                while (firstWriteStarted.count > 0) {
+                    delay(10)
+                }
+            }
+            writer.writeTerminalSessionJson(second)
+
+            val drainJob = launch {
+                writer.drainTerminalWrites()
+            }
+            delay(100)
+            assertFalse(drainJob.isCompleted)
+
+            releaseFirstWrite.countDown()
+            withTimeout(1000) {
+                drainJob.join()
+            }
+
+            val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000326")
             assertEquals(second, File(traceDirectory, "session.json").readText())
         } finally {
             releaseFirstWrite.countDown()
