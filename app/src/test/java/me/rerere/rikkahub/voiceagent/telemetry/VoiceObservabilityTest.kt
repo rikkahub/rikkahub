@@ -21,6 +21,27 @@ class VoiceObservabilityTest {
     )
 
     @Test
+    fun `new voice trace context uses same short id for trace and session`() {
+        val trace = newVoiceTraceContext(randomInt = { 42 })
+
+        assertEquals("VA000042", trace.traceId)
+        assertEquals("VA000042", trace.voiceSessionId)
+        assertNull(trace.sentryTrace)
+        assertNull(trace.sentryBaggage)
+    }
+
+    @Test
+    fun `new voice trace id formats six digit voice agent id`() {
+        val values = listOf(0, 7, 999999)
+        val traceIds = values.map { value -> newVoiceTraceId(randomInt = { value }) }
+
+        assertEquals(listOf("VA000000", "VA000007", "VA999999"), traceIds)
+        traceIds.forEach { traceId ->
+            assertTrue(traceId.matches(Regex("^VA[0-9]{6}$")))
+        }
+    }
+
+    @Test
     fun `sentry observability emits message event with trace attributes`() {
         val capturedEvents = mutableListOf<SentryEvent>()
 

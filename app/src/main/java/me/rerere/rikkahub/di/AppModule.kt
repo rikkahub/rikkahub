@@ -119,6 +119,7 @@ val appModule = module {
                     ?.coerceIn(0.0, 1.0)
                     ?: 0.0,
             ),
+            diagnosticRootDirectory = get<android.content.Context>().noBackupFilesDir,
         )
     }
 

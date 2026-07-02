@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.voiceagent.telemetry
 
 import java.security.MessageDigest
-import kotlin.uuid.Uuid
+import java.security.SecureRandom
 
 data class VoiceTraceContext(
     val traceId: String,
@@ -187,11 +187,26 @@ internal fun sha256Hex(value: String): String =
         .digest(value.toByteArray(Charsets.UTF_8))
         .joinToString(separator = "") { byte -> "%02x".format(byte) }
 
-internal fun newVoiceTraceContext(): VoiceTraceContext =
-    VoiceTraceContext(
-        traceId = Uuid.random().toString(),
-        voiceSessionId = Uuid.random().toString(),
+private val voiceTraceIdRandom = SecureRandom()
+
+internal fun newVoiceTraceId(
+    randomInt: (Int) -> Int = voiceTraceIdRandom::nextInt,
+): String {
+    val value = Math.floorMod(randomInt(VOICE_TRACE_ID_BOUND), VOICE_TRACE_ID_BOUND)
+    return "VA%06d".format(value)
+}
+
+internal fun newVoiceTraceContext(
+    randomInt: (Int) -> Int = voiceTraceIdRandom::nextInt,
+): VoiceTraceContext {
+    val traceId = newVoiceTraceId(randomInt)
+    return VoiceTraceContext(
+        traceId = traceId,
+        voiceSessionId = traceId,
     )
+}
 
 private fun VoiceAttributes.withoutNullValues(): Map<String, Any> =
     mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
+
+private const val VOICE_TRACE_ID_BOUND = 1_000_000

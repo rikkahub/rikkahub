@@ -10,6 +10,7 @@ import io.sentry.SentryLevel
 import io.sentry.SpanStatus
 import io.sentry.TransactionOptions
 import io.sentry.android.core.SentryAndroid
+import java.io.File
 import kotlinx.coroutines.CancellationException
 
 data class SentryVoiceObservabilityConfig(
@@ -132,8 +133,13 @@ class SentryVoiceObservability : VoiceObservability {
 fun createSentryVoiceObservability(
     context: Context,
     config: SentryVoiceObservabilityConfig,
+    diagnosticRootDirectory: File = context.noBackupFilesDir,
 ): VoiceObservability {
     if (config.dsn.isBlank()) {
+        writeVoiceSentryRuntimeConfigDiagnostics(
+            rootDirectory = diagnosticRootDirectory,
+            diagnostics = config.toRuntimeDiagnostics(observability = "noop"),
+        )
         return NoOpVoiceObservability
     }
 
@@ -144,10 +150,23 @@ fun createSentryVoiceObservability(
             options.tracesSampleRate = config.tracesSampleRate.coerceIn(0.0, 1.0)
         }
         SentryVoiceObservability()
-    }.getOrElse { error ->
-        Log.w(TAG, "Sentry init failed; continuing without voice observability", error)
-        NoOpVoiceObservability
-    }
+    }.fold(
+        onSuccess = { observability ->
+            writeVoiceSentryRuntimeConfigDiagnostics(
+                rootDirectory = diagnosticRootDirectory,
+                diagnostics = config.toRuntimeDiagnostics(observability = "sentry"),
+            )
+            observability
+        },
+        onFailure = { error ->
+            Log.w(TAG, "Sentry init failed; continuing without voice observability", error)
+            writeVoiceSentryRuntimeConfigDiagnostics(
+                rootDirectory = diagnosticRootDirectory,
+                diagnostics = config.toRuntimeDiagnostics(observability = "noop"),
+            )
+            NoOpVoiceObservability
+        },
+    )
 }
 
 private class MutableSentryVoiceSpan(
@@ -203,6 +222,16 @@ private fun isUsableSentryTrace(value: String): Boolean =
     value.isNotBlank() &&
         !value.startsWith("00000000000000000000000000000000-") &&
         !value.endsWith("-0")
+
+private fun SentryVoiceObservabilityConfig.toRuntimeDiagnostics(
+    observability: String,
+): VoiceSentryRuntimeConfigDiagnostics =
+    VoiceSentryRuntimeConfigDiagnostics.fromConfig(
+        dsn = dsn,
+        environment = environment,
+        tracesSampleRate = tracesSampleRate,
+        observability = observability,
+    )
 
 private const val TAG = "SentryVoiceObservability"
 private const val ANDROID_SERVICE = "android"
