@@ -90,7 +90,11 @@ class HermesJobManager(
 ) {
     private val lock = Any()
     private val announcementMutex = Mutex()
-    private val queueStore = HermesQueueStore(conversationStore = conversationStore, persister = persister)
+    private val queueStore = HermesQueueStore(
+        conversationStore = conversationStore,
+        persister = persister,
+        persistenceSessionId = ::currentPersistenceSessionId,
+    )
     private val activeJobs = mutableMapOf<String, ManagedHermesJob>()
     private val toolCalls = mutableMapOf<String, VoiceToolStatus>()
     private val _toolStatus = MutableStateFlow<VoiceToolStatus>(VoiceToolStatus.Idle)
@@ -254,7 +258,12 @@ class HermesJobManager(
             managedJob?.jobId ?: if (managedJob == null) persistedRecord?.jobId else null
         }
         scope.launch(dispatcher) {
-            val canceled = persistCanceledIfStillActive(callId = callId, prompt = prompt, jobId = initialJobId)
+            val canceled = queueStore.persistCanceledIfStillActive(
+                callId = callId,
+                prompt = prompt,
+                jobId = initialJobId,
+                message = CANCELED_MESSAGE,
+            )
             if (canceled) {
                 updateToolStatus(callId, VoiceToolStatus.HermesFailed(callId = callId, message = CANCELED_MESSAGE))
                 val latestManagedJobId = synchronized(lock) {
@@ -290,7 +299,7 @@ class HermesJobManager(
 
     private suspend fun submitAndPoll(managedJob: ManagedHermesJob) {
         try {
-            val pendingPersisted = persistPendingIfStillActive(
+            val pendingPersisted = queueStore.persistPendingIfStillActive(
                 callId = managedJob.callId,
                 prompt = managedJob.prompt,
                 shouldPersist = { !managedJob.explicitlyCanceled },
@@ -319,10 +328,11 @@ class HermesJobManager(
                 managedJob.jobId = submitted.jobId
             }
             if (managedJob.explicitlyCanceled) {
-                persistCanceledIfStillActive(
+                queueStore.persistCanceledIfStillActive(
                     callId = managedJob.callId,
                     prompt = managedJob.prompt,
                     jobId = submitted.jobId,
+                    message = CANCELED_MESSAGE,
                 )
                 cancelRemoteJob(submitted.jobId)
                 return
@@ -421,7 +431,7 @@ class HermesJobManager(
             when (poll.status) {
                 HermesJobStatus.Accepted,
                 HermesJobStatus.Queued -> {
-                    val persisted = persistActiveIfStillActive(
+                    val persisted = queueStore.persistActiveIfStillActive(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
                         status = VoiceToolRecordStatus.Queued,
@@ -436,7 +446,7 @@ class HermesJobManager(
                 }
 
                 HermesJobStatus.Running -> {
-                    val persisted = persistActiveIfStillActive(
+                    val persisted = queueStore.persistActiveIfStillActive(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
                         status = VoiceToolRecordStatus.Running,
@@ -456,7 +466,7 @@ class HermesJobManager(
                 HermesJobStatus.Succeeded -> {
                     val answer = requireNotNull(poll.answer) { "Hermes job succeeded without an answer" }
                     val elapsedMs = managedJob.elapsedMs()
-                    val persisted = persistTerminalIfStillActive(
+                    val persisted = queueStore.persistTerminalIfStillActive(
                         callId = managedJob.callId,
                         prompt = managedJob.prompt,
                         status = VoiceToolRecordStatus.Complete(answer),
@@ -568,7 +578,7 @@ class HermesJobManager(
     ): Boolean {
         return when (status) {
             HermesJobStatus.Running -> {
-                val persisted = persistActiveIfStillActive(
+                val persisted = queueStore.persistActiveIfStillActive(
                     callId = callId,
                     prompt = prompt,
                     status = VoiceToolRecordStatus.Running,
@@ -620,7 +630,7 @@ class HermesJobManager(
 
             HermesJobStatus.Accepted,
             HermesJobStatus.Queued -> {
-                val persisted = persistActiveIfStillActive(
+                val persisted = queueStore.persistActiveIfStillActive(
                     callId = callId,
                     prompt = prompt,
                     status = VoiceToolRecordStatus.Queued,
@@ -658,7 +668,7 @@ class HermesJobManager(
         visibleMessage: String,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
-        val persisted = persistTerminalIfStillActive(
+        val persisted = queueStore.persistTerminalIfStillActive(
             callId = callId,
             prompt = prompt,
             status = status,
@@ -899,69 +909,6 @@ class HermesJobManager(
         runCatching {
             observability.recordEvent(name = name, trace = traceContext, attributes = attributes)
         }
-    }
-
-    private suspend fun persistActiveIfStillActive(
-        callId: String,
-        prompt: String,
-        status: VoiceToolRecordStatus,
-        jobId: String,
-        shouldPersist: () -> Boolean = { true },
-    ): Boolean {
-        return queueStore.persistActiveIfStillActive(
-            callId = callId,
-            prompt = prompt,
-            status = status,
-            jobId = jobId,
-            sessionId = currentPersistenceSessionId(),
-            shouldPersist = shouldPersist,
-        )
-    }
-
-    private suspend fun persistPendingIfStillActive(
-        callId: String,
-        prompt: String,
-        shouldPersist: () -> Boolean = { true },
-    ): Boolean {
-        return queueStore.persistPendingIfStillActive(
-            callId = callId,
-            prompt = prompt,
-            sessionId = currentPersistenceSessionId(),
-            shouldPersist = shouldPersist,
-        )
-    }
-
-    private suspend fun persistCanceledIfStillActive(
-        callId: String,
-        prompt: String,
-        jobId: String?,
-    ): Boolean {
-        return queueStore.persistCanceledIfStillActive(
-            callId = callId,
-            prompt = prompt,
-            jobId = jobId,
-            sessionId = currentPersistenceSessionId(),
-            message = CANCELED_MESSAGE,
-        )
-    }
-
-    private suspend fun persistTerminalIfStillActive(
-        callId: String,
-        prompt: String,
-        status: VoiceToolRecordStatus,
-        jobId: String?,
-        resultAnnounced: Boolean? = null,
-        shouldPersist: () -> Boolean = { true },
-    ): Boolean {
-        return queueStore.persistTerminalIfStillActive(
-            callId = callId,
-            prompt = prompt,
-            status = status,
-            jobId = jobId,
-            sessionId = currentPersistenceSessionId(),
-            resultAnnounced = resultAnnounced,
-            shouldPersist = shouldPersist,
-        )
     }
 
     private fun currentPersistenceSessionId(): String? =

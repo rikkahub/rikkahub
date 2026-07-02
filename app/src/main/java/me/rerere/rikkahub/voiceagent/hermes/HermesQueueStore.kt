@@ -10,6 +10,7 @@ import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
 class HermesQueueStore(
     private val conversationStore: VoiceConversationStore,
     private val persister: VoiceConversationPersister,
+    private val persistenceSessionId: () -> String? = { null },
 ) {
     private val updateMutex = Mutex()
 
@@ -35,7 +36,6 @@ class HermesQueueStore(
         prompt: String,
         status: VoiceToolRecordStatus,
         jobId: String,
-        sessionId: String?,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
         return updateWithResult { conversation ->
@@ -50,7 +50,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = status,
-                    sessionId = sessionId,
+                    sessionId = persistenceSessionId(),
                     jobId = jobId,
                 ) to true
             }
@@ -60,7 +60,6 @@ class HermesQueueStore(
     suspend fun persistPendingIfStillActive(
         callId: String,
         prompt: String,
-        sessionId: String?,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
         return updateWithResult { conversation ->
@@ -72,7 +71,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = VoiceToolRecordStatus.Pending,
-                    sessionId = sessionId,
+                    sessionId = persistenceSessionId(),
                     jobId = null,
                 ) to true
             }
@@ -83,7 +82,6 @@ class HermesQueueStore(
         callId: String,
         prompt: String,
         jobId: String?,
-        sessionId: String?,
         message: String,
     ): Boolean {
         return updateWithResult { conversation ->
@@ -96,7 +94,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = VoiceToolRecordStatus.Canceled(message),
-                    sessionId = sessionId,
+                    sessionId = persistenceSessionId(),
                     jobId = jobId,
                 ) to true
             }
@@ -108,7 +106,6 @@ class HermesQueueStore(
         prompt: String,
         status: VoiceToolRecordStatus,
         jobId: String?,
-        sessionId: String?,
         resultAnnounced: Boolean? = null,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
@@ -122,7 +119,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = status,
-                    sessionId = sessionId,
+                    sessionId = persistenceSessionId(),
                     jobId = jobId,
                     resultAnnounced = resultAnnounced,
                 ) to true
