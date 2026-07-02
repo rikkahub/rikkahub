@@ -1077,6 +1077,7 @@
   <string name="speech_tab_asr">Speech Recognition</string>
   <string name="speech_tab_tts">Text to Speech</string>
   <string name="stats_page_cached_tokens">Cached Tokens</string>
+  <string name="stats_page_cache_hit_rate">Cache Hit Rate</string>
   <string name="stats_page_dow_fri">Fri</string>
   <string name="stats_page_dow_mon">Mon</string>
   <string name="stats_page_dow_wed">Wed</string>
@@ -1089,6 +1090,7 @@
   <string name="stats_page_title">Statistics</string>
   <string name="stats_page_total_conversations">Total Conversations</string>
   <string name="stats_page_total_messages">Total Messages</string>
+  <string name="stats_page_total_requests">Total Requests</string>
   <string name="stop">Stop</string>
   <string name="tag_input_dialog_create_new">Create New Tag</string>
   <string name="tag_input_dialog_existing_tags">Existing Tags</string>

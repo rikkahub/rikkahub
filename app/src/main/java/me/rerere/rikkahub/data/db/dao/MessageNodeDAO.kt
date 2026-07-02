@@ -53,16 +53,23 @@ data class MessageTokenStats(
     val promptTokens: Long = 0,
     val completionTokens: Long = 0,
     val cachedTokens: Long = 0,
+    // 已完成的用户请求次数: 角色为 assistant 且 usage 字段非空的消息数
+    // (每次成功完成的 API 调用 = 1 个 assistant 消息 + 非空 usage)
+    val requestCount: Int = 0,
 )
 
 data class MessageDayCount(val day: String, val count: Int)
 
 // SQLite json_each() 展开 messages JSON 数组，json_extract() 提取 Token 字段并聚合
+// 说明: promptTokens 已包含 cachedTokens (所有 Provider 中 cachedTokens 都是 promptTokens 的子集)
+//       缓存命中率应使用 cachedTokens / promptTokens 计算, 不要把两者相加
 private val TOKEN_STATS_SQL = SimpleSQLiteQuery(
     "SELECT COUNT(*) AS totalMessages, " +
         "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.promptTokens') AS INTEGER)), 0) AS promptTokens, " +
         "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.completionTokens') AS INTEGER)), 0) AS completionTokens, " +
-        "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.cachedTokens') AS INTEGER)), 0) AS cachedTokens " +
+        "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.cachedTokens') AS INTEGER)), 0) AS cachedTokens, " +
+        "COALESCE(SUM(CASE WHEN json_extract(j.value, '$.role') = 'assistant' " +
+        "AND json_extract(j.value, '$.usage') IS NOT NULL THEN 1 ELSE 0 END), 0) AS requestCount " +
         "FROM message_node mn, json_each(mn.messages) j"
 )
 
