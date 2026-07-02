@@ -54,7 +54,11 @@ internal fun VoiceE2ESessionMetadata.withLifecycleUpdate(
     if (!startsRecoveryAfterFailure && nextRank < currentRank) return this
     if (status == this.status && status.isTerminalSessionStatus()) return this
     return copy(
-        providerModel = providerModel ?: this.providerModel,
+        providerModel = if (startsRecoveryAfterFailure) {
+            providerModel
+        } else {
+            providerModel ?: this.providerModel
+        },
         status = status,
         endedAtEpochMs = endedAtEpochMs,
         closeStatus = closeStatus,

@@ -3104,6 +3104,101 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `manual reconnect start clears stale provider model before Gemini reconnect completes`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-reconnect-start-provider-model").toFile()
+        val artifactScope = CoroutineScope(coroutineContext + SupervisorJob())
+        var metadataNow = 1_700_000_010_111
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000130",
+                scope = artifactScope,
+            )
+            val gemini = FakeGeminiLiveVoiceClient()
+            val session = VoiceAgentCallSession(
+                modelId = "gemini-flash",
+                sessionApi = FakeVoiceSessionApi(),
+                toolApi = FakeVoiceToolApi(),
+                gemini = gemini,
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = "system", turns = emptyList())
+                ),
+                traceContext = VoiceTraceContext(traceId = "VA000130", voiceSessionId = "VA000130"),
+                voiceE2EArtifacts = artifactWriter,
+                sessionMetadata = testSessionMetadata(
+                    traceId = "VA000130",
+                    conversationId = "conversation-130",
+                ),
+                nowMs = { 10 },
+                metadataEpochNowMs = { metadataNow },
+                scope = this,
+            )
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000130/session.json")
+
+            session.start()
+            gemini.awaitConnectCount(1)
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
+
+            val connected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("connected", connected.string("status"))
+            assertEquals("gemini-live-test", connected.string("providerModel"))
+
+            gemini.eventHandlers.single()(
+                GeminiLiveEvent.Error(message = "runtime failed", raw = "{}")
+            )
+            withTimeout(500) {
+                while (session.state.value.session !is VoiceSessionStatus.Error) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
+
+            val failed = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("failed", failed.string("status"))
+            assertEquals("gemini-live-test", failed.string("providerModel"))
+
+            metadataNow = 1_700_000_010_999
+            val blockedReconnectConnect = gemini.blockNextConnectCompletion()
+            session.reconnect()
+            gemini.awaitConnectCount(2)
+            artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
+
+            val started = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("started", started.string("status"))
+            assertEquals(JsonNull, started.getValue("providerModel"))
+            assertEquals(JsonNull, started.getValue("closeStatus"))
+            assertEquals(JsonNull, started.getValue("endedAtEpochMs"))
+
+            blockedReconnectConnect.release.complete(Unit)
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
+
+            val reconnected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("connected", reconnected.string("status"))
+            assertEquals("gemini-live-test", reconnected.string("providerModel"))
+        } finally {
+            artifactScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `terminal session metadata rejects stale non terminal updates`() {
         val terminal = testSessionMetadata(status = "ended", endedAtEpochMs = 1_700_000_003_000)
 
