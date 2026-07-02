@@ -221,7 +221,7 @@ class BlockedCancel {
 }
 
 class FakeVoiceToolApi : VoiceToolApi {
-    val requests = mutableListOf<Pair<String, String>>()
+    val requests = CopyOnWriteArrayList<Pair<String, String>>()
     private val lock = Any()
     private val calls = mutableMapOf<String, PendingHermesJob>()
     private val scriptedPolls = mutableMapOf<String, ArrayDeque<Any>>()

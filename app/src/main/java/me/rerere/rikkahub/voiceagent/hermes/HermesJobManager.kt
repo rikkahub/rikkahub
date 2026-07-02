@@ -16,7 +16,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
@@ -90,8 +89,8 @@ class HermesJobManager(
     private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
 ) {
     private val lock = Any()
-    private val conversationUpdateMutex = Mutex()
     private val announcementMutex = Mutex()
+    private val queueStore = HermesQueueStore(conversationStore = conversationStore, persister = persister)
     private val activeJobs = mutableMapOf<String, ManagedHermesJob>()
     private val toolCalls = mutableMapOf<String, VoiceToolStatus>()
     private val _toolStatus = MutableStateFlow<VoiceToolStatus>(VoiceToolStatus.Idle)
@@ -120,7 +119,7 @@ class HermesJobManager(
     }
 
     fun resumeActiveJobs() {
-        conversationStore.conversation.value.hermesQueueRecords()
+        queueStore.records()
             .latestByHermesDurableIdentity()
             .filter { !it.status.isTerminal }
             .forEach { record ->
@@ -240,7 +239,7 @@ class HermesJobManager(
                 ?: activeJobs.values.lastOrNull { it.callId == callId }
             job?.also { it.explicitlyCanceled = true }
         }
-        val persistedRecord = conversationStore.conversation.value.hermesQueueRecords()
+        val persistedRecord = queueStore.records()
             .lastOrNull { record ->
                 record.callId == callId && when {
                     managedJob?.jobId != null -> record.jobId == managedJob.jobId
@@ -748,7 +747,7 @@ class HermesJobManager(
     }
 
     private suspend fun announceUnannouncedTerminalResults(bridge: HermesSessionBridge, sessionId: Long) {
-        conversationStore.conversation.value.hermesQueueRecords()
+        queueStore.records()
             .latestByHermesDurableIdentity()
             .filter { it.status.isTerminal && !it.resultAnnounced }
             .forEach { record ->
@@ -777,7 +776,7 @@ class HermesJobManager(
     ) {
         val current = attachment ?: return
         announcementMutex.withLock {
-            val record = conversationStore.conversation.value.hermesQueueRecords()
+            val record = queueStore.records()
                 .lastOrNull { record ->
                     record.callId == callId && when {
                         jobId != null -> record.jobId == jobId
@@ -800,14 +799,7 @@ class HermesJobManager(
                 } ?: false
             }.getOrDefault(false)
             if (sent) {
-                updateConversation { conversation ->
-                    persister.markHermesToolResultAnnounced(
-                        conversation = conversation,
-                        callId = callId,
-                        jobId = jobId,
-                        matchMissingJobId = jobId == null,
-                    )
-                }
+                queueStore.markResultAnnounced(callId = callId, jobId = jobId)
             }
         }
     }
@@ -819,7 +811,7 @@ class HermesJobManager(
     ) {
         val current = attachment ?: return
         announcementMutex.withLock {
-            val record = conversationStore.conversation.value.hermesQueueRecords()
+            val record = queueStore.records()
                 .lastOrNull { record ->
                     record.callId == callId && when {
                         jobId != null -> record.jobId == jobId
@@ -850,14 +842,7 @@ class HermesJobManager(
                 } ?: false
             }.getOrDefault(false)
             if (sent) {
-                updateConversation { conversation ->
-                    persister.markHermesToolResultAnnounced(
-                        conversation = conversation,
-                        callId = callId,
-                        jobId = jobId,
-                        matchMissingJobId = jobId == null,
-                    )
-                }
+                queueStore.markResultAnnounced(callId = callId, jobId = jobId)
             }
         }
     }
@@ -923,24 +908,14 @@ class HermesJobManager(
         jobId: String,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
-        val sessionId = persistenceSessionId() ?: currentBridgeAttachment()?.sessionId?.toString()
-        return updateConversationWithResult { conversation ->
-            val latestRecord = conversation.hermesQueueRecords().lastOrNull { record ->
-                record.callId == callId && record.jobId == jobId
-            }
-            if (!shouldPersist() || latestRecord?.status?.isTerminal == true) {
-                conversation to false
-            } else {
-                persister.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = status,
-                    sessionId = sessionId,
-                    jobId = jobId,
-                ) to true
-            }
-        }
+        return queueStore.persistActiveIfStillActive(
+            callId = callId,
+            prompt = prompt,
+            status = status,
+            jobId = jobId,
+            sessionId = currentPersistenceSessionId(),
+            shouldPersist = shouldPersist,
+        )
     }
 
     private suspend fun persistPendingIfStillActive(
@@ -948,21 +923,12 @@ class HermesJobManager(
         prompt: String,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
-        val sessionId = persistenceSessionId() ?: currentBridgeAttachment()?.sessionId?.toString()
-        return updateConversationWithResult { conversation ->
-            if (!shouldPersist()) {
-                conversation to false
-            } else {
-                persister.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = VoiceToolRecordStatus.Pending,
-                    sessionId = sessionId,
-                    jobId = null,
-                ) to true
-            }
-        }
+        return queueStore.persistPendingIfStillActive(
+            callId = callId,
+            prompt = prompt,
+            sessionId = currentPersistenceSessionId(),
+            shouldPersist = shouldPersist,
+        )
     }
 
     private suspend fun persistCanceledIfStillActive(
@@ -970,27 +936,13 @@ class HermesJobManager(
         prompt: String,
         jobId: String?,
     ): Boolean {
-        val sessionId = persistenceSessionId() ?: currentBridgeAttachment()?.sessionId?.toString()
-        return updateConversationWithResult { conversation ->
-            val latestRecord = conversation.hermesQueueRecords().lastOrNull { record ->
-                record.callId == callId && when {
-                    jobId != null -> record.jobId == jobId
-                    else -> record.jobId == null
-                }
-            }
-            if (latestRecord?.status?.isTerminal == true) {
-                conversation to false
-            } else {
-                persister.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = VoiceToolRecordStatus.Canceled(CANCELED_MESSAGE),
-                    sessionId = sessionId,
-                    jobId = jobId,
-                ) to true
-            }
-        }
+        return queueStore.persistCanceledIfStillActive(
+            callId = callId,
+            prompt = prompt,
+            jobId = jobId,
+            sessionId = currentPersistenceSessionId(),
+            message = CANCELED_MESSAGE,
+        )
     }
 
     private suspend fun persistTerminalIfStillActive(
@@ -1001,51 +953,19 @@ class HermesJobManager(
         resultAnnounced: Boolean? = null,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
-        val sessionId = persistenceSessionId() ?: currentBridgeAttachment()?.sessionId?.toString()
-        return updateConversationWithResult { conversation ->
-            val latestRecord = conversation.hermesQueueRecords().lastOrNull { record ->
-                record.callId == callId && when {
-                    jobId != null -> record.jobId == jobId
-                    else -> record.jobId == null
-                }
-            }
-            if (!shouldPersist() || latestRecord?.status?.isTerminal == true) {
-                conversation to false
-            } else {
-                persister.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = status,
-                    sessionId = sessionId,
-                    jobId = jobId,
-                    resultAnnounced = resultAnnounced,
-                ) to true
-            }
-        }
+        return queueStore.persistTerminalIfStillActive(
+            callId = callId,
+            prompt = prompt,
+            status = status,
+            jobId = jobId,
+            sessionId = currentPersistenceSessionId(),
+            resultAnnounced = resultAnnounced,
+            shouldPersist = shouldPersist,
+        )
     }
 
-    private suspend fun updateConversation(
-        transform: (Conversation) -> Conversation,
-    ) {
-        conversationUpdateMutex.withLock {
-            conversationStore.update(transform)
-        }
-    }
-
-    private suspend fun <T> updateConversationWithResult(
-        transform: (Conversation) -> Pair<Conversation, T>,
-    ): T {
-        return conversationUpdateMutex.withLock {
-            var result: T? = null
-            conversationStore.update { conversation ->
-                val (updatedConversation, transformResult) = transform(conversation)
-                result = transformResult
-                updatedConversation
-            }
-            requireNotNull(result)
-        }
-    }
+    private fun currentPersistenceSessionId(): String? =
+        persistenceSessionId() ?: currentBridgeAttachment()?.sessionId?.toString()
 
     private suspend fun cancelRemoteJob(jobId: String) {
         try {

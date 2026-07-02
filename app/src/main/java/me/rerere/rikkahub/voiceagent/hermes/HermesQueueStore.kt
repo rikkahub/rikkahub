@@ -1,0 +1,162 @@
+package me.rerere.rikkahub.voiceagent.hermes
+
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.voiceagent.VoiceConversationStore
+import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
+import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
+
+class HermesQueueStore(
+    private val conversationStore: VoiceConversationStore,
+    private val persister: VoiceConversationPersister,
+) {
+    private val updateMutex = Mutex()
+
+    fun records(): List<HermesQueueRecord> =
+        conversationStore.conversation.value.hermesQueueRecords()
+
+    suspend fun markResultAnnounced(
+        callId: String,
+        jobId: String?,
+    ) {
+        update { conversation ->
+            persister.markHermesToolResultAnnounced(
+                conversation = conversation,
+                callId = callId,
+                jobId = jobId,
+                matchMissingJobId = jobId == null,
+            )
+        }
+    }
+
+    suspend fun persistActiveIfStillActive(
+        callId: String,
+        prompt: String,
+        status: VoiceToolRecordStatus,
+        jobId: String,
+        sessionId: String?,
+        shouldPersist: () -> Boolean = { true },
+    ): Boolean {
+        return updateWithResult { conversation ->
+            val latestRecord = conversation.hermesQueueRecords().lastOrNull { record ->
+                record.callId == callId && record.jobId == jobId
+            }
+            if (!shouldPersist() || latestRecord?.status?.isTerminal == true) {
+                conversation to false
+            } else {
+                persister.upsertHermesTool(
+                    conversation = conversation,
+                    callId = callId,
+                    prompt = prompt,
+                    status = status,
+                    sessionId = sessionId,
+                    jobId = jobId,
+                ) to true
+            }
+        }
+    }
+
+    suspend fun persistPendingIfStillActive(
+        callId: String,
+        prompt: String,
+        sessionId: String?,
+        shouldPersist: () -> Boolean = { true },
+    ): Boolean {
+        return updateWithResult { conversation ->
+            if (!shouldPersist()) {
+                conversation to false
+            } else {
+                persister.upsertHermesTool(
+                    conversation = conversation,
+                    callId = callId,
+                    prompt = prompt,
+                    status = VoiceToolRecordStatus.Pending,
+                    sessionId = sessionId,
+                    jobId = null,
+                ) to true
+            }
+        }
+    }
+
+    suspend fun persistCanceledIfStillActive(
+        callId: String,
+        prompt: String,
+        jobId: String?,
+        sessionId: String?,
+        message: String,
+    ): Boolean {
+        return updateWithResult { conversation ->
+            val latestRecord = conversation.latestHermesRecord(callId = callId, jobId = jobId)
+            if (latestRecord?.status?.isTerminal == true) {
+                conversation to false
+            } else {
+                persister.upsertHermesTool(
+                    conversation = conversation,
+                    callId = callId,
+                    prompt = prompt,
+                    status = VoiceToolRecordStatus.Canceled(message),
+                    sessionId = sessionId,
+                    jobId = jobId,
+                ) to true
+            }
+        }
+    }
+
+    suspend fun persistTerminalIfStillActive(
+        callId: String,
+        prompt: String,
+        status: VoiceToolRecordStatus,
+        jobId: String?,
+        sessionId: String?,
+        resultAnnounced: Boolean? = null,
+        shouldPersist: () -> Boolean = { true },
+    ): Boolean {
+        return updateWithResult { conversation ->
+            val latestRecord = conversation.latestHermesRecord(callId = callId, jobId = jobId)
+            if (!shouldPersist() || latestRecord?.status?.isTerminal == true) {
+                conversation to false
+            } else {
+                persister.upsertHermesTool(
+                    conversation = conversation,
+                    callId = callId,
+                    prompt = prompt,
+                    status = status,
+                    sessionId = sessionId,
+                    jobId = jobId,
+                    resultAnnounced = resultAnnounced,
+                ) to true
+            }
+        }
+    }
+
+    private suspend fun update(
+        transform: (Conversation) -> Conversation,
+    ) {
+        updateMutex.withLock {
+            conversationStore.update(transform)
+        }
+    }
+
+    private suspend fun <T> updateWithResult(
+        transform: (Conversation) -> Pair<Conversation, T>,
+    ): T {
+        return updateMutex.withLock {
+            var result: T? = null
+            conversationStore.update { conversation ->
+                val (updatedConversation, transformResult) = transform(conversation)
+                result = transformResult
+                updatedConversation
+            }
+            requireNotNull(result)
+        }
+    }
+
+    private fun Conversation.latestHermesRecord(callId: String, jobId: String?): HermesQueueRecord? =
+        hermesQueueRecords().lastOrNull { record ->
+            record.callId == callId && when {
+                jobId != null -> record.jobId == jobId
+                else -> record.jobId == null
+            }
+        }
+}
