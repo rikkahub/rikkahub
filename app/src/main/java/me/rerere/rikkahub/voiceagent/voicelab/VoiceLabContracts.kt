@@ -249,6 +249,11 @@ internal data class MobileHermesJobSnapshotWire(
 
 internal fun MobileHermesJobSnapshotWire.toHermesJobSnapshot(): HermesJobSnapshot {
     val parsedStatus = status.toHermesJobStatus()
+    val parsedFailure = if (status.isKnownHermesJobStatus()) {
+        failure
+    } else {
+        status.toLegacyVoiceFailure(error = null)
+    }
     return HermesJobSnapshot(
         jobId = jobId,
         callId = callId,
@@ -262,7 +267,7 @@ internal fun MobileHermesJobSnapshotWire.toHermesJobSnapshot(): HermesJobSnapsho
         profileId = profileId,
         profileLabel = profileLabel,
         elapsedMs = elapsedMs,
-        failure = failure ?: status.toLegacyVoiceFailure(error = null),
+        failure = parsedFailure,
     )
 }
 
