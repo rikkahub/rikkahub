@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent
 
 import android.content.ContextWrapper
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -2990,6 +2991,104 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `pending failed session metadata write cannot overwrite manual reconnect metadata`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-delayed-failed-session").toFile()
+        val artifactScope = CoroutineScope(coroutineContext + SupervisorJob())
+        var metadataNow = 1_700_000_009_111
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000129",
+                scope = artifactScope,
+            )
+            val gemini = FakeGeminiLiveVoiceClient()
+            val session = VoiceAgentCallSession(
+                modelId = "gemini-flash",
+                sessionApi = FakeVoiceSessionApi(),
+                toolApi = FakeVoiceToolApi(),
+                gemini = gemini,
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = "system", turns = emptyList())
+                ),
+                traceContext = VoiceTraceContext(traceId = "VA000129", voiceSessionId = "VA000129"),
+                voiceE2EArtifacts = artifactWriter,
+                sessionMetadata = VoiceE2ESessionMetadata(
+                    voiceTraceId = "VA000129",
+                    voiceSessionId = "VA000129",
+                    conversationId = "conversation-129",
+                    packageName = "me.rerere.rikkahub",
+                    versionName = "2.2.6",
+                    versionCode = "162",
+                    debuggable = true,
+                    voiceModelId = "gemini-flash",
+                    providerModel = null,
+                    status = "created",
+                    startedAtEpochMs = 1_700_000_000_000,
+                    sentryDsnConfigured = true,
+                    sentryTracingEnabled = true,
+                    sentryPropagationCreated = true,
+                ),
+                nowMs = { 9 },
+                metadataEpochNowMs = { metadataNow },
+                scope = this,
+            )
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000129/session.json")
+
+            session.start()
+            gemini.awaitConnectCount(1)
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+            artifactWriter.drainTerminalWrites()
+
+            val blockedFailedWrite = artifactWriter.blockNextTerminalSessionJsonForTest()
+            gemini.eventHandlers.single()(
+                GeminiLiveEvent.Error(message = "runtime failed", raw = "{}")
+            )
+            withTimeout(500) {
+                while (session.state.value.session !is VoiceSessionStatus.Error) {
+                    delay(10)
+                }
+            }
+
+            session.reconnect()
+            gemini.awaitConnectCount(2)
+            withTimeout(500) {
+                while (session.state.value.session != VoiceSessionStatus.Connected) {
+                    delay(10)
+                }
+            }
+            artifactWriter.drain()
+
+            blockedFailedWrite.complete(Unit)
+            artifactWriter.drainTerminalWrites()
+
+            val connected = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("connected", connected.string("status"))
+            assertEquals("gemini-live-test", connected.string("providerModel"))
+            assertEquals(JsonNull, connected.getValue("closeStatus"))
+            assertEquals(JsonNull, connected.getValue("endedAtEpochMs"))
+
+            metadataNow = 1_700_000_009_999
+            session.endAndDrain()
+
+            val ended = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("ended", ended.string("status"))
+            assertEquals("user_end", ended.string("closeStatus"))
+            assertEquals("1700000009999", ended.getValue("endedAtEpochMs").jsonPrimitive.content)
+        } finally {
+            artifactScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `terminal session metadata rejects stale non terminal updates`() {
         val terminal = testSessionMetadata(status = "ended", endedAtEpochMs = 1_700_000_003_000)
 
@@ -4542,6 +4641,15 @@ private fun testSessionMetadata(
 
 private fun VoiceE2ESessionMetadata.string(key: String): String =
     Json.parseToJsonElement(toJson()).jsonObject.getValue(key).jsonPrimitive.content
+
+private fun VoiceE2EArtifactWriter.blockNextTerminalSessionJsonForTest(): CompletableDeferred<Unit> {
+    val blocked = CompletableDeferred<Unit>()
+    val terminalWriteTail = VoiceE2EArtifactWriter::class.java
+        .getDeclaredField("terminalWriteTail")
+        .apply { isAccessible = true }
+    terminalWriteTail.set(this, blocked)
+    return blocked
+}
 
 private class VoiceFactoryTestContext(
     private val root: File,

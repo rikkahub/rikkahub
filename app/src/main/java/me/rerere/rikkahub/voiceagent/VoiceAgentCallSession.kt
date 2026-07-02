@@ -182,7 +182,7 @@ class VoiceAgentCallSession internal constructor(
         resourceCleaner.cleanupForEnd(closeGemini = false)
         coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
         coordinator.close(waitForStartedSends = false)
-        recordSessionEndedSafely(endReason = "close_now", writeSessionMetadataImmediately = true)
+        recordSessionEndedSafely(endReason = "close_now")
         coordinator.launchPersistenceDrain()
     }
 
@@ -966,7 +966,6 @@ class VoiceAgentCallSession internal constructor(
         endReason: String,
         failureKind: String = "none",
         failureSummary: String? = null,
-        writeSessionMetadataImmediately: Boolean = false,
     ): Deferred<Unit> {
         val shouldRecord = synchronized(sessionLock) {
             if (sessionEndedRecorded) {
@@ -981,7 +980,6 @@ class VoiceAgentCallSession internal constructor(
             status = "ended",
             closeStatus = endReason,
             endedAtEpochMs = metadataEpochNowMs(),
-            immediately = writeSessionMetadataImmediately,
         )
         recordEventSafely(
             name = "voicelab.mobile.session.ended",
@@ -1034,7 +1032,6 @@ class VoiceAgentCallSession internal constructor(
         providerModel: String? = null,
         closeStatus: String? = null,
         endedAtEpochMs: Long? = null,
-        immediately: Boolean = false,
     ): Deferred<Unit> {
         val content = synchronized(sessionLock) {
             val metadata = sessionMetadata ?: return completedSessionMetadataWrite()
@@ -1048,12 +1045,7 @@ class VoiceAgentCallSession internal constructor(
             sessionMetadata = updated
             updated.toJson()
         }
-        return if (immediately || status.isTerminalSessionMetadataStatus()) {
-            voiceE2EArtifacts.writeTerminalSessionJson(content)
-        } else {
-            voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
-            completedSessionMetadataWrite()
-        }
+        return voiceE2EArtifacts.writeTerminalSessionJson(content)
     }
 
     private companion object {
@@ -1080,8 +1072,6 @@ private fun VoiceContext.withTurnsFoldedIntoSystemInstruction(): VoiceContext {
         turns = emptyList(),
     )
 }
-
-private fun String.isTerminalSessionMetadataStatus(): Boolean = this == "ended" || this == "failed"
 
 private fun GeminiContentTurn.voiceContextLabel(): String =
     when (role) {
