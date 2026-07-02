@@ -26,6 +26,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
+import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
@@ -213,6 +214,101 @@ class VoiceAgentRuntimeTest {
                     it.detail.contains("answerChars=12")
             }
         )
+    }
+
+    @Test
+    fun `runtime observability records canonical transcript Hermes and followup attributes`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val observability = RecordingVoiceObservability()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            observability = observability,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.InputTranscript("hello user"))
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputTranscript("assistant answer"))
+        coordinator.onGeminiEvent(GeminiLiveEvent.GenerationComplete)
+        coordinator.awaitPersistenceJobsWithTimeout()
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-observe", name = "ask_hermes", prompt = "private prompt")
+        )
+        assertEquals("call-observe" to "private prompt", toolApi.awaitRequest("call-observe"))
+        toolApi.complete(response(callId = "call-observe", answer = "private answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+        coordinator.closeAndDrain()
+
+        val userFinal = observability.events.single { it.name == "voicelab.mobile.transcript.user_final" }
+        assertEquals("user", userFinal.attributes["speaker"])
+        assertEquals(10, userFinal.attributes["voice.user_transcript.chars"])
+        assertFalse(userFinal.attributes.containsKey("text"))
+        assertFalse(userFinal.attributes.containsKey("text.chars"))
+
+        val assistantFinal = observability.events.single { it.name == "voicelab.mobile.transcript.assistant_final" }
+        assertEquals("assistant", assistantFinal.attributes["speaker"])
+        assertEquals(16, assistantFinal.attributes["gemini.output_transcript.chars"])
+        assertFalse(assistantFinal.attributes.containsKey("text"))
+        assertFalse(assistantFinal.attributes.containsKey("text.chars"))
+
+        val submitted = observability.events.single { it.name == "voicelab.mobile.hermes_tool.submitted" }
+        assertEquals("call-observe", submitted.attributes["callId"])
+        assertEquals("call-observe", submitted.attributes["gemini.tool_call.call_id"])
+        assertEquals("private prompt", submitted.attributes["gemini.tool_call.prompt"])
+        assertEquals(14, submitted.attributes["gemini.tool_call.prompt.chars"])
+        assertFalse(submitted.attributes.containsKey("prompt"))
+
+        val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
+        assertEquals("call-observe", completed.attributes["callId"])
+        assertEquals("job-1", completed.attributes["jobId"])
+        assertEquals("call-observe", completed.attributes["gemini.tool_call.call_id"])
+        assertEquals("job-1", completed.attributes["hermes_job_id"])
+        assertEquals("succeeded", completed.attributes["hermes_job_status"])
+        assertEquals("private answer", completed.attributes["hermes.response.answer"])
+        assertFalse(completed.attributes.containsKey("answer"))
+
+        val followup = observability.events.single { it.name == "voicelab.mobile.gemini.followup_sent" }
+        assertEquals("call-observe", followup.attributes["callId"])
+        assertEquals("job-1", followup.attributes["jobId"])
+        assertEquals("call-observe", followup.attributes["gemini.tool_call.call_id"])
+        assertEquals("job-1", followup.attributes["hermes_job_id"])
+        assertEquals(true, followup.attributes["sent"])
+        assertTrue(followup.attributes["gemini.followup_text"].toString().contains("Hermes answer:"))
+        assertTrue((followup.attributes["gemini.followup_text.chars"] as Int) > 0)
+        assertFalse(followup.attributes.containsKey("followupText"))
+    }
+
+    @Test
+    fun `runtime observability records canonical Hermes failed aliases`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val observability = RecordingVoiceObservability()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            observability = observability,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-observe-failed", name = "ask_hermes", prompt = "private prompt")
+        )
+        assertEquals("call-observe-failed" to "private prompt", toolApi.awaitRequest("call-observe-failed"))
+        toolApi.failJob(callId = "call-observe-failed", message = "Hermes failed")
+        coordinator.awaitToolJobsWithTimeout()
+
+        val failed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.failed" }
+        assertEquals("call-observe-failed", failed.attributes["callId"])
+        assertEquals("job-1", failed.attributes["jobId"])
+        assertEquals("call-observe-failed", failed.attributes["gemini.tool_call.call_id"])
+        assertEquals("job-1", failed.attributes["hermes_job_id"])
+        assertEquals("failed", failed.attributes["hermes_job_status"])
+        assertEquals("Hermes failed", failed.attributes["message"])
     }
 
     @Test

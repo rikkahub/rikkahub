@@ -224,13 +224,26 @@ private fun applyVoiceTrace(
     scope.setExtra("service", ANDROID_SERVICE)
     scope.setExtra("traceId", trace.traceId)
     scope.setExtra("voiceSessionId", trace.voiceSessionId)
-    attributes.withoutNullValues().forEach { (key, value) ->
+    val nonNullAttributes = attributes.withoutNullValues()
+    nonNullAttributes.forEach { (key, value) ->
         scope.setExtra(key, value.toString())
+    }
+    nonNullAttributes.correlationAttributes().forEach { (key, value) ->
+        val stringValue = value.toString()
+        scope.setTag(key, stringValue)
+        scope.setExtra(key, stringValue)
     }
 }
 
 private fun VoiceAttributes.withoutNullValues(): Map<String, Any> =
     mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
+
+private fun Map<String, Any>.correlationAttributes(): Map<String, Any> =
+    mapOf(
+        "conversationId" to this["conversationId"],
+        "callId" to (this["callId"] ?: this["gemini.tool_call.call_id"]),
+        "hermes_job_id" to (this["hermes_job_id"] ?: this["jobId"]),
+    ).mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
 
 private fun VoiceTraceContext.withPropagationHeadersFrom(span: ISpan): VoiceTraceContext =
     span.toSentryTrace().value

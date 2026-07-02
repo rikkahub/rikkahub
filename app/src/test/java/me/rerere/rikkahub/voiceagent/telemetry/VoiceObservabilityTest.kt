@@ -98,6 +98,47 @@ class VoiceObservabilityTest {
     }
 
     @Test
+    fun `sentry observability sets correlation tags from canonical and alias attributes`() {
+        val capturedEvents = mutableListOf<SentryEvent>()
+
+        Sentry.init { options ->
+            options.dsn = "https://public@example.com/1"
+            options.setTransportFactory(NoOpTransportFactory.getInstance())
+            options.setBeforeSend { event, _ ->
+                capturedEvents += event
+                event
+            }
+        }
+
+        try {
+            SentryVoiceObservability().recordEvent(
+                name = "voicelab.mobile.hermes_tool.completed",
+                trace = trace,
+                attributes = mapOf(
+                    "conversationId" to "conversation-123",
+                    "jobId" to "job-456",
+                    "gemini.tool_call.call_id" to "call-789",
+                    "existing" to "extra",
+                ),
+            )
+            Sentry.flush(1_000)
+        } finally {
+            Sentry.close()
+        }
+
+        val event = capturedEvents.single()
+        assertEquals("conversation-123", event.getTag("conversationId"))
+        assertEquals("call-789", event.getTag("callId"))
+        assertEquals("job-456", event.getTag("hermes_job_id"))
+        assertEquals("conversation-123", event.getExtra("conversationId"))
+        assertEquals("call-789", event.getExtra("callId"))
+        assertEquals("call-789", event.getExtra("gemini.tool_call.call_id"))
+        assertEquals("job-456", event.getExtra("jobId"))
+        assertEquals("job-456", event.getExtra("hermes_job_id"))
+        assertEquals("extra", event.getExtra("existing"))
+    }
+
+    @Test
     fun `sentry observability adds propagation headers to trace context`() {
         Sentry.init { options ->
             options.dsn = "https://public@example.com/1"
