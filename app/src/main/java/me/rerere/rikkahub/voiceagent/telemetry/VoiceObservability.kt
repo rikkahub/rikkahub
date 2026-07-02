@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent.telemetry
 
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Locale
 
 data class VoiceTraceContext(
     val traceId: String,
@@ -193,7 +194,7 @@ internal fun newVoiceTraceId(
     randomInt: (Int) -> Int = voiceTraceIdRandom::nextInt,
 ): String {
     val value = Math.floorMod(randomInt(VOICE_TRACE_ID_BOUND), VOICE_TRACE_ID_BOUND)
-    return "VA%06d".format(value)
+    return String.format(Locale.US, "VA%06d", value)
 }
 
 internal fun newVoiceTraceContext(

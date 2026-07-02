@@ -5,6 +5,7 @@ import io.sentry.Sentry
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
 import io.sentry.SpanStatus
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -38,6 +39,21 @@ class VoiceObservabilityTest {
         assertEquals(listOf("VA000000", "VA000007", "VA999999"), traceIds)
         traceIds.forEach { traceId ->
             assertTrue(traceId.matches(Regex("^VA[0-9]{6}$")))
+        }
+    }
+
+    @Test
+    fun `new voice trace id always uses ascii digits regardless of default locale`() {
+        val originalLocale = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-EG"))
+
+            val traceId = newVoiceTraceId(randomInt = { 42 })
+
+            assertEquals("VA000042", traceId)
+            assertTrue(traceId.matches(Regex("^VA[0-9]{6}$")))
+        } finally {
+            Locale.setDefault(originalLocale)
         }
     }
 
