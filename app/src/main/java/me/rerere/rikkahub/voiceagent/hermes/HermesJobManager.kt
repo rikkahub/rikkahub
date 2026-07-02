@@ -1057,15 +1057,9 @@ class HermesJobManager(
         }
 
     private fun Throwable.isTerminalHermesPollFailure(): Boolean {
-        if (this is VoiceLabHttpException) {
-            failure?.let { return !it.retryable }
-            return statusCode.isTerminalVoiceLabStatusCode()
-        }
-        val legacyStatusCode = message
-            ?.substringAfter("Voice Lab request failed ", missingDelimiterValue = "")
-            ?.take(3)
-            ?.toIntOrNull()
-        return legacyStatusCode?.isTerminalVoiceLabStatusCode() == true
+        if (this !is VoiceLabHttpException) return false
+        failure?.let { return !it.retryable }
+        return statusCode.isTerminalVoiceLabStatusCode()
     }
 
     private fun Int.isTerminalVoiceLabStatusCode(): Boolean =

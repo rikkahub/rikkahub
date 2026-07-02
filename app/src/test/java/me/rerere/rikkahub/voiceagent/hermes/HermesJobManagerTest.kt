@@ -28,6 +28,10 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -978,6 +982,30 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `legacy formatted poll failure is transient when it is not typed`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.submit(callId = "call-legacy-message", prompt = "legacy message request")
+        assertEquals("call-legacy-message" to "legacy message request", toolApi.awaitRequest("call-legacy-message"))
+        toolApi.scriptPollFailure(
+            callId = "call-legacy-message",
+            error = IllegalStateException("Voice Lab request failed 404: job missing"),
+        )
+        toolApi.complete(response(callId = "call-legacy-message", answer = "eventual answer"))
+
+        conversationStore.awaitHermesRecord("call-legacy-message") {
+            it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
+        }
+
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-legacy-message" }
+        assertEquals(HermesQueueStatus.Complete, record.status)
+        assertEquals("eventual answer", record.answer)
+    }
+
+    @Test
     fun `terminal poll failure persists failed record without waiting for local timeout`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -992,7 +1020,17 @@ class HermesJobManagerTest {
         assertEquals("call-terminal-http" to "terminal http request", toolApi.awaitRequest("call-terminal-http"))
         toolApi.scriptPollFailure(
             callId = "call-terminal-http",
-            error = IllegalStateException("Voice Lab request failed 404: job missing"),
+            error = VoiceLabHttpException(
+                statusCode = 404,
+                safePreview = "job missing",
+                failure = VoiceFailure(
+                    kind = VoiceFailureKind.HermesFailed,
+                    safeMessage = "job missing",
+                    safeSummary = "job missing",
+                    retryable = false,
+                    source = VoiceFailureSource.VoiceLab,
+                ),
+            ),
         )
 
         conversationStore.awaitHermesRecord("call-terminal-http") {
