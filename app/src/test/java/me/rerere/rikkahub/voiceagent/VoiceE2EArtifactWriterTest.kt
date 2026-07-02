@@ -218,6 +218,49 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
+    fun `trace retention pruning does not follow nested symlinks outside voice e2e`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-trace-retention-symlink").toFile()
+        val sentinelDirectory = Files.createTempDirectory("voice-e2e-retention-sentinel").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val baseDirectory = VoiceE2EArtifactPaths.rootDirectory(root)
+            val sentinelFile = File(sentinelDirectory, "sentinel.txt")
+            sentinelFile.writeText("outside data")
+            val oldTraceDirectory = createTraceArtifactDirectory(root, "trace-oldest", lastModified = 1_000)
+            val nestedDirectory = File(oldTraceDirectory, "nested").apply { mkdirs() }
+            Files.createSymbolicLink(
+                File(nestedDirectory, "outside-link").toPath(),
+                sentinelDirectory.toPath(),
+            )
+            assertTrue("failed to restore modified time for trace-oldest", oldTraceDirectory.setLastModified(1_000))
+            (1..10).forEach { index ->
+                createTraceArtifactDirectory(
+                    root = root,
+                    traceId = "trace-kept-$index",
+                    lastModified = 2_000L + index,
+                )
+            }
+
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "trace-active",
+                scope = scope,
+            )
+
+            writer.drain()
+
+            assertFalse(File(baseDirectory, "trace-oldest").exists())
+            assertTrue(sentinelFile.isFile)
+            assertEquals("outside data", sentinelFile.readText())
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+            sentinelDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `enabled writer falls back to base directory for unsafe voice trace ids`() = runBlocking {
         listOf(".", "..", "a/b", "latest-trace-id.txt").forEachIndexed { index, traceId ->
             val root = Files.createTempDirectory("voice-e2e-unsafe-trace-$index").toFile()
@@ -525,10 +568,11 @@ class VoiceE2EArtifactWriterTest {
         root: File,
         traceId: String,
         lastModified: Long,
-    ) {
+    ): File {
         val directory = File(VoiceE2EArtifactPaths.rootDirectory(root), traceId)
         directory.mkdirs()
         File(directory, "input-transcript.txt").writeText("private artifact for $traceId")
         assertTrue("failed to set modified time for $traceId", directory.setLastModified(lastModified))
+        return directory
     }
 }

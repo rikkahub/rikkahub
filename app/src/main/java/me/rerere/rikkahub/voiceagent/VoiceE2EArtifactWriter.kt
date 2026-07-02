@@ -6,7 +6,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.IOException
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 
 enum class VoiceE2EArtifact(
     val fileName: String,
@@ -129,7 +134,7 @@ class VoiceE2EArtifactWriter private constructor(
 
             traceDirectories
                 .drop(MAX_TRACE_ARTIFACT_DIRECTORIES)
-                .forEach { it.deleteRecursively() }
+                .forEach { it.deleteTraceDirectoryNoFollow() }
         }.onFailure { error ->
             val message = (error.message ?: error.javaClass.simpleName).redactForVoiceAgentLog()
             VoiceAgentLog.w(TAG, "artifact trace retention cleanup failed message=$message")
@@ -223,6 +228,36 @@ private fun String.isSafeTraceDirectoryName(): Boolean =
         this != ".." &&
         this != VoiceE2EArtifactPaths.LATEST_TRACE_ID_FILE_NAME &&
         SAFE_TRACE_DIRECTORY_NAME.matches(this)
+
+private fun File.deleteTraceDirectoryNoFollow() {
+    val rootPath = toPath().toAbsolutePath().normalize()
+    Files.walkFileTree(
+        rootPath,
+        object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                file.requireUnderTraceDirectory(rootPath)
+                Files.deleteIfExists(file)
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
+                if (exc != null) {
+                    throw exc
+                }
+                dir.requireUnderTraceDirectory(rootPath)
+                Files.deleteIfExists(dir)
+                return FileVisitResult.CONTINUE
+            }
+        },
+    )
+}
+
+private fun Path.requireUnderTraceDirectory(rootPath: Path) {
+    val visitedPath = toAbsolutePath().normalize()
+    if (!visitedPath.startsWith(rootPath)) {
+        throw SecurityException("refusing to delete path outside trace directory")
+    }
+}
 
 private val SAFE_TRACE_DIRECTORY_NAME = Regex("[A-Za-z0-9._-]+")
 private const val MAX_TRACE_ARTIFACT_DIRECTORIES = 10
