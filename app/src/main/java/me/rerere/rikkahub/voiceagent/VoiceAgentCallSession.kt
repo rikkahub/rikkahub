@@ -39,6 +39,7 @@ class VoiceAgentCallSession internal constructor(
     private var sessionMetadata: VoiceE2ESessionMetadata? = null,
     private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
     private val nowMs: () -> Long = ::defaultReconnectClockMs,
+    private val metadataEpochNowMs: () -> Long = System::currentTimeMillis,
     private val scope: CoroutineScope,
 ) : ManagedVoiceCallSession {
     constructor(
@@ -68,6 +69,7 @@ class VoiceAgentCallSession internal constructor(
         sessionMetadata = sessionMetadata,
         reconnectPolicy = VoiceReconnectPolicy(),
         nowMs = ::defaultReconnectClockMs,
+        metadataEpochNowMs = System::currentTimeMillis,
         scope = scope,
     )
 
@@ -971,7 +973,7 @@ class VoiceAgentCallSession internal constructor(
         writeSessionMetadata(
             status = "ended",
             closeStatus = endReason,
-            endedAtEpochMs = nowMs(),
+            endedAtEpochMs = metadataEpochNowMs(),
             immediately = writeSessionMetadataImmediately,
         )
         recordEventSafely(
@@ -1004,7 +1006,7 @@ class VoiceAgentCallSession internal constructor(
         writeSessionMetadata(
             status = "failed",
             closeStatus = endReason,
-            endedAtEpochMs = nowMs(),
+            endedAtEpochMs = metadataEpochNowMs(),
         )
         recordEventSafely(
             name = "voicelab.mobile.session.failed",
@@ -1025,19 +1027,22 @@ class VoiceAgentCallSession internal constructor(
         endedAtEpochMs: Long? = null,
         immediately: Boolean = false,
     ) {
-        val metadata = sessionMetadata ?: return
-        val updated = metadata.copy(
-            providerModel = providerModel ?: metadata.providerModel,
-            status = status,
-            endedAtEpochMs = endedAtEpochMs,
-            closeStatus = closeStatus,
-        )
-        sessionMetadata = updated
-        val content = updated.toJson()
-        if (immediately) {
-            voiceE2EArtifacts.writeImmediately(VoiceE2EArtifact.SessionJson, content)
-        } else {
-            voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
+        synchronized(sessionLock) {
+            val metadata = sessionMetadata ?: return
+            val updated = metadata.withLifecycleUpdate(
+                status = status,
+                providerModel = providerModel,
+                closeStatus = closeStatus,
+                endedAtEpochMs = endedAtEpochMs,
+            )
+            if (updated == metadata) return
+            sessionMetadata = updated
+            val content = updated.toJson()
+            if (immediately || status.isTerminalSessionMetadataStatus()) {
+                voiceE2EArtifacts.writeImmediately(VoiceE2EArtifact.SessionJson, content)
+            } else {
+                voiceE2EArtifacts.write(VoiceE2EArtifact.SessionJson, content)
+            }
         }
     }
 
@@ -1062,6 +1067,8 @@ private fun VoiceContext.withTurnsFoldedIntoSystemInstruction(): VoiceContext {
         turns = emptyList(),
     )
 }
+
+private fun String.isTerminalSessionMetadataStatus(): Boolean = this == "ended" || this == "failed"
 
 private fun GeminiContentTurn.voiceContextLabel(): String =
     when (role) {

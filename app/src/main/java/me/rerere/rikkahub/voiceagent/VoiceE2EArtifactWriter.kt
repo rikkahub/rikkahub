@@ -7,10 +7,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
+import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
 
 enum class VoiceE2EArtifact(
@@ -173,7 +175,7 @@ class VoiceE2EArtifactWriter private constructor(
             if (append) {
                 file.appendText("$content\n")
             } else {
-                file.writeText(content)
+                file.replaceTextAtomically(content)
             }
         }.onFailure { error ->
             val message = error.message ?: error.javaClass.simpleName
@@ -238,6 +240,32 @@ class VoiceE2EArtifactWriter private constructor(
             traceId = traceId,
             scope = scope,
         )
+    }
+}
+
+private fun File.replaceTextAtomically(content: String) {
+    val parent = requireNotNull(parentFile)
+    val temp = File.createTempFile("$name.", ".tmp", parent)
+    try {
+        temp.writeText(content)
+        try {
+            Files.move(
+                temp.toPath(),
+                toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (error: AtomicMoveNotSupportedException) {
+            Files.move(
+                temp.toPath(),
+                toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }
+    } finally {
+        if (temp.exists()) {
+            temp.delete()
+        }
     }
 }
 

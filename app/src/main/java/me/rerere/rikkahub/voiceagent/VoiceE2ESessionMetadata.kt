@@ -40,3 +40,32 @@ data class VoiceE2ESessionMetadata(
         put("sentryPropagationCreated", sentryPropagationCreated)
     }.toString()
 }
+
+internal fun VoiceE2ESessionMetadata.withLifecycleUpdate(
+    status: String,
+    providerModel: String? = null,
+    closeStatus: String? = null,
+    endedAtEpochMs: Long? = null,
+): VoiceE2ESessionMetadata {
+    val currentRank = this.status.lifecycleRank()
+    val nextRank = status.lifecycleRank()
+    if (nextRank < currentRank) return this
+    if (nextRank == currentRank && status.isTerminalSessionStatus()) return this
+    return copy(
+        providerModel = providerModel ?: this.providerModel,
+        status = status,
+        endedAtEpochMs = endedAtEpochMs,
+        closeStatus = closeStatus,
+    )
+}
+
+private fun String.lifecycleRank(): Int = when (this) {
+    "created" -> 0
+    "started" -> 1
+    "connected" -> 2
+    "ended" -> 3
+    "failed" -> 4
+    else -> 0
+}
+
+private fun String.isTerminalSessionStatus(): Boolean = this == "ended" || this == "failed"

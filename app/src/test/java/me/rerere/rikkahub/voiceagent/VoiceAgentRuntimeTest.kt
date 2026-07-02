@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent
 
+import android.content.ContextWrapper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,20 +16,28 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
+import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
-import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileCredentials
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabTraceHeaders
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
+import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -40,6 +49,7 @@ import java.util.Base64
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.uuid.Uuid
 
 class VoiceAgentRuntimeTest {
     @Test
@@ -2531,7 +2541,8 @@ class VoiceAgentRuntimeTest {
                     sentryTracingEnabled = true,
                     sentryPropagationCreated = true,
                 ),
-                nowMs = { 1_700_000_000_999 },
+                nowMs = { 42 },
+                metadataEpochNowMs = { 1_700_000_000_999 },
                 scope = this,
             )
             val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000123/session.json")
@@ -2623,7 +2634,8 @@ class VoiceAgentRuntimeTest {
                     sentryTracingEnabled = true,
                     sentryPropagationCreated = true,
                 ),
-                nowMs = { 1_700_000_001_999 },
+                nowMs = { 42 },
+                metadataEpochNowMs = { 1_700_000_001_999 },
                 scope = this,
             )
 
@@ -2637,6 +2649,162 @@ class VoiceAgentRuntimeTest {
             assertEquals("1700000001999", ended.getValue("endedAtEpochMs").jsonPrimitive.content)
         } finally {
             artifactScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `failed session metadata is persisted with close status and epoch end time`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-failed-session").toFile()
+        val artifactScope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000125",
+                scope = artifactScope,
+            )
+            val gemini = FakeGeminiLiveVoiceClient().apply {
+                connectEvent = GeminiLiveEvent.Error(message = "setup failed", raw = "{}")
+            }
+            val session = VoiceAgentCallSession(
+                modelId = "gemini-flash",
+                sessionApi = FakeVoiceSessionApi(),
+                toolApi = FakeVoiceToolApi(),
+                gemini = gemini,
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = "system", turns = emptyList())
+                ),
+                traceContext = VoiceTraceContext(traceId = "VA000125", voiceSessionId = "VA000125"),
+                voiceE2EArtifacts = artifactWriter,
+                sessionMetadata = VoiceE2ESessionMetadata(
+                    voiceTraceId = "VA000125",
+                    voiceSessionId = "VA000125",
+                    conversationId = "conversation-125",
+                    packageName = "me.rerere.rikkahub",
+                    versionName = "2.2.6",
+                    versionCode = "162",
+                    debuggable = true,
+                    voiceModelId = "gemini-flash",
+                    providerModel = null,
+                    status = "created",
+                    startedAtEpochMs = 1_700_000_000_000,
+                    sentryDsnConfigured = true,
+                    sentryTracingEnabled = true,
+                    sentryPropagationCreated = true,
+                ),
+                nowMs = { 7 },
+                metadataEpochNowMs = { 1_700_000_002_999 },
+                scope = this,
+            )
+
+            session.start()
+            gemini.awaitConnect()
+            artifactWriter.drain()
+
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000125/session.json")
+            val failed = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("failed", failed.string("status"))
+            assertEquals("startup_failure", failed.string("closeStatus"))
+            assertEquals("1700000002999", failed.getValue("endedAtEpochMs").jsonPrimitive.content)
+        } finally {
+            artifactScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `terminal session metadata rejects stale non terminal updates`() {
+        val terminal = testSessionMetadata(status = "ended", endedAtEpochMs = 1_700_000_003_000)
+
+        val staleConnected = terminal.withLifecycleUpdate(
+            status = "connected",
+            providerModel = "gemini-live-test",
+        )
+
+        assertEquals("ended", staleConnected.string("status"))
+        assertEquals("1700000003000", staleConnected.string("endedAtEpochMs"))
+        assertNull(staleConnected.providerModel)
+    }
+
+    @Test
+    fun `terminal session metadata ordering is deterministic`() {
+        val failed = testSessionMetadata(status = "failed", closeStatus = "startup_failure")
+
+        val endedAfterFailed = failed.withLifecycleUpdate(
+            status = "ended",
+            closeStatus = "user_end",
+            endedAtEpochMs = 1_700_000_004_000,
+        )
+        val failedAfterEnded = testSessionMetadata(status = "ended", closeStatus = "user_end")
+            .withLifecycleUpdate(
+                status = "failed",
+                closeStatus = "runtime_failure",
+                endedAtEpochMs = 1_700_000_004_000,
+            )
+
+        assertEquals("failed", endedAfterFailed.string("status"))
+        assertEquals("startup_failure", endedAfterFailed.string("closeStatus"))
+        assertEquals("failed", failedAfterEnded.string("status"))
+        assertEquals("runtime_failure", failedAfterEnded.string("closeStatus"))
+    }
+
+    @Test
+    fun `default factory creates session metadata from trace context and build fields`() = runTest {
+        val root = Files.createTempDirectory("voice-e2e-factory-session").toFile()
+        val sessionApi = FakeVoiceSessionApi()
+        val blockedSession = sessionApi.blockNextSession()
+        val dependencies = FakeDefaultVoiceAgentCallFactoryDependencies(
+            sessionApi = sessionApi,
+            traceContext = VoiceTraceContext(
+                traceId = "VA654321",
+                voiceSessionId = "VS654321",
+                sentryTrace = "0123456789abcdef0123456789abcdef-0123456789abcdef-1",
+                sentryBaggage = "sentry-public_key=abc",
+            ),
+        )
+        val factory = DefaultVoiceAgentCallFactory(
+            context = VoiceFactoryTestContext(root),
+            observability = dependencies,
+            dependencies = dependencies,
+            metadataEpochNowMs = { 1_700_000_005_000 },
+        )
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val session = factory.create(
+                conversationId = Uuid.parse("00000000-0000-0000-0000-000000000123"),
+                config = VoiceAgentLaunchConfig(
+                    voiceLabBaseUrl = "https://voice.test",
+                    credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
+                    voiceModelId = "gemini-flash",
+                    assistantName = "Assistant",
+                    assistantPrompt = "Prompt",
+                ),
+                scope = scope,
+            )
+
+            session.start()
+            withTimeout(500) {
+                blockedSession.started.await()
+            }
+            dependencies.artifactWriter?.drain()
+
+            val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA654321/session.json")
+            val started = Json.parseToJsonElement(sessionJson.readText()).jsonObject
+            assertEquals("VA654321", started.string("voiceTraceId"))
+            assertEquals("VS654321", started.string("voiceSessionId"))
+            assertEquals("00000000-0000-0000-0000-000000000123", started.string("conversationId"))
+            assertEquals("me.rerere.rikkahub.debug", started.string("packageName"))
+            assertEquals(BuildConfig.VERSION_NAME, started.string("versionName"))
+            assertEquals(BuildConfig.VERSION_CODE, started.string("versionCode"))
+            assertEquals("gemini-flash", started.string("voiceModelId"))
+            assertEquals("1700000005000", started.getValue("startedAtEpochMs").jsonPrimitive.content)
+            assertTrue(started.boolean("debuggable"))
+            assertTrue(started.boolean("sentryPropagationCreated"))
+        } finally {
+            scope.cancel()
             root.deleteRecursively()
         }
     }
@@ -4048,4 +4216,102 @@ private class ThrowingVoiceAgentContextProvider(
     override fun build(conversation: Conversation): VoiceContext {
         throw error
     }
+}
+
+private fun testSessionMetadata(
+    status: String,
+    closeStatus: String? = null,
+    endedAtEpochMs: Long? = null,
+): VoiceE2ESessionMetadata = VoiceE2ESessionMetadata(
+    voiceTraceId = "VA999999",
+    voiceSessionId = "VA999999",
+    conversationId = "conversation-999",
+    packageName = "me.rerere.rikkahub",
+    versionName = "2.2.6",
+    versionCode = "162",
+    debuggable = true,
+    voiceModelId = "gemini-flash",
+    providerModel = null,
+    status = status,
+    startedAtEpochMs = 1_700_000_000_000,
+    sentryDsnConfigured = true,
+    sentryTracingEnabled = true,
+    sentryPropagationCreated = true,
+    endedAtEpochMs = endedAtEpochMs,
+    closeStatus = closeStatus,
+)
+
+private fun VoiceE2ESessionMetadata.string(key: String): String =
+    Json.parseToJsonElement(toJson()).jsonObject.getValue(key).jsonPrimitive.content
+
+private class VoiceFactoryTestContext(
+    private val root: File,
+) : ContextWrapper(null) {
+    override fun getNoBackupFilesDir(): File = root
+    override fun getPackageName(): String = "me.rerere.rikkahub.debug"
+}
+
+private class FakeDefaultVoiceAgentCallFactoryDependencies(
+    private val sessionApi: VoiceSessionApi,
+    private val traceContext: VoiceTraceContext,
+) : DefaultVoiceAgentCallFactoryDependencies, VoiceObservability {
+    var artifactWriter: VoiceE2EArtifactWriter? = null
+
+    override fun withSentryPropagation(trace: VoiceTraceContext): VoiceTraceContext = traceContext
+
+    override fun createSessionApi(
+        config: VoiceAgentLaunchConfig,
+        traceHeaders: VoiceLabTraceHeaders,
+    ): VoiceSessionApi = sessionApi
+
+    override fun createToolApi(
+        config: VoiceAgentLaunchConfig,
+        traceHeaders: VoiceLabTraceHeaders,
+    ): VoiceToolApi = FakeVoiceToolApi()
+
+    override fun createGemini(okHttpClient: OkHttpClient?): GeminiLiveVoiceClient = FakeGeminiLiveVoiceClient()
+
+    override fun createAudio(context: android.content.Context): VoiceAudioEngine = FakeVoiceAudioEngine()
+
+    override fun createConversationStore(
+        conversationId: Uuid,
+        chatService: me.rerere.rikkahub.service.ChatService?,
+    ): VoiceConversationStore = FakeVoiceConversationStore(
+        Conversation.ofId(id = conversationId)
+    )
+
+    override fun createContextProvider(
+        settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore?,
+        voiceModelName: String,
+    ): VoiceAgentContextProvider = FakeVoiceAgentContextProvider(
+        VoiceContext(systemInstruction = "system", turns = emptyList())
+    )
+
+    override fun createArtifactWriter(
+        noBackupFilesDir: File,
+        traceContext: VoiceTraceContext,
+        scope: CoroutineScope,
+    ): VoiceE2EArtifactWriter = createDefaultVoiceE2EArtifactWriter(
+        noBackupFilesDir = noBackupFilesDir,
+        traceContext = traceContext,
+        scope = scope,
+    ).also { artifactWriter = it }
+
+    override fun recordEvent(
+        name: String,
+        trace: VoiceTraceContext,
+        attributes: Map<String, Any?>,
+    ) = Unit
+
+    override suspend fun <T> withSpan(
+        name: String,
+        trace: VoiceTraceContext,
+        block: suspend (VoiceSpan) -> T,
+    ): T = error("Factory metadata test does not create spans")
+
+    override fun captureException(
+        throwable: Throwable,
+        trace: VoiceTraceContext,
+        attributes: Map<String, Any?>,
+    ) = Unit
 }

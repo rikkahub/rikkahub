@@ -136,6 +136,38 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
+    fun `non append writer replaces session json without leaving temp files`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-session-json-atomic").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000322",
+                scope = scope,
+            )
+            val first = """{"voiceTraceId":"VA000322","status":"started"}"""
+            val second = """{"voiceTraceId":"VA000322","status":"ended"}"""
+
+            writer.writeImmediately(VoiceE2EArtifact.SessionJson, first)
+            writer.writeImmediately(VoiceE2EArtifact.SessionJson, second)
+
+            val traceDirectory = File(VoiceE2EArtifactPaths.rootDirectory(root), "VA000322")
+            assertEquals(second, File(traceDirectory, "session.json").readText())
+            assertEquals(
+                emptyList<String>(),
+                traceDirectory.listFiles()
+                    .orEmpty()
+                    .map { it.name }
+                    .filter { it.startsWith("session.json.") && it.endsWith(".tmp") },
+            )
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `enabled writer prunes older trace artifact directories`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-trace-retention").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
