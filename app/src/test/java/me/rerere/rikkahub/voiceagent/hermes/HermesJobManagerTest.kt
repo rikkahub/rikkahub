@@ -4,12 +4,15 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -1646,6 +1649,56 @@ class HermesJobManagerTest {
 
         val records = conversationStore.conversation.value.hermesQueueRecords()
         assertEquals(listOf("call-a", "call-b"), records.map { it.callId }.sorted())
+    }
+
+    @Test
+    fun `queue store samples session id before waiting for queued persistence update`() = runTest {
+        val conversationStore = SnapshotBeforeBlockConversationStore()
+        var currentSessionId = "session-a"
+        val providerCalls = AtomicInteger(0)
+        val secondSessionSampled = CompletableDeferred<Unit>()
+        val queueStore = HermesQueueStore(
+            conversationStore = conversationStore,
+            persister = persister,
+            persistenceSessionId = {
+                val sessionId = currentSessionId
+                if (providerCalls.incrementAndGet() == 2) {
+                    secondSessionSampled.complete(Unit)
+                }
+                sessionId
+            },
+        )
+        val blockedUpdate = conversationStore.blockNextUpdate()
+
+        val blockedPersist = launch {
+            queueStore.persistPendingIfStillActive(
+                callId = "call-blocked",
+                prompt = "blocked prompt",
+            )
+        }
+        blockedUpdate.started.await()
+
+        val queuedPersist = launch {
+            queueStore.persistPendingIfStillActive(
+                callId = "call-sampled",
+                prompt = "sampled prompt",
+            )
+        }
+        withTimeoutOrNull(500) {
+            secondSessionSampled.await()
+        }
+        currentSessionId = "session-b"
+        blockedUpdate.release.complete(Unit)
+
+        blockedPersist.join()
+        queuedPersist.join()
+
+        val sampledTool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-sampled" }
+
+        assertEquals("session-a", sampledTool.metadata!!["voice_session_id"]!!.jsonPrimitive.content)
     }
 
     private fun manager(

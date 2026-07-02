@@ -38,6 +38,7 @@ class HermesQueueStore(
         jobId: String,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
+        val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
             val latestRecord = conversation.hermesQueueRecords().lastOrNull { record ->
                 record.callId == callId && record.jobId == jobId
@@ -50,7 +51,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = status,
-                    sessionId = persistenceSessionId(),
+                    sessionId = sessionId,
                     jobId = jobId,
                 ) to true
             }
@@ -62,6 +63,7 @@ class HermesQueueStore(
         prompt: String,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
+        val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
             if (!shouldPersist()) {
                 conversation to false
@@ -71,7 +73,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = VoiceToolRecordStatus.Pending,
-                    sessionId = persistenceSessionId(),
+                    sessionId = sessionId,
                     jobId = null,
                 ) to true
             }
@@ -84,6 +86,7 @@ class HermesQueueStore(
         jobId: String?,
         message: String,
     ): Boolean {
+        val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
             val latestRecord = conversation.latestHermesRecord(callId = callId, jobId = jobId)
             if (latestRecord?.status?.isTerminal == true) {
@@ -94,7 +97,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = VoiceToolRecordStatus.Canceled(message),
-                    sessionId = persistenceSessionId(),
+                    sessionId = sessionId,
                     jobId = jobId,
                 ) to true
             }
@@ -109,6 +112,7 @@ class HermesQueueStore(
         resultAnnounced: Boolean? = null,
         shouldPersist: () -> Boolean = { true },
     ): Boolean {
+        val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
             val latestRecord = conversation.latestHermesRecord(callId = callId, jobId = jobId)
             if (!shouldPersist() || latestRecord?.status?.isTerminal == true) {
@@ -119,7 +123,7 @@ class HermesQueueStore(
                     callId = callId,
                     prompt = prompt,
                     status = status,
-                    sessionId = persistenceSessionId(),
+                    sessionId = sessionId,
                     jobId = jobId,
                     resultAnnounced = resultAnnounced,
                 ) to true
