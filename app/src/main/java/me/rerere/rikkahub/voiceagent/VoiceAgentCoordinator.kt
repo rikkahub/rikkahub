@@ -16,12 +16,8 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
@@ -36,6 +32,7 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.hermes.HermesWaitingToneController
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptStatus
+import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
@@ -852,7 +849,7 @@ class VoiceAgentCoordinator(
     private fun recordHermesJobFailure(failure: HermesJobFailure) {
         val jobDetail = failure.jobId?.let { ", jobId=$it" }.orEmpty()
         val e2eDetail = "callId=${failure.callId}$jobDetail, elapsedMs=${failure.elapsedMs}, " +
-            "message=${failure.message.e2eSafeHermesFailureMessage()}"
+            "message=${HermesTelemetryLogSanitizer.failureMessage(failure.message)}"
         runCatching {
             logHermesToolFailure(e2eDetail)
         }
@@ -949,7 +946,7 @@ class VoiceAgentCoordinator(
 
     private fun writeHermesQueueArtifactLine(content: String) {
         val detail = runCatching {
-            content.toHermesQueueLogDetail()
+            HermesTelemetryLogSanitizer.queueEventDetail(content)
         }.getOrElse { error ->
             diagnostics.record(
                 "hermes_queue_event_parse_failed",
@@ -1171,21 +1168,6 @@ class VoiceAgentCoordinator(
     private enum class TranscriptSpeaker {
         User,
         Assistant,
-    }
-
-    private fun String.e2eSafeHermesFailureMessage(): String {
-        Regex("Voice Lab request failed \\d+").find(this)?.let { return it.value }
-        return substringBefore(':').take(120).ifBlank { "Hermes tool failed" }
-    }
-
-    private fun String.toHermesQueueLogDetail(): String {
-        val event = Json.parseToJsonElement(this).jsonObject
-        fun value(name: String): String? = event[name]?.jsonPrimitive?.contentOrNull
-        return "type=${value("type") ?: "unknown"} " +
-            "callId=${value("callId") ?: "unknown"} " +
-            "jobId=${value("jobId") ?: "none"} " +
-            "status=${value("status") ?: "none"} " +
-            "sent=${value("sent") ?: "n/a"}"
     }
 
     private data class ToolCallKey(
