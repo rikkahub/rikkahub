@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +28,7 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesJobCompletion
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobFailure
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobManager
 import me.rerere.rikkahub.voiceagent.hermes.HermesPollFailure
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.hermes.HermesWaitingToneController
@@ -144,6 +146,7 @@ class VoiceAgentCoordinator(
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
     private val persistenceJobs = mutableSetOf<Job>()
     private var lastPersistenceJob: Job? = null
+    private var hermesQueueStatusProjectionJob: Job? = null
     private var activeSessionId = 0L
     private var acceptsUnscopedGeminiEvents = true
     private var hasAttachedScopedHermesBridge = false
@@ -177,6 +180,18 @@ class VoiceAgentCoordinator(
                 current.copy(
                     diagnostics = (current.diagnostics + event.toUiDiagnosticLine()).takeLast(MAX_UI_DIAGNOSTICS)
                 )
+            }
+        }
+        startHermesQueueStatusProjection()
+    }
+
+    private fun startHermesQueueStatusProjection() {
+        hermesQueueStatusProjectionJob = hermesScope.launch {
+            sharedConversationStore.conversation.collect { conversation ->
+                val queueStatus = VoiceHermesQueueUiStatus.fromSnapshot(HermesQueueSnapshot.from(conversation))
+                _state.update { current ->
+                    current.copy(hermesQueue = queueStatus)
+                }
             }
         }
     }
@@ -398,6 +413,8 @@ class VoiceAgentCoordinator(
             }
             hermesWaitingToneSuspended.set(true)
             assistantOutputAudioActive.set(false)
+            hermesQueueStatusProjectionJob?.cancel()
+            hermesQueueStatusProjectionJob = null
             hermesWaitingToneController.close()
             gemini.close()
             audio.release()

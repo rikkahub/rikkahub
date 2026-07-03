@@ -25,6 +25,8 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
+import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
+import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
@@ -68,6 +70,58 @@ class VoiceAgentRuntimeTest {
         )
 
         assertEquals("trace-123", coordinator.state.value.traceId)
+    }
+
+    @Test
+    fun `coordinator refreshes durable Hermes queue status in UI state`() = runTest {
+        val conversationStore = FakeVoiceConversationStore()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = FakeVoiceToolApi(),
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            scope = this,
+        )
+        val persister = VoiceConversationPersister()
+
+        assertEquals(VoiceHermesQueueUiStatus(), coordinator.state.value.hermesQueue)
+
+        conversationStore.update { conversation ->
+            persister.upsertHermesTool(
+                conversation = conversation,
+                callId = "call-running",
+                prompt = "running request",
+                status = VoiceToolRecordStatus.Running,
+                jobId = "job-running",
+            )
+        }
+
+        withTimeout(500) {
+            while (coordinator.state.value.hermesQueue.activeCount != 1) {
+                delay(10)
+            }
+        }
+
+        conversationStore.update { conversation ->
+            persister.upsertHermesTool(
+                conversation = conversation,
+                callId = "call-complete",
+                prompt = "complete request",
+                status = VoiceToolRecordStatus.Complete("complete answer"),
+                jobId = "job-complete",
+                resultAnnounced = false,
+            )
+        }
+
+        withTimeout(500) {
+            while (coordinator.state.value.hermesQueue.completedWaitingCount != 1) {
+                delay(10)
+            }
+        }
+
+        assertEquals(1, coordinator.state.value.hermesQueue.activeCount)
+        assertEquals(1, coordinator.state.value.hermesQueue.completedWaitingCount)
+        assertTrue(coordinator.state.value.hermesQueue.hasVisibleWork)
     }
 
     @Test
