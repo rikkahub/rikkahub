@@ -102,6 +102,31 @@ class HermesQueueRecordTest {
     }
 
     @Test
+    fun `malformed status with unannounced output recovers as failed terminal record`() {
+        val conversation = conversationOf(
+            legacyHermesTool(
+                callId = "bad-status-output",
+                prompt = "private malformed status request",
+                outputText = "private malformed status answer",
+                metadata = buildJsonObject {
+                    put(HERMES_TOOL_SOURCE_KEY, VoiceAgentToolNames.ASK_HERMES)
+                    put(HERMES_TOOL_STATUS_KEY, "not-a-status")
+                    put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, false)
+                },
+            )
+        )
+
+        val snapshot = HermesQueueSnapshot.from(conversation)
+        val record = snapshot.unannouncedTerminal.single()
+
+        assertEquals("bad-status-output", record.callId)
+        assertEquals(HermesQueueStatus.Failed, record.status)
+        assertEquals("private malformed status request", record.prompt)
+        assertEquals("private malformed status answer", record.error)
+        assertFalse(record.resultAnnounced)
+    }
+
+    @Test
     fun `terminal records with malformed announcement metadata remain unannounced`() {
         val conversation = conversationOf(
             legacyHermesTool(

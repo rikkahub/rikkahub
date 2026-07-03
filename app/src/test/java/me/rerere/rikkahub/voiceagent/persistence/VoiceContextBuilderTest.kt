@@ -431,6 +431,40 @@ class VoiceContextBuilderTest {
         assertFalse(context.systemInstruction.contains("Unannounced terminal results"))
         assertFalse(context.systemInstruction.contains("announced private request"))
         assertFalse(context.systemInstruction.contains("announced private answer"))
+        val turnText = context.turns.joinToString("\n") { it.text }
+        assertFalse(turnText.contains("announced private request"))
+        assertFalse(turnText.contains("announced private answer"))
+    }
+
+    @Test
+    fun `build excludes legacy terminal Hermes tool without announcement metadata from turns`() {
+        val conversation = conversationWith(
+            listOf(
+                UIMessage.user("check legacy terminal work"),
+                UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(
+                        hermesTool(
+                            callId = "call-legacy-terminal",
+                            prompt = "legacy private request",
+                            status = "failed",
+                            outputText = "legacy private reason",
+                            includeResultAnnounced = false,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        val context = VoiceContextBuilder().build(
+            assistantName = "Hermes",
+            assistantPrompt = "Prompt",
+            conversation = conversation,
+        )
+
+        val turnText = context.turns.joinToString("\n") { it.text }
+        assertFalse(turnText.contains("legacy private request"))
+        assertFalse(turnText.contains("legacy private reason"))
     }
 
     @Test
@@ -585,6 +619,7 @@ class VoiceContextBuilderTest {
         outputText: String? = null,
         resultAnnounced: Boolean = false,
         resultAnnouncedText: String? = null,
+        includeResultAnnounced: Boolean = true,
     ): UIMessagePart.Tool = UIMessagePart.Tool(
         toolCallId = callId,
         toolName = VoiceAgentToolNames.ASK_HERMES,
@@ -595,7 +630,7 @@ class VoiceContextBuilderTest {
             put(HERMES_TOOL_STATUS_KEY, status)
             if (resultAnnouncedText != null) {
                 put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnouncedText)
-            } else {
+            } else if (includeResultAnnounced) {
                 put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnounced)
             }
         },

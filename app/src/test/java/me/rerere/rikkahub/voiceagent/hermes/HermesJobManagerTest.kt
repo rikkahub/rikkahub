@@ -307,29 +307,88 @@ class HermesJobManagerTest {
             scriptSubmitStatus(callId = "call-submit-canceled", status = "canceled")
         }
         val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.attachBridge(bridge = bridge, sessionId = 13L)
 
         manager.submit(callId = "call-submit-failed", prompt = "submit failed")
         manager.submit(callId = "call-submit-expired", prompt = "submit expired")
         manager.submit(callId = "call-submit-timeout", prompt = "submit timeout")
         manager.submit(callId = "call-submit-canceled", prompt = "submit canceled")
         conversationStore.awaitHermesRecord("call-submit-failed") {
-            it.status == HermesQueueStatus.Failed
+            it.status == HermesQueueStatus.Failed && it.resultAnnounced
         }
         conversationStore.awaitHermesRecord("call-submit-expired") {
-            it.status == HermesQueueStatus.Expired
+            it.status == HermesQueueStatus.Expired && it.resultAnnounced
         }
         conversationStore.awaitHermesRecord("call-submit-timeout") {
-            it.status == HermesQueueStatus.Expired
+            it.status == HermesQueueStatus.Expired && it.resultAnnounced
         }
         conversationStore.awaitHermesRecord("call-submit-canceled") {
-            it.status == HermesQueueStatus.Canceled
+            it.status == HermesQueueStatus.Canceled && it.resultAnnounced
         }
 
         assertEquals(0, toolApi.pollCount("call-submit-failed"))
         assertEquals(0, toolApi.pollCount("call-submit-expired"))
         assertEquals(0, toolApi.pollCount("call-submit-timeout"))
         assertEquals(0, toolApi.pollCount("call-submit-canceled"))
+        assertEquals(
+            setOf(
+                "call-submit-failed" to 13L,
+                "call-submit-expired" to 13L,
+                "call-submit-timeout" to 13L,
+                "call-submit-canceled" to 13L,
+            ),
+            bridge.queuedAcknowledgements.toSet(),
+        )
+        assertEquals(4, bridge.terminalFollowUps.size)
+        assertEquals(
+            mapOf(
+                "call-submit-failed" to HermesQueueStatus.Failed,
+                "call-submit-expired" to HermesQueueStatus.Expired,
+                "call-submit-timeout" to HermesQueueStatus.Expired,
+                "call-submit-canceled" to HermesQueueStatus.Canceled,
+            ),
+            bridge.terminalFollowUps.associate { it.callId to it.status },
+        )
+        assertTrue(bridge.terminalFollowUps.all { it.sessionId == 13L && it.reason.isNotBlank() })
+    }
+
+    @Test
+    fun `terminal submit status remains unannounced when queued acknowledgement fails`() = runTest {
+        val toolApi = FakeVoiceToolApi().apply {
+            scriptSubmitStatus(callId = "call-submit-failed-ack", status = "failed")
+        }
+        val conversationStore = FakeVoiceConversationStore()
+        val failingBridge = RecordingHermesBridge().apply { failQueuedAcknowledgement = true }
+        val retryBridge = RecordingHermesBridge()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.attachBridge(bridge = failingBridge, sessionId = 14L)
+        manager.submit(callId = "call-submit-failed-ack", prompt = "submit failed ack")
+        conversationStore.awaitHermesRecord("call-submit-failed-ack") {
+            it.status == HermesQueueStatus.Failed && !it.resultAnnounced
+        }
+
+        assertTrue(failingBridge.queuedAcknowledgements.isEmpty())
+        assertTrue(failingBridge.terminalFollowUps.isEmpty())
+
+        manager.detachBridge(failingBridge)
+        manager.attachBridge(bridge = retryBridge, sessionId = 15L)
+        conversationStore.awaitHermesRecord("call-submit-failed-ack") {
+            it.status == HermesQueueStatus.Failed && it.resultAnnounced
+        }
+
+        assertEquals(
+            TerminalFollowUp(
+                callId = "call-submit-failed-ack",
+                prompt = "submit failed ack",
+                status = HermesQueueStatus.Failed,
+                reason = "Hermes job was no longer available.",
+                sessionId = 15L,
+            ),
+            retryBridge.terminalFollowUps.single(),
+        )
     }
 
     @Test
@@ -741,6 +800,41 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `failed terminal follow-up remains unannounced for later bridge retry`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val failingBridge = RecordingHermesBridge().apply { failTerminalFollowUp = true }
+        val retryBridge = RecordingHermesBridge()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.attachBridge(bridge = failingBridge, sessionId = 1L)
+        manager.submit(callId = "call-terminal-retry", prompt = "terminal retry request")
+        assertEquals("call-terminal-retry" to "terminal retry request", toolApi.awaitRequest("call-terminal-retry"))
+        toolApi.failJob(callId = "call-terminal-retry", message = "terminal retry failure")
+        conversationStore.awaitHermesRecord("call-terminal-retry") {
+            it.status == HermesQueueStatus.Failed && !it.resultAnnounced
+        }
+
+        manager.detachBridge(failingBridge)
+        manager.attachBridge(bridge = retryBridge, sessionId = 2L)
+        conversationStore.awaitHermesRecord("call-terminal-retry") {
+            it.status == HermesQueueStatus.Failed && it.resultAnnounced
+        }
+
+        assertTrue(failingBridge.terminalFollowUps.isEmpty())
+        assertEquals(
+            TerminalFollowUp(
+                callId = "call-terminal-retry",
+                prompt = "terminal retry request",
+                status = HermesQueueStatus.Failed,
+                reason = "terminal retry failure",
+                sessionId = 2L,
+            ),
+            retryBridge.terminalFollowUps.single(),
+        )
+    }
+
+    @Test
     fun `successful follow-up is marked announced even if bridge detaches during mark`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -920,6 +1014,113 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `polled failed status announces terminal result to attached bridge`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.attachBridge(bridge = bridge, sessionId = 11L)
+        manager.submit(callId = "call-polled-failed-live", prompt = "polled failed live")
+        assertEquals("call-polled-failed-live" to "polled failed live", toolApi.awaitRequest("call-polled-failed-live"))
+        toolApi.failJob(callId = "call-polled-failed-live", message = "Hermes failed live.")
+
+        conversationStore.awaitHermesRecord("call-polled-failed-live") {
+            it.status == HermesQueueStatus.Failed && it.resultAnnounced
+        }
+
+        assertEquals(1, bridge.terminalFollowUps.size)
+        assertEquals(
+            TerminalFollowUp(
+                callId = "call-polled-failed-live",
+                prompt = "polled failed live",
+                status = HermesQueueStatus.Failed,
+                reason = "Hermes failed live.",
+                sessionId = 11L,
+            ),
+            bridge.terminalFollowUps.single(),
+        )
+    }
+
+    @Test
+    fun `polled failed status retries queued acknowledgement before terminal follow-up`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge().apply { failQueuedAcknowledgement = true }
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        val blockedInitialAck = bridge.blockNextQueuedAcknowledgement()
+        manager.attachBridge(bridge = bridge, sessionId = 16L)
+        manager.submit(callId = "call-polled-failed-retry-ack", prompt = "polled failed retry ack")
+        assertEquals("call-polled-failed-retry-ack" to "polled failed retry ack", toolApi.awaitRequest("call-polled-failed-retry-ack"))
+        assertTrue(blockedInitialAck.started.await(500, TimeUnit.MILLISECONDS))
+        blockedInitialAck.release.countDown()
+        delay(10)
+        bridge.failQueuedAcknowledgement = false
+
+        toolApi.failJob(callId = "call-polled-failed-retry-ack", message = "Hermes failed after ack retry.")
+
+        conversationStore.awaitHermesRecord("call-polled-failed-retry-ack") {
+            it.status == HermesQueueStatus.Failed && it.resultAnnounced
+        }
+
+        assertEquals(listOf("call-polled-failed-retry-ack" to 16L), bridge.queuedAcknowledgements)
+        assertEquals(
+            TerminalFollowUp(
+                callId = "call-polled-failed-retry-ack",
+                prompt = "polled failed retry ack",
+                status = HermesQueueStatus.Failed,
+                reason = "Hermes failed after ack retry.",
+                sessionId = 16L,
+            ),
+            bridge.terminalFollowUps.single(),
+        )
+    }
+
+    @Test
+    fun `polled expired and canceled statuses announce terminal results to attached bridge`() = runTest {
+        listOf(
+            HermesQueueStatus.Expired to "Hermes expired live.",
+            HermesQueueStatus.Canceled to "Hermes canceled live.",
+        ).forEach { (status, reason) ->
+            val toolApi = FakeVoiceToolApi()
+            val conversationStore = FakeVoiceConversationStore()
+            val bridge = RecordingHermesBridge()
+            val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+            val callId = "call-polled-${status.wireName}-live"
+            val prompt = "polled ${status.wireName} live"
+
+            manager.attachBridge(bridge = bridge, sessionId = 12L)
+            manager.submit(callId = callId, prompt = prompt)
+            assertEquals(callId to prompt, toolApi.awaitRequest(callId))
+            toolApi.scriptPoll(
+                callId = callId,
+                response = MobileHermesJobPollResponse(
+                    callId = callId,
+                    status = status.wireName,
+                    error = reason,
+                ),
+            )
+
+            conversationStore.awaitHermesRecord(callId) {
+                it.status == status && it.resultAnnounced
+            }
+
+            assertEquals(1, bridge.terminalFollowUps.size)
+            assertEquals(
+                TerminalFollowUp(
+                    callId = callId,
+                    prompt = prompt,
+                    status = status,
+                    reason = reason,
+                    sessionId = 12L,
+                ),
+                bridge.terminalFollowUps.single(),
+            )
+        }
+    }
+
+    @Test
     fun `polled expired status persists expired record`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -1048,12 +1249,14 @@ class HermesJobManagerTest {
     fun `terminal poll failure persists failed record without waiting for local timeout`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
         val manager = manager(
             toolApi = toolApi,
             conversationStore = conversationStore,
             scope = this,
             maxElapsedMs = 10_000L,
         )
+        manager.attachBridge(bridge = bridge, sessionId = 14L)
 
         manager.submit(callId = "call-terminal-http", prompt = "terminal http request")
         assertEquals("call-terminal-http" to "terminal http request", toolApi.awaitRequest("call-terminal-http"))
@@ -1073,12 +1276,22 @@ class HermesJobManagerTest {
         )
 
         conversationStore.awaitHermesRecord("call-terminal-http") {
-            it.status == HermesQueueStatus.Failed
+            it.status == HermesQueueStatus.Failed && it.resultAnnounced
         }
 
         val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-terminal-http" }
         assertEquals(HermesQueueStatus.Failed, record.status)
         assertEquals("Voice Lab request failed 404: job missing", record.error)
+        assertEquals(
+            TerminalFollowUp(
+                callId = "call-terminal-http",
+                prompt = "terminal http request",
+                status = HermesQueueStatus.Failed,
+                reason = "Voice Lab request failed 404: job missing",
+                sessionId = 14L,
+            ),
+            bridge.terminalFollowUps.single(),
+        )
     }
 
     @Test

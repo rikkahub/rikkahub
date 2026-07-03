@@ -3,7 +3,6 @@ package me.rerere.rikkahub.voiceagent.persistence
 import android.os.Build
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
@@ -11,7 +10,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
-import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_RESULT_ANNOUNCED_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_STATUS_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
@@ -134,7 +132,7 @@ class VoiceContextBuilder(
 
     private fun UIMessagePart.Tool.toContextText(): String? {
         if (!isExecuted) return null
-        if (isUnannouncedTerminalHermesRecord()) return null
+        if (shouldHideHermesToolOutputFromContext()) return null
 
         val outputText = output
             .filterIsInstance<UIMessagePart.Text>()
@@ -146,16 +144,12 @@ class VoiceContextBuilder(
         return "Tool $toolName ($toolCallId)\nInput: $input\nOutput: $outputText"
     }
 
-    private fun UIMessagePart.Tool.isUnannouncedTerminalHermesRecord(): Boolean {
+    private fun UIMessagePart.Tool.shouldHideHermesToolOutputFromContext(): Boolean {
         if (toolName != VoiceAgentToolNames.ASK_HERMES) return false
         val metadata = metadata ?: return false
-        val hasResultAnnounced = HERMES_TOOL_RESULT_ANNOUNCED_KEY in metadata
-        val resultAnnounced = metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY)
         val status = HermesQueueStatus.fromWireName(metadata.stringOrNull(HERMES_TOOL_STATUS_KEY))
-            ?: return hasResultAnnounced && resultAnnounced != true && hasTextOutput()
-        if (!status.isTerminal) return false
-        if (!hasResultAnnounced) return false
-        return resultAnnounced != true
+            ?: return hasTextOutput()
+        return status.isTerminal
     }
 
     private fun UIMessagePart.Tool.hasTextOutput(): Boolean {
@@ -212,10 +206,6 @@ class VoiceContextBuilder(
 
     private fun JsonObject.stringOrNull(key: String): String? {
         return (this[key] as? JsonPrimitive)?.contentOrNull
-    }
-
-    private fun JsonObject.booleanOrNull(key: String): Boolean? {
-        return (this[key] as? JsonPrimitive)?.booleanOrNull
     }
 
     private fun LocalDate.formatLocalizedDate(locale: Locale): String =

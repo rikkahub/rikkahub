@@ -165,6 +165,7 @@ class HermesJobManager(
                         prompt = record.prompt,
                         jobId = jobId,
                         startedAtMs = startedAtMs,
+                        requiresQueuedAcknowledgement = false,
                     ).also {
                         activeJobs[activeKey] = it
                     }
@@ -348,6 +349,9 @@ class HermesJobManager(
                 status = submitted.status,
                 failureMessage = submitted.failure?.safeMessage,
                 shouldPersist = { !managedJob.explicitlyCanceled },
+                terminalAcknowledgement = {
+                    acknowledgeQueuedCallIfNeeded(managedJob)
+                },
             )
             if (!shouldPoll) return
             if (managedJob.explicitlyCanceled) {
@@ -366,21 +370,27 @@ class HermesJobManager(
                     status = submitted.status.wireName,
                 )
             )
-            sendQueuedAcknowledgementIfAttached(
-                callId = managedJob.callId,
-                shouldSend = { !managedJob.explicitlyCanceled },
-            )
+            acknowledgeQueuedCallIfNeeded(managedJob)
             pollHermesJob(managedJob = managedJob, jobId = submitted.jobId)
         } catch (error: CancellationException) {
             if (!managedJob.explicitlyCanceled) throw error
         } catch (error: Throwable) {
-            persistFailure(
-                callId = managedJob.callId,
-                prompt = managedJob.prompt,
-                jobId = managedJob.jobId,
-                error = error,
-                shouldPersist = { !managedJob.explicitlyCanceled },
-            )
+            val jobId = managedJob.jobId
+            if (jobId == null) {
+                persistFailure(
+                    callId = managedJob.callId,
+                    prompt = managedJob.prompt,
+                    jobId = null,
+                    error = error,
+                    shouldPersist = { !managedJob.explicitlyCanceled },
+                )
+            } else {
+                persistFailureAfterAcknowledgement(
+                    managedJob = managedJob,
+                    jobId = jobId,
+                    error = error,
+                )
+            }
         }
     }
 
@@ -404,13 +414,11 @@ class HermesJobManager(
                 return
             } catch (error: Throwable) {
                 if (error.isTerminalHermesPollFailure()) {
-                    completeFailureStatus(
-                        callId = managedJob.callId,
-                        prompt = managedJob.prompt,
+                    completeFailureStatusAfterAcknowledgement(
+                        managedJob = managedJob,
                         jobId = jobId,
                         status = VoiceToolRecordStatus.Failed(error.message ?: error.javaClass.simpleName),
                         visibleMessage = error.message ?: error.javaClass.simpleName,
-                        shouldPersist = { !managedJob.explicitlyCanceled },
                     )
                     return
                 }
@@ -533,39 +541,33 @@ class HermesJobManager(
 
                 HermesJobStatus.Failed -> {
                     val failureMessage = poll.failure?.safeMessage ?: DEFAULT_FAILURE_MESSAGE
-                    completeFailureStatus(
-                        callId = managedJob.callId,
-                        prompt = managedJob.prompt,
+                    completeFailureStatusAfterAcknowledgement(
+                        managedJob = managedJob,
                         jobId = jobId,
                         status = VoiceToolRecordStatus.Failed(failureMessage),
                         visibleMessage = failureMessage,
-                        shouldPersist = { !managedJob.explicitlyCanceled },
                     )
                     return
                 }
 
                 HermesJobStatus.Expired -> {
                     val failureMessage = poll.failure?.safeMessage ?: EXPIRED_MESSAGE
-                    completeFailureStatus(
-                        callId = managedJob.callId,
-                        prompt = managedJob.prompt,
+                    completeFailureStatusAfterAcknowledgement(
+                        managedJob = managedJob,
                         jobId = jobId,
                         status = VoiceToolRecordStatus.Expired(failureMessage),
                         visibleMessage = failureMessage,
-                        shouldPersist = { !managedJob.explicitlyCanceled },
                     )
                     return
                 }
 
                 HermesJobStatus.Canceled -> {
                     val failureMessage = poll.failure?.safeMessage ?: CANCELED_MESSAGE
-                    completeFailureStatus(
-                        callId = managedJob.callId,
-                        prompt = managedJob.prompt,
+                    completeFailureStatusAfterAcknowledgement(
+                        managedJob = managedJob,
                         jobId = jobId,
                         status = VoiceToolRecordStatus.Canceled(failureMessage),
                         visibleMessage = failureMessage,
-                        shouldPersist = { !managedJob.explicitlyCanceled },
                     )
                     return
                 }
@@ -582,7 +584,26 @@ class HermesJobManager(
         status: HermesJobStatus,
         failureMessage: String?,
         shouldPersist: () -> Boolean = { true },
+        terminalAcknowledgement: suspend () -> Boolean = { false },
     ): Boolean {
+        suspend fun persistTerminal(
+            status: VoiceToolRecordStatus,
+            visibleMessage: String,
+        ): Boolean {
+            val persisted = completeFailureStatus(
+                callId = callId,
+                prompt = prompt,
+                jobId = jobId,
+                status = status,
+                visibleMessage = visibleMessage,
+                shouldPersist = shouldPersist,
+            )
+            if (persisted && terminalAcknowledgement()) {
+                announceTerminalResult(callId = callId, jobId = jobId)
+            }
+            return false
+        }
+
         return when (status) {
             HermesJobStatus.Running -> {
                 val persisted = queueStore.persistActiveIfStillActive(
@@ -600,39 +621,24 @@ class HermesJobManager(
             HermesJobStatus.Succeeded -> error("Hermes submit response cannot be succeeded without an answer")
 
             HermesJobStatus.Failed -> {
-                completeFailureStatus(
-                    callId = callId,
-                    prompt = prompt,
-                    jobId = jobId,
+                persistTerminal(
                     status = VoiceToolRecordStatus.Failed(failureMessage ?: DEFAULT_FAILURE_MESSAGE),
                     visibleMessage = failureMessage ?: DEFAULT_FAILURE_MESSAGE,
-                    shouldPersist = shouldPersist,
                 )
-                false
             }
 
             HermesJobStatus.Expired -> {
-                completeFailureStatus(
-                    callId = callId,
-                    prompt = prompt,
-                    jobId = jobId,
+                persistTerminal(
                     status = VoiceToolRecordStatus.Expired(failureMessage ?: EXPIRED_MESSAGE),
                     visibleMessage = failureMessage ?: EXPIRED_MESSAGE,
-                    shouldPersist = shouldPersist,
                 )
-                false
             }
 
             HermesJobStatus.Canceled -> {
-                completeFailureStatus(
-                    callId = callId,
-                    prompt = prompt,
-                    jobId = jobId,
+                persistTerminal(
                     status = VoiceToolRecordStatus.Canceled(failureMessage ?: CANCELED_MESSAGE),
                     visibleMessage = failureMessage ?: CANCELED_MESSAGE,
-                    shouldPersist = shouldPersist,
                 )
-                false
             }
 
             HermesJobStatus.Accepted,
@@ -657,14 +663,45 @@ class HermesJobManager(
         } catch (error: CancellationException) {
             if (!managedJob.explicitlyCanceled) throw error
         } catch (error: Throwable) {
-            persistFailure(
-                callId = managedJob.callId,
-                prompt = managedJob.prompt,
+            persistFailureAfterAcknowledgement(
+                managedJob = managedJob,
                 jobId = jobId,
                 error = error,
-                shouldPersist = { !managedJob.explicitlyCanceled },
             )
         }
+    }
+
+    private suspend fun completeFailureStatusAfterAcknowledgement(
+        managedJob: ManagedHermesJob,
+        jobId: String,
+        status: VoiceToolRecordStatus,
+        visibleMessage: String,
+    ): Boolean {
+        val persisted = completeFailureStatus(
+            callId = managedJob.callId,
+            prompt = managedJob.prompt,
+            jobId = jobId,
+            status = status,
+            visibleMessage = visibleMessage,
+            shouldPersist = { !managedJob.explicitlyCanceled },
+        )
+        if (persisted && acknowledgeQueuedCallIfNeeded(managedJob)) {
+            announceTerminalResult(callId = managedJob.callId, jobId = jobId)
+        }
+        return persisted
+    }
+
+    private suspend fun persistFailureAfterAcknowledgement(
+        managedJob: ManagedHermesJob,
+        jobId: String,
+        error: Throwable,
+    ) {
+        completeFailureStatusAfterAcknowledgement(
+            managedJob = managedJob,
+            jobId = jobId,
+            status = VoiceToolRecordStatus.Failed(error.message ?: error.javaClass.simpleName),
+            visibleMessage = error.message ?: error.javaClass.simpleName,
+        )
     }
 
     private suspend fun completeFailureStatus(
@@ -674,6 +711,7 @@ class HermesJobManager(
         status: VoiceToolRecordStatus,
         visibleMessage: String,
         shouldPersist: () -> Boolean = { true },
+        shouldAnnounceTerminalResult: Boolean = false,
     ): Boolean {
         val persisted = queueStore.persistTerminalIfStillActive(
             callId = callId,
@@ -716,17 +754,18 @@ class HermesJobManager(
             )
         )
         updateToolStatus(callId, VoiceToolStatus.HermesFailed(callId = callId, message = visibleMessage))
+        if (shouldAnnounceTerminalResult) {
+            announceTerminalResult(callId = callId, jobId = jobId)
+        }
         return true
     }
 
     private suspend fun expireTimedOutJob(managedJob: ManagedHermesJob, jobId: String) {
-        val expired = completeFailureStatus(
-            callId = managedJob.callId,
-            prompt = managedJob.prompt,
+        val expired = completeFailureStatusAfterAcknowledgement(
+            managedJob = managedJob,
             jobId = jobId,
             status = VoiceToolRecordStatus.Expired(TIMEOUT_MESSAGE),
             visibleMessage = TIMEOUT_MESSAGE,
-            shouldPersist = { !managedJob.explicitlyCanceled },
         )
         if (expired) cancelRemoteJob(jobId)
     }
@@ -737,6 +776,7 @@ class HermesJobManager(
         jobId: String?,
         error: Throwable,
         shouldPersist: () -> Boolean = { true },
+        shouldAnnounceTerminalResult: Boolean = jobId != null,
     ) {
         val message = error.message ?: error.javaClass.simpleName
         completeFailureStatus(
@@ -746,24 +786,37 @@ class HermesJobManager(
             status = VoiceToolRecordStatus.Failed(message),
             visibleMessage = message,
             shouldPersist = shouldPersist,
+            shouldAnnounceTerminalResult = shouldAnnounceTerminalResult,
         )
     }
 
     private suspend fun sendQueuedAcknowledgementIfAttached(
         callId: String,
         shouldSend: () -> Boolean = { true },
-    ) {
-        val attachment = currentBridgeAttachment() ?: return
-        if (!shouldSend()) return
-        runCatching {
+    ): Boolean {
+        val attachment = currentBridgeAttachment() ?: return false
+        if (!shouldSend()) return false
+        return runCatching {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 runInterruptible {
                     if (!shouldSend()) return@runInterruptible false
                     if (!attachment.isCurrentBridgeAttachment()) return@runInterruptible false
                     attachment.bridge.sendQueuedAcknowledgement(callId = callId, sessionId = attachment.sessionId)
                 }
-            }
+            } ?: false
+        }.getOrDefault(false)
+    }
+
+    private suspend fun acknowledgeQueuedCallIfNeeded(managedJob: ManagedHermesJob): Boolean {
+        if (managedJob.queuedAcknowledged) return true
+        val acknowledged = sendQueuedAcknowledgementIfAttached(
+            callId = managedJob.callId,
+            shouldSend = { !managedJob.explicitlyCanceled },
+        )
+        if (acknowledged) {
+            managedJob.queuedAcknowledged = true
         }
+        return acknowledged
     }
 
     private suspend fun announceUnannouncedTerminalResults(bridge: HermesSessionBridge, sessionId: Long) {
@@ -1052,10 +1105,13 @@ class HermesJobManager(
         val prompt: String,
         var jobId: String? = null,
         private val startedAtMs: Long = System.currentTimeMillis(),
+        requiresQueuedAcknowledgement: Boolean = true,
     ) {
         var job: Job? = null
         @Volatile
         var explicitlyCanceled: Boolean = false
+        @Volatile
+        var queuedAcknowledged: Boolean = !requiresQueuedAcknowledgement
 
         fun elapsedMs(): Long = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
         fun hasTimedOut(maxElapsedMs: Long): Boolean = elapsedMs() >= maxElapsedMs

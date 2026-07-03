@@ -124,8 +124,7 @@ private fun HermesQueueRecord.durableIdentity(): HermesDurableIdentity {
 private fun UIMessagePart.Tool.toHermesQueueRecord(): HermesQueueRecord? {
     if (toolName != VoiceAgentToolNames.ASK_HERMES) return null
     val metadata = metadata ?: return null
-    val status = HermesQueueStatus.fromWireName(metadata.stringOrNull(HERMES_TOOL_STATUS_KEY))
-        ?: return null
+    val parsedStatus = HermesQueueStatus.fromWireName(metadata.stringOrNull(HERMES_TOOL_STATUS_KEY))
     val prompt = runCatching {
         Json.parseToJsonElement(input).jsonObject["prompt"]?.jsonPrimitive?.content.orEmpty()
     }.getOrDefault("")
@@ -136,7 +135,11 @@ private fun UIMessagePart.Tool.toHermesQueueRecord(): HermesQueueRecord? {
     val resultAnnounced = if (hasResultAnnounced) {
         metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY) == true
     } else {
-        status.isTerminal
+        parsedStatus?.isTerminal == true
+    }
+    val status = parsedStatus ?: when {
+        outputText.isNotBlank() && hasResultAnnounced -> HermesQueueStatus.Failed
+        else -> return null
     }
 
     return HermesQueueRecord(

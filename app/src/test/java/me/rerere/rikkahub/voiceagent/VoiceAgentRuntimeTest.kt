@@ -663,7 +663,11 @@ class VoiceAgentRuntimeTest {
 
         toolApi.awaitRemoteCancelled("call-local-timeout")
         assertEquals(listOf(queuedAck("call-local-timeout")), gemini.toolResponses)
-        assertEquals(emptyList<Pair<Long?, String>>(), gemini.textTurns)
+        val followUp = gemini.textTurns.single()
+        assertNull(followUp.first)
+        assertTrue(followUp.second.contains("Original request:\nslow"))
+        assertTrue(followUp.second.contains("Hermes status: expired"))
+        assertTrue(followUp.second.contains("Reason: Hermes job polling timed out."))
         assertEquals(
             VoiceToolStatus.HermesFailed(
                 callId = "call-local-timeout",
@@ -719,14 +723,21 @@ class VoiceAgentRuntimeTest {
             .single { it.toolCallId == "call-malformed" }
         assertEquals("job-1", tool.metadata?.get("voice_tool_job_id")?.jsonPrimitive?.content)
         assertTrue(tool.output.text().contains("Hermes job succeeded without an answer"))
+        val followUp = gemini.textTurns.single()
+        assertNull(followUp.first)
+        assertTrue(followUp.second.contains("Original request:\nslow"))
+        assertTrue(followUp.second.contains("Hermes status: failed"))
+        assertTrue(followUp.second.contains("Reason: Hermes job succeeded without an answer"))
+        assertTrue(tool.metadata?.get("voice_tool_result_announced")?.jsonPrimitive?.boolean == true)
     }
 
     @Test
     fun `Hermes unknown poll status persists failure with job id`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
         val coordinator = VoiceAgentCoordinator(
-            gemini = FakeGeminiLiveVoiceClient(),
+            gemini = gemini,
             toolApi = toolApi,
             audio = FakeVoiceAudioEngine(),
             conversationStore = conversationStore,
@@ -754,6 +765,12 @@ class VoiceAgentRuntimeTest {
             .filterIsInstance<UIMessagePart.Tool>()
             .single { it.toolCallId == "call-unknown" }
         assertEquals("job-1", tool.metadata?.get("voice_tool_job_id")?.jsonPrimitive?.content)
+        val followUp = gemini.textTurns.single()
+        assertNull(followUp.first)
+        assertTrue(followUp.second.contains("Original request:\nslow"))
+        assertTrue(followUp.second.contains("Hermes status: failed"))
+        assertTrue(followUp.second.contains("Reason: Unknown Hermes job status: mystery"))
+        assertTrue(tool.metadata?.get("voice_tool_result_announced")?.jsonPrimitive?.boolean == true)
     }
 
     @Test
