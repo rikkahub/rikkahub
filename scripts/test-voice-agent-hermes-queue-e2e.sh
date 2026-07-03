@@ -59,6 +59,15 @@ assert_file_contains_exactly() {
   fi
 }
 
+assert_file_not_exists() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    printf 'Expected file not to exist: %s\n' "$path" >&2
+    printf 'Actual contents:\n%s\n' "$(cat "$path")" >&2
+    exit 1
+  fi
+}
+
 write_fake_readiness_script() {
   cat > "$TMP_DIR/adb-ready.sh" <<'FAKE_READY'
 #!/usr/bin/env bash
@@ -129,9 +138,20 @@ case "$args" in
 06-11 12:00:01.000 I/VoiceAudioDebugInjection(1): debug_audio_injection result delivered=true
 06-11 12:00:01.524 D/VoiceAgentGemini(1): event kind=SessionResumptionUpdate
 LOGS
-    if [[ "${FAKE_QUEUE_SCENARIO:-pass}" == "delayed-markers" ]]; then
-      sleep 2
-    fi
+    case "${FAKE_QUEUE_SCENARIO:-pass}" in
+      delayed-markers)
+        sleep 2
+        ;;
+      missing-tool-call)
+        sleep 2
+        exit 0
+        ;;
+      forbidden-before-tool-call)
+        printf '06-11 12:00:02.000 E/VoiceAgentCallSession(1): Voice Lab request failed 524\n'
+        sleep 1
+        exit 0
+        ;;
+    esac
     cat <<'LOGS'
 06-11 12:00:02.000 D/VoiceAgentE2E(1): hermes_tool_call_received callId=call-a promptChars=5
 06-11 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_call_received callId=call-b promptChars=6
@@ -291,7 +311,7 @@ EVENTS
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-queue/input-transcript.txt")
     require_drain_before_artifact_pull "$args"
-    printf 'Ask Hermes three separate questions now.'
+    printf 'Ask Hermes two separate questions now.'
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/trace-queue/output-transcript.txt")
     require_drain_before_artifact_pull "$args"
@@ -318,7 +338,7 @@ EVENTS
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/input-transcript.txt")
     require_drain_before_artifact_pull "$args"
-    printf 'Ask Hermes three separate questions now.'
+    printf 'Ask Hermes two separate questions now.'
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/output-transcript.txt")
     require_drain_before_artifact_pull "$args"
@@ -331,6 +351,36 @@ EVENTS
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/hermes-answer.txt")
     require_drain_before_artifact_pull "$args"
     printf 'latest Hermes answer snapshot'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/input-transcript.txt")
+    if [[ "${FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS:-0}" == "1" ]]; then
+      printf 'Gemini understood from voice: '
+      printf 'A%.0s' {1..260}
+      printf 'diagnostic-tail'
+    else
+      printf 'Ask Hermes two separate questions now.'
+    fi
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/output-transcript.txt")
+    printf 'I answered directly instead of using Hermes.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/hermes-call.txt")
+    printf 'latest diagnostic Hermes prompt snapshot'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/hermes-events.ndjson")
+    printf '{"type":"diagnostic","jobId":"job-diagnostic"}'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/input-transcript.txt")
+    printf 'Ask Hermes two separate questions now.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/output-transcript.txt")
+    printf 'I answered directly instead of using Hermes.'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/hermes-call.txt")
+    printf 'latest diagnostic Hermes prompt snapshot'
+    ;;
+  "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/hermes-events.ndjson")
+    printf '{"type":"diagnostic","jobId":"job-diagnostic"}'
     ;;
   *)
     printf 'unexpected adb args: %s\n' "$args" >&2
@@ -353,7 +403,7 @@ export FAKE_ADB_END_MARKER
 export FAKE_ADB_DRAINED_MARKER
 : > "$FAKE_ADB_ARGS_LOG"
 
-default_prompt="Ask Hermes three separate questions now. First, ask whether he is connected to G Brain. Second, ask him to recall the private queue test fact. Third, ask him to summarize the latest Arthur status. Keep talking with me while those Hermes requests run, and tell me each answer when it is ready."
+default_prompt="Ask Hermes two separate questions now. First, use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no. Second, use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me each Hermes answer when it is ready."
 
 pass_log_dir="$TMP_DIR/pass-log"
 set +e
@@ -423,7 +473,7 @@ if [[ "$delayed_markers_status" -ne 0 ]]; then
 fi
 assert_contains "$delayed_markers_output" "PASS marker: at least 2 ask_hermes tool calls"
 assert_contains "$delayed_markers_output" "Voice Agent Hermes queue E2E reached manual review gate."
-assert_file_contains "$delayed_markers_log_dir/report.txt" "Ask Hermes three separate questions now."
+assert_file_contains "$delayed_markers_log_dir/report.txt" "Ask Hermes two separate questions now."
 assert_file_contains "$delayed_markers_log_dir/report.txt" "\"jobId\":\"job-a\""
 assert_file_contains "$delayed_markers_log_dir/report.txt" "latest Hermes prompt snapshot"
 assert_file_contains "$delayed_markers_log_dir/report.txt" "latest Hermes answer snapshot"
@@ -466,6 +516,117 @@ assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/output-transc
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-call.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-answer.txt"
 assert_not_contains "$(cat "$FAKE_ADB_ARGS_LOG")" "cat no_backup/voice-e2e/trace-queue"
+
+missing_tool_call_log_dir="$TMP_DIR/missing-tool-call-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+missing_tool_call_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_QUEUE_SCENARIO=missing-tool-call \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$missing_tool_call_log_dir" \
+  VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_QUEUE_E2E_COMPLETION_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+missing_tool_call_status=$?
+set -e
+if [[ "$missing_tool_call_status" -eq 0 ]]; then
+  printf 'Expected missing-tool-call scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_tool_call_output" >&2
+  exit 1
+fi
+missing_tool_call_diagnostics="$missing_tool_call_log_dir/missing-tool-call-diagnostics.txt"
+assert_contains "$missing_tool_call_output" "ask_hermes tool calls, found 0."
+assert_contains "$missing_tool_call_output" \
+  "Voice Agent Hermes queue E2E diagnostic artifact: $missing_tool_call_diagnostics"
+assert_file_contains "$missing_tool_call_diagnostics" "Text used to generate voice: $default_prompt"
+assert_file_contains "$missing_tool_call_diagnostics" "Gemini understood from voice: Ask Hermes two separate questions now."
+assert_file_contains "$missing_tool_call_diagnostics" "Gemini response to user: I answered directly instead of using Hermes."
+assert_file_contains "$missing_tool_call_diagnostics" "Latest Hermes call: latest diagnostic Hermes prompt snapshot"
+assert_file_contains "$missing_tool_call_diagnostics" 'Hermes queue events: {"type":"diagnostic","jobId":"job-diagnostic"}'
+if [[ "$missing_tool_call_output" == *"I answered directly instead of using Hermes."* ||
+  "$missing_tool_call_output" == *"latest diagnostic Hermes prompt snapshot"* ||
+  "$missing_tool_call_output" == *"job-diagnostic"* ||
+  "$missing_tool_call_output" == *"$default_prompt"* ||
+  "$missing_tool_call_output" == *"Ask Hermes two separate questions now."* ]]; then
+  printf 'Expected private diagnostic contents not to be printed to process output.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_tool_call_output" >&2
+  exit 1
+fi
+assert_file_contains "$FAKE_ADB_ARGS_LOG" \
+  "exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/input-transcript.txt"
+
+large_diagnostic_log_dir="$TMP_DIR/large-diagnostic-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+large_diagnostic_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_QUEUE_SCENARIO=missing-tool-call \
+  FAKE_ADB_LARGE_DIAGNOSTIC_ARTIFACTS=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$large_diagnostic_log_dir" \
+  VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_QUEUE_E2E_COMPLETION_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+large_diagnostic_status=$?
+set -e
+if [[ "$large_diagnostic_status" -eq 0 ]]; then
+  printf 'Expected large diagnostic artifact scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$large_diagnostic_output" >&2
+  exit 1
+fi
+large_diagnostic_file="$large_diagnostic_log_dir/missing-tool-call-diagnostics.txt"
+assert_contains "$large_diagnostic_output" \
+  "Voice Agent Hermes queue E2E diagnostic artifact: $large_diagnostic_file"
+assert_file_contains "$large_diagnostic_file" "Gemini understood from voice: Gemini understood from voice: AAAAAAAAAAAAAAAA"
+if [[ "$large_diagnostic_output" == *"AAAAAAAAAAAAAAAA"* ||
+  "$large_diagnostic_output" == *"diagnostic-tail"* ]]; then
+  printf 'Expected diagnostic preview contents not to print to process output.\n' >&2
+  printf 'Actual output:\n%s\n' "$large_diagnostic_output" >&2
+  exit 1
+fi
+if [[ "$(cat "$large_diagnostic_file")" == *"diagnostic-tail"* ]]; then
+  printf 'Expected diagnostic artifact not to contain content past 240 bytes.\n' >&2
+  printf 'Actual diagnostic file:\n%s\n' "$(cat "$large_diagnostic_file")" >&2
+  exit 1
+fi
+
+forbidden_before_tool_call_log_dir="$TMP_DIR/forbidden-before-tool-call-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+forbidden_before_tool_call_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_QUEUE_SCENARIO=forbidden-before-tool-call \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$forbidden_before_tool_call_log_dir" \
+  VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_QUEUE_E2E_COMPLETION_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+forbidden_before_tool_call_status=$?
+set -e
+if [[ "$forbidden_before_tool_call_status" -eq 0 ]]; then
+  printf 'Expected forbidden-before-tool-call scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$forbidden_before_tool_call_output" >&2
+  exit 1
+fi
+assert_contains "$forbidden_before_tool_call_output" "Forbidden marker found: common forbidden marker"
+assert_not_contains "$forbidden_before_tool_call_output" "Voice Agent Hermes queue E2E diagnostic artifact:"
+assert_file_not_exists "$forbidden_before_tool_call_log_dir/missing-tool-call-diagnostics.txt"
 
 one_complete_log_dir="$TMP_DIR/one-complete-log"
 set +e
