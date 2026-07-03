@@ -70,6 +70,36 @@ data class HermesQueueSnapshot(
         }.trim()
     }
 
+    fun toStatusQuestionPromptSummary(): String {
+        if (active.isEmpty() && unannouncedTerminal.isEmpty()) return ""
+
+        val completedWaiting = unannouncedTerminal.countStatus(HermesQueueStatus.Complete)
+        val failedWaiting = unannouncedTerminal.countStatus(HermesQueueStatus.Failed)
+        val expiredWaiting = unannouncedTerminal.countStatus(HermesQueueStatus.Expired)
+        val canceledWaiting = unannouncedTerminal.countStatus(HermesQueueStatus.Canceled)
+
+        return buildString {
+            appendLine("Durable Hermes queue status:")
+            active.forEach { record ->
+                appendLine("- Still ${record.status.wireName}: ${record.prompt}")
+            }
+            if (unannouncedTerminal.isNotEmpty()) {
+                appendLine(
+                    "- Unannounced terminal results: " +
+                        "completed=$completedWaiting, " +
+                        "failed=$failedWaiting, " +
+                        "expired=$expiredWaiting, " +
+                        "canceled=$canceledWaiting"
+                )
+            }
+            append(
+                "When the user asks about Hermes status, answer only from this durable queue status. " +
+                    "Do not invent completed results. Do not describe terminal result contents unless a later " +
+                    "Hermes completion follow-up turn provides them."
+            )
+        }.trim()
+    }
+
     fun toPromptSummary(): String {
         if (!hasPromptSummary) return ""
         return buildString {
@@ -129,6 +159,9 @@ internal fun List<HermesQueueRecord>.latestByHermesDurableIdentity(): List<Herme
         .filter { record -> seen.add(record.durableIdentity()) }
         .asReversed()
 }
+
+private fun List<HermesQueueRecord>.countStatus(status: HermesQueueStatus): Int =
+    count { it.status == status }
 
 private data class HermesDurableIdentity(
     val callId: String,

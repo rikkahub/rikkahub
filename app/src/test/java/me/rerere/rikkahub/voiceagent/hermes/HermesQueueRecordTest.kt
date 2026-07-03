@@ -254,6 +254,75 @@ class HermesQueueRecordTest {
     }
 
     @Test
+    fun `status question summary exposes active prompts and terminal counts without terminal content`() {
+        val conversation = Conversation.ofId(Uuid.random())
+            .let {
+                persister.upsertHermesTool(
+                    conversation = it,
+                    callId = "active",
+                    prompt = "active request",
+                    status = VoiceToolRecordStatus.Running,
+                    jobId = "job-active",
+                )
+            }
+            .let {
+                persister.upsertHermesTool(
+                    conversation = it,
+                    callId = "complete",
+                    prompt = "complete private request",
+                    status = VoiceToolRecordStatus.Complete("complete private answer"),
+                    jobId = "job-complete",
+                    resultAnnounced = false,
+                )
+            }
+            .let {
+                persister.upsertHermesTool(
+                    conversation = it,
+                    callId = "failed",
+                    prompt = "failed private request",
+                    status = VoiceToolRecordStatus.Failed("failed private reason"),
+                    jobId = "job-failed",
+                    resultAnnounced = false,
+                )
+            }
+            .let {
+                persister.upsertHermesTool(
+                    conversation = it,
+                    callId = "expired",
+                    prompt = "expired private request",
+                    status = VoiceToolRecordStatus.Expired("expired private reason"),
+                    jobId = "job-expired",
+                    resultAnnounced = false,
+                )
+            }
+            .let {
+                persister.upsertHermesTool(
+                    conversation = it,
+                    callId = "canceled",
+                    prompt = "canceled private request",
+                    status = VoiceToolRecordStatus.Canceled("canceled private reason"),
+                    jobId = "job-canceled",
+                    resultAnnounced = false,
+                )
+            }
+
+        val summary = HermesQueueSnapshot.from(conversation).toStatusQuestionPromptSummary()
+
+        assertTrue(summary.contains("Durable Hermes queue status:"))
+        assertTrue(summary.contains("- Still running: active request"))
+        assertTrue(summary.contains("- Unannounced terminal results: completed=1, failed=1, expired=1, canceled=1"))
+        assertTrue(summary.contains("answer only from this durable queue status"))
+        assertFalse(summary.contains("complete private request"))
+        assertFalse(summary.contains("complete private answer"))
+        assertFalse(summary.contains("failed private request"))
+        assertFalse(summary.contains("failed private reason"))
+        assertFalse(summary.contains("expired private request"))
+        assertFalse(summary.contains("expired private reason"))
+        assertFalse(summary.contains("canceled private request"))
+        assertFalse(summary.contains("canceled private reason"))
+    }
+
+    @Test
     fun `queue snapshot uses latest record for duplicate durable identity`() {
         val conversation = conversationOf(
             legacyHermesTool(
