@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.voiceagent
 
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
+
 sealed interface VoiceSessionStatus {
     data object Idle : VoiceSessionStatus
     data object PreparingContext : VoiceSessionStatus
@@ -28,6 +31,39 @@ sealed interface VoiceToolStatus {
     data class HermesFailed(val callId: String, val message: String) : VoiceToolStatus
 }
 
+data class VoiceHermesQueueUiStatus(
+    val activeCount: Int = 0,
+    val completedWaitingCount: Int = 0,
+    val failedWaitingCount: Int = 0,
+    val expiredWaitingCount: Int = 0,
+    val canceledWaitingCount: Int = 0,
+    val announcedTerminalCount: Int = 0,
+) {
+    val hasVisibleWork: Boolean
+        get() = activeCount > 0 ||
+            completedWaitingCount > 0 ||
+            failedWaitingCount > 0 ||
+            expiredWaitingCount > 0 ||
+            canceledWaitingCount > 0
+
+    companion object {
+        fun fromSnapshot(snapshot: HermesQueueSnapshot): VoiceHermesQueueUiStatus {
+            return VoiceHermesQueueUiStatus(
+                activeCount = snapshot.active.size,
+                completedWaitingCount = snapshot.unannouncedTerminal.countStatus(HermesQueueStatus.Complete),
+                failedWaitingCount = snapshot.unannouncedTerminal.countStatus(HermesQueueStatus.Failed),
+                expiredWaitingCount = snapshot.unannouncedTerminal.countStatus(HermesQueueStatus.Expired),
+                canceledWaitingCount = snapshot.unannouncedTerminal.countStatus(HermesQueueStatus.Canceled),
+                announcedTerminalCount = snapshot.announcedTerminal.size,
+            )
+        }
+    }
+}
+
+private fun List<me.rerere.rikkahub.voiceagent.hermes.HermesQueueRecord>.countStatus(
+    status: HermesQueueStatus,
+): Int = count { it.status == status }
+
 sealed interface VoicePersistenceStatus {
     data object Idle : VoicePersistenceStatus
     data object Saving : VoicePersistenceStatus
@@ -50,6 +86,7 @@ data class VoiceAgentUiState(
     val tool: VoiceToolStatus = VoiceToolStatus.Idle,
     val call: VoiceCallStatus = VoiceCallStatus.Idle,
     val toolCalls: Map<String, VoiceToolStatus> = emptyMap(),
+    val hermesQueue: VoiceHermesQueueUiStatus = VoiceHermesQueueUiStatus(),
     val persistence: VoicePersistenceStatus = VoicePersistenceStatus.Idle,
     val inputTranscript: String = "",
     val outputTranscript: String = "",
