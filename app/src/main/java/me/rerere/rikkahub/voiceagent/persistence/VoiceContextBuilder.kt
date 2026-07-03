@@ -149,11 +149,13 @@ class VoiceContextBuilder(
     private fun UIMessagePart.Tool.isUnannouncedTerminalHermesRecord(): Boolean {
         if (toolName != VoiceAgentToolNames.ASK_HERMES) return false
         val metadata = metadata ?: return false
+        val hasResultAnnounced = HERMES_TOOL_RESULT_ANNOUNCED_KEY in metadata
         val resultAnnounced = metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY)
         val status = HermesQueueStatus.fromWireName(metadata.stringOrNull(HERMES_TOOL_STATUS_KEY))
-            ?: return resultAnnounced == false && hasTextOutput()
+            ?: return hasResultAnnounced && resultAnnounced != true && hasTextOutput()
         if (!status.isTerminal) return false
-        return !(resultAnnounced ?: status.isTerminal)
+        if (!hasResultAnnounced) return false
+        return resultAnnounced != true
     }
 
     private fun UIMessagePart.Tool.hasTextOutput(): Boolean {

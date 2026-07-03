@@ -433,6 +433,37 @@ class VoiceContextBuilderTest {
     }
 
     @Test
+    fun `build excludes terminal Hermes tool with malformed announcement metadata from turns`() {
+        val conversation = conversationWith(
+            listOf(
+                UIMessage.user("start malformed announcement background work"),
+                UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(
+                        hermesTool(
+                            callId = "call-malformed-announcement",
+                            prompt = "private malformed announcement request",
+                            status = "complete",
+                            outputText = "private malformed announcement answer",
+                            resultAnnouncedText = "not-a-boolean",
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        val context = VoiceContextBuilder().build(
+            assistantName = "Hermes",
+            assistantPrompt = "Prompt",
+            conversation = conversation,
+        )
+
+        val turnText = context.turns.joinToString("\n") { it.text }
+        assertFalse(turnText.contains("private malformed announcement request"))
+        assertFalse(turnText.contains("private malformed announcement answer"))
+    }
+
+    @Test
     fun `build renders voice system prompt placeholders before Gemini setup`() {
         val context = VoiceContextBuilder(
             placeholderValues = VoicePromptPlaceholderValues(
@@ -521,6 +552,7 @@ class VoiceContextBuilderTest {
         status: String,
         outputText: String? = null,
         resultAnnounced: Boolean = false,
+        resultAnnouncedText: String? = null,
     ): UIMessagePart.Tool = UIMessagePart.Tool(
         toolCallId = callId,
         toolName = VoiceAgentToolNames.ASK_HERMES,
@@ -529,7 +561,11 @@ class VoiceContextBuilderTest {
         metadata = buildJsonObject {
             put(HERMES_TOOL_SOURCE_KEY, VoiceAgentToolNames.ASK_HERMES)
             put(HERMES_TOOL_STATUS_KEY, status)
-            put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnounced)
+            if (resultAnnouncedText != null) {
+                put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnouncedText)
+            } else {
+                put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnounced)
+            }
         },
     )
 
