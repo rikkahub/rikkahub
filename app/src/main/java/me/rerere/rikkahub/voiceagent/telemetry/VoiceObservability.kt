@@ -192,15 +192,17 @@ private val voiceTraceIdRandom = SecureRandom()
 
 internal fun newVoiceTraceId(
     randomInt: (Int) -> Int = voiceTraceIdRandom::nextInt,
+    randomLong: () -> Long = voiceTraceIdRandom::nextLong,
 ): String {
     val value = Math.floorMod(randomInt(VOICE_TRACE_ID_BOUND), VOICE_TRACE_ID_BOUND)
-    return String.format(Locale.US, "VA%06d", value)
+    return String.format(Locale.US, "VA%06d-%016x", value, randomLong())
 }
 
 internal fun newVoiceTraceContext(
     randomInt: (Int) -> Int = voiceTraceIdRandom::nextInt,
+    randomLong: () -> Long = voiceTraceIdRandom::nextLong,
 ): VoiceTraceContext {
-    val traceId = newVoiceTraceId(randomInt)
+    val traceId = newVoiceTraceId(randomInt, randomLong)
     return VoiceTraceContext(
         traceId = traceId,
         voiceSessionId = traceId,

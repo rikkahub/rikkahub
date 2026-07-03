@@ -22,23 +22,38 @@ class VoiceObservabilityTest {
     )
 
     @Test
-    fun `new voice trace context uses same short id for trace and session`() {
-        val trace = newVoiceTraceContext(randomInt = { 42 })
+    fun `new voice trace context uses same high entropy id for trace and session`() {
+        val trace = newVoiceTraceContext(
+            randomInt = { 42 },
+            randomLong = { 0x1234L },
+        )
 
-        assertEquals("VA000042", trace.traceId)
-        assertEquals("VA000042", trace.voiceSessionId)
+        assertEquals("VA000042-0000000000001234", trace.traceId)
+        assertEquals("VA000042-0000000000001234", trace.voiceSessionId)
         assertNull(trace.sentryTrace)
         assertNull(trace.sentryBaggage)
     }
 
     @Test
-    fun `new voice trace id formats six digit voice agent id`() {
+    fun `new voice trace id keeps readable prefix and appends entropy`() {
         val values = listOf(0, 7, 999999)
-        val traceIds = values.map { value -> newVoiceTraceId(randomInt = { value }) }
+        val traceIds = values.map { value ->
+            newVoiceTraceId(
+                randomInt = { value },
+                randomLong = { 0x1234L },
+            )
+        }
 
-        assertEquals(listOf("VA000000", "VA000007", "VA999999"), traceIds)
+        assertEquals(
+            listOf(
+                "VA000000-0000000000001234",
+                "VA000007-0000000000001234",
+                "VA999999-0000000000001234",
+            ),
+            traceIds,
+        )
         traceIds.forEach { traceId ->
-            assertTrue(traceId.matches(Regex("^VA[0-9]{6}$")))
+            assertTrue(traceId.matches(Regex("^VA[0-9]{6}-[0-9a-f]{16}$")))
         }
     }
 
@@ -48,10 +63,13 @@ class VoiceObservabilityTest {
         try {
             Locale.setDefault(Locale.forLanguageTag("ar-EG"))
 
-            val traceId = newVoiceTraceId(randomInt = { 42 })
+            val traceId = newVoiceTraceId(
+                randomInt = { 42 },
+                randomLong = { 0x1234L },
+            )
 
-            assertEquals("VA000042", traceId)
-            assertTrue(traceId.matches(Regex("^VA[0-9]{6}$")))
+            assertEquals("VA000042-0000000000001234", traceId)
+            assertTrue(traceId.matches(Regex("^VA[0-9]{6}-[0-9a-f]{16}$")))
         } finally {
             Locale.setDefault(originalLocale)
         }

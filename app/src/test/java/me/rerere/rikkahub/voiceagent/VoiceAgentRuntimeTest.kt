@@ -3396,6 +3396,21 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `session metadata treats connected to started as a fresh reconnect attempt`() {
+        val connected = testSessionMetadata(
+            status = "connected",
+            providerModel = "gemini-live-test",
+        )
+
+        val startedAfterConnected = connected.withLifecycleUpdate(status = "started")
+
+        assertEquals("started", startedAfterConnected.string("status"))
+        assertNull(startedAfterConnected.providerModel)
+        assertNull(startedAfterConnected.closeStatus)
+        assertNull(startedAfterConnected.endedAtEpochMs)
+    }
+
+    @Test
     fun `session does not overwrite Gemini startup error with connected`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient().apply {
             connectEvent = GeminiLiveEvent.Error(message = "Failed to send Gemini setup message", raw = "{}")
