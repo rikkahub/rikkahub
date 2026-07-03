@@ -362,6 +362,12 @@ EVENTS
     fi
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/output-transcript.txt")
+    if [[ "${FAKE_ADB_FORBIDDEN_DURING_DIAGNOSTICS_LOG_FILE:-}" != "" ]]; then
+      printf '06-11 12:00:03.000 E/VoiceAgentCallSession(1): Voice Lab request failed 524\n' >> "$FAKE_ADB_FORBIDDEN_DURING_DIAGNOSTICS_LOG_FILE"
+    fi
+    if [[ "${FAKE_ADB_MISSING_DIAGNOSTIC_ARTIFACT:-}" == "output-transcript" ]]; then
+      exit 1
+    fi
     printf 'I answered directly instead of using Hermes.'
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/hermes-call.txt")
@@ -404,6 +410,7 @@ export FAKE_ADB_DRAINED_MARKER
 : > "$FAKE_ADB_ARGS_LOG"
 
 default_prompt="Ask Hermes two separate questions now. First, use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no. Second, use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me each Hermes answer when it is ready."
+default_prompt_preview="${default_prompt:0:240}"
 
 pass_log_dir="$TMP_DIR/pass-log"
 set +e
@@ -522,10 +529,10 @@ missing_tool_call_log_dir="$TMP_DIR/missing-tool-call-log"
 set +e
 missing_tool_call_output="$(
   PATH="$TMP_DIR:$PATH" \
+  FAKE_FFMPEG_EXPECTED_PROMPT="$default_prompt" \
   FAKE_QUEUE_SCENARIO=missing-tool-call \
   VOICE_AGENT_E2E_SERIAL=RZ \
   VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
-  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
   VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
   VOICE_AGENT_QUEUE_E2E_LOG_DIR="$missing_tool_call_log_dir" \
   VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=1 \
@@ -544,7 +551,8 @@ missing_tool_call_diagnostics="$missing_tool_call_log_dir/missing-tool-call-diag
 assert_contains "$missing_tool_call_output" "ask_hermes tool calls, found 0."
 assert_contains "$missing_tool_call_output" \
   "Voice Agent Hermes queue E2E diagnostic artifact: $missing_tool_call_diagnostics"
-assert_file_contains "$missing_tool_call_diagnostics" "Text used to generate voice: $default_prompt"
+assert_file_contains "$missing_tool_call_diagnostics" "Text used to generate voice: $default_prompt_preview"
+assert_not_contains "$(cat "$missing_tool_call_diagnostics")" "answer when it is ready."
 assert_file_contains "$missing_tool_call_diagnostics" "Gemini understood from voice: Ask Hermes two separate questions now."
 assert_file_contains "$missing_tool_call_diagnostics" "Gemini response to user: I answered directly instead of using Hermes."
 assert_file_contains "$missing_tool_call_diagnostics" "Latest Hermes call: latest diagnostic Hermes prompt snapshot"
@@ -560,6 +568,100 @@ if [[ "$missing_tool_call_output" == *"I answered directly instead of using Herm
 fi
 assert_file_contains "$FAKE_ADB_ARGS_LOG" \
   "exec-out run-as me.rerere.rikkahub.debug head -c 240 no_backup/voice-e2e/trace-queue/input-transcript.txt"
+
+missing_diagnostic_artifact_log_dir="$TMP_DIR/missing-diagnostic-artifact-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+missing_diagnostic_artifact_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_FFMPEG_EXPECTED_PROMPT="$default_prompt" \
+  FAKE_QUEUE_SCENARIO=missing-tool-call \
+  FAKE_ADB_MISSING_DIAGNOSTIC_ARTIFACT=output-transcript \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$missing_diagnostic_artifact_log_dir" \
+  VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_QUEUE_E2E_COMPLETION_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+missing_diagnostic_artifact_status=$?
+set -e
+if [[ "$missing_diagnostic_artifact_status" -eq 0 ]]; then
+  printf 'Expected missing diagnostic artifact scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_diagnostic_artifact_output" >&2
+  exit 1
+fi
+missing_diagnostic_artifact_file="$missing_diagnostic_artifact_log_dir/missing-tool-call-diagnostics.txt"
+assert_contains "$missing_diagnostic_artifact_output" \
+  "Voice Agent Hermes queue E2E diagnostic artifact: $missing_diagnostic_artifact_file"
+assert_file_contains "$missing_diagnostic_artifact_file" "Gemini response to user: missing"
+
+forbidden_during_diagnostics_log_dir="$TMP_DIR/forbidden-during-diagnostics-log"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+forbidden_during_diagnostics_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_FFMPEG_EXPECTED_PROMPT="$default_prompt" \
+  FAKE_QUEUE_SCENARIO=missing-tool-call \
+  FAKE_ADB_FORBIDDEN_DURING_DIAGNOSTICS_LOG_FILE="$forbidden_during_diagnostics_log_dir/logcat.txt" \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$forbidden_during_diagnostics_log_dir" \
+  VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_QUEUE_E2E_COMPLETION_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+forbidden_during_diagnostics_status=$?
+set -e
+if [[ "$forbidden_during_diagnostics_status" -eq 0 ]]; then
+  printf 'Expected forbidden-during-diagnostics scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$forbidden_during_diagnostics_output" >&2
+  exit 1
+fi
+assert_contains "$forbidden_during_diagnostics_output" "Forbidden marker found: common forbidden marker"
+assert_not_contains "$forbidden_during_diagnostics_output" "Voice Agent Hermes queue E2E diagnostic artifact:"
+assert_file_not_exists "$forbidden_during_diagnostics_log_dir/missing-tool-call-diagnostics.txt"
+
+custom_pcm_missing_tool_call_log_dir="$TMP_DIR/custom-pcm-missing-tool-call-log"
+mkdir -p "$custom_pcm_missing_tool_call_log_dir"
+printf 'stale previous prompt text' > "$custom_pcm_missing_tool_call_log_dir/generated-prompt.txt"
+: > "$FAKE_ADB_ARGS_LOG"
+set +e
+custom_pcm_missing_tool_call_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_QUEUE_SCENARIO=missing-tool-call \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$custom_pcm_missing_tool_call_log_dir" \
+  VOICE_AGENT_QUEUE_E2E_TOOL_CALL_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_QUEUE_E2E_COMPLETION_TIMEOUT_SECONDS=1 \
+  VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+custom_pcm_missing_tool_call_status=$?
+set -e
+if [[ "$custom_pcm_missing_tool_call_status" -eq 0 ]]; then
+  printf 'Expected custom PCM missing-tool-call scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$custom_pcm_missing_tool_call_output" >&2
+  exit 1
+fi
+custom_pcm_missing_tool_call_diagnostics="$custom_pcm_missing_tool_call_log_dir/missing-tool-call-diagnostics.txt"
+assert_contains "$custom_pcm_missing_tool_call_output" \
+  "Voice Agent Hermes queue E2E diagnostic artifact: $custom_pcm_missing_tool_call_diagnostics"
+assert_file_contains "$custom_pcm_missing_tool_call_diagnostics" "Text used to generate voice: missing"
+assert_not_contains "$(cat "$custom_pcm_missing_tool_call_diagnostics")" "stale previous prompt text"
+if [[ "$custom_pcm_missing_tool_call_output" == *"$default_prompt"* ||
+  "$custom_pcm_missing_tool_call_output" == *"Ask Hermes two separate questions now."* ]]; then
+  printf 'Expected custom PCM diagnostic contents not to be printed to process output.\n' >&2
+  printf 'Actual output:\n%s\n' "$custom_pcm_missing_tool_call_output" >&2
+  exit 1
+fi
 
 large_diagnostic_log_dir="$TMP_DIR/large-diagnostic-log"
 : > "$FAKE_ADB_ARGS_LOG"
@@ -841,5 +943,52 @@ if [[ "$supplied_status" -ne 0 ]]; then
   exit 1
 fi
 assert_file_contains_exactly "$supplied_log_dir/generated-prompt.txt" "Supplied prompt text for report."
+
+early_validation_log_dir="$TMP_DIR/early-validation-log"
+mkdir -p "$early_validation_log_dir"
+printf 'stale diagnostic' > "$early_validation_log_dir/missing-tool-call-diagnostics.txt"
+set +e
+early_validation_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/missing-prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$early_validation_log_dir" \
+  "$SCRIPT" 2>&1
+)"
+early_validation_status=$?
+set -e
+if [[ "$early_validation_status" -eq 0 ]]; then
+  printf 'Expected early validation scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$early_validation_output" >&2
+  exit 1
+fi
+assert_contains "$early_validation_output" "VOICE_AGENT_QUEUE_E2E_PCM_PATH does not exist: $TMP_DIR/missing-prompt.pcm"
+assert_file_not_exists "$early_validation_log_dir/missing-tool-call-diagnostics.txt"
+
+invalid_expected_log_dir="$TMP_DIR/invalid-expected-log"
+mkdir -p "$invalid_expected_log_dir"
+printf 'stale diagnostic' > "$invalid_expected_log_dir/missing-tool-call-diagnostics.txt"
+set +e
+invalid_expected_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$TMP_DIR/queue-prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_QUEUE_E2E_EXPECTED_COMPLETIONS=0 \
+  VOICE_AGENT_QUEUE_E2E_LOG_DIR="$invalid_expected_log_dir" \
+  "$SCRIPT" 2>&1
+)"
+invalid_expected_status=$?
+set -e
+if [[ "$invalid_expected_status" -eq 0 ]]; then
+  printf 'Expected invalid expected-completions scenario to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$invalid_expected_output" >&2
+  exit 1
+fi
+assert_contains "$invalid_expected_output" "VOICE_AGENT_QUEUE_E2E_EXPECTED_COMPLETIONS must be a positive integer: 0"
+assert_file_not_exists "$invalid_expected_log_dir/missing-tool-call-diagnostics.txt"
 
 printf 'Queue E2E shell harness passed.\n'

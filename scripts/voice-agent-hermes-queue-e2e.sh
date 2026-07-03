@@ -19,12 +19,15 @@ APP_HERMES_ANSWER_ARTIFACT="hermes-answer.txt"
 DEVICE_TMP_PCM="/data/local/tmp/rikkahub-voice-agent-queue-e2e-prompt.pcm"
 LOG_DIR="${VOICE_AGENT_QUEUE_E2E_LOG_DIR:-build/voice-agent-queue-e2e}"
 LOG_FILE="$LOG_DIR/logcat.txt"
-DEFAULT_PROMPT_TEXT="Ask Hermes three separate questions now. First, ask whether he is connected to G Brain. Second, ask him to recall the private queue test fact. Third, ask him to summarize the latest Arthur status. Keep talking with me while those Hermes requests run, and tell me each answer when it is ready."
+DEFAULT_PROMPT_TEXT="Ask Hermes two separate questions now. First, use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no. Second, use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me each Hermes answer when it is ready."
 FLITE_VOICE="${VOICE_AGENT_QUEUE_E2E_FLITE_VOICE:-slt}"
 PROMPT_TEXT="${VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT:-$DEFAULT_PROMPT_TEXT}"
 GENERATED_PCM_PATH="${VOICE_AGENT_QUEUE_E2E_GENERATED_PCM_PATH:-$LOG_DIR/generated-prompt.pcm}"
 PROMPT_SOURCE_TEXT_FILE="$LOG_DIR/generated-prompt.txt"
 REPORT_FILE="${VOICE_AGENT_QUEUE_E2E_REPORT_PATH:-$LOG_DIR/report.txt}"
+MISSING_TOOL_CALL_DIAGNOSTICS_FILE="$LOG_DIR/missing-tool-call-diagnostics.txt"
+mkdir -p "$LOG_DIR" "$(dirname "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE")"
+rm -f "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE"
 HERMES_EVENTS_FILE="$LOG_DIR/hermes-events.ndjson"
 INPUT_TRANSCRIPT_FILE="$LOG_DIR/input-transcript.txt"
 OUTPUT_TRANSCRIPT_FILE="$LOG_DIR/output-transcript.txt"
@@ -355,6 +358,60 @@ write_e2e_report() {
   printf 'Voice Agent Hermes queue E2E report: %s\n' "$REPORT_FILE"
 }
 
+append_artifact_preview_to_file() {
+  local label="$1"
+  local artifact_dir="$2"
+  local artifact_name="$3"
+  local output_file="$4"
+  local app_path
+  local temp_path
+  app_path="$(app_artifact_path "$artifact_dir" "$artifact_name")"
+  temp_path="$(mktemp "$LOG_DIR/report-artifact.XXXXXX")"
+  register_report_temp_file "$temp_path"
+  chmod 600 "$temp_path"
+  if adb_exec_out_to_file "$temp_path" run-as "$PACKAGE" head -c 240 "$app_path" &&
+    [[ -s "$temp_path" ]]; then
+    printf '%s: ' "$label" >> "$output_file"
+    tr '\r\n' ' ' < "$temp_path" | cut -c 1-240 >> "$output_file"
+    printf '\n' >> "$output_file"
+  else
+    printf '%s: missing\n' "$label" >> "$output_file"
+  fi
+  rm -f "$temp_path"
+}
+
+write_missing_tool_call_diagnostics() {
+  umask 077
+  mkdir -p "$LOG_DIR" "$(dirname "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE")"
+  local artifact_dir
+  local temp_path
+  artifact_dir="$(resolve_app_artifact_dir)"
+  temp_path="$(mktemp "$LOG_DIR/missing-tool-call-diagnostics.XXXXXX")"
+  register_report_temp_file "$temp_path"
+  chmod 600 "$temp_path"
+  {
+    printf 'Voice Agent Hermes queue E2E diagnostic artifacts after missing tool call:\n'
+    printf 'Text used to generate voice: '
+    if [[ -s "$PROMPT_SOURCE_TEXT_FILE" ]]; then
+      tr '\r\n' ' ' < "$PROMPT_SOURCE_TEXT_FILE" | cut -c 1-240
+    else
+      printf 'missing'
+    fi
+    printf '\n'
+  } > "$temp_path"
+  append_artifact_preview_to_file "Gemini understood from voice" "$artifact_dir" "$APP_INPUT_TRANSCRIPT_ARTIFACT" "$temp_path"
+  append_artifact_preview_to_file "Gemini response to user" "$artifact_dir" "$APP_OUTPUT_TRANSCRIPT_ARTIFACT" "$temp_path"
+  append_artifact_preview_to_file "Latest Hermes call" "$artifact_dir" "$APP_HERMES_CALL_ARTIFACT" "$temp_path"
+  append_artifact_preview_to_file "Hermes queue events" "$artifact_dir" "$APP_HERMES_EVENTS_ARTIFACT" "$temp_path"
+  if ! fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN"; then
+    rm -f "$temp_path"
+    return 1
+  fi
+  mv -f "$temp_path" "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE"
+  chmod 600 "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE"
+  printf 'Voice Agent Hermes queue E2E diagnostic artifact: %s\n' "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE" >&2
+}
+
 generate_pcm_prompt() {
   require_command ffmpeg
   if [[ ! "$FLITE_VOICE" =~ ^[A-Za-z0-9_-]+$ ]]; then
@@ -492,6 +549,8 @@ elif [[ -n "${VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT:-}" ]]; then
   mkdir -p "$LOG_DIR"
   printf '%s' "$PROMPT_TEXT" > "$PROMPT_SOURCE_TEXT_FILE"
   chmod 600 "$PROMPT_SOURCE_TEXT_FILE"
+else
+  rm -f "$PROMPT_SOURCE_TEXT_FILE"
 fi
 
 if [[ ! -f "$VOICE_AGENT_QUEUE_E2E_PCM_PATH" ]]; then
@@ -500,8 +559,9 @@ if [[ ! -f "$VOICE_AGENT_QUEUE_E2E_PCM_PATH" ]]; then
 fi
 
 mkdir -p "$LOG_DIR"
-rm -f "$LOG_FILE" "$REPORT_FILE" "$HERMES_EVENTS_FILE" "$INPUT_TRANSCRIPT_FILE" \
-  "$OUTPUT_TRANSCRIPT_FILE" "$HERMES_CALL_FILE" "$HERMES_ANSWER_FILE"
+rm -f "$LOG_FILE" "$REPORT_FILE" "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE" \
+  "$HERMES_EVENTS_FILE" "$INPUT_TRANSCRIPT_FILE" "$OUTPUT_TRANSCRIPT_FILE" \
+  "$HERMES_CALL_FILE" "$HERMES_ANSWER_FILE"
 
 printf 'Checking ADB device readiness...\n'
 if [[ -x "$ADB_READY_SCRIPT" ]]; then
@@ -577,7 +637,17 @@ adb_cmd shell am broadcast \
   --el trailing_silence_ms "${VOICE_AGENT_QUEUE_E2E_TRAILING_SILENCE_MS:-200}" >/dev/null
 
 wait_for_log "debug PCM delivered" 'VoiceAudioDebugInjection.*debug_audio_injection result delivered=true' 30
-wait_for_log_count "at least $EXPECTED_COMPLETIONS ask_hermes tool calls" 'VoiceAgentE2E.*hermes_tool_call_received' "$EXPECTED_COMPLETIONS" "$TOOL_CALL_TIMEOUT_SECONDS"
+if ! wait_for_log_count "at least $EXPECTED_COMPLETIONS ask_hermes tool calls" \
+  'VoiceAgentE2E.*hermes_tool_call_received' \
+  "$EXPECTED_COMPLETIONS" \
+  "$TOOL_CALL_TIMEOUT_SECONDS"; then
+  if [[ "$WAIT_FOR_LOG_FAILURE" == "timeout" ]]; then
+    fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
+    write_missing_tool_call_diagnostics
+    fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
+  fi
+  exit 1
+fi
 wait_for_log_count "at least $EXPECTED_COMPLETIONS queued Hermes jobs" 'hermes_queue_event type=job_created|hermes_job_created|diagnostic name=hermes_job_created' "$EXPECTED_COMPLETIONS" "$TOOL_CALL_TIMEOUT_SECONDS"
 assert_distinct_created_jobs "$EXPECTED_COMPLETIONS"
 wait_for_log_count "at least $EXPECTED_COMPLETIONS queued Hermes tool responses" 'VoiceAgentGemini.*send kind=toolResponse sent=true' "$EXPECTED_COMPLETIONS" 60
