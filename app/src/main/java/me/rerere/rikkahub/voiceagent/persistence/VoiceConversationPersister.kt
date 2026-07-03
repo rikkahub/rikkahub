@@ -411,8 +411,12 @@ class VoiceConversationPersister {
     }
 
     private fun UIMessagePart.Tool.resultAnnouncedOrDefault(): Boolean {
-        return metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY)
-            ?: (metadata.queueStatus()?.isTerminal == true)
+        val toolMetadata = metadata
+        return if (toolMetadata != null && HERMES_TOOL_RESULT_ANNOUNCED_KEY in toolMetadata) {
+            toolMetadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY) == true
+        } else {
+            metadata.queueStatus()?.isTerminal == true
+        }
     }
 
     private fun VoiceToolRecordStatus.toMetadata(

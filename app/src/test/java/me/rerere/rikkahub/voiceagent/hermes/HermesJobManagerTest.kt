@@ -1648,8 +1648,6 @@ class HermesJobManagerTest {
         val snapshot = HermesQueueSnapshot.from(conversationStore.conversation.value)
         assertTrue(snapshot.unannouncedTerminal.isEmpty())
         assertEquals(listOf(HermesQueueStatus.Failed), snapshot.announcedTerminal.map { it.status })
-        assertFalse(snapshot.toPromptSummary().contains("old answer"))
-        assertFalse(snapshot.toPromptSummary().contains("latest failure"))
         assertEquals(1, bridge.terminalFollowUps.size)
         assertEquals("latest failure", bridge.terminalFollowUps.single().reason)
     }

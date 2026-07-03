@@ -63,8 +63,6 @@ class HermesQueueRecordTest {
         assertTrue(snapshot.active.isEmpty())
         assertTrue(snapshot.unannouncedTerminal.isEmpty())
         assertEquals(listOf("call-complete", "call-failed"), snapshot.announcedTerminal.map { it.callId })
-        assertFalse(snapshot.toPromptSummary().contains("legacy complete answer"))
-        assertFalse(snapshot.toPromptSummary().contains("legacy failed reason"))
     }
 
     @Test
@@ -104,6 +102,28 @@ class HermesQueueRecordTest {
     }
 
     @Test
+    fun `terminal records with malformed announcement metadata remain unannounced`() {
+        val conversation = conversationOf(
+            legacyHermesTool(
+                callId = "bad-announced",
+                prompt = "bad announced request",
+                status = "complete",
+                outputText = "bad announced answer",
+                metadata = buildJsonObject {
+                    put(HERMES_TOOL_SOURCE_KEY, VoiceAgentToolNames.ASK_HERMES)
+                    put(HERMES_TOOL_STATUS_KEY, "complete")
+                    put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, "not-a-boolean")
+                },
+            )
+        )
+
+        val snapshot = HermesQueueSnapshot.from(conversation)
+
+        assertEquals(listOf("bad-announced"), snapshot.unannouncedTerminal.map { it.callId })
+        assertTrue(snapshot.announcedTerminal.isEmpty())
+    }
+
+    @Test
     fun `queue parser skips non-Hermes tools and defaults malformed input prompts`() {
         val conversation = conversationOf(
             legacyHermesTool(
@@ -132,7 +152,7 @@ class HermesQueueRecordTest {
     }
 
     @Test
-    fun `snapshot summary renders expired and canceled terminal errors`() {
+    fun `snapshot records expired and canceled terminal errors`() {
         val conversation = Conversation.ofId(Uuid.random())
             .let {
                 persister.upsertHermesTool(
@@ -156,13 +176,10 @@ class HermesQueueRecordTest {
             }
 
         val snapshot = HermesQueueSnapshot.from(conversation)
-        val summary = snapshot.toPromptSummary()
 
         assertEquals(listOf("call-expired", "call-canceled"), snapshot.unannouncedTerminal.map { it.callId })
-        assertTrue(summary.contains("Expired: expired request"))
-        assertTrue(summary.contains("Reason: expired reason"))
-        assertTrue(summary.contains("Canceled: canceled request"))
-        assertTrue(summary.contains("Reason: canceled reason"))
+        assertEquals(listOf("expired request", "canceled request"), snapshot.unannouncedTerminal.map { it.prompt })
+        assertEquals(listOf("expired reason", "canceled reason"), snapshot.unannouncedTerminal.map { it.error })
     }
 
     @Test
@@ -248,9 +265,9 @@ class HermesQueueRecordTest {
         assertEquals(listOf("job-active"), snapshot.active.map { it.jobId })
         assertEquals(listOf("new-result"), snapshot.unannouncedTerminal.map { it.callId })
         assertEquals(listOf("old-result"), snapshot.announcedTerminal.map { it.callId })
-        assertTrue(snapshot.toPromptSummary().contains("active request"))
-        assertTrue(snapshot.toPromptSummary().contains("new answer"))
-        assertFalse(snapshot.toPromptSummary().contains("old answer"))
+        assertEquals(listOf("active request"), snapshot.active.map { it.prompt })
+        assertEquals(listOf("new answer"), snapshot.unannouncedTerminal.map { it.answer })
+        assertEquals(listOf("old answer"), snapshot.announcedTerminal.map { it.answer })
     }
 
     @Test
@@ -369,13 +386,11 @@ class HermesQueueRecordTest {
 
         val records = conversation.hermesQueueRecords()
         val snapshot = HermesQueueSnapshot.from(conversation)
-        val summary = snapshot.toPromptSummary()
 
         assertEquals(2, records.size)
         assertEquals(listOf(HermesQueueStatus.Failed), snapshot.unannouncedTerminal.map { it.status })
         assertTrue(snapshot.announcedTerminal.isEmpty())
-        assertFalse(summary.contains("old answer"))
-        assertTrue(summary.contains("latest failure"))
+        assertEquals(listOf("latest failure"), snapshot.unannouncedTerminal.map { it.error })
     }
 
     @Test

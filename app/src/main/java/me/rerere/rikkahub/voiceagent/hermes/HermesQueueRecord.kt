@@ -53,9 +53,6 @@ data class HermesQueueSnapshot(
     val unannouncedTerminal: List<HermesQueueRecord>,
     val announcedTerminal: List<HermesQueueRecord>,
 ) {
-    val hasPromptSummary: Boolean
-        get() = active.isNotEmpty() || unannouncedTerminal.isNotEmpty()
-
     fun toStatusQuestionPromptSummary(): String {
         if (active.isEmpty() && unannouncedTerminal.isEmpty()) return ""
 
@@ -82,40 +79,6 @@ data class HermesQueueSnapshot(
                 "When the user asks about Hermes status, answer only from this durable queue status. " +
                     "Do not invent completed results. Do not describe terminal result contents unless a later " +
                     "Hermes completion follow-up turn provides them."
-            )
-        }.trim()
-    }
-
-    fun toPromptSummary(): String {
-        if (!hasPromptSummary) return ""
-        return buildString {
-            appendLine("Durable Hermes queue status:")
-            active.forEach { record ->
-                appendLine("- Still ${record.status.wireName}: ${record.prompt}")
-            }
-            unannouncedTerminal.forEach { record ->
-                when (record.status) {
-                    HermesQueueStatus.Complete -> appendLine(
-                        "- Completed: ${record.prompt}\n  Hermes answer: ${record.answer.orEmpty()}"
-                    )
-
-                    HermesQueueStatus.Failed,
-                    HermesQueueStatus.Expired,
-                    HermesQueueStatus.Canceled,
-                        -> appendLine(
-                            "- ${record.status.wireName.replaceFirstChar { it.uppercase() }}: " +
-                                "${record.prompt}\n  Reason: ${record.error.orEmpty()}"
-                        )
-
-                    HermesQueueStatus.Pending,
-                    HermesQueueStatus.Queued,
-                    HermesQueueStatus.Running,
-                        -> Unit
-                }
-            }
-            append(
-                "Briefly tell the user about any completed, failed, expired, or canceled Hermes queue items above. " +
-                    "Do not repeat terminal results after they have already been announced."
             )
         }.trim()
     }
@@ -169,8 +132,12 @@ private fun UIMessagePart.Tool.toHermesQueueRecord(): HermesQueueRecord? {
     val outputText = output.filterIsInstance<UIMessagePart.Text>()
         .joinToString(separator = "\n") { it.text }
         .trim()
-    val resultAnnounced = metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY)
-        ?: status.isTerminal
+    val hasResultAnnounced = HERMES_TOOL_RESULT_ANNOUNCED_KEY in metadata
+    val resultAnnounced = if (hasResultAnnounced) {
+        metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY) == true
+    } else {
+        status.isTerminal
+    }
 
     return HermesQueueRecord(
         callId = toolCallId,
