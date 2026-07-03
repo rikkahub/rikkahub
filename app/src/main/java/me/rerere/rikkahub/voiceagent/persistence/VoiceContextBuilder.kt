@@ -1,11 +1,19 @@
 package me.rerere.rikkahub.voiceagent.persistence
 
 import android.os.Build
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
+import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_RESULT_ANNOUNCED_KEY
+import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_STATUS_KEY
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -52,13 +60,14 @@ class VoiceContextBuilder(
         val recentTurns = turns
             .drop(leadingSummaryTurns.size)
             .takeLast(recentBudget)
+        val hermesQueueSnapshot = HermesQueueSnapshot.from(conversation)
         return VoiceContext(
             systemInstruction = buildSystemInstruction(
                 assistantName = assistantName,
                 assistantPrompt = assistantPrompt,
                 voiceModelName = voiceModelName,
                 userNickname = userNickname,
-                hermesQueueSummary = HermesQueueSnapshot.from(conversation).toActivePromptSummary(),
+                hermesQueueSummary = hermesQueueSnapshot.toStatusQuestionPromptSummary(),
             ),
             turns = (leadingSummaryTurns + recentTurns).takeLast(maxTurns),
         )
@@ -125,6 +134,7 @@ class VoiceContextBuilder(
 
     private fun UIMessagePart.Tool.toContextText(): String? {
         if (!isExecuted) return null
+        if (isUnannouncedTerminalHermesRecord()) return null
 
         val outputText = output
             .filterIsInstance<UIMessagePart.Text>()
@@ -134,6 +144,22 @@ class VoiceContextBuilder(
         if (outputText.isBlank()) return null
 
         return "Tool $toolName ($toolCallId)\nInput: $input\nOutput: $outputText"
+    }
+
+    private fun UIMessagePart.Tool.isUnannouncedTerminalHermesRecord(): Boolean {
+        if (toolName != VoiceAgentToolNames.ASK_HERMES) return false
+        val metadata = metadata ?: return false
+        val resultAnnounced = metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY)
+        val status = HermesQueueStatus.fromWireName(metadata.stringOrNull(HERMES_TOOL_STATUS_KEY))
+            ?: return resultAnnounced == false && hasTextOutput()
+        if (!status.isTerminal) return false
+        return !(resultAnnounced ?: status.isTerminal)
+    }
+
+    private fun UIMessagePart.Tool.hasTextOutput(): Boolean {
+        return output
+            .filterIsInstance<UIMessagePart.Text>()
+            .any { it.text.isNotBlank() }
     }
 
     private fun String.looksLikeCompressedSummary(): Boolean {
@@ -180,6 +206,14 @@ class VoiceContextBuilder(
                     .replace(oldValue = "{$key}", newValue = value, ignoreCase = true)
             }
         }
+    }
+
+    private fun JsonObject.stringOrNull(key: String): String? {
+        return (this[key] as? JsonPrimitive)?.contentOrNull
+    }
+
+    private fun JsonObject.booleanOrNull(key: String): Boolean? {
+        return (this[key] as? JsonPrimitive)?.booleanOrNull
     }
 
     private fun LocalDate.formatLocalizedDate(locale: Locale): String =

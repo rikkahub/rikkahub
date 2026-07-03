@@ -285,7 +285,7 @@ class VoiceContextBuilderTest {
 
         assertTrue(context.systemInstruction.contains("Durable Hermes queue status:"))
         assertTrue(context.systemInstruction.contains("- Still running: check project status"))
-        assertTrue(context.systemInstruction.contains("active queue items above"))
+        assertTrue(context.systemInstruction.contains("answer only from this durable queue status"))
     }
 
     @Test
@@ -347,6 +347,89 @@ class VoiceContextBuilderTest {
         assertFalse(context.systemInstruction.contains("- Failed: debug the latest run"))
         assertFalse(context.systemInstruction.contains("Reason: Hermes request failed."))
         assertFalse(context.systemInstruction.contains("completed, failed, expired, or canceled Hermes queue items"))
+    }
+
+    @Test
+    fun `build includes terminal queue counts without terminal prompt answer or reason`() {
+        val conversation = conversationWith(
+            listOf(
+                UIMessage.user("start background work"),
+                UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(
+                        hermesTool(
+                            callId = "call-complete",
+                            prompt = "private complete request",
+                            status = "complete",
+                            outputText = "private complete answer",
+                            resultAnnounced = false,
+                        ),
+                        hermesTool(
+                            callId = "call-failed",
+                            prompt = "private failed request",
+                            status = "failed",
+                            outputText = "private failed reason",
+                            resultAnnounced = false,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        val context = VoiceContextBuilder().build(
+            assistantName = "Hermes",
+            assistantPrompt = "Prompt",
+            conversation = conversation,
+        )
+
+        assertTrue(context.systemInstruction.contains("Durable Hermes queue status:"))
+        assertTrue(
+            context.systemInstruction.contains(
+                "- Unannounced terminal results: completed=1, failed=1, expired=0, canceled=0"
+            )
+        )
+        assertTrue(context.systemInstruction.contains("answer only from this durable queue status"))
+        assertFalse(context.systemInstruction.contains("private complete request"))
+        assertFalse(context.systemInstruction.contains("private complete answer"))
+        assertFalse(context.systemInstruction.contains("private failed request"))
+        assertFalse(context.systemInstruction.contains("private failed reason"))
+
+        val turnText = context.turns.joinToString("\n") { it.text }
+        assertFalse(turnText.contains("private complete request"))
+        assertFalse(turnText.contains("private complete answer"))
+        assertFalse(turnText.contains("private failed request"))
+        assertFalse(turnText.contains("private failed reason"))
+    }
+
+    @Test
+    fun `build excludes malformed unannounced Hermes tool from turns`() {
+        val conversation = conversationWith(
+            listOf(
+                UIMessage.user("start malformed background work"),
+                UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(
+                        hermesTool(
+                            callId = "call-malformed",
+                            prompt = "private malformed request",
+                            status = "not-a-status",
+                            outputText = "private malformed answer",
+                            resultAnnounced = false,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        val context = VoiceContextBuilder().build(
+            assistantName = "Hermes",
+            assistantPrompt = "Prompt",
+            conversation = conversation,
+        )
+
+        val turnText = context.turns.joinToString("\n") { it.text }
+        assertFalse(turnText.contains("private malformed request"))
+        assertFalse(turnText.contains("private malformed answer"))
     }
 
     @Test
