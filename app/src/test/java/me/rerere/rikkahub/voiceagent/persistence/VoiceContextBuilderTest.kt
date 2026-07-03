@@ -402,6 +402,38 @@ class VoiceContextBuilderTest {
     }
 
     @Test
+    fun `build omits durable queue status when records are announced terminal only`() {
+        val conversation = conversationWith(
+            listOf(
+                UIMessage.user("check already announced work"),
+                UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(
+                        hermesTool(
+                            callId = "call-announced",
+                            prompt = "announced private request",
+                            status = "complete",
+                            outputText = "announced private answer",
+                            resultAnnounced = true,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        val context = VoiceContextBuilder().build(
+            assistantName = "Hermes",
+            assistantPrompt = "Prompt",
+            conversation = conversation,
+        )
+
+        assertFalse(context.systemInstruction.contains("Durable Hermes queue status:"))
+        assertFalse(context.systemInstruction.contains("Unannounced terminal results"))
+        assertFalse(context.systemInstruction.contains("announced private request"))
+        assertFalse(context.systemInstruction.contains("announced private answer"))
+    }
+
+    @Test
     fun `build excludes malformed unannounced Hermes tool from turns`() {
         val conversation = conversationWith(
             listOf(

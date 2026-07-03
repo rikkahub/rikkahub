@@ -323,6 +323,22 @@ class HermesQueueRecordTest {
     }
 
     @Test
+    fun `status question summary is empty for announced terminal records only`() {
+        val conversation = persister.upsertHermesTool(
+            conversation = Conversation.ofId(Uuid.random()),
+            callId = "announced",
+            prompt = "announced private request",
+            status = VoiceToolRecordStatus.Complete("announced private answer"),
+            jobId = "job-announced",
+            resultAnnounced = true,
+        )
+
+        val summary = HermesQueueSnapshot.from(conversation).toStatusQuestionPromptSummary()
+
+        assertEquals("", summary)
+    }
+
+    @Test
     fun `queue snapshot uses latest record for duplicate durable identity`() {
         val conversation = conversationOf(
             legacyHermesTool(

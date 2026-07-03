@@ -122,6 +122,21 @@ class VoiceAgentRuntimeTest {
         assertEquals(1, coordinator.state.value.hermesQueue.activeCount)
         assertEquals(1, coordinator.state.value.hermesQueue.completedWaitingCount)
         assertTrue(coordinator.state.value.hermesQueue.hasVisibleWork)
+
+        coordinator.close()
+        conversationStore.update { conversation ->
+            persister.upsertHermesTool(
+                conversation = conversation,
+                callId = "call-failed-after-close",
+                prompt = "failed after close",
+                status = VoiceToolRecordStatus.Failed("failed after close"),
+                jobId = "job-failed-after-close",
+                resultAnnounced = false,
+            )
+        }
+        delay(50)
+
+        assertEquals(0, coordinator.state.value.hermesQueue.failedWaitingCount)
     }
 
     @Test
