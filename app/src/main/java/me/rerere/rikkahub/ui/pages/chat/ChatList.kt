@@ -9,6 +9,8 @@ import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.CursorPointer01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Download04
+import me.rerere.hugeicons.stroke.Upload02
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -101,6 +103,7 @@ import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
+import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.plus
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
@@ -108,6 +111,7 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
+private const val TokenSummaryKey = "ConversationTokenSummary"
 
 @Composable
 fun ChatList(
@@ -238,19 +242,15 @@ private fun ChatListNormal(
         val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
         val lastPos = lastItem.offset + lastItem.size
         val inputPos = (state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt())
-        // println("lastPos = $lastPos, inputPos = $inputPos  | ${lastPos <= inputPos - 8}")
         return lastPos <= inputPos - 8
     }
 
-    // 聊天选择
     val selectedItems = remember { mutableStateListOf<Uuid>() }
     var selecting by remember { mutableStateOf(false) }
     var showExportSheet by remember { mutableStateOf(false) }
 
-    // 自动跟随键盘滚动
     ImeLazyListAutoScroller(lazyListState = state)
 
-    // 对话大小警告对话框
     val sizeInfo = rememberConversationSizeInfo(conversation)
     var showSizeWarningDialog by rememberSaveable(conversation.id) { mutableStateOf(true) }
     if (sizeInfo.showWarning && showSizeWarningDialog) {
@@ -270,26 +270,27 @@ private fun ChatListNormal(
     }
     val lastMessageIndex = conversation.messageNodes.lastIndex
 
+    // Calculate total token usage for the entire conversation
+    val conversationTokenSummary = remember(conversation.messageNodes) {
+        calculateConversationTokenUsage(conversation.messageNodes)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize(),
     ) {
-        // 自动滚动到底部
         if (settings.displaySetting.enableAutoScroll) {
             LaunchedEffect(state) {
                 snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
-                    // println("is bottom = ${visibleItemsInfo.isAtBottom()}, scroll = ${state.isScrollInProgress}, can_scroll = ${state.canScrollForward}, loading = $loading")
                     if (!state.isScrollInProgress && loadingState) {
                         if (visibleItemsInfo.isAtBottom()) {
                             state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
-                            // Log.i(TAG, "ChatList: scroll to ${conversationUpdated.messageNodes.lastIndex}")
                         }
                     }
                 }
             }
         }
 
-        // 判断最近是否滚动
         LaunchedEffect(state.isScrollInProgress) {
             if (state.isScrollInProgress) {
                 isRecentScroll = true
@@ -347,7 +348,7 @@ private fun ChatListNormal(
                                 onDelete(node.currentMessage)
                             },
                             onShare = {
-                                selecting = true  // 使用 CoroutineScope 延迟状态更新
+                                selecting = true
                                 selectedItems.clear()
                                 selectedItems.addAll(conversation.messageNodes.map { it.id }
                                     .subList(0, conversation.messageNodes.indexOf(node) + 1))
@@ -366,6 +367,15 @@ private fun ChatListNormal(
                             lastMessage = index == lastMessageIndex,
                         )
                     }
+                }
+            }
+
+            // Conversation-level token usage summary at the end of the message list
+            if (!loading && settings.displaySetting.showTokenUsage && conversationTokenSummary.totalTokens > 0) {
+                item(key = TokenSummaryKey) {
+                    ConversationTokenSummaryBar(
+                        summary = conversationTokenSummary,
+                    )
                 }
             }
 
@@ -401,7 +411,6 @@ private fun ChatListNormal(
                 }
             }
 
-            // 为了能正确滚动到这
             item(ScrollBottomKey) {
                 Spacer(
                     Modifier
@@ -417,7 +426,6 @@ private fun ChatListNormal(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            // 错误消息卡片
             ErrorCardsDisplay(
                 errors = errors,
                 onDismissError = onDismissError,
@@ -427,7 +435,6 @@ private fun ChatListNormal(
                     .zIndex(5f)
             )
 
-            // 完成选择
             AnimatedVisibility(
                 visible = selecting,
                 modifier = Modifier
@@ -443,58 +450,31 @@ private fun ChatListNormal(
                 HorizontalFloatingToolbar(
                     expanded = true,
                 ) {
-                    Tooltip(
-                        tooltip = {
-                            Text("Clear selection")
-                        }
-                    ) {
-                        IconButton(
-                            onClick = {
-                                selecting = false
-                                selectedItems.clear()
-                            }
-                        ) {
+                    Tooltip(tooltip = { Text("Clear selection") }) {
+                        IconButton(onClick = { selecting = false; selectedItems.clear() }) {
                             Icon(HugeIcons.Cancel01, null)
                         }
                     }
-                    Tooltip(
-                        tooltip = {
-                            Text("Select all")
-                        }
-                    ) {
-                        IconButton(
-                            onClick = {
-                                if (selectedItems.isNotEmpty()) {
-                                    selectedItems.clear()
-                                } else {
-                                    selectedItems.addAll(conversation.messageNodes.map { it.id })
-                                }
-                            }
-                        ) {
+                    Tooltip(tooltip = { Text("Select all") }) {
+                        IconButton(onClick = {
+                            if (selectedItems.isNotEmpty()) selectedItems.clear()
+                            else selectedItems.addAll(conversation.messageNodes.map { it.id })
+                        }) {
                             Icon(HugeIcons.CursorPointer01, null)
                         }
                     }
-                    Tooltip(
-                        tooltip = {
-                            Text("Confirm")
-                        }
-                    ) {
-                        FilledIconButton(
-                            onClick = {
-                                selecting = false
-                                val messages = conversation.messageNodes.filter { it.id in selectedItems }
-                                if (messages.isNotEmpty()) {
-                                    showExportSheet = true
-                                }
-                            }
-                        ) {
+                    Tooltip(tooltip = { Text("Confirm") }) {
+                        FilledIconButton(onClick = {
+                            selecting = false
+                            val messages = conversation.messageNodes.filter { it.id in selectedItems }
+                            if (messages.isNotEmpty()) showExportSheet = true
+                        }) {
                             Icon(HugeIcons.Tick01, null)
                         }
                     }
                 }
             }
 
-            // 导出对话框
             ChatExportSheet(
                 visible = showExportSheet,
                 onDismissRequest = {
@@ -508,7 +488,6 @@ private fun ChatListNormal(
 
             val captureProgress = LocalScrollCaptureInProgress.current
 
-            // 消息快速跳转
             MessageJumper(
                 show = isRecentScroll && !state.isScrollInProgress && settings.displaySetting.showMessageJumper && !captureProgress,
                 onLeft = settings.displaySetting.messageJumperOnLeft,
@@ -516,7 +495,6 @@ private fun ChatListNormal(
                 state = state
             )
 
-            // Suggestion
             if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
                 ChatSuggestionsRow(
                     conversation = conversation,
@@ -528,8 +506,125 @@ private fun ChatListNormal(
     }
 }
 
+// ========== Conversation-level Token Summary ==========
+
 /**
- * 提取包含搜索词的文本片段，确保匹配词在开头可见
+ * Aggregated token usage data for the entire conversation.
+ */
+private data class ConversationTokenUsage(
+    val totalTokens: Int = 0,
+    val totalPromptTokens: Int = 0,
+    val totalCompletionTokens: Int = 0,
+    val totalCachedTokens: Int = 0,
+)
+
+/**
+ * Iterates all message nodes and sums up token usage from the currently
+ * selected message in each node.
+ */
+private fun calculateConversationTokenUsage(messageNodes: List<MessageNode>): ConversationTokenUsage {
+    var totalTokens = 0
+    var totalPromptTokens = 0
+    var totalCompletionTokens = 0
+    var totalCachedTokens = 0
+    for (node in messageNodes) {
+        val usage = node.currentMessage.usage
+        if (usage != null) {
+            totalTokens += usage.totalTokens
+            totalPromptTokens += usage.promptTokens
+            totalCompletionTokens += usage.completionTokens
+            totalCachedTokens += usage.cachedTokens
+        }
+    }
+    return ConversationTokenUsage(
+        totalTokens = totalTokens,
+        totalPromptTokens = totalPromptTokens,
+        totalCompletionTokens = totalCompletionTokens,
+        totalCachedTokens = totalCachedTokens,
+    )
+}
+
+/**
+ * A summary bar displayed at the end of the conversation message list
+ * showing aggregated token usage. Matches ChatMessageNerdLine styling.
+ *
+ * Format:
+ *   ↑ Input  ↓ Output  |  Total: X tokens  (cached: Y)
+ *
+ * Only shown when [Settings.DisplaySetting.showTokenUsage] is enabled
+ * and there is at least one message with non-zero tokens.
+ */
+@Composable
+private fun ConversationTokenSummaryBar(
+    summary: ConversationTokenUsage,
+) {
+    val color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Total input tokens
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Icon(HugeIcons.Upload02, "Input", tint = color, modifier = Modifier.size(12.dp))
+                Text(
+                    text = "${summary.totalPromptTokens.formatNumber()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color,
+                )
+            }
+
+            // Total output tokens
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Icon(HugeIcons.Download04, "Output", tint = color, modifier = Modifier.size(12.dp))
+                Text(
+                    text = "${summary.totalCompletionTokens.formatNumber()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color,
+                )
+            }
+
+            // Separator
+            Text(
+                text = "|",
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+            )
+
+            // Grand total
+            Text(
+                text = "Total: ${summary.totalTokens.formatNumber()} tokens",
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+            )
+
+            // Cached token hint (only shown when > 0)
+            if (summary.totalCachedTokens > 0) {
+                Text(
+                    text = "(cached: ${summary.totalCachedTokens.formatNumber()})",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Extracts a snippet containing the search term, ensuring the match
+ * appears at the beginning of the visible text.
  */
 private fun extractMatchingSnippet(
     text: String,
@@ -544,10 +639,8 @@ private fun extractMatchingSnippet(
         return text
     }
 
-    // 直接从匹配词开始显示，确保匹配词在最前面
     val snippet = text.substring(matchIndex)
 
-    // 只在前面有内容时添加省略号
     return if (matchIndex > 0) {
         "...$snippet"
     } else {
@@ -569,10 +662,8 @@ private fun buildHighlightedText(
         var index = text.indexOf(query, startIndex, ignoreCase = true)
 
         while (index >= 0) {
-            // 添加高亮前的文本
             append(text.substring(startIndex, index))
 
-            // 添加高亮文本
             withStyle(
                 style = SpanStyle(
                     background = highlightColor,
@@ -586,7 +677,6 @@ private fun buildHighlightedText(
             index = text.indexOf(query, startIndex, ignoreCase = true)
         }
 
-        // 添加剩余文本
         if (startIndex < text.length) {
             append(text.substring(startIndex))
         }
@@ -604,7 +694,6 @@ private fun ChatListPreview(
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
-    // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
     val filteredMessages = remember(conversation.messageNodes, searchQuery) {
         if (searchQuery.isBlank()) {
             conversation.messageNodes.mapIndexed { index, node -> index to node }
@@ -620,7 +709,6 @@ private fun ChatListPreview(
             .fillMaxSize()
             .hazeSource(state = hazeState),
     ) {
-        // 搜索框
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -629,20 +717,12 @@ private fun ChatListPreview(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             placeholder = { Text(stringResource(R.string.history_page_search)) },
             leadingIcon = {
-                Icon(
-                    imageVector = HugeIcons.Search01,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(HugeIcons.Search01, contentDescription = null, modifier = Modifier.size(20.dp))
             },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { searchQuery = "" }) {
-                        Icon(
-                            imageVector = HugeIcons.Cancel01,
-                            contentDescription = "Clear",
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(HugeIcons.Cancel01, contentDescription = "Clear", modifier = Modifier.size(20.dp))
                     }
                 }
             },
@@ -651,7 +731,6 @@ private fun ChatListPreview(
             maxLines = 1,
         )
 
-        // 消息预览
         LazyColumn(
             contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -668,9 +747,7 @@ private fun ChatListPreview(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(
-                            if (!isUser) Modifier.padding(end = 24.dp) else Modifier
-                        ),
+                        .then(if (!isUser) Modifier.padding(end = 24.dp) else Modifier),
                     horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
                 ) {
                     Surface(
@@ -679,9 +756,7 @@ private fun ChatListPreview(
                     ) {
                         Row(
                             modifier = Modifier
-                                .clickable {
-                                    onJumpToMessage(originalIndex)
-                                }
+                                .clickable { onJumpToMessage(originalIndex) }
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -689,15 +764,8 @@ private fun ChatListPreview(
                             val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
                             val highlightedText = remember(searchQuery, message) {
                                 val fullText = message.toText().trim().ifBlank { "[...]" }
-                                val messageText = extractMatchingSnippet(
-                                    text = fullText,
-                                    query = searchQuery
-                                )
-                                buildHighlightedText(
-                                    text = messageText,
-                                    query = searchQuery,
-                                    highlightColor = highlightColor
-                                )
+                                val messageText = extractMatchingSnippet(text = fullText, query = searchQuery)
+                                buildHighlightedText(text = messageText, query = searchQuery, highlightColor = highlightColor)
                             }
                             Text(
                                 text = highlightedText,
@@ -730,16 +798,11 @@ private fun ChatSuggestionsRow(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .clickable {
-                        onClickSuggestion(suggestion)
-                    }
+                    .clickable { onClickSuggestion(suggestion) }
                     .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
                     .padding(vertical = 4.dp, horizontal = 8.dp),
             ) {
-                Text(
-                    text = suggestion,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text(text = suggestion, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -767,82 +830,34 @@ private fun BoxScope.MessageJumper(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Surface(
-                onClick = {
-                    scope.launch {
-                        state.scrollToItem(0)
-                    }
-                },
+                onClick = { scope.launch { state.scrollToItem(0) } },
                 shape = CircleShape,
                 tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.65f)
             ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowUpDouble,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                )
+                Icon(HugeIcons.ArrowUpDouble, contentDescription = null, modifier = Modifier.padding(4.dp))
             }
             Surface(
-                onClick = {
-                    scope.launch {
-                        state.animateScrollToItem(
-                            (state.firstVisibleItemIndex - 1).fastCoerceAtLeast(
-                                0
-                            )
-                        )
-                    }
-                },
+                onClick = { scope.launch { state.animateScrollToItem((state.firstVisibleItemIndex - 1).fastCoerceAtLeast(0)) } },
                 shape = CircleShape,
                 tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.65f)
             ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowUp01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                )
+                Icon(HugeIcons.ArrowUp01, contentDescription = null, modifier = Modifier.padding(4.dp))
             }
             Surface(
-                onClick = {
-                    scope.launch {
-                        state.animateScrollToItem(state.firstVisibleItemIndex + 1)
-                    }
-                },
+                onClick = { scope.launch { state.animateScrollToItem(state.firstVisibleItemIndex + 1) } },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.65f)
             ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowDown01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                )
+                Icon(HugeIcons.ArrowDown01, contentDescription = null, modifier = Modifier.padding(4.dp))
             }
             Surface(
-                onClick = {
-                    scope.launch {
-                        state.scrollToItem(state.layoutInfo.totalItemsCount - 1)
-                    }
-                },
+                onClick = { scope.launch { state.scrollToItem(state.layoutInfo.totalItemsCount - 1) } },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.65f),
             ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowDownDouble,
-                    contentDescription = stringResource(R.string.chat_page_scroll_to_bottom),
-                    modifier = Modifier
-                        .padding(4.dp)
-                )
+                Icon(HugeIcons.ArrowDownDouble, contentDescription = stringResource(R.string.chat_page_scroll_to_bottom), modifier = Modifier.padding(4.dp))
             }
         }
     }
