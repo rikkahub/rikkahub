@@ -178,6 +178,9 @@
         import markdownItTaskLists from 'https://esm.sh/markdown-it-task-lists@2.1.1';
 
         import katex from 'https://esm.sh/katex@0.16.8';
+        // mhchem 扩展: 支持 \ce{} 等化学公式语法
+        import katexMhchem from 'https://esm.sh/katex@0.16.8/dist/contrib/mhchem.mjs';
+        katex.use(katexMhchem);
         import hljs from 'https://esm.sh/highlight.js@11.9.0';
         import mermaid from 'https://esm.sh/mermaid@10.6.1';
         import { Base64 } from 'https://esm.sh/js-base64@3.7.5';
@@ -268,7 +271,8 @@
                     try {
                         katex.render(el.textContent, el, {
                             throwOnError: false,
-                            errorColor: '#cc0000'
+                            errorColor: '#cc0000',
+                            trust: true
                         });
                     } catch (e) {
                         console.warn('KaTeX inline render error:', e);
@@ -280,7 +284,8 @@
                         katex.render(el.textContent, el, {
                             displayMode: true,
                             throwOnError: false,
-                            errorColor: '#cc0000'
+                            errorColor: '#cc0000',
+                            trust: true
                         });
                     } catch (e) {
                         console.warn('KaTeX block render error:', e);
