@@ -101,6 +101,7 @@ class VoiceAgentCallSession internal constructor(
     private var sessionFailedRecordedSessionId: Long? = null
     private var runtimeFailureTelemetrySessionId: Long? = null
     private var hermesBridge: HermesSessionBridge? = null
+    private var debugInjectionCaptureRestartSessionId: Long? = null
     private val sessionLock = Any()
     private val reconnectController = VoiceReconnectController(
         policy = reconnectPolicy,
@@ -533,6 +534,7 @@ class VoiceAgentCallSession internal constructor(
             return
         }
         coordinator.onGeminiEvent(sessionId, coordinatorEvent)
+        restartDebugInjectionCaptureAfterGeneration(sessionId, coordinatorEvent)
         if (stopReason != null) {
             if (coordinator.isActiveSession(sessionId)) {
                 val runtimeFailure = isRuntimeFailureTelemetryEligible(sessionId) || automaticReconnectAttemptFailure
@@ -912,6 +914,15 @@ class VoiceAgentCallSession internal constructor(
         }
     }
 
+    private fun restartDebugInjectionCaptureAfterGeneration(sessionId: Long, event: GeminiLiveEvent) {
+        if (event != GeminiLiveEvent.GenerationComplete) return
+        if (debugInjectionCaptureRestartSessionId != sessionId) return
+        debugInjectionCaptureRestartSessionId = null
+        if (isSessionOpenAndActive(sessionId)) {
+            startCapture(sessionId)
+        }
+    }
+
     private fun startCapture(currentSessionId: Long) {
         VoiceAgentLog.d(TAG, "starting audio capture sessionId=$currentSessionId muted=$muted")
         audio.startCapture(
@@ -935,6 +946,7 @@ class VoiceAgentCallSession internal constructor(
                             "sessionId=$currentSessionId",
                     )
                     audio.stopCapture()
+                    debugInjectionCaptureRestartSessionId = currentSessionId
                     gemini.sendAudioStreamEnd(currentSessionId)
                     coordinator.updateAudioStatus(VoiceAudioStatus.Listening)
                 }

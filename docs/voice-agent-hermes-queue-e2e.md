@@ -2,9 +2,9 @@
 
 This runbook verifies the live queued Hermes voice flow:
 
-1. The script converts text to generated voice.
-2. The generated voice is injected into the installed Android app.
-3. Gemini calls `ask_hermes` at least two times.
+1. The script converts two short text prompts to generated voice.
+2. Each generated voice prompt is injected as a separate turn into the installed Android app.
+3. Gemini calls `ask_hermes` at least two times across those turns.
 4. RikkaHub submits background Hermes jobs through Voice Lab.
 5. Gemini receives queued acknowledgements quickly.
 6. Hermes finishes the jobs later.
@@ -33,7 +33,8 @@ repository:
 | Variable | Notes |
 | --- | --- |
 | `VOICE_AGENT_E2E_CONVERSATION_ID` | Existing app conversation id used to start the Voice Agent service. Required. |
-| `VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT` | Optional text used to generate PCM. Override this for private facts and local Arthur wording. |
+| `VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT_1`, `VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT_2`, ... | Optional generated prompt text per injected voice turn. Set entries `1..VOICE_AGENT_QUEUE_E2E_EXPECTED_COMPLETIONS` together when overriding the default multi-turn prompts. |
+| `VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT` | Optional legacy single-turn text used to generate PCM. This is mainly useful with `VOICE_AGENT_QUEUE_E2E_EXPECTED_COMPLETIONS=1`. |
 | `VOICE_AGENT_QUEUE_E2E_PCM_PATH` | Optional signed 16-bit little-endian mono PCM at 16 kHz. |
 | `VOICE_AGENT_QUEUE_E2E_FLITE_VOICE` | Optional Flite voice for generated PCM. Defaults to `slt`. |
 | `VOICE_AGENT_QUEUE_E2E_EXPECTED_COMPLETIONS` | Optional completed Hermes jobs required for pass. Defaults to `2`. |
@@ -69,14 +70,19 @@ unless you are ready to reconfigure Voice Lab and Hermes settings.
 
 ## Default Generated Prompt
 
-If `VOICE_AGENT_QUEUE_E2E_PCM_PATH` is unset, the script generates PCM from:
+If `VOICE_AGENT_QUEUE_E2E_PCM_PATH` is unset and no prompt override is supplied,
+the script generates two separate PCM prompts:
 
 ```text
-Ask Hermes three separate questions now. First, ask whether he is connected to G Brain. Second, ask him to recall the private queue test fact. Third, ask him to summarize the latest Arthur status. Keep talking with me while those Hermes requests run, and tell me each answer when it is ready.
+Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no.
+
+Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me the answer when it is ready.
 ```
 
-Override this prompt for real private facts. Do not commit or paste the real
-private prompt.
+The prompts are separate turns because live generated speech can cause Gemini
+to merge multiple questions from one utterance into one `ask_hermes` call.
+Override the indexed prompts for real private facts. Do not commit or paste the
+real private prompts.
 
 ## Running
 

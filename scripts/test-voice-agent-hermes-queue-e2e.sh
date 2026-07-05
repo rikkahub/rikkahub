@@ -59,6 +59,22 @@ assert_file_contains_exactly() {
   fi
 }
 
+assert_file_line_count() {
+  local path="$1"
+  local expected_count="$2"
+  if [[ ! -f "$path" ]]; then
+    printf 'Expected file to exist: %s\n' "$path" >&2
+    exit 1
+  fi
+  local actual_count
+  actual_count="$(awk 'END { print NR + 0 }' "$path")"
+  if [[ "$actual_count" != "$expected_count" ]]; then
+    printf 'Expected file %s to contain %s lines, got %s\n' "$path" "$expected_count" "$actual_count" >&2
+    printf 'Actual contents:\n%s\n' "$(cat "$path")" >&2
+    exit 1
+  fi
+}
+
 assert_file_not_exists() {
   local path="$1"
   if [[ -e "$path" ]]; then
@@ -90,7 +106,11 @@ if [[ "$input" != flite=textfile=*":voice=$expected_voice" ]]; then
 fi
 textfile="${input#flite=textfile=}"
 textfile="${textfile%:voice=$expected_voice}"
-if [[ "$(cat "$textfile")" != "${FAKE_FFMPEG_EXPECTED_PROMPT:-}" ]]; then
+prompt_text="$(cat "$textfile")"
+if [[ -n "${FAKE_FFMPEG_PROMPT_LOG:-}" ]]; then
+  printf '%s\n' "$prompt_text" >> "$FAKE_FFMPEG_PROMPT_LOG"
+fi
+if [[ -n "${FAKE_FFMPEG_EXPECTED_PROMPT:-}" && "$prompt_text" != "${FAKE_FFMPEG_EXPECTED_PROMPT:-}" ]]; then
   printf 'unexpected prompt text: %s\n' "$(cat "$textfile")" >&2
   exit 96
 fi
@@ -162,6 +182,8 @@ LOGS
 06-11 12:00:08.000 D/VoiceAgentGemini(1): event kind=OutputAudio
 06-11 12:00:09.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-11 12:00:10.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
+06-11 12:00:10.500 D/VoiceAgentGemini(1): event kind=GenerationComplete
+06-11 12:00:11.000 I/VoiceAudioDebugInjection(1): debug_audio_injection result delivered=true
 LOGS
     case "${FAKE_QUEUE_SCENARIO:-pass}" in
       one-complete)
@@ -253,9 +275,13 @@ LOGS
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug cp /data/local/tmp/rikkahub-voice-agent-queue-e2e-prompt.pcm files/voice-e2e/queue-prompt.pcm")
     ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug cp /data/local/tmp/rikkahub-voice-agent-queue-e2e-prompt.pcm files/voice-e2e/queue-prompt-"*".pcm")
+    ;;
   "-s RZ shell rm -f /data/local/tmp/rikkahub-voice-agent-queue-e2e-prompt.pcm")
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug rm -f files/voice-e2e/queue-prompt.pcm")
+    ;;
+  "-s RZ shell run-as me.rerere.rikkahub.debug rm -f files/voice-e2e/queue-prompt-"*".pcm")
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/hermes-events.ndjson")
     ;;
@@ -409,14 +435,19 @@ export FAKE_ADB_END_MARKER
 export FAKE_ADB_DRAINED_MARKER
 : > "$FAKE_ADB_ARGS_LOG"
 
-default_prompt="Ask Hermes two separate questions now. First, use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no. Second, use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me each Hermes answer when it is ready."
-default_prompt_preview="${default_prompt:0:240}"
+default_prompt_1="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no."
+default_prompt_2="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me the answer when it is ready."
+default_prompts_file="$TMP_DIR/default-prompts.txt"
+printf '%s\n%s\n' "$default_prompt_1" "$default_prompt_2" > "$default_prompts_file"
+default_prompt="$(cat "$default_prompts_file")"
+default_prompt_preview="Turn 1: ${default_prompt_1}"
 
 pass_log_dir="$TMP_DIR/pass-log"
+pass_prompt_log="$TMP_DIR/pass-ffmpeg-prompts.log"
 set +e
 pass_output="$(
   PATH="$TMP_DIR:$PATH" \
-  FAKE_FFMPEG_EXPECTED_PROMPT="$default_prompt" \
+  FAKE_FFMPEG_PROMPT_LOG="$pass_prompt_log" \
   VOICE_AGENT_E2E_SERIAL=RZ \
   VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
   VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
@@ -454,6 +485,10 @@ assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/trace-queue/h
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-events.ndjson"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/trace-queue/hermes-events.ndjson"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/latest-trace-id.txt"
+assert_file_line_count "$pass_prompt_log" 2
+assert_file_contains_exactly "$pass_prompt_log" "$(cat "$default_prompts_file")"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "files/voice-e2e/queue-prompt-1.pcm"
+assert_file_contains "$FAKE_ADB_ARGS_LOG" "files/voice-e2e/queue-prompt-2.pcm"
 
 delayed_markers_log_dir="$TMP_DIR/delayed-markers-log"
 : > "$FAKE_ADB_ARGS_LOG"
@@ -529,7 +564,6 @@ missing_tool_call_log_dir="$TMP_DIR/missing-tool-call-log"
 set +e
 missing_tool_call_output="$(
   PATH="$TMP_DIR:$PATH" \
-  FAKE_FFMPEG_EXPECTED_PROMPT="$default_prompt" \
   FAKE_QUEUE_SCENARIO=missing-tool-call \
   VOICE_AGENT_E2E_SERIAL=RZ \
   VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
@@ -574,7 +608,6 @@ missing_diagnostic_artifact_log_dir="$TMP_DIR/missing-diagnostic-artifact-log"
 set +e
 missing_diagnostic_artifact_output="$(
   PATH="$TMP_DIR:$PATH" \
-  FAKE_FFMPEG_EXPECTED_PROMPT="$default_prompt" \
   FAKE_QUEUE_SCENARIO=missing-tool-call \
   FAKE_ADB_MISSING_DIAGNOSTIC_ARTIFACT=output-transcript \
   VOICE_AGENT_E2E_SERIAL=RZ \
@@ -603,7 +636,6 @@ forbidden_during_diagnostics_log_dir="$TMP_DIR/forbidden-during-diagnostics-log"
 set +e
 forbidden_during_diagnostics_output="$(
   PATH="$TMP_DIR:$PATH" \
-  FAKE_FFMPEG_EXPECTED_PROMPT="$default_prompt" \
   FAKE_QUEUE_SCENARIO=missing-tool-call \
   FAKE_ADB_FORBIDDEN_DURING_DIAGNOSTICS_LOG_FILE="$forbidden_during_diagnostics_log_dir/logcat.txt" \
   VOICE_AGENT_E2E_SERIAL=RZ \
@@ -942,7 +974,7 @@ if [[ "$supplied_status" -ne 0 ]]; then
   printf 'Actual output:\n%s\n' "$supplied_output" >&2
   exit 1
 fi
-assert_file_contains_exactly "$supplied_log_dir/generated-prompt.txt" "Supplied prompt text for report."
+assert_file_contains_exactly "$supplied_log_dir/generated-prompt.txt" "Turn 1: Supplied prompt text for report."
 
 early_validation_log_dir="$TMP_DIR/early-validation-log"
 mkdir -p "$early_validation_log_dir"

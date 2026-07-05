@@ -456,6 +456,35 @@ class VoiceAgentCallSessionTest {
     }
 
     @Test
+    fun `debug injection can resume capture after model generation completes`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            scope = this,
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        assertEquals(1, audio.startCaptureCalls)
+
+        audio.completeDebugInjection()
+        assertEquals(1, audio.stopCaptureCalls)
+
+        gemini.eventHandlers.single()(GeminiLiveEvent.GenerationComplete)
+
+        assertEquals(2, audio.startCaptureCalls)
+    }
+
+    @Test
     fun `audio capture records started muted and unmuted observability events`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val observability = RecordingVoiceObservability()

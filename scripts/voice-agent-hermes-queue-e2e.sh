@@ -8,7 +8,7 @@ INJECT_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.debug.VoiceAudioDebugIn
 INJECT_ACTION="me.rerere.rikkahub.debug.voiceagent.INJECT_PCM"
 CALL_START_ACTION="me.rerere.rikkahub.voiceagent.action.START"
 CALL_END_ACTION="me.rerere.rikkahub.voiceagent.action.END"
-APP_PCM_PATH="voice-e2e/queue-prompt.pcm"
+APP_PCM_PATH_PREFIX="voice-e2e/queue-prompt"
 APP_ARTIFACT_BASE_DIR="no_backup/voice-e2e"
 APP_LATEST_TRACE_ID_PATH="$APP_ARTIFACT_BASE_DIR/latest-trace-id.txt"
 APP_HERMES_EVENTS_ARTIFACT="hermes-events.ndjson"
@@ -19,9 +19,10 @@ APP_HERMES_ANSWER_ARTIFACT="hermes-answer.txt"
 DEVICE_TMP_PCM="/data/local/tmp/rikkahub-voice-agent-queue-e2e-prompt.pcm"
 LOG_DIR="${VOICE_AGENT_QUEUE_E2E_LOG_DIR:-build/voice-agent-queue-e2e}"
 LOG_FILE="$LOG_DIR/logcat.txt"
-DEFAULT_PROMPT_TEXT="Ask Hermes two separate questions now. First, use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no. Second, use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me each Hermes answer when it is ready."
+DEFAULT_PROMPT_TEXT_1="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no."
+DEFAULT_PROMPT_TEXT_2="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me the answer when it is ready."
 FLITE_VOICE="${VOICE_AGENT_QUEUE_E2E_FLITE_VOICE:-slt}"
-PROMPT_TEXT="${VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT:-$DEFAULT_PROMPT_TEXT}"
+PROMPT_TEXT="${VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT:-}"
 GENERATED_PCM_PATH="${VOICE_AGENT_QUEUE_E2E_GENERATED_PCM_PATH:-$LOG_DIR/generated-prompt.pcm}"
 PROMPT_SOURCE_TEXT_FILE="$LOG_DIR/generated-prompt.txt"
 REPORT_FILE="${VOICE_AGENT_QUEUE_E2E_REPORT_PATH:-$LOG_DIR/report.txt}"
@@ -48,10 +49,14 @@ CLEANUP_STATUS="not_started"
 CLEANUP_DETAIL=""
 DEVICE_TMP_PCM_CLEANUP_NEEDED=0
 APP_PCM_CLEANUP_NEEDED=0
+APP_PCM_CLEANUP_PATHS=()
 ADB_APP_CLEANUP_ENABLED=0
 GENERATED_PCM_FROM_PROMPT=0
 FFMPEG_PROMPT_TEXT_CLEANUP_PATH=""
 REPORT_TEMP_CLEANUP_PATHS=()
+QUEUE_PCM_PATHS=()
+QUEUE_APP_PCM_PATHS=()
+QUEUE_PROMPT_TEXTS=()
 COMMON_FORBIDDEN_PATTERN='VoiceAgentE2E.*hermes_tool_failed|Voice Lab request failed (403|524)|Cloudflare|cf-error|Access denied|FATAL EXCEPTION|Voice playback write failed|AudioTrack write failed|AudioTrack write error|HTTP[ /]524|status=524|code=524|Hermes job polling timed out|Hermes job was no longer available'
 
 . "$SCRIPT_DIR/voice-agent-e2e-artifacts.sh"
@@ -412,21 +417,55 @@ write_missing_tool_call_diagnostics() {
   printf 'Voice Agent Hermes queue E2E diagnostic artifact: %s\n' "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE" >&2
 }
 
+write_prompt_source_file() {
+  umask 077
+  mkdir -p "$LOG_DIR"
+  : > "$PROMPT_SOURCE_TEXT_FILE"
+  chmod 600 "$PROMPT_SOURCE_TEXT_FILE"
+  local index=1
+  local prompt_text
+  for prompt_text in "${QUEUE_PROMPT_TEXTS[@]}"; do
+    if (( index > 1 )); then
+      printf '\n' >> "$PROMPT_SOURCE_TEXT_FILE"
+    fi
+    printf 'Turn %s: %s' "$index" "$prompt_text" >> "$PROMPT_SOURCE_TEXT_FILE"
+    index=$((index + 1))
+  done
+}
+
+generated_pcm_path_for_turn() {
+  local turn="$1"
+  local total="$2"
+  if (( total == 1 )); then
+    printf '%s' "$GENERATED_PCM_PATH"
+    return 0
+  fi
+  case "$GENERATED_PCM_PATH" in
+    *.pcm)
+      printf '%s-%s.pcm' "${GENERATED_PCM_PATH%.pcm}" "$turn"
+      ;;
+    *)
+      printf '%s-%s' "$GENERATED_PCM_PATH" "$turn"
+      ;;
+  esac
+}
+
 generate_pcm_prompt() {
+  local prompt_text="$1"
+  local output_path="$2"
   require_command ffmpeg
   if [[ ! "$FLITE_VOICE" =~ ^[A-Za-z0-9_-]+$ ]]; then
     printf 'VOICE_AGENT_QUEUE_E2E_FLITE_VOICE contains unsupported characters: %s\n' "$FLITE_VOICE" >&2
     return 2
   fi
   umask 077
-  mkdir -p "$LOG_DIR" "$(dirname "$GENERATED_PCM_PATH")"
+  mkdir -p "$LOG_DIR" "$(dirname "$output_path")"
   local ffmpeg_prompt_text_file
   ffmpeg_prompt_text_file="$(mktemp /tmp/rikkahub-voice-agent-queue-e2e-prompt.XXXXXX)"
   FFMPEG_PROMPT_TEXT_CLEANUP_PATH="$ffmpeg_prompt_text_file"
-  printf '%s' "$PROMPT_TEXT" > "$PROMPT_SOURCE_TEXT_FILE"
-  printf '%s' "$PROMPT_TEXT" > "$ffmpeg_prompt_text_file"
-  chmod 600 "$PROMPT_SOURCE_TEXT_FILE" "$ffmpeg_prompt_text_file"
-  printf 'Generating PCM prompt from VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT.\n'
+  printf '%s' "$prompt_text" > "$ffmpeg_prompt_text_file"
+  chmod 600 "$ffmpeg_prompt_text_file"
+  printf 'Generating PCM prompt.\n'
   set +e
   ffmpeg -hide_banner \
     -f lavfi \
@@ -434,7 +473,7 @@ generate_pcm_prompt() {
     -ar 16000 \
     -ac 1 \
     -f s16le \
-    -y "$GENERATED_PCM_PATH" >/dev/null
+    -y "$output_path" >/dev/null
   local ffmpeg_status=$?
   set -e
   rm -f "$ffmpeg_prompt_text_file"
@@ -442,8 +481,78 @@ generate_pcm_prompt() {
   if [[ "$ffmpeg_status" -ne 0 ]]; then
     return "$ffmpeg_status"
   fi
-  chmod 600 "$GENERATED_PCM_PATH"
+  chmod 600 "$output_path"
   GENERATED_PCM_FROM_PROMPT=1
+}
+
+collect_indexed_prompt_texts() {
+  local index=1
+  local name
+  local value
+  while (( index <= EXPECTED_COMPLETIONS )); do
+    name="VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT_$index"
+    value="${!name:-}"
+    if [[ -z "$value" ]]; then
+      break
+    fi
+    QUEUE_PROMPT_TEXTS+=("$value")
+    index=$((index + 1))
+  done
+  if (( ${#QUEUE_PROMPT_TEXTS[@]} > 0 && ${#QUEUE_PROMPT_TEXTS[@]} < EXPECTED_COMPLETIONS )); then
+    printf 'Set VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT_1.._%s when using indexed queue prompts.\n' "$EXPECTED_COMPLETIONS" >&2
+    return 2
+  fi
+}
+
+configure_queue_prompts() {
+  if [[ -n "${VOICE_AGENT_QUEUE_E2E_PCM_PATH:-}" ]]; then
+    QUEUE_PCM_PATHS+=("$VOICE_AGENT_QUEUE_E2E_PCM_PATH")
+    QUEUE_APP_PCM_PATHS+=("$APP_PCM_PATH_PREFIX-1.pcm")
+    if [[ -n "$PROMPT_TEXT" ]]; then
+      QUEUE_PROMPT_TEXTS+=("$PROMPT_TEXT")
+      write_prompt_source_file
+    else
+      rm -f "$PROMPT_SOURCE_TEXT_FILE"
+    fi
+    return 0
+  fi
+
+  collect_indexed_prompt_texts
+  if (( ${#QUEUE_PROMPT_TEXTS[@]} == 0 )); then
+    if [[ -n "$PROMPT_TEXT" ]]; then
+      QUEUE_PROMPT_TEXTS+=("$PROMPT_TEXT")
+    else
+      QUEUE_PROMPT_TEXTS+=("$DEFAULT_PROMPT_TEXT_1" "$DEFAULT_PROMPT_TEXT_2")
+    fi
+  fi
+
+  write_prompt_source_file
+  local total="${#QUEUE_PROMPT_TEXTS[@]}"
+  local index=1
+  local prompt_text
+  local pcm_path
+  for prompt_text in "${QUEUE_PROMPT_TEXTS[@]}"; do
+    pcm_path="$(generated_pcm_path_for_turn "$index" "$total")"
+    generate_pcm_prompt "$prompt_text" "$pcm_path"
+    QUEUE_PCM_PATHS+=("$pcm_path")
+    QUEUE_APP_PCM_PATHS+=("$APP_PCM_PATH_PREFIX-$index.pcm")
+    index=$((index + 1))
+  done
+}
+
+copy_private_pcm_prompt() {
+  local local_pcm_path="$1"
+  local app_pcm_path="$2"
+  printf 'Copying private PCM prompt into app-private files: %s\n' "$app_pcm_path"
+  adb_cmd shell "run-as $PACKAGE mkdir -p files/voice-e2e"
+  DEVICE_TMP_PCM_CLEANUP_NEEDED=1
+  adb_long_cmd push "$local_pcm_path" "$DEVICE_TMP_PCM" >/dev/null
+  APP_PCM_CLEANUP_NEEDED=1
+  APP_PCM_CLEANUP_PATHS+=("$app_pcm_path")
+  adb_cmd shell "run-as $PACKAGE cp $DEVICE_TMP_PCM files/$app_pcm_path"
+  if adb_cmd shell rm -f "$DEVICE_TMP_PCM" >/dev/null 2>&1; then
+    DEVICE_TMP_PCM_CLEANUP_NEEDED=0
+  fi
 }
 
 clear_app_artifacts() {
@@ -521,7 +630,10 @@ cleanup() {
       "${VOICE_AGENT_E2E_SERVICE_END_TIMEOUT_SECONDS:-30}" >/dev/null 2>&1 || true
   fi
   if [[ "$APP_PCM_CLEANUP_NEEDED" == "1" ]]; then
-    adb_cmd shell "run-as $PACKAGE rm -f files/$APP_PCM_PATH" >/dev/null 2>&1 || true
+    local app_pcm_path
+    for app_pcm_path in "${APP_PCM_CLEANUP_PATHS[@]}"; do
+      adb_cmd shell "run-as $PACKAGE rm -f files/$app_pcm_path" >/dev/null 2>&1 || true
+    done
   fi
   if [[ "$ADB_APP_CLEANUP_ENABLED" == "1" ]]; then
     clear_app_artifacts
@@ -541,22 +653,14 @@ if [[ ! "$EXPECTED_COMPLETIONS" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-if [[ -z "${VOICE_AGENT_QUEUE_E2E_PCM_PATH:-}" ]]; then
-  generate_pcm_prompt
-  VOICE_AGENT_QUEUE_E2E_PCM_PATH="$GENERATED_PCM_PATH"
-elif [[ -n "${VOICE_AGENT_QUEUE_E2E_PROMPT_TEXT:-}" ]]; then
-  umask 077
-  mkdir -p "$LOG_DIR"
-  printf '%s' "$PROMPT_TEXT" > "$PROMPT_SOURCE_TEXT_FILE"
-  chmod 600 "$PROMPT_SOURCE_TEXT_FILE"
-else
-  rm -f "$PROMPT_SOURCE_TEXT_FILE"
-fi
+configure_queue_prompts
 
-if [[ ! -f "$VOICE_AGENT_QUEUE_E2E_PCM_PATH" ]]; then
-  printf 'VOICE_AGENT_QUEUE_E2E_PCM_PATH does not exist: %s\n' "$VOICE_AGENT_QUEUE_E2E_PCM_PATH" >&2
-  exit 2
-fi
+for queue_pcm_path in "${QUEUE_PCM_PATHS[@]}"; do
+  if [[ ! -f "$queue_pcm_path" ]]; then
+    printf 'VOICE_AGENT_QUEUE_E2E_PCM_PATH does not exist: %s\n' "$queue_pcm_path" >&2
+    exit 2
+  fi
+done
 
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_FILE" "$REPORT_FILE" "$MISSING_TOOL_CALL_DIAGNOSTICS_FILE" \
@@ -607,16 +711,6 @@ adb_logcat logcat -v time \
   '*:S' > "$LOG_FILE" &
 LOGCAT_PID=$!
 
-printf 'Copying private PCM prompt into app-private files...\n'
-adb_cmd shell "run-as $PACKAGE mkdir -p files/voice-e2e"
-DEVICE_TMP_PCM_CLEANUP_NEEDED=1
-adb_long_cmd push "$VOICE_AGENT_QUEUE_E2E_PCM_PATH" "$DEVICE_TMP_PCM" >/dev/null
-APP_PCM_CLEANUP_NEEDED=1
-adb_cmd shell "run-as $PACKAGE cp $DEVICE_TMP_PCM files/$APP_PCM_PATH"
-if adb_cmd shell rm -f "$DEVICE_TMP_PCM" >/dev/null 2>&1; then
-  DEVICE_TMP_PCM_CLEANUP_NEEDED=0
-fi
-
 printf 'Starting Voice Agent foreground service...\n'
 adb_cmd shell am start-foreground-service \
   -n "$SERVICE_COMPONENT" \
@@ -626,28 +720,43 @@ CALL_STARTED=1
 
 wait_for_log "Gemini setup complete" 'VoiceAgentGemini.*event kind=SetupComplete' 120
 
-printf 'Injecting private PCM prompt...\n'
-adb_cmd shell am broadcast \
-  -n "$INJECT_COMPONENT" \
-  -a "$INJECT_ACTION" \
-  --es path "$APP_PCM_PATH" \
-  --ei chunk_bytes "${VOICE_AGENT_QUEUE_E2E_CHUNK_BYTES:-3200}" \
-  --el chunk_delay_ms "${VOICE_AGENT_QUEUE_E2E_CHUNK_DELAY_MS:-20}" \
-  --el leading_silence_ms "${VOICE_AGENT_QUEUE_E2E_LEADING_SILENCE_MS:-100}" \
-  --el trailing_silence_ms "${VOICE_AGENT_QUEUE_E2E_TRAILING_SILENCE_MS:-200}" >/dev/null
+for index in "${!QUEUE_PCM_PATHS[@]}"; do
+  turn=$((index + 1))
+  copy_private_pcm_prompt "${QUEUE_PCM_PATHS[$index]}" "${QUEUE_APP_PCM_PATHS[$index]}"
 
-wait_for_log "debug PCM delivered" 'VoiceAudioDebugInjection.*debug_audio_injection result delivered=true' 30
-if ! wait_for_log_count "at least $EXPECTED_COMPLETIONS ask_hermes tool calls" \
+  printf 'Injecting private PCM prompt turn %s...\n' "$turn"
+  adb_cmd shell am broadcast \
+    -n "$INJECT_COMPONENT" \
+    -a "$INJECT_ACTION" \
+    --es path "${QUEUE_APP_PCM_PATHS[$index]}" \
+    --ei chunk_bytes "${VOICE_AGENT_QUEUE_E2E_CHUNK_BYTES:-3200}" \
+    --el chunk_delay_ms "${VOICE_AGENT_QUEUE_E2E_CHUNK_DELAY_MS:-20}" \
+    --el leading_silence_ms "${VOICE_AGENT_QUEUE_E2E_LEADING_SILENCE_MS:-100}" \
+    --el trailing_silence_ms "${VOICE_AGENT_QUEUE_E2E_TRAILING_SILENCE_MS:-200}" >/dev/null
+
+  wait_for_log "debug PCM delivered for turn $turn" 'VoiceAudioDebugInjection.*debug_audio_injection result delivered=true' 30
+  if ! wait_for_log_count "at least $turn ask_hermes tool calls" \
+    'VoiceAgentE2E.*hermes_tool_call_received' \
+    "$turn" \
+    "$TOOL_CALL_TIMEOUT_SECONDS"; then
+    if [[ "$WAIT_FOR_LOG_FAILURE" == "timeout" ]]; then
+      fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
+      write_missing_tool_call_diagnostics
+      fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
+    fi
+    exit 1
+  fi
+  wait_for_log_count "at least $turn queued Hermes jobs" 'hermes_queue_event type=job_created|hermes_job_created|diagnostic name=hermes_job_created' "$turn" "$TOOL_CALL_TIMEOUT_SECONDS"
+  wait_for_log_count "at least $turn queued Hermes tool responses" 'VoiceAgentGemini.*send kind=toolResponse sent=true' "$turn" 60
+  if (( turn < ${#QUEUE_PCM_PATHS[@]} )); then
+    wait_for_log "Gemini generation complete for turn $turn" 'VoiceAgentGemini.*event kind=GenerationComplete' "$OUTPUT_TIMEOUT_SECONDS"
+  fi
+done
+
+wait_for_log_count "at least $EXPECTED_COMPLETIONS ask_hermes tool calls" \
   'VoiceAgentE2E.*hermes_tool_call_received' \
   "$EXPECTED_COMPLETIONS" \
-  "$TOOL_CALL_TIMEOUT_SECONDS"; then
-  if [[ "$WAIT_FOR_LOG_FAILURE" == "timeout" ]]; then
-    fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
-    write_missing_tool_call_diagnostics
-    fail_if_log "common forbidden marker" "$COMMON_FORBIDDEN_PATTERN" || exit 1
-  fi
-  exit 1
-fi
+  "$TOOL_CALL_TIMEOUT_SECONDS"
 wait_for_log_count "at least $EXPECTED_COMPLETIONS queued Hermes jobs" 'hermes_queue_event type=job_created|hermes_job_created|diagnostic name=hermes_job_created' "$EXPECTED_COMPLETIONS" "$TOOL_CALL_TIMEOUT_SECONDS"
 assert_distinct_created_jobs "$EXPECTED_COMPLETIONS"
 wait_for_log_count "at least $EXPECTED_COMPLETIONS queued Hermes tool responses" 'VoiceAgentGemini.*send kind=toolResponse sent=true' "$EXPECTED_COMPLETIONS" 60
