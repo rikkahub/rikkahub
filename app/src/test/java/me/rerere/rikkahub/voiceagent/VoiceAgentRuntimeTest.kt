@@ -73,6 +73,41 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `session start does not write trace and session ids into conversation`() = runTest {
+        val conversationStore = FakeVoiceConversationStore()
+        val trace = VoiceTraceContext(traceId = "VA123456-abcdef", voiceSessionId = "VS123456-fedcba")
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = FakeGeminiLiveVoiceClient(),
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            traceContext = trace,
+            scope = this,
+        )
+
+        try {
+            session.start()
+
+            delay(100)
+            val text = conversationStore.conversation.value.currentMessages
+                .flatMap { it.parts }
+                .filterIsInstance<UIMessagePart.Text>()
+                .joinToString("\n") { it.text }
+
+            assertFalse(text.contains("Voice Agent session started"))
+            assertFalse(text.contains("Trace ID: VA123456-abcdef"))
+            assertFalse(text.contains("Session ID: VS123456-fedcba"))
+        } finally {
+            session.closeNow()
+        }
+    }
+
+    @Test
     fun `coordinator refreshes durable Hermes queue status in UI state`() = runTest {
         val conversationStore = FakeVoiceConversationStore()
         val coordinator = VoiceAgentCoordinator(

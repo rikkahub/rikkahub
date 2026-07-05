@@ -20,6 +20,7 @@ import me.rerere.rikkahub.voiceagent.DefaultVoiceAgentCallFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallManager
 import me.rerere.rikkahub.voiceagent.VoiceAgentNotificationFactory
+import me.rerere.rikkahub.voiceagent.VoiceSessionMetadataStore
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomAdapter
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomCallRegistry
 import me.rerere.rikkahub.voiceagent.telemetry.SentryVoiceObservabilityConfig
@@ -122,6 +123,10 @@ val appModule = module {
 
     single {
         VoiceAgentCallManager(factory = get())
+    }
+
+    single {
+        VoiceSessionMetadataStore(rootDirectory = get<android.content.Context>().noBackupFilesDir)
     }
 
     single {

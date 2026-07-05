@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,6 +35,7 @@ import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
@@ -93,6 +98,7 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.isAllowedFileType
 import me.rerere.rikkahub.utils.navigateToChatPage
+import me.rerere.rikkahub.voiceagent.VoiceSessionDebugDisplay
 import me.rerere.rikkahub.voiceagent.voiceAgentLaunchLabel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -118,6 +124,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
+    val voiceSessionDebugDisplay by vm.voiceSessionDebugDisplay.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -145,6 +153,18 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     LaunchedEffect(isBigScreen) {
         if (isBigScreen && drawerState.isOpen) {
             drawerState.close()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, vm) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.refreshVoiceSessionDebugDisplay()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -217,6 +237,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     chatListState = chatListState,
                     enableWebSearch = enableWebSearch,
                     currentChatModel = currentChatModel,
+                    voiceSessionDebugDisplay = voiceSessionDebugDisplay,
                     bigScreen = true,
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
@@ -249,6 +270,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     chatListState = chatListState,
                     enableWebSearch = enableWebSearch,
                     currentChatModel = currentChatModel,
+                    voiceSessionDebugDisplay = voiceSessionDebugDisplay,
                     bigScreen = false,
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
@@ -276,6 +298,7 @@ private fun ChatPageContent(
     chatListState: LazyListState,
     enableWebSearch: Boolean,
     currentChatModel: Model?,
+    voiceSessionDebugDisplay: VoiceSessionDebugDisplay?,
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
@@ -412,6 +435,7 @@ private fun ChatPageContent(
                 loading = loadingJob != null,
                 processingStatus = processingStatus,
                 previewMode = previewMode,
+                voiceSessionDebugDisplay = voiceSessionDebugDisplay,
                 settings = setting,
                 hazeState = hazeState,
                 errors = errors,

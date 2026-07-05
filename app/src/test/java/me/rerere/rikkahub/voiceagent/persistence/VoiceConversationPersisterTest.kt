@@ -8,6 +8,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import org.junit.Assert.assertEquals
@@ -18,6 +19,35 @@ import java.time.Instant
 import kotlin.uuid.Uuid
 
 class VoiceConversationPersisterTest {
+    @Test
+    fun `remove legacy voice session started notes removes only metadata tagged notes`() {
+        val persister = VoiceConversationPersister()
+        val legacyNote = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Text(
+                    text = "Voice Agent session started\n\nTrace ID: VA-old\nSession ID: VA-old",
+                    metadata = buildJsonObject {
+                        put("voice_source", JsonPrimitive("voice_agent"))
+                        put("voice_status", JsonPrimitive("session-started"))
+                        put("voice_trace_id", JsonPrimitive("VA-old"))
+                    }
+                )
+            )
+        )
+        val normalMessage = UIMessage.assistant("Voice Agent session started as normal text")
+        val conversation = emptyConversation().copy(
+            messageNodes = listOf(
+                MessageNode.of(legacyNote),
+                MessageNode.of(normalMessage),
+            )
+        )
+
+        val updated = persister.removeLegacyVoiceSessionStartedNotes(conversation)
+
+        assertEquals(listOf(normalMessage.id), updated.currentMessages.map { it.id })
+    }
+
     @Test
     fun `append user tool and assistant turns creates visible Hermes tool record`() {
         val persister = VoiceConversationPersister()

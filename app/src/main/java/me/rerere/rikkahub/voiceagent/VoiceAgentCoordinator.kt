@@ -346,6 +346,12 @@ class VoiceAgentCoordinator(
         diagnostics.record("gemini_setup_complete")
     }
 
+    fun removeLegacyVoiceSessionStartedNotes() {
+        persistConversation(
+            transform = persister::removeLegacyVoiceSessionStartedNotes,
+        )
+    }
+
     suspend fun awaitToolJobs() {
         hermesJobManager.awaitJobs()
     }

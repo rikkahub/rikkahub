@@ -41,6 +41,14 @@ enum class VoiceTranscriptStatus(val statusName: String) {
 }
 
 class VoiceConversationPersister {
+    fun removeLegacyVoiceSessionStartedNotes(conversation: Conversation): Conversation {
+        return conversation.copy(
+            messageNodes = conversation.messageNodes.filterNot { node ->
+                node.messages.any { it.isLegacyVoiceSessionStartedNote() }
+            }
+        )
+    }
+
     fun appendUserTurn(
         conversation: Conversation,
         text: String,
@@ -508,6 +516,15 @@ class VoiceConversationPersister {
         }
     }
 
+    private fun UIMessage.isLegacyVoiceSessionStartedNote(): Boolean {
+        return parts.any { part ->
+            if (part !is UIMessagePart.Text) return@any false
+            val metadata = part.metadata ?: return@any false
+            metadata[VOICE_SOURCE_KEY]?.jsonPrimitive?.content == VOICE_SOURCE_AGENT &&
+                metadata[VOICE_STATUS_KEY]?.jsonPrimitive?.content == VOICE_SESSION_STARTED_STATUS
+        }
+    }
+
     private val VoiceToolRecordStatus.statusName: String
         get() = queueStatus.wireName
 
@@ -547,5 +564,6 @@ class VoiceConversationPersister {
         const val VOICE_TRANSCRIPT_TURN_ID_KEY = "voice_transcript_turn_id"
         const val VOICE_TRANSCRIPT_USER_ROLE = "user"
         const val VOICE_TRANSCRIPT_ASSISTANT_ROLE = "assistant"
+        const val VOICE_SESSION_STARTED_STATUS = "session-started"
     }
 }

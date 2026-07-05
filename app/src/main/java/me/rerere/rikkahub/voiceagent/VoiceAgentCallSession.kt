@@ -117,6 +117,7 @@ class VoiceAgentCallSession internal constructor(
         sessionId = currentSessionId
         VoiceAgentLog.d(TAG, "start sessionId=$currentSessionId modelId=$modelId")
         writeSessionMetadata(status = "started")
+        coordinator.removeLegacyVoiceSessionStartedNotes()
         recordEventSafely(
             name = "voicelab.mobile.session.started",
             attributes = mapOf(

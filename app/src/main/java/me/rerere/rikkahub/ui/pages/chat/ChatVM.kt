@@ -12,10 +12,13 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.analytics.FirebaseAnalytics
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -41,6 +44,9 @@ import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
+import me.rerere.rikkahub.voiceagent.VoiceSessionDebugDisplay
+import me.rerere.rikkahub.voiceagent.VoiceSessionMetadataStore
+import me.rerere.rikkahub.voiceagent.toDebugDisplay
 import java.util.Locale
 import kotlin.uuid.Uuid
 
@@ -56,10 +62,13 @@ class ChatVM(
     private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
+    private val voiceSessionMetadataStore: VoiceSessionMetadataStore,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
+    private val _voiceSessionDebugDisplay = MutableStateFlow<VoiceSessionDebugDisplay?>(null)
+    val voiceSessionDebugDisplay: StateFlow<VoiceSessionDebugDisplay?> = _voiceSessionDebugDisplay.asStateFlow()
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
@@ -86,6 +95,7 @@ class ChatVM(
         viewModelScope.launch {
             chatService.initializeConversation(_conversationId)
         }
+        refreshVoiceSessionDebugDisplay()
 
         // 记住对话ID, 方便下次启动恢复
         context.writeStringPreference("lastConversationId", _conversationId.toString())
@@ -117,6 +127,14 @@ class ChatVM(
     fun dismissError(id: Uuid) = chatService.dismissError(id)
 
     fun clearAllErrors() = chatService.clearAllErrors()
+
+    fun refreshVoiceSessionDebugDisplay() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _voiceSessionDebugDisplay.value = voiceSessionMetadataStore
+                .latestForConversation(_conversationId.toString())
+                ?.toDebugDisplay()
+        }
+    }
 
     // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow

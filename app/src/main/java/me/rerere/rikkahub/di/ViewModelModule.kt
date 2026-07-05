@@ -36,6 +36,7 @@ val viewModelModule = module {
             analytics = get(),
             filesManager = get(),
             favoriteRepository = get(),
+            voiceSessionMetadataStore = get(),
         )
     }
     viewModelOf(::ChatDrawerVM)

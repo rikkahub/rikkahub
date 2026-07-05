@@ -102,6 +102,7 @@ import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.voiceagent.VoiceSessionDebugDisplay
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
 
@@ -117,6 +118,7 @@ fun ChatList(
     loading: Boolean,
     processingStatus: String? = null,
     previewMode: Boolean,
+    voiceSessionDebugDisplay: VoiceSessionDebugDisplay? = null,
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError> = emptyList(),
@@ -159,6 +161,7 @@ fun ChatList(
                 state = state,
                 loading = loading,
                 processingStatus = processingStatus,
+                voiceSessionDebugDisplay = voiceSessionDebugDisplay,
                 settings = settings,
                 hazeState = hazeState,
                 errors = errors,
@@ -189,6 +192,7 @@ private fun ChatListNormal(
     state: LazyListState,
     loading: Boolean,
     processingStatus: String? = null,
+    voiceSessionDebugDisplay: VoiceSessionDebugDisplay?,
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError>,
@@ -312,6 +316,15 @@ private fun ChatListNormal(
                     .hazeSource(state = hazeState)
                     .padding(top = innerPadding.calculateTopPadding()),
             ) {
+            voiceSessionDebugDisplay?.let { display ->
+                item(key = "VoiceSessionDebugHeader") {
+                    VoiceSessionDebugBanner(
+                        display = display,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
             itemsIndexed(
                 items = conversation.messageNodes,
                 key = { index, item -> item.id },
