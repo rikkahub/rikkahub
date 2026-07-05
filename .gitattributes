@@ -1,0 +1,2 @@
+# Baseline Profile 生成文件：标记为文本，统一使用 LF 换行，避免 CRLF 抖动
+app/src/release/generated/baselineProfiles/*.txt text eol=lf

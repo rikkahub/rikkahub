@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.search
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.Sorting01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,9 +24,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
+import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -97,6 +102,10 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                 navigationIcon = { BackButton() },
                 title = { Text(stringResource(R.string.search_page_title)) },
                 actions = {
+                    SortMenuButton(
+                        current = vm.sortOrder,
+                        onSortChange = { vm.onSortChange(it) },
+                    )
                     IconButton(
                         onClick = { showRebuildDialog = true },
                         enabled = !vm.isRebuilding,
@@ -205,6 +214,52 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SortMenuButton(
+    current: MessageSearchSort,
+    onSortChange: (MessageSearchSort) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                HugeIcons.Sorting01,
+                contentDescription = stringResource(R.string.search_page_sort)
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            MessageSearchSort.entries.forEach { sort ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                when (sort) {
+                                    MessageSearchSort.RELEVANCE -> R.string.search_page_sort_relevance
+                                    MessageSearchSort.NEWEST_FIRST -> R.string.search_page_sort_newest
+                                    MessageSearchSort.OLDEST_FIRST -> R.string.search_page_sort_oldest
+                                }
+                            )
+                        )
+                    },
+                    leadingIcon = {
+                        RadioButton(
+                            selected = sort == current,
+                            onClick = null,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSortChange(sort)
+                    },
+                )
             }
         }
     }

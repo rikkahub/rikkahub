@@ -17,21 +17,20 @@
 
 ## 🚀 下載
 
-🔗 [前往官網下載](https://rikka-ai.com/download)
+🔗 [前往官網下載](https://rikka-ai.com/download)（推薦）
 🔗 [前往 Google Play 下載](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
 ## 💖 贊助商
 
-<div align="center">
-  <img src="app/src/main/assets/icons/aihubmix-color.svg" alt="Aihubmix" width="50" />
-  <p style="font-size: 16px; font-weight: bold;">Aihubmix</p>
-  <p style="font-size: 14px;">感謝 <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> 的資金支持。我們推薦使用 aihubmix 作為全球主流模型的一站式服務平台。（OpenAI、Claude、Google Gemini、DeepSeek、Qwen 以及數百種其他模型）。</p>
-</div>
+|                                         贊助商                                         | 介紹                                                                                                                                              |
+|:-----------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------------------------------------------------------|
+| <img src="docs/sponsors/aihubmix.png" alt="Aihubmix" width="50" /><br /><b>Aihubmix</b> | 感謝 <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> 的資金支持。我們推薦使用 aihubmix 作為全球主流模型的一站式服務平台。（OpenAI、Claude、Google Gemini、DeepSeek、Qwen 以及數百種其他模型）。 |
+| <img src="docs/sponsors/suixiang.jpg" alt="隨想AI網關" width="50" /><br /><b>隨想AI網關</b> | 感謝隨想AI網關對本項目的贊助！隨想AI網關 是一家可靠高效的 API 中繼服務提供商，提供 Claude、Codex、Gemini 等的中繼服務。注重隱私的中轉站·無數據倒賣·無模型摻水，隱私，透明，極速售後。新帳戶註冊每日簽到就送 0.5 元測試額度，儲值額度 1:1，無需訂閱，按量付費。多線路冗餘、跨區域容災、自動故障切換，長鏈路 SSE 不中斷。99.9% 可用性，關鍵呼叫從不掉隊。 |
 
 ## ✨ 功能特色
 
-- 🎨 現代化安卓APP設計（Material You / 預測性返回）
-- 🌙 暗色模式
+- 🎨 現代化安卓APP設計（Material You / 預測性返回）和 🌙 暗色模式
+- 📦 工作區：基於 proot 的 Linux 智能體環境
 - 🖥️ Web多端訪問支持
 - 🛠️ MCP 支持
 - 🔄 多種類型的供應商支持，自定義 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
@@ -59,10 +58,9 @@
 - [Room](https://developer.android.com/training/data-storage/room) (數據庫)
 - [Coil](https://coil-kt.github.io/coil/) (圖片加載)
 - [Material You](https://m3.material.io/) (UI 設計)
-- [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation) (導航)
+- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (導航)
 - [Okhttp](https://square.github.io/okhttp/) (HTTP 客戶端)
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
-- [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (圖標庫)
 
 > [!TIP]
 > 你需要在 `app` 資料夾下添加 `google-services.json` 檔案才能構建應用。

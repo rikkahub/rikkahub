@@ -32,11 +32,14 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.ImageGenerationResult
+import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
+import me.rerere.ai.ui.ClaudeReasoningMetadata
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -96,7 +99,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): ImageGenerationResult {
+    ): Flow<ImageGenerationItem> {
         error("Claude provider does not support image generation")
     }
 
@@ -487,7 +490,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         is UIMessagePart.Reasoning -> buildJsonObject {
             put("type", "thinking")
             put("thinking", reasoning)
-            metadata?.forEach { (key, value) -> put(key, value) }
+            metadataAs<ClaudeReasoningMetadata>()?.signature?.let { put("signature", it) }
         }
 
         else -> null
@@ -533,9 +536,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                             finishedAt = null
                         )
                         if (signature != null) {
-                            reasoning.metadata = buildJsonObject {
-                                put("signature", signature)
-                            }
+                            reasoning.metadata = ClaudeReasoningMetadata(signature = signature).toMetadata()
                         }
                         parts.add(reasoning)
                     }

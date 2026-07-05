@@ -34,7 +34,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -87,12 +90,14 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
-import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
-import me.rerere.rikkahub.ui.pages.extensions.SkillDetailPage
-import me.rerere.rikkahub.ui.pages.extensions.SkillsPage
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
@@ -123,6 +128,7 @@ import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
+import me.rerere.rikkahub.utils.openUsageAccessSettings
 import me.rerere.rikkahub.voiceagent.VoiceAgentRoute
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
@@ -256,6 +262,7 @@ class RouteActivity : ComponentActivity() {
             ?: navStack?.openConversationIntent(intent.getStringExtra(EXTRA_CONVERSATION_ID))
     }
 
+    @OptIn(ExperimentalComposeUiApi::class)
     @Composable
     fun AppRoutes() {
         val toastState = rememberToasterState()
@@ -267,6 +274,8 @@ class RouteActivity : ComponentActivity() {
             eventBus.events.collect { event ->
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
+                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
+                    is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
                 }
             }
         }
@@ -311,6 +320,7 @@ class RouteActivity : ComponentActivity() {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .semantics { testTagsAsResourceId = true }
                         .background(MaterialTheme.colorScheme.background)
                 ) {
                     NavDisplay(
@@ -494,10 +504,6 @@ class RouteActivity : ComponentActivity() {
                                 SettingWebPage()
                             }
 
-                            entry<Screen.Developer> {
-                                DeveloperPage()
-                            }
-
                             entry<Screen.Debug> {
                                 DebugPage()
                             }
@@ -520,6 +526,18 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.Skills> {
                                 SkillsPage()
+                            }
+
+                            entry<Screen.Workspaces> {
+                                WorkspacePage()
+                            }
+
+                            entry<Screen.WorkspaceDetail> { key ->
+                                WorkspaceDetailPage(key.id)
+                            }
+
+                            entry<Screen.WorkspaceTerminal> { key ->
+                                WorkspaceTerminalPage(key.id)
                             }
 
                             entry<Screen.SkillDetail> { key ->
@@ -698,9 +716,6 @@ sealed interface Screen : NavKey {
     data object SettingWeb : Screen
 
     @Serializable
-    data object Developer : Screen
-
-    @Serializable
     data object Debug : Screen
 
     @Serializable
@@ -717,6 +732,15 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Skills : Screen
+
+    @Serializable
+    data object Workspaces : Screen
+
+    @Serializable
+    data class WorkspaceDetail(val id: String) : Screen
+
+    @Serializable
+    data class WorkspaceTerminal(val id: String) : Screen
 
     @Serializable
     data class SkillDetail(val skillName: String) : Screen

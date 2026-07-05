@@ -11,6 +11,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.baselineprofile)
 }
 
 val localProperties = Properties().apply {
@@ -37,8 +38,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 162
-        versionName = "2.2.6"
+        versionCode = 168
+        versionName = "2.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "VOICE_AGENT_BASE_URL_OVERRIDE", localStringProperty("voiceAgentBaseUrlOverride", "VOICE_AGENT_BASE_URL_OVERRIDE"))
@@ -102,16 +103,6 @@ android {
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
             buildConfigField("String", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH", localStringProperty("voiceAgentHermesE2eExpectedHash", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH"))
         }
-        create("baseline") {
-            initWith(getByName("release"))
-            matchingFallbacks.add("release")
-            signingConfig = signingConfigs.getByName("debug")
-            applicationIdSuffix = ".debug"
-            isDebuggable = false
-            isMinifyEnabled = false
-            isShrinkResources = false
-            isProfileable = true
-        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -130,6 +121,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            pickFirsts += "lib/*/libtermux.so"
         }
     }
     tasks.withType<KotlinCompile>().configureEach {
@@ -175,6 +167,8 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.profileinstaller)
+    implementation(libs.termux.terminal.view)
+    implementation(libs.guava.listenablefuture)
 
     // Compose
     implementation(libs.androidx.activity.compose)
@@ -237,6 +231,9 @@ dependencies {
     // pebble (template engine)
     implementation(libs.pebble)
 
+    // java-diff-utils (unified diff)
+    implementation(libs.diffutils)
+
     // coil
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
@@ -260,6 +257,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.paging)
+    baselineProfile(project(":app:baselineprofile"))
     ksp(libs.androidx.room.compiler)
 
     // Paging3
@@ -310,6 +308,7 @@ dependencies {
     implementation(project(":speech"))
     implementation(project(":common"))
     implementation(project(":material3"))
+    implementation(project(":workspace"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
 

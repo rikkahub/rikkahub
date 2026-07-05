@@ -16,6 +16,11 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+  <uses-permission
+    android:name="android.permission.PACKAGE_USAGE_STATS"
+    tools:ignore="ProtectedPermissions" />
+  <uses-permission android:name="android.permission.READ_CALENDAR" />
+  <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
   <uses-feature
     android:name="android.hardware.camera"
@@ -27,6 +32,16 @@
   <queries>
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
+    </intent>
+    <!-- 用于解析屏幕使用时间里各 App 的名称(可见性受 Android 11+ 包可见性限制) -->
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
+    <!-- 用于识别桌面 launcher 以便在屏幕使用时间中排除 -->
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.HOME" />
     </intent>
   </queries>
 
@@ -99,6 +114,22 @@
       </intent-filter>
     </activity>
     <activity
+      android:name=".ui.activity.McpOAuthCallbackActivity"
+      android:exported="true"
+      android:launchMode="singleTask"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+
+        <data
+          android:host="mcp-oauth-callback"
+          android:scheme="rikkahub" />
+      </intent-filter>
+    </activity>
+    <activity
       android:name="com.yalantis.ucrop.UCropActivity"
       android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
@@ -131,6 +162,16 @@
       <meta-data
         android:name="android.support.FILE_PROVIDER_PATHS"
         android:resource="@xml/file_paths" />
+    </provider>
+    <provider
+      android:name=".data.provider.WorkspaceDocumentsProvider"
+      android:authorities="${applicationId}.documents"
+      android:exported="true"
+      android:grantUriPermissions="true"
+      android:permission="android.permission.MANAGE_DOCUMENTS">
+      <intent-filter>
+        <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+      </intent-filter>
     </provider>
     <provider
       android:name="androidx.startup.InitializationProvider"

@@ -56,6 +56,8 @@ fun TTSProviderConfigure(
                         is TTSProviderSetting.Groq -> "Groq"
                         is TTSProviderSetting.XAI -> "xAI"
                         is TTSProviderSetting.MiMo -> "MiMo"
+                        is TTSProviderSetting.Step -> "Step"
+                        is TTSProviderSetting.ElevenLabs -> "ElevenLabs"
                     },
                     onValueChange = {},
                     readOnly = true,
@@ -83,6 +85,8 @@ fun TTSProviderConfigure(
                                         TTSProviderSetting.Groq::class -> "Groq"
                                         TTSProviderSetting.XAI::class -> "xAI"
                                         TTSProviderSetting.MiMo::class -> "MiMo"
+                                        TTSProviderSetting.ElevenLabs::class -> "ElevenLabs"
+                                        TTSProviderSetting.Step::class -> "Step"
                                         else -> providerClass.simpleName ?: "Unknown"
                                     }
                                 )
@@ -129,6 +133,15 @@ fun TTSProviderConfigure(
                                         id = setting.id,
                                         name = "MiMo TTS"
                                     )
+                                    TTSProviderSetting.ElevenLabs::class -> TTSProviderSetting.ElevenLabs(
+                                        id = setting.id,
+                                        name = "ElevenLabs TTS"
+                                    )
+
+                                    TTSProviderSetting.Step::class -> TTSProviderSetting.Step(
+                                        id = setting.id,
+                                        name = "Step TTS"
+                                    )
 
                                     else -> setting
                                 }
@@ -165,6 +178,8 @@ fun TTSProviderConfigure(
             is TTSProviderSetting.Groq -> GroqTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.XAI -> XAITTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.MiMo -> MiMoTTSConfiguration(setting, onValueChange)
+            is TTSProviderSetting.ElevenLabs -> ElevenLabsTTSConfiguration(setting, onValueChange)
+            is TTSProviderSetting.Step -> StepTTSConfiguration(setting, onValueChange)
         }
     }
 }
@@ -967,5 +982,423 @@ private fun XAITTSConfiguration(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ElevenLabsTTSConfiguration(
+    setting: TTSProviderSetting.ElevenLabs,
+    onValueChange: (TTSProviderSetting) -> Unit
+) {
+    // API Key
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
+        description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { newApiKey ->
+                onValueChange(setting.copy(apiKey = newApiKey))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("sk_...") },
+        )
+    }
+
+    // Base URL
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
+        description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.baseUrl,
+            onValueChange = { newBaseUrl ->
+                onValueChange(setting.copy(baseUrl = newBaseUrl))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("https://api.elevenlabs.io") }
+        )
+    }
+
+    // Model
+    var modelExpanded by remember { mutableStateOf(false) }
+    val models = listOf(
+        "eleven_multilingual_v2" to "Eleven Multilingual v2",
+        "eleven_v3" to "Eleven v3",
+        "eleven_flash_v2_5" to "Eleven Flash v2.5"
+    )
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_model)) },
+        description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = modelExpanded,
+            onExpandedChange = { modelExpanded = !modelExpanded }
+        ) {
+            OutlinedTextField(
+                value = setting.model,
+                onValueChange = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = modelExpanded,
+                onDismissRequest = { modelExpanded = false }
+            ) {
+                models.forEach { (modelId, displayName) ->
+                    DropdownMenuItem(
+                        text = { Text("$displayName ($modelId)") },
+                        onClick = {
+                            modelExpanded = false
+                            onValueChange(setting.copy(model = modelId))
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // Voice ID
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_voice)) },
+        description = { Text(stringResource(R.string.setting_tts_page_voice_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.voiceId,
+            onValueChange = { newVoiceId ->
+                onValueChange(setting.copy(voiceId = newVoiceId))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("JBFqnCBsd6RMkjVDRZzb") }
+        )
+    }
+
+    // Stability
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_stability)) },
+        description = { Text(stringResource(R.string.setting_tts_page_stability_description)) }
+    ) {
+        OutlinedNumberInput(
+            value = setting.stability,
+            onValueChange = { newStability ->
+                onValueChange(setting.copy(stability = newStability.coerceIn(0f, 1f)))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = "0.5",
+        )
+    }
+
+    // Similarity Boost
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_similarity_boost)) },
+        description = { Text(stringResource(R.string.setting_tts_page_similarity_boost_description)) }
+    ) {
+        OutlinedNumberInput(
+            value = setting.similarityBoost,
+            onValueChange = { newSimilarityBoost ->
+                onValueChange(setting.copy(similarityBoost = newSimilarityBoost.coerceIn(0f, 1f)))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = "0.75",
+        )
+    }
+}
+
+@Composable
+private fun StepTTSConfiguration(
+    setting: TTSProviderSetting.Step,
+    onValueChange: (TTSProviderSetting) -> Unit
+) {
+    // API Key
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
+        description = { Text("从阶跃星辰官网获取密钥: platform.stepfun.com/interface-key") }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { newApiKey ->
+                onValueChange(setting.copy(apiKey = newApiKey))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("从阶跃星辰官网获取密钥") },
+        )
+    }
+
+    // Base URL
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
+        description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.baseUrl,
+            onValueChange = { newBaseUrl ->
+                onValueChange(setting.copy(baseUrl = newBaseUrl))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("https://api.stepfun.com") }
+        )
+    }
+
+    // Model
+    var modelExpanded by remember { mutableStateOf(false) }
+    val models = listOf(
+        "step-tts-mini" to "step-tts-mini (轻量, 便宜)",
+        "step-tts-vivid" to "step-tts-vivid (情感丰富)",
+        "stepaudio-2.5-tts" to "stepaudio-2.5-tts (语境感知, 支持 instruction)",
+        "step-tts-2" to "step-tts-2 (上一代)",
+    )
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_model)) },
+        description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = modelExpanded,
+            onExpandedChange = { modelExpanded = !modelExpanded }
+        ) {
+            OutlinedTextField(
+                value = setting.model,
+                onValueChange = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = modelExpanded,
+                onDismissRequest = { modelExpanded = false }
+            ) {
+                models.forEach { (modelId, description) ->
+                    DropdownMenuItem(
+                        text = { Text(description) },
+                        onClick = {
+                            modelExpanded = false
+                            onValueChange(setting.copy(model = modelId))
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // Voice
+    var voiceExpanded by remember { mutableStateOf(false) }
+    // 部分常用 voice-id, 完整列表见官方开发指南
+    // https://platform.stepfun.com/docs/zh/guides/developer/tts
+    val voices = listOf(
+        "elegantgentle-female" to "气质温婉 (elegantgentle-female)",
+        "livelybreezy-female" to "活力轻快 (livelybreezy-female)",
+        "energeticconfident-female" to "活力自信 (energeticconfident-female)",
+        "jingdiannvsheng" to "经典女声 (jingdiannvsheng)",
+        "wenroushunv" to "温柔熟女 (wenroushunv)",
+        "tianmeinvsheng" to "甜美女声 (tianmeinvsheng)",
+        "qingchunshaonv" to "清纯少女 (qingchunshaonv)",
+        "wenrounvsheng" to "温柔女声 (wenrounvsheng)",
+        "ruanmengnvsheng" to "软萌女生 (ruanmengnvsheng)",
+        "youyanvsheng" to "优雅女生 (youyanvsheng)",
+        "lengyanyujie" to "冷艳御姐 (lengyanyujie)",
+        "shuangkuaijiejie" to "爽快姐姐 (shuangkuaijiejie)",
+        "wenjingxuejie" to "文静学姐 (wenjingxuejie)",
+        "linjiajiejie" to "邻家姐姐 (linjiajiejie)",
+        "linjiameimei" to "邻家妹妹 (linjiameimei)",
+        "zhixingjiejie" to "知性姐姐 (zhixingjiejie)",
+        "cixingnansheng" to "磁性男声 (cixingnansheng)",
+        "wenrounansheng" to "温柔男声 (wenrounansheng)",
+        "yuanqinansheng" to "元气男声 (yuanqinansheng)",
+        "zhengpaiqingnian" to "正派青年 (zhengpaiqingnian)",
+        "ruyananshi" to "儒雅男士 (ruyananshi)",
+        "boyinnansheng" to "播音男声 (boyinnansheng)",
+        "shenchennanyin" to "深沉男音 (shenchennanyin)",
+        "shuangkuainansheng" to "爽快男声 (shuangkuainansheng)",
+        "ganliannvsheng" to "干练女声 (ganliannvsheng)",
+        "qinhenvsheng" to "亲切女声 (qinhenvsheng)",
+        "huolinvsheng" to "活力女声 (huolinvsheng)",
+        "jilingshaonv" to "机灵少女 (jilingshaonv)",
+        "yuanqishaonv" to "元气少女 (yuanqishaonv)",
+        "wenrougongzi" to "温柔公子 (wenrougongzi)",
+        "qingniandaxuesheng" to "青年大学生 (qingniandaxuesheng)",
+    )
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_voice)) },
+        description = { Text(stringResource(R.string.setting_tts_page_voice_description)) }
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = voiceExpanded,
+            onExpandedChange = { voiceExpanded = !voiceExpanded }
+        ) {
+            OutlinedTextField(
+                value = setting.voice,
+                onValueChange = { newVoice ->
+                    onValueChange(setting.copy(voice = newVoice))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = voiceExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = voiceExpanded,
+                onDismissRequest = { voiceExpanded = false }
+            ) {
+                voices.forEach { (voiceId, description) ->
+                    DropdownMenuItem(
+                        text = { Text(description) },
+                        onClick = {
+                            voiceExpanded = false
+                            onValueChange(setting.copy(voice = voiceId))
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // Response Format
+    var formatExpanded by remember { mutableStateOf(false) }
+    val formats = listOf("mp3", "wav", "pcm", "opus", "flac")
+
+    FormItem(
+        label = { Text("Response Format") },
+        description = { Text("音频编码格式 (注意 StepFun API 字段名为 camelCase)") }
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = formatExpanded,
+            onExpandedChange = { formatExpanded = !formatExpanded }
+        ) {
+            OutlinedTextField(
+                value = setting.responseFormat,
+                onValueChange = { newFormat ->
+                    onValueChange(setting.copy(responseFormat = newFormat))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = formatExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = formatExpanded,
+                onDismissRequest = { formatExpanded = false }
+            ) {
+                formats.forEach { format ->
+                    DropdownMenuItem(
+                        text = { Text(format) },
+                        onClick = {
+                            formatExpanded = false
+                            onValueChange(setting.copy(responseFormat = format))
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // Speed
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_speed)) },
+        description = { Text("语速 (0.5 - 2.0, 1.0 为正常)") }
+    ) {
+        OutlinedNumberInput(
+            value = setting.speed,
+            onValueChange = { newSpeed ->
+                if (newSpeed in 0.5f..2.0f) {
+                    onValueChange(setting.copy(speed = newSpeed))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.setting_tts_page_speed)
+        )
+    }
+
+    // Volume
+    FormItem(
+        label = { Text("Volume") },
+        description = { Text("音量 (0.1 - 2.0, 1.0 为正常)") }
+    ) {
+        OutlinedNumberInput(
+            value = setting.volume,
+            onValueChange = { newVolume ->
+                if (newVolume in 0.1f..2.0f) {
+                    onValueChange(setting.copy(volume = newVolume))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = "Volume"
+        )
+    }
+
+    // Sample Rate
+    var sampleRateExpanded by remember { mutableStateOf(false) }
+    val sampleRates = listOf(8000, 16000, 22050, 24000)
+
+    FormItem(
+        label = { Text("Sample Rate") },
+        description = { Text("采样率 (Hz)") }
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = sampleRateExpanded,
+            onExpandedChange = { sampleRateExpanded = !sampleRateExpanded }
+        ) {
+            OutlinedTextField(
+                value = setting.sampleRate.toString(),
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = sampleRateExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = sampleRateExpanded,
+                onDismissRequest = { sampleRateExpanded = false }
+            ) {
+                sampleRates.forEach { rate ->
+                    DropdownMenuItem(
+                        text = { Text("$rate Hz") },
+                        onClick = {
+                            sampleRateExpanded = false
+                            onValueChange(setting.copy(sampleRate = rate))
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // Instruction (仅 stepaudio-2.5-tts 生效)
+    FormItem(
+        label = { Text("Instruction") },
+        description = { Text("全局语境指令, 仅 stepaudio-2.5-tts 生效 (≤200 字符, 留空不下发)") }
+    ) {
+        OutlinedTextField(
+            value = setting.instruction,
+            onValueChange = { newInstruction ->
+                // 服务端上限 200 字符, 客户端做一层保护
+                if (newInstruction.length <= 200) {
+                    onValueChange(setting.copy(instruction = newInstruction))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("例如: 语气温柔, 语速偏慢") },
+            minLines = 2,
+            maxLines = 4,
+        )
     }
 }

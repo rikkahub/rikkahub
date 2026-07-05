@@ -8,6 +8,7 @@ import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Cancel01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,19 +38,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +71,7 @@ import io.github.g00fy2.quickie.ScanQRCode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.RECOMMENDED_PROVIDERS
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -79,18 +83,16 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
+import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
-import java.util.Locale
-import kotlinx.coroutines.launch
 import kotlin.uuid.Uuid
 
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
-    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
     val lazyListState = rememberLazyListState()
@@ -121,21 +123,12 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
-                    if(Locale.getDefault().language == "zh") {
-                        IconButton(
-                            onClick = {
-                                val aihubmixIndex = filteredProviders.indexOfFirst {
-                                    it.id.toString() == "1b1395ed-b702-4aeb-8bc1-b681c4456953"
-                                }
-                                if (aihubmixIndex != -1) {
-                                    scope.launch {
-                                        lazyListState.animateScrollToItem(aihubmixIndex)
-                                    }
-                                }
-                            }
-                        ) {
-                            AutoAIIcon("AiHubMix")
-                        }
+                    RecommendProviderButton { provider ->
+                        vm.updateSettings(
+                            settings.copy(
+                                providers = listOf(provider.copyProvider(Uuid.random())) + settings.providers
+                            )
+                        )
                     }
                     ImportProviderButton {
                         vm.updateSettings(
@@ -162,7 +155,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             // Search bar
             OutlinedTextField(
@@ -192,7 +185,8 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     .fillMaxWidth()
                     .weight(1f)
                     .imePadding(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp) +
+                    PaddingValues(bottom = innerPadding.calculateBottomPadding()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 state = lazyListState,
             ) {
@@ -232,6 +226,101 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecommendProviderButton(
+    onAdd: (ProviderSetting) -> Unit
+) {
+    val toaster = LocalToaster.current
+    var showSheet by remember { mutableStateOf(false) }
+    val importSuccessMessage = stringResource(R.string.setting_provider_page_import_success)
+
+    IconButton(
+        onClick = { showSheet = true }
+    ) {
+        Icon(HugeIcons.Sparkles, contentDescription = stringResource(R.string.setting_provider_page_recommend))
+    }
+
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.setting_provider_page_recommend),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                RECOMMENDED_PROVIDERS.forEach { provider ->
+                    RecommendProviderItem(
+                        provider = provider,
+                        onAdd = {
+                            onAdd(provider)
+                            toaster.show(
+                                importSuccessMessage,
+                                type = ToastType.Success
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecommendProviderItem(
+    provider: ProviderSetting,
+    onAdd: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AutoAIIcon(
+                name = provider.name,
+                modifier = Modifier.size(40.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = provider.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                    CompositionLocalProvider(LocalContentColor provides LocalContentColor.current.copy(alpha = 0.7f)) {
+                        provider.description()
+                    }
+                }
+            }
+            IconButton(onClick = onAdd) {
+                Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.setting_provider_page_add))
             }
         }
     }

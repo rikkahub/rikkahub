@@ -8,8 +8,7 @@ import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
-import me.rerere.rikkahub.data.ai.AILoggingManager
-import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.EmojiData
@@ -78,10 +77,6 @@ val appModule = module {
     }
 
     single {
-        AILoggingManager()
-    }
-
-    single {
         ChatService(
             context = get(),
             appScope = get(),
@@ -94,7 +89,9 @@ val appModule = module {
             localTools = get(),
             mcpManager = get(),
             filesManager = get(),
-            skillManager = get()
+            skillManager = get(),
+            workspaceRepository = get(),
+            folderRepository = get()
         )
     }
 

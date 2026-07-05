@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -22,6 +23,7 @@ import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
+import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -150,38 +152,24 @@ class ImgGenVM(
                 val providerSetting = settings.providers.find { it.id == provider.id }
                     ?: throw IllegalStateException("Provider setting not found")
 
+                val requestPrompt = _prompt.value
                 val params = ImageGenerationParams(
                     model = model,
-                    prompt = _prompt.value,
+                    prompt = requestPrompt,
                     numOfImages = _numberOfImages.value,
                     aspectRatio = _aspectRatio.value,
                     customHeaders = model.customHeaders,
                     customBody = model.customBodies
                 )
 
-                val result = providerManager.getProviderByType(provider)
+                val images = providerManager.getProviderByType(provider)
                     .generateImage(providerSetting, params)
 
-                val newImages = mutableListOf<GeneratedImage>()
-
-                result.items.forEachIndexed { index, item ->
-                    val imageFile = saveImageToStorage(
-                        item = item,
-                        prompt = _prompt.value,
-                        modelName = model.displayName,
-                        index = index
-                    )
-                    val generatedImage = GeneratedImage(
-                        id = 0, // Will be updated after database insertion
-                        prompt = _prompt.value,
-                        filePath = imageFile.absolutePath,
-                        timestamp = System.currentTimeMillis(),
-                        model = model.displayName
-                    )
-                    newImages.add(generatedImage)
-                }
-
-                _currentGeneratedImages.value = newImages
+                collectImageGeneration(
+                    images = images,
+                    prompt = requestPrompt,
+                    modelName = model.displayName,
+                )
             } catch (e: Exception) {
                 if(e is CancellationException) return@launch
                 Log.e(TAG, "Failed to generate image", e)
@@ -211,10 +199,11 @@ class ImgGenVM(
                 val providerSetting = settings.providers.find { it.id == provider.id }
                     ?: throw IllegalStateException("Provider setting not found")
 
+                val requestPrompt = _prompt.value
                 val sourceImages = _referenceImages.value
                 val params = ImageEditParams(
                     model = model,
-                    prompt = _prompt.value,
+                    prompt = requestPrompt,
                     images = sourceImages,
                     numOfImages = _numberOfImages.value,
                     aspectRatio = _aspectRatio.value,
@@ -222,30 +211,16 @@ class ImgGenVM(
                     customBody = model.customBodies
                 )
 
-                val result = providerManager.getProviderByType(provider)
+                val images = providerManager.getProviderByType(provider)
                     .editImage(providerSetting, params)
 
-                val newImages = mutableListOf<GeneratedImage>()
-
-                result.items.forEachIndexed { index, item ->
-                    val imageFile = saveImageToStorage(
-                        item = item,
-                        prompt = _prompt.value,
-                        modelName = model.displayName,
-                        index = index,
-                        type = GenMediaEntity.TYPE_IMAGE_EDIT,
-                    )
-                    val generatedImage = GeneratedImage(
-                        id = 0, // Will be updated after database insertion
-                        prompt = _prompt.value,
-                        filePath = imageFile.absolutePath,
-                        timestamp = System.currentTimeMillis(),
-                        model = model.displayName
-                    )
-                    newImages.add(generatedImage)
-                }
-
-                _currentGeneratedImages.value = newImages
+                collectImageGeneration(
+                    images = images,
+                    prompt = requestPrompt,
+                    modelName = model.displayName,
+                    type = GenMediaEntity.TYPE_IMAGE_EDIT,
+                    sourcePaths = sourceImages.joinToString("\n"),
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) return@launch
                 Log.e(TAG, "Failed to edit image", e)
@@ -258,6 +233,69 @@ class ImgGenVM(
 
     fun cancelGeneration() {
         cancelJob?.cancel()
+    }
+
+    private suspend fun collectImageGeneration(
+        images: Flow<ImageGenerationItem>,
+        prompt: String,
+        modelName: String,
+        type: String = GenMediaEntity.TYPE_IMAGE_GENERATION,
+        sourcePaths: String? = null,
+    ) {
+        val finalImages = mutableListOf<GeneratedImage>()
+        var previewFile: File? = null
+        var finalIndex = 0
+
+        images.collect { item ->
+            if (item.partial) {
+                previewFile?.delete()
+                val imageFile = saveImagePreview(
+                    item = item,
+                    modelName = modelName,
+                    index = item.partialImageIndex ?: finalIndex,
+                )
+                previewFile = imageFile
+                _currentGeneratedImages.value = finalImages + GeneratedImage(
+                    id = 0,
+                    prompt = prompt,
+                    filePath = imageFile.absolutePath,
+                    timestamp = System.currentTimeMillis(),
+                    model = modelName
+                )
+            } else {
+                previewFile?.delete()
+                previewFile = null
+                val imageFile = saveImageToStorage(
+                    item = item,
+                    prompt = prompt,
+                    modelName = modelName,
+                    index = finalIndex,
+                    type = type,
+                    sourcePaths = sourcePaths,
+                )
+                finalImages.add(
+                    GeneratedImage(
+                        id = 0, // Will be updated after database insertion
+                        prompt = prompt,
+                        filePath = imageFile.absolutePath,
+                        timestamp = System.currentTimeMillis(),
+                        model = modelName
+                    )
+                )
+                finalIndex++
+                _currentGeneratedImages.value = finalImages.toList()
+            }
+        }
+    }
+
+    private fun saveImagePreview(
+        item: ImageGenerationItem,
+        modelName: String,
+        index: Int,
+    ): File {
+        val timestamp = System.currentTimeMillis()
+        val imageFile = File(getApplication<Application>().appTempFolder, "imggen_${timestamp}_${modelName}_$index.png")
+        return filesManager.createImageFileFromBase64(item.data, imageFile.absolutePath)
     }
 
     private suspend fun saveImageToStorage(

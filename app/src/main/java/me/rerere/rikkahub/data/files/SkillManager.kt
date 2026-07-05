@@ -46,11 +46,13 @@ class SkillManager(
     }
 
     fun saveSkill(name: String, content: String): SkillMetadata? {
+        // 通过原子写入(staging + rename)落盘，避免直接 mkdirs 失败时
+        // writeText 抛出 FileNotFoundException 导致崩溃
+        if (!saveSkillFileBytesAtomically(name, mapOf("SKILL.md" to content.toByteArray()))) {
+            return null
+        }
         val skillDir = resolveSkillDir(name) ?: return null
-        skillDir.mkdirs()
-        val skillFile = skillDir.resolve("SKILL.md")
-        skillFile.writeText(content)
-        return parseSkillFile(skillFile, skillDir)
+        return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir)
     }
 
     suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
@@ -70,6 +72,31 @@ class SkillManager(
             }
         }
         deleted
+    }
+
+    /**
+     * 清理所有助手 enabledSkills 中已不存在于磁盘的技能名。
+     *
+     * 当用户在 App 外直接删除 /skills/ 目录下的技能时，不会走 [deleteSkill] 的清理逻辑，
+     * 导致 enabledSkills 残留"幽灵"技能名，使扩展入口角标计数偏大。
+     */
+    suspend fun pruneOrphanedEnabledSkills(): List<SkillMetadata> = withContext(Dispatchers.IO) {
+        val skills = listSkills()
+        val existing = skills.mapTo(HashSet()) { it.name }
+        settingsStore.update { settings ->
+            var changed = false
+            val newAssistants = settings.assistants.map { assistant ->
+                val pruned = assistant.enabledSkills.filterTo(LinkedHashSet()) { it in existing }
+                if (pruned.size != assistant.enabledSkills.size) {
+                    changed = true
+                    assistant.copy(enabledSkills = pruned)
+                } else {
+                    assistant
+                }
+            }
+            if (changed) settings.copy(assistants = newAssistants) else settings
+        }
+        skills
     }
 
     fun getSkillDir(skillName: String): File? = resolveSkillDir(skillName)

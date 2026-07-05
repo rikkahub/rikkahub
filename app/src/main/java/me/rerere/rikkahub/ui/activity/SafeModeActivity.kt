@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -54,6 +55,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
+import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.utils.CrashHandler
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
@@ -105,6 +107,16 @@ class SafeModeActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(stringResource(R.string.safe_mode_switch_assistant))
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                startActivity(Intent(this@SafeModeActivity, RouteActivity::class.java))
+                                finish()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.safe_mode_enter_app))
                         }
 
                         if (stackTrace != null) {

@@ -139,19 +139,25 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().workspaceDao()
+    }
+
+    single {
+        get<AppDatabase>().folderDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 
-    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get()) }
+    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
 
     single {
         GenerationHandler(
             context = get(),
             providerManager = get(),
             json = get(),
-            memoryRepo = get(),
-            conversationRepo = get(),
-            aiLoggingManager = get()
+            memoryRepo = get()
         )
     }
 

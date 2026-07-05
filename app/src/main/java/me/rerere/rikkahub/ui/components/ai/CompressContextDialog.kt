@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 
 @Composable
@@ -39,7 +40,6 @@ fun CompressContextDialog(
     var selectedTokens by remember { mutableIntStateOf(2000) }
     var keepRecentMessages by remember { mutableIntStateOf(32) }
     val tokenOptions = listOf(500, 1000, 2000, 4000)
-    val keepRecentOptions = listOf(0, 16, 32, 64)
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
 
@@ -103,27 +103,13 @@ fun CompressContextDialog(
                         }
                     }
 
-                    // Keep recent messages selector
-                    Text(
-                        text = stringResource(R.string.chat_page_compress_keep_recent),
-                        style = MaterialTheme.typography.labelMedium
+                    // Keep recent messages input
+                    OutlinedNumberInput(
+                        value = keepRecentMessages,
+                        onValueChange = { keepRecentMessages = it },
+                        label = stringResource(R.string.chat_page_compress_keep_recent),
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        keepRecentOptions.forEachIndexed { index, count ->
-                            SegmentedButton(
-                                selected = keepRecentMessages == count,
-                                onClick = { keepRecentMessages = count },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = keepRecentOptions.size
-                                )
-                            ) {
-                                Text("$count")
-                            }
-                        }
-                    }
 
                     // Additional context input
                     OutlinedTextField(

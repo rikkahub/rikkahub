@@ -17,6 +17,8 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import me.rerere.rikkahub.data.files.FileFolders
+import java.io.File
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -33,6 +35,8 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.WorkspaceManager
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -69,6 +73,15 @@ class RikkaHubApp : Application() {
         // delete temp files
         deleteTempFiles()
 
+        // cleanup stale tool output files
+        cleanupToolOutputs()
+
+        // cleanup workspace temp dirs (proot + rootfs /tmp)
+        cleanupWorkspaceTempDirs()
+
+        // check workspace integrity (remove orphaned DB records after backup restore)
+        checkWorkspaceIntegrity()
+
         // sync upload files to DB
         syncManagedFiles()
 
@@ -103,11 +116,42 @@ class RikkaHubApp : Application() {
         }
     }
 
+    private fun cleanupWorkspaceTempDirs() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<WorkspaceManager>().cleanupAllTempDirs()
+            }.onFailure {
+                Log.e(TAG, "cleanupWorkspaceTempDirs failed", it)
+            }
+        }
+    }
+
+    private fun checkWorkspaceIntegrity() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<WorkspaceRepository>().checkIntegrity()
+            }.onFailure {
+                Log.e(TAG, "checkWorkspaceIntegrity failed", it)
+            }
+        }
+    }
+
     private fun deleteTempFiles() {
         get<AppScope>().launch(Dispatchers.IO) {
             val dir = appTempFolder
             if (dir.exists()) {
                 dir.deleteRecursively()
+            }
+        }
+    }
+
+    private fun cleanupToolOutputs() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val dir = File(filesDir, FileFolders.TOOL_OUTPUTS)
+                if (dir.exists()) {
+                    dir.deleteRecursively()
+                }
             }
         }
     }

@@ -5,7 +5,11 @@ plugins {
 
 android {
     namespace = "me.rerere.baselineprofile"
-    compileSdk = 37
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -14,9 +18,12 @@ android {
 
     defaultConfig {
         minSdk = 28
-        targetSdk = 37
+        targetSdk = 36
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 允许在模拟器上生成 Baseline Profile（将 EMULATOR 错误降级为警告）
+        testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] = "EMULATOR"
     }
 
     targetProjectPath = ":app"
@@ -30,10 +37,10 @@ baselineProfile {
 }
 
 dependencies {
-    implementation(libs.androidx.junit)
-    implementation(libs.androidx.espresso.core)
-    implementation(libs.androidx.uiautomator)
     implementation(libs.androidx.benchmark.macro.junit4)
+    implementation(libs.androidx.espresso.core)
+    implementation(libs.androidx.junit)
+    implementation(libs.androidx.uiautomator)
 }
 
 androidComponents {

@@ -31,9 +31,12 @@ import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.OpenAIReasoningMetadata
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -302,9 +305,10 @@ class ResponseAPI(
                                     contentBuffer.clear()
                                 }
                                 // 输出 reasoning item
+                                val reasoningMetadata = part.metadataAs<OpenAIReasoningMetadata>()
                                 add(buildJsonObject {
                                     put("type", "reasoning")
-                                    part.metadata?.get("reasoning_id")?.jsonPrimitiveOrNull?.contentOrNull?.let {
+                                    reasoningMetadata?.reasoningId?.let {
                                         put("id", it)
                                     }
                                     put("summary", buildJsonArray {
@@ -313,11 +317,8 @@ class ResponseAPI(
                                             put("text", part.reasoning)
                                         })
                                     })
-                                    part.metadata?.get("encrypted_content")?.jsonPrimitiveOrNull?.contentOrNull?.let {
-                                        put(
-                                            "encrypted_content",
-                                            part.metadata?.get("encrypted_content")?.jsonPrimitive?.contentOrNull ?: ""
-                                        )
+                                    reasoningMetadata?.encryptedContent?.let {
+                                        put("encrypted_content", it)
                                     }
                                 })
                             }
@@ -352,14 +353,42 @@ class ResponseAPI(
                             put("type", "function_call")
                             put("call_id", tool.toolCallId)
                             put("name", tool.toolName)
-                            put("arguments", tool.input)
+                            // 使用 inputAsJson() 归一化，避免流式中断导致的残缺 JSON 被发送
+                            put("arguments", tool.inputAsJson().toString())
                         })
                         add(buildJsonObject {
                             put("type", "function_call_output")
                             put("call_id", tool.toolCallId)
-                            put(
-                                "output",
-                                tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                            val hasImage = tool.output.any { it is UIMessagePart.Image }
+                            if (hasImage) {
+                                putJsonArray("output") {
+                                    tool.output.forEach { part ->
+                                        when (part) {
+                                            is UIMessagePart.Image -> add(buildJsonObject {
+                                                part.encodeBase64().onSuccess { encoded ->
+                                                    put("type", "input_image")
+                                                    put("image_url", encoded.base64)
+                                                }.onFailure {
+                                                    it.printStackTrace()
+                                                    put("type", "input_text")
+                                                    put("text", "Error: Failed to encode image to base64")
+                                                }
+                                            })
+                                            is UIMessagePart.Text -> add(buildJsonObject {
+                                                put("type", "input_text")
+                                                put("text", part.text)
+                                            })
+                                            else -> {}
+                                        }
+                                    }
+                                }
+                            } else {
+                                put(
+                                    "output",
+                                    tool.output.filterIsInstance<UIMessagePart.Text>()
+                                        .joinToString("\n") { it.text }
+                                )
+                            }
                         })
                     }
                 }
@@ -525,10 +554,10 @@ class ResponseAPI(
                                             reasoning = "",
                                             createdAt = Clock.System.now(),
                                             finishedAt = null,
-                                            metadata = buildJsonObject {
-                                                put("encrypted_content", encryptedContent)
-                                                put("reasoning_id", id)
-                                            }
+                                            metadata = OpenAIReasoningMetadata(
+                                                reasoningId = id,
+                                                encryptedContent = encryptedContent,
+                                            ).toMetadata()
                                         )
                                     )
                                 ),
@@ -559,10 +588,10 @@ class ResponseAPI(
                                             reasoning = "",
                                             createdAt = Clock.System.now(),
                                             finishedAt = null,
-                                            metadata = buildJsonObject {
-                                                put("encrypted_content", encryptedContent)
-                                                put("reasoning_id", id)
-                                            }
+                                            metadata = OpenAIReasoningMetadata(
+                                                reasoningId = id,
+                                                encryptedContent = encryptedContent,
+                                            ).toMetadata()
                                         )
                                     )
                                 ),

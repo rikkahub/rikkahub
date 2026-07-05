@@ -16,6 +16,10 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 @Composable
 fun AssistantBackground(setting: Settings, modifier: Modifier) {
     val assistant = setting.getCurrentAssistant()
+    if (assistant.useGradientBackground) {
+        MeshGradientBackground(modifier = modifier)
+        return
+    }
     if (assistant.background != null) {
         val backgroundColor = MaterialTheme.colorScheme.background
         val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
