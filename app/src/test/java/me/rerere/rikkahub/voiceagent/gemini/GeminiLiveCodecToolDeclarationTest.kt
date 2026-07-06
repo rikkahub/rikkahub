@@ -17,6 +17,21 @@ class GeminiLiveCodecToolDeclarationTest {
 
     @Test
     fun `setup message strengthens ask hermes declaration description and behavior`() {
+        val parameters = JsonObject(
+            mapOf(
+                "type" to JsonPrimitive("OBJECT"),
+                "properties" to JsonObject(
+                    mapOf(
+                        "prompt" to JsonObject(
+                            mapOf(
+                                "type" to JsonPrimitive("STRING"),
+                            )
+                        )
+                    )
+                ),
+                "required" to JsonArray(listOf(JsonPrimitive("prompt"))),
+            )
+        )
         val liveConnectConfig = JsonObject(
             mapOf(
                 "tools" to JsonArray(
@@ -29,6 +44,7 @@ class GeminiLiveCodecToolDeclarationTest {
                                             mapOf(
                                                 "name" to JsonPrimitive("ask_hermes"),
                                                 "description" to JsonPrimitive("Ask Hermes"),
+                                                "parameters" to parameters,
                                             )
                                         )
                                     )
@@ -54,6 +70,7 @@ class GeminiLiveCodecToolDeclarationTest {
         assertEquals("ask_hermes", declaration["name"]!!.jsonPrimitive.content)
         assertEquals(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION, declaration["description"]!!.jsonPrimitive.content)
         assertEquals(VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING, declaration["behavior"]!!.jsonPrimitive.content)
+        assertEquals(parameters, declaration["parameters"])
     }
 
     @Test
