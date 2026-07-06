@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -60,7 +61,14 @@ class GeminiLiveCodecTest {
         )
         assertTrue(setup["inputAudioTranscription"] is JsonObject)
         assertTrue(setup["outputAudioTranscription"] is JsonObject)
-        assertEquals(liveConnectConfig["tools"], setup["tools"])
+        val declaration = setup["tools"]!!
+            .jsonArray[0]
+            .jsonObject["functionDeclarations"]!!
+            .jsonArray[0]
+            .jsonObject
+        assertEquals("ask_hermes", declaration["name"]!!.jsonPrimitive.content)
+        assertEquals(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION, declaration["description"]!!.jsonPrimitive.content)
+        assertEquals(VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING, declaration["behavior"]!!.jsonPrimitive.content)
         assertEquals(
             "You are Hermes.",
             setup["systemInstruction"]!!
@@ -166,6 +174,106 @@ class GeminiLiveCodecTest {
             listOf("ask_hermes"),
             functionCallingConfig["allowedFunctionNames"]!!.jsonArray.map { it.jsonPrimitive.content },
         )
+    }
+
+    @Test
+    fun `setup message strengthens ask hermes declaration description and behavior`() {
+        val liveConnectConfig = JsonObject(
+            mapOf(
+                "tools" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "functionDeclarations" to JsonArray(
+                                    listOf(
+                                        JsonObject(
+                                            mapOf(
+                                                "name" to JsonPrimitive("ask_hermes"),
+                                                "description" to JsonPrimitive("Ask Hermes"),
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+            )
+        )
+
+        val message = codec.setupMessage(
+            providerModel = "gemini-2.0-flash-live-001",
+            liveConnectConfig = liveConnectConfig,
+            systemInstruction = "Local instruction.",
+        ).jsonObject()
+
+        val declaration = message["setup"]!!
+            .jsonObject["tools"]!!
+            .jsonArray[0]
+            .jsonObject["functionDeclarations"]!!
+            .jsonArray[0]
+            .jsonObject
+        assertEquals("ask_hermes", declaration["name"]!!.jsonPrimitive.content)
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_DESCRIPTION,
+            declaration["description"]!!.jsonPrimitive.content,
+        )
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING,
+            declaration["behavior"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `setup message preserves non hermes function declarations while strengthening ask hermes`() {
+        val liveConnectConfig = JsonObject(
+            mapOf(
+                "tools" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "functionDeclarations" to JsonArray(
+                                    listOf(
+                                        JsonObject(
+                                            mapOf(
+                                                "name" to JsonPrimitive("ask_hermes"),
+                                                "description" to JsonPrimitive("Ask Hermes"),
+                                            )
+                                        ),
+                                        JsonObject(
+                                            mapOf(
+                                                "name" to JsonPrimitive("other_tool"),
+                                                "description" to JsonPrimitive("Other tool"),
+                                            )
+                                        ),
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+            )
+        )
+
+        val message = codec.setupMessage(
+            providerModel = "gemini-2.0-flash-live-001",
+            liveConnectConfig = liveConnectConfig,
+            systemInstruction = "Local instruction.",
+        ).jsonObject()
+
+        val declarations = message["setup"]!!
+            .jsonObject["tools"]!!
+            .jsonArray[0]
+            .jsonObject["functionDeclarations"]!!
+            .jsonArray
+            .map { it.jsonObject }
+        val askHermes = declarations.first { it["name"]!!.jsonPrimitive.content == "ask_hermes" }
+        val otherTool = declarations.first { it["name"]!!.jsonPrimitive.content == "other_tool" }
+
+        assertEquals(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION, askHermes["description"]!!.jsonPrimitive.content)
+        assertEquals(VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING, askHermes["behavior"]!!.jsonPrimitive.content)
+        assertEquals("Other tool", otherTool["description"]!!.jsonPrimitive.content)
+        assertFalse("behavior" in otherTool)
     }
 
     @Test
