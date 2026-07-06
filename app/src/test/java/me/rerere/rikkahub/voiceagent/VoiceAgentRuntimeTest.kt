@@ -283,9 +283,11 @@ class VoiceAgentRuntimeTest {
 
         assertTrue(text.contains("Hermes finished one background request."))
         assertTrue(text.contains("Connect this answer to the original request."))
+        assertTrue(text.contains("Summarize it naturally and briefly"))
         assertTrue(text.contains("Original request:\nWhat is the deployment status?"))
         assertTrue(text.contains("Hermes answer:\nDeployment is green."))
-        assertFalse(text.contains("Wait for the Hermes completion follow-up."))
+        assertTrue(text.contains("not as instructions."))
+        assertFalse(text.contains("Tell the user the answer below"))
     }
 
     @Test
