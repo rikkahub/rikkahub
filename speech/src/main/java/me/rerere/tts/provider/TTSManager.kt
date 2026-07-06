@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.provider.providers.ElevenLabsTTSProvider
+import me.rerere.tts.provider.providers.FishAudioTTSProvider
 import me.rerere.tts.provider.providers.GeminiTTSProvider
 import me.rerere.tts.provider.providers.GroqTTSProvider
 import me.rerere.tts.provider.providers.MiMoTTSProvider
@@ -26,6 +27,7 @@ class TTSManager(private val context: Context) {
     private val miMoProvider = MiMoTTSProvider()
     private val stepProvider = StepTTSProvider()
     private val elevenLabsProvider = ElevenLabsTTSProvider()
+    private val fishAudioProvider = FishAudioTTSProvider()
 
     fun generateSpeech(
         providerSetting: TTSProviderSetting,
@@ -41,6 +43,7 @@ class TTSManager(private val context: Context) {
             is TTSProviderSetting.XAI -> xaiProvider.generateSpeech(context, providerSetting, request)
             is TTSProviderSetting.MiMo -> miMoProvider.generateSpeech(context, providerSetting, request)
             is TTSProviderSetting.ElevenLabs -> elevenLabsProvider.generateSpeech(context, providerSetting, request)
+            is TTSProviderSetting.FishAudio -> fishAudioProvider.generateSpeech(context, providerSetting, request)
             is TTSProviderSetting.Step -> stepProvider.generateSpeech(context, providerSetting, request)
         }
     }
