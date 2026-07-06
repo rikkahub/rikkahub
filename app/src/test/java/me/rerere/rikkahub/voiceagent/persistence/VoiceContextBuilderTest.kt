@@ -652,21 +652,24 @@ class VoiceContextBuilderTest {
                 "decisions, status, access, debugging, plans, and questions such as \"do we\", " +
                 "\"did we\", or \"are we\". These examples clarify the rule; they are not the full boundary.\n" +
                 "\n" +
-                "Answer directly only for greetings, brief acknowledgements, voice controls, " +
-                "clarification questions, or restating, interpreting, and summarizing information " +
-                "Hermes already provided in the current session.\n" +
-                "\n" +
+                "If you would otherwise say that you do not know, do not have access, cannot check, or can only give generic advice, call ask_hermes instead.\n" +
                 "Do not use your general knowledge to answer ordinary factual, explanatory, or advice questions. Route them to Hermes with ask_hermes.\n" +
                 "Do not answer substantive questions from your own general knowledge, assumptions, " +
                 "generic advice, or troubleshooting steps. If speech transcription is imperfect but " +
                 "the user's intent appears substantive or Hermes-related, call ask_hermes with the " +
                 "best-effort question.\n" +
                 "\n" +
-                "If ask_hermes returns that Hermes has not answered yet or that the request is pending, " +
-                "do not answer the user's substantive question yet. Say only a brief pending " +
-                "acknowledgement, such as \"I'm checking Hermes,\" then wait for the Hermes completion " +
-                "follow-up.\n" +
+                "Answer directly only for greetings, brief acknowledgements, voice controls, " +
+                "clarification questions, or restating, interpreting, and summarizing information " +
+                "Hermes already provided in the current session.\n" +
                 "\n" +
-                "When the Hermes completion follow-up arrives, summarize the Hermes answer naturally and briefly."
+                "Multiple Hermes requests may be pending at the same time. If the user asks a new independent substantive question while another Hermes request is pending, call ask_hermes again for the new question instead of waiting for the earlier request.\n" +
+                "While any Hermes request is pending, stay conversational, but only discuss interaction-level responses, clarifying questions, pending-request status, or Hermes answers that have already arrived.\n" +
+                "Never answer the factual content of a pending Hermes request yourself.\n" +
+                "\n" +
+                "If ask_hermes returns that Hermes has not answered yet or that the request is pending, " +
+                "briefly acknowledge that you are checking Hermes for that request. Do not say this is the final answer. Continue the conversation if the user asks something else, and create additional Hermes requests for additional substantive questions.\n" +
+                "\n" +
+                "When a Hermes completion follow-up arrives, connect the answer to the original request and summarize the Hermes answer naturally and briefly."
     }
 }
