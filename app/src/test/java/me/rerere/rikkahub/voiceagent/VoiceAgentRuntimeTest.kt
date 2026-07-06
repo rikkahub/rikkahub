@@ -2919,7 +2919,7 @@ class VoiceAgentRuntimeTest {
                 context = context,
                 chatService = null,
                 settingsStore = null,
-                okHttpClient = jvmOkHttpClient(),
+                okHttpClient = okhttp3.OkHttpClient(),
                 observability = observability,
                 metadataEpochNowMs = { 1_700_000_010_000 },
                 sessionApiFactory = { api ->
@@ -4958,14 +4958,6 @@ class VoiceAgentRuntimeTest {
     private fun JsonObject.boolean(key: String): Boolean = getValue(key).jsonPrimitive.boolean
 
     private fun JsonObject.int(key: String): Int = getValue(key).jsonPrimitive.content.toInt()
-
-    private fun jvmOkHttpClient(): okhttp3.OkHttpClient {
-        val field = sun.misc.Unsafe::class.java.getDeclaredField("theUnsafe")
-        field.isAccessible = true
-        val unsafe = field.get(null) as sun.misc.Unsafe
-        @Suppress("UNCHECKED_CAST")
-        return unsafe.allocateInstance(okhttp3.OkHttpClient::class.java) as okhttp3.OkHttpClient
-    }
 
     private suspend fun VoiceDiagnostics.awaitEvent(name: String) {
         withTimeout(500) {
