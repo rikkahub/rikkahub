@@ -34,6 +34,12 @@ fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
                 .addHeader("HTTP-Referer", "https://rikka-ai.com")
         }
 
+        "router.requesty.ai" -> {
+            this
+                .addHeader("X-Title", "RikkaHub")
+                .addHeader("HTTP-Referer", "https://rikka-ai.com")
+        }
+
         else -> this
     }
 }

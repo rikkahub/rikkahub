@@ -280,7 +280,7 @@ class ChatCompletionsAPI(
             }
 
             // open router适配
-            if(host == "openrouter.ai") {
+            if(host == "openrouter.ai" || host == "router.requesty.ai") {
                 if(params.model.outputModalities.contains(Modality.IMAGE)) {
                     put("modalities", buildJsonArray {
                         add("image")
@@ -292,7 +292,7 @@ class ChatCompletionsAPI(
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = params.reasoningLevel
                 when (host) {
-                    "openrouter.ai" -> {
+                    "openrouter.ai", "router.requesty.ai" -> {
                         // https://openrouter.ai/docs/use-cases/reasoning-tokens
                         put("reasoning", buildJsonObject {
                             when (level) {

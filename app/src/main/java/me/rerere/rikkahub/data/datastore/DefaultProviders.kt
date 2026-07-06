@@ -134,6 +134,22 @@ val DEFAULT_PROVIDERS = listOf(
         )
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("c3f8a1e2-6b4d-4e7a-9c05-2f1d8a3b6e90"),
+        name = "Requesty",
+        baseUrl = "https://router.requesty.ai/v1",
+        apiKey = "",
+        builtIn = true,
+        description = {
+            MarkdownBlock(
+                content = """
+                    OpenAI-compatible LLM router providing access to hundreds of models through a single API (model naming: provider/model).
+                    官网: [requesty.ai](https://requesty.ai)
+                    API Keys: [app.requesty.ai/api-keys](https://app.requesty.ai/api-keys)
+                """.trimIndent()
+            )
+        },
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("386e0f29-8228-4512-affe-8fd8add82d88"),
         name = "Vercel AI Gateway",
         baseUrl = "https://ai-gateway.vercel.sh/v1",
