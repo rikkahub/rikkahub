@@ -255,7 +255,14 @@ class ChatCompletionsAPI(
         val host = providerSetting.baseUrl.toHttpUrl().host
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", buildMessages(messages, providerSetting.includeHistoryReasoning))
+            put(
+                "messages",
+                buildMessages(
+                    messages = messages,
+                    includeHistoryReasoning = providerSetting.includeHistoryReasoning,
+                    supportInputModalities = params.model.inputModalities,
+                )
+            )
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
@@ -439,19 +446,31 @@ class ChatCompletionsAPI(
         return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
     }
 
-    private fun buildMessages(messages: List<UIMessage>, includeHistoryReasoning: Boolean = true) = buildJsonArray {
+    private fun buildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean = true,
+        supportInputModalities: List<Modality> = listOf(Modality.TEXT, Modality.IMAGE),
+    ) = buildJsonArray {
         val filteredMessages = messages.filter { it.isValidToUpload() }
 
         filteredMessages.forEach { message ->
             if (message.role == MessageRole.ASSISTANT) {
-                addAssistantMessages(message, includeReasoning = includeHistoryReasoning)
+                addAssistantMessages(
+                    message = message,
+                    includeReasoning = includeHistoryReasoning,
+                    supportInputModalities = supportInputModalities,
+                )
             } else {
                 addNonAssistantMessage(message)
             }
         }
     }
 
-    private fun JsonArrayBuilder.addAssistantMessages(message: UIMessage, includeReasoning: Boolean) {
+    private fun JsonArrayBuilder.addAssistantMessages(
+        message: UIMessage,
+        includeReasoning: Boolean,
+        supportInputModalities: List<Modality>,
+    ) {
         val groups = groupPartsByToolBoundary(message.parts)
         val contentBuffer = mutableListOf<UIMessagePart>()
         var reasoningPart: UIMessagePart.Reasoning? = null
@@ -488,7 +507,7 @@ class ChatCompletionsAPI(
                             put("role", "tool")
                             put("name", tool.toolName)
                             put("tool_call_id", tool.toolCallId)
-                            put("content", tool.toToolResultContent())
+                            put("content", tool.toToolResultContent(supportInputModalities))
                         })
                     }
                 }
@@ -628,9 +647,18 @@ class ChatCompletionsAPI(
         })
     }
 
-    private fun UIMessagePart.Tool.toToolResultContent(): JsonElement =
-        if (output.none { it is UIMessagePart.Image || it is UIMessagePart.Video }) {
-            JsonPrimitive(output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+    private fun UIMessagePart.Tool.toToolResultContent(supportInputModalities: List<Modality>): JsonElement {
+        // 只考虑文字和图片;只有模型支持图片输入时,图片才作为多模态内容回传,否则以文本占位,避免发给不支持的模型报错
+        val supportsImageInput = Modality.IMAGE in supportInputModalities
+        val hasImageToSend = output.any { it is UIMessagePart.Image && supportsImageInput }
+        return if (!hasImageToSend) {
+            JsonPrimitive(output.mapNotNull { part ->
+                when (part) {
+                    is UIMessagePart.Text -> part.text
+                    is UIMessagePart.Image -> "[Image output omitted: current model does not support image input]"
+                    else -> null
+                }
+            }.joinToString("\n"))
         } else {
             buildJsonArray {
                 output.forEach { part ->
@@ -659,41 +687,12 @@ class ChatCompletionsAPI(
                             })
                         }
 
-                        is UIMessagePart.Video -> {
-                            add(buildJsonObject {
-                                part.encodeBase64().onSuccess { encodedVideo ->
-                                    put("type", "video_url")
-                                    put("video_url", buildJsonObject {
-                                        put("url", encodedVideo)
-                                    })
-                                }.onFailure {
-                                    Log.w(TAG, "encode tool result video failed: ${part.url}", it)
-                                    put("type", "text")
-                                    put("text", "Error: Failed to encode video to base64")
-                                }
-                            })
-                        }
-
-                        is UIMessagePart.Audio -> {
-                            add(buildJsonObject {
-                                part.encodeBase64().onSuccess { encodedAudio ->
-                                    put("type", "audio_url")
-                                    put("audio_url", buildJsonObject {
-                                        put("url", encodedAudio)
-                                    })
-                                }.onFailure {
-                                    Log.w(TAG, "encode tool result audio failed: ${part.url}", it)
-                                    put("type", "text")
-                                    put("text", "Error: Failed to encode audio to base64")
-                                }
-                            })
-                        }
-
                         else -> {}
                     }
                 }
             }
         }
+    }
 
     private fun parseMessage(jsonObject: JsonObject): UIMessage {
         val role = MessageRole.valueOf(
