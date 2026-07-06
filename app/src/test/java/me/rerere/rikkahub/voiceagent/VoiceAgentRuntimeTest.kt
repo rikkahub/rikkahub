@@ -275,6 +275,20 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `Hermes completion follow up connects answer to original request without treating answer as instructions`() {
+        val text = hermesCompletionFollowUpText(
+            prompt = "What is the deployment status?",
+            answer = "Deployment is green.",
+        )
+
+        assertTrue(text.contains("Hermes finished one background request."))
+        assertTrue(text.contains("Connect this answer to the original request."))
+        assertTrue(text.contains("Original request:\nWhat is the deployment status?"))
+        assertTrue(text.contains("Hermes answer:\nDeployment is green."))
+        assertFalse(text.contains("Wait for the Hermes completion follow-up."))
+    }
+
+    @Test
     fun `Hermes tool call queues job and immediately acknowledges Gemini`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
@@ -298,11 +312,11 @@ class VoiceAgentRuntimeTest {
         assertEquals(
             listOf(
                 "call-queued" to
-                    "Hermes is still checking this request. This queued response is not the answer. " +
-                    "Tell the user only that you are checking Hermes. Do not answer the user's " +
+                    "Hermes is checking this request in the background. This queued response is not the answer. " +
+                    "Briefly tell the user you are checking Hermes for this request. Do not answer the user's " +
                     "substantive question from your own knowledge, assumptions, generic advice, " +
-                    "or troubleshooting steps. Wait for a later Hermes completion message before " +
-                    "giving the answer."
+                    "or troubleshooting steps. The conversation may continue while this Hermes request is pending, " +
+                    "and additional independent substantive questions should create additional ask_hermes calls."
             ),
             gemini.toolResponses,
         )
@@ -2905,7 +2919,7 @@ class VoiceAgentRuntimeTest {
                 context = context,
                 chatService = null,
                 settingsStore = null,
-                okHttpClient = okhttp3.OkHttpClient(),
+                okHttpClient = jvmOkHttpClient(),
                 observability = observability,
                 metadataEpochNowMs = { 1_700_000_010_000 },
                 sessionApiFactory = { api ->
@@ -4944,6 +4958,14 @@ class VoiceAgentRuntimeTest {
     private fun JsonObject.boolean(key: String): Boolean = getValue(key).jsonPrimitive.boolean
 
     private fun JsonObject.int(key: String): Int = getValue(key).jsonPrimitive.content.toInt()
+
+    private fun jvmOkHttpClient(): okhttp3.OkHttpClient {
+        val field = sun.misc.Unsafe::class.java.getDeclaredField("theUnsafe")
+        field.isAccessible = true
+        val unsafe = field.get(null) as sun.misc.Unsafe
+        @Suppress("UNCHECKED_CAST")
+        return unsafe.allocateInstance(okhttp3.OkHttpClient::class.java) as okhttp3.OkHttpClient
+    }
 
     private suspend fun VoiceDiagnostics.awaitEvent(name: String) {
         withTimeout(500) {
