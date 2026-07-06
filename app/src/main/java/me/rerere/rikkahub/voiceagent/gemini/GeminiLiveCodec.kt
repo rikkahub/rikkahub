@@ -124,9 +124,9 @@ class GeminiLiveCodec(
                         buildJsonObject {
                             put("id", callId)
                             put("name", VoiceAgentToolNames.ASK_HERMES)
+                            put("scheduling", VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE)
                             putJsonObject("response") {
                                 put("answer", answer)
-                                put("scheduling", VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE)
                             }
                         }
                     )
