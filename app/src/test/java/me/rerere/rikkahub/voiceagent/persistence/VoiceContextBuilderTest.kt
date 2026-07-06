@@ -642,10 +642,12 @@ class VoiceContextBuilderTest {
                 "Hermes is the source of truth for substantive answers in RikkaHub voice mode.\n" +
                 "You are the voice interface to Hermes, not a replacement for Hermes.\n" +
                 "\n" +
+                "Treat every user request as substantive unless it is clearly one of the direct-answer exceptions below.\n" +
                 "Default rule: if the user asks for any substantive answer that was not already " +
                 "provided by Hermes in this session, you MUST call ask_hermes before answering.\n" +
                 "When in doubt, call ask_hermes.\n" +
                 "\n" +
+                "A request is substantive if answering it would require facts, explanation, advice, status, state, memory, code or project context, access or authorization details, debugging, plans, decisions, or any knowledge outside this small interaction.\n" +
                 "Substantive answers include facts, state, context, memory, code, projects, " +
                 "decisions, status, access, debugging, plans, and questions such as \"do we\", " +
                 "\"did we\", or \"are we\". These examples clarify the rule; they are not the full boundary.\n" +
@@ -654,6 +656,7 @@ class VoiceContextBuilderTest {
                 "clarification questions, or restating, interpreting, and summarizing information " +
                 "Hermes already provided in the current session.\n" +
                 "\n" +
+                "Do not use your general knowledge to answer ordinary factual, explanatory, or advice questions. Route them to Hermes with ask_hermes.\n" +
                 "Do not answer substantive questions from your own general knowledge, assumptions, " +
                 "generic advice, or troubleshooting steps. If speech transcription is imperfect but " +
                 "the user's intent appears substantive or Hermes-related, call ask_hermes with the " +
