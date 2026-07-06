@@ -277,6 +277,54 @@ class GeminiLiveCodecTest {
     }
 
     @Test
+    fun `setup message preserves non function tool objects while normalizing ask hermes`() {
+        val legacyAskHermes = JsonObject(
+            mapOf(
+                "name" to JsonPrimitive("ask_hermes"),
+                "description" to JsonPrimitive("Ask Hermes old description"),
+                "behavior" to JsonPrimitive("UNKNOWN"),
+            )
+        )
+        val nonFunctionTool = JsonObject(
+            mapOf(
+                "googleSearch" to JsonObject(emptyMap()),
+            )
+        )
+
+        val liveConnectConfig = JsonObject(
+            mapOf(
+                "tools" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "functionDeclarations" to JsonArray(listOf(legacyAskHermes))
+                            )
+                        ),
+                        nonFunctionTool,
+                    )
+                ),
+            )
+        )
+
+        val message = codec.setupMessage(
+            providerModel = "gemini-2.0-flash-live-001",
+            liveConnectConfig = liveConnectConfig,
+            systemInstruction = "Local instruction.",
+        ).jsonObject()
+
+        val tools = message["setup"]!!.jsonObject["tools"]!!.jsonArray
+        val declarations = tools[0].jsonObject["functionDeclarations"]!!.jsonArray.map { it.jsonObject }
+        val askHermesDeclaration = declarations.first { it["name"]!!.jsonPrimitive.content == VoiceAgentToolNames.ASK_HERMES }
+        assertEquals(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION, askHermesDeclaration["description"]!!.jsonPrimitive.content)
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING,
+            askHermesDeclaration["behavior"]!!.jsonPrimitive.content,
+        )
+        assertEquals(2, tools.size)
+        assertEquals(nonFunctionTool, tools[1])
+    }
+
+    @Test
     fun `setup message preserves explicit server tool config`() {
         val explicitToolConfig = JsonObject(
             mapOf(
