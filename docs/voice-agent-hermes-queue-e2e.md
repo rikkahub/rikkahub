@@ -74,15 +74,19 @@ If `VOICE_AGENT_QUEUE_E2E_PCM_PATH` is unset and no prompt override is supplied,
 the script generates two separate PCM prompts:
 
 ```text
-Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no.
+Call the ask Hermes tool. Ask Hermes: are you connected to G Brain? Do not answer yourself.
 
-Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me the answer when it is ready.
+Call the ask Hermes tool. Ask Hermes: recall the private queue test fact. Do not answer yourself.
 ```
 
 The prompts are separate turns because live generated speech can cause Gemini
 to merge multiple questions from one utterance into one `ask_hermes` call.
 Override the indexed prompts for real private facts. Do not commit or paste the
 real private prompts.
+
+The immediate `ask_hermes` tool response is a pending-state instruction, not the final answer. During manual review,
+Gemini should only acknowledge that it is checking Hermes until the completion follow-up arrives. Substantive answers
+before Hermes completion are protocol failures, even when Hermes eventually completes.
 
 ## Running
 

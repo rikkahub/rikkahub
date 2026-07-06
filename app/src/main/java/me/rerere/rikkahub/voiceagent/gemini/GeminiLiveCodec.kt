@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
@@ -26,16 +27,17 @@ class GeminiLiveCodec(
         val generationConfigElement = liveConnectConfig["generationConfig"]
         val generationConfig = generationConfigElement?.jsonObjectOrNull()
         val topLevelResponseModalities = liveConnectConfig["responseModalities"]
+        val normalizedLiveConnectConfig = liveConnectConfig.withAskHermesSetupDefaults()
 
         return json.encodeToString(
             buildJsonObject {
                 putJsonObject("setup") {
-                    liveConnectConfig.forEach { (key, value) ->
+                    normalizedLiveConnectConfig.forEach { (key, value) ->
                         if (key != "responseModalities" && key != "generationConfig") {
                             put(key, value)
                         }
                     }
-                    if ("toolConfig" !in liveConnectConfig && liveConnectConfig.declaresAskHermesTool()) {
+                    if ("toolConfig" !in normalizedLiveConnectConfig && normalizedLiveConnectConfig.declaresAskHermesTool()) {
                         putJsonObject("toolConfig") {
                             putJsonObject("functionCallingConfig") {
                                 put("mode", "ANY")
@@ -122,6 +124,7 @@ class GeminiLiveCodec(
                         buildJsonObject {
                             put("id", callId)
                             put("name", VoiceAgentToolNames.ASK_HERMES)
+                            put("scheduling", VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE)
                             putJsonObject("response") {
                                 put("answer", answer)
                             }
@@ -251,6 +254,63 @@ class GeminiLiveCodec(
                             ?.stringContentOrNull() == VoiceAgentToolNames.ASK_HERMES
                     } == true
             } == true
+
+    private fun JsonObject.withAskHermesSetupDefaults(): JsonObject {
+        if (!declaresAskHermesTool()) return this
+        return buildJsonObject {
+            forEach { (key, value) ->
+                put(
+                    key,
+                    if (key == "tools") value.withAskHermesToolDefaults() else value,
+                )
+            }
+        }
+    }
+
+    private fun JsonElement.withAskHermesToolDefaults(): JsonElement {
+        val tools = jsonArrayOrNull() ?: return this
+        return buildJsonArray {
+            tools.forEach { tool ->
+                val toolObject = tool.jsonObjectOrNull()
+                if (toolObject == null || "functionDeclarations" !in toolObject) {
+                    add(tool)
+                } else {
+                    add(toolObject.withAskHermesFunctionDeclarations())
+                }
+            }
+        }
+    }
+
+    private fun JsonObject.withAskHermesFunctionDeclarations(): JsonObject = buildJsonObject {
+        forEach { (key, value) ->
+            put(
+                key,
+                if (key == "functionDeclarations") value.withAskHermesFunctionDeclarationDefaults() else value,
+            )
+        }
+    }
+
+    private fun JsonElement.withAskHermesFunctionDeclarationDefaults(): JsonElement {
+        val declarations = jsonArrayOrNull() ?: return this
+        return buildJsonArray {
+            declarations.forEach { declaration ->
+                val declarationObject = declaration.jsonObjectOrNull()
+                if (declarationObject?.get("name")?.stringContentOrNull() == VoiceAgentToolNames.ASK_HERMES) {
+                    add(declarationObject.withAskHermesSingleDeclarationDefaults())
+                } else {
+                    add(declaration)
+                }
+            }
+        }
+    }
+
+    private fun JsonObject.withAskHermesSingleDeclarationDefaults(): JsonObject = buildJsonObject {
+        forEach { (key, value) ->
+            put(key, value)
+        }
+        put("description", JsonPrimitive(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION))
+        put("behavior", JsonPrimitive(VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING))
+    }
 
     private fun JsonObject.sessionResumptionUpdate(raw: String): GeminiLiveEvent {
         val update = this["sessionResumptionUpdate"]?.jsonObjectOrNull()

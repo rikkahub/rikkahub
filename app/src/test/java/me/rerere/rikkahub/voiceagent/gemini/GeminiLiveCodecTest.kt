@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -60,7 +61,14 @@ class GeminiLiveCodecTest {
         )
         assertTrue(setup["inputAudioTranscription"] is JsonObject)
         assertTrue(setup["outputAudioTranscription"] is JsonObject)
-        assertEquals(liveConnectConfig["tools"], setup["tools"])
+        val declaration = setup["tools"]!!
+            .jsonArray[0]
+            .jsonObject["functionDeclarations"]!!
+            .jsonArray[0]
+            .jsonObject
+        assertEquals("ask_hermes", declaration["name"]!!.jsonPrimitive.content)
+        assertEquals(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION, declaration["description"]!!.jsonPrimitive.content)
+        assertEquals(VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING, declaration["behavior"]!!.jsonPrimitive.content)
         assertEquals(
             "You are Hermes.",
             setup["systemInstruction"]!!
@@ -295,6 +303,29 @@ class GeminiLiveCodecTest {
         assertEquals("call-1", response["id"]!!.jsonPrimitive.content)
         assertEquals("ask_hermes", response["name"]!!.jsonPrimitive.content)
         assertEquals("42", response["response"]!!.jsonObject["answer"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `tool response includes scheduling at functionResponse level`() {
+        val message = codec.toolResponseMessage(
+            callId = "call-1",
+            answer = "Hermes is checking.",
+        ).jsonObject()
+
+        val functionResponse = message["toolResponse"]!!
+            .jsonObject["functionResponses"]!!
+            .jsonArray[0]
+            .jsonObject
+        assertEquals("call-1", functionResponse["id"]!!.jsonPrimitive.content)
+        assertEquals("ask_hermes", functionResponse["name"]!!.jsonPrimitive.content)
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+            functionResponse["scheduling"]!!.jsonPrimitive.content,
+        )
+
+        val response = functionResponse["response"]!!.jsonObject
+        assertEquals("Hermes is checking.", response["answer"]!!.jsonPrimitive.content)
+        assertEquals(1, response.size)
     }
 
     @Test

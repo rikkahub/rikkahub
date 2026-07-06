@@ -90,12 +90,12 @@ If `VOICE_AGENT_E2E_PCM_PATH` is unset, the script generates signed 16-bit littl
 The default generated prompt is:
 
 ```text
-Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no.
+Call the ask Hermes tool. Ask Hermes: are you connected to G Brain? Do not answer yourself.
 ```
 
-The generated prompt repeats the Ask Hermes instruction because live testing showed the shorter prompt could be
-misrecognized as a greeting-like fragment and fail to trigger a tool call. The generated prompt uses Flite voice `slt`
-by default because live testing showed the previous `kal` voice was transcribed unreliably by Gemini Live.
+The generated prompt uses an explicit tool-calling instruction because live testing showed softer wording could be
+handled as a direct Gemini answer instead of an `ask_hermes` tool call. The generated prompt uses Flite voice `slt` by
+default because live testing showed the previous `kal` voice was transcribed unreliably by Gemini Live.
 Set `VOICE_AGENT_E2E_FLITE_VOICE` to another installed Flite voice when comparing ASR behavior.
 
 Set `VOICE_AGENT_E2E_PROMPT_TEXT` to change one string and regenerate the PCM for a different question.
@@ -229,14 +229,17 @@ The script passes only when all of these markers appear in the same run:
 - Debug PCM injection delivered.
 - Gemini emits tool call.
 - App emits `hermes_tool_response_hash` with an `actualHash` equal to `VOICE_AGENT_E2E_EXPECTED_HASH`.
-- App sends the queued acknowledgement tool response back to Gemini.
+- App sends the directive pending `ask_hermes` tool response back to Gemini.
+- Gemini's immediate spoken output, if present before Hermes completion, is only a brief pending acknowledgement such
+  as "I'm checking Hermes."
 - App sends a follow-up text turn after the completed Hermes answer is ready.
 - Gemini emits output audio.
 - Android playback queues audio.
 - Android playback writes audio.
 
 In manual review mode, the script reaches a manual review gate instead of declaring an automatic pass. The operator must
-read the private answer artifact and decide pass/fail.
+read the private answer artifact and report, then decide pass/fail. The report passes semantic review only when Gemini
+does not provide a substantive answer before Hermes completion and the final answer is grounded in the Hermes answer.
 
 ## Failure Criteria
 
