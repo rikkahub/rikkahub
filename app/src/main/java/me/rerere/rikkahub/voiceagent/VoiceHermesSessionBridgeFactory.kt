@@ -6,7 +6,9 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 
 const val HERMES_QUEUED_ACKNOWLEDGEMENT =
-    "Hermes request queued. I will notify the user when the answer is ready."
+    "Hermes has not answered yet. Tell the user only that you are checking Hermes. " +
+        "Do not answer the user's question from your own knowledge. " +
+        "Wait for a later Hermes completion message before giving the answer."
 
 private const val HERMES_COMPLETION_FOLLOW_UP_PREFIX =
     "Hermes finished the background request. Tell the user the answer below, " +

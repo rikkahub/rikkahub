@@ -295,7 +295,15 @@ class VoiceAgentRuntimeTest {
                 delay(10)
             }
         }
-        assertEquals(listOf(queuedAck("call-queued")), gemini.toolResponses)
+        assertEquals(
+            listOf(
+                "call-queued" to
+                    "Hermes has not answered yet. Tell the user only that you are checking Hermes. " +
+                    "Do not answer the user's question from your own knowledge. " +
+                    "Wait for a later Hermes completion message before giving the answer."
+            ),
+            gemini.toolResponses,
+        )
         assertTrue(
             diagnostics.events.value.any {
                 it.name == "hermes_job_created" && it.detail.contains("callId=call-queued")
