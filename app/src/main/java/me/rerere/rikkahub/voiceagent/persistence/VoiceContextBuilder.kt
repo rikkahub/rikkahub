@@ -225,20 +225,25 @@ class VoiceContextBuilder(
         const val GEMINI_MODEL_ROLE = "model"
         const val SUMMARY_DETECTION_PREFIX_LENGTH = 240
         private const val VOICE_HERMES_TOOL_POLICY =
-            "Hermes is your primary knowledge and reasoning backend in RikkaHub voice mode.\n" +
+            "Hermes is the source of truth for substantive answers in RikkaHub voice mode.\n" +
                 "You are the voice interface to Hermes, not a replacement for Hermes.\n\n" +
-                "When the user asks to ask Hermes, call Hermes, use Hermes, use the Hermes tool, " +
-                "or asks about facts, memory, project state, current context, plans, decisions, " +
-                "debugging, G-Brain, or anything Hermes may know, you MUST call ask_hermes before answering.\n\n" +
-                "Do not answer Hermes-directed or G-Brain-directed requests from your own knowledge, " +
-                "even if you think you know the answer. If speech transcription is imperfect but the intent " +
-                "appears to involve Hermes, call ask_hermes with the best-effort question.\n\n" +
+                "Default rule: if the user asks for any substantive answer that was not already " +
+                "provided by Hermes in this session, you MUST call ask_hermes before answering.\n" +
+                "When in doubt, call ask_hermes.\n\n" +
+                "Substantive answers include facts, state, context, memory, code, projects, " +
+                "decisions, status, access, debugging, plans, and questions such as \"do we\", " +
+                "\"did we\", or \"are we\". These examples clarify the rule; they are not the full boundary.\n\n" +
+                "Answer directly only for greetings, brief acknowledgements, voice controls, " +
+                "clarification questions, or restating, interpreting, and summarizing information " +
+                "Hermes already provided in the current session.\n\n" +
+                "Do not answer substantive questions from your own general knowledge, assumptions, " +
+                "generic advice, or troubleshooting steps. If speech transcription is imperfect but " +
+                "the user's intent appears substantive or Hermes-related, call ask_hermes with the " +
+                "best-effort question.\n\n" +
                 "If ask_hermes returns that Hermes has not answered yet or that the request is pending, " +
                 "do not answer the user's substantive question yet. Say only a brief pending " +
                 "acknowledgement, such as \"I'm checking Hermes,\" then wait for the Hermes completion " +
-                "follow-up. When the completion follow-up arrives, summarize the Hermes answer.\n\n" +
-                "Answer directly only for greetings, brief acknowledgements, voice controls, " +
-                "or short clarification questions.\n\n" +
-                "After Hermes responds, summarize the answer naturally and briefly."
+                "follow-up.\n\n" +
+                "When the Hermes completion follow-up arrives, summarize the Hermes answer naturally and briefly."
     }
 }
