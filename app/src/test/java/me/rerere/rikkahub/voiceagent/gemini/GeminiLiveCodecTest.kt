@@ -454,6 +454,25 @@ class GeminiLiveCodecTest {
     }
 
     @Test
+    fun `tool response includes when idle scheduling by default`() {
+        val message = codec.toolResponseMessage(
+            callId = "call-1",
+            answer = "Hermes is checking.",
+        ).jsonObject()
+
+        val response = message["toolResponse"]!!
+            .jsonObject["functionResponses"]!!
+            .jsonArray[0]
+            .jsonObject["response"]!!
+            .jsonObject
+        assertEquals("Hermes is checking.", response["answer"]!!.jsonPrimitive.content)
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+            response["scheduling"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
     fun `parse server setup complete`() {
         assertEquals(
             GeminiLiveEvent.SetupComplete,
