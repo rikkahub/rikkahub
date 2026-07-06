@@ -298,9 +298,11 @@ class VoiceAgentRuntimeTest {
         assertEquals(
             listOf(
                 "call-queued" to
-                    "Hermes has not answered yet. Tell the user only that you are checking Hermes. " +
-                    "Do not answer the user's question from your own knowledge. " +
-                    "Wait for a later Hermes completion message before giving the answer."
+                    "Hermes is still checking this request. This queued response is not the answer. " +
+                    "Tell the user only that you are checking Hermes. Do not answer the user's " +
+                    "substantive question from your own knowledge, assumptions, generic advice, " +
+                    "or troubleshooting steps. Wait for a later Hermes completion message before " +
+                    "giving the answer."
             ),
             gemini.toolResponses,
         )
