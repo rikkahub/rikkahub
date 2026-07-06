@@ -435,8 +435,8 @@ export FAKE_ADB_END_MARKER
 export FAKE_ADB_DRAINED_MARKER
 : > "$FAKE_ADB_ARGS_LOG"
 
-default_prompt_1="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Are you connected to G Brain? Answer yes or no."
-default_prompt_2="Ask Hermes. Use the ask Hermes tool now. Ask Hermes: Recall the private queue test fact. Tell me the answer when it is ready."
+default_prompt_1="Call the ask Hermes tool. Ask Hermes: are you connected to G Brain? Do not answer yourself."
+default_prompt_2="Call the ask Hermes tool. Ask Hermes: recall the private queue test fact. Do not answer yourself."
 default_prompts_file="$TMP_DIR/default-prompts.txt"
 printf '%s\n%s\n' "$default_prompt_1" "$default_prompt_2" > "$default_prompts_file"
 default_prompt="$(cat "$default_prompts_file")"
