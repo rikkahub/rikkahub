@@ -177,14 +177,9 @@ class S3Client(
                     throw S3Exception("Failed to download object: ${response.status}", errorBody)
                 }
 
-                val channel = response.bodyAsChannel()
-                targetFile.outputStream().use { outputStream ->
-                    val buffer = ByteArray(8192)
-                    while (!channel.isClosedForRead) {
-                        val bytesRead = channel.readAvailable(buffer)
-                        if (bytesRead > 0) {
-                            outputStream.write(buffer, 0, bytesRead)
-                        }
+                response.bodyAsChannel().toInputStream().use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
                     }
                 }
                 Log.d(TAG, "downloadObjectToFile success: downloaded ${targetFile.length()} bytes")

@@ -12,6 +12,8 @@ import { useOptionalWorkbench } from "~/components/workbench/workbench-context";
 import { useSettingsStore } from "~/stores";
 import { CodeBlock } from "./code-block";
 import "katex/dist/katex.min.css";
+// mhchem 扩展: 支持 \ce{} 等化学公式语法
+import "katex/dist/contrib/mhchem.mjs";
 import "./markdown.css";
 import "streamdown/styles.css";
 
@@ -111,7 +113,7 @@ export default function Markdown({
     <div className={cn("markdown", className)}>
       <Streamdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, rehypeRaw]}
+        rehypePlugins={[[rehypeKatex, { trust: true, strict: false }], rehypeRaw]}
         plugins={{ cjk: cjk }}
         animated={{ animation: "fadeIn", sep: 'word', duration: 150 }}
         isAnimating={isAnimating}

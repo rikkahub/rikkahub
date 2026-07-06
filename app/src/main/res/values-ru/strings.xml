@@ -1280,5 +1280,16 @@
   <string name="setting_model_page_ta_message_model_desc">Модель для принятия решений о времени сообщений Ta.Если не задана,используется быстрая модель</string>
   <string name="setting_model_page_ta_message_prompt_note">Промпт времени сообщений Ta можно настроить на странице настроек каждого ассистента.</string>
 
+  <string name="chat_page_move_to_folder">Переместить в папку</string>
+  <string name="chat_page_remove_from_folder">Убрать из папки</string>
+  <string name="chat_page_create_folder">Новая папка</string>
+  <string name="chat_page_folder_name">Имя папки</string>
+  <string name="chat_page_rename_folder">Переименовать папку</string>
+  <string name="chat_page_delete_folder">Удалить папку</string>
+  <string name="chat_page_rename">Переименовать</string>
+  <string name="chat_page_folder_default">Чат</string>
+  <string name="chat_page_folder_add">Новая</string>
+  <string name="chat_page_delete_folder_confirm">Удалить папку "%1$s"? Беседы внутри не будут удалены, только исключены из папки.</string>
+  <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
 </resources>
 
