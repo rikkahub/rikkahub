@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
@@ -796,6 +797,20 @@ class FakeVoiceConversationStore(
             }
         }
     }
+
+    suspend fun awaitTextUpdate(text: String) {
+        withTimeout(500) {
+            while (!conversation.value.hasTextPart(text)) {
+                delay(10)
+            }
+        }
+    }
+
+    private fun Conversation.hasTextPart(text: String): Boolean =
+        currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Text>()
+            .any { it.text == text }
 }
 
 class BlockedUpdate {

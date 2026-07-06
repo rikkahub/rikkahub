@@ -263,7 +263,7 @@ class VoiceAgentCallSessionTest {
         session.start()
         gemini.awaitConnect()
         gemini.eventHandlers.single()(GeminiLiveEvent.OutputTranscript("recovered assistant"))
-        conversationStore.awaitUpdateCount(1)
+        conversationStore.awaitTextUpdate("recovered assistant")
         conversationStore.failNextUpdate()
         gemini.eventHandlers.single()(GeminiLiveEvent.GenerationComplete)
 
@@ -412,7 +412,7 @@ class VoiceAgentCallSessionTest {
         session.start()
         gemini.awaitConnect()
         gemini.eventHandlers.single()(GeminiLiveEvent.OutputTranscript("lost assistant"))
-        conversationStore.awaitUpdateCount(1)
+        conversationStore.awaitTextUpdate("lost assistant")
         conversationStore.failNextUpdate()
         conversationStore.failNextUpdate()
         gemini.eventHandlers.single()(GeminiLiveEvent.GenerationComplete)

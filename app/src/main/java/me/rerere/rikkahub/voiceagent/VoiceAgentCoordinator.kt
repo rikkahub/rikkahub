@@ -155,6 +155,7 @@ class VoiceAgentCoordinator(
     private var closing = false
     private var closed = false
     private var outputAudioSuppressed = false
+    private var outputAudioSuppressedByGeminiInterruption = false
     private var activeTranscriptSpeaker: TranscriptSpeaker? = null
     private var inputTurnTranscript = ""
     private var outputTurnTranscript = ""
@@ -534,6 +535,7 @@ class VoiceAgentCoordinator(
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
         val artifactSnapshot = synchronized(toolJobsLock) {
             if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
+            clearOutputAudioSuppressionForAssistantTurnAfterInterruption()
             if (activeTranscriptSpeaker != TranscriptSpeaker.Assistant) {
                 outputTurnTranscript = ""
                 outputTurnId = nextTranscriptTurnId(TranscriptSpeaker.Assistant)
@@ -609,15 +611,35 @@ class VoiceAgentCoordinator(
 
     private fun handleInterrupted(event: GeminiLiveEvent.Interrupted) {
         diagnostics.record("gemini_interrupted", event.reason)
+        synchronized(playbackSuppressionLock) {
+            outputAudioSuppressedByGeminiInterruption = true
+        }
         suppressPlayback()
     }
 
     private fun clearOutputAudioSuppressionForNewTurn() {
         synchronized(playbackSuppressionLock) {
             outputAudioSuppressed = false
+            outputAudioSuppressedByGeminiInterruption = false
         }
         hermesWaitingToneSuspended.set(false)
         assistantOutputAudioActive.set(false)
+    }
+
+    private fun clearOutputAudioSuppressionForAssistantTurnAfterInterruption() {
+        val cleared = synchronized(playbackSuppressionLock) {
+            if (outputAudioSuppressed && outputAudioSuppressedByGeminiInterruption) {
+                outputAudioSuppressed = false
+                outputAudioSuppressedByGeminiInterruption = false
+                true
+            } else {
+                outputAudioSuppressedByGeminiInterruption = false
+                false
+            }
+        }
+        if (cleared) {
+            diagnostics.record("output_audio_suppression_cleared_after_interruption")
+        }
     }
 
     private fun handleGenerationComplete() {

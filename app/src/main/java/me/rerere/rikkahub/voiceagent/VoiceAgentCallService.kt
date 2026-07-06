@@ -187,7 +187,7 @@ class VoiceAgentCallService : Service() {
         val endingConversationId = manager.activeConversationId.value
         if (shouldStartForegroundForVoiceAgentEnd(endingConversationId)) {
             startForegroundFor(
-                conversationId = endingConversationId.toString(),
+                conversationId = endingConversationId?.toString() ?: FALLBACK_END_NOTIFICATION_CONVERSATION_ID,
                 state = manager.state.value.copy(call = VoiceCallStatus.Ending),
             )
         }
@@ -286,11 +286,12 @@ class VoiceAgentCallService : Service() {
 
     private companion object {
         const val TAG = "VoiceAgentCallService"
+        const val FALLBACK_END_NOTIFICATION_CONVERSATION_ID = "voice-agent"
     }
 }
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
-    activeConversationId != null
+    true
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
     "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}"

@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.voiceagent
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -28,7 +27,7 @@ class VoiceAgentCallContractTest {
     }
 
     @Test
-    fun `end foreground promotion is skipped when idle`() {
-        assertFalse(shouldStartForegroundForVoiceAgentEnd(null))
+    fun `end foreground promotion is used when idle`() {
+        assertTrue(shouldStartForegroundForVoiceAgentEnd(null))
     }
 }

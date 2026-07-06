@@ -247,6 +247,34 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `Hermes completion follow up audio plays after Gemini interrupts prior response`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-1", name = "ask_hermes", prompt = "slow"))
+        assertEquals("call-1" to "slow", toolApi.awaitRequest("call-1"))
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("processing-audio"))
+
+        toolApi.complete(response(callId = "call-1", answer = "Hermes answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        assertEquals(1, gemini.textTurns.size)
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
+        audio.awaitSuppressPlaybackCalls(1)
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputTranscript("Hermes says yes."))
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("follow-up-audio"))
+
+        assertEquals(listOf("processing-audio", "follow-up-audio"), audio.playedPcm16)
+    }
+
+    @Test
     fun `Hermes tool call queues job and immediately acknowledges Gemini`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
