@@ -147,7 +147,7 @@ class HermesQueueStore(
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
             val record = conversation.latestHermesRecord(callId = callId, jobId = jobId)
-            if (record == null || !record.status.isTerminal || record.messageWritten) {
+            if (record == null || !record.status.isTerminal || record.messageWritten || record.resultAnnounced) {
                 conversation to false
             } else {
                 val appended = persister.appendHermesResultMessage(

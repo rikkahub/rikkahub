@@ -1,6 +1,10 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -107,6 +111,32 @@ class HermesAnnouncementSchedulerTest {
 
         assertTrue(error is IllegalStateException)
         assertTrue(diagnostics.contains("hermes_announcement_send_failed"))
+        assertEquals("ok", scheduler.withAnnouncementSlot("after") { "ok" })
+    }
+
+    @Test
+    fun `cancelled send does not record a send failure diagnostic`() = runTest {
+        val clock = VirtualClock()
+        val diagnostics = mutableListOf<String>()
+        val scheduler = HermesAnnouncementScheduler(
+            nowMs = { clock.nowMs },
+            delayFn = clock::delayFn,
+            recordDiagnostic = { name, _ -> diagnostics += name },
+        )
+        scheduler.onBridgeAvailable(true)
+
+        val sendStarted = CompletableDeferred<Unit>()
+        val job = launch {
+            scheduler.withAnnouncementSlot("cancelled") {
+                sendStarted.complete(Unit)
+                awaitCancellation()
+            }
+        }
+
+        sendStarted.await()
+        job.cancelAndJoin()
+
+        assertFalse(diagnostics.contains("hermes_announcement_send_failed"))
         assertEquals("ok", scheduler.withAnnouncementSlot("after") { "ok" })
     }
 

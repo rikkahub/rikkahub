@@ -67,6 +67,8 @@ class HermesAnnouncementScheduler(
             }
             val result = try {
                 send()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 safeRecordDiagnostic("hermes_announcement_send_failed", label)
                 throw error

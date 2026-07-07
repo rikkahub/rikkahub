@@ -2303,6 +2303,45 @@ class HermesJobManagerTest {
         }
     }
 
+    @Test
+    fun `appendVisibleResultMessageIfNeeded is a no-op for a terminal record already announced`() = runTest {
+        // Defense-in-depth: a record can reach resultAnnounced = true without ever going
+        // through messageWritten (e.g. a user-initiated cancel is persisted as already
+        // announced in the same atomic write, per HermesJobManager.cancel). If the
+        // no-bridge/failed-send fallback is ever driven for such a record, it must not
+        // write a redundant visible chat message for a result the user already knows about.
+        val conversationStore = FakeVoiceConversationStore()
+        val queueStore = HermesQueueStore(
+            conversationStore = conversationStore,
+            persister = persister,
+        )
+
+        assertTrue(
+            queueStore.persistTerminalIfStillActive(
+                callId = "call-already-announced",
+                prompt = "already announced prompt",
+                status = VoiceToolRecordStatus.Complete("already spoken answer"),
+                jobId = "job-already-announced",
+                resultAnnounced = true,
+            )
+        )
+
+        val appended = queueStore.appendVisibleResultMessageIfNeeded(
+            callId = "call-already-announced",
+            jobId = "job-already-announced",
+        )
+
+        assertFalse(appended)
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-already-announced" }
+        assertTrue(record.resultAnnounced)
+        assertFalse(record.messageWritten)
+        val visibleTextMessages = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Text>()
+        assertTrue(visibleTextMessages.none { it.text.contains("already spoken answer") })
+    }
+
     private fun manager(
         toolApi: VoiceToolApi,
         conversationStore: VoiceConversationStore,
