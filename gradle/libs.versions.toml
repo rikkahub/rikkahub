@@ -32,6 +32,7 @@ datastore = "1.2.1"
 serialization-json = "1.11.0"
 sentryAndroid = "8.43.2"
 kotlin-coroutines-core = "1.11.0"
+kotlin-coroutines-test = "1.11.0"
 kotlinx-datetime = "0.8.0"
 ksp = "2.3.4"
 paging = "3.5.0"
@@ -130,6 +131,7 @@ koin-androidx-workmanager = { group = "io.insert-koin", name = "koin-androidx-wo
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization-json" }
 sentry-android = { group = "io.sentry", name = "sentry-android", version.ref = "sentryAndroid" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlin-coroutines-core" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlin-coroutines-test" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 lucide-icons = { group = "com.composables", name = "icons-lucide", version.ref = "lucide-icons" }
 huge-icons = { group = "com.github.rikkahub", name = "hugeicons-compose", version.ref = "huge-icons" }
