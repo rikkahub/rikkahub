@@ -142,11 +142,16 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
         }
     }
 
-    override fun sendToolResponse(callId: String, answer: String): Boolean {
-        return sendToolResponse(callId = callId, answer = answer, sessionId = null)
+    override fun sendToolResponse(callId: String, answer: String, name: String): Boolean {
+        return sendToolResponse(callId = callId, answer = answer, sessionId = null, name = name)
     }
 
-    override fun sendToolResponse(callId: String, answer: String, sessionId: Long?): Boolean {
+    override fun sendToolResponse(
+        callId: String,
+        answer: String,
+        sessionId: Long?,
+        name: String,
+    ): Boolean {
         synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
