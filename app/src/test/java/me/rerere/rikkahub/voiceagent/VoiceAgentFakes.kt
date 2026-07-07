@@ -30,6 +30,7 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     val toolResponseNames = mutableListOf<String>()
     val textTurns = mutableListOf<Pair<Long?, String>>()
     val failToolResponses = mutableSetOf<String>()
+    val toolResponseErrors = mutableMapOf<String, Throwable>()
     var failTextTurns = false
     var closeCalls = 0
     var onBeforeToolResponseRecorded: (() -> Unit)? = null
@@ -174,6 +175,7 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
                 return false
             }
             onBeforeToolResponseRecorded?.invoke()
+            toolResponseErrors[callId]?.let { throw it }
             if (callId in failToolResponses) {
                 return false
             }

@@ -1686,6 +1686,159 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `failed cancel hermes tool response is recorded without undoing cancellation`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient().apply {
+            failToolResponses += "cancel-send-fails"
+        }
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val conversationStore = FakeVoiceConversationStore()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            conversationStore = conversationStore,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "ask-send-fails", name = "ask_hermes", prompt = "cancel target")
+        )
+        assertEquals("ask-send-fails" to "cancel target", toolApi.awaitRequest("ask-send-fails"))
+        withTimeout(500) {
+            while (gemini.toolResponses.none { it.first == "ask-send-fails" }) {
+                delay(10)
+            }
+        }
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(
+                callId = "cancel-send-fails",
+                name = "cancel_hermes",
+                prompt = "cancel target",
+            )
+        )
+
+        toolApi.awaitRemoteCancelledJob("job-1")
+        conversationStore.awaitHermesToolStatus("ask-send-fails", "canceled")
+        withTimeout(500) {
+            while (diagnostics.events.value.none { it.name == "cancel_hermes_tool_response_failed" }) {
+                delay(10)
+            }
+        }
+
+        assertTrue(gemini.toolResponses.none { it.first == "cancel-send-fails" })
+        val diagnostic = diagnostics.events.value.single { it.name == "cancel_hermes_tool_response_failed" }
+        assertTrue(diagnostic.detail.contains("callId=cancel-send-fails"))
+        assertTrue(diagnostic.detail.contains("send_returned_false"))
+        assertFalse(diagnostic.detail.contains("cancel target"))
+    }
+
+    @Test
+    fun `thrown cancel hermes tool response records sanitized failure`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient().apply {
+            toolResponseErrors["cancel-throws"] = IllegalStateException(
+                "Voice Lab request failed 403: {\"prompt\":\"cancel target\",\"answer\":\"private answer\"}"
+            )
+        }
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val conversationStore = FakeVoiceConversationStore()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            conversationStore = conversationStore,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "ask-throws", name = "ask_hermes", prompt = "cancel target")
+        )
+        assertEquals("ask-throws" to "cancel target", toolApi.awaitRequest("ask-throws"))
+        withTimeout(500) {
+            while (gemini.toolResponses.none { it.first == "ask-throws" }) {
+                delay(10)
+            }
+        }
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(
+                callId = "cancel-throws",
+                name = "cancel_hermes",
+                prompt = "cancel target",
+            )
+        )
+
+        toolApi.awaitRemoteCancelledJob("job-1")
+        conversationStore.awaitHermesToolStatus("ask-throws", "canceled")
+        withTimeout(500) {
+            while (diagnostics.events.value.none { it.name == "cancel_hermes_tool_response_failed" }) {
+                delay(10)
+            }
+        }
+
+        val diagnostic = diagnostics.events.value.single { it.name == "cancel_hermes_tool_response_failed" }
+        assertTrue(diagnostic.detail.contains("callId=cancel-throws"))
+        assertTrue(diagnostic.detail.contains("Voice Lab request failed 403"))
+        assertFalse(diagnostic.detail.contains("cancel target"))
+        assertFalse(diagnostic.detail.contains("private answer"))
+        assertFalse(diagnostic.detail.contains("\"prompt\""))
+        assertFalse(diagnostic.detail.contains("\"answer\""))
+    }
+
+    @Test
+    fun `cancel hermes with pending jobs but no match asks which one to cancel`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "ask-alpha", name = "ask_hermes", prompt = "alpha deployment")
+        )
+        assertEquals("ask-alpha" to "alpha deployment", toolApi.awaitRequest("ask-alpha"))
+        withTimeout(500) {
+            while (gemini.toolResponses.none { it.first == "ask-alpha" }) {
+                delay(10)
+            }
+        }
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "ask-beta", name = "ask_hermes", prompt = "beta incident")
+        )
+        assertEquals("ask-beta" to "beta incident", toolApi.awaitRequest("ask-beta"))
+        withTimeout(500) {
+            while (gemini.toolResponses.none { it.first == "ask-beta" }) {
+                delay(10)
+            }
+        }
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "cancel-no-match", name = "cancel_hermes", prompt = "billing forecast")
+        )
+
+        withTimeout(500) {
+            while (gemini.toolResponses.none { it.first == "cancel-no-match" }) {
+                delay(10)
+            }
+        }
+        val answer = gemini.toolResponses.single { it.first == "cancel-no-match" }.second
+        assertTrue(answer.contains("No pending Hermes request matches"))
+        assertTrue(answer.contains("alpha deployment"))
+        assertTrue(answer.contains("beta incident"))
+        assertTrue(answer.contains("which one to cancel"))
+        assertFalse(toolApi.wasRemoteCancelled("ask-alpha"))
+        assertFalse(toolApi.wasRemoteCancelled("ask-beta"))
+    }
+
+    @Test
     fun `cancel hermes with ambiguous match lists pending questions`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()

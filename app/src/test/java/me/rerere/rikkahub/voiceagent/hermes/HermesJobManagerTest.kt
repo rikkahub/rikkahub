@@ -521,6 +521,58 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `resume does not repeat already announced still working update`() = runTest {
+        val initialConversation = Conversation.ofId(Uuid.random()).let {
+            val running = persister.upsertHermesTool(
+                conversation = it,
+                callId = "call-resume-still-working",
+                prompt = "resume still working request",
+                status = VoiceToolRecordStatus.Running,
+                jobId = "job-resume-still-working",
+            )
+            persister.markHermesToolStillWorkingAnnounced(
+                conversation = running,
+                callId = "call-resume-still-working",
+                jobId = "job-resume-still-working",
+            )
+        }
+        val toolApi = FakeVoiceToolApi().apply {
+            seedJob(jobId = "job-resume-still-working", callId = "call-resume-still-working")
+            scriptPoll(
+                callId = "call-resume-still-working",
+                response = MobileHermesJobPollResponse(
+                    jobId = "job-resume-still-working",
+                    callId = "call-resume-still-working",
+                    status = "running",
+                ),
+            )
+        }
+        val conversationStore = FakeVoiceConversationStore(initialConversation)
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            pollIntervalMs = 10L,
+            maxElapsedMs = 5_000L,
+            stillWorkingThresholdMs = 1L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 9L)
+        manager.resumeActiveJobs()
+        conversationStore.awaitHermesRecord("call-resume-still-working") {
+            it.status == HermesQueueStatus.Running && it.stillWorkingAnnounced
+        }
+        delay(50)
+
+        assertTrue(bridge.stillWorkingUpdates.isEmpty())
+        toolApi.complete(response(callId = "call-resume-still-working", answer = "resumed answer"))
+        conversationStore.awaitHermesRecord("call-resume-still-working") {
+            it.status == HermesQueueStatus.Complete
+        }
+    }
+
+    @Test
     fun `explicit cancel cancels remote job and persists canceled`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()

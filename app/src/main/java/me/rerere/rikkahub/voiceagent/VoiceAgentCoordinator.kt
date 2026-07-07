@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -725,18 +726,41 @@ class VoiceAgentCoordinator(
                     ". Ask the user which one to cancel."
         }
         sessionScope.launch(toolLaunchContext) {
-            if (sessionId != null) {
-                gemini.sendToolResponse(
-                    callId = call.callId,
-                    answer = answer,
-                    sessionId = sessionId,
-                    name = VoiceAgentToolNames.CANCEL_HERMES,
+            var failureReason = "send_returned_false"
+            val sent = try {
+                if (sessionId != null) {
+                    gemini.sendToolResponse(
+                        callId = call.callId,
+                        answer = answer,
+                        sessionId = sessionId,
+                        name = VoiceAgentToolNames.CANCEL_HERMES,
+                    )
+                } else {
+                    gemini.sendToolResponse(
+                        callId = call.callId,
+                        answer = answer,
+                        name = VoiceAgentToolNames.CANCEL_HERMES,
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Error) {
+                throw error
+            } catch (error: Exception) {
+                failureReason = HermesTelemetryLogSanitizer.failureMessage(
+                    error.message ?: error.javaClass.simpleName
+                )
+                false
+            }
+            if (!sent) {
+                diagnostics.record(
+                    "cancel_hermes_tool_response_failed",
+                    "callId=${call.callId}, sessionId=${sessionId ?: "none"}, error=$failureReason",
                 )
             } else {
-                gemini.sendToolResponse(
-                    callId = call.callId,
-                    answer = answer,
-                    name = VoiceAgentToolNames.CANCEL_HERMES,
+                diagnostics.record(
+                    "cancel_hermes_tool_response_sent",
+                    "callId=${call.callId}, sessionId=${sessionId ?: "none"}",
                 )
             }
         }
