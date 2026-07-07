@@ -148,7 +148,6 @@ class VoiceAgentCoordinator(
                 sent = event.sent,
             )
         },
-        appendLocalAssistantTranscript = ::appendLocalAssistantTranscript,
         clearOutputAudioSuppressionForNewTurn = ::clearOutputAudioSuppressionForNewTurn,
         announcementScheduler = this.hermesAnnouncementScheduler,
     )
@@ -807,28 +806,6 @@ class VoiceAgentCoordinator(
         if (shouldDetach) {
             hermesJobManager.detachBridge(defaultHermesBridge)
         }
-    }
-
-    private fun appendLocalAssistantTranscript(text: String) {
-        val artifactSnapshot = synchronized(toolJobsLock) {
-            activeTranscriptSpeaker = TranscriptSpeaker.Assistant
-            outputTurnTranscript = text
-            outputTurnId = nextTranscriptTurnId(TranscriptSpeaker.Assistant)
-            outputTurnStatus = VoiceTranscriptStatus.Complete
-            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
-            _state.update { current ->
-                current.copy(
-                    outputTranscript = if (current.outputTranscript.isBlank()) {
-                        text
-                    } else {
-                        current.outputTranscript + "\n" + text
-                    }
-                )
-            }
-            persistAssistantTranscript()
-            outputTurnTranscript
-        }
-        writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = artifactSnapshot)
     }
 
     private fun isClosed(): Boolean = synchronized(toolJobsLock) { closed || closing }

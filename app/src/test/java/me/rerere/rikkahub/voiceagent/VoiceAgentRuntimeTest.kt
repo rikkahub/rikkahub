@@ -26,6 +26,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
+import me.rerere.rikkahub.voiceagent.hermes.hermesQueueRecords
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
@@ -725,7 +726,83 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `Hermes completion follow up failure surfaces answer in local transcript`() = runTest {
+    fun `Hermes result completing without a bridge writes a visible chat message once`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val conversationStore = FakeVoiceConversationStore()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        // Attach a scoped bridge (rather than relying on the default unbound bridge) so it can
+        // be detached without leaving the default bridge auto-reattached underneath it. The
+        // session must be marked active first or the scoped tool call below is dropped as stale.
+        val sessionId = coordinator.nextSessionId()
+        val scopedBridge = coordinator.createHermesSessionBridge(sessionId)
+        coordinator.attachHermesBridge(scopedBridge, sessionId = sessionId)
+
+        coordinator.onGeminiEvent(
+            sessionId = sessionId,
+            event = GeminiLiveEvent.ToolCall(callId = "call-no-bridge", name = "ask_hermes", prompt = "unattended request"),
+        )
+        assertEquals("call-no-bridge" to "unattended request", toolApi.awaitRequest("call-no-bridge"))
+
+        // Detach the bridge before the fake tool API reports success: the completion
+        // announcement has nowhere to send, so it must fall back to a visible chat message
+        // instead of silently dropping the result.
+        coordinator.detachHermesBridge(scopedBridge)
+
+        toolApi.complete(response(callId = "call-no-bridge", answer = "quiet answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        coordinator.awaitPersistenceJobsWithTimeout()
+
+        fun visibleFallbackMessages() = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Text>()
+            .map { it.text }
+            .filter { it.contains("Hermes finished: unattended request") && it.contains("quiet answer") }
+
+        assertEquals(1, visibleFallbackMessages().size)
+
+        val tool = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .single { it.toolCallId == "call-no-bridge" }
+        assertTrue(tool.metadata?.boolean("voice_tool_message_written") == true)
+
+        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-no-bridge" }
+        assertFalse(
+            "resultAnnounced must stay false so a later session can still announce it",
+            record.resultAnnounced,
+        )
+
+        // Re-drive the announcement path by attaching a working bridge: this must mark the
+        // result announced without writing a second visible message. The fake Gemini client
+        // gates session-scoped sends on the outbound session being activated (mirroring the
+        // real handshake), so activate it before attaching.
+        val secondSessionId = coordinator.nextSessionId()
+        gemini.activateOutboundSession(secondSessionId)
+        coordinator.attachHermesBridge(coordinator.createHermesSessionBridge(secondSessionId), sessionId = secondSessionId)
+        withTimeout(500) {
+            while (
+                !conversationStore.conversation.value.hermesQueueRecords()
+                    .single { it.callId == "call-no-bridge" }.resultAnnounced
+            ) {
+                delay(10)
+            }
+        }
+
+        assertEquals(1, visibleFallbackMessages().size)
+    }
+
+    @Test
+    fun `Hermes completion follow up failure surfaces answer as visible chat message`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient().apply {
             failTextTurns = true
         }
@@ -753,7 +830,6 @@ class VoiceAgentRuntimeTest {
 
         assertEquals(listOf(queuedAck("call-follow-up-fails")), gemini.toolResponses)
         assertEquals(emptyList<Pair<Long?, String>>(), gemini.textTurns)
-        assertTrue(coordinator.state.value.outputTranscript.contains("Hermes answer: fallback answer"))
         assertHermesAnswered(callId = "call-follow-up-fails", status = coordinator.state.value.tool)
         assertTrue(
             diagnostics.events.value.any {
@@ -768,7 +844,7 @@ class VoiceAgentRuntimeTest {
             .flatMap { it.parts }
             .filterIsInstance<UIMessagePart.Text>()
             .map { it.text }
-        assertTrue(assistantText.any { it.contains("Hermes answer: fallback answer") })
+        assertTrue(assistantText.any { it.contains("Hermes finished: slow") && it.contains("fallback answer") })
     }
 
     @Test

@@ -900,7 +900,10 @@ class HermesJobManager(
         jobId: String?,
         attachment: BridgeAttachment? = currentBridgeAttachment(),
     ) {
-        val current = attachment ?: return
+        val current = attachment ?: run {
+            queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
+            return
+        }
         announcementMutex.withLock {
             val record = queueStore.records()
                 .lastOrNull { record ->
@@ -938,6 +941,9 @@ class HermesJobManager(
                     ),
                 )
             }
+            if (!sent) {
+                queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
+            }
         }
     }
 
@@ -946,7 +952,10 @@ class HermesJobManager(
         jobId: String?,
         attachment: BridgeAttachment? = currentBridgeAttachment(),
     ) {
-        val current = attachment ?: return
+        val current = attachment ?: run {
+            queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
+            return
+        }
         announcementMutex.withLock {
             val record = queueStore.records()
                 .lastOrNull { record ->
@@ -978,6 +987,9 @@ class HermesJobManager(
             }.getOrDefault(false)
             if (sent) {
                 queueStore.markResultAnnounced(callId = callId, jobId = jobId)
+            }
+            if (!sent) {
+                queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
             }
         }
     }

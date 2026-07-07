@@ -53,7 +53,6 @@ class VoiceHermesSessionBridgeFactory(
     private val diagnostics: VoiceDiagnostics,
     private val unboundSessionId: Long,
     private val writeQueueEvent: (HermesBridgeQueueEvent) -> Unit,
-    private val appendLocalAssistantTranscript: (String) -> Unit,
     private val clearOutputAudioSuppressionForNewTurn: () -> Unit,
     private val announcementScheduler: HermesAnnouncementScheduler,
 ) {
@@ -100,7 +99,6 @@ class VoiceHermesSessionBridgeFactory(
                 diagnostics.record("hermes_completion_follow_up_sent", detail)
             } else {
                 diagnostics.record("hermes_completion_follow_up_failed", detail)
-                appendLocalAssistantTranscript("Hermes answer: $answer")
             }
             return sent
         }
@@ -134,7 +132,6 @@ class VoiceHermesSessionBridgeFactory(
                 diagnostics.record("hermes_terminal_follow_up_sent", detail)
             } else {
                 diagnostics.record("hermes_terminal_follow_up_failed", detail)
-                appendLocalAssistantTranscript("Hermes ${status.wireName}: $reason")
             }
             return sent
         }

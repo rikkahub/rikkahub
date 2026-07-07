@@ -143,6 +143,30 @@ class HermesQueueStore(
         }
     }
 
+    suspend fun appendVisibleResultMessageIfNeeded(callId: String, jobId: String?): Boolean {
+        val sessionId = persistenceSessionId()
+        return updateWithResult { conversation ->
+            val record = conversation.latestHermesRecord(callId = callId, jobId = jobId)
+            if (record == null || !record.status.isTerminal || record.messageWritten) {
+                conversation to false
+            } else {
+                val appended = persister.appendHermesResultMessage(
+                    conversation = conversation,
+                    prompt = record.prompt,
+                    answer = record.answer,
+                    statusWireName = record.status.wireName,
+                    reason = record.error,
+                    sessionId = sessionId,
+                )
+                persister.markHermesToolMessageWritten(
+                    conversation = appended,
+                    callId = callId,
+                    jobId = jobId,
+                ) to true
+            }
+        }
+    }
+
     private suspend fun update(
         transform: (Conversation) -> Conversation,
     ) {

@@ -16,6 +16,7 @@ import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_CREATED_AT_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_JOB_ID_KEY
+import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_MESSAGE_WRITTEN_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_RESULT_ANNOUNCED_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_SOURCE_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_STATUS_KEY
@@ -165,6 +166,8 @@ class VoiceConversationPersister {
         val createdAt = (existingTool?.metadata).stringOrNull(HERMES_TOOL_CREATED_AT_KEY)
         val stillWorkingAnnounced =
             (existingTool?.metadata).booleanOrNull(HERMES_TOOL_STILL_WORKING_KEY) == true
+        val messageWritten =
+            (existingTool?.metadata).booleanOrNull(HERMES_TOOL_MESSAGE_WRITTEN_KEY) == true
         val effectiveResultAnnounced = resultAnnounced ?: existingTool?.resultAnnouncedOrDefault() ?: false
         val tool = UIMessagePart.Tool(
             toolCallId = callId,
@@ -180,6 +183,7 @@ class VoiceConversationPersister {
                 jobId = jobId,
                 resultAnnounced = effectiveResultAnnounced,
                 stillWorkingAnnounced = stillWorkingAnnounced,
+                messageWritten = messageWritten,
                 createdAt = createdAt,
             ),
             metadata = status.toMetadata(
@@ -188,6 +192,7 @@ class VoiceConversationPersister {
                 jobId = jobId,
                 resultAnnounced = effectiveResultAnnounced,
                 stillWorkingAnnounced = stillWorkingAnnounced,
+                messageWritten = messageWritten,
                 createdAt = createdAt,
             ),
         )
@@ -337,6 +342,62 @@ class VoiceConversationPersister {
         return conversation.updateCurrentMessages(updatedMessages)
     }
 
+    fun appendHermesResultMessage(
+        conversation: Conversation,
+        prompt: String,
+        answer: String?,
+        statusWireName: String,
+        reason: String?,
+        sessionId: String? = null,
+    ): Conversation {
+        val text = if (statusWireName == HermesQueueStatus.Complete.wireName && answer != null) {
+            "Hermes finished: $prompt\n\n$answer"
+        } else {
+            "Hermes could not finish: $prompt" + (reason?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty())
+        }
+        return appendAssistantTurn(
+            conversation = conversation,
+            text = text,
+            interrupted = false,
+            sessionId = sessionId,
+        )
+    }
+
+    fun markHermesToolMessageWritten(
+        conversation: Conversation,
+        callId: String,
+        jobId: String? = null,
+    ): Conversation {
+        val currentMessages = conversation.currentMessages
+        var marked = false
+        val updatedMessages = currentMessages.map { message ->
+            message.copy(
+                parts = message.parts.map { part ->
+                    if (
+                        !marked &&
+                        part is UIMessagePart.Tool &&
+                        part.isHermesTool(callId) &&
+                        part.metadata.stringOrNull(HERMES_TOOL_JOB_ID_KEY) == jobId &&
+                        part.metadata.queueStatus()?.isTerminal == true
+                    ) {
+                        marked = true
+                        part.copy(
+                            metadata = buildJsonObject {
+                                part.metadata?.forEach { (key, value) -> put(key, value) }
+                                put(HERMES_TOOL_MESSAGE_WRITTEN_KEY, true)
+                                put(HERMES_TOOL_UPDATED_AT_KEY, Clock.System.now().toString())
+                            }
+                        )
+                    } else {
+                        part
+                    }
+                }
+            )
+        }
+        if (!marked) return conversation
+        return conversation.updateCurrentMessages(updatedMessages)
+    }
+
     private fun UIMessagePart.Tool.withResultAnnounced(): UIMessagePart.Tool {
         return copy(
             metadata = metadata.withResultAnnounced(),
@@ -385,6 +446,7 @@ class VoiceConversationPersister {
         jobId: String?,
         resultAnnounced: Boolean,
         stillWorkingAnnounced: Boolean,
+        messageWritten: Boolean,
         createdAt: String?,
     ): List<UIMessagePart> {
         val text = when (this) {
@@ -408,6 +470,7 @@ class VoiceConversationPersister {
                     jobId = jobId,
                     resultAnnounced = resultAnnounced,
                     stillWorkingAnnounced = stillWorkingAnnounced,
+                    messageWritten = messageWritten,
                     createdAt = createdAt,
                 ),
             )
@@ -475,12 +538,14 @@ class VoiceConversationPersister {
         jobId: String?,
         resultAnnounced: Boolean,
         stillWorkingAnnounced: Boolean,
+        messageWritten: Boolean,
         createdAt: String?,
     ) = buildJsonObject {
         put(HERMES_TOOL_SOURCE_KEY, VoiceAgentToolNames.ASK_HERMES)
         put(HERMES_TOOL_STATUS_KEY, statusName)
         put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnounced)
         put(HERMES_TOOL_STILL_WORKING_KEY, stillWorkingAnnounced)
+        put(HERMES_TOOL_MESSAGE_WRITTEN_KEY, messageWritten)
         jobId?.let { put(HERMES_TOOL_JOB_ID_KEY, it) }
         val timestamp = Clock.System.now().toString()
         put(HERMES_TOOL_CREATED_AT_KEY, createdAt ?: timestamp)
