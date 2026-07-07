@@ -43,6 +43,9 @@ class GeminiLiveCodec(
                                 put("mode", "ANY")
                                 putJsonArray("allowedFunctionNames") {
                                     add(JsonPrimitive(VoiceAgentToolNames.ASK_HERMES))
+                                    if (normalizedLiveConnectConfig.declaresTool(VoiceAgentToolNames.CANCEL_HERMES)) {
+                                        add(JsonPrimitive(VoiceAgentToolNames.CANCEL_HERMES))
+                                    }
                                 }
                             }
                         }
@@ -116,14 +119,18 @@ class GeminiLiveCodec(
         }
     )
 
-    fun toolResponseMessage(callId: String, answer: String): String = json.encodeToString(
+    fun toolResponseMessage(
+        callId: String,
+        answer: String,
+        name: String = VoiceAgentToolNames.ASK_HERMES,
+    ): String = json.encodeToString(
         buildJsonObject {
             putJsonObject("toolResponse") {
                 putJsonArray("functionResponses") {
                     add(
                         buildJsonObject {
                             put("id", callId)
-                            put("name", VoiceAgentToolNames.ASK_HERMES)
+                            put("name", name)
                             put("scheduling", VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE)
                             putJsonObject("response") {
                                 put("answer", answer)
@@ -198,19 +205,20 @@ class GeminiLiveCodec(
                 ?: return@mapNotNull null
             val name = functionCall["name"]?.stringContentOrNull()?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
-            if (name != VoiceAgentToolNames.ASK_HERMES) {
-                unsupportedCalls += GeminiLiveEvent.UnsupportedToolCall(
-                    callId = callId,
-                    name = name,
-                )
-                return@mapNotNull null
+            val argKey = when (name) {
+                VoiceAgentToolNames.ASK_HERMES -> "prompt"
+                VoiceAgentToolNames.CANCEL_HERMES -> "question"
+                else -> {
+                    unsupportedCalls += GeminiLiveEvent.UnsupportedToolCall(callId = callId, name = name)
+                    return@mapNotNull null
+                }
             }
             val prompt = functionCall["args"]
-                    ?.jsonObjectOrNull()
-                    ?.get("prompt")
-                    ?.stringContentOrNull()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: return@mapNotNull null
+                ?.jsonObjectOrNull()
+                ?.get(argKey)
+                ?.stringContentOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
             GeminiLiveEvent.ToolCall(
                 callId = callId,
                 name = name,
@@ -241,7 +249,9 @@ class GeminiLiveCodec(
         return GeminiLiveEvent.ToolCallCancellation(ids)
     }
 
-    private fun JsonObject.declaresAskHermesTool(): Boolean =
+    private fun JsonObject.declaresAskHermesTool(): Boolean = declaresTool(VoiceAgentToolNames.ASK_HERMES)
+
+    private fun JsonObject.declaresTool(name: String): Boolean =
         this["tools"]
             ?.jsonArrayOrNull()
             ?.any { tool ->
@@ -251,7 +261,7 @@ class GeminiLiveCodec(
                     ?.any { declaration ->
                         declaration.jsonObjectOrNull()
                             ?.get("name")
-                            ?.stringContentOrNull() == VoiceAgentToolNames.ASK_HERMES
+                            ?.stringContentOrNull() == name
                     } == true
             } == true
 

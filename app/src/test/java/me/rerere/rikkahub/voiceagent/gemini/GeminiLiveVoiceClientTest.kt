@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Interceptor
@@ -842,6 +843,42 @@ class GeminiLiveVoiceClientTest {
         client.activateOutboundSession(2L)
         assertFalse(client.sendToolResponse(callId = "call-late", answer = "late", sessionId = 1L))
         assertEquals(1, socket.sentMessages.count { "functionResponses" in it })
+    }
+
+    @Test
+    fun `token aware tool response preserves cancel hermes function name`() = runBlocking {
+        val socket = FakeGeminiSocket()
+        val client = TestableGeminiLiveVoiceClient(socket = socket, codec = GeminiLiveCodec())
+
+        client.connect(
+            token = "token-1",
+            websocketUrl = "wss://example.test/live",
+            providerModel = "gemini-2.0-flash-live-001",
+            liveConnectConfig = liveConnectConfig,
+            systemInstruction = "You are Hermes.",
+            contextTurns = emptyList(),
+            onEvent = {},
+        )
+        socket.receive(setupCompleteMessage)
+        client.activateOutboundSession(1L)
+
+        assertTrue(
+            client.sendToolResponse(
+                callId = "cancel-1",
+                answer = "cancel response",
+                sessionId = 1L,
+                name = VoiceAgentToolNames.CANCEL_HERMES,
+            )
+        )
+
+        val functionResponse = socket.sentMessages
+            .last { "functionResponses" in it }
+            .jsonObject()["toolResponse"]!!
+            .jsonObject["functionResponses"]!!
+            .jsonArray.single()
+            .jsonObject
+        assertEquals("cancel-1", functionResponse["id"]!!.jsonPrimitive.content)
+        assertEquals(VoiceAgentToolNames.CANCEL_HERMES, functionResponse["name"]!!.jsonPrimitive.content)
     }
 
     @Test

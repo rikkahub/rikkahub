@@ -55,9 +55,14 @@ interface GeminiLiveVoiceClient {
     fun activateOutboundSession(sessionId: Long) = Unit
     fun invalidateOutboundSession() = Unit
 
-    fun sendToolResponse(callId: String, answer: String): Boolean
-    fun sendToolResponse(callId: String, answer: String, sessionId: Long?): Boolean {
-        return sendToolResponse(callId = callId, answer = answer)
+    fun sendToolResponse(callId: String, answer: String, name: String = VoiceAgentToolNames.ASK_HERMES): Boolean
+    fun sendToolResponse(
+        callId: String,
+        answer: String,
+        sessionId: Long?,
+        name: String = VoiceAgentToolNames.ASK_HERMES,
+    ): Boolean {
+        return sendToolResponse(callId = callId, answer = answer, name = name)
     }
     fun sendTextTurn(text: String): Boolean
     fun sendTextTurn(text: String, sessionId: Long?): Boolean {
@@ -225,18 +230,23 @@ class TestableGeminiLiveVoiceClient(
         }
     }
 
-    override fun sendToolResponse(callId: String, answer: String): Boolean {
+    override fun sendToolResponse(callId: String, answer: String, name: String): Boolean {
         return sendPostSetupMessage(
-            text = codec.toolResponseMessage(callId = callId, answer = answer),
+            text = codec.toolResponseMessage(callId = callId, answer = answer, name = name),
             errorMessage = "Failed to send Gemini tool response message",
             queueBeforeSetup = false,
         )
     }
 
-    override fun sendToolResponse(callId: String, answer: String, sessionId: Long?): Boolean {
+    override fun sendToolResponse(
+        callId: String,
+        answer: String,
+        sessionId: Long?,
+        name: String,
+    ): Boolean {
         synchronized(outboundSendLock) {
             return sendPostSetupMessage(
-                text = codec.toolResponseMessage(callId = callId, answer = answer),
+                text = codec.toolResponseMessage(callId = callId, answer = answer, name = name),
                 errorMessage = "Failed to send Gemini tool response message",
                 queueBeforeSetup = false,
                 requiredOutboundSessionId = sessionId,

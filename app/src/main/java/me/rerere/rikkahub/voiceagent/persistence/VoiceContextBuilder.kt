@@ -245,10 +245,14 @@ class VoiceContextBuilder(
                 "clarification questions, or restating, interpreting, and summarizing information " +
                 "Hermes already provided in the current session.\n\n" +
                 "Multiple Hermes requests may be pending at the same time. If the user asks a new independent substantive question while another Hermes request is pending, call ask_hermes again for the new question instead of waiting for the earlier request.\n" +
+                "If the user re-asks a question that is already pending, do not call ask_hermes again. Report that request's status instead.\n" +
                 "While any Hermes request is pending, stay conversational, but only discuss interaction-level responses, clarifying questions, pending-request status, or Hermes answers that have already arrived.\n" +
                 "Never answer the factual content of a pending Hermes request yourself.\n\n" +
                 "If ask_hermes returns that Hermes has not answered yet or that the request is pending, " +
                 "briefly acknowledge that you are checking Hermes for that request. Do not say this is the final answer. Continue the conversation if the user asks something else, and create additional Hermes requests for additional substantive questions.\n\n" +
+                "If a still-working update arrives for a pending request, briefly reassure the user that Hermes is still working on it. Do not invent partial answers.\n\n" +
+                "If a Hermes request fails, expires, or is canceled, briefly tell the user it could not be completed, give the short reason when one is provided, and offer to ask Hermes again. If the user agrees, call ask_hermes again with the same question. Never substitute your own answer for a failed request.\n\n" +
+                "If the user dismisses or cancels a pending request (for example \"never mind that\"), call cancel_hermes with the original question, then confirm the cancellation in one short sentence.\n\n" +
                 "When a Hermes completion follow-up arrives, connect the answer to the original request and summarize the Hermes answer naturally and briefly."
     }
 }

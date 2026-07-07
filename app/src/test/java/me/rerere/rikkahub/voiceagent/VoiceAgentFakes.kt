@@ -21,15 +21,16 @@ import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     val audioMessages = mutableListOf<String>()
     val audioStreamEndSessionIds = mutableListOf<Long?>()
     val toolResponses = mutableListOf<Pair<String, String>>()
+    val toolResponseNames = mutableListOf<String>()
     val textTurns = mutableListOf<Pair<Long?, String>>()
     val failToolResponses = mutableSetOf<String>()
+    val toolResponseErrors = mutableMapOf<String, Throwable>()
     var failTextTurns = false
     var closeCalls = 0
     var onBeforeToolResponseRecorded: (() -> Unit)? = null
@@ -142,30 +143,44 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
         }
     }
 
-    override fun sendToolResponse(callId: String, answer: String): Boolean {
-        return sendToolResponse(callId = callId, answer = answer, sessionId = null)
+    override fun sendToolResponse(callId: String, answer: String, name: String): Boolean {
+        return sendToolResponse(callId = callId, answer = answer, sessionId = null, name = name)
     }
 
-    override fun sendToolResponse(callId: String, answer: String, sessionId: Long?): Boolean {
+    override fun sendToolResponse(
+        callId: String,
+        answer: String,
+        sessionId: Long?,
+        name: String,
+    ): Boolean {
         synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
-            val blocked = synchronized(blockedResponses) {
-                blockedResponses[callId]?.removeFirstOrNull()
-            }
-            if (blocked != null) {
-                blocked.started.countDown()
-                blocked.release.await(blocked.timeoutMillis, TimeUnit.MILLISECONDS)
-            }
+        }
+        val blocked = synchronized(blockedResponses) {
+            blockedResponses[callId]?.removeFirstOrNull()
+        }
+        if (blocked != null) {
+            // Wait OUTSIDE outboundSendLock. The bridge send path is suspend-based now
+            // (no runInterruptible thread-interrupt can break a stuck wait anymore), so a
+            // blocked in-flight send must not hold the outbound monitor: otherwise
+            // invalidateOutboundSession() and concurrent sends would be forced to wait out
+            // the full latch timeout.
+            blocked.started.countDown()
+            blocked.release.await(blocked.timeoutMillis, TimeUnit.MILLISECONDS)
+        }
+        synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
             onBeforeToolResponseRecorded?.invoke()
+            toolResponseErrors[callId]?.let { throw it }
             if (callId in failToolResponses) {
                 return false
             }
             toolResponses += callId to answer
+            toolResponseNames += name
             return true
         }
     }
@@ -544,23 +559,12 @@ class PendingHermesJob(
 
 class FakeVoiceAudioEngine : VoiceAudioEngine {
     val playedPcm16 = CopyOnWriteArrayList<String>()
-    val playedLocalCuePcm16 = CopyOnWriteArrayList<String>()
-    val playedLocalCueTokens = CopyOnWriteArrayList<Long?>()
-    var failLocalCuePlayback = false
-    var localCuePlaybackError: Throwable? = null
-    var localCueInvalidationError: Throwable? = null
-    private val localCuePlaybackAttemptCount = AtomicInteger()
-    val localCuePlaybackAttempts: Int
-        get() = localCuePlaybackAttemptCount.get()
-    val invalidatedLocalCueTokens = CopyOnWriteArrayList<Long?>()
-    var invalidateLocalCuePlaybackCalls = 0
     var suppressPlaybackCalls = 0
     var releaseCalls = 0
     var startCaptureCalls = 0
     var stopCaptureCalls = 0
     var startCaptureError: Throwable? = null
     private var errorHandler: ((String) -> Unit)? = null
-    private var localCueErrorHandler: ((String) -> Unit)? = null
     private var playbackSessionId: Long? = null
     private var captureCallback: ((ByteArray) -> Unit)? = null
     private var debugInjectionCompleteCallback: (() -> Unit)? = null
@@ -572,10 +576,6 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         errorHandler = onError
-    }
-
-    override fun setLocalCueErrorHandler(onError: ((String) -> Unit)?) {
-        localCueErrorHandler = onError
     }
 
     override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
@@ -622,23 +622,6 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
             blockedAfterAccepted.release.await(500, TimeUnit.MILLISECONDS)
         }
         return true
-    }
-
-    override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
-        localCuePlaybackAttemptCount.incrementAndGet()
-        localCuePlaybackError?.let { throw it }
-        if (failLocalCuePlayback) {
-            return false
-        }
-        playedLocalCueTokens += cueToken
-        playedLocalCuePcm16 += base64Pcm16
-        return true
-    }
-
-    override fun invalidateLocalCuePlayback(cueToken: Long?) {
-        invalidateLocalCuePlaybackCalls += 1
-        invalidatedLocalCueTokens += cueToken
-        localCueInvalidationError?.let { throw it }
     }
 
     override fun activatePlaybackSession(sessionId: Long) {
@@ -720,10 +703,6 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     fun emitError(message: String) {
         errorHandler?.invoke(message)
-    }
-
-    fun emitLocalCueError(message: String) {
-        localCueErrorHandler?.invoke(message)
     }
 }
 

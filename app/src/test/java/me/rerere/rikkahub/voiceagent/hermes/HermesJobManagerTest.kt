@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -36,6 +38,7 @@ import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -427,7 +430,7 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Complete && it.answer == "blocked ack answer"
         }
 
-        blockedAck.release.countDown()
+        blockedAck.release.complete(Unit)
     }
 
     @Test
@@ -452,7 +455,7 @@ class HermesJobManagerTest {
         }
 
         delay(50)
-        blockedAck.release.countDown()
+        blockedAck.release.complete(Unit)
         delay(50)
 
         assertTrue(bridge.queuedAcknowledgements.isEmpty())
@@ -515,6 +518,58 @@ class HermesJobManagerTest {
             ),
             bridge.completionFollowUps,
         )
+    }
+
+    @Test
+    fun `resume does not repeat already announced still working update`() = runTest {
+        val initialConversation = Conversation.ofId(Uuid.random()).let {
+            val running = persister.upsertHermesTool(
+                conversation = it,
+                callId = "call-resume-still-working",
+                prompt = "resume still working request",
+                status = VoiceToolRecordStatus.Running,
+                jobId = "job-resume-still-working",
+            )
+            persister.markHermesToolStillWorkingAnnounced(
+                conversation = running,
+                callId = "call-resume-still-working",
+                jobId = "job-resume-still-working",
+            )
+        }
+        val toolApi = FakeVoiceToolApi().apply {
+            seedJob(jobId = "job-resume-still-working", callId = "call-resume-still-working")
+            scriptPoll(
+                callId = "call-resume-still-working",
+                response = MobileHermesJobPollResponse(
+                    jobId = "job-resume-still-working",
+                    callId = "call-resume-still-working",
+                    status = "running",
+                ),
+            )
+        }
+        val conversationStore = FakeVoiceConversationStore(initialConversation)
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            pollIntervalMs = 10L,
+            maxElapsedMs = 5_000L,
+            stillWorkingThresholdMs = 1L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 9L)
+        manager.resumeActiveJobs()
+        conversationStore.awaitHermesRecord("call-resume-still-working") {
+            it.status == HermesQueueStatus.Running && it.stillWorkingAnnounced
+        }
+        delay(50)
+
+        assertTrue(bridge.stillWorkingUpdates.isEmpty())
+        toolApi.complete(response(callId = "call-resume-still-working", answer = "resumed answer"))
+        conversationStore.awaitHermesRecord("call-resume-still-working") {
+            it.status == HermesQueueStatus.Complete
+        }
     }
 
     @Test
@@ -994,6 +1049,76 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `long running job announces still working once before completion follow-up`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            maxElapsedMs = 5_000L,
+            stillWorkingThresholdMs = 50L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 9L)
+        manager.submit(callId = "call-still-working", prompt = "long request")
+        assertEquals("call-still-working" to "long request", toolApi.awaitRequest("call-still-working"))
+        toolApi.scriptPoll(
+            callId = "call-still-working",
+            response = MobileHermesJobPollResponse(
+                callId = "call-still-working",
+                status = "running",
+            ),
+        )
+        conversationStore.awaitHermesRecord("call-still-working") {
+            it.status == HermesQueueStatus.Running
+        }
+
+        // The job stays running past the injected threshold: the bridge must receive
+        // exactly one still-working update while the job is still active, and the
+        // once-per-job flag must be persisted on the active record.
+        withTimeout(500) {
+            while (bridge.stillWorkingUpdates.isEmpty()) {
+                delay(10)
+            }
+        }
+        assertEquals(
+            listOf(
+                StillWorkingUpdate(callId = "call-still-working", prompt = "long request", sessionId = 9L)
+            ),
+            bridge.stillWorkingUpdates.toList(),
+        )
+        conversationStore.awaitHermesRecord("call-still-working") {
+            !it.status.isTerminal && it.stillWorkingAnnounced
+        }
+
+        // Waiting out several more threshold windows with the job still running must not
+        // produce a second update.
+        delay(150)
+        assertEquals(1, bridge.stillWorkingUpdates.size)
+
+        toolApi.complete(response(callId = "call-still-working", answer = "long answer"))
+        withTimeout(500) {
+            while (bridge.completionFollowUps.isEmpty()) {
+                delay(10)
+            }
+        }
+        assertEquals(
+            listOf(
+                CompletionFollowUp(
+                    callId = "call-still-working",
+                    prompt = "long request",
+                    answer = "long answer",
+                    sessionId = 9L,
+                )
+            ),
+            bridge.completionFollowUps.toList(),
+        )
+        assertEquals(1, bridge.stillWorkingUpdates.size)
+    }
+
+    @Test
     fun `polled failed status persists failed record`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -1054,7 +1179,7 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-polled-failed-retry-ack", prompt = "polled failed retry ack")
         assertEquals("call-polled-failed-retry-ack" to "polled failed retry ack", toolApi.awaitRequest("call-polled-failed-retry-ack"))
         assertTrue(blockedInitialAck.started.await(500, TimeUnit.MILLISECONDS))
-        blockedInitialAck.release.countDown()
+        blockedInitialAck.release.complete(Unit)
         delay(10)
         bridge.failQueuedAcknowledgement = false
 
@@ -1733,6 +1858,186 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `user cancel during in-flight submit marks canceled record announced under returned job id`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val blockedSubmit = toolApi.blockSubmitCancellable("call-user-cancel-mid-submit")
+        val blockedRemoteCancel = toolApi.blockCancel("call-user-cancel-mid-submit")
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            maxElapsedMs = 10_000L,
+            remoteCancelTimeoutMs = 500L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-user-cancel-mid-submit", prompt = "cancel mid submit")
+        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
+        conversationStore.awaitHermesRecord("call-user-cancel-mid-submit") {
+            it.status == HermesQueueStatus.Pending && it.jobId == null
+        }
+
+        val pending = manager.pendingRequests().single()
+        assertEquals("call-user-cancel-mid-submit", pending.callId)
+        assertNull(pending.jobId)
+
+        // Hold the user cancel's canceled persistence open (it still owns the queue-store
+        // mutex) while the blocked submit returns with the real job id, so the manager's
+        // canceled persistence under that job id queues on the fair mutex ahead of any
+        // user-cancel announcement mark that uses the stale null job id snapshot.
+        val blockedCancelPersist = conversationStore.blockAfterNextUpdate()
+        manager.cancelByUser(pending)
+        assertTrue(blockedCancelPersist.started.await(500, TimeUnit.MILLISECONDS))
+        blockedSubmit.release.complete(Unit)
+        delay(50)
+        blockedCancelPersist.release.countDown()
+
+        conversationStore.awaitHermesRecord("call-user-cancel-mid-submit") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == "job-1" && it.resultAnnounced
+        }
+
+        blockedRemoteCancel.release.complete(Unit)
+        toolApi.awaitRemoteCancelledJob("job-1")
+        delay(50)
+
+        val records = conversationStore.conversation.value.hermesQueueRecords()
+            .filter { it.callId == "call-user-cancel-mid-submit" }
+        assertEquals(1, records.size)
+        assertEquals(HermesQueueStatus.Canceled, records.single().status)
+        assertEquals("job-1", records.single().jobId)
+        assertTrue(records.single().resultAnnounced)
+
+        // A fresh bridge attachment replays unannounced terminal results; a user-initiated
+        // cancellation must never come back as a spurious canceled follow-up.
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 8L)
+        delay(100)
+        assertTrue(bridge.terminalFollowUps.isEmpty())
+    }
+
+    @Test
+    fun `user cancel persist landing after submit canceled persist leaves no unannounced record`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val dispatcher = HoldNextDispatchDispatcher(Dispatchers.Default)
+        val blockedSubmit = toolApi.blockSubmitCancellable("call-user-cancel-orphan")
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            dispatcher = dispatcher,
+            maxElapsedMs = 10_000L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-user-cancel-orphan", prompt = "cancel orphan ordering")
+        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
+        conversationStore.awaitHermesRecord("call-user-cancel-orphan") {
+            it.status == HermesQueueStatus.Pending && it.jobId == null
+        }
+        val pending = manager.pendingRequests().single()
+        assertNull(pending.jobId)
+        delay(100)
+
+        // Mirror ordering of the mid-submit race: hold the user cancel's persist coroutine
+        // at dispatch so the submit's explicitly-canceled persistence commits FIRST under
+        // the real job id, then let the stale null-job-id cancel persist run against the
+        // moved identity (where it appends an orphan record).
+        dispatcher.holdNextDispatch()
+        manager.cancelByUser(pending)
+        assertEquals(1, dispatcher.heldCount())
+
+        blockedSubmit.release.complete(Unit)
+        conversationStore.awaitHermesRecord("call-user-cancel-orphan") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == "job-1" && it.resultAnnounced
+        }
+        toolApi.awaitRemoteCancelledJob("job-1")
+
+        dispatcher.releaseHeld()
+        conversationStore.awaitHermesRecord("call-user-cancel-orphan") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == null
+        }
+
+        // Whatever this ordering leaves behind (including the orphan null-job-id record,
+        // a pre-existing accepted residual), every record must be canceled and already
+        // announced so nothing is ever replayed as a spurious follow-up.
+        val records = conversationStore.conversation.value.hermesQueueRecords()
+            .filter { it.callId == "call-user-cancel-orphan" }
+        assertTrue(records.isNotEmpty())
+        assertTrue(
+            "Expected every canceled record to be announced but got $records",
+            records.all { it.status == HermesQueueStatus.Canceled && it.resultAnnounced },
+        )
+
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 8L)
+        delay(100)
+        assertTrue(bridge.terminalFollowUps.isEmpty())
+    }
+
+    @Test
+    fun `user cancel racing gemini cancel persists canceled record as announced`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val dispatcher = HoldNextDispatchDispatcher(Dispatchers.Default)
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            dispatcher = dispatcher,
+            // One scripted queued poll below parks the poll loop in a long interval delay
+            // so the manager dispatcher is quiescent when the dispatch hold is armed.
+            pollIntervalMs = 60_000L,
+            maxElapsedMs = 10_000L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-dual-cancel", prompt = "dual cancel race")
+        assertEquals("call-dual-cancel" to "dual cancel race", toolApi.awaitRequest("call-dual-cancel"))
+        toolApi.scriptQueuedPolls(callId = "call-dual-cancel", count = 1)
+        conversationStore.awaitHermesRecord("call-dual-cancel") {
+            it.status == HermesQueueStatus.Queued && it.jobId == "job-1"
+        }
+        val pending = manager.pendingRequests().single()
+        assertEquals("job-1", pending.jobId)
+        delay(100)
+
+        // Race the two independent cancel callers on the same managed job: hold the user
+        // cancel's own persist at dispatch — its shared user-cancel flag is already set
+        // synchronously under the lock — so the Gemini-initiated cancel's persist commits
+        // FIRST, then release the user persist into the already-terminal skip.
+        dispatcher.holdNextDispatch()
+        manager.cancelByUser(pending)
+        assertEquals(1, dispatcher.heldCount())
+        manager.cancel("call-dual-cancel")
+
+        conversationStore.awaitHermesRecord("call-dual-cancel") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == "job-1"
+        }
+        toolApi.awaitRemoteCancelledJob("job-1")
+
+        dispatcher.releaseHeld()
+        delay(50)
+
+        val records = conversationStore.conversation.value.hermesQueueRecords()
+            .filter { it.callId == "call-dual-cancel" }
+        assertTrue(records.isNotEmpty())
+        assertTrue(
+            "Expected every canceled record to be announced but got $records",
+            records.all { it.status == HermesQueueStatus.Canceled && it.resultAnnounced },
+        )
+
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 8L)
+        delay(100)
+        assertTrue(bridge.terminalFollowUps.isEmpty())
+    }
+
+    @Test
     fun `stale active poll does not resurrect terminal record`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -2050,17 +2355,59 @@ class HermesJobManagerTest {
         }
     }
 
+    @Test
+    fun `appendVisibleResultMessageIfNeeded is a no-op for a terminal record already announced`() = runTest {
+        // Defense-in-depth: a record can reach resultAnnounced = true without ever going
+        // through messageWritten (e.g. a user-initiated cancel is persisted as already
+        // announced in the same atomic write, per HermesJobManager.cancel). If the
+        // no-bridge/failed-send fallback is ever driven for such a record, it must not
+        // write a redundant visible chat message for a result the user already knows about.
+        val conversationStore = FakeVoiceConversationStore()
+        val queueStore = HermesQueueStore(
+            conversationStore = conversationStore,
+            persister = persister,
+        )
+
+        assertTrue(
+            queueStore.persistTerminalIfStillActive(
+                callId = "call-already-announced",
+                prompt = "already announced prompt",
+                status = VoiceToolRecordStatus.Complete("already spoken answer"),
+                jobId = "job-already-announced",
+                resultAnnounced = true,
+            )
+        )
+
+        val appended = queueStore.appendVisibleResultMessageIfNeeded(
+            callId = "call-already-announced",
+            jobId = "job-already-announced",
+        )
+
+        assertFalse(appended)
+        val record = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-already-announced" }
+        assertTrue(record.resultAnnounced)
+        assertFalse(record.messageWritten)
+        val visibleTextMessages = conversationStore.conversation.value.currentMessages
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Text>()
+        assertTrue(visibleTextMessages.none { it.text.contains("already spoken answer") })
+    }
+
     private fun manager(
         toolApi: VoiceToolApi,
         conversationStore: VoiceConversationStore,
         scope: CoroutineScope,
+        dispatcher: CoroutineDispatcher = Dispatchers.Default,
         updateToolStatus: (VoiceToolStatus) -> Unit = {},
         recordDiagnostic: (String, String) -> Unit = { _, _ -> },
         writeQueueEvent: (String) -> Unit = {},
         writeHermesAnswer: (String) -> Unit = {},
+        pollIntervalMs: Long = 10L,
         maxElapsedMs: Long = 1_000L,
         remoteCancelTimeoutMs: Long = 50L,
         bridgeSendTimeoutMs: Long = 200L,
+        stillWorkingThresholdMs: Long = 45_000L,
         observability: VoiceObservability = NoOpVoiceObservability,
         traceContext: VoiceTraceContext = VoiceTraceContext(
             traceId = "trace-test",
@@ -2071,12 +2418,13 @@ class HermesJobManagerTest {
         conversationStore = conversationStore,
         persister = persister,
         scope = scope,
-        dispatcher = Dispatchers.Default,
-        pollIntervalMs = 10L,
+        dispatcher = dispatcher,
+        pollIntervalMs = pollIntervalMs,
         pollRetryDelayMs = 1L,
         maxElapsedMs = maxElapsedMs,
         remoteCancelTimeoutMs = remoteCancelTimeoutMs,
         bridgeSendTimeoutMs = bridgeSendTimeoutMs,
+        stillWorkingThresholdMs = stillWorkingThresholdMs,
         updateToolStatus = updateToolStatus,
         recordDiagnostic = recordDiagnostic,
         writeQueueEvent = writeQueueEvent,
@@ -2325,22 +2673,70 @@ private class BlockingPollVoiceToolApi : VoiceToolApi {
     }
 }
 
+/**
+ * Delegating dispatcher that can capture the next dispatched coroutine instead of running
+ * it, so a test can deterministically delay one specific coroutine (e.g. the user cancel's
+ * persistence) until after another racing coroutine has committed its own persistence.
+ */
+private class HoldNextDispatchDispatcher(
+    private val delegate: CoroutineDispatcher,
+) : CoroutineDispatcher() {
+    private val lock = Any()
+    private var holdNext = false
+    private val held = mutableListOf<Pair<kotlin.coroutines.CoroutineContext, Runnable>>()
+
+    fun holdNextDispatch() {
+        synchronized(lock) { holdNext = true }
+    }
+
+    fun heldCount(): Int = synchronized(lock) { held.size }
+
+    fun releaseHeld() {
+        val toRun = synchronized(lock) {
+            val copy = held.toList()
+            held.clear()
+            copy
+        }
+        toRun.forEach { (context, block) -> delegate.dispatch(context, block) }
+    }
+
+    override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+        val shouldHold = synchronized(lock) {
+            if (holdNext) {
+                holdNext = false
+                held += context to block
+                true
+            } else {
+                false
+            }
+        }
+        if (!shouldHold) {
+            delegate.dispatch(context, block)
+        }
+    }
+}
+
 private class RecordingHermesBridge : HermesSessionBridge {
     val queuedAcknowledgements = Collections.synchronizedList(mutableListOf<Pair<String, Long>>())
     val completionFollowUps = Collections.synchronizedList(mutableListOf<CompletionFollowUp>())
     val terminalFollowUps = Collections.synchronizedList(mutableListOf<TerminalFollowUp>())
+    val stillWorkingUpdates = Collections.synchronizedList(mutableListOf<StillWorkingUpdate>())
     var failCompletionFollowUp = false
     var failTerminalFollowUp = false
     var failQueuedAcknowledgement = false
     var throwQueuedAcknowledgement = false
+    var failStillWorkingUpdate = false
     private val blockedQueuedAcknowledgements = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
     private val blockedCompletionFollowUps = Collections.synchronizedList(mutableListOf<BlockedCompletionFollowUp>())
 
-    override fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
+    override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
         val blocked = blockedQueuedAcknowledgements.removeFirstOrNull()
         if (blocked != null) {
             blocked.started.countDown()
-            blocked.release.await(blocked.timeoutMillis, TimeUnit.MILLISECONDS)
+            // A suspending (not thread-blocking) wait so that the manager's own
+            // withTimeoutOrNull(bridgeSendTimeoutMs) can actually cancel this call,
+            // mirroring how a real, suspend-based bridge implementation behaves.
+            withTimeoutOrNull(blocked.timeoutMillis) { blocked.release.await() }
         }
         if (throwQueuedAcknowledgement) error("queued acknowledgement failed")
         if (failQueuedAcknowledgement) return false
@@ -2348,7 +2744,7 @@ private class RecordingHermesBridge : HermesSessionBridge {
         return true
     }
 
-    override fun sendCompletionFollowUp(
+    override suspend fun sendCompletionFollowUp(
         callId: String,
         prompt: String,
         answer: String,
@@ -2357,7 +2753,10 @@ private class RecordingHermesBridge : HermesSessionBridge {
         val blocked = blockedCompletionFollowUps.removeFirstOrNull()
         if (blocked != null) {
             blocked.started.complete(Unit)
-            runBlocking { blocked.release.await() }
+            // A suspending (not thread-blocking) wait so that the manager's own
+            // withTimeoutOrNull(bridgeSendTimeoutMs) can actually cancel this call,
+            // mirroring how a real, suspend-based bridge implementation behaves.
+            withTimeoutOrNull(blocked.timeoutMillis) { blocked.release.await() }
         }
         if (failCompletionFollowUp) return false
         completionFollowUps += CompletionFollowUp(
@@ -2369,7 +2768,7 @@ private class RecordingHermesBridge : HermesSessionBridge {
         return true
     }
 
-    override fun sendTerminalFollowUp(
+    override suspend fun sendTerminalFollowUp(
         callId: String,
         prompt: String,
         status: HermesQueueStatus,
@@ -2384,6 +2783,12 @@ private class RecordingHermesBridge : HermesSessionBridge {
             reason = reason,
             sessionId = sessionId,
         )
+        return true
+    }
+
+    override suspend fun sendStillWorkingUpdate(callId: String, prompt: String, sessionId: Long): Boolean {
+        if (failStillWorkingUpdate) return false
+        stillWorkingUpdates += StillWorkingUpdate(callId = callId, prompt = prompt, sessionId = sessionId)
         return true
     }
 
@@ -2410,13 +2815,14 @@ private class RecordingHermesBridge : HermesSessionBridge {
 
 private class BlockedBridgeCall {
     val started = java.util.concurrent.CountDownLatch(1)
-    val release = java.util.concurrent.CountDownLatch(1)
+    val release = CompletableDeferred<Unit>()
     var timeoutMillis: Long = 500
 }
 
 private class BlockedCompletionFollowUp {
     val started = CompletableDeferred<Unit>()
     val release = CompletableDeferred<Unit>()
+    var timeoutMillis: Long = 500
 }
 
 private data class CompletionFollowUp(
@@ -2431,5 +2837,11 @@ private data class TerminalFollowUp(
     val prompt: String,
     val status: HermesQueueStatus,
     val reason: String,
+    val sessionId: Long,
+)
+
+private data class StillWorkingUpdate(
+    val callId: String,
+    val prompt: String,
     val sessionId: Long,
 )

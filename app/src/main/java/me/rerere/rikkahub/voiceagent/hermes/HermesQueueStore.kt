@@ -31,6 +31,16 @@ class HermesQueueStore(
         }
     }
 
+    suspend fun markStillWorkingAnnounced(callId: String, jobId: String?) {
+        update { conversation ->
+            persister.markHermesToolStillWorkingAnnounced(
+                conversation = conversation,
+                callId = callId,
+                jobId = jobId,
+            )
+        }
+    }
+
     suspend fun persistActiveIfStillActive(
         callId: String,
         prompt: String,
@@ -85,6 +95,7 @@ class HermesQueueStore(
         prompt: String,
         jobId: String?,
         message: String,
+        resultAnnounced: Boolean? = null,
     ): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
@@ -99,6 +110,7 @@ class HermesQueueStore(
                     status = VoiceToolRecordStatus.Canceled(message),
                     sessionId = sessionId,
                     jobId = jobId,
+                    resultAnnounced = resultAnnounced,
                 ) to true
             }
         }
@@ -126,6 +138,30 @@ class HermesQueueStore(
                     sessionId = sessionId,
                     jobId = jobId,
                     resultAnnounced = resultAnnounced,
+                ) to true
+            }
+        }
+    }
+
+    suspend fun appendVisibleResultMessageIfNeeded(callId: String, jobId: String?): Boolean {
+        val sessionId = persistenceSessionId()
+        return updateWithResult { conversation ->
+            val record = conversation.latestHermesRecord(callId = callId, jobId = jobId)
+            if (record == null || !record.status.isTerminal || record.messageWritten || record.resultAnnounced) {
+                conversation to false
+            } else {
+                val appended = persister.appendHermesResultMessage(
+                    conversation = conversation,
+                    prompt = record.prompt,
+                    answer = record.answer,
+                    statusWireName = record.status.wireName,
+                    reason = record.error,
+                    sessionId = sessionId,
+                )
+                persister.markHermesToolMessageWritten(
+                    conversation = appended,
+                    callId = callId,
+                    jobId = jobId,
                 ) to true
             }
         }

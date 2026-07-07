@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -24,6 +25,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
+import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobCompletion
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobFailure
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobManager
@@ -31,7 +33,7 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesPollFailure
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
-import me.rerere.rikkahub.voiceagent.hermes.HermesWaitingToneController
+import me.rerere.rikkahub.voiceagent.hermes.PendingHermesRequest
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
@@ -49,8 +51,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
 
 const val HERMES_JOB_POLL_INTERVAL_MS = 10_000L
-const val HERMES_WAITING_TONE_GRACE_DELAY_MS = HermesWaitingToneController.DEFAULT_GRACE_DELAY_MS
-const val HERMES_WAITING_TONE_REPEAT_INTERVAL_MS = HermesWaitingToneController.DEFAULT_REPEAT_INTERVAL_MS
+const val HERMES_STILL_WORKING_THRESHOLD_MS = 45_000L
 private const val HERMES_JOB_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000L
 private const val HERMES_JOB_POLL_RETRY_DELAY_MS = 2_000L
 private const val UNBOUND_HERMES_BRIDGE_SESSION_ID = 0L
@@ -81,8 +82,8 @@ class VoiceAgentCoordinator(
     private val hermesJobPollIntervalMs: Long = HERMES_JOB_POLL_INTERVAL_MS,
     private val hermesJobMaxElapsedMs: Long = HERMES_JOB_MAX_ELAPSED_MS,
     private val hermesJobPollRetryDelayMs: Long = HERMES_JOB_POLL_RETRY_DELAY_MS,
-    private val hermesWaitingToneGraceDelayMs: Long = HERMES_WAITING_TONE_GRACE_DELAY_MS,
-    private val hermesWaitingToneRepeatIntervalMs: Long = HERMES_WAITING_TONE_REPEAT_INTERVAL_MS,
+    private val hermesStillWorkingThresholdMs: Long = HERMES_STILL_WORKING_THRESHOLD_MS,
+    hermesAnnouncementScheduler: HermesAnnouncementScheduler? = null,
     scope: CoroutineScope? = null,
     dispatcher: CoroutineDispatcher? = null,
 ) {
@@ -100,6 +101,8 @@ class VoiceAgentCoordinator(
     private val sharedConversationStore = SynchronizedVoiceConversationStore(
         conversationStore ?: InMemoryVoiceConversationStore()
     )
+    private val hermesAnnouncementScheduler = hermesAnnouncementScheduler
+        ?: HermesAnnouncementScheduler(recordDiagnostic = diagnostics::record)
     private val hermesJobManager = HermesJobManager(
         toolApi = toolApi,
         conversationStore = sharedConversationStore,
@@ -109,6 +112,7 @@ class VoiceAgentCoordinator(
         pollIntervalMs = hermesJobPollIntervalMs,
         pollRetryDelayMs = hermesJobPollRetryDelayMs,
         maxElapsedMs = hermesJobMaxElapsedMs,
+        stillWorkingThresholdMs = hermesStillWorkingThresholdMs,
         updateToolStatus = ::updateHermesToolStatusFromManager,
         recordDiagnostic = diagnostics::record,
         writeQueueEvent = ::writeHermesQueueArtifactLine,
@@ -119,14 +123,6 @@ class VoiceAgentCoordinator(
         onPollFailed = ::recordHermesPollFailure,
         observability = observability,
         traceContext = traceContext,
-    )
-    private val hermesWaitingToneController = HermesWaitingToneController(
-        audio = audio,
-        scope = sessionScope,
-        dispatcher = dispatcher ?: Dispatchers.Default,
-        graceDelayMs = hermesWaitingToneGraceDelayMs,
-        repeatIntervalMs = hermesWaitingToneRepeatIntervalMs,
-        recordDiagnostic = diagnostics::record,
     )
     private val hermesBridgeFactory = VoiceHermesSessionBridgeFactory(
         gemini = gemini,
@@ -140,8 +136,8 @@ class VoiceAgentCoordinator(
                 sent = event.sent,
             )
         },
-        appendLocalAssistantTranscript = ::appendLocalAssistantTranscript,
         clearOutputAudioSuppressionForNewTurn = ::clearOutputAudioSuppressionForNewTurn,
+        announcementScheduler = this.hermesAnnouncementScheduler,
     )
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
     private val persistenceJobs = mutableSetOf<Job>()
@@ -167,7 +163,6 @@ class VoiceAgentCoordinator(
     private val finalTranscriptTelemetryKeys = mutableSetOf<String>()
     private val voiceArtifactSessionId = Uuid.random().toString()
     private val removeDiagnosticsListener: () -> Unit
-    private val hermesWaitingToneSuspended = AtomicBoolean(false)
     private val assistantOutputAudioActive = AtomicBoolean(false)
 
     private val _state = MutableStateFlow(VoiceAgentUiState(traceId = traceContext.traceId))
@@ -205,12 +200,6 @@ class VoiceAgentCoordinator(
     fun updateSessionStatus(status: VoiceSessionStatus) {
         diagnostics.record("session_status", status.diagnosticDetail())
         _state.update { it.copy(session = status, error = (status as? VoiceSessionStatus.Error)?.message) }
-        if (status == VoiceSessionStatus.Connected) {
-            hermesWaitingToneSuspended.set(false)
-            refreshHermesWaitingTone()
-        } else if (!status.allowsHermesWaitingTone()) {
-            suspendHermesWaitingTone()
-        }
     }
 
     fun updateAudioStatus(status: VoiceAudioStatus) {
@@ -262,9 +251,13 @@ class VoiceAgentCoordinator(
         }
     }
 
+    private fun setAssistantOutputAudioActive(active: Boolean) {
+        assistantOutputAudioActive.set(active)
+        hermesAnnouncementScheduler.onAssistantAudioActive(active)
+    }
+
     fun suppressPlayback() {
-        suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         synchronized(playbackSuppressionLock) {
             outputAudioSuppressed = true
             if (outputTurnTranscript.isNotBlank()) {
@@ -418,11 +411,10 @@ class VoiceAgentCoordinator(
                     toolCalls = emptyMap(),
                 )
             }
-            hermesWaitingToneSuspended.set(true)
-            assistantOutputAudioActive.set(false)
+            setAssistantOutputAudioActive(false)
             hermesQueueStatusProjectionJob?.cancel()
             hermesQueueStatusProjectionJob = null
-            hermesWaitingToneController.close()
+            hermesAnnouncementScheduler.close()
             gemini.close()
             audio.release()
             audio.setErrorHandler(null)
@@ -435,8 +427,7 @@ class VoiceAgentCoordinator(
     }
 
     fun prepareForReconnect() {
-        suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         diagnostics.record("prepare_for_reconnect")
         invalidateActiveSession()
         synchronized(playbackSuppressionLock) {
@@ -451,8 +442,7 @@ class VoiceAgentCoordinator(
     }
 
     fun prepareForAutomaticReconnect() {
-        suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         diagnostics.record("prepare_for_automatic_reconnect")
         invalidateActiveSession()
         synchronized(playbackSuppressionLock) {
@@ -461,8 +451,7 @@ class VoiceAgentCoordinator(
     }
 
     fun prepareForSessionEnd() {
-        suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         diagnostics.record("prepare_for_session_end")
         invalidateActiveSession()
         _state.update {
@@ -484,9 +473,13 @@ class VoiceAgentCoordinator(
             detachDefaultHermesBridge()
         }
         hermesJobManager.attachBridge(bridge = bridge, sessionId = sessionId)
+        hermesAnnouncementScheduler.onBridgeAvailable(true)
     }
 
     fun detachHermesBridge(bridge: HermesSessionBridge) {
+        // Announcements must not target a bridge that is going away. If the default bridge is
+        // re-attached below, it flips availability back to true.
+        hermesAnnouncementScheduler.onBridgeAvailable(false)
         hermesJobManager.detachBridge(bridge)
         val shouldAttachDefault = synchronized(toolJobsLock) {
             !closed && !closing && !hasAttachedScopedHermesBridge
@@ -510,6 +503,7 @@ class VoiceAgentCoordinator(
             activeTranscriptSpeaker = TranscriptSpeaker.User
             inputTurnTranscript += text
             diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, chars=${text.length}")
+            hermesAnnouncementScheduler.onInputTranscriptDelta()
             recordEventSafely(
                 name = "voicelab.mobile.transcript.input_delta",
                 attributes = mapOf("turnId" to inputTurnId) + voiceTextMetadata(key = "text", text = text),
@@ -581,7 +575,6 @@ class VoiceAgentCoordinator(
             diagnostics.record("output_audio_accepted_suppressed_after_interruption")
             return
         }
-        hermesWaitingToneController.stop()
         var skippedQueuedAudioDiagnostic: String? = null
         val queued = synchronized(playbackSuppressionLock) {
             if (outputAudioSuppressed) {
@@ -591,7 +584,7 @@ class VoiceAgentCoordinator(
                 skippedQueuedAudioDiagnostic = "stale_output_audio_state_suppressed"
                 false
             } else {
-                assistantOutputAudioActive.set(true)
+                setAssistantOutputAudioActive(true)
                 _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
                 true
             }
@@ -622,8 +615,7 @@ class VoiceAgentCoordinator(
             outputAudioSuppressed = false
             outputAudioSuppressedByGeminiInterruption = false
         }
-        hermesWaitingToneSuspended.set(false)
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
     }
 
     private fun clearOutputAudioSuppressionForAssistantTurnAfterInterruption() {
@@ -644,6 +636,7 @@ class VoiceAgentCoordinator(
 
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
+        hermesAnnouncementScheduler.onGenerationComplete()
         synchronized(playbackSuppressionLock) {
             if (
                 outputTurnTranscript.isBlank() ||
@@ -674,6 +667,10 @@ class VoiceAgentCoordinator(
             "tool_call_received",
             "callId=${call.callId}, name=${call.name}, promptChars=${call.prompt.length}",
         )
+        if (call.name == VoiceAgentToolNames.CANCEL_HERMES) {
+            handleCancelHermesToolCall(call = call, sessionId = sessionId)
+            return
+        }
         if (call.name != VoiceAgentToolNames.ASK_HERMES) {
             recordUnsupportedToolCall(
                 GeminiLiveEvent.UnsupportedToolCall(
@@ -699,6 +696,82 @@ class VoiceAgentCoordinator(
         }
     }
 
+    private fun handleCancelHermesToolCall(call: GeminiLiveEvent.ToolCall, sessionId: Long?) {
+        if (sessionId == null) {
+            attachDefaultHermesBridge()
+        }
+        val pending = hermesJobManager.pendingRequests()
+        val question = call.prompt.normalizeForHermesMatch()
+        val matches = when {
+            pending.size <= 1 -> pending
+            else -> pending.filter { request ->
+                val prompt = request.prompt.normalizeForHermesMatch()
+                prompt.contains(question) || question.contains(prompt)
+            }
+        }
+        val answer = when {
+            pending.isEmpty() ->
+                "There are no pending Hermes requests to cancel. Tell the user nothing is currently pending."
+            matches.size == 1 -> {
+                hermesJobManager.cancelByUser(matches.single())
+                diagnostics.record("hermes_user_cancel", "callId=${matches.single().callId}")
+                "Canceling the pending Hermes request: \"${matches.single().prompt}\". " +
+                    "Confirm the cancellation to the user in one short sentence."
+            }
+            matches.isEmpty() ->
+                "No pending Hermes request matches that question. Pending requests: " +
+                    pending.pendingPromptSummary() + ". Ask the user which one to cancel."
+            else ->
+                "Multiple pending Hermes requests match: " + matches.pendingPromptSummary() +
+                    ". Ask the user which one to cancel."
+        }
+        sessionScope.launch(toolLaunchContext) {
+            var failureReason = "send_returned_false"
+            val sent = try {
+                if (sessionId != null) {
+                    gemini.sendToolResponse(
+                        callId = call.callId,
+                        answer = answer,
+                        sessionId = sessionId,
+                        name = VoiceAgentToolNames.CANCEL_HERMES,
+                    )
+                } else {
+                    gemini.sendToolResponse(
+                        callId = call.callId,
+                        answer = answer,
+                        name = VoiceAgentToolNames.CANCEL_HERMES,
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Error) {
+                throw error
+            } catch (error: Exception) {
+                failureReason = HermesTelemetryLogSanitizer.failureMessage(
+                    error.message ?: error.javaClass.simpleName
+                )
+                false
+            }
+            if (!sent) {
+                diagnostics.record(
+                    "cancel_hermes_tool_response_failed",
+                    "callId=${call.callId}, sessionId=${sessionId ?: "none"}, error=$failureReason",
+                )
+            } else {
+                diagnostics.record(
+                    "cancel_hermes_tool_response_sent",
+                    "callId=${call.callId}, sessionId=${sessionId ?: "none"}",
+                )
+            }
+        }
+    }
+
+    private fun List<PendingHermesRequest>.pendingPromptSummary(): String =
+        joinToString(separator = "; ") { "\"${it.prompt}\"" }
+
+    private fun String.normalizeForHermesMatch(): String =
+        lowercase().replace(Regex("\\s+"), " ").trim()
+
     private fun attachDefaultHermesBridge() {
         val shouldAttach = synchronized(toolJobsLock) {
             if (closed || closing || hasAttachedScopedHermesBridge || defaultHermesBridgeAttached) {
@@ -710,10 +783,14 @@ class VoiceAgentCoordinator(
         }
         if (shouldAttach) {
             hermesJobManager.attachBridge(defaultHermesBridge, sessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID)
+            hermesAnnouncementScheduler.onBridgeAvailable(true)
         }
     }
 
     private fun detachDefaultHermesBridge() {
+        // Callers either re-attach a scoped bridge right after (which flips availability back
+        // to true) or are closing down, so signalling unavailability first is always safe.
+        hermesAnnouncementScheduler.onBridgeAvailable(false)
         val shouldDetach = synchronized(toolJobsLock) {
             if (defaultHermesBridgeAttached) {
                 defaultHermesBridgeAttached = false
@@ -725,28 +802,6 @@ class VoiceAgentCoordinator(
         if (shouldDetach) {
             hermesJobManager.detachBridge(defaultHermesBridge)
         }
-    }
-
-    private fun appendLocalAssistantTranscript(text: String) {
-        val artifactSnapshot = synchronized(toolJobsLock) {
-            activeTranscriptSpeaker = TranscriptSpeaker.Assistant
-            outputTurnTranscript = text
-            outputTurnId = nextTranscriptTurnId(TranscriptSpeaker.Assistant)
-            outputTurnStatus = VoiceTranscriptStatus.Complete
-            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
-            _state.update { current ->
-                current.copy(
-                    outputTranscript = if (current.outputTranscript.isBlank()) {
-                        text
-                    } else {
-                        current.outputTranscript + "\n" + text
-                    }
-                )
-            }
-            persistAssistantTranscript()
-            outputTurnTranscript
-        }
-        writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = artifactSnapshot)
     }
 
     private fun isClosed(): Boolean = synchronized(toolJobsLock) { closed || closing }
@@ -805,7 +860,6 @@ class VoiceAgentCoordinator(
                 toolCalls = toolCalls,
             )
         }
-        refreshHermesWaitingTone()
     }
 
     private fun updateHermesToolStatusFromManager(status: VoiceToolStatus) {
@@ -819,7 +873,6 @@ class VoiceAgentCoordinator(
                         )
                     )
                 }
-                refreshHermesWaitingTone()
             }
             is VoiceToolStatus.CallingHermes -> updateToolStatus(callId = status.callId, status = status)
             is VoiceToolStatus.QueuedHermes -> updateToolStatus(callId = status.callId, status = status)
@@ -830,8 +883,6 @@ class VoiceAgentCoordinator(
                 }
                 if (!canceled) {
                     updateToolStatus(callId = status.callId, status = status)
-                } else {
-                    refreshHermesWaitingTone()
                 }
             }
         }
@@ -848,35 +899,7 @@ class VoiceAgentCoordinator(
                 toolCalls = toolCalls,
             )
         }
-        refreshHermesWaitingTone()
     }
-
-    private fun refreshHermesWaitingTone() {
-        hermesWaitingToneController.setWaiting(hasActiveHermesWait(_state.value))
-    }
-
-    private fun hasActiveHermesWait(state: VoiceAgentUiState): Boolean {
-        return !isClosed() &&
-            !hermesWaitingToneSuspended.get() &&
-            !assistantOutputAudioActive.get() &&
-            !synchronized(playbackSuppressionLock) { outputAudioSuppressed } &&
-            state.session.allowsHermesWaitingTone() &&
-            (
-                state.toolCalls.values.any { it.isHermesWaitingStatus() } ||
-                    state.tool.isHermesWaitingStatus()
-                )
-    }
-
-    private fun suspendHermesWaitingTone() {
-        hermesWaitingToneSuspended.set(true)
-        hermesWaitingToneController.stop()
-    }
-
-    private fun VoiceToolStatus.isHermesWaitingStatus(): Boolean {
-        return this is VoiceToolStatus.QueuedHermes || this is VoiceToolStatus.CallingHermes
-    }
-
-    private fun VoiceSessionStatus.allowsHermesWaitingTone(): Boolean = this == VoiceSessionStatus.Connected
 
     private fun recordUnsupportedToolCall(call: GeminiLiveEvent.UnsupportedToolCall) {
         diagnostics.record("unsupported_tool_call", "callId=${call.callId}, name=${call.name}")

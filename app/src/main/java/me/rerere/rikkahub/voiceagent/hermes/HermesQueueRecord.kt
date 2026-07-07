@@ -17,6 +17,8 @@ const val HERMES_TOOL_JOB_ID_KEY = "voice_tool_job_id"
 const val HERMES_TOOL_CREATED_AT_KEY = "voice_tool_created_at"
 const val HERMES_TOOL_UPDATED_AT_KEY = "voice_tool_updated_at"
 const val HERMES_TOOL_RESULT_ANNOUNCED_KEY = "voice_tool_result_announced"
+const val HERMES_TOOL_STILL_WORKING_KEY = "voice_tool_still_working_announced"
+const val HERMES_TOOL_MESSAGE_WRITTEN_KEY = "voice_tool_message_written"
 
 enum class HermesQueueStatus(val wireName: String) {
     Pending("pending"),
@@ -44,6 +46,8 @@ data class HermesQueueRecord(
     val answer: String?,
     val error: String?,
     val resultAnnounced: Boolean,
+    val stillWorkingAnnounced: Boolean,
+    val messageWritten: Boolean,
     val createdAt: String?,
     val updatedAt: String?,
 )
@@ -150,6 +154,8 @@ private fun UIMessagePart.Tool.toHermesQueueRecord(): HermesQueueRecord? {
         answer = outputText.takeIf { status == HermesQueueStatus.Complete && it.isNotBlank() },
         error = outputText.takeIf { status != HermesQueueStatus.Complete && status.isTerminal && it.isNotBlank() },
         resultAnnounced = resultAnnounced,
+        stillWorkingAnnounced = metadata.booleanOrNull(HERMES_TOOL_STILL_WORKING_KEY) == true,
+        messageWritten = metadata.booleanOrNull(HERMES_TOOL_MESSAGE_WRITTEN_KEY) == true,
         createdAt = metadata.stringOrNull(HERMES_TOOL_CREATED_AT_KEY),
         updatedAt = metadata.stringOrNull(HERMES_TOOL_UPDATED_AT_KEY),
     )

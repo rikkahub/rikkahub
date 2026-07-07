@@ -60,12 +60,17 @@ class OkHttpGeminiLiveVoiceClient(
         delegate.invalidateOutboundSession()
     }
 
-    override fun sendToolResponse(callId: String, answer: String): Boolean {
-        return delegate.sendToolResponse(callId = callId, answer = answer)
+    override fun sendToolResponse(callId: String, answer: String, name: String): Boolean {
+        return delegate.sendToolResponse(callId = callId, answer = answer, name = name)
     }
 
-    override fun sendToolResponse(callId: String, answer: String, sessionId: Long?): Boolean {
-        return delegate.sendToolResponse(callId = callId, answer = answer, sessionId = sessionId)
+    override fun sendToolResponse(
+        callId: String,
+        answer: String,
+        sessionId: Long?,
+        name: String,
+    ): Boolean {
+        return delegate.sendToolResponse(callId = callId, answer = answer, sessionId = sessionId, name = name)
     }
 
     override fun sendTextTurn(text: String): Boolean {

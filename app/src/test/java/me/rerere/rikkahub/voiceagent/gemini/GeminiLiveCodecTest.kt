@@ -177,6 +177,42 @@ class GeminiLiveCodecTest {
     }
 
     @Test
+    fun `setup message allows cancel hermes in injected tool config when declared`() {
+        val liveConnectConfig = JsonObject(
+            mapOf(
+                "tools" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "functionDeclarations" to JsonArray(
+                                    listOf(
+                                        JsonObject(mapOf("name" to JsonPrimitive("ask_hermes"))),
+                                        JsonObject(mapOf("name" to JsonPrimitive("cancel_hermes"))),
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+            )
+        )
+
+        val message = codec.setupMessage(
+            providerModel = "gemini-2.0-flash-live-001",
+            liveConnectConfig = liveConnectConfig,
+            systemInstruction = "Local instruction.",
+        ).jsonObject()
+
+        val allowed = message["setup"]!!
+            .jsonObject["toolConfig"]!!
+            .jsonObject["functionCallingConfig"]!!
+            .jsonObject["allowedFunctionNames"]!!
+            .jsonArray
+            .map { it.jsonPrimitive.content }
+        assertEquals(listOf("ask_hermes", "cancel_hermes"), allowed)
+    }
+
+    @Test
     fun `setup message preserves explicit server tool config`() {
         val explicitToolConfig = JsonObject(
             mapOf(
@@ -326,6 +362,41 @@ class GeminiLiveCodecTest {
         val response = functionResponse["response"]!!.jsonObject
         assertEquals("Hermes is checking.", response["answer"]!!.jsonPrimitive.content)
         assertEquals(1, response.size)
+    }
+
+    @Test
+    fun `tool response supports cancel hermes name and keeps function level scheduling`() {
+        val message = codec.toolResponseMessage(
+            callId = "call-1",
+            answer = "Canceled.",
+            name = VoiceAgentToolNames.CANCEL_HERMES,
+        ).jsonObject()
+
+        val functionResponse = message["toolResponse"]!!
+            .jsonObject["functionResponses"]!!
+            .jsonArray[0]
+            .jsonObject
+        assertEquals("cancel_hermes", functionResponse["name"]!!.jsonPrimitive.content)
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+            functionResponse["scheduling"]!!.jsonPrimitive.content,
+        )
+        assertEquals(
+            "Canceled.",
+            functionResponse["response"]!!.jsonObject["answer"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `cancel hermes tool call parses question argument`() {
+        val event = codec.parseServerMessage(
+            """{"toolCall":{"functionCalls":[{"id":"call-9","name":"cancel_hermes","args":{"question":"What is the deploy status?"}}]}}"""
+        )
+
+        val call = event as GeminiLiveEvent.ToolCall
+        assertEquals("call-9", call.callId)
+        assertEquals("cancel_hermes", call.name)
+        assertEquals("What is the deploy status?", call.prompt)
     }
 
     @Test
