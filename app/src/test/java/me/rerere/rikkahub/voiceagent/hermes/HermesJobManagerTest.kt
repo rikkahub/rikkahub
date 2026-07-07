@@ -995,6 +995,76 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `long running job announces still working once before completion follow-up`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            maxElapsedMs = 5_000L,
+            stillWorkingThresholdMs = 50L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 9L)
+        manager.submit(callId = "call-still-working", prompt = "long request")
+        assertEquals("call-still-working" to "long request", toolApi.awaitRequest("call-still-working"))
+        toolApi.scriptPoll(
+            callId = "call-still-working",
+            response = MobileHermesJobPollResponse(
+                callId = "call-still-working",
+                status = "running",
+            ),
+        )
+        conversationStore.awaitHermesRecord("call-still-working") {
+            it.status == HermesQueueStatus.Running
+        }
+
+        // The job stays running past the injected threshold: the bridge must receive
+        // exactly one still-working update while the job is still active, and the
+        // once-per-job flag must be persisted on the active record.
+        withTimeout(500) {
+            while (bridge.stillWorkingUpdates.isEmpty()) {
+                delay(10)
+            }
+        }
+        assertEquals(
+            listOf(
+                StillWorkingUpdate(callId = "call-still-working", prompt = "long request", sessionId = 9L)
+            ),
+            bridge.stillWorkingUpdates.toList(),
+        )
+        conversationStore.awaitHermesRecord("call-still-working") {
+            !it.status.isTerminal && it.stillWorkingAnnounced
+        }
+
+        // Waiting out several more threshold windows with the job still running must not
+        // produce a second update.
+        delay(150)
+        assertEquals(1, bridge.stillWorkingUpdates.size)
+
+        toolApi.complete(response(callId = "call-still-working", answer = "long answer"))
+        withTimeout(500) {
+            while (bridge.completionFollowUps.isEmpty()) {
+                delay(10)
+            }
+        }
+        assertEquals(
+            listOf(
+                CompletionFollowUp(
+                    callId = "call-still-working",
+                    prompt = "long request",
+                    answer = "long answer",
+                    sessionId = 9L,
+                )
+            ),
+            bridge.completionFollowUps.toList(),
+        )
+        assertEquals(1, bridge.stillWorkingUpdates.size)
+    }
+
+    @Test
     fun `polled failed status persists failed record`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -2062,6 +2132,7 @@ class HermesJobManagerTest {
         maxElapsedMs: Long = 1_000L,
         remoteCancelTimeoutMs: Long = 50L,
         bridgeSendTimeoutMs: Long = 200L,
+        stillWorkingThresholdMs: Long = 45_000L,
         observability: VoiceObservability = NoOpVoiceObservability,
         traceContext: VoiceTraceContext = VoiceTraceContext(
             traceId = "trace-test",
@@ -2078,6 +2149,7 @@ class HermesJobManagerTest {
         maxElapsedMs = maxElapsedMs,
         remoteCancelTimeoutMs = remoteCancelTimeoutMs,
         bridgeSendTimeoutMs = bridgeSendTimeoutMs,
+        stillWorkingThresholdMs = stillWorkingThresholdMs,
         updateToolStatus = updateToolStatus,
         recordDiagnostic = recordDiagnostic,
         writeQueueEvent = writeQueueEvent,

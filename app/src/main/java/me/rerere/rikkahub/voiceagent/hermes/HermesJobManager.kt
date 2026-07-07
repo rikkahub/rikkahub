@@ -480,6 +480,13 @@ class HermesJobManager(
                 }
 
                 HermesJobStatus.Succeeded -> {
+                    // Cancel the still-working timer as the first action at terminal
+                    // detection: the completion announce below runs inside this same
+                    // coroutine, so the invokeOnCompletion backstop would only fire after
+                    // the entire completion sequence — leaving a live timer free to grab
+                    // the announcement mutex first and speak a spurious "still working"
+                    // for an already-finished job.
+                    managedJob.stillWorkingJob?.cancel()
                     val answer = requireNotNull(poll.answer) { "Hermes job succeeded without an answer" }
                     val elapsedMs = managedJob.elapsedMs()
                     val persisted = queueStore.persistTerminalIfStillActive(
@@ -681,6 +688,11 @@ class HermesJobManager(
         status: VoiceToolRecordStatus,
         visibleMessage: String,
     ): Boolean {
+        // All Failed/Expired/Canceled poll results, timeouts, and terminal poll failures
+        // funnel through here: cancel the still-working timer before persistence and the
+        // terminal announcement so it cannot fire mid-terminal-sequence (the
+        // invokeOnCompletion cancel remains as the backstop).
+        managedJob.stillWorkingJob?.cancel()
         val persisted = completeFailureStatus(
             callId = managedJob.callId,
             prompt = managedJob.prompt,
