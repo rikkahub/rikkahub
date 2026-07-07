@@ -13,23 +13,11 @@ internal class AndroidVoicePlaybackTracks(
 ) {
     private val lock = Any()
     private var assistantAudioTrack: AudioTrack? = null
-    private var localCueAudioTrack: AudioTrack? = null
     private var released = false
 
     fun createAssistantSinkOrNull(): VoicePcm16Sink? {
-        val track = getOrCreatePlaybackTrack(AndroidPlaybackTrackOwner.Assistant) ?: return null
-        return AndroidAudioTrackSink(
-            track = track,
-            owner = AndroidPlaybackTrackOwner.Assistant,
-        )
-    }
-
-    fun createLocalCueSinkOrNull(): VoicePcm16Sink? {
-        val track = createLocalCuePlaybackTrack() ?: return null
-        return AndroidAudioTrackSink(
-            track = track,
-            owner = AndroidPlaybackTrackOwner.LocalCue,
-        )
+        val track = getOrCreatePlaybackTrack() ?: return null
+        return AndroidAudioTrackSink(track = track)
     }
 
     fun markReleased() {
@@ -40,37 +28,30 @@ internal class AndroidVoicePlaybackTracks(
 
     fun releaseAll() {
         val assistant: AudioTrack?
-        val localCue: AudioTrack?
         synchronized(lock) {
             released = true
             assistant = assistantAudioTrack
-            localCue = localCueAudioTrack
             assistantAudioTrack = null
-            localCueAudioTrack = null
         }
         assistant?.stopSafely()
         assistant?.releaseSafely()
-        if (localCue !== assistant) {
-            localCue?.stopSafely()
-            localCue?.releaseSafely()
-        }
     }
 
-    private fun getOrCreatePlaybackTrack(owner: AndroidPlaybackTrackOwner): AudioTrack? {
-        val existingTrack = synchronized(lock) { playbackTrackForLocked(owner) }
+    private fun getOrCreatePlaybackTrack(): AudioTrack? {
+        val existingTrack = synchronized(lock) { assistantAudioTrack }
         if (existingTrack != null) {
-            return currentPlaybackTrack(existingTrack, owner)
+            return currentPlaybackTrack(existingTrack)
         }
 
-        val newTrack = createAudioTrackOrNull(owner) ?: return null
+        val newTrack = createAudioTrackOrNull() ?: return null
         var selectedTrack: AudioTrack? = null
         var shouldReleaseNewTrack = false
         synchronized(lock) {
-            val currentTrack = playbackTrackForLocked(owner)
+            val currentTrack = assistantAudioTrack
             if (released) {
                 shouldReleaseNewTrack = true
             } else if (currentTrack == null) {
-                setPlaybackTrackForLocked(owner, newTrack)
+                assistantAudioTrack = newTrack
                 selectedTrack = newTrack
             } else {
                 selectedTrack = currentTrack
@@ -81,48 +62,19 @@ internal class AndroidVoicePlaybackTracks(
         if (shouldReleaseNewTrack) {
             newTrack.releaseSafely()
         }
-        return currentPlaybackTrack(selectedTrack ?: return null, owner)
+        return currentPlaybackTrack(selectedTrack ?: return null)
     }
 
-    private fun createLocalCuePlaybackTrack(): AudioTrack? {
-        val newTrack = createAudioTrackOrNull(AndroidPlaybackTrackOwner.LocalCue) ?: return null
-        var shouldReleaseNewTrack = false
+    private fun currentPlaybackTrack(track: AudioTrack): AudioTrack? =
         synchronized(lock) {
-            if (released) {
-                shouldReleaseNewTrack = true
-            } else {
-                localCueAudioTrack = newTrack
-            }
-        }
-        if (shouldReleaseNewTrack) {
-            newTrack.releaseSafely()
-            return null
-        }
-        return currentPlaybackTrack(newTrack, AndroidPlaybackTrackOwner.LocalCue)
-    }
-
-    private fun currentPlaybackTrack(track: AudioTrack, owner: AndroidPlaybackTrackOwner): AudioTrack? =
-        synchronized(lock) {
-            if (!released && playbackTrackForLocked(owner) === track) {
+            if (!released && assistantAudioTrack === track) {
                 track
             } else {
                 null
             }
         }
 
-    private fun playbackTrackForLocked(owner: AndroidPlaybackTrackOwner): AudioTrack? = when (owner) {
-        AndroidPlaybackTrackOwner.Assistant -> assistantAudioTrack
-        AndroidPlaybackTrackOwner.LocalCue -> localCueAudioTrack
-    }
-
-    private fun setPlaybackTrackForLocked(owner: AndroidPlaybackTrackOwner, track: AudioTrack?) {
-        when (owner) {
-            AndroidPlaybackTrackOwner.Assistant -> assistantAudioTrack = track
-            AndroidPlaybackTrackOwner.LocalCue -> localCueAudioTrack = track
-        }
-    }
-
-    private fun createAudioTrackOrNull(owner: AndroidPlaybackTrackOwner): AudioTrack? {
+    private fun createAudioTrackOrNull(): AudioTrack? {
         val bufferSize = playbackBufferSizeOrNull() ?: return null
         val format = AudioFormat.Builder()
             .setSampleRate(PLAYBACK_SAMPLE_RATE)
@@ -139,20 +91,12 @@ internal class AndroidVoicePlaybackTracks(
             )
         }.onFailure {
             Log.w(TAG, "AudioTrack creation failed", it)
-            if (owner == AndroidPlaybackTrackOwner.LocalCue) {
-                Log.w(TAG, "Local cue playback failed: AudioTrack creation failed")
-            } else {
-                onAssistantPlaybackError("AudioTrack creation failed: ${it.message ?: it.javaClass.simpleName}")
-            }
+            onAssistantPlaybackError("AudioTrack creation failed: ${it.message ?: it.javaClass.simpleName}")
         }.getOrNull() ?: return null
 
         if (track.state != AudioTrack.STATE_INITIALIZED) {
             Log.w(TAG, "AudioTrack initialization failed: state=${track.state}")
-            if (owner == AndroidPlaybackTrackOwner.LocalCue) {
-                Log.w(TAG, "Local cue playback failed: AudioTrack initialization failed")
-            } else {
-                onAssistantPlaybackError("AudioTrack initialization failed: state=${track.state}")
-            }
+            onAssistantPlaybackError("AudioTrack initialization failed: state=${track.state}")
             track.releaseSafely()
             return null
         }
@@ -165,13 +109,10 @@ internal class AndroidVoicePlaybackTracks(
             if (assistantAudioTrack === track) {
                 assistantAudioTrack = null
             }
-            if (localCueAudioTrack === track) {
-                localCueAudioTrack = null
-            }
         }
     }
 
-    private fun AudioTrack.playSafely(owner: AndroidPlaybackTrackOwner): Boolean {
+    private fun AudioTrack.playSafely(): Boolean {
         return runCatching {
             if (playState != AudioTrack.PLAYSTATE_PLAYING) {
                 play()
@@ -179,11 +120,7 @@ internal class AndroidVoicePlaybackTracks(
             true
         }.onFailure {
             Log.w(TAG, "AudioTrack play failed", it)
-            if (owner == AndroidPlaybackTrackOwner.LocalCue) {
-                Log.w(TAG, "Local cue playback failed: AudioTrack play failed")
-            } else {
-                onAssistantPlaybackError("AudioTrack play failed: ${it.message ?: it.javaClass.simpleName}")
-            }
+            onAssistantPlaybackError("AudioTrack play failed: ${it.message ?: it.javaClass.simpleName}")
             removeTrack(this)
             releaseSafely()
         }.getOrDefault(false)
@@ -191,13 +128,12 @@ internal class AndroidVoicePlaybackTracks(
 
     private inner class AndroidAudioTrackSink(
         private val track: AudioTrack,
-        private val owner: AndroidPlaybackTrackOwner,
     ) : VoicePcm16Sink {
         private val interrupted = AtomicBoolean(false)
 
         override fun start(): VoicePcm16Sink.StartResult {
             interrupted.set(false)
-            return if (track.playSafely(owner)) {
+            return if (track.playSafely()) {
                 VoicePcm16Sink.StartResult.Started
             } else {
                 VoicePcm16Sink.StartResult.Failed("AudioTrack play failed")
@@ -208,13 +144,13 @@ internal class AndroidVoicePlaybackTracks(
             if (interrupted.get()) {
                 return VoicePcm16Sink.WriteResult.Interrupted
             }
-            if (!track.playSafely(owner)) {
+            if (!track.playSafely()) {
                 return VoicePcm16Sink.WriteResult.Failed("AudioTrack play failed")
             }
 
             var offset = 0
             var zeroWrites = 0
-            while (offset < pcm16.size && !interrupted.get() && currentPlaybackTrack(track, owner) != null) {
+            while (offset < pcm16.size && !interrupted.get() && currentPlaybackTrack(track) != null) {
                 val remaining = pcm16.size - offset
                 val writeResult = try {
                     track.write(pcm16, offset, remaining, AudioTrack.WRITE_BLOCKING)
@@ -277,11 +213,6 @@ internal class AndroidVoicePlaybackTracks(
             track.releaseSafely()
             removeTrack(track)
         }
-    }
-
-    private enum class AndroidPlaybackTrackOwner {
-        Assistant,
-        LocalCue,
     }
 
     private companion object {

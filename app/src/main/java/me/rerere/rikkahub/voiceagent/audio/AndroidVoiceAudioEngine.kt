@@ -39,17 +39,6 @@ private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (t
     -> null
 }
 
-private fun VoiceLocalCueDiagnostic.localCueErrorMessageOrNull(): String? = when (this) {
-    is VoiceLocalCueDiagnostic.SinkStartFailed -> "AudioTrack start failed: $message"
-    is VoiceLocalCueDiagnostic.SinkWriteFailed -> "AudioTrack write failed: $message"
-    is VoiceLocalCueDiagnostic.ChunkQueued,
-    is VoiceLocalCueDiagnostic.ChunkWritten,
-    is VoiceLocalCueDiagnostic.StaleCueRejected,
-    is VoiceLocalCueDiagnostic.MalformedCue,
-    VoiceLocalCueDiagnostic.Released,
-    -> null
-}
-
 class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private val context = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -66,11 +55,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         createSink = playbackTracks::createAssistantSinkOrNull,
         onDiagnostic = ::handlePlaybackDiagnostic,
     )
-    private val localCuePlayer = VoiceLocalCuePlayer(
-        scope = scope,
-        createSink = playbackTracks::createLocalCueSinkOrNull,
-        onDiagnostic = ::handleLocalCueDiagnostic,
-    )
     private var captureJob: Job? = null
     private var audioRecord: AudioRecord? = null
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -86,7 +70,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private var hasAudioFocus = false
     private var captureGeneration = 0L
     private var errorHandler: ((String) -> Unit)? = null
-    private var localCueErrorHandler: ((String) -> Unit)? = null
     private var released = false
     private val bluetoothProfileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
@@ -116,12 +99,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         synchronized(lock) {
             errorHandler = onError
-        }
-    }
-
-    override fun setLocalCueErrorHandler(onError: ((String) -> Unit)?) {
-        synchronized(lock) {
-            localCueErrorHandler = onError
         }
     }
 
@@ -290,14 +267,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         return playbackWriter.playBase64(base64Pcm16 = base64Pcm16, sessionId = sessionId)
     }
 
-    override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
-        return localCuePlayer.playBase64(base64Pcm16 = base64Pcm16, cueToken = cueToken)
-    }
-
-    override fun invalidateLocalCuePlayback(cueToken: Long?) {
-        localCuePlayer.invalidate(cueToken = cueToken)
-    }
-
     override fun activatePlaybackSession(sessionId: Long) {
         playbackWriter.activateSession(sessionId)
     }
@@ -329,7 +298,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
         playbackWriter.release()
-        localCuePlayer.release()
         playbackTracks.releaseAll()
         clearVoiceCommunicationRoutingBestEffort()
         closeBluetoothHeadsetProxy()
@@ -763,13 +731,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         handler?.invoke(message)
     }
 
-    private fun notifyLocalCueError(message: String) {
-        val handler = synchronized(lock) {
-            if (released) null else localCueErrorHandler
-        }
-        handler?.invoke(message)
-    }
-
     private fun logCaptureLevelIfNeeded(chunk: Int, pcm16: ByteArray) {
         if (chunk != 1 && chunk % CAPTURE_LEVEL_LOG_INTERVAL_CHUNKS != 0) {
             return
@@ -815,38 +776,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             }
             VoicePlaybackDiagnostic.Released -> {
                 Log.d(TAG, "Voice playback released")
-            }
-        }
-    }
-
-    private fun handleLocalCueDiagnostic(diagnostic: VoiceLocalCueDiagnostic) {
-        when (diagnostic) {
-            is VoiceLocalCueDiagnostic.ChunkQueued -> {
-                Log.d(TAG, "Local cue playback queued: bytes=${diagnostic.bytes} generation=${diagnostic.generation}")
-            }
-            is VoiceLocalCueDiagnostic.ChunkWritten -> {
-                Log.d(TAG, "Local cue playback wrote: bytes=${diagnostic.bytes} generation=${diagnostic.generation}")
-            }
-            is VoiceLocalCueDiagnostic.StaleCueRejected -> {
-                Log.d(
-                    TAG,
-                    "Local cue stale chunk rejected: generation=${diagnostic.generation} " +
-                        "active=${diagnostic.activeGeneration} cueToken=${diagnostic.rejectedCueToken}",
-                )
-            }
-            is VoiceLocalCueDiagnostic.MalformedCue -> {
-                Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-            }
-            is VoiceLocalCueDiagnostic.SinkStartFailed -> {
-                Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
-            }
-            is VoiceLocalCueDiagnostic.SinkWriteFailed -> {
-                Log.w(TAG, "Local cue playback failed: ${diagnostic.message}")
-                diagnostic.localCueErrorMessageOrNull()?.let(::notifyLocalCueError)
-            }
-            VoiceLocalCueDiagnostic.Released -> {
-                Log.d(TAG, "Local cue playback released")
             }
         }
     }

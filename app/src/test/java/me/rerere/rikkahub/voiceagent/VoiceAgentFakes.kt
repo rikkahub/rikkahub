@@ -21,7 +21,6 @@ import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
@@ -558,23 +557,12 @@ class PendingHermesJob(
 
 class FakeVoiceAudioEngine : VoiceAudioEngine {
     val playedPcm16 = CopyOnWriteArrayList<String>()
-    val playedLocalCuePcm16 = CopyOnWriteArrayList<String>()
-    val playedLocalCueTokens = CopyOnWriteArrayList<Long?>()
-    var failLocalCuePlayback = false
-    var localCuePlaybackError: Throwable? = null
-    var localCueInvalidationError: Throwable? = null
-    private val localCuePlaybackAttemptCount = AtomicInteger()
-    val localCuePlaybackAttempts: Int
-        get() = localCuePlaybackAttemptCount.get()
-    val invalidatedLocalCueTokens = CopyOnWriteArrayList<Long?>()
-    var invalidateLocalCuePlaybackCalls = 0
     var suppressPlaybackCalls = 0
     var releaseCalls = 0
     var startCaptureCalls = 0
     var stopCaptureCalls = 0
     var startCaptureError: Throwable? = null
     private var errorHandler: ((String) -> Unit)? = null
-    private var localCueErrorHandler: ((String) -> Unit)? = null
     private var playbackSessionId: Long? = null
     private var captureCallback: ((ByteArray) -> Unit)? = null
     private var debugInjectionCompleteCallback: (() -> Unit)? = null
@@ -586,10 +574,6 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         errorHandler = onError
-    }
-
-    override fun setLocalCueErrorHandler(onError: ((String) -> Unit)?) {
-        localCueErrorHandler = onError
     }
 
     override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
@@ -636,23 +620,6 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
             blockedAfterAccepted.release.await(500, TimeUnit.MILLISECONDS)
         }
         return true
-    }
-
-    override fun playLocalCuePcm16(base64Pcm16: String, cueToken: Long?): Boolean {
-        localCuePlaybackAttemptCount.incrementAndGet()
-        localCuePlaybackError?.let { throw it }
-        if (failLocalCuePlayback) {
-            return false
-        }
-        playedLocalCueTokens += cueToken
-        playedLocalCuePcm16 += base64Pcm16
-        return true
-    }
-
-    override fun invalidateLocalCuePlayback(cueToken: Long?) {
-        invalidateLocalCuePlaybackCalls += 1
-        invalidatedLocalCueTokens += cueToken
-        localCueInvalidationError?.let { throw it }
     }
 
     override fun activatePlaybackSession(sessionId: Long) {
@@ -734,10 +701,6 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     fun emitError(message: String) {
         errorHandler?.invoke(message)
-    }
-
-    fun emitLocalCueError(message: String) {
-        localCueErrorHandler?.invoke(message)
     }
 }
 
