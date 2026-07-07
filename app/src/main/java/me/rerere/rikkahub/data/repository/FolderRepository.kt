@@ -18,6 +18,10 @@ class FolderRepository(
             .map { list -> list.map { it.toFolder() } }
     }
 
+    suspend fun getFolderById(id: Uuid): Folder? {
+        return folderDAO.getFolderById(id.toString())?.toFolder()
+    }
+
     suspend fun createFolder(assistantId: Uuid, name: String): Folder {
         val folder = Folder(
             assistantId = assistantId,

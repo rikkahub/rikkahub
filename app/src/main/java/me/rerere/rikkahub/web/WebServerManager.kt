@@ -15,6 +15,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.startWebServer
 import java.net.ServerSocket
@@ -39,6 +40,7 @@ class WebServerManager(
     private val appScope: AppScope,
     private val chatService: ChatService,
     private val conversationRepo: ConversationRepository,
+    private val folderRepo: FolderRepository,
     private val settingsStore: SettingsStore,
     private val filesManager: FilesManager
 ) {
@@ -75,7 +77,7 @@ class WebServerManager(
                     return@launch
                 }
                 server = startWebServer(port = port, host = host) {
-                    configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
+                    configureWebApi(context, chatService, conversationRepo, folderRepo, settingsStore, filesManager)
                 }.start(wait = false)
 
                 _state.value = baseState.copy(isRunning = true)

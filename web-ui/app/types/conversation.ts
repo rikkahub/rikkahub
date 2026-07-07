@@ -19,12 +19,15 @@ export interface Conversation {
   assistantId: string;
   title: string;
   messageNodes: MessageNode[];
-  truncateIndex: number;
   chatSuggestions: string[];
   isPinned: boolean;
   customSystemPrompt?: string | null;
   modeInjectionIds?: string[];
   lorebookIds?: string[];
+  /** Absolute path inside the workspace rootfs */
+  workspaceCwd?: string | null;
+  /** 所属文件夹（助手内分组），null 表示未归入任何文件夹 */
+  folderId?: string | null;
   createAt: number;
   updateAt: number;
 }
