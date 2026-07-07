@@ -42,6 +42,7 @@ interface HermesSessionBridge {
         reason: String,
         sessionId: Long,
     ): Boolean
+    suspend fun sendStillWorkingUpdate(callId: String, prompt: String, sessionId: Long): Boolean
 }
 
 data class HermesJobCompletion(
@@ -77,6 +78,7 @@ class HermesJobManager(
     private val maxElapsedMs: Long = DEFAULT_MAX_ELAPSED_MS,
     private val remoteCancelTimeoutMs: Long = DEFAULT_REMOTE_CANCEL_TIMEOUT_MS,
     private val bridgeSendTimeoutMs: Long = DEFAULT_BRIDGE_SEND_TIMEOUT_MS,
+    private val stillWorkingThresholdMs: Long = DEFAULT_STILL_WORKING_THRESHOLD_MS,
     private val updateToolStatus: (VoiceToolStatus) -> Unit = {},
     private val recordDiagnostic: (String, String) -> Unit = { _, _ -> },
     private val writeQueueEvent: (String) -> Unit = {},
@@ -169,6 +171,7 @@ class HermesJobManager(
                         activeJobs[activeKey] = it
                     }
                 }
+                launchStillWorkingTimer(managedJob, alreadyAnnounced = record.stillWorkingAnnounced)
                 launchManagedJob(managedJob) {
                     pollHermesJobSafely(managedJob, jobId)
                 }
@@ -289,6 +292,7 @@ class HermesJobManager(
         }
         managedJob.job = job
         job.invokeOnCompletion {
+            managedJob.stillWorkingJob?.cancel()
             synchronized(lock) {
                 if (activeJobs[managedJob.activeKey] === managedJob) {
                     activeJobs.remove(managedJob.activeKey)
@@ -370,6 +374,7 @@ class HermesJobManager(
                 )
             )
             acknowledgeQueuedCallIfNeeded(managedJob)
+            launchStillWorkingTimer(managedJob, alreadyAnnounced = false)
             pollHermesJob(managedJob = managedJob, jobId = submitted.jobId)
         } catch (error: CancellationException) {
             if (!managedJob.explicitlyCanceled) throw error
@@ -926,6 +931,47 @@ class HermesJobManager(
         }
     }
 
+    private fun launchStillWorkingTimer(managedJob: ManagedHermesJob, alreadyAnnounced: Boolean) {
+        if (alreadyAnnounced) return
+        managedJob.stillWorkingJob = scope.launch(dispatcher) {
+            val remaining = (stillWorkingThresholdMs - managedJob.elapsedMs()).coerceAtLeast(0L)
+            delay(remaining)
+            announceStillWorkingUpdate(managedJob)
+        }
+    }
+
+    private suspend fun announceStillWorkingUpdate(managedJob: ManagedHermesJob) {
+        if (managedJob.explicitlyCanceled || !managedJob.queuedAcknowledged) return
+        val current = currentBridgeAttachment() ?: return
+        announcementMutex.withLock {
+            val jobId = managedJob.jobId
+            val record = queueStore.records().lastOrNull { record ->
+                record.callId == managedJob.callId && when {
+                    jobId != null -> record.jobId == jobId
+                    else -> record.jobId == null
+                }
+            } ?: return@withLock
+            if (record.status.isTerminal || record.stillWorkingAnnounced) return@withLock
+            if (!current.isCurrentBridgeAttachment()) return@withLock
+            val sent = runCatching {
+                withTimeoutOrNull(bridgeSendTimeoutMs) {
+                    current.bridge.sendStillWorkingUpdate(
+                        callId = managedJob.callId,
+                        prompt = record.prompt,
+                        sessionId = current.sessionId,
+                    )
+                } ?: false
+            }.getOrDefault(false)
+            if (sent) {
+                queueStore.markStillWorkingAnnounced(callId = managedJob.callId, jobId = jobId)
+                safeRecordDiagnostic(
+                    "hermes_still_working_announced",
+                    "callId=${managedJob.callId}${jobId?.let { ", jobId=$it" }.orEmpty()}",
+                )
+            }
+        }
+    }
+
     private fun launchCompletedResultAnnouncement(
         callId: String,
         jobId: String?,
@@ -1101,6 +1147,7 @@ class HermesJobManager(
         requiresQueuedAcknowledgement: Boolean = true,
     ) {
         var job: Job? = null
+        var stillWorkingJob: Job? = null
         @Volatile
         var explicitlyCanceled: Boolean = false
         @Volatile
@@ -1132,5 +1179,6 @@ class HermesJobManager(
         const val SUPERSEDED_JOB_MESSAGE = "Hermes job was superseded by a newer job for the same call id."
         const val DEFAULT_REMOTE_CANCEL_TIMEOUT_MS = 5_000L
         const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 30_000L
+        const val DEFAULT_STILL_WORKING_THRESHOLD_MS = 45_000L
     }
 }

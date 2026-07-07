@@ -857,6 +857,81 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `Hermes long running job gets exactly one still working update`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        // A scheduler whose deadline poll ticks resolve quickly (a genuine suspending delay,
+        // not a virtual clock) so the completion follow-up — which is gated behind the
+        // still-working announcement until a Gemini generation-complete event this test never
+        // sends — is released by the scheduler's own max-hold deadline instead of hanging this
+        // file's runTest (plain runBlocking, no virtual time) for the real 15s deadline.
+        val scheduler = HermesAnnouncementScheduler(
+            delayFn = { delay(2L) },
+            recordDiagnostic = diagnostics::record,
+        )
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            hermesJobPollIntervalMs = 10,
+            hermesStillWorkingThresholdMs = 150L,
+            hermesAnnouncementScheduler = scheduler,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.ToolCall(callId = "call-still-working", name = "ask_hermes", prompt = "long task")
+        )
+        assertEquals("call-still-working" to "long task", toolApi.awaitRequest("call-still-working"))
+
+        // Keep the job in running status past the injected still-working threshold.
+        toolApi.scriptPoll(
+            "call-still-working",
+            jobPoll(callId = "call-still-working", jobId = "job-1", status = "running"),
+        )
+        withTimeout(500) {
+            while (coordinator.state.value.tool !is VoiceToolStatus.CallingHermes) {
+                delay(10)
+            }
+        }
+
+        withTimeout(2_000) {
+            while (gemini.textTurns.isEmpty()) {
+                delay(10)
+            }
+        }
+        assertEquals(1, gemini.textTurns.size)
+        val stillWorking = gemini.textTurns.single()
+        assertNull(stillWorking.first)
+        assertEquals(hermesStillWorkingUpdateText(prompt = "long task"), stillWorking.second)
+
+        // More virtual-equivalent (real) time passes with the job still running: exactly one
+        // still-working update must ever be sent per job.
+        delay(300)
+        assertEquals(1, gemini.textTurns.size)
+
+        toolApi.complete(response(callId = "call-still-working", answer = "final answer", elapsedMs = 10L))
+        withTimeout(5_000) {
+            coordinator.awaitToolJobs()
+        }
+
+        withTimeout(2_000) {
+            while (gemini.textTurns.size < 2) {
+                delay(10)
+            }
+        }
+        assertEquals(2, gemini.textTurns.size)
+        val completion = gemini.textTurns[1]
+        assertNull(completion.first)
+        assertEquals(
+            hermesCompletionFollowUpText(prompt = "long task", answer = "final answer"),
+            completion.second,
+        )
+    }
+
+    @Test
     fun `Hermes returned failed status persists failure without second Gemini response`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val conversationStore = FakeVoiceConversationStore()

@@ -50,6 +50,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
 
 const val HERMES_JOB_POLL_INTERVAL_MS = 10_000L
+const val HERMES_STILL_WORKING_THRESHOLD_MS = 45_000L
 const val HERMES_WAITING_TONE_GRACE_DELAY_MS = HermesWaitingToneController.DEFAULT_GRACE_DELAY_MS
 const val HERMES_WAITING_TONE_REPEAT_INTERVAL_MS = HermesWaitingToneController.DEFAULT_REPEAT_INTERVAL_MS
 private const val HERMES_JOB_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000L
@@ -82,6 +83,7 @@ class VoiceAgentCoordinator(
     private val hermesJobPollIntervalMs: Long = HERMES_JOB_POLL_INTERVAL_MS,
     private val hermesJobMaxElapsedMs: Long = HERMES_JOB_MAX_ELAPSED_MS,
     private val hermesJobPollRetryDelayMs: Long = HERMES_JOB_POLL_RETRY_DELAY_MS,
+    private val hermesStillWorkingThresholdMs: Long = HERMES_STILL_WORKING_THRESHOLD_MS,
     private val hermesWaitingToneGraceDelayMs: Long = HERMES_WAITING_TONE_GRACE_DELAY_MS,
     private val hermesWaitingToneRepeatIntervalMs: Long = HERMES_WAITING_TONE_REPEAT_INTERVAL_MS,
     hermesAnnouncementScheduler: HermesAnnouncementScheduler? = null,
@@ -113,6 +115,7 @@ class VoiceAgentCoordinator(
         pollIntervalMs = hermesJobPollIntervalMs,
         pollRetryDelayMs = hermesJobPollRetryDelayMs,
         maxElapsedMs = hermesJobMaxElapsedMs,
+        stillWorkingThresholdMs = hermesStillWorkingThresholdMs,
         updateToolStatus = ::updateHermesToolStatusFromManager,
         recordDiagnostic = diagnostics::record,
         writeQueueEvent = ::writeHermesQueueArtifactLine,

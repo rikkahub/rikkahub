@@ -138,5 +138,38 @@ class VoiceHermesSessionBridgeFactory(
             }
             return sent
         }
+
+        override suspend fun sendStillWorkingUpdate(
+            callId: String,
+            prompt: String,
+            sessionId: Long,
+        ): Boolean {
+            val sent = announcementScheduler.withAnnouncementSlot("still-working:$callId") {
+                clearOutputAudioSuppressionForNewTurn()
+                if (sessionId == unboundSessionId) {
+                    gemini.sendTextTurn(text = hermesStillWorkingUpdateText(prompt = prompt))
+                } else {
+                    gemini.sendTextTurn(
+                        text = hermesStillWorkingUpdateText(prompt = prompt),
+                        sessionId = sessionId,
+                    )
+                }
+            } ?: false
+            writeQueueEvent(
+                HermesBridgeQueueEvent(
+                    type = "still_working_text_turn_sent",
+                    callId = callId,
+                    jobId = "none",
+                    sent = sent,
+                )
+            )
+            val detail = "callId=$callId, jobId=none"
+            if (sent) {
+                diagnostics.record("hermes_still_working_sent", detail)
+            } else {
+                diagnostics.record("hermes_still_working_failed", detail)
+            }
+            return sent
+        }
     }
 }

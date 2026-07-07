@@ -2330,10 +2330,12 @@ private class RecordingHermesBridge : HermesSessionBridge {
     val queuedAcknowledgements = Collections.synchronizedList(mutableListOf<Pair<String, Long>>())
     val completionFollowUps = Collections.synchronizedList(mutableListOf<CompletionFollowUp>())
     val terminalFollowUps = Collections.synchronizedList(mutableListOf<TerminalFollowUp>())
+    val stillWorkingUpdates = Collections.synchronizedList(mutableListOf<StillWorkingUpdate>())
     var failCompletionFollowUp = false
     var failTerminalFollowUp = false
     var failQueuedAcknowledgement = false
     var throwQueuedAcknowledgement = false
+    var failStillWorkingUpdate = false
     private val blockedQueuedAcknowledgements = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
     private val blockedCompletionFollowUps = Collections.synchronizedList(mutableListOf<BlockedCompletionFollowUp>())
 
@@ -2394,6 +2396,12 @@ private class RecordingHermesBridge : HermesSessionBridge {
         return true
     }
 
+    override suspend fun sendStillWorkingUpdate(callId: String, prompt: String, sessionId: Long): Boolean {
+        if (failStillWorkingUpdate) return false
+        stillWorkingUpdates += StillWorkingUpdate(callId = callId, prompt = prompt, sessionId = sessionId)
+        return true
+    }
+
     fun blockNextCompletionFollowUp(): BlockedCompletionFollowUp {
         return BlockedCompletionFollowUp().also { blocked ->
             blockedCompletionFollowUps += blocked
@@ -2439,5 +2447,11 @@ private data class TerminalFollowUp(
     val prompt: String,
     val status: HermesQueueStatus,
     val reason: String,
+    val sessionId: Long,
+)
+
+private data class StillWorkingUpdate(
+    val callId: String,
+    val prompt: String,
     val sessionId: Long,
 )

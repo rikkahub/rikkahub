@@ -31,6 +31,16 @@ class HermesQueueStore(
         }
     }
 
+    suspend fun markStillWorkingAnnounced(callId: String, jobId: String?) {
+        update { conversation ->
+            persister.markHermesToolStillWorkingAnnounced(
+                conversation = conversation,
+                callId = callId,
+                jobId = jobId,
+            )
+        }
+    }
+
     suspend fun persistActiveIfStillActive(
         callId: String,
         prompt: String,

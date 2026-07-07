@@ -19,6 +19,7 @@ import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_JOB_ID_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_RESULT_ANNOUNCED_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_SOURCE_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_STATUS_KEY
+import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_STILL_WORKING_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_UPDATED_AT_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import kotlin.time.Clock
@@ -162,6 +163,8 @@ class VoiceConversationPersister {
             null
         }
         val createdAt = (existingTool?.metadata).stringOrNull(HERMES_TOOL_CREATED_AT_KEY)
+        val stillWorkingAnnounced =
+            (existingTool?.metadata).booleanOrNull(HERMES_TOOL_STILL_WORKING_KEY) == true
         val effectiveResultAnnounced = resultAnnounced ?: existingTool?.resultAnnouncedOrDefault() ?: false
         val tool = UIMessagePart.Tool(
             toolCallId = callId,
@@ -176,6 +179,7 @@ class VoiceConversationPersister {
                 callId = callId,
                 jobId = jobId,
                 resultAnnounced = effectiveResultAnnounced,
+                stillWorkingAnnounced = stillWorkingAnnounced,
                 createdAt = createdAt,
             ),
             metadata = status.toMetadata(
@@ -183,6 +187,7 @@ class VoiceConversationPersister {
                 callId = callId,
                 jobId = jobId,
                 resultAnnounced = effectiveResultAnnounced,
+                stillWorkingAnnounced = stillWorkingAnnounced,
                 createdAt = createdAt,
             ),
         )
@@ -297,6 +302,41 @@ class VoiceConversationPersister {
         return conversation.updateCurrentMessages(updatedMessages)
     }
 
+    fun markHermesToolStillWorkingAnnounced(
+        conversation: Conversation,
+        callId: String,
+        jobId: String? = null,
+    ): Conversation {
+        val currentMessages = conversation.currentMessages
+        var marked = false
+        val updatedMessages = currentMessages.map { message ->
+            message.copy(
+                parts = message.parts.map { part ->
+                    if (
+                        !marked &&
+                        part is UIMessagePart.Tool &&
+                        part.isHermesTool(callId) &&
+                        part.metadata.stringOrNull(HERMES_TOOL_JOB_ID_KEY) == jobId &&
+                        part.isActiveHermesTool()
+                    ) {
+                        marked = true
+                        part.copy(
+                            metadata = buildJsonObject {
+                                part.metadata?.forEach { (key, value) -> put(key, value) }
+                                put(HERMES_TOOL_STILL_WORKING_KEY, true)
+                                put(HERMES_TOOL_UPDATED_AT_KEY, Clock.System.now().toString())
+                            }
+                        )
+                    } else {
+                        part
+                    }
+                }
+            )
+        }
+        if (!marked) return conversation
+        return conversation.updateCurrentMessages(updatedMessages)
+    }
+
     private fun UIMessagePart.Tool.withResultAnnounced(): UIMessagePart.Tool {
         return copy(
             metadata = metadata.withResultAnnounced(),
@@ -344,6 +384,7 @@ class VoiceConversationPersister {
         callId: String,
         jobId: String?,
         resultAnnounced: Boolean,
+        stillWorkingAnnounced: Boolean,
         createdAt: String?,
     ): List<UIMessagePart> {
         val text = when (this) {
@@ -366,6 +407,7 @@ class VoiceConversationPersister {
                     callId = callId,
                     jobId = jobId,
                     resultAnnounced = resultAnnounced,
+                    stillWorkingAnnounced = stillWorkingAnnounced,
                     createdAt = createdAt,
                 ),
             )
@@ -432,11 +474,13 @@ class VoiceConversationPersister {
         callId: String,
         jobId: String?,
         resultAnnounced: Boolean,
+        stillWorkingAnnounced: Boolean,
         createdAt: String?,
     ) = buildJsonObject {
         put(HERMES_TOOL_SOURCE_KEY, VoiceAgentToolNames.ASK_HERMES)
         put(HERMES_TOOL_STATUS_KEY, statusName)
         put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnounced)
+        put(HERMES_TOOL_STILL_WORKING_KEY, stillWorkingAnnounced)
         jobId?.let { put(HERMES_TOOL_JOB_ID_KEY, it) }
         val timestamp = Clock.System.now().toString()
         put(HERMES_TOOL_CREATED_AT_KEY, createdAt ?: timestamp)
