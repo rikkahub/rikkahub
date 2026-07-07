@@ -255,6 +255,34 @@ sealed class TTSProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("fish-audio")
+    data class FishAudio(
+        override var id: Uuid = Uuid.random(),
+        override var name: String = "Fish Audio TTS",
+        val apiKey: String = "",
+        val baseUrl: String = "https://api.fish.audio",
+        val model: String = "s2.1-pro",
+        val referenceId: String = "",
+        val temperature: Float = 0.7f,
+        val speed: Float = 1.0f,
+        val format: String = "mp3",
+        val topP: Float = 0.7f,
+        val chunkLength: Int = 300,
+        val normalize: Boolean = true,
+        val latency: String = "normal",
+    ) : TTSProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): TTSProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -268,6 +296,7 @@ sealed class TTSProviderSetting {
                 MiMo::class,
                 ElevenLabs::class,
                 Step::class,
+                FishAudio::class,
             )
         }
     }

@@ -698,6 +698,7 @@ private fun TTSProviderItem(
                             is TTSProviderSetting.MiMo -> "MiMo"
                             is TTSProviderSetting.Step -> "Step"
                             is TTSProviderSetting.ElevenLabs -> "ElevenLabs"
+                            is TTSProviderSetting.FishAudio -> "Fish Audio"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
