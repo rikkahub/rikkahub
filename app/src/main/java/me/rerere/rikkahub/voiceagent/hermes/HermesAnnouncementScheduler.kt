@@ -58,10 +58,19 @@ class HermesAnnouncementScheduler(
                 waitedMs += pollTickMs
             }
             if (closed.get()) return@withLock null
+            if (!bridgeAvailable.get()) {
+                safeRecordDiagnostic("hermes_announcement_dropped_bridge_unavailable", label)
+                return@withLock null
+            }
             if (waitedMs >= maxHoldMs) {
                 safeRecordDiagnostic("hermes_announcement_released_at_deadline", label)
             }
-            val result = send()
+            val result = try {
+                send()
+            } catch (error: Throwable) {
+                safeRecordDiagnostic("hermes_announcement_send_failed", label)
+                throw error
+            }
             hasSentAnnouncement.set(true)
             generationCompleteSinceLastSend.set(false)
             result

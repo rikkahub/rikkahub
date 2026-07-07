@@ -13,7 +13,9 @@ class HermesAnnouncementSchedulerTest {
     private class VirtualClock {
         var nowMs = 0L
         val delays = mutableListOf<Long>()
+        var onDelay: (() -> Unit)? = null
         suspend fun delayFn(ms: Long) {
+            onDelay?.invoke()
             delays += ms
             nowMs += ms
         }
@@ -66,11 +68,46 @@ class HermesAnnouncementSchedulerTest {
     fun `max hold deadline releases even when never quiet`() = runTest {
         val clock = VirtualClock()
         val scheduler = scheduler(clock)
-        scheduler.onBridgeAvailable(false)
+        scheduler.onBridgeAvailable(true)
+        scheduler.onAssistantAudioActive(true)
 
         val sentAt = scheduler.withAnnouncementSlot("deadline") { clock.nowMs }!!
 
         assertEquals(HermesAnnouncementScheduler.DEFAULT_MAX_HOLD_MS, sentAt)
+    }
+
+    @Test
+    fun `deadline with bridge unavailable returns null without sending`() = runTest {
+        val clock = VirtualClock()
+        val scheduler = scheduler(clock)
+        scheduler.onBridgeAvailable(false)
+
+        var sent = false
+        val result = scheduler.withAnnouncementSlot("no-bridge") { sent = true }
+
+        assertNull(result)
+        assertFalse(sent)
+        assertEquals(HermesAnnouncementScheduler.DEFAULT_MAX_HOLD_MS, clock.nowMs)
+    }
+
+    @Test
+    fun `send failure is recorded and rethrown and scheduler stays usable`() = runTest {
+        val clock = VirtualClock()
+        val diagnostics = mutableListOf<String>()
+        val scheduler = HermesAnnouncementScheduler(
+            nowMs = { clock.nowMs },
+            delayFn = clock::delayFn,
+            recordDiagnostic = { name, _ -> diagnostics += name },
+        )
+        scheduler.onBridgeAvailable(true)
+
+        val error = runCatching {
+            scheduler.withAnnouncementSlot("boom") { throw IllegalStateException("ws down") }
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalStateException)
+        assertTrue(diagnostics.contains("hermes_announcement_send_failed"))
+        assertEquals("ok", scheduler.withAnnouncementSlot("after") { "ok" })
     }
 
     @Test
@@ -80,11 +117,11 @@ class HermesAnnouncementSchedulerTest {
         scheduler.onBridgeAvailable(true)
         scheduler.withAnnouncementSlot("first") { }
 
-        val second = async { scheduler.withAnnouncementSlot("second") { clock.nowMs } }
-        scheduler.onGenerationComplete()
-        val sentAt = second.await()!!
+        var ticks = 0
+        clock.onDelay = { if (++ticks == 3) scheduler.onGenerationComplete() }
+        val sentAt = scheduler.withAnnouncementSlot("second") { clock.nowMs }!!
 
-        assertTrue(sentAt < HermesAnnouncementScheduler.DEFAULT_MAX_HOLD_MS)
+        assertEquals(3 * HermesAnnouncementScheduler.DEFAULT_POLL_TICK_MS, sentAt)
     }
 
     @Test
