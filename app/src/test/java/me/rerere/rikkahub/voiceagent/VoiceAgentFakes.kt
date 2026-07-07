@@ -156,13 +156,20 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
-            val blocked = synchronized(blockedResponses) {
-                blockedResponses[callId]?.removeFirstOrNull()
-            }
-            if (blocked != null) {
-                blocked.started.countDown()
-                blocked.release.await(blocked.timeoutMillis, TimeUnit.MILLISECONDS)
-            }
+        }
+        val blocked = synchronized(blockedResponses) {
+            blockedResponses[callId]?.removeFirstOrNull()
+        }
+        if (blocked != null) {
+            // Wait OUTSIDE outboundSendLock. The bridge send path is suspend-based now
+            // (no runInterruptible thread-interrupt can break a stuck wait anymore), so a
+            // blocked in-flight send must not hold the outbound monitor: otherwise
+            // invalidateOutboundSession() and concurrent sends would be forced to wait out
+            // the full latch timeout.
+            blocked.started.countDown()
+            blocked.release.await(blocked.timeoutMillis, TimeUnit.MILLISECONDS)
+        }
+        synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
