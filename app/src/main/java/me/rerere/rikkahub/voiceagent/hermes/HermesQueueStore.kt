@@ -95,6 +95,7 @@ class HermesQueueStore(
         prompt: String,
         jobId: String?,
         message: String,
+        resultAnnounced: Boolean? = null,
     ): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
@@ -109,6 +110,7 @@ class HermesQueueStore(
                     status = VoiceToolRecordStatus.Canceled(message),
                     sessionId = sessionId,
                     jobId = jobId,
+                    resultAnnounced = resultAnnounced,
                 ) to true
             }
         }

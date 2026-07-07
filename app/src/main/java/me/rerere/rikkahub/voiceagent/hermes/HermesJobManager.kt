@@ -278,6 +278,13 @@ class HermesJobManager(
                 prompt = prompt,
                 jobId = initialJobId,
                 message = CANCELED_MESSAGE,
+                // A user-initiated cancellation is persisted as already announced in the
+                // same atomic write, so no interleaving with a racing submit (which may
+                // re-persist the record under the real job id, or leave this write as an
+                // orphan) can produce a canceled record that later replays as a spurious
+                // terminal follow-up. Gemini-initiated cancels pass null and keep the
+                // replay-on-attach behavior.
+                resultAnnounced = if (userInitiated) true else null,
             )
             if (canceled) {
                 updateToolStatus(callId, VoiceToolStatus.HermesFailed(callId = callId, message = CANCELED_MESSAGE))
@@ -290,14 +297,6 @@ class HermesJobManager(
                 if (latestJobId != null) {
                     managedJob?.job?.cancel()
                 }
-            }
-            if (canceled && userInitiated && (managedJob == null || initialJobId != null)) {
-                // Only mark here when the durable identity is stable. When the cancel raced
-                // an in-flight submit (managedJob != null, job id not yet known), the record
-                // may be re-persisted under the real returned job id before this mark runs,
-                // and a null-job-id mark would then match nothing (or stamp an orphan).
-                // submitAndPoll's explicitly-canceled branch owns that case.
-                queueStore.markResultAnnounced(callId = callId, jobId = initialJobId)
             }
         }
     }
@@ -365,19 +364,18 @@ class HermesJobManager(
                 managedJob.jobId = submitted.jobId
             }
             if (managedJob.explicitlyCanceled) {
-                val canceled = queueStore.persistCanceledIfStillActive(
+                queueStore.persistCanceledIfStillActive(
                     callId = managedJob.callId,
                     prompt = managedJob.prompt,
                     jobId = submitted.jobId,
                     message = CANCELED_MESSAGE,
-                )
-                if (canceled && managedJob.userInitiatedCancel) {
                     // A user-initiated cancel that raced this submit snapshotted a null job
-                    // id, so cancel() skipped its announcement mark. This is the one place
-                    // that knows the real returned job id: mark the canceled record announced
-                    // here so it is never replayed as a spurious terminal follow-up.
-                    queueStore.markResultAnnounced(callId = managedJob.callId, jobId = submitted.jobId)
-                }
+                    // id in cancel(); this is the one place that knows the real returned job
+                    // id, so persist the canceled record as already announced in the same
+                    // atomic write — whichever persistence wins or replaces, nothing is left
+                    // behind to replay as a spurious terminal follow-up.
+                    resultAnnounced = if (managedJob.userInitiatedCancel) true else null,
+                )
                 cancelRemoteJob(submitted.jobId)
                 return
             }

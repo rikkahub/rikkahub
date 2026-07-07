@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1865,6 +1866,67 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `user cancel persist landing after submit canceled persist leaves no unannounced record`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val dispatcher = HoldNextDispatchDispatcher(Dispatchers.Default)
+        val blockedSubmit = toolApi.blockSubmitCancellable("call-user-cancel-orphan")
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            dispatcher = dispatcher,
+            maxElapsedMs = 10_000L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-user-cancel-orphan", prompt = "cancel orphan ordering")
+        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
+        conversationStore.awaitHermesRecord("call-user-cancel-orphan") {
+            it.status == HermesQueueStatus.Pending && it.jobId == null
+        }
+        val pending = manager.pendingRequests().single()
+        assertNull(pending.jobId)
+        delay(100)
+
+        // Mirror ordering of the mid-submit race: hold the user cancel's persist coroutine
+        // at dispatch so the submit's explicitly-canceled persistence commits FIRST under
+        // the real job id, then let the stale null-job-id cancel persist run against the
+        // moved identity (where it appends an orphan record).
+        dispatcher.holdNextDispatch()
+        manager.cancelByUser(pending)
+        assertEquals(1, dispatcher.heldCount())
+
+        blockedSubmit.release.complete(Unit)
+        conversationStore.awaitHermesRecord("call-user-cancel-orphan") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == "job-1" && it.resultAnnounced
+        }
+        toolApi.awaitRemoteCancelledJob("job-1")
+
+        dispatcher.releaseHeld()
+        conversationStore.awaitHermesRecord("call-user-cancel-orphan") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == null
+        }
+
+        // Whatever this ordering leaves behind (including the orphan null-job-id record,
+        // a pre-existing accepted residual), every record must be canceled and already
+        // announced so nothing is ever replayed as a spurious follow-up.
+        val records = conversationStore.conversation.value.hermesQueueRecords()
+            .filter { it.callId == "call-user-cancel-orphan" }
+        assertTrue(records.isNotEmpty())
+        assertTrue(
+            "Expected every canceled record to be announced but got $records",
+            records.all { it.status == HermesQueueStatus.Canceled && it.resultAnnounced },
+        )
+
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 8L)
+        delay(100)
+        assertTrue(bridge.terminalFollowUps.isEmpty())
+    }
+
+    @Test
     fun `stale active poll does not resurrect terminal record`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -2186,6 +2248,7 @@ class HermesJobManagerTest {
         toolApi: VoiceToolApi,
         conversationStore: VoiceConversationStore,
         scope: CoroutineScope,
+        dispatcher: CoroutineDispatcher = Dispatchers.Default,
         updateToolStatus: (VoiceToolStatus) -> Unit = {},
         recordDiagnostic: (String, String) -> Unit = { _, _ -> },
         writeQueueEvent: (String) -> Unit = {},
@@ -2204,7 +2267,7 @@ class HermesJobManagerTest {
         conversationStore = conversationStore,
         persister = persister,
         scope = scope,
-        dispatcher = Dispatchers.Default,
+        dispatcher = dispatcher,
         pollIntervalMs = 10L,
         pollRetryDelayMs = 1L,
         maxElapsedMs = maxElapsedMs,
@@ -2456,6 +2519,49 @@ private class BlockingPollVoiceToolApi : VoiceToolApi {
             createdAt = "2026-06-11T00:00:00.000Z",
             completedAt = "2026-06-11T00:00:01.000Z",
         )
+    }
+}
+
+/**
+ * Delegating dispatcher that can capture the next dispatched coroutine instead of running
+ * it, so a test can deterministically delay one specific coroutine (e.g. the user cancel's
+ * persistence) until after another racing coroutine has committed its own persistence.
+ */
+private class HoldNextDispatchDispatcher(
+    private val delegate: CoroutineDispatcher,
+) : CoroutineDispatcher() {
+    private val lock = Any()
+    private var holdNext = false
+    private val held = mutableListOf<Pair<kotlin.coroutines.CoroutineContext, Runnable>>()
+
+    fun holdNextDispatch() {
+        synchronized(lock) { holdNext = true }
+    }
+
+    fun heldCount(): Int = synchronized(lock) { held.size }
+
+    fun releaseHeld() {
+        val toRun = synchronized(lock) {
+            val copy = held.toList()
+            held.clear()
+            copy
+        }
+        toRun.forEach { (context, block) -> delegate.dispatch(context, block) }
+    }
+
+    override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+        val shouldHold = synchronized(lock) {
+            if (holdNext) {
+                holdNext = false
+                held += context to block
+                true
+            } else {
+                false
+            }
+        }
+        if (!shouldHold) {
+            delegate.dispatch(context, block)
+        }
     }
 }
 
