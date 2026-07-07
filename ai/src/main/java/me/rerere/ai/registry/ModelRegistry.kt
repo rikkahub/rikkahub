@@ -395,6 +395,11 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GLM_5_2 = defineModel {
+        tokens("glm", "5", "2")
+        toolReasoningAbility()
+    }
+
     private val MINIMAX_M2 = defineModel {
         tokens("minimax", "m", "2")
         toolReasoningAbility()
@@ -434,6 +439,16 @@ object ModelRegistry {
 
     private val XIAOMI_MIMO_V2_5_PRO = defineModel {
         tokens("mimo", "v", "2", "5", "pro")
+        toolReasoningAbility()
+    }
+
+    private val HY3 = defineModel {
+        tokens("hy", "3")
+        toolReasoningAbility()
+    }
+
+    private val LONGCAT_2 = defineModel {
+        tokens("longcat", "2", "0")
         toolReasoningAbility()
     }
 
@@ -503,6 +518,7 @@ object ModelRegistry {
         GLM_4_7,
         GLM_5,
         GLM_5_1,
+        GLM_5_2,
         MINIMAX_M2,
         MINIMAX_M2_5,
         MINIMAX_M2_7,
@@ -511,6 +527,8 @@ object ModelRegistry {
         XIAOMI_MIMO_V2_PRO,
         XIAOMI_MIMO_V2_5,
         XIAOMI_MIMO_V2_5_PRO,
+        HY3,
+        LONGCAT_2,
         QWEN_MT
     )
 
