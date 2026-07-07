@@ -100,8 +100,8 @@ fun String.extractQuotedContent(): List<String> {
     val result = mutableListOf<String>()
     // 匹配多种引号类型
     val patterns = listOf(
-        """"([^"]*?)"""",  // 中文双引号
-        """'([^']*?)'""",  // 中文单引号
+        "\u201C([^\u201D]*?)\u201D",  // 中文双引号
+        "\u2018([^\u2019]*?)\u2019",  // 中文单引号
         """"([^"]*?)"""",  // 英文双引号
         """'([^']*?)'""",  // 英文单引号
     )
