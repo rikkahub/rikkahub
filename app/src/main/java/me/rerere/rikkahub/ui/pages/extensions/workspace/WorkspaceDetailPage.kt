@@ -76,6 +76,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.fileSizeToString
 import me.rerere.rikkahub.utils.plus
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
@@ -470,8 +471,8 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
         Text(
             text = when (progress.stage) {
                 RootfsInstallStage.DOWNLOADING -> {
-                    val total = progress.totalBytes?.let { " / ${formatBytes(it)}" }.orEmpty()
-                    stringResource(R.string.workspace_detail_downloading, formatBytes(progress.bytesRead), total)
+                    val total = progress.totalBytes?.let { " / ${it.fileSizeToString()}" }.orEmpty()
+                    stringResource(R.string.workspace_detail_downloading, progress.bytesRead.fileSizeToString(), total)
                 }
 
                 RootfsInstallStage.EXTRACTING -> {
@@ -682,7 +683,7 @@ private fun WorkspaceFileCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = if (entry.isDirectory) entry.path else "${entry.path} · ${formatBytes(entry.sizeBytes)}",
+                    text = if (entry.isDirectory) entry.path else "${entry.path} · ${entry.sizeBytes.fileSizeToString()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -781,18 +782,6 @@ private fun ErrorCard(message: String) {
             color = MaterialTheme.colorScheme.error,
         )
     }
-}
-
-private fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val units = listOf("KB", "MB", "GB", "TB")
-    var value = bytes / 1024.0
-    var unitIndex = 0
-    while (value >= 1024 && unitIndex < units.lastIndex) {
-        value /= 1024
-        unitIndex++
-    }
-    return "%.1f %s".format(value, units[unitIndex])
 }
 
 @Composable

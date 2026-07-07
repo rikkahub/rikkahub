@@ -53,6 +53,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.fileSizeToString
 import org.koin.compose.koinInject
 import java.io.File
 
@@ -253,21 +254,11 @@ private fun FileItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = formatBytes(file.sizeBytes),
+                    text = file.sizeBytes.fileSizeToString(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
-}
-
-private fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "${bytes}B"
-    val kb = bytes / 1024.0
-    if (kb < 1024) return String.format("%.1fKB", kb)
-    val mb = kb / 1024.0
-    if (mb < 1024) return String.format("%.1fMB", mb)
-    val gb = mb / 1024.0
-    return String.format("%.1fGB", gb)
 }
