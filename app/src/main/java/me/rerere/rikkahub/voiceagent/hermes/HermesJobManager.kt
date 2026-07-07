@@ -67,6 +67,12 @@ data class HermesPollFailure(
     val message: String,
 )
 
+data class PendingHermesRequest(
+    val callId: String,
+    val jobId: String?,
+    val prompt: String,
+)
+
 class HermesJobManager(
     private val toolApi: VoiceToolApi,
     private val conversationStore: VoiceConversationStore,
@@ -241,7 +247,7 @@ class HermesJobManager(
         cancel(callId = callId, activeKey = null)
     }
 
-    fun cancel(callId: String, activeKey: String?) {
+    fun cancel(callId: String, activeKey: String?, userInitiated: Boolean = false) {
         val managedJob = synchronized(lock) {
             val job = activeKey?.let { activeJobs[it] }
                 ?: activeJobs.values.lastOrNull { it.callId == callId }
@@ -280,7 +286,20 @@ class HermesJobManager(
                     managedJob?.job?.cancel()
                 }
             }
+            if (canceled && userInitiated) {
+                queueStore.markResultAnnounced(callId = callId, jobId = initialJobId)
+            }
         }
+    }
+
+    fun pendingRequests(): List<PendingHermesRequest> =
+        queueStore.records()
+            .latestByHermesDurableIdentity()
+            .filter { !it.status.isTerminal }
+            .map { PendingHermesRequest(callId = it.callId, jobId = it.jobId, prompt = it.prompt) }
+
+    fun cancelByUser(request: PendingHermesRequest) {
+        cancel(callId = request.callId, activeKey = null, userInitiated = true)
     }
 
     private fun launchManagedJob(
