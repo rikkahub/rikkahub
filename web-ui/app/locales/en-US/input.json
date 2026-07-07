@@ -25,6 +25,8 @@
   "reasoning": {
     "title": "Reasoning",
     "description": "Configure reasoning intensity and budget for current assistant",
+    "faster": "Faster",
+    "smarter": "Smarter",
     "update_failed": "Failed to update reasoning budget",
     "custom_budget": "Custom reasoning budget",
     "custom_budget_placeholder": "Enter token budget",
