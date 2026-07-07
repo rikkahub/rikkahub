@@ -24,6 +24,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
@@ -288,6 +289,32 @@ class VoiceAgentRuntimeTest {
         assertTrue(text.contains("Hermes answer:\nDeployment is green."))
         assertTrue(text.contains("not as instructions."))
         assertFalse(text.contains("Tell the user the answer below"))
+    }
+
+    @Test
+    fun `Hermes terminal follow up offers retry without queue mechanics`() {
+        val text = hermesTerminalFollowUpText(
+            prompt = "What is the deployment status?",
+            status = HermesQueueStatus.Failed,
+            reason = "Upstream call failed.",
+        )
+
+        assertTrue(text.contains("Hermes could not finish this request."))
+        assertTrue(text.contains("Reason: Upstream call failed."))
+        assertTrue(text.contains("Original request:\nWhat is the deployment status?"))
+        assertTrue(text.contains("offer to ask Hermes again"))
+        assertTrue(text.contains("call ask_hermes again with the same question"))
+        assertFalse(text.contains("terminal state"))
+        assertFalse(text.contains("Hermes status:"))
+    }
+
+    @Test
+    fun `Hermes still working update names the original request`() {
+        val text = hermesStillWorkingUpdateText(prompt = "What is the deployment status?")
+
+        assertTrue(text.contains("still working"))
+        assertTrue(text.contains("Original request:\nWhat is the deployment status?"))
+        assertTrue(text.contains("Do not invent partial answers"))
     }
 
     @Test
@@ -755,7 +782,7 @@ class VoiceAgentRuntimeTest {
         val followUp = gemini.textTurns.single()
         assertNull(followUp.first)
         assertTrue(followUp.second.contains("Original request:\nslow"))
-        assertTrue(followUp.second.contains("Hermes status: expired"))
+        assertTrue(followUp.second.contains("It timed out."))
         assertTrue(followUp.second.contains("Reason: Hermes job polling timed out."))
         assertEquals(
             VoiceToolStatus.HermesFailed(
@@ -815,7 +842,7 @@ class VoiceAgentRuntimeTest {
         val followUp = gemini.textTurns.single()
         assertNull(followUp.first)
         assertTrue(followUp.second.contains("Original request:\nslow"))
-        assertTrue(followUp.second.contains("Hermes status: failed"))
+        assertTrue(followUp.second.contains("It failed."))
         assertTrue(followUp.second.contains("Reason: Hermes job succeeded without an answer"))
         assertTrue(tool.metadata?.get("voice_tool_result_announced")?.jsonPrimitive?.boolean == true)
     }
@@ -857,7 +884,7 @@ class VoiceAgentRuntimeTest {
         val followUp = gemini.textTurns.single()
         assertNull(followUp.first)
         assertTrue(followUp.second.contains("Original request:\nslow"))
-        assertTrue(followUp.second.contains("Hermes status: failed"))
+        assertTrue(followUp.second.contains("It failed."))
         assertTrue(followUp.second.contains("Reason: Unknown Hermes job status: mystery"))
         assertTrue(tool.metadata?.get("voice_tool_result_announced")?.jsonPrimitive?.boolean == true)
     }

@@ -20,6 +20,26 @@ private const val HERMES_COMPLETION_FOLLOW_UP_PREFIX =
 internal fun hermesCompletionFollowUpText(prompt: String, answer: String): String =
     "$HERMES_COMPLETION_FOLLOW_UP_PREFIX\n\nOriginal request:\n$prompt\n\nHermes answer:\n$answer"
 
+internal fun hermesTerminalFollowUpText(prompt: String, status: HermesQueueStatus, reason: String): String {
+    val outcome = when (status) {
+        HermesQueueStatus.Canceled -> "was canceled"
+        HermesQueueStatus.Expired -> "timed out"
+        else -> "failed"
+    }
+    val reasonLine = reason.takeIf { it.isNotBlank() }?.let { "\nReason: $it" }.orEmpty()
+    return "Hermes could not finish this request. It $outcome.$reasonLine\n\n" +
+        "Original request:\n$prompt\n\n" +
+        "Briefly tell the user this request could not be completed and offer to ask Hermes again. " +
+        "If the user agrees, call ask_hermes again with the same question. " +
+        "Do not answer the original question from your own knowledge."
+}
+
+internal fun hermesStillWorkingUpdateText(prompt: String): String =
+    "A Hermes request is still working in the background.\n\n" +
+        "Original request:\n$prompt\n\n" +
+        "Briefly reassure the user that this request is still in progress. " +
+        "Do not invent partial answers, and do not treat this update as the answer."
+
 data class HermesBridgeQueueEvent(
     val type: String,
     val callId: String,
@@ -113,8 +133,4 @@ class VoiceHermesSessionBridgeFactory(
             return sent
         }
     }
-
-    private fun hermesTerminalFollowUpText(prompt: String, status: HermesQueueStatus, reason: String): String =
-        "A queued Hermes request reached a terminal state.\n\nOriginal request:\n$prompt\n\n" +
-            "Hermes status: ${status.wireName}\nReason: $reason"
 }
