@@ -749,6 +749,7 @@
   <string name="setting_model_page_ocr_prompt_vars">変数: 画像データ: {images}</string>
   <string name="setting_model_page_prompt">プロンプト</string>
   <string name="setting_model_page_reset_to_default">デフォルトにリセット</string>
+  <string name="setting_model_page_use_system_preset">システムプリセットを使用</string>
   <string name="setting_model_page_suggestion_model">チャット提案モデル</string>
   <string name="setting_model_page_suggestion_model_desc">会話の提案を生成するモデル。設定されていない場合は高速モデルを使用します</string>
   <string name="setting_model_page_suggestion_prompt_vars">変数: 会話内容: {content}, 言語: {locale}</string>
@@ -1111,6 +1112,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_tab_prompt">プロンプト</string>
   <string name="setting_model_page_prompt_translation">翻訳</string>
   <string name="setting_model_page_prompt_title">タイトル生成</string>
+  <string name="title_preset_dialog_title">タイトル生成プリセット</string>
+  <string name="title_preset_enable_emoji">タイトルに絵文字を含める</string>
+  <string name="title_preset_enable_emoji_desc">関連する絵文字1つで始めます</string>
+  <string name="title_preset_dialog_apply">適用</string>
   <string name="setting_model_page_prompt_suggestion">チャット返信の提案</string>
   <string name="setting_model_page_prompt_ocr">OCR認識</string>
   <string name="setting_model_page_prompt_compress">コンテキスト圧縮</string>

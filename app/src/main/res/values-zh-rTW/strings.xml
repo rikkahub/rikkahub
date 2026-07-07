@@ -749,6 +749,7 @@
   <string name="setting_model_page_ocr_prompt_vars">變數：圖片資料：{images}</string>
   <string name="setting_model_page_prompt">提示詞</string>
   <string name="setting_model_page_reset_to_default">重置為預設值</string>
+  <string name="setting_model_page_use_system_preset">使用系統預設</string>
   <string name="setting_model_page_suggestion_model">聊天建議模型</string>
   <string name="setting_model_page_suggestion_model_desc">用於生成聊天建議的模型。未設置時使用快速模型</string>
   <string name="setting_model_page_suggestion_prompt_vars">變數: 對話內容: {content}, 語言: {locale}</string>
@@ -1109,6 +1110,10 @@
   <string name="setting_model_page_tab_prompt">提示詞</string>
   <string name="setting_model_page_prompt_translation">翻譯</string>
   <string name="setting_model_page_prompt_title">標題生成</string>
+  <string name="title_preset_dialog_title">標題提示詞預設</string>
+  <string name="title_preset_enable_emoji">標題中包含 Emoji</string>
+  <string name="title_preset_enable_emoji_desc">以一個相關 Emoji 開頭</string>
+  <string name="title_preset_dialog_apply">套用</string>
   <string name="setting_model_page_prompt_suggestion">聊天回覆建議</string>
   <string name="setting_model_page_prompt_ocr">OCR 辨識</string>
   <string name="setting_model_page_prompt_compress">上下文壓縮</string>

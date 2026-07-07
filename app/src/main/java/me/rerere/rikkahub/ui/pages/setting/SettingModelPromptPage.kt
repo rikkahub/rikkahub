@@ -3,16 +3,19 @@ package me.rerere.rikkahub.ui.pages.setting
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -32,13 +36,18 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
+import me.rerere.rikkahub.data.ai.prompts.EMOJI_TITLE_PROMPT
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.utils.plus
 
 @Composable
-internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPadding: PaddingValues) {
+internal fun PromptSettingsPage(
+    settings: Settings,
+    vm: SettingVM,
+    contentPadding: PaddingValues,
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding + PaddingValues(horizontal = 16.dp),
@@ -52,7 +61,11 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 onPromptChange = { vm.updateSettings(settings.copy(translatePrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(translatePrompt = DEFAULT_TRANSLATION_PROMPT)) },
                 reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
-                onUpdateReasoningLevel = { vm.updateSettings(settings.copy(translateThinkingBudget = it.budgetTokens)) },
+                onUpdateReasoningLevel = {
+                    vm.updateSettings(
+                        settings.copy(translateThinkingBudget = it.budgetTokens),
+                    )
+                },
             )
         }
         item {
@@ -62,6 +75,12 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 promptValue = settings.titlePrompt,
                 onPromptChange = { vm.updateSettings(settings.copy(titlePrompt = it)) },
                 onResetPrompt = { vm.updateSettings(settings.copy(titlePrompt = DEFAULT_TITLE_PROMPT)) },
+                onPreset = {
+                    TitlePresetAction(
+                        currentPrompt = settings.titlePrompt,
+                        onApplyPreset = { vm.updateSettings(settings.copy(titlePrompt = it)) },
+                    )
+                },
             )
         }
         item {
@@ -103,6 +122,7 @@ private fun PromptSettingItem(
     onResetPrompt: () -> Unit,
     reasoningLevel: ReasoningLevel? = null,
     onUpdateReasoningLevel: ((ReasoningLevel) -> Unit)? = null,
+    onPreset: (@Composable () -> Unit)? = null,
 ) {
     var showEditor by remember { mutableStateOf(false) }
 
@@ -136,10 +156,11 @@ private fun PromptSettingItem(
             onDismissRequest = { showEditor = false },
         ) {
             Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp)
-                    .imePadding(),
+                modifier =
+                    Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 16.dp)
+                        .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
@@ -157,10 +178,71 @@ private fun PromptSettingItem(
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 15,
                 )
-                TextButton(onClick = onResetPrompt) {
-                    Text(stringResource(R.string.setting_model_page_reset_to_default))
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    TextButton(onClick = onResetPrompt) {
+                        Text(stringResource(R.string.setting_model_page_reset_to_default))
+                    }
+                    onPreset?.invoke()
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TitlePresetAction(
+    currentPrompt: String,
+    onApplyPreset: (String) -> Unit,
+) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    TextButton(onClick = { showDialog = true }) {
+        Text(stringResource(R.string.setting_model_page_use_system_preset))
+    }
+
+    if (showDialog) {
+        var enableEmoji by remember {
+            mutableStateOf(currentPrompt.trim() == EMOJI_TITLE_PROMPT.trim())
+        }
+
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(stringResource(R.string.title_preset_dialog_title)) },
+            text = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(stringResource(R.string.title_preset_enable_emoji))
+                        Text(
+                            stringResource(R.string.title_preset_enable_emoji_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = enableEmoji,
+                        onCheckedChange = { enableEmoji = it },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onApplyPreset(if (enableEmoji) EMOJI_TITLE_PROMPT else DEFAULT_TITLE_PROMPT)
+                    showDialog = false
+                }) {
+                    Text(stringResource(R.string.title_preset_dialog_apply))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }

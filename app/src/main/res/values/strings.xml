@@ -787,6 +787,7 @@
   <string name="setting_model_page_ocr_prompt_vars">Variables: Image data: {images}</string>
   <string name="setting_model_page_prompt">Prompt</string>
   <string name="setting_model_page_reset_to_default">Reset to default</string>
+  <string name="setting_model_page_use_system_preset">Use System Preset</string>
   <string name="setting_model_page_enable_suggestion">Enable Chat Suggestions</string>
   <string name="setting_model_page_suggestion_model">Chat Suggestion Model</string>
   <string name="setting_model_page_suggestion_model_desc">Model used to generate conversation suggestions. If not set, uses the fast model</string>
@@ -1144,6 +1145,10 @@
   <string name="setting_model_page_tab_prompt">Prompts</string>
   <string name="setting_model_page_prompt_translation">Translation</string>
   <string name="setting_model_page_prompt_title">Title Generation</string>
+  <string name="title_preset_dialog_title">Title Prompt Preset</string>
+  <string name="title_preset_enable_emoji">Include emoji in title</string>
+  <string name="title_preset_enable_emoji_desc">Starts title with one relevant emoji</string>
+  <string name="title_preset_dialog_apply">Apply</string>
   <string name="setting_model_page_prompt_suggestion">Chat Reply Suggestions</string>
   <string name="setting_model_page_prompt_ocr">OCR Recognition</string>
   <string name="setting_model_page_prompt_compress">Context Compression</string>
