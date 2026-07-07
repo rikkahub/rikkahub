@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import android.Manifest
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -34,6 +35,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.hasUsageStatsPermission
 import me.rerere.rikkahub.utils.openUsageAccessSettings
+import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -64,7 +66,7 @@ fun AssistantLocalToolPage(id: String) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         AssistantLocalToolContent(
-            modifier = Modifier.padding(innerPadding),
+            contentPadding = innerPadding,
             assistant = assistant,
             onUpdate = { vm.update(it) }
         )
@@ -74,6 +76,7 @@ fun AssistantLocalToolPage(id: String) {
 @Composable
 private fun AssistantLocalToolContent(
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
     assistant: Assistant,
     onUpdate: (Assistant) -> Unit
 ) {
@@ -120,8 +123,8 @@ private fun AssistantLocalToolContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(contentPadding + PaddingValues(16.dp))
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {

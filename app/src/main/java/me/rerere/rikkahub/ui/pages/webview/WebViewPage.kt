@@ -7,6 +7,7 @@ import me.rerere.hugeicons.stroke.Earth
 import me.rerere.hugeicons.stroke.Refresh01
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -40,6 +41,7 @@ import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.base64Decode
+import me.rerere.rikkahub.utils.plus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,12 +138,12 @@ fun WebViewPage(url: String, content: String) {
                 }
             )
         }
-    ) {
+    ) { innerPadding ->
         WebView(
             state = state,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(it),
+                .padding(PaddingValues(top = innerPadding.calculateTopPadding()) + PaddingValues()),
         )
     }
 

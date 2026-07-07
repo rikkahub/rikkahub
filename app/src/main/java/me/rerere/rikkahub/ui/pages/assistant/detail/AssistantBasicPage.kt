@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -47,6 +48,7 @@ import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toFixed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -84,7 +86,7 @@ fun AssistantBasicPage(id: String) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         AssistantBasicContent(
-            modifier = Modifier.padding(innerPadding),
+            contentPadding = innerPadding,
             assistant = assistant,
             providers = providers,
             tags = tags,
@@ -98,6 +100,7 @@ fun AssistantBasicPage(id: String) {
 @Composable
 internal fun AssistantBasicContent(
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
     assistant: Assistant,
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     tags: List<DataTag>,
@@ -108,8 +111,8 @@ internal fun AssistantBasicContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(contentPadding + PaddingValues(16.dp))
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {

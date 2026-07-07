@@ -53,6 +53,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.plus
 import org.koin.compose.koinInject
 import java.io.File
 
@@ -120,7 +121,7 @@ fun SettingFilesPage(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             FolderRow(
                 folders = folders,
@@ -134,12 +135,15 @@ fun SettingFilesPage(
                         .fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(stringResource(R.string.setting_files_page_no_files))
+                    Text(
+                        text = stringResource(R.string.setting_files_page_no_files),
+                        modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
+                    )
                 }
             } else {
                 LazyVerticalStaggeredGrid(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = innerPadding.calculateBottomPadding()),
                     verticalItemSpacing = 8.dp,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     state = gridState,

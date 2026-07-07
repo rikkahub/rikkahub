@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,6 +91,7 @@ import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.insertAtCursor
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onSuccess
+import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -123,7 +125,7 @@ fun AssistantPromptPage(id: String) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         AssistantPromptContent(
-            modifier = Modifier.padding(innerPadding),
+            innerPadding = innerPadding,
             assistant = assistant,
             settings = settings,
             onUpdate = { vm.update(it) }
@@ -134,6 +136,7 @@ fun AssistantPromptPage(id: String) {
 @Composable
 private fun AssistantPromptContent(
     modifier: Modifier = Modifier,
+    innerPadding: PaddingValues,
     assistant: Assistant,
     settings: Settings,
     onUpdate: (Assistant) -> Unit
@@ -144,9 +147,9 @@ private fun AssistantPromptContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
             .imePadding()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            .padding(innerPadding + PaddingValues(16.dp)),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Card(

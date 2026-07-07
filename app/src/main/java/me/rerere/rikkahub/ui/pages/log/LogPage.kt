@@ -46,6 +46,7 @@ import me.rerere.rikkahub.ui.components.ui.JsonTree
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.JsonInstantPretty
+import me.rerere.rikkahub.utils.plus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -85,9 +86,8 @@ fun LogPage() {
                 requestLoggingEnabled = it
                 Logging.setRequestLoggingEnabled(it)
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = contentPadding + PaddingValues(16.dp)
         )
     }
 }
@@ -97,7 +97,8 @@ private fun UnifiedLogList(
     logs: List<LogEntry>,
     requestLoggingEnabled: Boolean,
     onRequestLoggingChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(16.dp)
 ) {
     var selectedLog by remember { mutableStateOf<LogEntry.RequestLog?>(null) }
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
@@ -107,7 +108,7 @@ private fun UnifiedLogList(
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(16.dp)
+        contentPadding = contentPadding
     ) {
         item {
             RequestLoggingSwitchCard(
