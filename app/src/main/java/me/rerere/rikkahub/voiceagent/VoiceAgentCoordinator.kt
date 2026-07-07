@@ -499,6 +499,9 @@ class VoiceAgentCoordinator(
     }
 
     fun detachHermesBridge(bridge: HermesSessionBridge) {
+        // Announcements must not target a bridge that is going away. If the default bridge is
+        // re-attached below, it flips availability back to true.
+        hermesAnnouncementScheduler.onBridgeAvailable(false)
         hermesJobManager.detachBridge(bridge)
         val shouldAttachDefault = synchronized(toolJobsLock) {
             !closed && !closing && !hasAttachedScopedHermesBridge
@@ -729,6 +732,9 @@ class VoiceAgentCoordinator(
     }
 
     private fun detachDefaultHermesBridge() {
+        // Callers either re-attach a scoped bridge right after (which flips availability back
+        // to true) or are closing down, so signalling unavailability first is always safe.
+        hermesAnnouncementScheduler.onBridgeAvailable(false)
         val shouldDetach = synchronized(toolJobsLock) {
             if (defaultHermesBridgeAttached) {
                 defaultHermesBridgeAttached = false

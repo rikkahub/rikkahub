@@ -2361,7 +2361,10 @@ private class RecordingHermesBridge : HermesSessionBridge {
         val blocked = blockedCompletionFollowUps.removeFirstOrNull()
         if (blocked != null) {
             blocked.started.complete(Unit)
-            runBlocking { blocked.release.await() }
+            // A suspending (not thread-blocking) wait so that the manager's own
+            // withTimeoutOrNull(bridgeSendTimeoutMs) can actually cancel this call,
+            // mirroring how a real, suspend-based bridge implementation behaves.
+            withTimeoutOrNull(blocked.timeoutMillis) { blocked.release.await() }
         }
         if (failCompletionFollowUp) return false
         completionFollowUps += CompletionFollowUp(
@@ -2421,6 +2424,7 @@ private class BlockedBridgeCall {
 private class BlockedCompletionFollowUp {
     val started = CompletableDeferred<Unit>()
     val release = CompletableDeferred<Unit>()
+    var timeoutMillis: Long = 500
 }
 
 private data class CompletionFollowUp(
