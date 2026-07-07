@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.utils.extractQuotedContentAsText
+import me.rerere.rikkahub.utils.removeBracketedContent
 
 @Composable
 fun TTSAutoPlay(vm: ChatVM, setting: Settings, conversation: Conversation) {
@@ -24,6 +25,8 @@ fun TTSAutoPlay(vm: ChatVM, setting: Settings, conversation: Conversation) {
                     val text = lastMessage.toText()
                     val textToSpeak = if (updatedSetting.displaySetting.ttsOnlyReadQuoted) {
                         text.extractQuotedContentAsText() ?: text
+                    } else if (updatedSetting.displaySetting.ttsOnlyReadOutsideBrackets) {
+                        text.removeBracketedContent() ?: text
                     } else {
                         text
                     }

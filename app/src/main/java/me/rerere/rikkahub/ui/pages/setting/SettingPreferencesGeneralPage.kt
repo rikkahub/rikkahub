@@ -268,7 +268,29 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                             Switch(
                                 checked = displaySetting.ttsOnlyReadQuoted,
                                 onCheckedChange = {
-                                    updateDisplaySetting(displaySetting.copy(ttsOnlyReadQuoted = it))
+                                    updateDisplaySetting(
+                                        displaySetting.copy(
+                                            ttsOnlyReadQuoted = it,
+                                            ttsOnlyReadOutsideBrackets = if (it) false else displaySetting.ttsOnlyReadOutsideBrackets
+                                        )
+                                    )
+                                }
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_tts_read_outside_brackets_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_tts_read_outside_brackets_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.ttsOnlyReadOutsideBrackets,
+                                onCheckedChange = {
+                                    updateDisplaySetting(
+                                        displaySetting.copy(
+                                            ttsOnlyReadOutsideBrackets = it,
+                                            ttsOnlyReadQuoted = if (it) false else displaySetting.ttsOnlyReadQuoted
+                                        )
+                                    )
                                 }
                             )
                         },

@@ -61,6 +61,7 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.utils.copyMessageToClipboard
 import me.rerere.rikkahub.utils.extractQuotedContentAsText
+import me.rerere.rikkahub.utils.removeBracketedContent
 import me.rerere.rikkahub.utils.toLocalString
 import me.rerere.rikkahub.utils.toMessageTimeString
 import java.util.Locale
@@ -140,6 +141,8 @@ fun ColumnScope.ChatMessageActionButtons(
                                 val text = message.toText()
                                 val textToSpeak = if (settings.displaySetting.ttsOnlyReadQuoted) {
                                     text.extractQuotedContentAsText() ?: text
+                                } else if (settings.displaySetting.ttsOnlyReadOutsideBrackets) {
+                                    text.removeBracketedContent() ?: text
                                 } else {
                                     text
                                 }
