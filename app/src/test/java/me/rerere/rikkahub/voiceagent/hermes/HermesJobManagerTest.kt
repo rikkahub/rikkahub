@@ -1927,6 +1927,65 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `user cancel racing gemini cancel persists canceled record as announced`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val dispatcher = HoldNextDispatchDispatcher(Dispatchers.Default)
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            dispatcher = dispatcher,
+            // One scripted queued poll below parks the poll loop in a long interval delay
+            // so the manager dispatcher is quiescent when the dispatch hold is armed.
+            pollIntervalMs = 60_000L,
+            maxElapsedMs = 10_000L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-dual-cancel", prompt = "dual cancel race")
+        assertEquals("call-dual-cancel" to "dual cancel race", toolApi.awaitRequest("call-dual-cancel"))
+        toolApi.scriptQueuedPolls(callId = "call-dual-cancel", count = 1)
+        conversationStore.awaitHermesRecord("call-dual-cancel") {
+            it.status == HermesQueueStatus.Queued && it.jobId == "job-1"
+        }
+        val pending = manager.pendingRequests().single()
+        assertEquals("job-1", pending.jobId)
+        delay(100)
+
+        // Race the two independent cancel callers on the same managed job: hold the user
+        // cancel's own persist at dispatch — its shared user-cancel flag is already set
+        // synchronously under the lock — so the Gemini-initiated cancel's persist commits
+        // FIRST, then release the user persist into the already-terminal skip.
+        dispatcher.holdNextDispatch()
+        manager.cancelByUser(pending)
+        assertEquals(1, dispatcher.heldCount())
+        manager.cancel("call-dual-cancel")
+
+        conversationStore.awaitHermesRecord("call-dual-cancel") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == "job-1"
+        }
+        toolApi.awaitRemoteCancelledJob("job-1")
+
+        dispatcher.releaseHeld()
+        delay(50)
+
+        val records = conversationStore.conversation.value.hermesQueueRecords()
+            .filter { it.callId == "call-dual-cancel" }
+        assertTrue(records.isNotEmpty())
+        assertTrue(
+            "Expected every canceled record to be announced but got $records",
+            records.all { it.status == HermesQueueStatus.Canceled && it.resultAnnounced },
+        )
+
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 8L)
+        delay(100)
+        assertTrue(bridge.terminalFollowUps.isEmpty())
+    }
+
+    @Test
     fun `stale active poll does not resurrect terminal record`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -2253,6 +2312,7 @@ class HermesJobManagerTest {
         recordDiagnostic: (String, String) -> Unit = { _, _ -> },
         writeQueueEvent: (String) -> Unit = {},
         writeHermesAnswer: (String) -> Unit = {},
+        pollIntervalMs: Long = 10L,
         maxElapsedMs: Long = 1_000L,
         remoteCancelTimeoutMs: Long = 50L,
         bridgeSendTimeoutMs: Long = 200L,
@@ -2268,7 +2328,7 @@ class HermesJobManagerTest {
         persister = persister,
         scope = scope,
         dispatcher = dispatcher,
-        pollIntervalMs = 10L,
+        pollIntervalMs = pollIntervalMs,
         pollRetryDelayMs = 1L,
         maxElapsedMs = maxElapsedMs,
         remoteCancelTimeoutMs = remoteCancelTimeoutMs,

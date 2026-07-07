@@ -282,9 +282,14 @@ class HermesJobManager(
                 // same atomic write, so no interleaving with a racing submit (which may
                 // re-persist the record under the real job id, or leave this write as an
                 // orphan) can produce a canceled record that later replays as a spurious
-                // terminal follow-up. Gemini-initiated cancels pass null and keep the
-                // replay-on-attach behavior.
-                resultAnnounced = if (userInitiated) true else null,
+                // terminal follow-up. The shared userInitiatedCancel flag (set synchronously
+                // under the lock) is OR-ed in so a Gemini-initiated cancel() racing a user
+                // cancel of the same managed job also persists announced when its write
+                // commits first. The flag alone is not enough: a user cancel of a record
+                // with no live managed job has managedJob == null and must still persist
+                // announced via the local parameter. Pure Gemini-initiated cancels resolve
+                // to null and keep the replay-on-attach behavior.
+                resultAnnounced = if (userInitiated || managedJob?.userInitiatedCancel == true) true else null,
             )
             if (canceled) {
                 updateToolStatus(callId, VoiceToolStatus.HermesFailed(callId = callId, message = CANCELED_MESSAGE))
