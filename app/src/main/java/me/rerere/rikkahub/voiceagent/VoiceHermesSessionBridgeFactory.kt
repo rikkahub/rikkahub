@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent
 
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
+import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
@@ -54,9 +55,10 @@ class VoiceHermesSessionBridgeFactory(
     private val writeQueueEvent: (HermesBridgeQueueEvent) -> Unit,
     private val appendLocalAssistantTranscript: (String) -> Unit,
     private val clearOutputAudioSuppressionForNewTurn: () -> Unit,
+    private val announcementScheduler: HermesAnnouncementScheduler,
 ) {
     fun create(sessionId: Long): HermesSessionBridge = object : HermesSessionBridge {
-        override fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
+        override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
             return if (sessionId == unboundSessionId) {
                 gemini.sendToolResponse(callId = callId, answer = HERMES_QUEUED_ACKNOWLEDGEMENT)
             } else {
@@ -68,21 +70,23 @@ class VoiceHermesSessionBridgeFactory(
             }
         }
 
-        override fun sendCompletionFollowUp(
+        override suspend fun sendCompletionFollowUp(
             callId: String,
             prompt: String,
             answer: String,
             sessionId: Long,
         ): Boolean {
-            clearOutputAudioSuppressionForNewTurn()
-            val sent = if (sessionId == unboundSessionId) {
-                gemini.sendTextTurn(text = hermesCompletionFollowUpText(prompt = prompt, answer = answer))
-            } else {
-                gemini.sendTextTurn(
-                    text = hermesCompletionFollowUpText(prompt = prompt, answer = answer),
-                    sessionId = sessionId,
-                )
-            }
+            val sent = announcementScheduler.withAnnouncementSlot("completion:$callId") {
+                clearOutputAudioSuppressionForNewTurn()
+                if (sessionId == unboundSessionId) {
+                    gemini.sendTextTurn(text = hermesCompletionFollowUpText(prompt = prompt, answer = answer))
+                } else {
+                    gemini.sendTextTurn(
+                        text = hermesCompletionFollowUpText(prompt = prompt, answer = answer),
+                        sessionId = sessionId,
+                    )
+                }
+            } ?: false
             writeQueueEvent(
                 HermesBridgeQueueEvent(
                     type = "late_text_turn_sent",
@@ -101,20 +105,22 @@ class VoiceHermesSessionBridgeFactory(
             return sent
         }
 
-        override fun sendTerminalFollowUp(
+        override suspend fun sendTerminalFollowUp(
             callId: String,
             prompt: String,
             status: HermesQueueStatus,
             reason: String,
             sessionId: Long,
         ): Boolean {
-            clearOutputAudioSuppressionForNewTurn()
             val text = hermesTerminalFollowUpText(prompt = prompt, status = status, reason = reason)
-            val sent = if (sessionId == unboundSessionId) {
-                gemini.sendTextTurn(text = text)
-            } else {
-                gemini.sendTextTurn(text = text, sessionId = sessionId)
-            }
+            val sent = announcementScheduler.withAnnouncementSlot("terminal:$callId") {
+                clearOutputAudioSuppressionForNewTurn()
+                if (sessionId == unboundSessionId) {
+                    gemini.sendTextTurn(text = text)
+                } else {
+                    gemini.sendTextTurn(text = text, sessionId = sessionId)
+                }
+            } ?: false
             writeQueueEvent(
                 HermesBridgeQueueEvent(
                     type = "late_terminal_text_turn_sent",

@@ -10,7 +10,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
@@ -34,9 +33,9 @@ import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import java.time.Instant
 
 interface HermesSessionBridge {
-    fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean
-    fun sendCompletionFollowUp(callId: String, prompt: String, answer: String, sessionId: Long): Boolean
-    fun sendTerminalFollowUp(
+    suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean
+    suspend fun sendCompletionFollowUp(callId: String, prompt: String, answer: String, sessionId: Long): Boolean
+    suspend fun sendTerminalFollowUp(
         callId: String,
         prompt: String,
         status: HermesQueueStatus,
@@ -798,11 +797,9 @@ class HermesJobManager(
         if (!shouldSend()) return false
         return runCatching {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
-                runInterruptible {
-                    if (!shouldSend()) return@runInterruptible false
-                    if (!attachment.isCurrentBridgeAttachment()) return@runInterruptible false
-                    attachment.bridge.sendQueuedAcknowledgement(callId = callId, sessionId = attachment.sessionId)
-                }
+                if (!shouldSend()) return@withTimeoutOrNull false
+                if (!attachment.isCurrentBridgeAttachment()) return@withTimeoutOrNull false
+                attachment.bridge.sendQueuedAcknowledgement(callId = callId, sessionId = attachment.sessionId)
             } ?: false
         }.getOrDefault(false)
     }
@@ -861,14 +858,12 @@ class HermesJobManager(
 
             val sent = runCatching {
                 withTimeoutOrNull(bridgeSendTimeoutMs) {
-                    runInterruptible {
-                        current.bridge.sendCompletionFollowUp(
-                            callId = callId,
-                            prompt = record.prompt,
-                            answer = requireNotNull(record.answer),
-                            sessionId = current.sessionId,
-                        )
-                    }
+                    current.bridge.sendCompletionFollowUp(
+                        callId = callId,
+                        prompt = record.prompt,
+                        answer = requireNotNull(record.answer),
+                        sessionId = current.sessionId,
+                    )
                 } ?: false
             }.getOrDefault(false)
             if (sent) {
@@ -916,15 +911,13 @@ class HermesJobManager(
 
             val sent = runCatching {
                 withTimeoutOrNull(bridgeSendTimeoutMs) {
-                    runInterruptible {
-                        current.bridge.sendTerminalFollowUp(
-                            callId = callId,
-                            prompt = record.prompt,
-                            status = record.status,
-                            reason = record.error.orEmpty(),
-                            sessionId = current.sessionId,
-                        )
-                    }
+                    current.bridge.sendTerminalFollowUp(
+                        callId = callId,
+                        prompt = record.prompt,
+                        status = record.status,
+                        reason = record.error.orEmpty(),
+                        sessionId = current.sessionId,
+                    )
                 } ?: false
             }.getOrDefault(false)
             if (sent) {
@@ -1138,6 +1131,6 @@ class HermesJobManager(
         const val INVALID_TIMESTAMP_MESSAGE = "Hermes job had invalid timing metadata."
         const val SUPERSEDED_JOB_MESSAGE = "Hermes job was superseded by a newer job for the same call id."
         const val DEFAULT_REMOTE_CANCEL_TIMEOUT_MS = 5_000L
-        const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 2_000L
+        const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 30_000L
     }
 }

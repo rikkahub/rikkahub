@@ -24,6 +24,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
+import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobCompletion
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobFailure
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobManager
@@ -83,6 +84,7 @@ class VoiceAgentCoordinator(
     private val hermesJobPollRetryDelayMs: Long = HERMES_JOB_POLL_RETRY_DELAY_MS,
     private val hermesWaitingToneGraceDelayMs: Long = HERMES_WAITING_TONE_GRACE_DELAY_MS,
     private val hermesWaitingToneRepeatIntervalMs: Long = HERMES_WAITING_TONE_REPEAT_INTERVAL_MS,
+    hermesAnnouncementScheduler: HermesAnnouncementScheduler? = null,
     scope: CoroutineScope? = null,
     dispatcher: CoroutineDispatcher? = null,
 ) {
@@ -100,6 +102,8 @@ class VoiceAgentCoordinator(
     private val sharedConversationStore = SynchronizedVoiceConversationStore(
         conversationStore ?: InMemoryVoiceConversationStore()
     )
+    private val hermesAnnouncementScheduler = hermesAnnouncementScheduler
+        ?: HermesAnnouncementScheduler(recordDiagnostic = diagnostics::record)
     private val hermesJobManager = HermesJobManager(
         toolApi = toolApi,
         conversationStore = sharedConversationStore,
@@ -142,6 +146,7 @@ class VoiceAgentCoordinator(
         },
         appendLocalAssistantTranscript = ::appendLocalAssistantTranscript,
         clearOutputAudioSuppressionForNewTurn = ::clearOutputAudioSuppressionForNewTurn,
+        announcementScheduler = this.hermesAnnouncementScheduler,
     )
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
     private val persistenceJobs = mutableSetOf<Job>()
@@ -262,9 +267,14 @@ class VoiceAgentCoordinator(
         }
     }
 
+    private fun setAssistantOutputAudioActive(active: Boolean) {
+        assistantOutputAudioActive.set(active)
+        hermesAnnouncementScheduler.onAssistantAudioActive(active)
+    }
+
     fun suppressPlayback() {
         suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         synchronized(playbackSuppressionLock) {
             outputAudioSuppressed = true
             if (outputTurnTranscript.isNotBlank()) {
@@ -419,10 +429,11 @@ class VoiceAgentCoordinator(
                 )
             }
             hermesWaitingToneSuspended.set(true)
-            assistantOutputAudioActive.set(false)
+            setAssistantOutputAudioActive(false)
             hermesQueueStatusProjectionJob?.cancel()
             hermesQueueStatusProjectionJob = null
             hermesWaitingToneController.close()
+            hermesAnnouncementScheduler.close()
             gemini.close()
             audio.release()
             audio.setErrorHandler(null)
@@ -436,7 +447,7 @@ class VoiceAgentCoordinator(
 
     fun prepareForReconnect() {
         suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         diagnostics.record("prepare_for_reconnect")
         invalidateActiveSession()
         synchronized(playbackSuppressionLock) {
@@ -452,7 +463,7 @@ class VoiceAgentCoordinator(
 
     fun prepareForAutomaticReconnect() {
         suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         diagnostics.record("prepare_for_automatic_reconnect")
         invalidateActiveSession()
         synchronized(playbackSuppressionLock) {
@@ -462,7 +473,7 @@ class VoiceAgentCoordinator(
 
     fun prepareForSessionEnd() {
         suspendHermesWaitingTone()
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
         diagnostics.record("prepare_for_session_end")
         invalidateActiveSession()
         _state.update {
@@ -484,6 +495,7 @@ class VoiceAgentCoordinator(
             detachDefaultHermesBridge()
         }
         hermesJobManager.attachBridge(bridge = bridge, sessionId = sessionId)
+        hermesAnnouncementScheduler.onBridgeAvailable(true)
     }
 
     fun detachHermesBridge(bridge: HermesSessionBridge) {
@@ -510,6 +522,7 @@ class VoiceAgentCoordinator(
             activeTranscriptSpeaker = TranscriptSpeaker.User
             inputTurnTranscript += text
             diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, chars=${text.length}")
+            hermesAnnouncementScheduler.onInputTranscriptDelta()
             recordEventSafely(
                 name = "voicelab.mobile.transcript.input_delta",
                 attributes = mapOf("turnId" to inputTurnId) + voiceTextMetadata(key = "text", text = text),
@@ -591,7 +604,7 @@ class VoiceAgentCoordinator(
                 skippedQueuedAudioDiagnostic = "stale_output_audio_state_suppressed"
                 false
             } else {
-                assistantOutputAudioActive.set(true)
+                setAssistantOutputAudioActive(true)
                 _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
                 true
             }
@@ -623,7 +636,7 @@ class VoiceAgentCoordinator(
             outputAudioSuppressedByGeminiInterruption = false
         }
         hermesWaitingToneSuspended.set(false)
-        assistantOutputAudioActive.set(false)
+        setAssistantOutputAudioActive(false)
     }
 
     private fun clearOutputAudioSuppressionForAssistantTurnAfterInterruption() {
@@ -644,6 +657,7 @@ class VoiceAgentCoordinator(
 
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
+        hermesAnnouncementScheduler.onGenerationComplete()
         synchronized(playbackSuppressionLock) {
             if (
                 outputTurnTranscript.isBlank() ||
@@ -710,6 +724,7 @@ class VoiceAgentCoordinator(
         }
         if (shouldAttach) {
             hermesJobManager.attachBridge(defaultHermesBridge, sessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID)
+            hermesAnnouncementScheduler.onBridgeAvailable(true)
         }
     }
 

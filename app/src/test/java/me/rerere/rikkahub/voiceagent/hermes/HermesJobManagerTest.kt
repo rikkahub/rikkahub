@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -427,7 +428,7 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Complete && it.answer == "blocked ack answer"
         }
 
-        blockedAck.release.countDown()
+        blockedAck.release.complete(Unit)
     }
 
     @Test
@@ -452,7 +453,7 @@ class HermesJobManagerTest {
         }
 
         delay(50)
-        blockedAck.release.countDown()
+        blockedAck.release.complete(Unit)
         delay(50)
 
         assertTrue(bridge.queuedAcknowledgements.isEmpty())
@@ -1054,7 +1055,7 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-polled-failed-retry-ack", prompt = "polled failed retry ack")
         assertEquals("call-polled-failed-retry-ack" to "polled failed retry ack", toolApi.awaitRequest("call-polled-failed-retry-ack"))
         assertTrue(blockedInitialAck.started.await(500, TimeUnit.MILLISECONDS))
-        blockedInitialAck.release.countDown()
+        blockedInitialAck.release.complete(Unit)
         delay(10)
         bridge.failQueuedAcknowledgement = false
 
@@ -2336,11 +2337,14 @@ private class RecordingHermesBridge : HermesSessionBridge {
     private val blockedQueuedAcknowledgements = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
     private val blockedCompletionFollowUps = Collections.synchronizedList(mutableListOf<BlockedCompletionFollowUp>())
 
-    override fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
+    override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
         val blocked = blockedQueuedAcknowledgements.removeFirstOrNull()
         if (blocked != null) {
             blocked.started.countDown()
-            blocked.release.await(blocked.timeoutMillis, TimeUnit.MILLISECONDS)
+            // A suspending (not thread-blocking) wait so that the manager's own
+            // withTimeoutOrNull(bridgeSendTimeoutMs) can actually cancel this call,
+            // mirroring how a real, suspend-based bridge implementation behaves.
+            withTimeoutOrNull(blocked.timeoutMillis) { blocked.release.await() }
         }
         if (throwQueuedAcknowledgement) error("queued acknowledgement failed")
         if (failQueuedAcknowledgement) return false
@@ -2348,7 +2352,7 @@ private class RecordingHermesBridge : HermesSessionBridge {
         return true
     }
 
-    override fun sendCompletionFollowUp(
+    override suspend fun sendCompletionFollowUp(
         callId: String,
         prompt: String,
         answer: String,
@@ -2369,7 +2373,7 @@ private class RecordingHermesBridge : HermesSessionBridge {
         return true
     }
 
-    override fun sendTerminalFollowUp(
+    override suspend fun sendTerminalFollowUp(
         callId: String,
         prompt: String,
         status: HermesQueueStatus,
@@ -2410,7 +2414,7 @@ private class RecordingHermesBridge : HermesSessionBridge {
 
 private class BlockedBridgeCall {
     val started = java.util.concurrent.CountDownLatch(1)
-    val release = java.util.concurrent.CountDownLatch(1)
+    val release = CompletableDeferred<Unit>()
     var timeoutMillis: Long = 500
 }
 
