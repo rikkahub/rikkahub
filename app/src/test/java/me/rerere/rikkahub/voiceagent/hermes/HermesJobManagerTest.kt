@@ -37,6 +37,7 @@ import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -1801,6 +1802,66 @@ class HermesJobManagerTest {
         assertEquals(1, records.size)
         assertEquals(HermesQueueStatus.Canceled, records.single().status)
         assertEquals("job-1", records.single().jobId)
+    }
+
+    @Test
+    fun `user cancel during in-flight submit marks canceled record announced under returned job id`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val bridge = RecordingHermesBridge()
+        val blockedSubmit = toolApi.blockSubmitCancellable("call-user-cancel-mid-submit")
+        val blockedRemoteCancel = toolApi.blockCancel("call-user-cancel-mid-submit")
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            maxElapsedMs = 10_000L,
+            remoteCancelTimeoutMs = 500L,
+        )
+
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-user-cancel-mid-submit", prompt = "cancel mid submit")
+        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
+        conversationStore.awaitHermesRecord("call-user-cancel-mid-submit") {
+            it.status == HermesQueueStatus.Pending && it.jobId == null
+        }
+
+        val pending = manager.pendingRequests().single()
+        assertEquals("call-user-cancel-mid-submit", pending.callId)
+        assertNull(pending.jobId)
+
+        // Hold the user cancel's canceled persistence open (it still owns the queue-store
+        // mutex) while the blocked submit returns with the real job id, so the manager's
+        // canceled persistence under that job id queues on the fair mutex ahead of any
+        // user-cancel announcement mark that uses the stale null job id snapshot.
+        val blockedCancelPersist = conversationStore.blockAfterNextUpdate()
+        manager.cancelByUser(pending)
+        assertTrue(blockedCancelPersist.started.await(500, TimeUnit.MILLISECONDS))
+        blockedSubmit.release.complete(Unit)
+        delay(50)
+        blockedCancelPersist.release.countDown()
+
+        conversationStore.awaitHermesRecord("call-user-cancel-mid-submit") {
+            it.status == HermesQueueStatus.Canceled && it.jobId == "job-1" && it.resultAnnounced
+        }
+
+        blockedRemoteCancel.release.complete(Unit)
+        toolApi.awaitRemoteCancelledJob("job-1")
+        delay(50)
+
+        val records = conversationStore.conversation.value.hermesQueueRecords()
+            .filter { it.callId == "call-user-cancel-mid-submit" }
+        assertEquals(1, records.size)
+        assertEquals(HermesQueueStatus.Canceled, records.single().status)
+        assertEquals("job-1", records.single().jobId)
+        assertTrue(records.single().resultAnnounced)
+
+        // A fresh bridge attachment replays unannounced terminal results; a user-initiated
+        // cancellation must never come back as a spurious canceled follow-up.
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 8L)
+        delay(100)
+        assertTrue(bridge.terminalFollowUps.isEmpty())
     }
 
     @Test

@@ -251,7 +251,12 @@ class HermesJobManager(
         val managedJob = synchronized(lock) {
             val job = activeKey?.let { activeJobs[it] }
                 ?: activeJobs.values.lastOrNull { it.callId == callId }
-            job?.also { it.explicitlyCanceled = true }
+            job?.also {
+                it.explicitlyCanceled = true
+                if (userInitiated) {
+                    it.userInitiatedCancel = true
+                }
+            }
         }
         val persistedRecord = queueStore.records()
             .lastOrNull { record ->
@@ -286,7 +291,12 @@ class HermesJobManager(
                     managedJob?.job?.cancel()
                 }
             }
-            if (canceled && userInitiated) {
+            if (canceled && userInitiated && (managedJob == null || initialJobId != null)) {
+                // Only mark here when the durable identity is stable. When the cancel raced
+                // an in-flight submit (managedJob != null, job id not yet known), the record
+                // may be re-persisted under the real returned job id before this mark runs,
+                // and a null-job-id mark would then match nothing (or stamp an orphan).
+                // submitAndPoll's explicitly-canceled branch owns that case.
                 queueStore.markResultAnnounced(callId = callId, jobId = initialJobId)
             }
         }
@@ -355,12 +365,19 @@ class HermesJobManager(
                 managedJob.jobId = submitted.jobId
             }
             if (managedJob.explicitlyCanceled) {
-                queueStore.persistCanceledIfStillActive(
+                val canceled = queueStore.persistCanceledIfStillActive(
                     callId = managedJob.callId,
                     prompt = managedJob.prompt,
                     jobId = submitted.jobId,
                     message = CANCELED_MESSAGE,
                 )
+                if (canceled && managedJob.userInitiatedCancel) {
+                    // A user-initiated cancel that raced this submit snapshotted a null job
+                    // id, so cancel() skipped its announcement mark. This is the one place
+                    // that knows the real returned job id: mark the canceled record announced
+                    // here so it is never replayed as a spurious terminal follow-up.
+                    queueStore.markResultAnnounced(callId = managedJob.callId, jobId = submitted.jobId)
+                }
                 cancelRemoteJob(submitted.jobId)
                 return
             }
@@ -1181,6 +1198,8 @@ class HermesJobManager(
         var stillWorkingJob: Job? = null
         @Volatile
         var explicitlyCanceled: Boolean = false
+        @Volatile
+        var userInitiatedCancel: Boolean = false
         @Volatile
         var queuedAcknowledged: Boolean = !requiresQueuedAcknowledgement
 
