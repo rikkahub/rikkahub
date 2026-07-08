@@ -110,15 +110,18 @@ class HermesAnnouncer(
     }
 
     fun detachScoped(bridge: HermesSessionBridge) {
+        val detached: Boolean
         val fallbackToDefault: Boolean
         synchronized(lock) {
             val current = attachment
-            if (current?.bridge === bridge) {
-                current.active = false
+            detached = current?.bridge === bridge
+            if (detached) {
+                current!!.active = false
                 attachment = null
             }
-            fallbackToDefault = !closed && !scopedBridgeEverAttached && defaultBridge != null
+            fallbackToDefault = detached && !closed && !scopedBridgeEverAttached && defaultBridge != null
         }
+        if (!detached) return
         if (fallbackToDefault) {
             // Design refinement 2: no transient detached gap — the default attach event
             // replaces the detach event so queued intents survive the handoff.

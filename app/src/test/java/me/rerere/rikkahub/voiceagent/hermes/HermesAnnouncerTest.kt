@@ -180,6 +180,38 @@ class HermesAnnouncerTest {
         assertTrue(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
     }
 
+    // 8b (review fix)
+    @Test
+    fun `detachScoped of a non-current bridge is a no-op`() = runTest {
+        val store = store(emptyConversation())
+        val bridge1 = RecordingBridge()
+        val bridge2 = RecordingBridge()
+        val announcer = announcer(queueStore = store)
+
+        announcer.attachScoped(bridge1, sessionId = 7L)
+        announcer.attachScoped(bridge2, sessionId = 8L)
+        store.persistTerminal(
+            callId = "call-1",
+            prompt = "prompt-call-1",
+            status = VoiceToolRecordStatus.Complete("the answer"),
+            jobId = "job-1",
+            announced = false,
+        )
+
+        // Stale detach of the replaced bridge must not desync the reducer: B2 stays
+        // attached and the later completion is sent, not text-fallen-back.
+        announcer.detachScoped(bridge1)
+        runCurrent()
+        announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
+        runCurrent()
+
+        assertEquals(listOf("call-1"), bridge2.completions)
+        assertTrue(bridge1.completions.isEmpty())
+        assertFalse(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
+        assertEquals(8L, announcer.currentAttachment()?.sessionId)
+        assertSame(bridge2, announcer.currentAttachment()?.bridge)
+    }
+
     // 9
     @Test
     fun `attachDefaultIfNeeded is idempotent and refuses after close`() = runTest {
