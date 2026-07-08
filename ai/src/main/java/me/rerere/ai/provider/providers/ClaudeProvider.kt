@@ -3,8 +3,11 @@ package me.rerere.ai.provider.providers
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -210,6 +213,10 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     usage = tokenUsage
                 )
 
+                trySend(messageChunk).onFailure { e ->
+                    Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                }
+
                 when (type) {
                     "message_stop" -> {
                         Log.d(TAG, "Stream ended")
@@ -222,8 +229,6 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                         close(error)
                     }
                 }
-
-                trySend(messageChunk)
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
@@ -259,7 +264,8 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             Log.d(TAG, "Closing eventSource")
             eventSource.cancel()
         }
-    }
+        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
+    }.buffer(Channel.UNLIMITED)
 
     private fun buildMessageRequest(
         providerSetting: ProviderSetting.Claude,
