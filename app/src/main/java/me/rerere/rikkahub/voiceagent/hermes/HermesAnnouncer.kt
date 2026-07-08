@@ -124,17 +124,25 @@ class HermesAnnouncer(
                 attachment?.active = false
                 attachment = HermesBridgeAttachment(bridge = bridge, sessionId = sessionId)
                 attached = true
+                // Post the registry-mutation event while still holding `lock` so a concurrent
+                // attach/detach on another thread can't preempt between the mutation and the
+                // post and deliver events out of registry-mutation order (a reducer that sees
+                // BridgeDetached while the registry is actually still live degrades everything
+                // to text until the next attach). `trySend` on an UNLIMITED channel never
+                // blocks, and the consumer never posts registry events while holding `lock`
+                // (see the effect-failure SendReturned post above, which doesn't touch `lock`),
+                // so there's no lock-order hazard.
+                events.trySend(AnnouncerEvent.BridgeAttached(sessionId, nowMs()))
             }
         }
         if (attached) {
-            events.trySend(AnnouncerEvent.BridgeAttached(sessionId, nowMs()))
             enqueueReplayIntents()
         }
     }
 
     fun detachScoped(bridge: HermesSessionBridge) {
-        val detached: Boolean
-        val fallbackToDefault: Boolean
+        var detached = false
+        var fallbackToDefault = false
         synchronized(lock) {
             val current = attachment
             detached = current?.bridge === bridge
@@ -143,14 +151,16 @@ class HermesAnnouncer(
                 attachment = null
             }
             fallbackToDefault = detached && !closed && !scopedBridgeEverAttached && defaultBridge != null
+            if (detached && !fallbackToDefault) {
+                // See attachScoped for why this is posted inside the lock.
+                events.trySend(AnnouncerEvent.BridgeDetached(nowMs()))
+            }
         }
         if (!detached) return
         if (fallbackToDefault) {
             // Design refinement 2: no transient detached gap — the default attach event
             // replaces the detach event so queued intents survive the handoff.
             attachDefaultIfNeeded()
-        } else {
-            events.trySend(AnnouncerEvent.BridgeDetached(nowMs()))
         }
     }
 
@@ -167,12 +177,13 @@ class HermesAnnouncer(
                     sessionId = HermesJobManager.UNBOUND_BRIDGE_SESSION_ID,
                 )
                 attached = true
+                // See attachScoped for why this is posted inside the lock.
+                events.trySend(
+                    AnnouncerEvent.BridgeAttached(HermesJobManager.UNBOUND_BRIDGE_SESSION_ID, nowMs())
+                )
             }
         }
         if (attached) {
-            events.trySend(
-                AnnouncerEvent.BridgeAttached(HermesJobManager.UNBOUND_BRIDGE_SESSION_ID, nowMs())
-            )
             enqueueReplayIntents()
         }
     }
@@ -222,8 +233,9 @@ class HermesAnnouncer(
             closed = true
             attachment?.active = false
             attachment = null
+            // See attachScoped for why this is posted inside the lock.
+            events.trySend(AnnouncerEvent.Close)
         }
-        events.trySend(AnnouncerEvent.Close)
     }
 
     /**

@@ -623,6 +623,15 @@ class VoiceAgentRuntimeTest {
         assertTrue(completed.attributes["hermes.response.answer.sha256"].toString().isNotBlank())
         assertFalse(completed.attributes.containsKey("answer"))
 
+        // closeAndDrain() launches the drain fire-and-forget into hermesScope (joining would
+        // block endCall on multi-hour jobs); wait for the follow-up text turn and its
+        // followup_sent observability event before asserting on them.
+        withTimeout(2_000) {
+            while (gemini.textTurns.isEmpty()) {
+                delay(10)
+            }
+        }
+
         val followup = observability.events.single { it.name == "voicelab.mobile.gemini.followup_sent" }
         assertEquals("call-observe", followup.attributes["callId"])
         assertEquals("job-1", followup.attributes["jobId"])
