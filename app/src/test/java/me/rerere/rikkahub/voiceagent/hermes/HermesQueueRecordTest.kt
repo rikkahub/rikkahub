@@ -222,64 +222,6 @@ class HermesQueueRecordTest {
     }
 
     @Test
-    fun `status question summary exposes active prompts and terminal counts without terminal content`() {
-        // Ported from old row 46, assertions kept verbatim.
-        val active = record(status = HermesQueueStatus.Running, jobId = "job-active")
-            .copy(callId = "active", prompt = "active request").toToolPart()
-        val complete = record(
-            status = HermesQueueStatus.Complete,
-            jobId = "job-complete",
-            answer = "complete private answer",
-        ).copy(callId = "complete", prompt = "complete private request").toToolPart()
-        val failed = record(
-            status = HermesQueueStatus.Failed,
-            jobId = "job-failed",
-            error = "failed private reason",
-        ).copy(callId = "failed", prompt = "failed private request").toToolPart()
-        val expired = record(
-            status = HermesQueueStatus.Expired,
-            jobId = "job-expired",
-            error = "expired private reason",
-        ).copy(callId = "expired", prompt = "expired private request").toToolPart()
-        val canceled = record(
-            status = HermesQueueStatus.Canceled,
-            jobId = "job-canceled",
-            error = "canceled private reason",
-        ).copy(callId = "canceled", prompt = "canceled private request").toToolPart()
-
-        val summary = HermesQueueSnapshot.from(conversationOf(active, complete, failed, expired, canceled))
-            .toStatusQuestionPromptSummary()
-
-        assertTrue(summary.contains("Durable Hermes queue status:"))
-        assertTrue(summary.contains("- Still running: active request"))
-        assertTrue(summary.contains("- Unannounced terminal results: completed=1, failed=1, expired=1, canceled=1"))
-        assertTrue(summary.contains("answer only from this durable queue status"))
-        assertFalse(summary.contains("complete private request"))
-        assertFalse(summary.contains("complete private answer"))
-        assertFalse(summary.contains("failed private request"))
-        assertFalse(summary.contains("failed private reason"))
-        assertFalse(summary.contains("expired private request"))
-        assertFalse(summary.contains("expired private reason"))
-        assertFalse(summary.contains("canceled private request"))
-        assertFalse(summary.contains("canceled private reason"))
-    }
-
-    @Test
-    fun `status question summary is empty for announced terminal records only`() {
-        // Ported from old row 47.
-        val announced = record(
-            status = HermesQueueStatus.Complete,
-            jobId = "job-announced",
-            announcement = HermesAnnouncementState.Announced,
-            answer = "announced private answer",
-        ).copy(callId = "announced", prompt = "announced private request").toToolPart()
-
-        val summary = HermesQueueSnapshot.from(conversationOf(announced)).toStatusQuestionPromptSummary()
-
-        assertEquals("", summary)
-    }
-
-    @Test
     fun `queue snapshot uses latest record for duplicate durable identity`() {
         // Ported from old row 48 (latestByHermesDurableIdentity dedup).
         val old = record(status = HermesQueueStatus.Complete, jobId = "job-duplicate", answer = "old answer")

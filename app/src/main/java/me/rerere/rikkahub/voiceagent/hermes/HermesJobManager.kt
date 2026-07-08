@@ -130,11 +130,7 @@ class HermesJobManager(
     val toolStatus: StateFlow<VoiceToolStatus> = _toolStatus
     private var bridgeAttachment: BridgeAttachment? = null
 
-    fun submit(callId: String, prompt: String): Boolean {
-        return submit(callId = callId, prompt = prompt, activeKey = callActiveKey(callId))
-    }
-
-    fun submit(callId: String, prompt: String, activeKey: String): Boolean {
+    fun submit(callId: String, prompt: String, activeKey: String = callActiveKey(callId)): Boolean {
         val actor = synchronized(lock) {
             if (activeJobs.containsKey(activeKey)) return false
             JobActor(activeKey = activeKey, callId = callId, prompt = prompt).also {
@@ -257,11 +253,7 @@ class HermesJobManager(
         }
     }
 
-    fun cancel(callId: String) {
-        cancel(callId = callId, activeKey = null)
-    }
-
-    fun cancel(callId: String, activeKey: String?, userInitiated: Boolean = false) {
+    fun cancel(callId: String, activeKey: String? = null, userInitiated: Boolean = false) {
         val origin = if (userInitiated) CancelOrigin.User else CancelOrigin.Gemini
         val actor = synchronized(lock) {
             activeKey?.let { activeJobs[it] } ?: activeJobs.values.lastOrNull { it.callId == callId }
@@ -964,6 +956,6 @@ class HermesJobManager(
         private const val INVALID_TIMESTAMP_MESSAGE = "Hermes job had invalid timing metadata."
         private const val DEFAULT_REMOTE_CANCEL_TIMEOUT_MS = 5_000L
         private const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 30_000L
-        private const val DEFAULT_STILL_WORKING_THRESHOLD_MS = 45_000L
+        const val DEFAULT_STILL_WORKING_THRESHOLD_MS = 45_000L
     }
 }

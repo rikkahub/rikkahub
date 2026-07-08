@@ -38,7 +38,6 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
 
 const val HERMES_JOB_POLL_INTERVAL_MS = 10_000L
-const val HERMES_STILL_WORKING_THRESHOLD_MS = 45_000L
 private const val HERMES_JOB_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000L
 private const val HERMES_JOB_POLL_RETRY_DELAY_MS = 2_000L
 private const val UNBOUND_HERMES_BRIDGE_SESSION_ID = HermesJobManager.UNBOUND_BRIDGE_SESSION_ID
@@ -69,7 +68,7 @@ class VoiceAgentCoordinator(
     private val hermesJobPollIntervalMs: Long = HERMES_JOB_POLL_INTERVAL_MS,
     private val hermesJobMaxElapsedMs: Long = HERMES_JOB_MAX_ELAPSED_MS,
     private val hermesJobPollRetryDelayMs: Long = HERMES_JOB_POLL_RETRY_DELAY_MS,
-    private val hermesStillWorkingThresholdMs: Long = HERMES_STILL_WORKING_THRESHOLD_MS,
+    private val hermesStillWorkingThresholdMs: Long = HermesJobManager.DEFAULT_STILL_WORKING_THRESHOLD_MS,
     hermesAnnouncementScheduler: HermesAnnouncementScheduler? = null,
     scope: CoroutineScope? = null,
     dispatcher: CoroutineDispatcher? = null,
@@ -967,7 +966,6 @@ class VoiceAgentCoordinator(
 
     private companion object {
         const val E2E_TAG = "VoiceAgentE2E"
-        const val TOOL_CALL_CANCELED_BY_GEMINI = "Tool call canceled by Gemini"
         const val MAX_UI_DIAGNOSTICS = 30
     }
 
