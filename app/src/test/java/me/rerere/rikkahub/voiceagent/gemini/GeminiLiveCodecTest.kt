@@ -230,6 +230,18 @@ class GeminiLiveCodecTest {
     }
 
     @Test
+    fun `setup message omits tool config when config has no tools key`() {
+        val message = codec.setupMessage(
+            providerModel = "gemini-test",
+            liveConnectConfig = buildJsonObject { },
+            systemInstruction = "sys",
+        ).jsonObject()
+
+        val setup = message["setup"]!!.jsonObject
+        assertFalse("toolConfig" in setup)
+    }
+
+    @Test
     fun `setup message allows only declared registered tools`() {
         // Declares cancel_hermes but NOT ask_hermes: under the uniform
         // declaration-gated rule the toolConfig lists only cancel_hermes.
@@ -430,6 +442,25 @@ class GeminiLiveCodecTest {
         assertEquals(
             "Canceled.",
             functionResponse["response"]!!.jsonObject["answer"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `tool response falls back to when idle scheduling for unregistered tool name`() {
+        val message = codec.toolResponseMessage(
+            callId = "call-x",
+            answer = "a",
+            name = "unknown_tool",
+        ).jsonObject()
+
+        val functionResponse = message["toolResponse"]!!
+            .jsonObject["functionResponses"]!!
+            .jsonArray[0]
+            .jsonObject
+        assertEquals("unknown_tool", functionResponse["name"]!!.jsonPrimitive.content)
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+            functionResponse["scheduling"]!!.jsonPrimitive.content,
         )
     }
 
