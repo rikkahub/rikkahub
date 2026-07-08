@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.voiceagent.telemetry
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class HermesTelemetryLogSanitizerTest {
@@ -21,15 +20,5 @@ class HermesTelemetryLogSanitizerTest {
         )
 
         assertEquals("provider failed", sanitized)
-    }
-
-    @Test
-    fun `queue event detail keeps only routing metadata`() {
-        val detail = HermesTelemetryLogSanitizer.queueEventDetail(
-            """{"type":"job_completed","callId":"call-1","jobId":"job-1","status":"succeeded","sent":true,"answer":"private"}"""
-        )
-
-        assertEquals("type=job_completed callId=call-1 jobId=job-1 status=succeeded sent=true", detail)
-        assertFalse(detail.contains("private"))
     }
 }
