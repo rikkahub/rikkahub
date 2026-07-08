@@ -628,8 +628,11 @@ class VoiceContextBuilderTest {
             put(HERMES_TOOL_STATUS_KEY, status)
             if (resultAnnouncedText != null) {
                 // Malformed announcement value: HermesAnnouncementState.fromWireName
-                // rejects it and falls back to the terminal-default (Announced), same as
-                // the old malformed-boolean fallback this test ported from.
+                // rejects it and, on a terminal record, falls back to the terminal-default
+                // (Announced). Note this is the OPPOSITE of the old malformed-boolean
+                // fallback this test ported from: an unparseable legacy boolean read as
+                // unannounced, whereas an unrecognized wire name on a terminal record now
+                // reads as Announced (so it is excluded from turns, as asserted below).
                 put(HERMES_TOOL_ANNOUNCEMENT_KEY, resultAnnouncedText)
             } else if (includeResultAnnounced) {
                 put(HERMES_TOOL_ANNOUNCEMENT_KEY, if (resultAnnounced) "announced" else "not_announced")

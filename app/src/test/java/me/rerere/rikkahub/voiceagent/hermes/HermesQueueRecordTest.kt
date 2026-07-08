@@ -73,14 +73,19 @@ class HermesQueueRecordTest {
 
     @Test
     fun `missing announcement key on a terminal record falls back to Announced`() {
-        val part = record(status = HermesQueueStatus.Complete).toToolPart()
-        val stripped = part.copy(metadata = buildJsonObject {
-            part.metadata!!.forEach { (k, v) -> if (k != HERMES_TOOL_ANNOUNCEMENT_KEY) put(k, v) }
-        })
-        assertEquals(
-            HermesAnnouncementState.Announced,
-            HermesQueueRecord.fromToolPart(stripped)!!.announcement,
-        )
+        // The announced-default rule applies to EVERY terminal status, not just Complete:
+        // a legacy terminal record with no announcement key must never re-announce.
+        for (status in HermesQueueStatus.entries.filter { it.isTerminal }) {
+            val part = record(status = status).toToolPart()
+            val stripped = part.copy(metadata = buildJsonObject {
+                part.metadata!!.forEach { (k, v) -> if (k != HERMES_TOOL_ANNOUNCEMENT_KEY) put(k, v) }
+            })
+            assertEquals(
+                "status=$status",
+                HermesAnnouncementState.Announced,
+                HermesQueueRecord.fromToolPart(stripped)!!.announcement,
+            )
+        }
     }
 
     @Test

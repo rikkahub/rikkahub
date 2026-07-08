@@ -3372,6 +3372,10 @@ class VoiceAgentRuntimeTest {
         withTimeout(500) {
             cancelJob.join()
         }
+        // Drain the job actor to its terminal state: the canceled record is written by the
+        // reducer's single PersistTerminal effect inside the consumer, so awaiting the actor
+        // (not a second manager-side write) is what makes the durable cancel observable here.
+        coordinator.awaitToolJobsWithTimeout()
         coordinator.awaitPersistenceJobsWithTimeout()
 
         val tool = conversationStore.conversation.value.currentMessages
