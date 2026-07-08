@@ -24,9 +24,9 @@ import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
 fun voiceToolCall(callId: String, name: String, prompt: String): GeminiLiveEvent.ToolCall = when (name) {
-    VoiceAgentToolNames.CANCEL_HERMES ->
-        GeminiLiveEvent.CancelHermesCall(callId = callId, question = prompt)
-    else -> GeminiLiveEvent.AskHermesCall(callId = callId, prompt = prompt)
+    VoiceAgentToolNames.ASK_HERMES -> GeminiLiveEvent.AskHermesCall(callId = callId, prompt = prompt)
+    VoiceAgentToolNames.CANCEL_HERMES -> GeminiLiveEvent.CancelHermesCall(callId = callId, question = prompt)
+    else -> error("voiceToolCall: unknown tool name '$name' — construct GeminiLiveEvent.UnsupportedToolCall directly for negative-path fixtures")
 }
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
