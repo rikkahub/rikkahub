@@ -35,6 +35,8 @@ jobs:
     needs: check
     if: needs.check.outputs.should_build == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 发布 Release 需要写权限
 
     steps:
       - uses: actions/checkout@v4
@@ -90,11 +92,16 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      # 把 APK 直接发布为 Prerelease，用户点链接即可下载单个 apk，无需登录、无需解压
+      - name: Publish nightly prerelease
+        uses: softprops/action-gh-release@v2
         if: success()
         with:
-          name: nightly-${{ github.sha }}
-          path: app/build/outputs/apk/release/*.apk
-          # 每日构建产物保留 14 天，避免占满存储配额
-          retention-days: 14
+          tag_name: nightly            # 固定 tag，每晚覆盖同一个「最新每日构建」
+          name: Nightly Build
+          prerelease: true
+          body: |
+            自动每日构建（commit `${{ github.sha }}`）
+
+            > ⚠️ 开发版本，可能不稳定，仅供测试。
+          files: app/build/outputs/apk/release/*.apk
