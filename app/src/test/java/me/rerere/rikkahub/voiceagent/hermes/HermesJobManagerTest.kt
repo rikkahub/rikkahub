@@ -2598,7 +2598,13 @@ class HermesJobManagerTest {
     fun `resolveCancelRequest cancels a single pending job even when the question does not match`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
         manager.submit(callId = "call-1", prompt = "deploy status")
         assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
 
@@ -2607,6 +2613,11 @@ class HermesJobManagerTest {
         assertTrue(outcome is CancelHermesOutcome.Canceled)
         assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
         toolApi.awaitRemoteCancelledJob("job-1")
+        assertTrue(
+            diagnostics.any { (name, detail) ->
+                name == "hermes_user_cancel" && detail.contains("callId=call-1")
+            }
+        )
     }
 
     @Test
@@ -2661,6 +2672,8 @@ class HermesJobManagerTest {
             listOf("call-1", "call-2"),
             (outcome as CancelHermesOutcome.Ambiguous).matches.map { it.callId },
         )
+        assertFalse(toolApi.wasCancelled("call-1"))
+        assertFalse(toolApi.wasCancelled("call-2"))
     }
 }
 
