@@ -2637,6 +2637,38 @@ class HermesJobManagerTest {
     }
 
     @Test
+    fun `resolveCancelRequest matches when the question contains the whole prompt`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy")
+        assertEquals("call-1" to "deploy", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
+        assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveCancelRequest("can you cancel the deploy job please")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+    }
+
+    @Test
+    fun `resolveCancelRequest collapses whitespace inside the matched span`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy   status report")
+        assertEquals("call-1" to "deploy   status report", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
+        assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveCancelRequest("deploy status")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+    }
+
+    @Test
     fun `resolveCancelRequest reports NoMatch with the pending list`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val manager = manager(toolApi = toolApi, conversationStore = FakeVoiceConversationStore(), scope = this)
