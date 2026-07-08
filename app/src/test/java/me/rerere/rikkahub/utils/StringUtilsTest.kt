@@ -28,6 +28,16 @@ class StringUtilsTest {
     }
 
     @Test
+    fun `extract corner brackets`() {
+        assertEquals(listOf("你好"), "他说「你好」".extractQuotedContent())
+    }
+
+    @Test
+    fun `extract white corner brackets`() {
+        assertEquals(listOf("世界"), "标题是『世界』".extractQuotedContent())
+    }
+
+    @Test
     fun `extract multiple quotes`() {
         assertEquals(
             listOf("你好", "世界"),
