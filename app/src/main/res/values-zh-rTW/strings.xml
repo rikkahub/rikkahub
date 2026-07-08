@@ -688,6 +688,9 @@
   <string name="setting_display_page_show_user_avatar_title">顯示用戶頭像</string>
   <string name="setting_display_page_skip_crop_image_desc">匯入圖片或拍照後跳過裁剪介面</string>
   <string name="setting_display_page_skip_crop_image_title">跳過圖片編輯</string>
+  <string name="setting_display_page_manual_image_compression_desc">點擊附件中的圖片可壓縮解析度再發送</string>
+  <string name="setting_display_page_manual_image_compression_title">手動壓縮圖片</string>
+  <string name="image_compression_header">壓縮</string>
   <string name="setting_display_page_title">顯示設定</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">啟用後，TTS 只會朗讀引號內的內容</string>
   <string name="setting_display_page_tts_only_read_quoted_title">僅朗讀引用的 TTS 內容</string>

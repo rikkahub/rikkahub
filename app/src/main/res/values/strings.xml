@@ -724,6 +724,9 @@
   <string name="setting_display_page_show_user_avatar_title">Show User Avatar</string>
   <string name="setting_display_page_skip_crop_image_desc">Skip crop interface after importing images or taking photos</string>
   <string name="setting_display_page_skip_crop_image_title">Skip Image Editing</string>
+  <string name="setting_display_page_manual_image_compression_desc">Click the image attachment to resize and reduce size before sending</string>
+  <string name="setting_display_page_manual_image_compression_title">Manual Image Compression</string>
+  <string name="image_compression_header">Compress</string>
   <string name="setting_display_page_title">Display Settings</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">When enabled, TTS will only read content within quotation marks (including "", \'\', 「」, 『』)</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS Read Quoted Content Only</string>
