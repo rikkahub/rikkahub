@@ -317,6 +317,21 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val QWEN_3_5_MAX = defineModel {
+        tokens("qwen", "3", "5", "max")
+        toolReasoningAbility()
+    }
+
+    private val QWEN_3_6_MAX = defineModel {
+        tokens("qwen", "3", "6", "max")
+        toolReasoningAbility()
+    }
+
+    private val QWEN_3_7_MAX = defineModel {
+        tokens("qwen", "3", "7", "max")
+        toolReasoningAbility()
+    }
+
     private val DOUBAO_1_6 = defineModel {
         tokens("doubao", "1", "6")
         visionInput()
@@ -325,6 +340,18 @@ object ModelRegistry {
 
     private val DOUBAO_1_8 = defineModel {
         tokens("doubao", "1", "8")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val DOUBAO_2_0 = defineModel {
+        tokens("doubao", "2", "0")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val DOUBAO_2_1 = defineModel {
+        tokens("doubao", "2", "1")
         visionInput()
         toolReasoningAbility()
     }
@@ -504,8 +531,13 @@ object ModelRegistry {
         QWEN_3_5,
         QWEN_3_6,
         QWEN_3_7,
+        QWEN_3_5_MAX,
+        QWEN_3_6_MAX,
+        QWEN_3_7_MAX,
         DOUBAO_1_6,
         DOUBAO_1_8,
+        DOUBAO_2_0,
+        DOUBAO_2_1,
         GROK_4,
         KIMI_K2,
         KIMI_K2_5,
