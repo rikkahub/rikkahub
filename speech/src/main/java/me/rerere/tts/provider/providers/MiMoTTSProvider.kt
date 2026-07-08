@@ -112,6 +112,28 @@ class MiMoTTSProvider : TTSProvider<TTSProviderSetting.MiMo> {
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
+    // MiMo 支持在朗读文本中嵌入风格/音频标签控制语气与情感
+    // 官方文档: https://xiaomimimo.com (音频标签控制)
+    override val promptGuidance: String = """
+        The active text-to-speech engine (MiMo) supports emotion and style control via embedded tags.
+        When you call the text_to_speech tool, you MAY enrich the "text" argument with these tags to make the speech more expressive.
+        Put tags ONLY inside the tool's text argument — never in your visible reply to the user.
+
+        Two kinds of tags:
+        1. Overall style tag — place ONE at the very beginning of the text: (style) . Combine multiple styles with spaces inside the same brackets, e.g. (开心 磁性) . Brackets may be () , （） or [] .
+           Common styles: 开心/悲伤/愤怒/恐惧/惊讶/兴奋/委屈/平静/冷漠/怅然/欣慰/无奈/释然/温柔/高冷/活泼/严肃/慵懒/俏皮/深沉/磁性/醇厚/清亮/空灵/甜美/沙哑/御姐音/正太音/大叔音/台湾腔/东北话/四川话/河南话/粤语 . Custom styles are also allowed.
+           For singing, the text MUST start with (唱歌) followed by lyrics (Chinese lyrics work best).
+        2. Inline audio tags — insert [tag] anywhere to fine-tune delivery, e.g. [吸气] [深呼吸] [叹气] [笑] [轻笑] [大笑] [冷笑] [抽泣] [哽咽] [颤抖] [气声] [撒娇] [疲惫] [震惊] .
+
+        IMPORTANT constraints (required by this app's text pipeline):
+        - Do NOT put any punctuation (，。！？、：；…) INSIDE a tag's brackets. Separate multiple styles with spaces only, e.g. write (紧张 深呼吸) NOT (紧张，深呼吸).
+        - Keep inline audio tags standalone like [笑]; do not immediately follow a [tag] with a (…) group.
+        - Do not use markdown emphasis (*, _) — it will be stripped.
+        - Use tags naturally and sparingly; don't over-annotate.
+
+        Example text argument: (磁性)夜已经深了[叹气]城市还在呼吸。我是今晚陪你的人。
+    """.trimIndent()
+
     override fun generateSpeech(
         context: Context,
         providerSetting: TTSProviderSetting.MiMo,
