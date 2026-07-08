@@ -1,11 +1,14 @@
 package me.rerere.rikkahub.voiceagent
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoicePersistenceQueueTest {
@@ -47,5 +50,18 @@ class VoicePersistenceQueueTest {
         queue.enqueue { order += 2 }
         advanceUntilIdle()
         assertEquals(listOf(2), order)
+    }
+
+    @Test
+    fun `scope cancellation is not swallowed`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val queue = VoicePersistenceQueue(scope)
+        val job = queue.enqueue { delay(100) }
+        advanceTimeBy(10)
+        scope.cancel()
+        advanceUntilIdle()
+        assertTrue(job.isCancelled)
+        queue.await()
     }
 }

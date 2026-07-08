@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -24,7 +25,14 @@ class VoicePersistenceQueue(
             val previousJob = lastJob
             job = scope.launch(start = CoroutineStart.LAZY) {
                 previousJob?.join()
-                runCatching { block() }
+                try {
+                    block()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    // Contained: a failing job must not break the FIFO chain; the caller's
+                    // block owns its own logging.
+                }
             }
             jobs += job
             lastJob = job
