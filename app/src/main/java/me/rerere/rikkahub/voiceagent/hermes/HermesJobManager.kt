@@ -140,9 +140,7 @@ class HermesJobManager(
     }
 
     fun resumeActiveJobs() {
-        queueStore.records()
-            .latestByHermesDurableIdentity()
-            .filter { !it.status.isTerminal }
+        queueStore.activeRecords()
             .forEach { record ->
                 val activeKey = record.activeKey()
                 if (synchronized(lock) { hasActiveJob(record = record, activeKey = activeKey) }) return@forEach
@@ -300,9 +298,10 @@ class HermesJobManager(
             return
         }
         // Orphaned durable record (no live writer, so a direct write cannot race).
-        val persistedRecord = queueStore.records().lastOrNull { record ->
-            record.callId == callId && (activeKey == null || record.jobId == null)
-        }
+        val persistedRecord = queueStore.latestCancelCandidate(
+            callId = callId,
+            requireUnsubmitted = activeKey != null,
+        )
         if (persistedRecord?.status?.isTerminal != false) return
         scope.launch(dispatcher) {
             val canceled = queueStore.persistCanceled(
@@ -323,9 +322,7 @@ class HermesJobManager(
     }
 
     fun pendingRequests(): List<PendingHermesRequest> =
-        queueStore.records()
-            .latestByHermesDurableIdentity()
-            .filter { !it.status.isTerminal }
+        queueStore.activeRecords()
             .map { PendingHermesRequest(callId = it.callId, jobId = it.jobId, prompt = it.prompt) }
 
     fun cancelByUser(request: PendingHermesRequest) {
@@ -813,8 +810,7 @@ class HermesJobManager(
     private suspend fun announceStillWorking(actor: JobActor, jobId: String) {
         val current = currentBridgeAttachment() ?: return
         announcementMutex.withLock {
-            val record = queueStore.records()
-                .lastOrNull { it.matchesIdentity(callId = actor.callId, jobId = jobId) }
+            val record = queueStore.latestRecord(callId = actor.callId, jobId = jobId)
                 ?: return@withLock
             if (record.status.isTerminal || record.stillWorkingAnnounced) return@withLock
             if (!current.isCurrentBridgeAttachment()) return@withLock
@@ -848,9 +844,7 @@ class HermesJobManager(
     }
 
     private suspend fun announceUnannouncedTerminalResults(bridge: HermesSessionBridge, sessionId: Long) {
-        queueStore.records()
-            .latestByHermesDurableIdentity()
-            .filter { it.status.isTerminal && !it.resultAnnounced }
+        queueStore.unannouncedTerminalRecords()
             .forEach { record ->
                 val current = currentBridgeAttachment() ?: return@forEach
                 if (current.bridge !== bridge || current.sessionId != sessionId) return@forEach
@@ -880,13 +874,7 @@ class HermesJobManager(
             return
         }
         announcementMutex.withLock {
-            val record = queueStore.records()
-                .lastOrNull { record ->
-                    record.callId == callId && when {
-                        jobId != null -> record.jobId == jobId
-                        else -> record.jobId == null
-                    }
-                }
+            val record = queueStore.latestRecord(callId = callId, jobId = jobId)
             if (record?.status != HermesQueueStatus.Complete || record.resultAnnounced || record.answer == null) return@withLock
             if (!current.isCurrentBridgeAttachment()) return@withLock
 
@@ -932,13 +920,7 @@ class HermesJobManager(
             return
         }
         announcementMutex.withLock {
-            val record = queueStore.records()
-                .lastOrNull { record ->
-                    record.callId == callId && when {
-                        jobId != null -> record.jobId == jobId
-                        else -> record.jobId == null
-                    }
-                }
+            val record = queueStore.latestRecord(callId = callId, jobId = jobId)
             if (
                 record == null ||
                 record.status == HermesQueueStatus.Complete ||

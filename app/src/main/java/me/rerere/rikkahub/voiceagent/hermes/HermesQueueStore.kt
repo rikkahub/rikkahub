@@ -17,6 +17,23 @@ class HermesQueueStore(
     fun records(): List<HermesQueueRecord> =
         conversationStore.conversation.value.hermesQueueRecords()
 
+    fun latestRecord(callId: String, jobId: String?): HermesQueueRecord? =
+        records().lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
+
+    fun activeRecords(): List<HermesQueueRecord> =
+        records().latestByHermesDurableIdentity().filter { !it.status.isTerminal }
+
+    fun unannouncedTerminalRecords(): List<HermesQueueRecord> =
+        records().latestByHermesDurableIdentity().filter { it.status.isTerminal && !it.resultAnnounced }
+
+    /**
+     * Latest record for a cancel that found no live actor. With [requireUnsubmitted]
+     * the caller knows the cancel was scoped to a specific active key, so only a
+     * record that never got a jobId may match; otherwise any record for the call.
+     */
+    fun latestCancelCandidate(callId: String, requireUnsubmitted: Boolean): HermesQueueRecord? =
+        records().lastOrNull { it.callId == callId && (!requireUnsubmitted || it.jobId == null) }
+
     suspend fun markResultAnnounced(
         callId: String,
         jobId: String?,
@@ -122,7 +139,8 @@ class HermesQueueStore(
     suspend fun appendVisibleResultMessageIfNeeded(callId: String, jobId: String?): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
-            val record = conversation.latestHermesRecord(callId = callId, jobId = jobId)
+            val record = conversation.hermesQueueRecords()
+                .lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
             if (record == null || !record.status.isTerminal || record.messageWritten || record.resultAnnounced) {
                 conversation to false
             } else {
@@ -172,7 +190,4 @@ class HermesQueueStore(
             requireNotNull(result)
         }
     }
-
-    private fun Conversation.latestHermesRecord(callId: String, jobId: String?): HermesQueueRecord? =
-        hermesQueueRecords().lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
 }
