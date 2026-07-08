@@ -23,7 +23,7 @@ import me.rerere.rikkahub.voiceagent.FakeVoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
-import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
+import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
@@ -47,7 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
 class HermesJobManagerTest {
-    private val persister = VoiceConversationPersister()
+    private val transcriptPersister = VoiceTranscriptPersister()
     private val writer = HermesToolRecordWriter()
 
     @Test
@@ -1566,7 +1566,7 @@ class HermesJobManagerTest {
         val manager = HermesJobManager(
             toolApi = toolApi,
             conversationStore = conversationStore,
-            persister = persister,
+            transcriptPersister = transcriptPersister,
             scope = this,
             dispatcher = Dispatchers.Default,
             pollIntervalMs = 10L,
@@ -2299,7 +2299,7 @@ class HermesJobManagerTest {
             val secondSessionSampled = CompletableDeferred<Unit>()
             val queueStore = HermesQueueStore(
                 conversationStore = conversationStore,
-                persister = persister,
+                transcriptPersister = transcriptPersister,
                 writer = writer,
                 persistenceSessionId = {
                     val sessionId = currentSessionId
@@ -2366,7 +2366,7 @@ class HermesJobManagerTest {
         val conversationStore = FakeVoiceConversationStore()
         val queueStore = HermesQueueStore(
             conversationStore = conversationStore,
-            persister = persister,
+            transcriptPersister = transcriptPersister,
             writer = writer,
         )
 
@@ -2418,7 +2418,7 @@ class HermesJobManagerTest {
     ) = HermesJobManager(
         toolApi = toolApi,
         conversationStore = conversationStore,
-        persister = persister,
+        transcriptPersister = transcriptPersister,
         scope = scope,
         dispatcher = dispatcher,
         pollIntervalMs = pollIntervalMs,

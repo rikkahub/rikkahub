@@ -9,7 +9,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
+import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -243,7 +243,7 @@ class HermesToolRecordWriterTest {
     @Test
     fun `complete upsert updates pending tool before newer assistant turn without appending duplicate`() {
         // Ported from row 10.
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = emptyConversation()
             .let {
                 writer.upsertHermesTool(
@@ -371,7 +371,7 @@ class HermesToolRecordWriterTest {
     @Test
     fun `new call id after user turn appends tool message without changing old assistant`() {
         // Ported from row 15.
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = emptyConversation()
             .let { persister.appendAssistantTurn(it, "Old assistant reply", interrupted = false) }
             .let { persister.appendUserTurn(it, "New user request") }
@@ -451,8 +451,9 @@ class HermesToolRecordWriterTest {
     fun `upsertHermesTool stamps generic voice artifact metadata when sessionId is present`() {
         // Ported from the Hermes-tool portion of row 19 (`voice artifacts include session
         // source identifiers status and timestamps`). The transcript portions of that row
-        // are unaffected by this task and remain in VoiceConversationPersisterTest. The
-        // old assertion of a "voice_status" key and of output-part metadata is dropped:
+        // are unaffected by this task and remain in VoiceTranscriptPersisterTest (renamed
+        // from VoiceConversationPersisterTest in Task 4). The old assertion of a
+        // "voice_status" key and of output-part metadata is dropped:
         // pin 4 removes voice_status from tool metadata and nulls output-part metadata.
         val conversation = writer.upsertHermesTool(
             conversation = emptyConversation(),

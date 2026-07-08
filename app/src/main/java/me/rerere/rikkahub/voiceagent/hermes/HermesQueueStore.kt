@@ -4,12 +4,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
-import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
+import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 
 class HermesQueueStore(
     private val conversationStore: VoiceConversationStore,
-    private val persister: VoiceConversationPersister,
     private val writer: HermesToolRecordWriter,
+    private val transcriptPersister: VoiceTranscriptPersister,
     private val persistenceSessionId: () -> String? = { null },
 ) {
     private val updateMutex = Mutex()
@@ -147,12 +147,10 @@ class HermesQueueStore(
             if (record == null || !record.status.isTerminal || record.messageWritten || record.resultAnnounced) {
                 conversation to false
             } else {
-                val appended = persister.appendHermesResultMessage(
+                val appended = transcriptPersister.appendAssistantTurn(
                     conversation = conversation,
-                    prompt = record.prompt,
-                    answer = record.answer,
-                    statusWireName = record.status.wireName,
-                    reason = record.error,
+                    text = hermesResultMessageText(record),
+                    interrupted = false,
                     sessionId = sessionId,
                 )
                 writer.markMessageWritten(
@@ -161,6 +159,16 @@ class HermesQueueStore(
                     jobId = jobId,
                 ) to true
             }
+        }
+    }
+
+    private fun hermesResultMessageText(record: HermesQueueRecord): String {
+        val answer = record.answer
+        return if (record.status == HermesQueueStatus.Complete && answer != null) {
+            "Hermes finished: ${record.prompt}\n\n$answer"
+        } else {
+            "Hermes could not finish: ${record.prompt}" +
+                (record.error?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty())
         }
     }
 

@@ -20,7 +20,7 @@ import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
 import me.rerere.rikkahub.voiceagent.hermesCompletionFollowUpText
 import me.rerere.rikkahub.voiceagent.isTerminalHermesToolStatus
-import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
+import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import me.rerere.rikkahub.voiceagent.summarizeVoiceToolStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
@@ -84,7 +84,7 @@ sealed interface CancelHermesOutcome {
 class HermesJobManager(
     private val toolApi: VoiceToolApi,
     private val conversationStore: VoiceConversationStore,
-    private val persister: VoiceConversationPersister,
+    private val transcriptPersister: VoiceTranscriptPersister = VoiceTranscriptPersister(),
     private val scope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher,
     private val pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
@@ -109,8 +109,8 @@ class HermesJobManager(
     private val recordWriter = HermesToolRecordWriter()
     private val queueStore = HermesQueueStore(
         conversationStore = conversationStore,
-        persister = persister,
         writer = recordWriter,
+        transcriptPersister = transcriptPersister,
         persistenceSessionId = ::currentPersistenceSessionId,
     )
     private val activeJobs = mutableMapOf<String, ManagedHermesJob>()

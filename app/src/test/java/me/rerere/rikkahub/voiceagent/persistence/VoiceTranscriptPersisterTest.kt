@@ -15,10 +15,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
-class VoiceConversationPersisterTest {
+class VoiceTranscriptPersisterTest {
     @Test
     fun `remove legacy voice session started notes removes only metadata tagged notes`() {
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val legacyNote = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -47,7 +47,7 @@ class VoiceConversationPersisterTest {
 
     @Test
     fun `voice transcript upsert keeps streaming fragments in one visible turn`() {
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = emptyConversation()
             .let { persister.upsertUserTranscriptTurn(it, "hel", turnId = "user-1") }
             .let { persister.upsertUserTranscriptTurn(it, "hello", turnId = "user-1") }
@@ -66,7 +66,7 @@ class VoiceConversationPersisterTest {
 
     @Test
     fun `upsert transcript keeps same turn id from different voice sessions`() {
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = Conversation.ofId(Uuid.random())
 
         val afterFirst = persister.upsertUserTranscriptTurn(
@@ -94,7 +94,7 @@ class VoiceConversationPersisterTest {
 
     @Test
     fun `upsert transcript with session id does not replace legacy transcript without session id`() {
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = Conversation.ofId(Uuid.random())
 
         val legacyTranscript = persister.upsertUserTranscriptTurn(
@@ -122,7 +122,7 @@ class VoiceConversationPersisterTest {
 
     @Test
     fun `user transcript upsert preserves partial and session closed statuses`() {
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = emptyConversation()
             .let {
                 persister.upsertUserTranscriptTurn(
@@ -149,7 +149,7 @@ class VoiceConversationPersisterTest {
 
     @Test
     fun `assistant transcript upsert preserves partial complete and session closed statuses`() {
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = emptyConversation()
             .let {
                 persister.upsertAssistantTranscriptTurn(
@@ -192,7 +192,7 @@ class VoiceConversationPersisterTest {
     fun `voice transcript upsert replaces matching turn even when tool record interleaves`() {
         // The interleaved Hermes tool record is written through HermesToolRecordWriter
         // (Task 3); the assertion under test is purely about transcript positioning.
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val writer = HermesToolRecordWriter()
         val conversation = emptyConversation()
             .let { persister.upsertUserTranscriptTurn(it, "hel", turnId = "user-1") }
@@ -214,7 +214,7 @@ class VoiceConversationPersisterTest {
 
     @Test
     fun `interrupted assistant turn records voice status metadata while preserving text`() {
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
 
         val conversation = persister.appendAssistantTurn(
             conversation = emptyConversation(),
@@ -234,7 +234,7 @@ class VoiceConversationPersisterTest {
         // metadata when sessionId is present` (Task 3): pin 4 also drops voice_status and
         // output-part metadata from tool writes, which the old combined assertion here
         // could no longer satisfy.
-        val persister = VoiceConversationPersister()
+        val persister = VoiceTranscriptPersister()
         val conversation = emptyConversation()
             .let {
                 persister.upsertUserTranscriptTurn(

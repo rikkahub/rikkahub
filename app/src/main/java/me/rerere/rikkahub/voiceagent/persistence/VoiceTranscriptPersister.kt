@@ -8,7 +8,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import kotlin.time.Clock
 
 internal const val VOICE_SOURCE_KEY = "voice_source"
@@ -27,7 +26,7 @@ enum class VoiceTranscriptStatus(val statusName: String) {
     SessionClosedBeforeFinal("session-closed-before-final"),
 }
 
-class VoiceConversationPersister {
+class VoiceTranscriptPersister {
     fun removeLegacyVoiceSessionStartedNotes(conversation: Conversation): Conversation {
         return conversation.copy(
             messageNodes = conversation.messageNodes.filterNot { node ->
@@ -123,27 +122,6 @@ class VoiceConversationPersister {
         turnId = turnId,
         sessionId = sessionId,
     )
-
-    fun appendHermesResultMessage(
-        conversation: Conversation,
-        prompt: String,
-        answer: String?,
-        statusWireName: String,
-        reason: String?,
-        sessionId: String? = null,
-    ): Conversation {
-        val text = if (statusWireName == HermesQueueStatus.Complete.wireName && answer != null) {
-            "Hermes finished: $prompt\n\n$answer"
-        } else {
-            "Hermes could not finish: $prompt" + (reason?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty())
-        }
-        return appendAssistantTurn(
-            conversation = conversation,
-            text = text,
-            interrupted = false,
-            sessionId = sessionId,
-        )
-    }
 
     private fun upsertTranscriptTurn(
         conversation: Conversation,
