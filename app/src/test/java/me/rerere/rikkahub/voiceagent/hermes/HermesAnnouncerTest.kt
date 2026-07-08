@@ -232,12 +232,33 @@ class HermesAnnouncerTest {
         runCurrent()
     }
 
+    // 9b (review fix)
+    @Test
+    fun `attachScoped after close is a no-op`() = runTest {
+        val store = store(emptyConversation().withComplete(callId = "call-1", jobId = "job-1", answer = "the answer"))
+        val bridge = RecordingBridge()
+        val announcer = announcer(queueStore = store)
+
+        announcer.close()
+        announcer.attachScoped(bridge, sessionId = 7L)
+        runCurrent()
+        assertNull(announcer.currentAttachment())
+
+        announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
+        runCurrent()
+
+        assertTrue(bridge.completions.isEmpty())
+        assertTrue(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
+    }
+
     // 10
     @Test
     fun `a throwing store during a Send effect is contained and the queue continues`() = runTest {
         val diagnostics = mutableListOf<Pair<String, String>>()
-        // markResultAnnounced (the first store update) throws for call-1; the executor
-        // contains it and keeps draining, so the replayed call-2 still sends.
+        // markResultAnnounced (the first store update) throws for call-1 AFTER its send
+        // succeeded: the outcome stays Sent (delivered announcement, no same-cycle text
+        // duplicate), the mark failure is contained + logged, and the queue keeps
+        // draining — the replayed call-2 still sends.
         val store = throwingStore(
             emptyConversation()
                 .withComplete(callId = "call-1", jobId = "job-1", answer = "first")
@@ -249,7 +270,16 @@ class HermesAnnouncerTest {
         announcer.attachScoped(bridge, sessionId = 7L)
         runCurrent()
 
-        assertTrue(diagnostics.any { it.first == "announcer_effect_failed" })
+        assertTrue(bridge.completions.contains("call-1"))
+        assertTrue(diagnostics.any { it.first == "announcer_mark_failed" })
+        val record1 = store.latestRecord(callId = "call-1", jobId = "job-1")!!
+        assertFalse(record1.messageWritten)
+        assertFalse(record1.resultAnnounced)
+
+        // The Sent outcome engages generation-complete pacing; releasing it proves the
+        // queue was never wedged by the contained mark failure.
+        announcer.onGenerationComplete()
+        runCurrent()
         assertTrue(bridge.completions.contains("call-2"))
         assertTrue(store.latestRecord(callId = "call-2", jobId = "job-2")!!.resultAnnounced)
     }

@@ -98,15 +98,23 @@ class HermesAnnouncer(
     // --- bridge registry ---
 
     fun attachScoped(bridge: HermesSessionBridge, sessionId: Long) {
+        val attached: Boolean
         synchronized(lock) {
-            if (sessionId != HermesJobManager.UNBOUND_BRIDGE_SESSION_ID) {
-                scopedBridgeEverAttached = true
+            if (closed) {
+                attached = false
+            } else {
+                if (sessionId != HermesJobManager.UNBOUND_BRIDGE_SESSION_ID) {
+                    scopedBridgeEverAttached = true
+                }
+                attachment?.active = false
+                attachment = HermesBridgeAttachment(bridge = bridge, sessionId = sessionId)
+                attached = true
             }
-            attachment?.active = false
-            attachment = HermesBridgeAttachment(bridge = bridge, sessionId = sessionId)
         }
-        events.trySend(AnnouncerEvent.BridgeAttached(sessionId, nowMs()))
-        enqueueReplayIntents()
+        if (attached) {
+            events.trySend(AnnouncerEvent.BridgeAttached(sessionId, nowMs()))
+            enqueueReplayIntents()
+        }
     }
 
     fun detachScoped(bridge: HermesSessionBridge) {
@@ -275,7 +283,7 @@ class HermesAnnouncer(
             return AnnouncementSendOutcome.Skipped
         }
         if (!isCurrent(current)) return AnnouncementSendOutcome.Skipped
-        val sent = runCatching {
+        val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendCompletionFollowUp(
                     callId = intent.callId,
@@ -284,15 +292,32 @@ class HermesAnnouncer(
                     sessionId = current.sessionId,
                 )
             } ?: false
-        }.getOrDefault(false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            false
+        }
         return if (sent) {
-            queueStore.markResultAnnounced(callId = intent.callId, jobId = intent.jobId)
-            telemetry.followUpSent(
-                callId = intent.callId,
-                jobId = intent.jobId,
-                prompt = record.prompt,
-                answer = requireNotNull(record.answer),
-            )
+            // The RPC succeeded: the outcome is Sent no matter what the bookkeeping does.
+            // A failed mark leaves the record unannounced -> bounded re-send on the next
+            // attach, never a same-cycle duplicate text fallback.
+            try {
+                queueStore.markResultAnnounced(callId = intent.callId, jobId = intent.jobId)
+                telemetry.followUpSent(
+                    callId = intent.callId,
+                    jobId = intent.jobId,
+                    prompt = record.prompt,
+                    answer = requireNotNull(record.answer),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                telemetry.diagnostic(
+                    "announcer_mark_failed",
+                    "callId=${intent.callId}, error=" +
+                        HermesTelemetryLogSanitizer.failureMessage(e.message ?: e.javaClass.simpleName),
+                )
+            }
             AnnouncementSendOutcome.Sent
         } else {
             AnnouncementSendOutcome.Failed
@@ -313,7 +338,7 @@ class HermesAnnouncer(
             return AnnouncementSendOutcome.Skipped
         }
         if (!isCurrent(current)) return AnnouncementSendOutcome.Skipped
-        val sent = runCatching {
+        val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendTerminalFollowUp(
                     callId = intent.callId,
@@ -323,9 +348,24 @@ class HermesAnnouncer(
                     sessionId = current.sessionId,
                 )
             } ?: false
-        }.getOrDefault(false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            false
+        }
         return if (sent) {
-            queueStore.markResultAnnounced(callId = intent.callId, jobId = intent.jobId)
+            // The RPC succeeded: the outcome is Sent no matter what the bookkeeping does.
+            try {
+                queueStore.markResultAnnounced(callId = intent.callId, jobId = intent.jobId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                telemetry.diagnostic(
+                    "announcer_mark_failed",
+                    "callId=${intent.callId}, error=" +
+                        HermesTelemetryLogSanitizer.failureMessage(e.message ?: e.javaClass.simpleName),
+                )
+            }
             AnnouncementSendOutcome.Sent
         } else {
             AnnouncementSendOutcome.Failed
@@ -341,7 +381,7 @@ class HermesAnnouncer(
             return AnnouncementSendOutcome.Skipped
         }
         if (!isCurrent(current)) return AnnouncementSendOutcome.Skipped
-        val sent = runCatching {
+        val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendStillWorkingUpdate(
                     callId = intent.callId,
@@ -349,13 +389,28 @@ class HermesAnnouncer(
                     sessionId = current.sessionId,
                 )
             } ?: false
-        }.getOrDefault(false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            false
+        }
         return if (sent) {
-            queueStore.markStillWorkingAnnounced(callId = intent.callId, jobId = intent.jobId)
-            telemetry.diagnostic(
-                "hermes_still_working_announced",
-                "callId=${intent.callId}, jobId=${intent.jobId}",
-            )
+            // The RPC succeeded: the outcome is Sent no matter what the bookkeeping does.
+            try {
+                queueStore.markStillWorkingAnnounced(callId = intent.callId, jobId = intent.jobId)
+                telemetry.diagnostic(
+                    "hermes_still_working_announced",
+                    "callId=${intent.callId}, jobId=${intent.jobId}",
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                telemetry.diagnostic(
+                    "announcer_mark_failed",
+                    "callId=${intent.callId}, error=" +
+                        HermesTelemetryLogSanitizer.failureMessage(e.message ?: e.javaClass.simpleName),
+                )
+            }
             AnnouncementSendOutcome.Sent
         } else {
             AnnouncementSendOutcome.Failed
