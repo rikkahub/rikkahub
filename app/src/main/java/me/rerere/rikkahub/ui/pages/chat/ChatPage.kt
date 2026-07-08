@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -302,7 +303,6 @@ private fun ChatPageContent(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
-        AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         Scaffold(
             topBar = {
                 TopBar(
@@ -398,7 +398,13 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            ChatList(
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(hazeState)
+            ) {
+                AssistantBackground(setting = setting, modifier = Modifier.fillMaxSize())
+                ChatList(
                 innerPadding = innerPadding,
                 conversation = conversation,
                 state = chatListState,
@@ -406,7 +412,6 @@ private fun ChatPageContent(
                 processingStatus = processingStatus,
                 previewMode = previewMode,
                 settings = setting,
-                hazeState = hazeState,
                 errors = errors,
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
@@ -473,6 +478,7 @@ private fun ChatPageContent(
                     vm.saveConversationAsync()
                 },
             )
+            }
         }
 
         if (showFilesSheet) {
