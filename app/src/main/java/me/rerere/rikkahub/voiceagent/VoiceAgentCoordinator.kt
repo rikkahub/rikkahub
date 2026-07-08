@@ -32,7 +32,7 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesPollFailure
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
-import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
+import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
@@ -76,7 +76,7 @@ class VoiceAgentCoordinator(
         Log.d(E2E_TAG, "hermes_queue_event $detail")
     },
     private val conversationStore: VoiceConversationStore? = null,
-    private val persister: VoiceConversationPersister = VoiceConversationPersister(),
+    private val transcriptPersister: VoiceTranscriptPersister = VoiceTranscriptPersister(),
     private val hermesJobPollIntervalMs: Long = HERMES_JOB_POLL_INTERVAL_MS,
     private val hermesJobMaxElapsedMs: Long = HERMES_JOB_MAX_ELAPSED_MS,
     private val hermesJobPollRetryDelayMs: Long = HERMES_JOB_POLL_RETRY_DELAY_MS,
@@ -104,7 +104,7 @@ class VoiceAgentCoordinator(
     private val hermesJobManager = HermesJobManager(
         toolApi = toolApi,
         conversationStore = sharedConversationStore,
-        persister = persister,
+        transcriptPersister = transcriptPersister,
         scope = hermesScope,
         dispatcher = dispatcher ?: Dispatchers.Default,
         pollIntervalMs = hermesJobPollIntervalMs,
@@ -340,7 +340,7 @@ class VoiceAgentCoordinator(
 
     fun removeLegacyVoiceSessionStartedNotes() {
         persistConversation(
-            transform = persister::removeLegacyVoiceSessionStartedNotes,
+            transform = transcriptPersister::removeLegacyVoiceSessionStartedNotes,
         )
     }
 
@@ -511,7 +511,7 @@ class VoiceAgentCoordinator(
             val transcript = inputTurnTranscript
             val turnId = inputTurnId
             persistConversation(transform = { conversation ->
-                persister.upsertUserTranscriptTurn(
+                transcriptPersister.upsertUserTranscriptTurn(
                     conversation = conversation,
                     text = transcript,
                     turnId = turnId,
@@ -981,7 +981,7 @@ class VoiceAgentCoordinator(
         }
         persistConversation(
             transform = { conversation ->
-                persister.upsertAssistantTranscriptTurn(
+                transcriptPersister.upsertAssistantTranscriptTurn(
                     conversation = conversation,
                     text = transcript,
                     interrupted = status == VoiceTranscriptStatus.Interrupted,
@@ -1022,7 +1022,7 @@ class VoiceAgentCoordinator(
         if (transcript.isBlank() || turnId.isBlank()) return
         persistConversation(
             transform = { conversation ->
-                persister.upsertUserTranscriptTurn(
+                transcriptPersister.upsertUserTranscriptTurn(
                     conversation = conversation,
                     text = transcript,
                     turnId = turnId,

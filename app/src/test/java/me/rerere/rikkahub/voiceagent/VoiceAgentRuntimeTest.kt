@@ -26,10 +26,10 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
+import me.rerere.rikkahub.voiceagent.hermes.HermesToolRecordWriter
+import me.rerere.rikkahub.voiceagent.hermes.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.hermes.hermesQueueRecords
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
-import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
-import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
@@ -120,12 +120,12 @@ class VoiceAgentRuntimeTest {
             conversationStore = conversationStore,
             scope = this,
         )
-        val persister = VoiceConversationPersister()
+        val writer = HermesToolRecordWriter()
 
         assertEquals(VoiceHermesQueueUiStatus(), coordinator.state.value.hermesQueue)
 
         conversationStore.update { conversation ->
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = conversation,
                 callId = "call-running",
                 prompt = "running request",
@@ -141,13 +141,12 @@ class VoiceAgentRuntimeTest {
         }
 
         conversationStore.update { conversation ->
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = conversation,
                 callId = "call-complete",
                 prompt = "complete request",
                 status = VoiceToolRecordStatus.Complete("complete answer"),
                 jobId = "job-complete",
-                resultAnnounced = false,
             )
         }
 
@@ -163,13 +162,12 @@ class VoiceAgentRuntimeTest {
 
         coordinator.close()
         conversationStore.update { conversation ->
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = conversation,
                 callId = "call-failed-after-close",
                 prompt = "failed after close",
                 status = VoiceToolRecordStatus.Failed("failed after close"),
                 jobId = "job-failed-after-close",
-                resultAnnounced = false,
             )
         }
         delay(50)
@@ -774,7 +772,7 @@ class VoiceAgentRuntimeTest {
             .flatMap { it.parts }
             .filterIsInstance<UIMessagePart.Tool>()
             .single { it.toolCallId == "call-no-bridge" }
-        assertTrue(tool.metadata?.boolean("voice_tool_message_written") == true)
+        assertEquals("message_written", tool.metadata?.get("voice_tool_announcement")?.jsonPrimitive?.content)
 
         val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-no-bridge" }
         assertFalse(
@@ -1208,7 +1206,7 @@ class VoiceAgentRuntimeTest {
         assertTrue(followUp.second.contains("Original request:\nslow"))
         assertTrue(followUp.second.contains("It failed."))
         assertTrue(followUp.second.contains("Reason: Hermes job succeeded without an answer"))
-        assertTrue(tool.metadata?.get("voice_tool_result_announced")?.jsonPrimitive?.boolean == true)
+        assertEquals("announced", tool.metadata?.get("voice_tool_announcement")?.jsonPrimitive?.content)
     }
 
     @Test
@@ -1250,7 +1248,7 @@ class VoiceAgentRuntimeTest {
         assertTrue(followUp.second.contains("Original request:\nslow"))
         assertTrue(followUp.second.contains("It failed."))
         assertTrue(followUp.second.contains("Reason: Unknown Hermes job status: mystery"))
-        assertTrue(tool.metadata?.get("voice_tool_result_announced")?.jsonPrimitive?.boolean == true)
+        assertEquals("announced", tool.metadata?.get("voice_tool_announcement")?.jsonPrimitive?.content)
     }
 
     @Test
@@ -1657,7 +1655,7 @@ class VoiceAgentRuntimeTest {
             .filterIsInstance<UIMessagePart.Tool>()
             .single { it.toolCallId == "ask-1" }
         assertEquals("canceled", tool.metadata?.get("voice_tool_status")?.jsonPrimitive?.content)
-        assertEquals(true, tool.metadata?.get("voice_tool_result_announced")?.jsonPrimitive?.boolean)
+        assertEquals("announced", tool.metadata?.get("voice_tool_announcement")?.jsonPrimitive?.content)
 
         assertTrue(gemini.textTurns.isEmpty())
     }
