@@ -46,9 +46,119 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
+/**
+ * Thin manager suite: shell wiring + end-to-end journeys.
+ *
+ * The pure state-machine (which effect happens in which state, in which order, and
+ * how late/duplicate/stale events are absorbed) is exhaustively covered by
+ * [HermesJobLifecycleTest]'s transition table. This suite deliberately does NOT
+ * re-test those rows; it proves the manager *shell* — that each [JobEffect] is
+ * executed against real collaborators (fake tool API, fake bridge, in-memory
+ * conversation store), that effect feedback flows back as events, and that the
+ * full submit / resume / announce / cancel / timeout / poll-retry journeys behave
+ * end to end. Old tests whose scenario is now purely a reducer row were deleted and
+ * their inventory rows point at the covering [HermesJobLifecycleTest] test; see
+ * docs/voiceagent/phase3-behavior-inventory-pr-b.md.
+ *
+ * Sections: (1) shell wiring, (2) journeys, (3) timeout behavior, (4) poll
+ * retry/backoff, plus the standalone cancel-resolution / cancel_hermes handlers
+ * (pure manager logic, not reducer rows).
+ */
 class HermesJobManagerTest {
     private val transcriptPersister = VoiceTranscriptPersister()
     private val writer = HermesToolRecordWriter()
+
+    // =====================================================================
+    // Section 1 — Shell wiring: effects execute against real collaborators
+    // and their feedback flows back as events.
+    // =====================================================================
+
+    @Test
+    fun `cancel during polling aborts the in-flight poll`() = runTest {
+        // The AbortInFlight effect must actually cancel the child poll coroutine: a cancel
+        // while a poll is suspended in-flight propagates cancellation into the tool API's
+        // getHermesJob call rather than leaking a live poll.
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.submit(callId = "call-abort", prompt = "abort request")
+        assertEquals("call-abort" to "abort request", toolApi.awaitRequest("call-abort"))
+        // Wait until a poll is actually in flight (no scripted response, so getHermesJob
+        // parks in its polling loop).
+        withTimeout(500) {
+            while (toolApi.pollCount("call-abort") < 1) { delay(10) }
+        }
+
+        manager.cancel("call-abort")
+        toolApi.awaitCancelled("call-abort")
+        conversationStore.awaitHermesRecord("call-abort") { it.status == HermesQueueStatus.Canceled }
+    }
+
+    @Test
+    fun `an ack-less job never announces still working`() = runTest {
+        // With no bridge attached the queued ack never delivers, so ackDelivered stays
+        // false and the reducer drops every StillWorkingDue — the still-working flag is
+        // never persisted no matter how many threshold windows elapse.
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            maxElapsedMs = 5_000L,
+            stillWorkingThresholdMs = 1L,
+        )
+
+        manager.submit(callId = "call-ackless", prompt = "ackless request")
+        assertEquals("call-ackless" to "ackless request", toolApi.awaitRequest("call-ackless"))
+        toolApi.scriptPoll(
+            callId = "call-ackless",
+            response = MobileHermesJobPollResponse(callId = "call-ackless", status = "running"),
+        )
+        conversationStore.awaitHermesRecord("call-ackless") { it.status == HermesQueueStatus.Running }
+        delay(80)
+
+        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-ackless" }
+        assertFalse(record.stillWorkingAnnounced)
+
+        toolApi.complete(response(callId = "call-ackless", answer = "ackless answer"))
+        conversationStore.awaitHermesRecord("call-ackless") {
+            it.status == HermesQueueStatus.Complete && it.answer == "ackless answer"
+        }
+    }
+
+    @Test
+    fun `a terminated job frees its active key for a fresh submit`() = runTest {
+        // When an actor reaches Terminal it closes its consumer, which removes it from
+        // activeJobs — so a later submit under the same active key is accepted rather than
+        // rejected as a duplicate.
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        assertTrue(manager.submit(callId = "call-reuse-key", prompt = "first", activeKey = "key-1"))
+        assertEquals("call-reuse-key" to "first", toolApi.awaitRequest("call-reuse-key"))
+        toolApi.complete(response(callId = "call-reuse-key", answer = "first answer"))
+        conversationStore.awaitHermesRecord("call-reuse-key") {
+            it.status == HermesQueueStatus.Complete && it.answer == "first answer"
+        }
+        manager.awaitJobs()
+
+        assertTrue(manager.submit(callId = "call-reuse-key", prompt = "second", activeKey = "key-1"))
+        withTimeout(500) {
+            while (toolApi.requests.count { it.first == "call-reuse-key" } < 2) { delay(10) }
+        }
+        assertEquals(
+            listOf("first", "second"),
+            toolApi.requests.filter { it.first == "call-reuse-key" }.map { it.second },
+        )
+    }
+
+    // =====================================================================
+    // Section 2 — End-to-end journeys: submit / resume / announce / cancel
+    // paths through the real shell, ported from the pre-reducer suite.
+    // =====================================================================
 
     @Test
     fun `submitted job keeps polling after session bridge detaches`() = runTest {
@@ -257,25 +367,6 @@ class HermesJobManagerTest {
 
         assertFalse(manager.submit(callId = "call-duplicate-active", prompt = "duplicate prompt", activeKey = "session-1:call-duplicate-active"))
         assertEquals(listOf("first prompt"), toolApi.requests.map { it.second })
-    }
-
-    @Test
-    fun `running submit status persists running record and keeps polling`() = runTest {
-        val toolApi = FakeVoiceToolApi().apply {
-            scriptSubmitStatus(callId = "call-submit-running", status = "running")
-        }
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-submit-running", prompt = "submit running")
-        assertEquals("call-submit-running" to "submit running", toolApi.awaitRequest("call-submit-running"))
-        conversationStore.awaitHermesRecord("call-submit-running") {
-            it.status == HermesQueueStatus.Running && it.jobId != null
-        }
-        toolApi.complete(response(callId = "call-submit-running", answer = "running answer"))
-        conversationStore.awaitHermesRecord("call-submit-running") {
-            it.status == HermesQueueStatus.Complete && it.answer == "running answer"
-        }
     }
 
     @Test
@@ -550,7 +641,7 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `explicit cancel cancels remote job and persists canceled`() = runTest {
+    fun `gemini cancel of a live job remote-cancels, persists an unannounced canceled record, and replays on attach`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
@@ -570,6 +661,135 @@ class HermesJobManagerTest {
         val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-cancel" }
         assertEquals(HermesQueueStatus.Canceled, record.status)
         assertEquals("Hermes job canceled.", record.error)
+        // A Gemini-origin cancel is persisted unannounced, so a bridge attaching after
+        // the job settles replays it exactly once as a canceled terminal follow-up.
+        assertFalse(record.resultAnnounced)
+
+        val bridge = RecordingHermesBridge()
+        manager.attachBridge(bridge = bridge, sessionId = 21L)
+        withTimeout(500) {
+            while (bridge.terminalFollowUps.isEmpty()) { delay(10) }
+        }
+        assertEquals(
+            TerminalFollowUp(
+                callId = "call-cancel",
+                prompt = "cancel request",
+                status = HermesQueueStatus.Canceled,
+                reason = "Hermes job canceled.",
+                sessionId = 21L,
+            ),
+            bridge.terminalFollowUps.single(),
+        )
+        conversationStore.awaitHermesRecord("call-cancel") { it.resultAnnounced }
+    }
+
+    @Test
+    fun `user cancel of a live job persists an announced canceled record that never replays`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.submit(callId = "call-user-cancel", prompt = "user cancel request")
+        assertEquals("call-user-cancel" to "user cancel request", toolApi.awaitRequest("call-user-cancel"))
+        conversationStore.awaitHermesRecord("call-user-cancel") {
+            it.status == HermesQueueStatus.Queued && it.jobId != null
+        }
+
+        val pending = manager.pendingRequests().single { it.callId == "call-user-cancel" }
+        manager.cancelByUser(pending)
+        toolApi.awaitRemoteCancelled("call-user-cancel")
+        // The cancel is fire-and-forget; draining the actor is the durability boundary
+        // before the canceled record can be observed.
+        manager.awaitJobs()
+
+        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-user-cancel" }
+        assertEquals(HermesQueueStatus.Canceled, record.status)
+        assertEquals("Hermes job canceled.", record.error)
+        // A user-initiated cancel is persisted already announced: the user already knows,
+        // so a later bridge attach must never replay it as a spurious follow-up.
+        assertTrue(record.resultAnnounced)
+
+        val bridge = RecordingHermesBridge()
+        manager.attachBridge(bridge = bridge, sessionId = 22L)
+        delay(100)
+        assertTrue(bridge.terminalFollowUps.isEmpty())
+        assertTrue(bridge.completionFollowUps.isEmpty())
+    }
+
+    @Test
+    fun `cancel of a live job is durable only after awaitJobs drains`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.submit(callId = "call-drain", prompt = "drain request")
+        assertEquals("call-drain" to "drain request", toolApi.awaitRequest("call-drain"))
+        conversationStore.awaitHermesRecord("call-drain") {
+            it.status == HermesQueueStatus.Queued && it.jobId != null
+        }
+
+        // cancel() on a live job only enqueues a CancelRequested event and returns; the
+        // durable canceled record is produced by the actor consumer. The caller must drain
+        // (awaitJobs) before the terminal write is guaranteed observable.
+        manager.cancel("call-drain")
+        manager.awaitJobs()
+
+        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-drain" }
+        assertEquals(HermesQueueStatus.Canceled, record.status)
+        assertEquals("Hermes job canceled.", record.error)
+        assertTrue(toolApi.wasRemoteCancelled("call-drain"))
+    }
+
+    @Test
+    fun `cancel of an orphaned durable record persists canceled and remote-cancels`() = runTest {
+        // A durable active record with no live actor (e.g. a job left active by a previous
+        // process, never resumed): cancel() takes the orphan branch, persisting the
+        // canceled record directly and issuing the remote cancel. A cancel of an already
+        // terminal orphan record is a no-op (no overwrite, no remote cancel).
+        val initialConversation = Conversation.ofId(Uuid.random())
+            .let {
+                writer.upsertHermesTool(
+                    conversation = it,
+                    callId = "call-orphan-active",
+                    prompt = "orphan active prompt",
+                    status = VoiceToolRecordStatus.Queued,
+                    jobId = "job-orphan-active",
+                )
+            }
+            .let {
+                writer.upsertHermesTool(
+                    conversation = it,
+                    callId = "call-orphan-terminal",
+                    prompt = "orphan terminal prompt",
+                    status = VoiceToolRecordStatus.Complete("orphan answer"),
+                    jobId = "job-orphan-terminal",
+                    announceOnWrite = true,
+                )
+            }
+        val toolApi = FakeVoiceToolApi().apply {
+            seedJob(jobId = "job-orphan-active", callId = "call-orphan-active")
+            seedJob(jobId = "job-orphan-terminal", callId = "call-orphan-terminal")
+        }
+        val conversationStore = FakeVoiceConversationStore(initialConversation)
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+
+        manager.cancel("call-orphan-active")
+        conversationStore.awaitHermesRecord("call-orphan-active") {
+            it.status == HermesQueueStatus.Canceled
+        }
+        toolApi.awaitRemoteCancelledJob("job-orphan-active")
+        val activeRecord = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-orphan-active" }
+        assertEquals(HermesQueueStatus.Canceled, activeRecord.status)
+        assertEquals("Hermes job canceled.", activeRecord.error)
+
+        manager.cancel("call-orphan-terminal")
+        delay(50)
+        val terminalRecord = conversationStore.conversation.value.hermesQueueRecords()
+            .single { it.callId == "call-orphan-terminal" }
+        assertEquals(HermesQueueStatus.Complete, terminalRecord.status)
+        assertEquals("orphan answer", terminalRecord.answer)
+        assertFalse(toolApi.wasRemoteCancelled("call-orphan-terminal"))
     }
 
     @Test
@@ -673,58 +893,6 @@ class HermesJobManagerTest {
         conversationStore.awaitHermesRecord("call-active") {
             it.status == HermesQueueStatus.Complete
         }
-    }
-
-    @Test
-    fun `cancel after terminal result does not overwrite completed record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-complete", prompt = "complete request")
-        assertEquals("call-complete" to "complete request", toolApi.awaitRequest("call-complete"))
-        toolApi.complete(response(callId = "call-complete", answer = "complete answer"))
-        conversationStore.awaitHermesRecord("call-complete") {
-            it.status == HermesQueueStatus.Complete
-        }
-
-        manager.cancel("call-complete")
-        delay(50)
-
-        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-complete" }
-        assertEquals(HermesQueueStatus.Complete, record.status)
-        assertEquals("complete answer", record.answer)
-        assertFalse(toolApi.wasRemoteCancelled("call-complete"))
-    }
-
-    @Test
-    fun `cancel while completed job is still unwinding does not overwrite completed record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val bridge = RecordingHermesBridge()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.attachBridge(bridge = bridge, sessionId = 1L)
-        manager.submit(callId = "call-unwinding", prompt = "unwinding request")
-        assertEquals("call-unwinding" to "unwinding request", toolApi.awaitRequest("call-unwinding"))
-        val blockedFollowUp = bridge.blockNextCompletionFollowUp()
-        toolApi.complete(response(callId = "call-unwinding", answer = "unwinding answer"))
-        conversationStore.awaitHermesRecord("call-unwinding") {
-            it.status == HermesQueueStatus.Complete
-        }
-        blockedFollowUp.started.await()
-
-        manager.cancel("call-unwinding")
-        delay(50)
-        blockedFollowUp.release.complete(Unit)
-        conversationStore.awaitHermesRecord("call-unwinding") {
-            it.status == HermesQueueStatus.Complete
-        }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-unwinding" }
-        assertEquals(HermesQueueStatus.Complete, record.status)
-        assertEquals("unwinding answer", record.answer)
-        assertFalse(toolApi.wasRemoteCancelled("call-unwinding"))
     }
 
     @Test
@@ -886,32 +1054,6 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `poll timeout status persists expired record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-timeout", prompt = "timeout request")
-        assertEquals("call-timeout" to "timeout request", toolApi.awaitRequest("call-timeout"))
-        toolApi.scriptPoll(
-            callId = "call-timeout",
-            response = MobileHermesJobPollResponse(
-                callId = "call-timeout",
-                status = "timeout",
-                error = "Hermes job timed out.",
-            ),
-        )
-
-        conversationStore.awaitHermesRecord("call-timeout") {
-            it.status == HermesQueueStatus.Expired
-        }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-timeout" }
-        assertEquals(HermesQueueStatus.Expired, record.status)
-        assertEquals("Hermes job timed out.", record.error)
-    }
-
-    @Test
     fun `polled running status persists running record and emits calling status`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -1019,26 +1161,6 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `polled failed status persists failed record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-polled-failed", prompt = "polled failed")
-        assertEquals("call-polled-failed" to "polled failed", toolApi.awaitRequest("call-polled-failed"))
-        toolApi.failJob(callId = "call-polled-failed", message = "Hermes failed remotely.")
-
-        conversationStore.awaitHermesRecord("call-polled-failed") {
-            it.status == HermesQueueStatus.Failed
-        }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords()
-            .single { it.callId == "call-polled-failed" }
-        assertEquals(HermesQueueStatus.Failed, record.status)
-        assertEquals("Hermes failed remotely.", record.error)
-    }
-
-    @Test
     fun `polled failed status announces terminal result to attached bridge`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -1103,69 +1225,6 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `polled expired and canceled statuses announce terminal results to attached bridge`() = runTest {
-        listOf(
-            HermesQueueStatus.Expired to "Hermes expired live.",
-            HermesQueueStatus.Canceled to "Hermes canceled live.",
-        ).forEach { (status, reason) ->
-            val toolApi = FakeVoiceToolApi()
-            val conversationStore = FakeVoiceConversationStore()
-            val bridge = RecordingHermesBridge()
-            val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-            val callId = "call-polled-${status.wireName}-live"
-            val prompt = "polled ${status.wireName} live"
-
-            manager.attachBridge(bridge = bridge, sessionId = 12L)
-            manager.submit(callId = callId, prompt = prompt)
-            assertEquals(callId to prompt, toolApi.awaitRequest(callId))
-            toolApi.scriptPoll(
-                callId = callId,
-                response = MobileHermesJobPollResponse(
-                    callId = callId,
-                    status = status.wireName,
-                    error = reason,
-                ),
-            )
-
-            conversationStore.awaitHermesRecord(callId) {
-                it.status == status && it.resultAnnounced
-            }
-
-            assertEquals(1, bridge.terminalFollowUps.size)
-            assertEquals(
-                TerminalFollowUp(
-                    callId = callId,
-                    prompt = prompt,
-                    status = status,
-                    reason = reason,
-                    sessionId = 12L,
-                ),
-                bridge.terminalFollowUps.single(),
-            )
-        }
-    }
-
-    @Test
-    fun `polled expired status persists expired record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-polled-expired", prompt = "polled expired")
-        assertEquals("call-polled-expired" to "polled expired", toolApi.awaitRequest("call-polled-expired"))
-        toolApi.expireJob(callId = "call-polled-expired", message = "Hermes expired remotely.")
-
-        conversationStore.awaitHermesRecord("call-polled-expired") {
-            it.status == HermesQueueStatus.Expired
-        }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords()
-            .single { it.callId == "call-polled-expired" }
-        assertEquals(HermesQueueStatus.Expired, record.status)
-        assertEquals("Hermes expired remotely.", record.error)
-    }
-
-    @Test
     fun `hung poll request times out and cancels remote job`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
@@ -1189,11 +1248,24 @@ class HermesJobManagerTest {
         assertEquals("Hermes job polling timed out.", record.error)
     }
 
+    // =====================================================================
+    // Section 4 — Poll retry / backoff. The manager classifies a poll
+    // exception as transient (retry) vs terminal (fail now); the reducer owns
+    // the backoff arithmetic (HermesJobLifecycleTest), so here we assert the
+    // retry actually re-polls, notifies onPollFailed, and recovers.
+    // =====================================================================
+
     @Test
-    fun `transient poll failure retries and persists eventual success`() = runTest {
+    fun `transient poll failure re-polls, notifies onPollFailed, and recovers`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        val pollFailures = Collections.synchronizedList(mutableListOf<HermesPollFailure>())
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            onPollFailed = pollFailures::add,
+        )
 
         manager.submit(callId = "call-transient", prompt = "transient request")
         assertEquals("call-transient" to "transient request", toolApi.awaitRequest("call-transient"))
@@ -1204,49 +1276,26 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
         }
 
+        // A single transient failure is retried (the job still polls through to a
+        // Complete record) and the retry is surfaced as an onPollFailed(attempt=1).
         val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-transient" }
         assertEquals(HermesQueueStatus.Complete, record.status)
         assertEquals("eventual answer", record.answer)
+        assertTrue(toolApi.pollCount("call-transient") >= 2)
+        val failure = pollFailures.single()
+        assertEquals("call-transient", failure.callId)
+        assertEquals(1, failure.attempt)
+        assertEquals("temporary network failure", failure.message)
     }
 
     @Test
-    fun `legacy formatted poll failure is transient when it is not typed`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-legacy-message", prompt = "legacy message request")
-        assertEquals("call-legacy-message" to "legacy message request", toolApi.awaitRequest("call-legacy-message"))
-        toolApi.scriptPollFailure(
-            callId = "call-legacy-message",
-            error = IllegalStateException("Voice Lab request failed 404: job missing"),
-        )
-        toolApi.complete(response(callId = "call-legacy-message", answer = "eventual answer"))
-
-        conversationStore.awaitHermesRecord("call-legacy-message") {
-            it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
-        }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords()
-            .single { it.callId == "call-legacy-message" }
-        assertEquals(HermesQueueStatus.Complete, record.status)
-        assertEquals("eventual answer", record.answer)
-    }
-
-    @Test
-    fun `retryable typed poll failure retries and persists eventual success`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-retryable-http", prompt = "retryable http request")
-        assertEquals(
-            "call-retryable-http" to "retryable http request",
-            toolApi.awaitRequest("call-retryable-http"),
-        )
-        toolApi.scriptPollFailure(
-            callId = "call-retryable-http",
-            error = VoiceLabHttpException(
+    fun `legacy-formatted and retryable-typed poll failures are transient and recover`() = runTest {
+        // The manager treats a plain/legacy-formatted exception (no typed VoiceFailure)
+        // and an explicitly retryable typed VoiceLabHttpException the same way: transient,
+        // so the job keeps polling and still reaches its answer.
+        listOf(
+            "call-legacy-message" to IllegalStateException("Voice Lab request failed 404: job missing"),
+            "call-retryable-http" to VoiceLabHttpException(
                 statusCode = 404,
                 safePreview = "temporary voice lab failure",
                 failure = VoiceFailure(
@@ -1257,156 +1306,107 @@ class HermesJobManagerTest {
                     source = VoiceFailureSource.VoiceLab,
                 ),
             ),
-        )
-        toolApi.complete(response(callId = "call-retryable-http", answer = "eventual answer"))
+        ).forEach { (callId, error) ->
+            val toolApi = FakeVoiceToolApi()
+            val conversationStore = FakeVoiceConversationStore()
+            val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        conversationStore.awaitHermesRecord("call-retryable-http") {
-            it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
+            manager.submit(callId = callId, prompt = "$callId request")
+            assertEquals(callId to "$callId request", toolApi.awaitRequest(callId))
+            toolApi.scriptPollFailure(callId = callId, error = error)
+            toolApi.complete(response(callId = callId, answer = "eventual answer"))
+
+            conversationStore.awaitHermesRecord(callId) {
+                it.status == HermesQueueStatus.Complete && it.answer == "eventual answer"
+            }
+            val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == callId }
+            assertEquals("callId=$callId", HermesQueueStatus.Complete, record.status)
+            assertEquals("callId=$callId", "eventual answer", record.answer)
         }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords()
-            .single { it.callId == "call-retryable-http" }
-        assertEquals(HermesQueueStatus.Complete, record.status)
-        assertEquals("eventual answer", record.answer)
     }
 
     @Test
-    fun `terminal poll failure persists failed record without waiting for local timeout`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
+    fun `non-retryable typed and untyped HTTP poll failures end the job immediately as failed`() = runTest {
         val bridge = RecordingHermesBridge()
-        val manager = manager(
-            toolApi = toolApi,
-            conversationStore = conversationStore,
-            scope = this,
-            maxElapsedMs = 10_000L,
-        )
-        manager.attachBridge(bridge = bridge, sessionId = 14L)
+        run {
+            // A typed VoiceLabHttpException marked non-retryable ends the job at once
+            // (without waiting out the elapsed budget) as an announced Failed record with
+            // a terminal follow-up.
+            val toolApi = FakeVoiceToolApi()
+            val conversationStore = FakeVoiceConversationStore()
+            val manager = manager(
+                toolApi = toolApi,
+                conversationStore = conversationStore,
+                scope = this,
+                maxElapsedMs = 10_000L,
+            )
+            manager.attachBridge(bridge = bridge, sessionId = 14L)
 
-        manager.submit(callId = "call-terminal-http", prompt = "terminal http request")
-        assertEquals("call-terminal-http" to "terminal http request", toolApi.awaitRequest("call-terminal-http"))
-        toolApi.scriptPollFailure(
-            callId = "call-terminal-http",
-            error = VoiceLabHttpException(
-                statusCode = 404,
-                safePreview = "job missing",
-                failure = VoiceFailure(
-                    kind = VoiceFailureKind.HermesFailed,
-                    safeMessage = "job missing",
-                    safeSummary = "job missing",
-                    retryable = false,
-                    source = VoiceFailureSource.VoiceLab,
-                ),
-            ),
-        )
-
-        conversationStore.awaitHermesRecord("call-terminal-http") {
-            it.status == HermesQueueStatus.Failed && it.resultAnnounced
-        }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-terminal-http" }
-        assertEquals(HermesQueueStatus.Failed, record.status)
-        assertEquals("Voice Lab request failed 404: job missing", record.error)
-        assertEquals(
-            TerminalFollowUp(
+            manager.submit(callId = "call-terminal-http", prompt = "terminal http request")
+            assertEquals("call-terminal-http" to "terminal http request", toolApi.awaitRequest("call-terminal-http"))
+            toolApi.scriptPollFailure(
                 callId = "call-terminal-http",
-                prompt = "terminal http request",
-                status = HermesQueueStatus.Failed,
-                reason = "Voice Lab request failed 404: job missing",
-                sessionId = 14L,
-            ),
-            bridge.terminalFollowUps.single(),
-        )
-    }
+                error = VoiceLabHttpException(
+                    statusCode = 404,
+                    safePreview = "job missing",
+                    failure = VoiceFailure(
+                        kind = VoiceFailureKind.HermesFailed,
+                        safeMessage = "job missing",
+                        safeSummary = "job missing",
+                        retryable = false,
+                        source = VoiceFailureSource.VoiceLab,
+                    ),
+                ),
+            )
 
-    @Test
-    fun `terminal poll failure without typed failure persists failed record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(
-            toolApi = toolApi,
-            conversationStore = conversationStore,
-            scope = this,
-            maxElapsedMs = 10_000L,
-        )
-
-        manager.submit(
-            callId = "call-terminal-status-only",
-            prompt = "terminal status request",
-        )
-        assertEquals(
-            "call-terminal-status-only" to "terminal status request",
-            toolApi.awaitRequest("call-terminal-status-only"),
-        )
-        toolApi.scriptPollFailure(
-            callId = "call-terminal-status-only",
-            error = VoiceLabHttpException(
-                statusCode = 404,
-                safePreview = "job missing",
-                failure = null,
-            ),
-        )
-
-        conversationStore.awaitHermesRecord("call-terminal-status-only") {
-            it.status == HermesQueueStatus.Failed
+            conversationStore.awaitHermesRecord("call-terminal-http") {
+                it.status == HermesQueueStatus.Failed && it.resultAnnounced
+            }
+            val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-terminal-http" }
+            assertEquals(HermesQueueStatus.Failed, record.status)
+            assertEquals("Voice Lab request failed 404: job missing", record.error)
+            assertEquals(
+                TerminalFollowUp(
+                    callId = "call-terminal-http",
+                    prompt = "terminal http request",
+                    status = HermesQueueStatus.Failed,
+                    reason = "Voice Lab request failed 404: job missing",
+                    sessionId = 14L,
+                ),
+                bridge.terminalFollowUps.single(),
+            )
         }
 
-        val record = conversationStore.conversation.value.hermesQueueRecords()
-            .single { it.callId == "call-terminal-status-only" }
-        assertEquals(HermesQueueStatus.Failed, record.status)
-        assertEquals("Voice Lab request failed 404: job missing", record.error)
-    }
+        run {
+            // An HTTP exception with no typed classification is still terminal on a
+            // terminal status code, persisting the formatted status-and-preview message.
+            val toolApi = FakeVoiceToolApi()
+            val conversationStore = FakeVoiceConversationStore()
+            val manager = manager(
+                toolApi = toolApi,
+                conversationStore = conversationStore,
+                scope = this,
+                maxElapsedMs = 10_000L,
+            )
 
-    @Test
-    fun `unknown poll status persists failed record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+            manager.submit(callId = "call-terminal-status-only", prompt = "terminal status request")
+            assertEquals(
+                "call-terminal-status-only" to "terminal status request",
+                toolApi.awaitRequest("call-terminal-status-only"),
+            )
+            toolApi.scriptPollFailure(
+                callId = "call-terminal-status-only",
+                error = VoiceLabHttpException(statusCode = 404, safePreview = "job missing", failure = null),
+            )
 
-        manager.submit(callId = "call-unknown-status", prompt = "unknown status request")
-        assertEquals("call-unknown-status" to "unknown status request", toolApi.awaitRequest("call-unknown-status"))
-        toolApi.scriptPoll(
-            callId = "call-unknown-status",
-            response = MobileHermesJobPollResponse(
-                callId = "call-unknown-status",
-                status = "mystery",
-            ),
-        )
-
-        conversationStore.awaitHermesRecord("call-unknown-status") {
-            it.status == HermesQueueStatus.Failed
+            conversationStore.awaitHermesRecord("call-terminal-status-only") {
+                it.status == HermesQueueStatus.Failed
+            }
+            val record = conversationStore.conversation.value.hermesQueueRecords()
+                .single { it.callId == "call-terminal-status-only" }
+            assertEquals(HermesQueueStatus.Failed, record.status)
+            assertEquals("Voice Lab request failed 404: job missing", record.error)
         }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-unknown-status" }
-        assertEquals(HermesQueueStatus.Failed, record.status)
-        assertEquals("Unknown Hermes job status: mystery", record.error)
-    }
-
-    @Test
-    fun `remote canceled poll status persists canceled record`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-remote-canceled", prompt = "remote canceled request")
-        assertEquals("call-remote-canceled" to "remote canceled request", toolApi.awaitRequest("call-remote-canceled"))
-        toolApi.scriptPoll(
-            callId = "call-remote-canceled",
-            response = MobileHermesJobPollResponse(
-                callId = "call-remote-canceled",
-                status = "canceled",
-                error = "Hermes canceled the job.",
-            ),
-        )
-
-        conversationStore.awaitHermesRecord("call-remote-canceled") {
-            it.status == HermesQueueStatus.Canceled
-        }
-
-        val record = conversationStore.conversation.value.hermesQueueRecords()
-            .single { it.callId == "call-remote-canceled" }
-        assertEquals(HermesQueueStatus.Canceled, record.status)
-        assertEquals("Hermes canceled the job.", record.error)
     }
 
     @Test
@@ -1703,114 +1703,60 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `job created side effects are skipped when submit loses to explicit cancel`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
-        val queueEvents = Collections.synchronizedList(mutableListOf<String>())
-        val blockedSubmit = toolApi.blockSubmit("call-cancel-before-created")
-        val manager = manager(
-            toolApi = toolApi,
-            conversationStore = conversationStore,
-            scope = this,
-            recordDiagnostic = { event, detail -> diagnostics += event to detail },
-            writeQueueEvent = queueEvents::add,
-        )
-
-        manager.submit(callId = "call-cancel-before-created", prompt = "cancel before created")
-        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
-        manager.cancel("call-cancel-before-created")
-        conversationStore.awaitHermesRecord("call-cancel-before-created") {
-            it.status == HermesQueueStatus.Canceled
-        }
-
-        blockedSubmit.release.countDown()
-        toolApi.awaitRemoteCancelled("call-cancel-before-created")
-        delay(50)
-
-        assertTrue(diagnostics.isEmpty())
-        assertTrue(queueEvents.isEmpty())
-    }
-
-    @Test
-    fun `cancel before submit returns cancels remote job after job id arrives`() = runTest {
-        val toolApi = FakeVoiceToolApi()
-        val conversationStore = FakeVoiceConversationStore()
-        val blockedSubmit = toolApi.blockSubmitCancellable("call-cancel-job-id-race")
-        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-
-        manager.submit(callId = "call-cancel-job-id-race", prompt = "cancel job id race")
-        assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
-        manager.cancel("call-cancel-job-id-race")
-        conversationStore.awaitHermesRecord("call-cancel-job-id-race") {
-            it.status == HermesQueueStatus.Canceled
-        }
-
-        blockedSubmit.release.complete(Unit)
-        toolApi.awaitRemoteCancelled("call-cancel-job-id-race")
-        delay(50)
-
-        val records = conversationStore.conversation.value.hermesQueueRecords()
-            .filter { it.callId == "call-cancel-job-id-race" }
-        assertEquals(1, records.size)
-        assertEquals(HermesQueueStatus.Canceled, records.single().status)
-        assertEquals("job-1", records.single().jobId)
-    }
-
-    @Test
-    fun `user cancel during in-flight submit marks canceled record announced under returned job id`() = runTest {
+    fun `cancel during an in-flight submit adopts the late job id, remote-cancels, and skips job-created side effects`() = runTest {
+        // The cancel arrives while the submit is still hanging: the reducer's
+        // Submitting(cancelOrigin) row persists the canceled record immediately (with no
+        // jobId), then — when the submit finally returns — adopts the real jobId onto the
+        // canceled record and issues the remote cancel. Because the job never reached its
+        // active/created state, none of the job-created diagnostics or queue events fire.
+        // A user-origin cancel additionally persists the record already announced, so a
+        // later bridge attach never replays it.
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val bridge = RecordingHermesBridge()
-        val blockedSubmit = toolApi.blockSubmitCancellable("call-user-cancel-mid-submit")
-        val blockedRemoteCancel = toolApi.blockCancel("call-user-cancel-mid-submit")
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val queueEvents = Collections.synchronizedList(mutableListOf<String>())
+        val blockedSubmit = toolApi.blockSubmitCancellable("call-cancel-mid-submit")
         val manager = manager(
             toolApi = toolApi,
             conversationStore = conversationStore,
             scope = this,
             maxElapsedMs = 10_000L,
-            remoteCancelTimeoutMs = 500L,
+            recordDiagnostic = { event, detail -> diagnostics += event to detail },
+            writeQueueEvent = queueEvents::add,
         )
 
         manager.attachBridge(bridge = bridge, sessionId = 7L)
-        manager.submit(callId = "call-user-cancel-mid-submit", prompt = "cancel mid submit")
+        manager.submit(callId = "call-cancel-mid-submit", prompt = "cancel mid submit")
         assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
-        conversationStore.awaitHermesRecord("call-user-cancel-mid-submit") {
+        conversationStore.awaitHermesRecord("call-cancel-mid-submit") {
             it.status == HermesQueueStatus.Pending && it.jobId == null
         }
 
-        val pending = manager.pendingRequests().single()
-        assertEquals("call-user-cancel-mid-submit", pending.callId)
+        val pending = manager.pendingRequests().single { it.callId == "call-cancel-mid-submit" }
         assertNull(pending.jobId)
-
-        // Hold the user cancel's canceled persistence open (it still owns the queue-store
-        // mutex) while the blocked submit returns with the real job id, so the manager's
-        // canceled persistence under that job id queues on the fair mutex ahead of any
-        // user-cancel announcement mark that uses the stale null job id snapshot.
-        val blockedCancelPersist = conversationStore.blockAfterNextUpdate()
         manager.cancelByUser(pending)
-        assertTrue(blockedCancelPersist.started.await(500, TimeUnit.MILLISECONDS))
-        blockedSubmit.release.complete(Unit)
-        delay(50)
-        blockedCancelPersist.release.countDown()
-
-        conversationStore.awaitHermesRecord("call-user-cancel-mid-submit") {
-            it.status == HermesQueueStatus.Canceled && it.jobId == "job-1" && it.resultAnnounced
+        conversationStore.awaitHermesRecord("call-cancel-mid-submit") {
+            it.status == HermesQueueStatus.Canceled
         }
 
-        blockedRemoteCancel.release.complete(Unit)
+        // The submit finally returns; the pending cancel adopts its jobId and remote-cancels.
+        blockedSubmit.release.complete(Unit)
         toolApi.awaitRemoteCancelledJob("job-1")
-        delay(50)
+        manager.awaitJobs()
 
         val records = conversationStore.conversation.value.hermesQueueRecords()
-            .filter { it.callId == "call-user-cancel-mid-submit" }
+            .filter { it.callId == "call-cancel-mid-submit" }
         assertEquals(1, records.size)
         assertEquals(HermesQueueStatus.Canceled, records.single().status)
         assertEquals("job-1", records.single().jobId)
         assertTrue(records.single().resultAnnounced)
 
-        // A fresh bridge attachment replays unannounced terminal results; a user-initiated
-        // cancellation must never come back as a spurious canceled follow-up.
+        // No job-created side effects fired, since the job never entered its active state.
+        assertTrue(diagnostics.none { it.first == "hermes_job_created" })
+        assertTrue(queueEvents.none { it.contains("job_created") })
+
+        // A user-initiated cancel is announced on write, so re-attaching never replays it.
         manager.detachBridge(bridge)
         manager.attachBridge(bridge = bridge, sessionId = 8L)
         delay(100)
@@ -2187,6 +2133,7 @@ class HermesJobManagerTest {
         recordDiagnostic: (String, String) -> Unit = { _, _ -> },
         writeQueueEvent: (String) -> Unit = {},
         writeHermesAnswer: (String) -> Unit = {},
+        onPollFailed: (HermesPollFailure) -> Unit = {},
         pollIntervalMs: Long = 10L,
         maxElapsedMs: Long = 1_000L,
         remoteCancelTimeoutMs: Long = 50L,
@@ -2213,6 +2160,7 @@ class HermesJobManagerTest {
         recordDiagnostic = recordDiagnostic,
         writeQueueEvent = writeQueueEvent,
         writeHermesAnswer = writeHermesAnswer,
+        onPollFailed = onPollFailed,
         observability = observability,
         traceContext = traceContext,
     )

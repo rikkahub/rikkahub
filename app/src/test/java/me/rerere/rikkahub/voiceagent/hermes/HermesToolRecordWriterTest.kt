@@ -980,6 +980,56 @@ class HermesToolRecordWriterTest {
         assertEquals("not_announced", tools[1].metadata!![HERMES_TOOL_ANNOUNCEMENT_KEY]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun `markStillWorkingAnnounced marks every active duplicate for the same identity`() {
+        // Mirror of the markResultAnnounced duplicate scan: several active records sharing
+        // one identity all advance to StillWorkingAnnounced.
+        val conversation = emptyConversation()
+            .let {
+                writer.upsertHermesTool(
+                    conversation = it,
+                    callId = "call-1",
+                    prompt = "old prompt",
+                    status = VoiceToolRecordStatus.Running,
+                    jobId = "job-1",
+                )
+            }
+            .withDuplicateToolPart(callId = "call-1", prompt = "latest prompt", answer = "latest working")
+            .let { writer.markStillWorkingAnnounced(it, callId = "call-1", jobId = "job-1") }
+
+        val tools = conversation.toolParts()
+        assertEquals(2, tools.size)
+        assertEquals(
+            listOf("still_working_announced", "still_working_announced"),
+            tools.map { it.metadata!![HERMES_TOOL_ANNOUNCEMENT_KEY]!!.jsonPrimitive.content },
+        )
+    }
+
+    @Test
+    fun `markMessageWritten marks every terminal duplicate for the same identity`() {
+        // Mirror of the markResultAnnounced duplicate scan: several terminal records
+        // sharing one identity all advance to MessageWritten.
+        val conversation = emptyConversation()
+            .let {
+                writer.upsertHermesTool(
+                    conversation = it,
+                    callId = "call-1",
+                    prompt = "old prompt",
+                    status = VoiceToolRecordStatus.Failed("old failure"),
+                    jobId = "job-1",
+                )
+            }
+            .withDuplicateToolPart(callId = "call-1", prompt = "latest prompt", answer = "latest failure")
+            .let { writer.markMessageWritten(it, "call-1", "job-1") }
+
+        val tools = conversation.toolParts()
+        assertEquals(2, tools.size)
+        assertEquals(
+            listOf("message_written", "message_written"),
+            tools.map { it.metadata!![HERMES_TOOL_ANNOUNCEMENT_KEY]!!.jsonPrimitive.content },
+        )
+    }
+
     private fun Conversation.withDuplicateToolPart(
         callId: String,
         prompt: String,
