@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
+import me.rerere.rikkahub.voiceagent.voiceToolCall
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Interceptor
@@ -124,12 +125,12 @@ class GeminiLiveVoiceClientTest {
             listOf(
                 GeminiLiveEvent.ToolCalls(
                     listOf(
-                        GeminiLiveEvent.ToolCall(
+                        voiceToolCall(
                             callId = "call-1",
                             name = "ask_hermes",
                             prompt = "First prompt",
                         ),
-                        GeminiLiveEvent.ToolCall(
+                        voiceToolCall(
                             callId = "call-2",
                             name = "ask_hermes",
                             prompt = "Second prompt",

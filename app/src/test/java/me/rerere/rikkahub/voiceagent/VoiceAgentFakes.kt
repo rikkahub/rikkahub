@@ -23,6 +23,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
+fun voiceToolCall(callId: String, name: String, prompt: String): GeminiLiveEvent.ToolCall = when (name) {
+    VoiceAgentToolNames.CANCEL_HERMES ->
+        GeminiLiveEvent.CancelHermesCall(callId = callId, question = prompt)
+    else -> GeminiLiveEvent.AskHermesCall(callId = callId, prompt = prompt)
+}
+
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     val audioMessages = mutableListOf<String>()
     val audioStreamEndSessionIds = mutableListOf<Long?>()

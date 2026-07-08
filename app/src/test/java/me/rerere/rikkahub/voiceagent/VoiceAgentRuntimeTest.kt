@@ -191,7 +191,7 @@ class VoiceAgentRuntimeTest {
 
         coordinator.onGeminiEvent(
             GeminiLiveEvent.ToolCalls(
-                listOf(GeminiLiveEvent.ToolCall(callId = "call-1", name = "ask_hermes", prompt = "Look this up"))
+                listOf(voiceToolCall(callId = "call-1", name = "ask_hermes", prompt = "Look this up"))
             )
         )
 
@@ -233,7 +233,7 @@ class VoiceAgentRuntimeTest {
             scope = this,
         )
 
-        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-1", name = "ask_hermes", prompt = "slow"))
+        coordinator.onGeminiEvent(voiceToolCall(callId = "call-1", name = "ask_hermes", prompt = "slow"))
         assertEquals("call-1" to "slow", toolApi.awaitRequest("call-1"))
         coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
         audio.awaitSuppressPlaybackCalls(1)
@@ -261,7 +261,7 @@ class VoiceAgentRuntimeTest {
             scope = this,
         )
 
-        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-1", name = "ask_hermes", prompt = "slow"))
+        coordinator.onGeminiEvent(voiceToolCall(callId = "call-1", name = "ask_hermes", prompt = "slow"))
         assertEquals("call-1" to "slow", toolApi.awaitRequest("call-1"))
         coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("processing-audio"))
 
@@ -336,7 +336,7 @@ class VoiceAgentRuntimeTest {
             scope = this,
         )
 
-        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-queued", name = "ask_hermes", prompt = "slow"))
+        coordinator.onGeminiEvent(voiceToolCall(callId = "call-queued", name = "ask_hermes", prompt = "slow"))
 
         assertEquals("call-queued" to "slow", toolApi.awaitRequest("call-queued"))
         withTimeout(500) {
@@ -381,7 +381,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-complete", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-complete", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-complete" to "slow", toolApi.awaitRequest("call-complete"))
         toolApi.complete(response(callId = "call-complete", answer = "later answer", elapsedMs = 125_136L))
@@ -435,7 +435,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-gated", name = "ask_hermes", prompt = "gated prompt")
+            voiceToolCall(callId = "call-gated", name = "ask_hermes", prompt = "gated prompt")
         )
         assertEquals("call-gated" to "gated prompt", toolApi.awaitRequest("call-gated"))
         // Queued acknowledgements are tool responses, not proactive announcements, so they are
@@ -504,7 +504,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-paused", name = "ask_hermes", prompt = "pause prompt")
+            voiceToolCall(callId = "call-paused", name = "ask_hermes", prompt = "pause prompt")
         )
         assertEquals("call-paused" to "pause prompt", toolApi.awaitRequest("call-paused"))
         withTimeout(500) {
@@ -572,7 +572,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-quiet", name = "ask_hermes", prompt = "quiet prompt")
+            voiceToolCall(callId = "call-quiet", name = "ask_hermes", prompt = "quiet prompt")
         )
         assertEquals("call-quiet" to "quiet prompt", toolApi.awaitRequest("call-quiet"))
         withTimeout(500) {
@@ -631,7 +631,7 @@ class VoiceAgentRuntimeTest {
         // scheduler's quiet window (measured from the most recent input transcript delta)
         // never gates it.
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-observe", name = "ask_hermes", prompt = "private prompt")
+            voiceToolCall(callId = "call-observe", name = "ask_hermes", prompt = "private prompt")
         )
         assertEquals("call-observe" to "private prompt", toolApi.awaitRequest("call-observe"))
         toolApi.complete(response(callId = "call-observe", answer = "private answer"))
@@ -710,7 +710,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-observe-failed", name = "ask_hermes", prompt = "private prompt")
+            voiceToolCall(callId = "call-observe-failed", name = "ask_hermes", prompt = "private prompt")
         )
         assertEquals("call-observe-failed" to "private prompt", toolApi.awaitRequest("call-observe-failed"))
         toolApi.failJob(callId = "call-observe-failed", message = "Hermes failed")
@@ -749,7 +749,7 @@ class VoiceAgentRuntimeTest {
 
         coordinator.onGeminiEvent(
             sessionId = sessionId,
-            event = GeminiLiveEvent.ToolCall(callId = "call-no-bridge", name = "ask_hermes", prompt = "unattended request"),
+            event = voiceToolCall(callId = "call-no-bridge", name = "ask_hermes", prompt = "unattended request"),
         )
         assertEquals("call-no-bridge" to "unattended request", toolApi.awaitRequest("call-no-bridge"))
 
@@ -821,7 +821,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-follow-up-fails", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-follow-up-fails", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-follow-up-fails" to "slow", toolApi.awaitRequest("call-follow-up-fails"))
         toolApi.complete(response(callId = "call-follow-up-fails", answer = "fallback answer"))
@@ -867,7 +867,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-submit-fails", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-submit-fails", name = "ask_hermes", prompt = "slow")
         )
         coordinator.awaitToolJobsWithTimeout()
         coordinator.awaitPersistenceJobsWithTimeout()
@@ -907,7 +907,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-poll", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-poll", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-poll" to "slow", toolApi.awaitRequest("call-poll"))
 
@@ -958,7 +958,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-still-working", name = "ask_hermes", prompt = "long task")
+            voiceToolCall(callId = "call-still-working", name = "ask_hermes", prompt = "long task")
         )
         assertEquals("call-still-working" to "long task", toolApi.awaitRequest("call-still-working"))
 
@@ -1021,7 +1021,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-job-failed", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-job-failed", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-job-failed" to "slow", toolApi.awaitRequest("call-job-failed"))
         toolApi.failJob(callId = "call-job-failed", message = "Hermes request failed")
@@ -1056,7 +1056,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-expired", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-expired", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-expired" to "slow", toolApi.awaitRequest("call-expired"))
         toolApi.expireJob(callId = "call-expired")
@@ -1095,7 +1095,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-retry", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-retry", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-retry" to "slow", toolApi.awaitRequest("call-retry"))
         repeat(5) {
@@ -1132,7 +1132,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-local-timeout", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-local-timeout", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-local-timeout" to "slow", toolApi.awaitRequest("call-local-timeout"))
         toolApi.scriptPoll(
@@ -1172,7 +1172,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-malformed", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-malformed", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-malformed" to "slow", toolApi.awaitRequest("call-malformed"))
         toolApi.scriptPoll(
@@ -1226,7 +1226,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-unknown", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-unknown", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-unknown" to "slow", toolApi.awaitRequest("call-unknown"))
         toolApi.scriptPoll("call-unknown", jobPoll(callId = "call-unknown", jobId = "job-1", status = "mystery"))
@@ -1268,7 +1268,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-timeout", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-timeout", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-timeout" to "slow", toolApi.awaitRequest("call-timeout"))
         toolApi.scriptQueuedPolls(callId = "call-timeout", count = 20)
@@ -1304,7 +1304,10 @@ class VoiceAgentRuntimeTest {
 
         coordinator.onGeminiEvent(
             GeminiLiveEvent.ToolCalls(
-                listOf(GeminiLiveEvent.ToolCall(callId = "call-2", name = "unsupported_tool", prompt = "ignored"))
+                calls = emptyList(),
+                unsupportedCalls = listOf(
+                    GeminiLiveEvent.UnsupportedToolCall(callId = "call-2", name = "unsupported_tool")
+                ),
             )
         )
         coordinator.awaitToolJobsWithTimeout()
@@ -1326,7 +1329,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-timer", name = "ask_hermes", prompt = "wait")
+            voiceToolCall(callId = "call-timer", name = "ask_hermes", prompt = "wait")
         )
         assertEquals("call-timer" to "wait", toolApi.awaitRequest("call-timer"))
 
@@ -1454,7 +1457,7 @@ class VoiceAgentRuntimeTest {
         assertEquals(
             GeminiLiveEvent.ToolCalls(
                 calls = listOf(
-                    GeminiLiveEvent.ToolCall(
+                    voiceToolCall(
                         callId = "call-supported",
                         name = "ask_hermes",
                         prompt = "Use this prompt",
@@ -1497,7 +1500,7 @@ class VoiceAgentRuntimeTest {
             scope = this,
         )
 
-        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-close", name = "ask_hermes", prompt = "wait"))
+        coordinator.onGeminiEvent(voiceToolCall(callId = "call-close", name = "ask_hermes", prompt = "wait"))
         assertEquals("call-close" to "wait", toolApi.awaitRequest("call-close"))
 
         coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
@@ -1535,8 +1538,8 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(
             GeminiLiveEvent.ToolCalls(
                 listOf(
-                    GeminiLiveEvent.ToolCall(callId = "call-a", name = "ask_hermes", prompt = "First"),
-                    GeminiLiveEvent.ToolCall(callId = "call-b", name = "ask_hermes", prompt = "Second"),
+                    voiceToolCall(callId = "call-a", name = "ask_hermes", prompt = "First"),
+                    voiceToolCall(callId = "call-b", name = "ask_hermes", prompt = "Second"),
                 )
             )
         )
@@ -1591,7 +1594,7 @@ class VoiceAgentRuntimeTest {
 
         coordinator.onGeminiEvent(GeminiLiveEvent.ToolCallCancellation(listOf("call-before-start")))
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(
+            voiceToolCall(
                 callId = "call-before-start",
                 name = "ask_hermes",
                 prompt = "do not start",
@@ -1621,7 +1624,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "ask-1", name = "ask_hermes", prompt = "the original question text")
+            voiceToolCall(callId = "ask-1", name = "ask_hermes", prompt = "the original question text")
         )
         assertEquals("ask-1" to "the original question text", toolApi.awaitRequest("ask-1"))
         withTimeout(500) {
@@ -1632,7 +1635,7 @@ class VoiceAgentRuntimeTest {
         assertEquals(listOf(queuedAck("ask-1")), gemini.toolResponses)
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "cancel-1", name = "cancel_hermes", prompt = "the original question text")
+            voiceToolCall(callId = "cancel-1", name = "cancel_hermes", prompt = "the original question text")
         )
 
         toolApi.awaitRemoteCancelledJob("job-1")
@@ -1670,7 +1673,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "cancel-none", name = "cancel_hermes", prompt = "anything")
+            voiceToolCall(callId = "cancel-none", name = "cancel_hermes", prompt = "anything")
         )
 
         withTimeout(500) {
@@ -1703,7 +1706,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "ask-send-fails", name = "ask_hermes", prompt = "cancel target")
+            voiceToolCall(callId = "ask-send-fails", name = "ask_hermes", prompt = "cancel target")
         )
         assertEquals("ask-send-fails" to "cancel target", toolApi.awaitRequest("ask-send-fails"))
         withTimeout(500) {
@@ -1713,7 +1716,7 @@ class VoiceAgentRuntimeTest {
         }
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(
+            voiceToolCall(
                 callId = "cancel-send-fails",
                 name = "cancel_hermes",
                 prompt = "cancel target",
@@ -1755,7 +1758,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "ask-throws", name = "ask_hermes", prompt = "cancel target")
+            voiceToolCall(callId = "ask-throws", name = "ask_hermes", prompt = "cancel target")
         )
         assertEquals("ask-throws" to "cancel target", toolApi.awaitRequest("ask-throws"))
         withTimeout(500) {
@@ -1765,7 +1768,7 @@ class VoiceAgentRuntimeTest {
         }
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(
+            voiceToolCall(
                 callId = "cancel-throws",
                 name = "cancel_hermes",
                 prompt = "cancel target",
@@ -1801,7 +1804,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "ask-alpha", name = "ask_hermes", prompt = "alpha deployment")
+            voiceToolCall(callId = "ask-alpha", name = "ask_hermes", prompt = "alpha deployment")
         )
         assertEquals("ask-alpha" to "alpha deployment", toolApi.awaitRequest("ask-alpha"))
         withTimeout(500) {
@@ -1811,7 +1814,7 @@ class VoiceAgentRuntimeTest {
         }
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "ask-beta", name = "ask_hermes", prompt = "beta incident")
+            voiceToolCall(callId = "ask-beta", name = "ask_hermes", prompt = "beta incident")
         )
         assertEquals("ask-beta" to "beta incident", toolApi.awaitRequest("ask-beta"))
         withTimeout(500) {
@@ -1821,7 +1824,7 @@ class VoiceAgentRuntimeTest {
         }
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "cancel-no-match", name = "cancel_hermes", prompt = "billing forecast")
+            voiceToolCall(callId = "cancel-no-match", name = "cancel_hermes", prompt = "billing forecast")
         )
 
         withTimeout(500) {
@@ -1850,7 +1853,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "ask-agora", name = "ask_hermes", prompt = "deploy status of agora")
+            voiceToolCall(callId = "ask-agora", name = "ask_hermes", prompt = "deploy status of agora")
         )
         assertEquals("ask-agora" to "deploy status of agora", toolApi.awaitRequest("ask-agora"))
         withTimeout(500) {
@@ -1860,7 +1863,7 @@ class VoiceAgentRuntimeTest {
         }
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(
+            voiceToolCall(
                 callId = "ask-rikkahub",
                 name = "ask_hermes",
                 prompt = "deploy status of rikkahub",
@@ -1874,7 +1877,7 @@ class VoiceAgentRuntimeTest {
         }
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "cancel-ambiguous", name = "cancel_hermes", prompt = "deploy status")
+            voiceToolCall(callId = "cancel-ambiguous", name = "cancel_hermes", prompt = "deploy status")
         )
 
         withTimeout(500) {
@@ -1905,7 +1908,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-close-inflight", name = "ask_hermes", prompt = "slow")
+            voiceToolCall(callId = "call-close-inflight", name = "ask_hermes", prompt = "slow")
         )
         assertEquals("call-close-inflight" to "slow", toolApi.awaitRequest("call-close-inflight"))
         assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
@@ -1933,12 +1936,12 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-replay", name = "ask_hermes", prompt = "old")
+            voiceToolCall(callId = "call-replay", name = "ask_hermes", prompt = "old")
         )
         assertEquals("call-replay" to "old", toolApi.awaitRequest("call-replay"))
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-replay", name = "ask_hermes", prompt = "new")
+            voiceToolCall(callId = "call-replay", name = "ask_hermes", prompt = "new")
         )
         delay(50)
         assertFalse(("call-replay" to "new") in toolApi.requests)
@@ -1966,13 +1969,13 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-submit-inflight", name = "ask_hermes", prompt = "old")
+            voiceToolCall(callId = "call-submit-inflight", name = "ask_hermes", prompt = "old")
         )
         assertEquals("call-submit-inflight" to "old", toolApi.awaitRequest("call-submit-inflight"))
         assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-submit-inflight", name = "ask_hermes", prompt = "new")
+            voiceToolCall(callId = "call-submit-inflight", name = "ask_hermes", prompt = "new")
         )
         delay(50)
         assertFalse(("call-submit-inflight" to "new") in toolApi.requests)
@@ -2002,7 +2005,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-replay-send", name = "ask_hermes", prompt = "old")
+            voiceToolCall(callId = "call-replay-send", name = "ask_hermes", prompt = "old")
         )
         assertEquals("call-replay-send" to "old", toolApi.awaitRequest("call-replay-send"))
         toolApi.complete(response(callId = "call-replay-send", answer = "old answer"))
@@ -2010,7 +2013,7 @@ class VoiceAgentRuntimeTest {
 
         val replayJob = launch(Dispatchers.Default) {
             coordinator.onGeminiEvent(
-                GeminiLiveEvent.ToolCall(callId = "call-replay-send", name = "ask_hermes", prompt = "new")
+                voiceToolCall(callId = "call-replay-send", name = "ask_hermes", prompt = "new")
             )
         }
         withTimeout(500) {
@@ -2045,8 +2048,8 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(
             GeminiLiveEvent.ToolCalls(
                 listOf(
-                    GeminiLiveEvent.ToolCall(callId = "call-a", name = "ask_hermes", prompt = "First"),
-                    GeminiLiveEvent.ToolCall(callId = "call-b", name = "ask_hermes", prompt = "Second"),
+                    voiceToolCall(callId = "call-a", name = "ask_hermes", prompt = "First"),
+                    voiceToolCall(callId = "call-b", name = "ask_hermes", prompt = "Second"),
                 )
             )
         )
@@ -2139,8 +2142,8 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(
             GeminiLiveEvent.ToolCalls(
                 listOf(
-                    GeminiLiveEvent.ToolCall(callId = "call-a", name = "ask_hermes", prompt = "First"),
-                    GeminiLiveEvent.ToolCall(callId = "call-b", name = "ask_hermes", prompt = "Second"),
+                    voiceToolCall(callId = "call-a", name = "ask_hermes", prompt = "First"),
+                    voiceToolCall(callId = "call-b", name = "ask_hermes", prompt = "Second"),
                 )
             )
         )
@@ -2228,7 +2231,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-request-hash", name = "ask_hermes", prompt = "private prompt")
+            voiceToolCall(callId = "call-request-hash", name = "ask_hermes", prompt = "private prompt")
         )
 
         val hashEvent = diagnostics.events.value.single { it.name == "hermes_tool_request_hash" }
@@ -2260,7 +2263,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-hash", name = "ask_hermes", prompt = "private prompt")
+            voiceToolCall(callId = "call-hash", name = "ask_hermes", prompt = "private prompt")
         )
         assertEquals("call-hash" to "private prompt", toolApi.awaitRequest("call-hash"))
         toolApi.complete(response(callId = "call-hash", answer = " \nalpha\t  beta\r\n", elapsedMs = 321))
@@ -2299,7 +2302,7 @@ class VoiceAgentRuntimeTest {
         // scheduler's quiet window (measured from the most recent input transcript delta)
         // never gates it.
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(
+            voiceToolCall(
                 callId = "call-report",
                 name = "ask_hermes",
                 prompt = "Is Hermes connected to G-Brain? Answer yes or no.",
@@ -2338,7 +2341,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-manual-answer", name = "ask_hermes", prompt = "private prompt")
+            voiceToolCall(callId = "call-manual-answer", name = "ask_hermes", prompt = "private prompt")
         )
         assertEquals("call-manual-answer" to "private prompt", toolApi.awaitRequest("call-manual-answer"))
         toolApi.complete(response(callId = "call-manual-answer", answer = "raw private answer"))
@@ -2366,7 +2369,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-no-hash", name = "ask_hermes", prompt = "private prompt")
+            voiceToolCall(callId = "call-no-hash", name = "ask_hermes", prompt = "private prompt")
         )
         assertEquals("call-no-hash" to "private prompt", toolApi.awaitRequest("call-no-hash"))
         toolApi.complete(response(callId = "call-no-hash", answer = " \nalpha\t  beta\r\n"))
@@ -2404,7 +2407,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-log-fails", name = "ask_hermes", prompt = "private prompt")
+            voiceToolCall(callId = "call-log-fails", name = "ask_hermes", prompt = "private prompt")
         )
         assertEquals("call-log-fails" to "private prompt", toolApi.awaitRequest("call-log-fails"))
         toolApi.complete(response(callId = "call-log-fails", answer = "alpha beta"))
@@ -2444,8 +2447,8 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(
             GeminiLiveEvent.ToolCalls(
                 listOf(
-                    GeminiLiveEvent.ToolCall(callId = "call-fail", name = "ask_hermes", prompt = "First"),
-                    GeminiLiveEvent.ToolCall(callId = "call-ok", name = "ask_hermes", prompt = "Second"),
+                    voiceToolCall(callId = "call-fail", name = "ask_hermes", prompt = "First"),
+                    voiceToolCall(callId = "call-ok", name = "ask_hermes", prompt = "Second"),
                 )
             )
         )
@@ -2503,7 +2506,7 @@ class VoiceAgentRuntimeTest {
             scope = this,
         )
 
-        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-3", name = "ask_hermes", prompt = "fail"))
+        coordinator.onGeminiEvent(voiceToolCall(callId = "call-3", name = "ask_hermes", prompt = "fail"))
         assertEquals("call-3" to "fail", toolApi.awaitRequest("call-3"))
 
         toolApi.failJob(callId = "call-3", message = "Hermes offline")
@@ -2533,7 +2536,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(
+            voiceToolCall(
                 callId = "call-auth-fail",
                 name = "ask_hermes",
                 prompt = "private prompt",
@@ -2580,7 +2583,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-send-fails", name = "ask_hermes", prompt = "send fails")
+            voiceToolCall(callId = "call-send-fails", name = "ask_hermes", prompt = "send fails")
         )
         assertEquals("call-send-fails" to "send fails", toolApi.awaitRequest("call-send-fails"))
 
@@ -2672,7 +2675,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-close-send", name = "ask_hermes", prompt = "close race")
+            voiceToolCall(callId = "call-close-send", name = "ask_hermes", prompt = "close race")
         )
         assertEquals("call-close-send" to "close race", toolApi.awaitRequest("call-close-send"))
 
@@ -2713,7 +2716,7 @@ class VoiceAgentRuntimeTest {
         }
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-close-reentry", name = "ask_hermes", prompt = "close race")
+            voiceToolCall(callId = "call-close-reentry", name = "ask_hermes", prompt = "close race")
         )
         assertEquals("call-close-reentry" to "close race", toolApi.awaitRequest("call-close-reentry"))
 
@@ -2839,7 +2842,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-close-wait", name = "ask_hermes", prompt = "close wait")
+            voiceToolCall(callId = "call-close-wait", name = "ask_hermes", prompt = "close wait")
         )
         assertEquals("call-close-wait" to "close wait", toolApi.awaitRequest("call-close-wait"))
 
@@ -3004,7 +3007,7 @@ class VoiceAgentRuntimeTest {
         // scheduler's quiet window (measured from the most recent input transcript delta)
         // never gates it. Turn IDs below ("user-1"/"assistant-2") only depend on the relative
         // order of the transcript deltas, not on this tool call.
-        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-persist", name = "ask_hermes", prompt = "look up"))
+        coordinator.onGeminiEvent(voiceToolCall(callId = "call-persist", name = "ask_hermes", prompt = "look up"))
         assertEquals("call-persist" to "look up", toolApi.awaitRequest("call-persist"))
         toolApi.complete(response(callId = "call-persist", answer = "tool answer", elapsedMs = 321L))
         coordinator.awaitToolJobsWithTimeout()
@@ -3135,7 +3138,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-cancel-persist", name = "ask_hermes", prompt = "cancel me")
+            voiceToolCall(callId = "call-cancel-persist", name = "ask_hermes", prompt = "cancel me")
         )
         assertEquals("call-cancel-persist" to "cancel me", toolApi.awaitRequest("call-cancel-persist"))
 
@@ -3165,7 +3168,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-reconnect-persist", name = "ask_hermes", prompt = "old")
+            voiceToolCall(callId = "call-reconnect-persist", name = "ask_hermes", prompt = "old")
         )
         assertEquals("call-reconnect-persist" to "old", toolApi.awaitRequest("call-reconnect-persist"))
 
@@ -3198,7 +3201,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-close-persist", name = "ask_hermes", prompt = "close")
+            voiceToolCall(callId = "call-close-persist", name = "ask_hermes", prompt = "close")
         )
         assertEquals("call-close-persist" to "close", toolApi.awaitRequest("call-close-persist"))
 
@@ -3234,7 +3237,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-close-sending-persist", name = "ask_hermes", prompt = "close")
+            voiceToolCall(callId = "call-close-sending-persist", name = "ask_hermes", prompt = "close")
         )
         assertEquals("call-close-sending-persist" to "close", toolApi.awaitRequest("call-close-sending-persist"))
         toolApi.complete(response(callId = "call-close-sending-persist", answer = "sent answer"))
@@ -3275,7 +3278,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-reconnect-sending-persist", name = "ask_hermes", prompt = "old")
+            voiceToolCall(callId = "call-reconnect-sending-persist", name = "ask_hermes", prompt = "old")
         )
         assertEquals("call-reconnect-sending-persist" to "old", toolApi.awaitRequest("call-reconnect-sending-persist"))
         toolApi.complete(response(callId = "call-reconnect-sending-persist", answer = "sent answer"))
@@ -3316,7 +3319,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-forced-close-sending-persist", name = "ask_hermes", prompt = "close")
+            voiceToolCall(callId = "call-forced-close-sending-persist", name = "ask_hermes", prompt = "close")
         )
         assertEquals("call-forced-close-sending-persist" to "close", toolApi.awaitRequest("call-forced-close-sending-persist"))
         toolApi.complete(response(callId = "call-forced-close-sending-persist", answer = "sent answer"))
@@ -3357,7 +3360,7 @@ class VoiceAgentRuntimeTest {
         )
 
         coordinator.onGeminiEvent(
-            GeminiLiveEvent.ToolCall(callId = "call-cancel-sending-persist", name = "ask_hermes", prompt = "cancel")
+            voiceToolCall(callId = "call-cancel-sending-persist", name = "ask_hermes", prompt = "cancel")
         )
         assertEquals("call-cancel-sending-persist" to "cancel", toolApi.awaitRequest("call-cancel-sending-persist"))
         toolApi.complete(response(callId = "call-cancel-sending-persist", answer = "sent answer"))
@@ -3416,7 +3419,7 @@ class VoiceAgentRuntimeTest {
             scope = this,
         )
 
-        coordinator.onGeminiEvent(GeminiLiveEvent.ToolCall(callId = "call-reconnect", name = "ask_hermes", prompt = "old"))
+        coordinator.onGeminiEvent(voiceToolCall(callId = "call-reconnect", name = "ask_hermes", prompt = "old"))
         assertEquals("call-reconnect" to "old", toolApi.awaitRequest("call-reconnect"))
 
         coordinator.prepareForReconnect()
@@ -3447,7 +3450,7 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(staleSessionId, GeminiLiveEvent.InputTranscript("late input"))
         coordinator.onGeminiEvent(
             staleSessionId,
-            GeminiLiveEvent.ToolCall(callId = "call-stale-session", name = "ask_hermes", prompt = "stale"),
+            voiceToolCall(callId = "call-stale-session", name = "ask_hermes", prompt = "stale"),
         )
         delay(50)
 
@@ -4403,7 +4406,7 @@ class VoiceAgentRuntimeTest {
         audio.emitCapture(byteArrayOf(1, 2, 3))
         assertEquals(listOf(Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3))), gemini.audioMessages)
         gemini.eventHandlers.single()(
-            GeminiLiveEvent.ToolCall(callId = "call-async-error", name = "ask_hermes", prompt = "pending")
+            voiceToolCall(callId = "call-async-error", name = "ask_hermes", prompt = "pending")
         )
         assertEquals("call-async-error" to "pending", toolApi.awaitRequest("call-async-error"))
 
@@ -5065,7 +5068,7 @@ class VoiceAgentRuntimeTest {
         session.start()
         gemini.awaitConnectCount(1)
         gemini.eventHandlers.single()(
-            GeminiLiveEvent.ToolCall(callId = "call-vm-reconnect-order", name = "ask_hermes", prompt = "old")
+            voiceToolCall(callId = "call-vm-reconnect-order", name = "ask_hermes", prompt = "old")
         )
         assertEquals("call-vm-reconnect-order" to "old", toolApi.awaitRequest("call-vm-reconnect-order"))
         toolApi.complete(response(callId = "call-vm-reconnect-order", answer = "sent answer"))
@@ -5210,7 +5213,7 @@ class VoiceAgentRuntimeTest {
         session.reconnect()
         gemini.awaitConnectCount(2)
 
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "stale-call", name = "ask_hermes", prompt = "stale"))
+        oldCallback(voiceToolCall(callId = "stale-call", name = "ask_hermes", prompt = "stale"))
         delay(50)
 
         assertEquals(emptyList<Pair<String, String>>(), toolApi.requests)
@@ -5292,7 +5295,7 @@ class VoiceAgentRuntimeTest {
         val oldCallback = gemini.eventHandlers.single()
 
         session.reconnect()
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "stale-reconnect", name = "ask_hermes", prompt = "stale"))
+        oldCallback(voiceToolCall(callId = "stale-reconnect", name = "ask_hermes", prompt = "stale"))
         delay(50)
 
         assertEquals(emptyList<Pair<String, String>>(), toolApi.requests)
@@ -5329,7 +5332,7 @@ class VoiceAgentRuntimeTest {
 
         session.reconnect()
         assertEquals(1, audio.suppressPlaybackCalls)
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "stale-blocked-reconnect", name = "ask_hermes", prompt = "stale"))
+        oldCallback(voiceToolCall(callId = "stale-blocked-reconnect", name = "ask_hermes", prompt = "stale"))
         delay(50)
 
         assertEquals(emptyList<Pair<String, String>>(), toolApi.requests)
@@ -5369,7 +5372,7 @@ class VoiceAgentRuntimeTest {
         session.start()
         gemini.awaitConnectCount(1)
         val oldCallback = gemini.eventHandlers.single()
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "call-vm-reconnect-sending", name = "ask_hermes", prompt = "old"))
+        oldCallback(voiceToolCall(callId = "call-vm-reconnect-sending", name = "ask_hermes", prompt = "old"))
         assertEquals("call-vm-reconnect-sending" to "old", toolApi.awaitRequest("call-vm-reconnect-sending"))
         toolApi.complete(response(callId = "call-vm-reconnect-sending", answer = "sent answer"))
         assertTrue(withContext(Dispatchers.Default) { blockedSend.started.await(500, TimeUnit.MILLISECONDS) })
@@ -5417,7 +5420,7 @@ class VoiceAgentRuntimeTest {
         session.start()
         gemini.awaitConnectCount(1)
         val oldCallback = gemini.eventHandlers.single()
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "call-detached-complete", name = "ask_hermes", prompt = "old"))
+        oldCallback(voiceToolCall(callId = "call-detached-complete", name = "ask_hermes", prompt = "old"))
         assertEquals("call-detached-complete" to "old", toolApi.awaitRequest("call-detached-complete"))
         val blockedNextSession = sessionApi.blockNextSession()
 
@@ -5469,7 +5472,7 @@ class VoiceAgentRuntimeTest {
         session.start()
         gemini.awaitConnectCount(1)
         gemini.eventHandlers.single()(
-            GeminiLiveEvent.ToolCall(callId = "call-service-scope-cancel", name = "ask_hermes", prompt = "survive")
+            voiceToolCall(callId = "call-service-scope-cancel", name = "ask_hermes", prompt = "survive")
         )
         assertEquals("call-service-scope-cancel" to "survive", toolApi.awaitRequest("call-service-scope-cancel"))
 
@@ -5504,7 +5507,7 @@ class VoiceAgentRuntimeTest {
         session.start()
         gemini.awaitConnectCount(1)
         val oldCallback = gemini.eventHandlers.single()
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "call-vm-end-pending", name = "ask_hermes", prompt = "end"))
+        oldCallback(voiceToolCall(callId = "call-vm-end-pending", name = "ask_hermes", prompt = "end"))
         assertEquals("call-vm-end-pending" to "end", toolApi.awaitRequest("call-vm-end-pending"))
         val closeHookCalled = CountDownLatch(1)
         gemini.onClose = {
@@ -5549,7 +5552,7 @@ class VoiceAgentRuntimeTest {
         session.start()
         gemini.awaitConnectCount(1)
         val oldCallback = gemini.eventHandlers.single()
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "call-vm-cleared-pending", name = "ask_hermes", prompt = "clear"))
+        oldCallback(voiceToolCall(callId = "call-vm-cleared-pending", name = "ask_hermes", prompt = "clear"))
         assertEquals("call-vm-cleared-pending" to "clear", toolApi.awaitRequest("call-vm-cleared-pending"))
         val closeHookCalled = CountDownLatch(1)
         gemini.onClose = {
@@ -5596,7 +5599,7 @@ class VoiceAgentRuntimeTest {
         val oldCallback = gemini.eventHandlers.single()
 
         session.end()
-        oldCallback(GeminiLiveEvent.ToolCall(callId = "stale-end", name = "ask_hermes", prompt = "stale"))
+        oldCallback(voiceToolCall(callId = "stale-end", name = "ask_hermes", prompt = "stale"))
         delay(50)
 
         assertEquals(emptyList<Pair<String, String>>(), toolApi.requests)

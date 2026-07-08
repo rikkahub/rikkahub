@@ -665,21 +665,20 @@ class VoiceAgentCoordinator(
         }
         diagnostics.record(
             "tool_call_received",
-            "callId=${call.callId}, name=${call.name}, promptChars=${call.prompt.length}",
+            "callId=${call.callId}, name=${call.name}, promptChars=${call.argLength()}",
         )
-        if (call.name == VoiceAgentToolNames.CANCEL_HERMES) {
-            handleCancelHermesToolCall(call = call, sessionId = sessionId)
-            return
+        when (call) {
+            is GeminiLiveEvent.CancelHermesCall -> handleCancelHermesToolCall(call = call, sessionId = sessionId)
+            is GeminiLiveEvent.AskHermesCall -> handleAskHermesToolCall(call = call, sessionId = sessionId)
         }
-        if (call.name != VoiceAgentToolNames.ASK_HERMES) {
-            recordUnsupportedToolCall(
-                GeminiLiveEvent.UnsupportedToolCall(
-                    callId = call.callId,
-                    name = call.name,
-                )
-            )
-            return
-        }
+    }
+
+    private fun GeminiLiveEvent.ToolCall.argLength(): Int = when (this) {
+        is GeminiLiveEvent.AskHermesCall -> prompt.length
+        is GeminiLiveEvent.CancelHermesCall -> question.length
+    }
+
+    private fun handleAskHermesToolCall(call: GeminiLiveEvent.AskHermesCall, sessionId: Long?) {
         if (sessionId == null) {
             attachDefaultHermesBridge()
         }
@@ -696,12 +695,12 @@ class VoiceAgentCoordinator(
         }
     }
 
-    private fun handleCancelHermesToolCall(call: GeminiLiveEvent.ToolCall, sessionId: Long?) {
+    private fun handleCancelHermesToolCall(call: GeminiLiveEvent.CancelHermesCall, sessionId: Long?) {
         if (sessionId == null) {
             attachDefaultHermesBridge()
         }
         val pending = hermesJobManager.pendingRequests()
-        val question = call.prompt.normalizeForHermesMatch()
+        val question = call.question.normalizeForHermesMatch()
         val matches = when {
             pending.size <= 1 -> pending
             else -> pending.filter { request ->

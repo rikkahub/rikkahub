@@ -470,10 +470,10 @@ class GeminiLiveCodecTest {
             """{"toolCall":{"functionCalls":[{"id":"call-9","name":"cancel_hermes","args":{"question":"What is the deploy status?"}}]}}"""
         )
 
-        val call = event as GeminiLiveEvent.ToolCall
+        val call = event as GeminiLiveEvent.CancelHermesCall
         assertEquals("call-9", call.callId)
         assertEquals("cancel_hermes", call.name)
-        assertEquals("What is the deploy status?", call.prompt)
+        assertEquals("What is the deploy status?", call.question)
     }
 
     @Test
@@ -535,9 +535,8 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.Events(
                 listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-1",
-                        name = "ask_hermes",
                         prompt = "Use Hermes",
                     ),
                     GeminiLiveEvent.OutputTranscript("I will check."),
@@ -678,9 +677,8 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.ToolCalls(
                 calls = listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-1",
-                        name = "ask_hermes",
                         prompt = "What should I say?",
                     )
                 ),
@@ -717,9 +715,8 @@ class GeminiLiveCodecTest {
     @Test
     fun `parse skips malformed tool calls and returns first valid function call`() {
         assertEquals(
-            GeminiLiveEvent.ToolCall(
+            GeminiLiveEvent.AskHermesCall(
                 callId = "call-2",
-                name = "ask_hermes",
                 prompt = "Use this prompt",
             ),
             codec.parseServerMessage(
@@ -750,14 +747,12 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.ToolCalls(
                 listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-1",
-                        name = "ask_hermes",
                         prompt = "First prompt",
                     ),
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-2",
-                        name = "ask_hermes",
                         prompt = "Second prompt",
                     ),
                 )
@@ -788,9 +783,8 @@ class GeminiLiveCodecTest {
     @Test
     fun `parse skips tool calls with non string required fields`() {
         assertEquals(
-            GeminiLiveEvent.ToolCall(
+            GeminiLiveEvent.AskHermesCall(
                 callId = "call-valid",
-                name = "ask_hermes",
                 prompt = "Use this prompt",
             ),
             codec.parseServerMessage(
@@ -836,9 +830,8 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.ToolCalls(
                 calls = listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-2",
-                        name = "ask_hermes",
                         prompt = "Use this prompt",
                     )
                 ),

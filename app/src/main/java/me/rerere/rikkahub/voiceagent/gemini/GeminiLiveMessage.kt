@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.voiceagent.gemini
 
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
+
 sealed interface GeminiLiveEvent {
     data object SetupComplete : GeminiLiveEvent
 
@@ -27,11 +29,24 @@ sealed interface GeminiLiveEvent {
         val reason: String = "serverContent.interrupted",
     ) : GeminiLiveEvent
 
-    data class ToolCall(
-        val callId: String,
-        val name: String,
+    sealed interface ToolCall : GeminiLiveEvent {
+        val callId: String
+        val name: String
+    }
+
+    data class AskHermesCall(
+        override val callId: String,
         val prompt: String,
-    ) : GeminiLiveEvent
+    ) : ToolCall {
+        override val name: String get() = VoiceAgentToolNames.ASK_HERMES
+    }
+
+    data class CancelHermesCall(
+        override val callId: String,
+        val question: String,
+    ) : ToolCall {
+        override val name: String get() = VoiceAgentToolNames.CANCEL_HERMES
+    }
 
     data class UnsupportedToolCall(
         val callId: String,

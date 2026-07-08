@@ -20,6 +20,7 @@ internal data class VoiceToolSpec(
     val name: String,
     val argKey: String,
     val responseScheduling: String,
+    val buildCall: (callId: String, argValue: String) -> GeminiLiveEvent.ToolCall,
 )
 
 internal val VOICE_TOOL_SPECS: List<VoiceToolSpec> = listOf(
@@ -27,6 +28,7 @@ internal val VOICE_TOOL_SPECS: List<VoiceToolSpec> = listOf(
         name = VoiceAgentToolNames.ASK_HERMES,
         argKey = "prompt",
         responseScheduling = VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+        buildCall = { callId, argValue -> GeminiLiveEvent.AskHermesCall(callId = callId, prompt = argValue) },
     ),
     VoiceToolSpec(
         name = VoiceAgentToolNames.CANCEL_HERMES,
@@ -34,6 +36,7 @@ internal val VOICE_TOOL_SPECS: List<VoiceToolSpec> = listOf(
         // WHEN_IDLE for cancel is deliberate (adjudicated in the UX-gaps review:
         // blocking + immediate at idle turn, no barge-in) — now explicit per tool.
         responseScheduling = VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+        buildCall = { callId, argValue -> GeminiLiveEvent.CancelHermesCall(callId = callId, question = argValue) },
     ),
 )
 
@@ -241,11 +244,7 @@ class GeminiLiveCodec(
                 ?.stringContentOrNull()
                 ?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
-            GeminiLiveEvent.ToolCall(
-                callId = callId,
-                name = name,
-                prompt = prompt,
-            )
+            spec.buildCall(callId, prompt)
         }
         return when (calls.size) {
             0 -> if (unsupportedCalls.isEmpty()) null else {
