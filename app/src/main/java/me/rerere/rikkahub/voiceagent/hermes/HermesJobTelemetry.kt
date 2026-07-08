@@ -6,7 +6,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
 import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
 
-internal val HermesJobStatus.wireName: String
+private val HermesJobStatus.wireName: String
     get() = when (this) {
         HermesJobStatus.Accepted -> "accepted"
         HermesJobStatus.Queued -> "queued"

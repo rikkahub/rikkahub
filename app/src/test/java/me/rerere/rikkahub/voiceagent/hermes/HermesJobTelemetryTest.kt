@@ -12,10 +12,13 @@ import org.junit.Test
 
 class HermesJobTelemetryTest {
 
-    private class RecordingObservability : VoiceObservability {
+    private class RecordingObservability(
+        private val callOrder: MutableList<String>,
+    ) : VoiceObservability {
         val events = mutableListOf<Pair<String, Map<String, Any?>>>()
         override fun recordEvent(name: String, trace: VoiceTraceContext, attributes: Map<String, Any?>) {
             events += name to attributes
+            callOrder += "event"
         }
 
         override suspend fun <T> withSpan(
@@ -36,7 +39,8 @@ class HermesJobTelemetryTest {
         override fun setAttributes(attributes: VoiceAttributes) = Unit
     }
 
-    private val observability = RecordingObservability()
+    private val callOrder = mutableListOf<String>()
+    private val observability = RecordingObservability(callOrder)
     private val diagnostics = mutableListOf<Pair<String, String>>()
     private val queueEvents = mutableListOf<HermesQueueEvent>()
     private val answers = mutableListOf<String>()
@@ -45,14 +49,29 @@ class HermesJobTelemetryTest {
     private val pollFailures = mutableListOf<HermesPollFailure>()
 
     private fun telemetry(
-        onJobCompleted: (HermesJobCompletion) -> Unit = { completions += it },
-        onJobFailed: (HermesJobFailure) -> Unit = { failures += it },
+        onJobCompleted: (HermesJobCompletion) -> Unit = {
+            completions += it
+            callOrder += "callback"
+        },
+        onJobFailed: (HermesJobFailure) -> Unit = {
+            failures += it
+            callOrder += "callback"
+        },
     ) = HermesJobTelemetry(
         observability = observability,
         traceContext = newVoiceTraceContext(),
-        recordDiagnostic = { name, detail -> diagnostics += name to detail },
-        writeQueueEvent = { queueEvents += it },
-        writeHermesAnswer = { answers += it },
+        recordDiagnostic = { name, detail ->
+            diagnostics += name to detail
+            callOrder += "diagnostic"
+        },
+        writeQueueEvent = {
+            queueEvents += it
+            callOrder += "queueEvent"
+        },
+        writeHermesAnswer = {
+            answers += it
+            callOrder += "answer"
+        },
         onJobCompleted = onJobCompleted,
         onJobFailed = onJobFailed,
         onPollFailed = { pollFailures += it },
@@ -78,6 +97,7 @@ class HermesJobTelemetryTest {
             queueEvents.single(),
         )
         assertEquals(listOf("hi"), answers)
+        assertEquals(listOf("callback", "event", "diagnostic", "queueEvent", "answer"), callOrder)
     }
 
     @Test
@@ -96,6 +116,7 @@ class HermesJobTelemetryTest {
         assertEquals("hermes_job_failed" to "callId=c1, message=boom", diagnostics.single())
         assertEquals(listOf("c1"), failures.map { it.callId })
         assertEquals("none", queueEvents.single().jobId)
+        assertEquals(listOf("event", "diagnostic", "callback", "queueEvent"), callOrder)
     }
 
     @Test
@@ -103,6 +124,7 @@ class HermesJobTelemetryTest {
         telemetry().jobCreated(callId = "c1", jobId = "j1", status = HermesJobStatus.Queued)
         assertEquals("hermes_job_created" to "callId=c1, jobId=j1, status=Queued", diagnostics.single())
         assertEquals("queued", queueEvents.single().status)
+        assertEquals(listOf("diagnostic", "queueEvent"), callOrder)
     }
 
     @Test
