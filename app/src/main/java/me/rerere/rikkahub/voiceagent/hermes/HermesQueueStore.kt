@@ -40,103 +40,82 @@ class HermesQueueStore(
         }
     }
 
-    suspend fun persistActiveIfStillActive(
+    suspend fun persistActive(
         callId: String,
         prompt: String,
         status: VoiceToolRecordStatus,
         jobId: String,
-        shouldPersist: () -> Boolean = { true },
     ): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
-            val latestRecord = conversation.latestHermesRecord(callId = callId, jobId = jobId)
-            if (!shouldPersist() || latestRecord?.status?.isTerminal == true) {
-                conversation to false
-            } else {
-                writer.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = status,
-                    sessionId = sessionId,
-                    jobId = jobId,
-                ) to true
-            }
+            val updated = writer.upsertHermesTool(
+                conversation = conversation,
+                callId = callId,
+                prompt = prompt,
+                status = status,
+                sessionId = sessionId,
+                jobId = jobId,
+            )
+            updated to (updated !== conversation)
         }
     }
 
-    suspend fun persistPendingIfStillActive(
-        callId: String,
-        prompt: String,
-        shouldPersist: () -> Boolean = { true },
-    ): Boolean {
+    suspend fun persistPending(callId: String, prompt: String): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
-            if (!shouldPersist()) {
-                conversation to false
-            } else {
-                writer.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = VoiceToolRecordStatus.Pending,
-                    sessionId = sessionId,
-                    jobId = null,
-                ) to true
-            }
+            val updated = writer.upsertHermesTool(
+                conversation = conversation,
+                callId = callId,
+                prompt = prompt,
+                status = VoiceToolRecordStatus.Pending,
+                sessionId = sessionId,
+                jobId = null,
+            )
+            updated to (updated !== conversation)
         }
     }
 
-    suspend fun persistCanceledIfStillActive(
+    suspend fun persistCanceled(
         callId: String,
         prompt: String,
         jobId: String?,
         message: String,
-        resultAnnounced: Boolean? = null,
+        announced: Boolean,
     ): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
-            val latestRecord = conversation.latestHermesRecord(callId = callId, jobId = jobId)
-            if (latestRecord?.status?.isTerminal == true) {
-                conversation to false
-            } else {
-                writer.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = VoiceToolRecordStatus.Canceled(message),
-                    sessionId = sessionId,
-                    jobId = jobId,
-                    announceOnWrite = resultAnnounced == true,
-                ) to true
-            }
+            val updated = writer.upsertHermesTool(
+                conversation = conversation,
+                callId = callId,
+                prompt = prompt,
+                status = VoiceToolRecordStatus.Canceled(message),
+                sessionId = sessionId,
+                jobId = jobId,
+                announceOnWrite = announced,
+            )
+            updated to (updated !== conversation)
         }
     }
 
-    suspend fun persistTerminalIfStillActive(
+    suspend fun persistTerminal(
         callId: String,
         prompt: String,
         status: VoiceToolRecordStatus,
         jobId: String?,
-        resultAnnounced: Boolean? = null,
-        shouldPersist: () -> Boolean = { true },
+        announced: Boolean?,
     ): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
-            val latestRecord = conversation.latestHermesRecord(callId = callId, jobId = jobId)
-            if (!shouldPersist() || latestRecord?.status?.isTerminal == true) {
-                conversation to false
-            } else {
-                writer.upsertHermesTool(
-                    conversation = conversation,
-                    callId = callId,
-                    prompt = prompt,
-                    status = status,
-                    sessionId = sessionId,
-                    jobId = jobId,
-                    announceOnWrite = resultAnnounced == true,
-                ) to true
-            }
+            val updated = writer.upsertHermesTool(
+                conversation = conversation,
+                callId = callId,
+                prompt = prompt,
+                status = status,
+                sessionId = sessionId,
+                jobId = jobId,
+                announceOnWrite = announced == true,
+            )
+            updated to (updated !== conversation)
         }
     }
 
