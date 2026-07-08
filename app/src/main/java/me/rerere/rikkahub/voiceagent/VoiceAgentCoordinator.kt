@@ -52,7 +52,7 @@ const val HERMES_JOB_POLL_INTERVAL_MS = 10_000L
 const val HERMES_STILL_WORKING_THRESHOLD_MS = 45_000L
 private const val HERMES_JOB_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000L
 private const val HERMES_JOB_POLL_RETRY_DELAY_MS = 2_000L
-private const val UNBOUND_HERMES_BRIDGE_SESSION_ID = 0L
+private const val UNBOUND_HERMES_BRIDGE_SESSION_ID = HermesJobManager.UNBOUND_BRIDGE_SESSION_ID
 
 class VoiceAgentCoordinator(
     private val gemini: GeminiLiveVoiceClient,
@@ -670,7 +670,11 @@ class VoiceAgentCoordinator(
                 if (sessionId == null) {
                     attachDefaultHermesBridge()
                 }
-                hermesJobManager.handleCancelHermesCall(callId = call.callId, question = call.question)
+                hermesJobManager.handleCancelHermesCall(
+                    callId = call.callId,
+                    question = call.question,
+                    sessionId = sessionId ?: UNBOUND_HERMES_BRIDGE_SESSION_ID,
+                )
             }
             is GeminiLiveEvent.AskHermesCall -> handleAskHermesToolCall(call = call, sessionId = sessionId)
         }

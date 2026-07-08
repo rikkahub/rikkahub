@@ -2589,13 +2589,13 @@ class HermesJobManagerTest {
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
 
     @Test
-    fun `resolveCancelRequest with nothing pending returns NothingPending`() = runTest {
+    fun `resolveAndCancelRequest with nothing pending returns NothingPending`() = runTest {
         val manager = manager(toolApi = FakeVoiceToolApi(), conversationStore = FakeVoiceConversationStore(), scope = this)
-        assertEquals(CancelHermesOutcome.NothingPending, manager.resolveCancelRequest("anything"))
+        assertEquals(CancelHermesOutcome.NothingPending, manager.resolveAndCancelRequest("anything"))
     }
 
     @Test
-    fun `resolveCancelRequest cancels a single pending job even when the question does not match`() = runTest {
+    fun `resolveAndCancelRequest cancels a single pending job even when the question does not match`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
@@ -2608,7 +2608,7 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-1", prompt = "deploy status")
         assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
 
-        val outcome = manager.resolveCancelRequest("completely different words")
+        val outcome = manager.resolveAndCancelRequest("completely different words")
 
         assertTrue(outcome is CancelHermesOutcome.Canceled)
         assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
@@ -2621,7 +2621,7 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `resolveCancelRequest matches bidirectionally after normalization`() = runTest {
+    fun `resolveAndCancelRequest matches bidirectionally after normalization`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
@@ -2630,14 +2630,14 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
         assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
 
-        val outcome = manager.resolveCancelRequest("deploy status")
+        val outcome = manager.resolveAndCancelRequest("deploy status")
 
         assertTrue(outcome is CancelHermesOutcome.Canceled)
         assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
     }
 
     @Test
-    fun `resolveCancelRequest matches when the question contains the whole prompt`() = runTest {
+    fun `resolveAndCancelRequest matches when the question contains the whole prompt`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
@@ -2646,14 +2646,14 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
         assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
 
-        val outcome = manager.resolveCancelRequest("can you cancel the deploy job please")
+        val outcome = manager.resolveAndCancelRequest("can you cancel the deploy job please")
 
         assertTrue(outcome is CancelHermesOutcome.Canceled)
         assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
     }
 
     @Test
-    fun `resolveCancelRequest collapses whitespace inside the matched span`() = runTest {
+    fun `resolveAndCancelRequest collapses whitespace inside the matched span`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val conversationStore = FakeVoiceConversationStore()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
@@ -2662,14 +2662,14 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
         assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
 
-        val outcome = manager.resolveCancelRequest("deploy status")
+        val outcome = manager.resolveAndCancelRequest("deploy status")
 
         assertTrue(outcome is CancelHermesOutcome.Canceled)
         assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
     }
 
     @Test
-    fun `resolveCancelRequest reports NoMatch with the pending list`() = runTest {
+    fun `resolveAndCancelRequest reports NoMatch with the pending list`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val manager = manager(toolApi = toolApi, conversationStore = FakeVoiceConversationStore(), scope = this)
         manager.submit(callId = "call-1", prompt = "deploy status")
@@ -2677,7 +2677,7 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-2", prompt = "meeting notes")
         assertEquals("call-2" to "meeting notes", toolApi.awaitRequest("call-2"))
 
-        val outcome = manager.resolveCancelRequest("unrelated question")
+        val outcome = manager.resolveAndCancelRequest("unrelated question")
 
         assertTrue(outcome is CancelHermesOutcome.NoMatch)
         assertEquals(
@@ -2689,7 +2689,7 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `resolveCancelRequest reports Ambiguous with the matching subset`() = runTest {
+    fun `resolveAndCancelRequest reports Ambiguous with the matching subset`() = runTest {
         val toolApi = FakeVoiceToolApi()
         val manager = manager(toolApi = toolApi, conversationStore = FakeVoiceConversationStore(), scope = this)
         manager.submit(callId = "call-1", prompt = "deploy status for web")
@@ -2697,7 +2697,7 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-2", prompt = "deploy status for android")
         assertEquals("call-2" to "deploy status for android", toolApi.awaitRequest("call-2"))
 
-        val outcome = manager.resolveCancelRequest("deploy status")
+        val outcome = manager.resolveAndCancelRequest("deploy status")
 
         assertTrue(outcome is CancelHermesOutcome.Ambiguous)
         assertEquals(
@@ -2723,7 +2723,7 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-1", prompt = "deploy status")
         assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
 
-        manager.handleCancelHermesCall(callId = "cancel-1", question = "deploy status")
+        manager.handleCancelHermesCall(callId = "cancel-1", question = "deploy status", sessionId = 7L)
 
         withTimeout(500) {
             while (bridge.cancelResponses.isEmpty()) { delay(10) }
@@ -2748,7 +2748,7 @@ class HermesJobManagerTest {
         )
         manager.attachBridge(bridge = bridge, sessionId = 7L)
 
-        manager.handleCancelHermesCall(callId = "cancel-1", question = "anything")
+        manager.handleCancelHermesCall(callId = "cancel-1", question = "anything", sessionId = 7L)
 
         withTimeout(500) {
             while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
@@ -2772,7 +2772,7 @@ class HermesJobManagerTest {
         manager.attachBridge(bridge = bridge, sessionId = 7L)
         val blockedCancel = bridge.blockNextCancelResponse()
 
-        manager.handleCancelHermesCall(callId = "cancel-timeout", question = "anything")
+        manager.handleCancelHermesCall(callId = "cancel-timeout", question = "anything", sessionId = 7L)
 
         assertTrue(blockedCancel.started.await(500, TimeUnit.MILLISECONDS))
         withTimeout(500) {
@@ -2795,7 +2795,7 @@ class HermesJobManagerTest {
             recordDiagnostic = { name, detail -> diagnostics += name to detail },
         )
 
-        manager.handleCancelHermesCall(callId = "cancel-unattached", question = "anything")
+        manager.handleCancelHermesCall(callId = "cancel-unattached", question = "anything", sessionId = 7L)
 
         withTimeout(500) {
             while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
@@ -2805,6 +2805,59 @@ class HermesJobManagerTest {
         assertTrue(detail.contains("sessionId=none"))
         assertTrue(detail.contains("error=no_bridge_attached"))
         assertTrue(bridge.cancelResponses.isEmpty())
+    }
+
+    @Test
+    fun `handleCancelHermesCall records session_mismatch when the attachment session differs`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+
+        manager.handleCancelHermesCall(callId = "cancel-mismatch", question = "anything", sessionId = 9L)
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-mismatch"))
+        assertTrue(detail.contains("sessionId=7"))
+        assertTrue(detail.contains("error=session_mismatch"))
+        assertTrue(bridge.cancelResponses.isEmpty())
+    }
+
+    @Test
+    fun `handleCancelHermesCall records bridge_attachment_changed when the attachment changes mid-send`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            bridgeSendTimeoutMs = 10_000L,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        val blockedCancel = bridge.blockNextCancelResponse()
+
+        manager.handleCancelHermesCall(callId = "cancel-changed", question = "anything", sessionId = 7L)
+
+        assertTrue(blockedCancel.started.await(500, TimeUnit.MILLISECONDS))
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        blockedCancel.release.complete(Unit)
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-changed"))
+        assertTrue(detail.contains("error=bridge_attachment_changed"))
     }
 }
 

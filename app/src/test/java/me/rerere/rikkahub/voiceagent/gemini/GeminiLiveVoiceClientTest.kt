@@ -128,12 +128,12 @@ class GeminiLiveVoiceClientTest {
                         voiceToolCall(
                             callId = "call-1",
                             name = "ask_hermes",
-                            prompt = "First prompt",
+                            arg = "First prompt",
                         ),
                         voiceToolCall(
                             callId = "call-2",
                             name = "ask_hermes",
-                            prompt = "Second prompt",
+                            arg = "Second prompt",
                         ),
                     )
                 )

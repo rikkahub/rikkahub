@@ -13,6 +13,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
+import me.rerere.rikkahub.voiceagent.gemini.voiceToolSpecsByName
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
@@ -23,11 +24,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
-fun voiceToolCall(callId: String, name: String, prompt: String): GeminiLiveEvent.ToolCall = when (name) {
-    VoiceAgentToolNames.ASK_HERMES -> GeminiLiveEvent.AskHermesCall(callId = callId, prompt = prompt)
-    VoiceAgentToolNames.CANCEL_HERMES -> GeminiLiveEvent.CancelHermesCall(callId = callId, question = prompt)
-    else -> error("voiceToolCall: unknown tool name '$name' — construct GeminiLiveEvent.UnsupportedToolCall directly for negative-path fixtures")
-}
+fun voiceToolCall(callId: String, name: String, arg: String): GeminiLiveEvent.ToolCall =
+    voiceToolSpecsByName[name]?.buildCall?.invoke(callId, arg)
+        ?: error("voiceToolCall: unknown tool name '$name' — construct GeminiLiveEvent.UnsupportedToolCall directly for negative-path fixtures")
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     val audioMessages = mutableListOf<String>()
