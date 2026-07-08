@@ -95,20 +95,6 @@ class HermesQueueRecordTest {
         )
     }
 
-    @Test
-    fun `legacy boolean keys are honored until the writer migrates (bridge)`() {
-        // TEMPORARY Task-2->3 bridge test: DELETED in Task 3 with the bridge.
-        val part = record(status = HermesQueueStatus.Running).toToolPart()
-        val legacy = part.copy(metadata = buildJsonObject {
-            part.metadata!!.forEach { (k, v) -> if (k != HERMES_TOOL_ANNOUNCEMENT_KEY) put(k, v) }
-            put("voice_tool_still_working_announced", true)
-        })
-        assertEquals(
-            HermesAnnouncementState.StillWorkingAnnounced,
-            HermesQueueRecord.fromToolPart(legacy)!!.announcement,
-        )
-    }
-
     // --- advance transition table (at-most-once falls out of nulls) ---
 
     @Test
@@ -436,7 +422,7 @@ class HermesQueueRecordTest {
             outputText = "private malformed status answer",
             metadata = buildJsonObject {
                 put(HERMES_TOOL_STATUS_KEY, "not-a-status")
-                put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, false)
+                put(HERMES_TOOL_ANNOUNCEMENT_KEY, "not_announced")
             },
         )
 

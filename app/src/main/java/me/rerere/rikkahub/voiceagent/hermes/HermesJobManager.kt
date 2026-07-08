@@ -21,7 +21,6 @@ import me.rerere.rikkahub.voiceagent.VoiceToolStatus
 import me.rerere.rikkahub.voiceagent.hermesCompletionFollowUpText
 import me.rerere.rikkahub.voiceagent.isTerminalHermesToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
-import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.summarizeVoiceToolStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
@@ -107,9 +106,11 @@ class HermesJobManager(
 ) {
     private val lock = Any()
     private val announcementMutex = Mutex()
+    private val recordWriter = HermesToolRecordWriter()
     private val queueStore = HermesQueueStore(
         conversationStore = conversationStore,
         persister = persister,
+        writer = recordWriter,
         persistenceSessionId = ::currentPersistenceSessionId,
     )
     private val activeJobs = mutableMapOf<String, ManagedHermesJob>()

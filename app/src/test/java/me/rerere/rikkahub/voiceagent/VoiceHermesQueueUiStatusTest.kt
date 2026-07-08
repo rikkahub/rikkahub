@@ -2,8 +2,8 @@ package me.rerere.rikkahub.voiceagent
 
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
-import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
-import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
+import me.rerere.rikkahub.voiceagent.hermes.HermesToolRecordWriter
+import me.rerere.rikkahub.voiceagent.hermes.VoiceToolRecordStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,13 +11,13 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class VoiceHermesQueueUiStatusTest {
-    private val persister = VoiceConversationPersister()
+    private val writer = HermesToolRecordWriter()
 
     @Test
     fun `from snapshot exposes compact queue counts for UI state`() {
         val conversation = Conversation.ofId(Uuid.random())
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "queued",
                     prompt = "queued request",
@@ -26,7 +26,7 @@ class VoiceHermesQueueUiStatusTest {
                 )
             }
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "running",
                     prompt = "running request",
@@ -35,53 +35,49 @@ class VoiceHermesQueueUiStatusTest {
                 )
             }
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "complete",
                     prompt = "complete request",
                     status = VoiceToolRecordStatus.Complete("complete answer"),
                     jobId = "job-complete",
-                    resultAnnounced = false,
                 )
             }
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "failed",
                     prompt = "failed request",
                     status = VoiceToolRecordStatus.Failed("failed reason"),
                     jobId = "job-failed",
-                    resultAnnounced = false,
                 )
             }
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "expired",
                     prompt = "expired request",
                     status = VoiceToolRecordStatus.Expired("expired reason"),
                     jobId = "job-expired",
-                    resultAnnounced = false,
                 )
             }
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "canceled",
                     prompt = "canceled request",
                     status = VoiceToolRecordStatus.Canceled("canceled reason"),
                     jobId = "job-canceled",
-                    resultAnnounced = false,
                 )
             }
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "announced",
                     prompt = "announced request",
                     status = VoiceToolRecordStatus.Complete("announced answer"),
                     jobId = "job-announced",
-                    resultAnnounced = true,
+                    announceOnWrite = true,
                 )
             }
 
@@ -98,13 +94,13 @@ class VoiceHermesQueueUiStatusTest {
 
     @Test
     fun `announced terminal records are counted without visible work`() {
-        val conversation = persister.upsertHermesTool(
+        val conversation = writer.upsertHermesTool(
             conversation = Conversation.ofId(Uuid.random()),
             callId = "announced",
             prompt = "announced request",
             status = VoiceToolRecordStatus.Complete("announced answer"),
             jobId = "job-announced",
-            resultAnnounced = true,
+            announceOnWrite = true,
         )
 
         val status = VoiceHermesQueueUiStatus.fromSnapshot(HermesQueueSnapshot.from(conversation))

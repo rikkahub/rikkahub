@@ -3,7 +3,6 @@ package me.rerere.rikkahub.voiceagent.hermes
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -18,13 +17,6 @@ const val HERMES_TOOL_JOB_ID_KEY = "voice_tool_job_id"
 const val HERMES_TOOL_CREATED_AT_KEY = "voice_tool_created_at"
 const val HERMES_TOOL_UPDATED_AT_KEY = "voice_tool_updated_at"
 const val HERMES_TOOL_ANNOUNCEMENT_KEY = "voice_tool_announcement"
-
-// TEMPORARY: the persister still writes these until Task 3 replaces it with
-// HermesToolRecordWriter; Task 3 deletes all four constants.
-const val HERMES_TOOL_SOURCE_KEY = "voice_tool_source"
-const val HERMES_TOOL_RESULT_ANNOUNCED_KEY = "voice_tool_result_announced"
-const val HERMES_TOOL_STILL_WORKING_KEY = "voice_tool_still_working_announced"
-const val HERMES_TOOL_MESSAGE_WRITTEN_KEY = "voice_tool_message_written"
 
 enum class HermesQueueStatus(val wireName: String) {
     Pending("pending"),
@@ -159,7 +151,6 @@ data class HermesQueueRecord(
             val announcement = HermesAnnouncementState.fromWireName(
                 metadata.stringOrNull(HERMES_TOOL_ANNOUNCEMENT_KEY)
             )
-                ?: legacyAnnouncementOrNull(metadata, status)
                 ?: if (status.isTerminal) HermesAnnouncementState.Announced else HermesAnnouncementState.NotAnnounced
 
             return HermesQueueRecord(
@@ -176,26 +167,7 @@ data class HermesQueueRecord(
         }
 
         private fun JsonObject.hasAnnouncementSignal(): Boolean =
-            HERMES_TOOL_ANNOUNCEMENT_KEY in this || "voice_tool_result_announced" in this
-
-        // TEMPORARY Task-2->3 bridge: delete when HermesToolRecordWriter writes
-        // voice_tool_announcement (Task 3). Maps the legacy three-boolean encoding.
-        private fun legacyAnnouncementOrNull(
-            metadata: JsonObject,
-            status: HermesQueueStatus,
-        ): HermesAnnouncementState? {
-            val announced = metadata.booleanOrNull("voice_tool_result_announced")
-            val messageWritten = metadata.booleanOrNull("voice_tool_message_written") == true
-            val stillWorking = metadata.booleanOrNull("voice_tool_still_working_announced") == true
-            if (announced == null && !messageWritten && !stillWorking) return null
-            return when {
-                announced == true -> HermesAnnouncementState.Announced
-                messageWritten -> HermesAnnouncementState.MessageWritten
-                stillWorking -> HermesAnnouncementState.StillWorkingAnnounced
-                announced == false -> HermesAnnouncementState.NotAnnounced
-                else -> null
-            }
-        }
+            HERMES_TOOL_ANNOUNCEMENT_KEY in this
     }
 }
 
@@ -274,8 +246,4 @@ private fun HermesQueueRecord.durableIdentity(): HermesDurableIdentity {
 
 private fun JsonObject.stringOrNull(key: String): String? {
     return (this[key] as? JsonPrimitive)?.contentOrNull
-}
-
-private fun JsonObject.booleanOrNull(key: String): Boolean? {
-    return (this[key] as? JsonPrimitive)?.booleanOrNull
 }

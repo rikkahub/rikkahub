@@ -24,7 +24,6 @@ import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
-import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
@@ -49,6 +48,7 @@ import kotlin.uuid.Uuid
 
 class HermesJobManagerTest {
     private val persister = VoiceConversationPersister()
+    private val writer = HermesToolRecordWriter()
 
     @Test
     fun `submitted job keeps polling after session bridge detaches`() = runTest {
@@ -218,13 +218,13 @@ class HermesJobManagerTest {
     @Test
     fun `submit after terminal no job record with same call id creates fresh remote job`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-reused-no-job",
                 prompt = "old failed prompt",
                 status = VoiceToolRecordStatus.Failed("old submit failed"),
                 jobId = null,
-                resultAnnounced = true,
+                announceOnWrite = true,
             )
         }
         val toolApi = FakeVoiceToolApi()
@@ -482,7 +482,7 @@ class HermesJobManagerTest {
     @Test
     fun `resume polls persisted active jobs and announces when bridge is attached`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-resume",
                 prompt = "resume request",
@@ -523,14 +523,14 @@ class HermesJobManagerTest {
     @Test
     fun `resume does not repeat already announced still working update`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            val running = persister.upsertHermesTool(
+            val running = writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-resume-still-working",
                 prompt = "resume still working request",
                 status = VoiceToolRecordStatus.Running,
                 jobId = "job-resume-still-working",
             )
-            persister.markHermesToolStillWorkingAnnounced(
+            writer.markStillWorkingAnnounced(
                 conversation = running,
                 callId = "call-resume-still-working",
                 jobId = "job-resume-still-working",
@@ -922,13 +922,13 @@ class HermesJobManagerTest {
     @Test
     fun `completion waiting behind detached bridge remains unannounced for later retry`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-blocking",
                 prompt = "blocking announcement",
                 status = VoiceToolRecordStatus.Complete("blocking answer"),
                 jobId = "job-blocking",
-                resultAnnounced = false,
+                announceOnWrite = false,
             )
         }
         val toolApi = FakeVoiceToolApi()
@@ -1512,7 +1512,7 @@ class HermesJobManagerTest {
     @Test
     fun `resume expires already old active record without fresh timeout window`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-old-resume",
                 prompt = "old resume request",
@@ -1548,7 +1548,7 @@ class HermesJobManagerTest {
     @Test
     fun `default durable age keeps nearly twenty four hour old resumed job active`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-default-age",
                 prompt = "default age request",
@@ -1584,7 +1584,7 @@ class HermesJobManagerTest {
     @Test
     fun `resume expires active record missing job id`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-missing-job-id",
                 prompt = "missing job id",
@@ -1611,7 +1611,7 @@ class HermesJobManagerTest {
     @Test
     fun `resume expires active record with invalid timing metadata`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-invalid-created-at",
                 prompt = "invalid created at",
@@ -1727,7 +1727,7 @@ class HermesJobManagerTest {
     @Test
     fun `resume ignores stale active duplicate superseded by terminal record`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-stale-active-duplicate",
                 prompt = "old running prompt",
@@ -1763,7 +1763,7 @@ class HermesJobManagerTest {
     fun `resume polls distinct active records when call id has multiple active jobs`() = runTest {
         val initialConversation = Conversation.ofId(Uuid.random())
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "call-reused-active",
                     prompt = "old active prompt",
@@ -1772,7 +1772,7 @@ class HermesJobManagerTest {
                 )
             }
             .let {
-                persister.upsertHermesTool(
+                writer.upsertHermesTool(
                     conversation = it,
                     callId = "call-reused-active",
                     prompt = "new active prompt",
@@ -2050,7 +2050,7 @@ class HermesJobManagerTest {
         }
 
         conversationStore.update {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-stale-active",
                 prompt = "stale active",
@@ -2070,13 +2070,13 @@ class HermesJobManagerTest {
     @Test
     fun `repeated bridge attach announces each completed result once`() = runTest {
         val conversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-announced-once",
                 prompt = "announce once",
                 status = VoiceToolRecordStatus.Complete("single answer"),
                 jobId = "job-once",
-                resultAnnounced = false,
+                announceOnWrite = false,
             )
         }
         val toolApi = FakeVoiceToolApi()
@@ -2097,13 +2097,13 @@ class HermesJobManagerTest {
     @Test
     fun `completion announcement uses latest matching durable record`() = runTest {
         val conversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-duplicate-complete",
                 prompt = "old prompt",
                 status = VoiceToolRecordStatus.Complete("old answer"),
                 jobId = "job-duplicate",
-                resultAnnounced = false,
+                announceOnWrite = false,
             )
         }.withDuplicateHermesCompletion(
             callId = "call-duplicate-complete",
@@ -2140,13 +2140,13 @@ class HermesJobManagerTest {
     @Test
     fun `bridge attach ignores stale completed duplicate superseded by later terminal record`() = runTest {
         val conversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-stale-complete",
                 prompt = "old prompt",
                 status = VoiceToolRecordStatus.Complete("old answer"),
                 jobId = "job-stale",
-                resultAnnounced = false,
+                announceOnWrite = false,
             )
         }.withDuplicateHermesTerminal(
             callId = "call-stale-complete",
@@ -2173,13 +2173,13 @@ class HermesJobManagerTest {
     @Test
     fun `repeated bridge attach announces failed terminal result once`() = runTest {
         val conversation = Conversation.ofId(Uuid.random()).let {
-            persister.upsertHermesTool(
+            writer.upsertHermesTool(
                 conversation = it,
                 callId = "call-failed-once",
                 prompt = "announce failure once",
                 status = VoiceToolRecordStatus.Failed("single failure"),
                 jobId = "job-failed-once",
-                resultAnnounced = false,
+                announceOnWrite = false,
             )
         }
         val toolApi = FakeVoiceToolApi()
@@ -2300,6 +2300,7 @@ class HermesJobManagerTest {
             val queueStore = HermesQueueStore(
                 conversationStore = conversationStore,
                 persister = persister,
+                writer = writer,
                 persistenceSessionId = {
                     val sessionId = currentSessionId
                     if (providerCalls.incrementAndGet() == 2) {
@@ -2366,6 +2367,7 @@ class HermesJobManagerTest {
         val queueStore = HermesQueueStore(
             conversationStore = conversationStore,
             persister = persister,
+            writer = writer,
         )
 
         assertTrue(
@@ -2563,7 +2565,10 @@ class HermesJobManagerTest {
         resultAnnounced: Boolean,
     ) = buildJsonObject {
         forEach { (key, value) -> put(key, value) }
-        put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, JsonPrimitive(resultAnnounced))
+        put(
+            HERMES_TOOL_ANNOUNCEMENT_KEY,
+            JsonPrimitive(if (resultAnnounced) "announced" else "not_announced"),
+        )
     }
 
     private fun kotlinx.serialization.json.JsonObject.withStatus(

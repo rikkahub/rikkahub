@@ -6,8 +6,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
-import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_RESULT_ANNOUNCED_KEY
-import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_SOURCE_KEY
+import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_ANNOUNCEMENT_KEY
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_TOOL_STATUS_KEY
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -626,12 +625,14 @@ class VoiceContextBuilderTest {
         input = """{"prompt":"$prompt"}""",
         output = outputText?.let { listOf(UIMessagePart.Text(it)) }.orEmpty(),
         metadata = buildJsonObject {
-            put(HERMES_TOOL_SOURCE_KEY, VoiceAgentToolNames.ASK_HERMES)
             put(HERMES_TOOL_STATUS_KEY, status)
             if (resultAnnouncedText != null) {
-                put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnouncedText)
+                // Malformed announcement value: HermesAnnouncementState.fromWireName
+                // rejects it and falls back to the terminal-default (Announced), same as
+                // the old malformed-boolean fallback this test ported from.
+                put(HERMES_TOOL_ANNOUNCEMENT_KEY, resultAnnouncedText)
             } else if (includeResultAnnounced) {
-                put(HERMES_TOOL_RESULT_ANNOUNCED_KEY, resultAnnounced)
+                put(HERMES_TOOL_ANNOUNCEMENT_KEY, if (resultAnnounced) "announced" else "not_announced")
             }
         },
     )
