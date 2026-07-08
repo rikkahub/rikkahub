@@ -24,7 +24,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -137,6 +136,14 @@ fun WorkspaceDetailPage(id: String) {
                 },
                 navigationIcon = { BackButton() },
                 actions = {
+                    if (pagerState.currentPage == 1) {
+                        IconButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
+                            Icon(
+                                HugeIcons.FileImport,
+                                contentDescription = stringResource(R.string.workspace_detail_import_file),
+                            )
+                        }
+                    }
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(HugeIcons.Refresh01, contentDescription = null)
                     }
@@ -163,13 +170,6 @@ fun WorkspaceDetailPage(id: String) {
                     icon = { Icon(HugeIcons.File02, contentDescription = null) },
                     onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                 )
-            }
-        },
-        floatingActionButton = {
-            if (pagerState.currentPage == 1) {
-                FloatingActionButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
-                    Icon(HugeIcons.FileImport, contentDescription = stringResource(R.string.workspace_detail_import_file))
-                }
             }
         },
         containerColor = CustomColors.topBarColors.containerColor,
