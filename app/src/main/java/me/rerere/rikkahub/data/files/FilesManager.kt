@@ -442,6 +442,10 @@ object FileFolders {
     const val SKILLS = "skills"
     const val FONTS = "fonts"
     const val TOOL_OUTPUTS = "tool_outputs"
+    const val IMAGES = "images"
+
+    /** All browsable folders in display order. */
+    val ALL = listOf(UPLOAD, IMAGES, SKILLS, FONTS, TOOL_OUTPUTS)
 }
 
 suspend fun FilesManager.saveUploadFromUri(

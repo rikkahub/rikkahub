@@ -12,3 +12,13 @@ fun <E> Collection<E>.checkDifferent(
     }
     return added to removed
 }
+
+/**
+ * Returns a new list with [first] placed at index 0, preserving the original order
+ * of all other elements. Useful for ensuring the current image appears first in
+ * a preview gallery.
+ */
+fun <T> List<T>.reorderWithFirst(first: T): List<T> = buildList {
+    add(first)
+    addAll(this@reorderWithFirst.filter { it != first })
+}
