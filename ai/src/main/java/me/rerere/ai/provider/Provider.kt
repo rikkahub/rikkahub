@@ -41,7 +41,9 @@ interface Provider<T : ProviderSetting> {
     suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
-    ): Flow<ImageGenerationItem>
+    ): Flow<ImageGenerationItem> {
+        error("Image generation is not supported")
+    }
 
     suspend fun editImage(
         providerSetting: ProviderSetting,
