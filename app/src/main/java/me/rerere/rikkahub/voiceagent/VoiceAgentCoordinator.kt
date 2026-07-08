@@ -355,9 +355,13 @@ class VoiceAgentCoordinator(
         persistenceScope.cancel()
         hermesScope.launch {
             hermesJobManager.awaitJobs()
-            // Drain barrier: every announcement enqueued before close must be processed (sent
-            // or fallback-to-text) before the store closes and the scope is cancelled, so a
-            // tail completion/terminal is never lost to the racing cancel.
+            // Drain barrier — a within-process teardown ordering guarantee only: every
+            // announcement enqueued before close is processed (sent or fallback-to-text) before
+            // the store closes and this scope is cancelled, so the racing cancel can't drop a tail
+            // completion/terminal that teardown itself produced. It is NOT a crash-durability
+            // guarantee: process death mid-drain is recovered next session by resumeActiveJobs()
+            // + announcer replay-on-attach, because the terminal record is persisted before the
+            // announce is ever enqueued.
             hermesJobManager.announcer.awaitClosed()
             if (conversationStore != null) {
                 sharedConversationStore.close()

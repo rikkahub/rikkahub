@@ -287,6 +287,60 @@ class HermesAnnouncerTest {
         assertTrue(store.latestRecord(callId = "call-2", jobId = "job-2")!!.resultAnnounced)
     }
 
+    // 10b (Task 8 review: outer effect-failure containment)
+    @Test
+    fun `a send effect that throws is contained by the outer catch and the queue continues`() = runTest {
+        val diagnostics = mutableListOf<Pair<String, String>>()
+        // The store's latestRecord read throws inside executeSend BEFORE any guard, so the
+        // failure escapes sendCompletion entirely and lands in the consumer's OUTER try/catch:
+        // it logs announcer_effect_failed and re-emits SendReturned(Failed) so inFlight can never
+        // wedge the queue. The reducer then falls the intent back to the visible text message.
+        val poison = ReadPoisonStore(
+            SynchronizedVoiceConversationStore(InMemoryVoiceConversationStore(emptyConversation())),
+        )
+        val store = HermesQueueStore(
+            conversationStore = poison,
+            writer = writer,
+            transcriptPersister = transcriptPersister,
+        )
+        val bridge = RecordingBridge()
+        val announcer = announcer(queueStore = store, telemetry = telemetry(diagnostics))
+
+        announcer.attachScoped(bridge, sessionId = 7L)
+        runCurrent()
+
+        store.persistTerminal(
+            callId = "call-1",
+            prompt = "prompt-call-1",
+            status = VoiceToolRecordStatus.Complete("first"),
+            jobId = "job-1",
+            announced = false,
+        )
+        poison.arm()
+        announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
+        runCurrent()
+
+        assertTrue(bridge.completions.isEmpty())
+        assertTrue(diagnostics.any { it.first == "announcer_effect_failed" })
+        val failed = store.latestRecord(callId = "call-1", jobId = "job-1")!!
+        assertTrue("outer-catch failure must fall back to visible text", failed.messageWritten)
+        assertFalse(failed.resultAnnounced)
+
+        // The queue is not wedged: a subsequent completion still sends.
+        store.persistTerminal(
+            callId = "call-2",
+            prompt = "prompt-call-2",
+            status = VoiceToolRecordStatus.Complete("second"),
+            jobId = "job-2",
+            announced = false,
+        )
+        announcer.enqueueCompletion(callId = "call-2", jobId = "job-2")
+        runCurrent()
+
+        assertEquals(listOf("call-2"), bridge.completions)
+        assertTrue(store.latestRecord(callId = "call-2", jobId = "job-2")!!.resultAnnounced)
+    }
+
     // 11
     @Test
     fun `close mid-queue falls back queued completion intents`() = runTest {
@@ -535,6 +589,29 @@ class HermesAnnouncerTest {
             yield()
             delegate.update(transform)
         }
+    }
+
+    /**
+     * A conversation store whose [conversation] read throws once after [arm], then delegates.
+     * Drives a read failure inside `latestRecord` (the pre-guard read in `executeSend`), which
+     * escapes the send and exercises the consumer's outer effect-failure containment. Writes
+     * ([update]) always delegate, so the reducer's text fallback still lands.
+     */
+    private class ReadPoisonStore(
+        private val delegate: VoiceConversationStore,
+    ) : VoiceConversationStore {
+        private var armed = false
+        fun arm() { armed = true }
+        override val conversation: StateFlow<Conversation>
+            get() {
+                if (armed) {
+                    armed = false
+                    throw IllegalStateException("read boom")
+                }
+                return delegate.conversation
+            }
+
+        override suspend fun update(transform: (Conversation) -> Conversation) = delegate.update(transform)
     }
 
     /** A conversation store whose first [update] throws, then delegates normally. */
