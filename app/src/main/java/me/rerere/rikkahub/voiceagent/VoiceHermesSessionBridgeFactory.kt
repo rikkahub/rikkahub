@@ -2,7 +2,6 @@ package me.rerere.rikkahub.voiceagent
 
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.CancelHermesOutcome
-import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueEvent
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
@@ -67,7 +66,6 @@ class VoiceHermesSessionBridgeFactory(
     private val unboundSessionId: Long,
     private val writeQueueEvent: (HermesQueueEvent) -> Unit,
     private val clearOutputAudioSuppressionForNewTurn: () -> Unit,
-    private val announcementScheduler: HermesAnnouncementScheduler,
 ) {
     fun create(sessionId: Long): HermesSessionBridge = object : HermesSessionBridge {
         override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
@@ -88,17 +86,15 @@ class VoiceHermesSessionBridgeFactory(
             answer: String,
             sessionId: Long,
         ): Boolean {
-            val sent = announcementScheduler.withAnnouncementSlot("completion:$callId") {
-                clearOutputAudioSuppressionForNewTurn()
-                if (sessionId == unboundSessionId) {
-                    gemini.sendTextTurn(text = hermesCompletionFollowUpText(prompt = prompt, answer = answer))
-                } else {
-                    gemini.sendTextTurn(
-                        text = hermesCompletionFollowUpText(prompt = prompt, answer = answer),
-                        sessionId = sessionId,
-                    )
-                }
-            } ?: false
+            clearOutputAudioSuppressionForNewTurn()
+            val sent = if (sessionId == unboundSessionId) {
+                gemini.sendTextTurn(text = hermesCompletionFollowUpText(prompt = prompt, answer = answer))
+            } else {
+                gemini.sendTextTurn(
+                    text = hermesCompletionFollowUpText(prompt = prompt, answer = answer),
+                    sessionId = sessionId,
+                )
+            }
             writeQueueEvent(
                 HermesQueueEvent(
                     type = "late_text_turn_sent",
@@ -124,14 +120,12 @@ class VoiceHermesSessionBridgeFactory(
             sessionId: Long,
         ): Boolean {
             val text = hermesTerminalFollowUpText(prompt = prompt, status = status, reason = reason)
-            val sent = announcementScheduler.withAnnouncementSlot("terminal:$callId") {
-                clearOutputAudioSuppressionForNewTurn()
-                if (sessionId == unboundSessionId) {
-                    gemini.sendTextTurn(text = text)
-                } else {
-                    gemini.sendTextTurn(text = text, sessionId = sessionId)
-                }
-            } ?: false
+            clearOutputAudioSuppressionForNewTurn()
+            val sent = if (sessionId == unboundSessionId) {
+                gemini.sendTextTurn(text = text)
+            } else {
+                gemini.sendTextTurn(text = text, sessionId = sessionId)
+            }
             writeQueueEvent(
                 HermesQueueEvent(
                     type = "late_terminal_text_turn_sent",
@@ -154,17 +148,15 @@ class VoiceHermesSessionBridgeFactory(
             prompt: String,
             sessionId: Long,
         ): Boolean {
-            val sent = announcementScheduler.withAnnouncementSlot("still-working:$callId") {
-                clearOutputAudioSuppressionForNewTurn()
-                if (sessionId == unboundSessionId) {
-                    gemini.sendTextTurn(text = hermesStillWorkingUpdateText(prompt = prompt))
-                } else {
-                    gemini.sendTextTurn(
-                        text = hermesStillWorkingUpdateText(prompt = prompt),
-                        sessionId = sessionId,
-                    )
-                }
-            } ?: false
+            clearOutputAudioSuppressionForNewTurn()
+            val sent = if (sessionId == unboundSessionId) {
+                gemini.sendTextTurn(text = hermesStillWorkingUpdateText(prompt = prompt))
+            } else {
+                gemini.sendTextTurn(
+                    text = hermesStillWorkingUpdateText(prompt = prompt),
+                    sessionId = sessionId,
+                )
+            }
             writeQueueEvent(
                 HermesQueueEvent(
                     type = "still_working_text_turn_sent",

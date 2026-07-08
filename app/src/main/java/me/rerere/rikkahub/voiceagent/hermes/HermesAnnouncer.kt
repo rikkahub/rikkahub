@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -52,6 +53,12 @@ class HermesAnnouncer(
     private var closed = false
     private var defaultInstance: HermesSessionBridge? = null
 
+    // Drain barrier (Task 9 review, close-loss trace): awaitClosed() registers a deferred
+    // here under `lock` and posts a Close; the consumer completes-and-clears every registered
+    // ack after executing a Close event's effects. FIFO delivery means every intent enqueued
+    // before that Close has already been fallback-processed by the time the ack completes.
+    private val closeAcks = mutableListOf<CompletableDeferred<Unit>>()
+
     private var state = AnnouncerState()
     private var quietTimer: Job? = null
     private var holdTimer: Job? = null
@@ -90,6 +97,10 @@ class HermesAnnouncer(
                             )
                         }
                     }
+                }
+                if (event is AnnouncerEvent.Close) {
+                    // Close effects (queue drained to text fallback) have now executed in order.
+                    completeCloseAcks()
                 }
             }
         }
@@ -209,6 +220,34 @@ class HermesAnnouncer(
             attachment = null
         }
         events.trySend(AnnouncerEvent.Close)
+    }
+
+    /**
+     * Drain barrier: suspends until every event enqueued before this call has been processed
+     * by the consumer, so a tail completion/terminal cannot be lost to a racing scope cancel.
+     * Registers an ack under [lock], posts a Close (idempotent in the reducer), and awaits it;
+     * the consumer completes the ack after executing that Close's effects. FIFO delivery on the
+     * event channel guarantees all earlier intents were fallback-processed first.
+     */
+    suspend fun awaitClosed() {
+        val ack = CompletableDeferred<Unit>()
+        synchronized(lock) {
+            closed = true
+            attachment?.active = false
+            attachment = null
+            closeAcks += ack
+        }
+        events.trySend(AnnouncerEvent.Close)
+        ack.await()
+    }
+
+    private fun completeCloseAcks() {
+        val acks = synchronized(lock) {
+            val snapshot = closeAcks.toList()
+            closeAcks.clear()
+            snapshot
+        }
+        acks.forEach { it.complete(Unit) }
     }
 
     /** Replay unannounced terminal results through the ordinary intent queue. */

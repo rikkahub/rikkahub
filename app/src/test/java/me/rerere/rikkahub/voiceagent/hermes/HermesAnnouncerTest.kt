@@ -358,6 +358,26 @@ class HermesAnnouncerTest {
         assertEquals(listOf("call-a", "call-b"), bridge.completions)
     }
 
+    // 15 (Task 10 drain barrier)
+    @Test
+    fun `awaitClosed drains intents enqueued before close before returning`() = runTest {
+        val store = store(emptyConversation().withComplete(callId = "call-1", jobId = "job-1", answer = "the answer"))
+        val bridge = RecordingBridge()
+        val announcer = announcer(queueStore = store)
+
+        // Audio active holds the completion instead of sending it. close()+awaitClosed() must
+        // drain the held intent to the visible-text fallback before the barrier returns — no
+        // runCurrent() here, awaitClosed() is itself the drain point.
+        announcer.onAssistantAudioActive(active = true)
+        announcer.attachScoped(bridge, sessionId = 7L)
+        announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
+        announcer.close()
+        announcer.awaitClosed()
+
+        assertTrue(bridge.completions.isEmpty())
+        assertTrue(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
+    }
+
     // --- fixtures ---
 
     private fun emptyConversation(): Conversation = Conversation.ofId(Uuid.random())

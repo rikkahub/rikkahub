@@ -24,7 +24,6 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
-import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesToolRecordWriter
 import me.rerere.rikkahub.voiceagent.hermes.VoiceToolRecordStatus
@@ -417,23 +416,12 @@ class VoiceAgentRuntimeTest {
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
         val diagnostics = VoiceDiagnostics()
-        // A scheduler whose deadline poll ticks resolve quickly (a genuine suspending delay,
-        // not a virtual clock) so this test can observe the deadline-bound release without
-        // this file's runTest (plain runBlocking, no virtual time) actually waiting out the
-        // real HermesAnnouncementScheduler.DEFAULT_MAX_HOLD_MS (15s). Each tick is >= 2ms
-        // real, so the deadline (75 ticks) cannot fire before 150ms of wall time — the
-        // nothing-sent check below runs at 10ms, a wide margin against CI load.
-        val scheduler = HermesAnnouncementScheduler(
-            delayFn = { delay(2L) },
-            recordDiagnostic = diagnostics::record,
-        )
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = FakeVoiceAudioEngine(),
             conversationStore = conversationStore,
             diagnostics = diagnostics,
-            hermesAnnouncementScheduler = scheduler,
             scope = this,
         )
 
@@ -462,8 +450,8 @@ class VoiceAgentRuntimeTest {
         )
 
         // Assistant audio never explicitly stops in this test, so the only way the gated
-        // announcement is released is the scheduler's own deadline
-        // (HermesAnnouncementScheduler.DEFAULT_MAX_HOLD_MS), bounding how long it can be held.
+        // announcement is released is the announcer's own max-hold deadline
+        // (HermesAnnouncer.DEFAULT_MAX_HOLD_MS), bounding how long it can be held.
         withTimeout(5_000) {
             coordinator.awaitToolJobs()
         }
@@ -485,24 +473,18 @@ class VoiceAgentRuntimeTest {
         val toolApi = FakeVoiceToolApi()
         val audio = FakeVoiceAudioEngine()
         val diagnostics = VoiceDiagnostics()
-        // Injected maxHoldMs is deliberately large (in the scheduler's tick-accounted time) so
-        // the deadline fallback cannot mask a broken pause-release: reaching it would need
-        // 300 ticks of >= 2ms real each (>= 600ms wall time), while the pause-driven release
-        // below fires within a tick or two of the interrupt. If onAssistantAudioActive(false)
-        // stopped releasing the gate, the send could only happen at the deadline — flagged by
-        // the hermes_announcement_released_at_deadline diagnostic asserted absent below.
-        val scheduler = HermesAnnouncementScheduler(
-            maxHoldMs = 60_000L,
-            delayFn = { delay(2L) },
-            recordDiagnostic = diagnostics::record,
-        )
+        // Injected maxHoldMs is deliberately large so the deadline fallback cannot mask a
+        // broken pause-release: the pause-driven release below fires immediately on the
+        // interrupt. If onAssistantAudioActive(false) stopped releasing the gate, the send
+        // could only happen at the deadline — flagged by the
+        // hermes_announcement_released_at_deadline diagnostic asserted absent below.
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = audio,
             conversationStore = conversationStore,
             diagnostics = diagnostics,
-            hermesAnnouncementScheduler = scheduler,
+            hermesAnnouncementMaxHoldMs = 60_000L,
             scope = this,
         )
 
@@ -556,21 +538,15 @@ class VoiceAgentRuntimeTest {
         val diagnostics = VoiceDiagnostics()
         // Small injected quiet window (real wall time, measured from the last input transcript
         // delta) so the test releases quickly. The injected maxHoldMs keeps the deadline
-        // unreachable before the window elapses: 500 ticks of >= 2ms real each puts the
-        // deadline at >= 1s wall time, while the quiet window opens at ~500ms.
-        val scheduler = HermesAnnouncementScheduler(
-            quietWindowMs = 500L,
-            maxHoldMs = 100_000L,
-            delayFn = { delay(2L) },
-            recordDiagnostic = diagnostics::record,
-        )
+        // unreachable before the window elapses.
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = FakeVoiceAudioEngine(),
             conversationStore = conversationStore,
             diagnostics = diagnostics,
-            hermesAnnouncementScheduler = scheduler,
+            hermesAnnouncementQuietWindowMs = 500L,
+            hermesAnnouncementMaxHoldMs = 100_000L,
             scope = this,
         )
 
@@ -616,7 +592,6 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    @Ignore("MOVED-IN-TASK-11: completion follow-up + followUpSent telemetry now delivered asynchronously by HermesAnnouncer, which awaitToolJobs() does not drain until Task 10; covered by HermesAnnouncerTest 'enqueueCompletion sends the completion follow-up and marks the record announced'")
     fun `runtime observability records canonical transcript Hermes and followup attributes`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val conversationStore = FakeVoiceConversationStore()
@@ -944,15 +919,6 @@ class VoiceAgentRuntimeTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
         val diagnostics = VoiceDiagnostics()
-        // A scheduler whose deadline poll ticks resolve quickly (a genuine suspending delay,
-        // not a virtual clock) so the completion follow-up — which is gated behind the
-        // still-working announcement until a Gemini generation-complete event this test never
-        // sends — is released by the scheduler's own max-hold deadline instead of hanging this
-        // file's runTest (plain runBlocking, no virtual time) for the real 15s deadline.
-        val scheduler = HermesAnnouncementScheduler(
-            delayFn = { delay(2L) },
-            recordDiagnostic = diagnostics::record,
-        )
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
@@ -960,7 +926,6 @@ class VoiceAgentRuntimeTest {
             diagnostics = diagnostics,
             hermesJobPollIntervalMs = 10,
             hermesStillWorkingThresholdMs = 150L,
-            hermesAnnouncementScheduler = scheduler,
             scope = this,
         )
 
