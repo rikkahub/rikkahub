@@ -155,6 +155,46 @@ class HermesJobManagerTest {
         )
     }
 
+    @Test
+    fun `an effect-executor failure is contained and the actor keeps draining`() = runTest {
+        // A persistence throw inside an effect (here the first store update, which backs
+        // the PersistPending effect) must be caught by the effect executor, logged through
+        // the diagnostics path, and never kill the consumer or crash the scope. The actor
+        // keeps draining: the very next effect (StartSubmit) still runs, and the job still
+        // reaches its terminal outcome.
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        conversationStore.failNextUpdate(IllegalStateException("persist boom"))
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+
+        manager.submit(callId = "call-effect-failure", prompt = "effect failure request")
+        assertEquals(
+            "call-effect-failure" to "effect failure request",
+            toolApi.awaitRequest("call-effect-failure"),
+        )
+        toolApi.complete(response(callId = "call-effect-failure", answer = "survived answer"))
+
+        // The actor survived the persistence throw: the later terminal persist still runs
+        // and the job reaches Complete rather than dying with no terminal record.
+        conversationStore.awaitHermesRecord("call-effect-failure") {
+            it.status == HermesQueueStatus.Complete && it.answer == "survived answer"
+        }
+        manager.awaitJobs()
+
+        // And the containment was observable through the diagnostics path.
+        assertTrue(
+            diagnostics.any { (name, detail) ->
+                name == "hermes_effect_failed" && detail.contains("callId=call-effect-failure")
+            },
+        )
+    }
+
     // =====================================================================
     // Section 2 — End-to-end journeys: submit / resume / announce / cancel
     // paths through the real shell, ported from the pre-reducer suite.

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
@@ -238,6 +239,13 @@ class HermesJobManager(
                 if (activeJobs.isEmpty()) return
                 activeJobs.values.mapNotNull { it.consumer }
             }
+            if (consumers.isEmpty()) {
+                // activeJobs is non-empty but no consumer is published yet: an actor was
+                // inserted under `lock` and its consumer is being handed off just outside it.
+                // yield() instead of re-looping immediately so we don't hot-spin in that window.
+                yield()
+                continue
+            }
             consumers.joinAll()
         }
     }
@@ -284,6 +292,10 @@ class HermesJobManager(
             // deletes. Durability-before-inspection is the drain's job — callers that must
             // observe the terminal write await it through awaitJobs() (which the coordinator
             // folds into its close/drain path and tests await via awaitToolJobs()).
+            // Invariant making the silent trySend drop safe: every path into Terminal commits
+            // its terminal persist before events.close(), so if the channel is already closed
+            // the job is durably terminal and a dropped CancelRequested is exactly equivalent
+            // to the old terminal-freeze no-op — there is nothing left to cancel.
             actor.events.trySend(JobEvent.CancelRequested(origin))
             return
         }
@@ -445,7 +457,25 @@ class HermesJobManager(
                 val transition = reducer.reduce(actor.state, event)
                 actor.state = transition.state
                 (transition.state as? JobState.Polling)?.let { actor.jobId = it.jobId }
-                transition.effects.forEach { effect -> execute(actor, effect) }
+                transition.effects.forEach { effect ->
+                    // Effect-failure containment: a persistence throw (e.g. SQLite IO from the
+                    // production store) must never kill the consumer or escape to the scope's
+                    // (handler-less) uncaught path and crash the app. Catch it, log through the
+                    // diagnostics path, and keep draining — state was already committed by the
+                    // reducer, so the loop stays consistent. CancellationException is coroutine
+                    // cancellation, not an effect failure, and is rethrown untouched.
+                    try {
+                        execute(actor, effect)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        safeRecordDiagnostic(
+                            "hermes_effect_failed",
+                            "callId=${actor.callId}, effect=${effect::class.simpleName}, " +
+                                "error=${HermesTelemetryLogSanitizer.failureMessage(e.message ?: e.javaClass.simpleName)}",
+                        )
+                    }
+                }
                 if (transition.state is JobState.Terminal) {
                     actor.events.close()
                 }
@@ -1080,6 +1110,10 @@ class HermesJobManager(
     ) {
         val events = Channel<JobEvent>(Channel.UNLIMITED)
         var state: JobState = JobState.Created
+
+        // @Volatile so awaitJobs() reliably sees the consumer handoff that launchActor
+        // performs outside `lock` after the actor is already published in activeJobs.
+        @Volatile
         var consumer: Job? = null
         var inFlight: Job? = null
         var stillWorkingTimer: Job? = null
