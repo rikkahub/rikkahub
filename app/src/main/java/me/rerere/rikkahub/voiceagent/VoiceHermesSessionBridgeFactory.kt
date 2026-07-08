@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.CancelHermesOutcome
 import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueueEvent
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.hermes.PendingHermesRequest
@@ -60,18 +61,11 @@ internal fun cancelHermesResponseText(outcome: CancelHermesOutcome): String = wh
 internal fun List<PendingHermesRequest>.pendingPromptSummary(): String =
     joinToString(separator = "; ") { "\"${it.prompt}\"" }
 
-data class HermesBridgeQueueEvent(
-    val type: String,
-    val callId: String,
-    val jobId: String,
-    val sent: Boolean,
-)
-
 class VoiceHermesSessionBridgeFactory(
     private val gemini: GeminiLiveVoiceClient,
     private val diagnostics: VoiceDiagnostics,
     private val unboundSessionId: Long,
-    private val writeQueueEvent: (HermesBridgeQueueEvent) -> Unit,
+    private val writeQueueEvent: (HermesQueueEvent) -> Unit,
     private val clearOutputAudioSuppressionForNewTurn: () -> Unit,
     private val announcementScheduler: HermesAnnouncementScheduler,
 ) {
@@ -106,7 +100,7 @@ class VoiceHermesSessionBridgeFactory(
                 }
             } ?: false
             writeQueueEvent(
-                HermesBridgeQueueEvent(
+                HermesQueueEvent(
                     type = "late_text_turn_sent",
                     callId = callId,
                     jobId = "none",
@@ -139,7 +133,7 @@ class VoiceHermesSessionBridgeFactory(
                 }
             } ?: false
             writeQueueEvent(
-                HermesBridgeQueueEvent(
+                HermesQueueEvent(
                     type = "late_terminal_text_turn_sent",
                     callId = callId,
                     jobId = "none",
@@ -172,7 +166,7 @@ class VoiceHermesSessionBridgeFactory(
                 }
             } ?: false
             writeQueueEvent(
-                HermesBridgeQueueEvent(
+                HermesQueueEvent(
                     type = "still_working_text_turn_sent",
                     callId = callId,
                     jobId = "none",
