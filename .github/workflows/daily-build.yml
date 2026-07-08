@@ -40,6 +40,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive # 拉取子模块
 
       - name: Set up JDK
         uses: actions/setup-java@v4
