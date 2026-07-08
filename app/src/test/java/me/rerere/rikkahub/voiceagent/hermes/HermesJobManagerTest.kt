@@ -2587,6 +2587,81 @@ class HermesJobManagerTest {
     }
 
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
+
+    @Test
+    fun `resolveCancelRequest with nothing pending returns NothingPending`() = runTest {
+        val manager = manager(toolApi = FakeVoiceToolApi(), conversationStore = FakeVoiceConversationStore(), scope = this)
+        assertEquals(CancelHermesOutcome.NothingPending, manager.resolveCancelRequest("anything"))
+    }
+
+    @Test
+    fun `resolveCancelRequest cancels a single pending job even when the question does not match`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy status")
+        assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
+
+        val outcome = manager.resolveCancelRequest("completely different words")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+        toolApi.awaitRemoteCancelledJob("job-1")
+    }
+
+    @Test
+    fun `resolveCancelRequest matches bidirectionally after normalization`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.submit(callId = "call-1", prompt = "What is the   Deploy Status?")
+        assertEquals("call-1" to "What is the   Deploy Status?", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
+        assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveCancelRequest("deploy status")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+    }
+
+    @Test
+    fun `resolveCancelRequest reports NoMatch with the pending list`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val manager = manager(toolApi = toolApi, conversationStore = FakeVoiceConversationStore(), scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy status")
+        assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "meeting notes")
+        assertEquals("call-2" to "meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveCancelRequest("unrelated question")
+
+        assertTrue(outcome is CancelHermesOutcome.NoMatch)
+        assertEquals(
+            listOf("call-1", "call-2"),
+            (outcome as CancelHermesOutcome.NoMatch).pending.map { it.callId },
+        )
+        assertFalse(toolApi.wasCancelled("call-1"))
+        assertFalse(toolApi.wasCancelled("call-2"))
+    }
+
+    @Test
+    fun `resolveCancelRequest reports Ambiguous with the matching subset`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val manager = manager(toolApi = toolApi, conversationStore = FakeVoiceConversationStore(), scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy status for web")
+        assertEquals("call-1" to "deploy status for web", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "deploy status for android")
+        assertEquals("call-2" to "deploy status for android", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveCancelRequest("deploy status")
+
+        assertTrue(outcome is CancelHermesOutcome.Ambiguous)
+        assertEquals(
+            listOf("call-1", "call-2"),
+            (outcome as CancelHermesOutcome.Ambiguous).matches.map { it.callId },
+        )
+    }
 }
 
 private class SnapshotBeforeBlockConversationStore(

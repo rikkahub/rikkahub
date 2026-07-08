@@ -73,6 +73,13 @@ data class PendingHermesRequest(
     val prompt: String,
 )
 
+sealed interface CancelHermesOutcome {
+    data object NothingPending : CancelHermesOutcome
+    data class Canceled(val request: PendingHermesRequest) : CancelHermesOutcome
+    data class NoMatch(val pending: List<PendingHermesRequest>) : CancelHermesOutcome
+    data class Ambiguous(val matches: List<PendingHermesRequest>) : CancelHermesOutcome
+}
+
 class HermesJobManager(
     private val toolApi: VoiceToolApi,
     private val conversationStore: VoiceConversationStore,
@@ -315,6 +322,40 @@ class HermesJobManager(
     fun cancelByUser(request: PendingHermesRequest) {
         cancel(callId = request.callId, activeKey = null, userInitiated = true)
     }
+
+    /**
+     * Resolves which pending request a cancel_hermes question refers to. Matching
+     * policy (moved verbatim from the coordinator): with at most one pending request
+     * the question always refers to it; otherwise match by bidirectional substring
+     * containment after normalization. On a unique match this also performs the
+     * user-initiated cancel before returning [CancelHermesOutcome.Canceled] —
+     * resolution and action keep one owner.
+     */
+    fun resolveCancelRequest(question: String): CancelHermesOutcome {
+        val pending = pendingRequests()
+        if (pending.isEmpty()) return CancelHermesOutcome.NothingPending
+        val normalizedQuestion = question.normalizeForHermesMatch()
+        val matches = when {
+            pending.size <= 1 -> pending
+            else -> pending.filter { request ->
+                val prompt = request.prompt.normalizeForHermesMatch()
+                prompt.contains(normalizedQuestion) || normalizedQuestion.contains(prompt)
+            }
+        }
+        return when {
+            matches.size == 1 -> {
+                val request = matches.single()
+                cancelByUser(request)
+                recordDiagnostic("hermes_user_cancel", "callId=${request.callId}")
+                CancelHermesOutcome.Canceled(request)
+            }
+            matches.isEmpty() -> CancelHermesOutcome.NoMatch(pending)
+            else -> CancelHermesOutcome.Ambiguous(matches)
+        }
+    }
+
+    private fun String.normalizeForHermesMatch(): String =
+        lowercase().replace(Regex("\\s+"), " ").trim()
 
     private fun launchManagedJob(
         managedJob: ManagedHermesJob,
