@@ -31,4 +31,13 @@ class VoiceE2EArtifactSinkTest {
         val event = diagnostics.events.value.single { it.name == "voice_e2e_artifact_write_failed" }
         assertTrue(event.detail.contains("callId=c9"))
     }
+
+    @Test
+    fun `failure diagnostic omits callId when null`() {
+        sink(writeArtifact = { _, _ -> error("disk full") })
+            .writeArtifactSafely(VoiceE2EArtifact.HermesAnswer, "content")
+        val event = diagnostics.events.value.single { it.name == "voice_e2e_artifact_write_failed" }
+        assertTrue(!event.detail.contains("callId="))
+        assertTrue(event.detail.startsWith("name="))
+    }
 }

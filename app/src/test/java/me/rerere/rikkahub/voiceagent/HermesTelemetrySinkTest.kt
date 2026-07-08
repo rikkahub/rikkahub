@@ -22,11 +22,13 @@ class HermesTelemetrySinkTest {
         expectedHash: String? = null,
         writeArtifact: (VoiceE2EArtifact, String) -> Unit = { artifact, content -> artifacts += artifact to content },
         logQueueEvent: (String) -> Unit = { queueEventLogs += it },
+        logRequestHash: (String) -> Unit = { requestHashes += it },
+        logResponseHash: (String) -> Unit = { responseHashes += it },
     ) = HermesTelemetrySink(
         diagnostics = diagnostics,
         hermesResponseExpectedHash = expectedHash,
-        logHermesRequestHash = { requestHashes += it },
-        logHermesResponseHash = { responseHashes += it },
+        logHermesRequestHash = logRequestHash,
+        logHermesResponseHash = logResponseHash,
         logHermesToolFailure = { toolFailures += it },
         logHermesQueueEvent = logQueueEvent,
         artifactSink = VoiceE2EArtifactSink(
@@ -95,5 +97,26 @@ class HermesTelemetrySinkTest {
         sink().recordRequestHash(callId = "c1", prompt = "p")
         assertEquals(1, requestHashes.size)
         assertTrue("hermes_tool_request_hash" in diagnosticNames())
+    }
+
+    @Test
+    fun `recordRequestHash survives a throwing request-hash logger`() {
+        sink(logRequestHash = { error("logcat down") })
+            .recordRequestHash(callId = "c1", prompt = "p")
+        val failureEvent = diagnostics.events.value.single { it.name == "hermes_tool_request_hash_log_failed" }
+        assertTrue(failureEvent.detail.contains("callId=c1"))
+        assertTrue("hermes_tool_request_hash" in diagnosticNames())
+    }
+
+    @Test
+    fun `recordJobCompletion survives a throwing response-hash logger`() {
+        sink(logResponseHash = { error("logcat down") })
+            .recordJobCompletion(
+                HermesJobCompletion(callId = "c1", jobId = "j1", answer = "a", elapsedMs = 1L, serverElapsedMs = null)
+            )
+        val failureEvent = diagnostics.events.value.single { it.name == "hermes_tool_response_hash_log_failed" }
+        assertTrue(failureEvent.detail.contains("callId=c1"))
+        assertEquals(VoiceE2EArtifact.HermesAnswer, artifacts.single().first)
+        assertEquals("a", artifacts.single().second)
     }
 }
