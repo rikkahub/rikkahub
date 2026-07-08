@@ -21,7 +21,7 @@ class HermesTelemetrySink(
     private val logHermesResponseHash: (String) -> Unit,
     private val logHermesToolFailure: (String) -> Unit,
     private val logHermesQueueEvent: (String) -> Unit,
-    private val writeVoiceE2EArtifact: (VoiceE2EArtifact, String) -> Unit,
+    private val artifactSink: VoiceE2EArtifactSink,
 ) {
     fun recordJobCompletion(completion: HermesJobCompletion) {
         recordResponseHash(
@@ -62,20 +62,11 @@ class HermesTelemetrySink(
 
     fun writeQueueEvent(event: HermesQueueEvent) {
         logQueueEventSafely(event.toLogDetail())
-        writeArtifactSafely(artifact = VoiceE2EArtifact.HermesEvents, content = event.toJson(), callId = event.callId)
-    }
-
-    fun writeArtifactSafely(artifact: VoiceE2EArtifact, content: String, callId: String? = null) {
-        runCatching {
-            writeVoiceE2EArtifact(artifact, content)
-        }.onFailure { error ->
-            val message = error.message ?: error.javaClass.simpleName
-            val callDetail = callId?.let { ", callId=$it" } ?: ""
-            diagnostics.record(
-                "voice_e2e_artifact_write_failed",
-                "name=${artifact.fileName}$callDetail, message=$message",
-            )
-        }
+        artifactSink.writeArtifactSafely(
+            artifact = VoiceE2EArtifact.HermesEvents,
+            content = event.toJson(),
+            callId = event.callId,
+        )
     }
 
     private fun recordResponseHash(
@@ -99,7 +90,7 @@ class HermesTelemetrySink(
             val message = error.message ?: error.javaClass.simpleName
             diagnostics.record("hermes_tool_response_hash_log_failed", "callId=$callId, message=$message")
         }
-        writeArtifactSafely(artifact = VoiceE2EArtifact.HermesAnswer, content = answer, callId = callId)
+        artifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.HermesAnswer, content = answer, callId = callId)
     }
 
     private fun logQueueEventSafely(detail: String) {

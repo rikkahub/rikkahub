@@ -29,7 +29,10 @@ class HermesTelemetrySinkTest {
         logHermesResponseHash = { responseHashes += it },
         logHermesToolFailure = { toolFailures += it },
         logHermesQueueEvent = logQueueEvent,
-        writeVoiceE2EArtifact = writeArtifact,
+        artifactSink = VoiceE2EArtifactSink(
+            diagnostics = diagnostics,
+            writeVoiceE2EArtifact = writeArtifact,
+        ),
     )
 
     private fun diagnosticNames(): List<String> = diagnostics.events.value.map { it.name }
@@ -48,6 +51,15 @@ class HermesTelemetrySinkTest {
             .writeQueueEvent(HermesQueueEvent(type = "t", callId = "c", jobId = "j"))
         assertTrue("hermes_queue_event_log_failed" in diagnosticNames())
         assertEquals(1, artifacts.size) // artifact still written
+    }
+
+    @Test
+    fun `writeQueueEvent with a throwing artifact writer records the failure diagnostic with the event callId`() {
+        sink(writeArtifact = { _, _ -> error("disk full") })
+            .writeQueueEvent(HermesQueueEvent(type = "t", callId = "c9", jobId = "j"))
+        val event = diagnostics.events.value.single { it.name == "voice_e2e_artifact_write_failed" }
+        assertTrue(event.detail.contains("callId=c9"))
+        assertEquals(listOf("type=t callId=c9 jobId=j status=none sent=n/a"), queueEventLogs)
     }
 
     @Test
@@ -83,13 +95,5 @@ class HermesTelemetrySinkTest {
         sink().recordRequestHash(callId = "c1", prompt = "p")
         assertEquals(1, requestHashes.size)
         assertTrue("hermes_tool_request_hash" in diagnosticNames())
-    }
-
-    @Test
-    fun `writeArtifactSafely records a diagnostic with callId on failure`() {
-        sink(writeArtifact = { _, _ -> error("disk full") })
-            .writeArtifactSafely(VoiceE2EArtifact.HermesAnswer, "content", callId = "c9")
-        val event = diagnostics.events.value.single { it.name == "voice_e2e_artifact_write_failed" }
-        assertTrue(event.detail.contains("callId=c9"))
     }
 }

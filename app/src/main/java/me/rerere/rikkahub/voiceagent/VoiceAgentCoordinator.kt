@@ -94,6 +94,10 @@ class VoiceAgentCoordinator(
     )
     private val hermesAnnouncementScheduler = hermesAnnouncementScheduler
         ?: HermesAnnouncementScheduler(recordDiagnostic = diagnostics::record)
+    private val voiceE2EArtifactSink = VoiceE2EArtifactSink(
+        diagnostics = diagnostics,
+        writeVoiceE2EArtifact = writeVoiceE2EArtifact,
+    )
     private val hermesTelemetrySink = HermesTelemetrySink(
         diagnostics = diagnostics,
         hermesResponseExpectedHash = hermesResponseExpectedHash,
@@ -101,7 +105,7 @@ class VoiceAgentCoordinator(
         logHermesResponseHash = logHermesResponseHash,
         logHermesToolFailure = logHermesToolFailure,
         logHermesQueueEvent = logHermesQueueEvent,
-        writeVoiceE2EArtifact = writeVoiceE2EArtifact,
+        artifactSink = voiceE2EArtifactSink,
     )
     private val hermesJobManager = HermesJobManager(
         toolApi = toolApi,
@@ -116,7 +120,7 @@ class VoiceAgentCoordinator(
         updateToolStatus = ::updateHermesToolStatusFromManager,
         recordDiagnostic = diagnostics::record,
         writeQueueEvent = hermesTelemetrySink::writeQueueEvent,
-        writeHermesAnswer = { answer -> hermesTelemetrySink.writeArtifactSafely(VoiceE2EArtifact.HermesAnswer, answer) },
+        writeHermesAnswer = { answer -> voiceE2EArtifactSink.writeArtifactSafely(VoiceE2EArtifact.HermesAnswer, answer) },
         persistenceSessionId = { voiceArtifactSessionId },
         onJobCompleted = hermesTelemetrySink::recordJobCompletion,
         onJobFailed = hermesTelemetrySink::recordJobFailure,
@@ -516,7 +520,7 @@ class VoiceAgentCoordinator(
             })
             transcript
         }
-        hermesTelemetrySink.writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = artifactSnapshot)
+        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = artifactSnapshot)
     }
 
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
@@ -539,7 +543,7 @@ class VoiceAgentCoordinator(
             persistAssistantTranscript()
             outputTurnTranscript
         }
-        hermesTelemetrySink.writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = artifactSnapshot)
+        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = artifactSnapshot)
     }
 
     private fun playOutputAudio(base64Pcm16: String, sessionId: Long?) {
@@ -689,7 +693,7 @@ class VoiceAgentCoordinator(
         }
         val activeKey = ToolCallKey(sessionId = sessionId, callId = call.callId).toString()
         if (hermesJobManager.submit(callId = call.callId, prompt = call.prompt, activeKey = activeKey)) {
-            hermesTelemetrySink.writeArtifactSafely(artifact = VoiceE2EArtifact.HermesCall, content = call.prompt)
+            voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.HermesCall, content = call.prompt)
             hermesTelemetrySink.recordRequestHash(callId = call.callId, prompt = call.prompt)
             diagnostics.record("hermes_tool_started", "callId=${call.callId}")
         } else {
