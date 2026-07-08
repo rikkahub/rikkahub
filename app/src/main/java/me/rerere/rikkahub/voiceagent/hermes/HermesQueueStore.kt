@@ -17,12 +17,15 @@ class HermesQueueStore(
     fun records(): List<HermesQueueRecord> =
         conversationStore.conversation.value.hermesQueueRecords()
 
+    /** Latest record with this exact identity — a null [jobId] only matches a null-jobId record. */
     fun latestRecord(callId: String, jobId: String?): HermesQueueRecord? =
         records().lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
 
+    /** Latest record per durable identity, keeping only non-terminal ones. */
     fun activeRecords(): List<HermesQueueRecord> =
         records().latestByHermesDurableIdentity().filter { !it.status.isTerminal }
 
+    /** Latest record per durable identity, keeping terminal ones whose result was never announced. */
     fun unannouncedTerminalRecords(): List<HermesQueueRecord> =
         records().latestByHermesDurableIdentity().filter { it.status.isTerminal && !it.resultAnnounced }
 

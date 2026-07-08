@@ -1,12 +1,17 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
 import kotlinx.coroutines.test.runTest
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.FakeVoiceConversationStore
+import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -84,23 +89,13 @@ class HermesQueueStoreTest {
 
     @Test
     fun `latestRecord matches identity including null jobId`() = runTest {
-        val initialConversation = Conversation.ofId(Uuid.random()).let {
-            writer.upsertHermesTool(
-                conversation = it,
-                callId = "call-1",
-                prompt = "the prompt",
-                status = VoiceToolRecordStatus.Pending,
-                jobId = null,
-            )
-        }.let {
-            writer.upsertHermesTool(
-                conversation = it,
-                callId = "call-1",
-                prompt = "the prompt",
-                status = VoiceToolRecordStatus.Running,
-                jobId = "job-1",
-            )
-        }
+        // The writer merges a null-jobId record into a later jobId-bearing upsert
+        // (jobId adoption), so coexisting records for the same call are hand-built:
+        // (jobId=null, Pending) alongside (jobId=job-1, Running).
+        val initialConversation = conversationOf(
+            hermesToolPart(callId = "call-1", jobId = null, status = HermesQueueStatus.Pending),
+            hermesToolPart(callId = "call-1", jobId = "job-1", status = HermesQueueStatus.Running),
+        )
         val conversationStore = FakeVoiceConversationStore(initialConversation)
         val store = HermesQueueStore(
             conversationStore = conversationStore,
@@ -108,9 +103,13 @@ class HermesQueueStoreTest {
             transcriptPersister = transcriptPersister,
         )
 
-        assertEquals(null, store.latestRecord(callId = "call-1", jobId = "job-2")?.jobId)
+        val pendingRecord = store.latestRecord(callId = "call-1", jobId = null)
+        assertNotNull(pendingRecord)
+        assertEquals(null, pendingRecord!!.jobId)
+        assertEquals(HermesQueueStatus.Pending, pendingRecord.status)
         assertEquals("job-1", store.latestRecord(callId = "call-1", jobId = "job-1")?.jobId)
-        assertEquals(null, store.latestRecord(callId = "missing", jobId = null))
+        assertNull(store.latestRecord(callId = "call-1", jobId = "job-2"))
+        assertNull(store.latestRecord(callId = "missing", jobId = null))
     }
 
     @Test
@@ -184,23 +183,12 @@ class HermesQueueStoreTest {
 
     @Test
     fun `latestCancelCandidate honors requireUnsubmitted`() = runTest {
-        val initialConversation = Conversation.ofId(Uuid.random()).let {
-            writer.upsertHermesTool(
-                conversation = it,
-                callId = "call-1",
-                prompt = "the prompt",
-                status = VoiceToolRecordStatus.Pending,
-                jobId = null,
-            )
-        }.let {
-            writer.upsertHermesTool(
-                conversation = it,
-                callId = "call-1",
-                prompt = "the prompt",
-                status = VoiceToolRecordStatus.Running,
-                jobId = "job-1",
-            )
-        }
+        // Coexisting records for call-1 (hand-built; the writer would merge them):
+        // an unsubmitted (jobId=null, Pending) record and a later (jobId=job-1, Running) one.
+        val initialConversation = conversationOf(
+            hermesToolPart(callId = "call-1", jobId = null, status = HermesQueueStatus.Pending),
+            hermesToolPart(callId = "call-1", jobId = "job-1", status = HermesQueueStatus.Running),
+        )
         val conversationStore = FakeVoiceConversationStore(initialConversation)
         val store = HermesQueueStore(
             conversationStore = conversationStore,
@@ -212,9 +200,40 @@ class HermesQueueStoreTest {
             "job-1",
             store.latestCancelCandidate(callId = "call-1", requireUnsubmitted = false)?.jobId,
         )
-        assertEquals(
-            null,
-            store.latestCancelCandidate(callId = "call-1", requireUnsubmitted = true)?.jobId,
+        val unsubmitted = store.latestCancelCandidate(callId = "call-1", requireUnsubmitted = true)
+        assertNotNull(unsubmitted)
+        assertEquals(null, unsubmitted!!.jobId)
+        assertEquals(HermesQueueStatus.Pending, unsubmitted.status)
+    }
+
+    private fun conversationOf(vararg tools: UIMessagePart.Tool): Conversation =
+        Conversation.ofId(Uuid.random()).updateCurrentMessages(
+            listOf(UIMessage(role = MessageRole.ASSISTANT, parts = tools.toList()))
+        )
+
+    /** Hand-builds an ask_hermes tool part so records the writer would merge can coexist. */
+    private fun hermesToolPart(
+        callId: String,
+        jobId: String?,
+        status: HermesQueueStatus,
+    ): UIMessagePart.Tool {
+        val record = HermesQueueRecord(
+            callId = callId,
+            jobId = jobId,
+            prompt = "the prompt",
+            status = status,
+            answer = null,
+            error = null,
+            announcement = HermesAnnouncementState.NotAnnounced,
+            createdAt = "2026-07-08T00:00:00Z",
+            updatedAt = "2026-07-08T00:00:01Z",
+        )
+        return UIMessagePart.Tool(
+            toolCallId = callId,
+            toolName = VoiceAgentToolNames.ASK_HERMES,
+            input = """{"prompt":"the prompt"}""",
+            output = emptyList(),
+            metadata = record.toMetadata(nowIso = "2026-07-08T00:00:01Z"),
         )
     }
 }
