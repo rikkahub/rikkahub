@@ -4,9 +4,12 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import org.junit.Assert.assertEquals
@@ -213,6 +216,61 @@ class GeminiLiveCodecTest {
     }
 
     @Test
+    fun `setup message omits tool config when no registered tool is declared`() {
+        val message = codec.setupMessage(
+            providerModel = "gemini-test",
+            liveConnectConfig = buildJsonObject {
+                putJsonArray("tools") { }
+            },
+            systemInstruction = "sys",
+        ).jsonObject()
+
+        val setup = message["setup"]!!.jsonObject
+        assertFalse("toolConfig" in setup)
+    }
+
+    @Test
+    fun `setup message omits tool config when config has no tools key`() {
+        val message = codec.setupMessage(
+            providerModel = "gemini-test",
+            liveConnectConfig = buildJsonObject { },
+            systemInstruction = "sys",
+        ).jsonObject()
+
+        val setup = message["setup"]!!.jsonObject
+        assertFalse("toolConfig" in setup)
+    }
+
+    @Test
+    fun `setup message allows only declared registered tools`() {
+        // Declares cancel_hermes but NOT ask_hermes: under the uniform
+        // declaration-gated rule the toolConfig lists only cancel_hermes.
+        val message = codec.setupMessage(
+            providerModel = "gemini-test",
+            liveConnectConfig = buildJsonObject {
+                putJsonArray("tools") {
+                    add(
+                        buildJsonObject {
+                            putJsonArray("functionDeclarations") {
+                                add(buildJsonObject { put("name", "cancel_hermes") })
+                            }
+                        }
+                    )
+                }
+            },
+            systemInstruction = "sys",
+        ).jsonObject()
+
+        val allowed = message["setup"]!!
+            .jsonObject["toolConfig"]!!
+            .jsonObject["functionCallingConfig"]!!
+            .jsonObject["allowedFunctionNames"]!!
+            .jsonArray
+            .map { it.jsonPrimitive.content }
+        assertEquals(listOf("cancel_hermes"), allowed)
+    }
+
+    @Test
     fun `setup message preserves explicit server tool config`() {
         val explicitToolConfig = JsonObject(
             mapOf(
@@ -388,15 +446,34 @@ class GeminiLiveCodecTest {
     }
 
     @Test
+    fun `tool response falls back to when idle scheduling for unregistered tool name`() {
+        val message = codec.toolResponseMessage(
+            callId = "call-x",
+            answer = "a",
+            name = "unknown_tool",
+        ).jsonObject()
+
+        val functionResponse = message["toolResponse"]!!
+            .jsonObject["functionResponses"]!!
+            .jsonArray[0]
+            .jsonObject
+        assertEquals("unknown_tool", functionResponse["name"]!!.jsonPrimitive.content)
+        assertEquals(
+            VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+            functionResponse["scheduling"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
     fun `cancel hermes tool call parses question argument`() {
         val event = codec.parseServerMessage(
             """{"toolCall":{"functionCalls":[{"id":"call-9","name":"cancel_hermes","args":{"question":"What is the deploy status?"}}]}}"""
         )
 
-        val call = event as GeminiLiveEvent.ToolCall
+        val call = event as GeminiLiveEvent.CancelHermesCall
         assertEquals("call-9", call.callId)
         assertEquals("cancel_hermes", call.name)
-        assertEquals("What is the deploy status?", call.prompt)
+        assertEquals("What is the deploy status?", call.question)
     }
 
     @Test
@@ -458,9 +535,8 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.Events(
                 listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-1",
-                        name = "ask_hermes",
                         prompt = "Use Hermes",
                     ),
                     GeminiLiveEvent.OutputTranscript("I will check."),
@@ -601,9 +677,8 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.ToolCalls(
                 calls = listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-1",
-                        name = "ask_hermes",
                         prompt = "What should I say?",
                     )
                 ),
@@ -640,9 +715,8 @@ class GeminiLiveCodecTest {
     @Test
     fun `parse skips malformed tool calls and returns first valid function call`() {
         assertEquals(
-            GeminiLiveEvent.ToolCall(
+            GeminiLiveEvent.AskHermesCall(
                 callId = "call-2",
-                name = "ask_hermes",
                 prompt = "Use this prompt",
             ),
             codec.parseServerMessage(
@@ -673,14 +747,12 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.ToolCalls(
                 listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-1",
-                        name = "ask_hermes",
                         prompt = "First prompt",
                     ),
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-2",
-                        name = "ask_hermes",
                         prompt = "Second prompt",
                     ),
                 )
@@ -711,9 +783,8 @@ class GeminiLiveCodecTest {
     @Test
     fun `parse skips tool calls with non string required fields`() {
         assertEquals(
-            GeminiLiveEvent.ToolCall(
+            GeminiLiveEvent.AskHermesCall(
                 callId = "call-valid",
-                name = "ask_hermes",
                 prompt = "Use this prompt",
             ),
             codec.parseServerMessage(
@@ -759,9 +830,8 @@ class GeminiLiveCodecTest {
         assertEquals(
             GeminiLiveEvent.ToolCalls(
                 calls = listOf(
-                    GeminiLiveEvent.ToolCall(
+                    GeminiLiveEvent.AskHermesCall(
                         callId = "call-2",
-                        name = "ask_hermes",
                         prompt = "Use this prompt",
                     )
                 ),

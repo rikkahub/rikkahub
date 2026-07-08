@@ -1,9 +1,11 @@
 package me.rerere.rikkahub.voiceagent
 
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
+import me.rerere.rikkahub.voiceagent.hermes.CancelHermesOutcome
 import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
+import me.rerere.rikkahub.voiceagent.hermes.PendingHermesRequest
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 
 const val HERMES_QUEUED_ACKNOWLEDGEMENT =
@@ -40,6 +42,23 @@ internal fun hermesStillWorkingUpdateText(prompt: String): String =
         "Original request:\n$prompt\n\n" +
         "Briefly reassure the user that this request is still in progress. " +
         "Do not invent partial answers, and do not treat this update as the answer."
+
+internal fun cancelHermesResponseText(outcome: CancelHermesOutcome): String = when (outcome) {
+    is CancelHermesOutcome.NothingPending ->
+        "There are no pending Hermes requests to cancel. Tell the user nothing is currently pending."
+    is CancelHermesOutcome.Canceled ->
+        "Canceling the pending Hermes request: \"${outcome.request.prompt}\". " +
+            "Confirm the cancellation to the user in one short sentence."
+    is CancelHermesOutcome.NoMatch ->
+        "No pending Hermes request matches that question. Pending requests: " +
+            outcome.pending.pendingPromptSummary() + ". Ask the user which one to cancel."
+    is CancelHermesOutcome.Ambiguous ->
+        "Multiple pending Hermes requests match: " + outcome.matches.pendingPromptSummary() +
+            ". Ask the user which one to cancel."
+}
+
+internal fun List<PendingHermesRequest>.pendingPromptSummary(): String =
+    joinToString(separator = "; ") { "\"${it.prompt}\"" }
 
 data class HermesBridgeQueueEvent(
     val type: String,
@@ -167,6 +186,28 @@ class VoiceHermesSessionBridgeFactory(
                 diagnostics.record("hermes_still_working_failed", detail)
             }
             return sent
+        }
+
+        override suspend fun sendCancelResponse(
+            callId: String,
+            outcome: CancelHermesOutcome,
+            sessionId: Long,
+        ): Boolean {
+            val answer = cancelHermesResponseText(outcome)
+            return if (sessionId == unboundSessionId) {
+                gemini.sendToolResponse(
+                    callId = callId,
+                    answer = answer,
+                    name = VoiceAgentToolNames.CANCEL_HERMES,
+                )
+            } else {
+                gemini.sendToolResponse(
+                    callId = callId,
+                    answer = answer,
+                    sessionId = sessionId,
+                    name = VoiceAgentToolNames.CANCEL_HERMES,
+                )
+            }
         }
     }
 }

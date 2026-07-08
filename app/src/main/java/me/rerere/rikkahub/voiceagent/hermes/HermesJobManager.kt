@@ -23,6 +23,7 @@ import me.rerere.rikkahub.voiceagent.isTerminalHermesToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.summarizeVoiceToolStatus
+import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -43,6 +44,7 @@ interface HermesSessionBridge {
         sessionId: Long,
     ): Boolean
     suspend fun sendStillWorkingUpdate(callId: String, prompt: String, sessionId: Long): Boolean
+    suspend fun sendCancelResponse(callId: String, outcome: CancelHermesOutcome, sessionId: Long): Boolean
 }
 
 data class HermesJobCompletion(
@@ -72,6 +74,13 @@ data class PendingHermesRequest(
     val jobId: String?,
     val prompt: String,
 )
+
+sealed interface CancelHermesOutcome {
+    data object NothingPending : CancelHermesOutcome
+    data class Canceled(val request: PendingHermesRequest) : CancelHermesOutcome
+    data class NoMatch(val pending: List<PendingHermesRequest>) : CancelHermesOutcome
+    data class Ambiguous(val matches: List<PendingHermesRequest>) : CancelHermesOutcome
+}
 
 class HermesJobManager(
     private val toolApi: VoiceToolApi,
@@ -230,7 +239,7 @@ class HermesJobManager(
     }
 
     fun attachBridge(bridge: HermesSessionBridge) {
-        attachBridge(bridge = bridge, sessionId = 0L)
+        attachBridge(bridge = bridge, sessionId = UNBOUND_BRIDGE_SESSION_ID)
     }
 
     fun detachBridge(bridge: HermesSessionBridge) {
@@ -314,6 +323,124 @@ class HermesJobManager(
 
     fun cancelByUser(request: PendingHermesRequest) {
         cancel(callId = request.callId, activeKey = null, userInitiated = true)
+    }
+
+    /**
+     * Resolves which pending request a cancel_hermes question refers to. Matching
+     * policy (moved verbatim from the coordinator): with at most one pending request
+     * the question always refers to it; otherwise match by bidirectional substring
+     * containment after normalization. On a unique match this also performs the
+     * user-initiated cancel before returning [CancelHermesOutcome.Canceled] —
+     * resolution and action keep one owner.
+     */
+    fun resolveAndCancelRequest(question: String): CancelHermesOutcome {
+        val pending = pendingRequests()
+        if (pending.isEmpty()) return CancelHermesOutcome.NothingPending
+        val normalizedQuestion = question.normalizeForHermesMatch()
+        val matches = when {
+            pending.size <= 1 -> pending
+            else -> pending.filter { request ->
+                val prompt = request.prompt.normalizeForHermesMatch()
+                prompt.contains(normalizedQuestion) || normalizedQuestion.contains(prompt)
+            }
+        }
+        return when {
+            matches.size == 1 -> {
+                val request = matches.single()
+                cancelByUser(request)
+                recordDiagnostic("hermes_user_cancel", "callId=${request.callId}")
+                CancelHermesOutcome.Canceled(request)
+            }
+            matches.isEmpty() -> CancelHermesOutcome.NoMatch(pending)
+            else -> CancelHermesOutcome.Ambiguous(matches)
+        }
+    }
+
+    private fun String.normalizeForHermesMatch(): String =
+        lowercase().replace(Regex("\\s+"), " ").trim()
+
+    /**
+     * Full cancel_hermes handling: resolve (and on a unique match cancel), then send
+     * the outcome as the tool response through the bridge, inheriting the standard
+     * send machinery (attachment guard, bridgeSendTimeoutMs, sanitized failure
+     * diagnostics). The coordinator's only involvement is dispatching here.
+     *
+     * [sessionId] is the session the cancel_hermes call originated from. When it is
+     * a concrete session (not [UNBOUND_BRIDGE_SESSION_ID]) the response is only sent
+     * if the current bridge attachment belongs to that same session; a mismatch is
+     * recorded as `error=session_mismatch` instead of answering through the wrong
+     * session. An unbound [sessionId] skips validation, matching the semantics of
+     * the session-less bridge attach.
+     */
+    fun handleCancelHermesCall(callId: String, question: String, sessionId: Long) {
+        val outcome = resolveAndCancelRequest(question)
+        scope.launch(dispatcher) {
+            var failureReason = "send_returned_false"
+            var attachmentChangedAfterDelivery = false
+            val attachment = currentBridgeAttachment()
+            val sent = if (attachment == null) {
+                failureReason = "no_bridge_attached"
+                false
+            } else if (sessionId != UNBOUND_BRIDGE_SESSION_ID && attachment.sessionId != sessionId) {
+                failureReason = "session_mismatch"
+                false
+            } else {
+                try {
+                    withTimeoutOrNull(bridgeSendTimeoutMs) {
+                        if (!attachment.isCurrentBridgeAttachment()) {
+                            failureReason = "bridge_attachment_changed"
+                            return@withTimeoutOrNull false
+                        }
+                        val delivered = attachment.bridge.sendCancelResponse(
+                            callId = callId,
+                            outcome = outcome,
+                            sessionId = attachment.sessionId,
+                        )
+                        // Re-validate after the send: a detach/re-attach while the bridge
+                        // call was suspended means the response raced a session change. A
+                        // delivered response still counts as sent — the change is surfaced
+                        // as an attachmentChanged advisory on the sent diagnostic. Only an
+                        // undelivered send with a changed attachment is labeled
+                        // bridge_attachment_changed.
+                        if (!attachment.isCurrentBridgeAttachment()) {
+                            if (delivered) {
+                                attachmentChangedAfterDelivery = true
+                            } else {
+                                failureReason = "bridge_attachment_changed"
+                            }
+                        }
+                        delivered
+                    } ?: run {
+                        failureReason = "send_timeout"
+                        false
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    failureReason = HermesTelemetryLogSanitizer.failureMessage(
+                        error.message ?: error.javaClass.simpleName
+                    )
+                    false
+                }
+            }
+            val sessionDetail = when (attachment?.sessionId) {
+                null -> "none"
+                UNBOUND_BRIDGE_SESSION_ID -> "unbound"
+                else -> attachment.sessionId.toString()
+            }
+            if (sent) {
+                recordDiagnostic(
+                    "cancel_hermes_tool_response_sent",
+                    "callId=$callId, sessionId=$sessionDetail" +
+                        if (attachmentChangedAfterDelivery) ", attachmentChanged=true" else "",
+                )
+            } else {
+                recordDiagnostic(
+                    "cancel_hermes_tool_response_failed",
+                    "callId=$callId, sessionId=$sessionDetail, error=$failureReason",
+                )
+            }
+        }
     }
 
     private fun launchManagedJob(
@@ -1231,19 +1358,25 @@ class HermesJobManager(
         var active: Boolean = true
     }
 
-    private companion object {
-        const val DEFAULT_POLL_INTERVAL_MS = 1_000L
-        const val DEFAULT_POLL_RETRY_DELAY_MS = 1_000L
-        const val DEFAULT_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000
-        const val DEFAULT_FAILURE_MESSAGE = "Hermes job was no longer available."
-        const val EXPIRED_MESSAGE = "Hermes job was no longer available."
-        const val TIMEOUT_MESSAGE = "Hermes job polling timed out."
-        const val CANCELED_MESSAGE = "Hermes job canceled."
-        const val MISSING_JOB_ID_MESSAGE = "Hermes job was missing a job id."
-        const val INVALID_TIMESTAMP_MESSAGE = "Hermes job had invalid timing metadata."
-        const val SUPERSEDED_JOB_MESSAGE = "Hermes job was superseded by a newer job for the same call id."
-        const val DEFAULT_REMOTE_CANCEL_TIMEOUT_MS = 5_000L
-        const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 30_000L
-        const val DEFAULT_STILL_WORKING_THRESHOLD_MS = 45_000L
+    companion object {
+        /**
+         * Sentinel session id for a bridge attachment that is not scoped to a concrete
+         * Gemini session. Cancel sends with an unbound expected session skip session
+         * validation, matching the semantics of the session-less attach overload.
+         */
+        const val UNBOUND_BRIDGE_SESSION_ID = 0L
+        private const val DEFAULT_POLL_INTERVAL_MS = 1_000L
+        private const val DEFAULT_POLL_RETRY_DELAY_MS = 1_000L
+        private const val DEFAULT_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000
+        private const val DEFAULT_FAILURE_MESSAGE = "Hermes job was no longer available."
+        private const val EXPIRED_MESSAGE = "Hermes job was no longer available."
+        private const val TIMEOUT_MESSAGE = "Hermes job polling timed out."
+        private const val CANCELED_MESSAGE = "Hermes job canceled."
+        private const val MISSING_JOB_ID_MESSAGE = "Hermes job was missing a job id."
+        private const val INVALID_TIMESTAMP_MESSAGE = "Hermes job had invalid timing metadata."
+        private const val SUPERSEDED_JOB_MESSAGE = "Hermes job was superseded by a newer job for the same call id."
+        private const val DEFAULT_REMOTE_CANCEL_TIMEOUT_MS = 5_000L
+        private const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 30_000L
+        private const val DEFAULT_STILL_WORKING_THRESHOLD_MS = 45_000L
     }
 }

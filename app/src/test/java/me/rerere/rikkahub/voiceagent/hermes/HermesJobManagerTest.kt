@@ -2587,6 +2587,280 @@ class HermesJobManagerTest {
     }
 
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
+
+    @Test
+    fun `resolveAndCancelRequest with nothing pending returns NothingPending`() = runTest {
+        val manager = manager(toolApi = FakeVoiceToolApi(), conversationStore = FakeVoiceConversationStore(), scope = this)
+        assertEquals(CancelHermesOutcome.NothingPending, manager.resolveAndCancelRequest("anything"))
+    }
+
+    @Test
+    fun `resolveAndCancelRequest cancels a single pending job even when the question does not match`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = conversationStore,
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.submit(callId = "call-1", prompt = "deploy status")
+        assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
+
+        val outcome = manager.resolveAndCancelRequest("completely different words")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+        toolApi.awaitRemoteCancelledJob("job-1")
+        assertTrue(
+            diagnostics.any { (name, detail) ->
+                name == "hermes_user_cancel" && detail.contains("callId=call-1")
+            }
+        )
+    }
+
+    @Test
+    fun `resolveAndCancelRequest matches bidirectionally after normalization`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.submit(callId = "call-1", prompt = "What is the   Deploy Status?")
+        assertEquals("call-1" to "What is the   Deploy Status?", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
+        assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveAndCancelRequest("deploy status")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+    }
+
+    @Test
+    fun `resolveAndCancelRequest matches when the question contains the whole prompt`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy")
+        assertEquals("call-1" to "deploy", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
+        assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveAndCancelRequest("can you cancel the deploy job please")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+    }
+
+    @Test
+    fun `resolveAndCancelRequest collapses whitespace inside the matched span`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy   status report")
+        assertEquals("call-1" to "deploy   status report", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "summarize the meeting notes")
+        assertEquals("call-2" to "summarize the meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveAndCancelRequest("deploy status")
+
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        assertEquals("call-1", (outcome as CancelHermesOutcome.Canceled).request.callId)
+    }
+
+    @Test
+    fun `resolveAndCancelRequest reports NoMatch with the pending list`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val manager = manager(toolApi = toolApi, conversationStore = FakeVoiceConversationStore(), scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy status")
+        assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "meeting notes")
+        assertEquals("call-2" to "meeting notes", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveAndCancelRequest("unrelated question")
+
+        assertTrue(outcome is CancelHermesOutcome.NoMatch)
+        assertEquals(
+            listOf("call-1", "call-2"),
+            (outcome as CancelHermesOutcome.NoMatch).pending.map { it.callId },
+        )
+        assertFalse(toolApi.wasCancelled("call-1"))
+        assertFalse(toolApi.wasCancelled("call-2"))
+    }
+
+    @Test
+    fun `resolveAndCancelRequest reports Ambiguous with the matching subset`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val manager = manager(toolApi = toolApi, conversationStore = FakeVoiceConversationStore(), scope = this)
+        manager.submit(callId = "call-1", prompt = "deploy status for web")
+        assertEquals("call-1" to "deploy status for web", toolApi.awaitRequest("call-1"))
+        manager.submit(callId = "call-2", prompt = "deploy status for android")
+        assertEquals("call-2" to "deploy status for android", toolApi.awaitRequest("call-2"))
+
+        val outcome = manager.resolveAndCancelRequest("deploy status")
+
+        assertTrue(outcome is CancelHermesOutcome.Ambiguous)
+        assertEquals(
+            listOf("call-1", "call-2"),
+            (outcome as CancelHermesOutcome.Ambiguous).matches.map { it.callId },
+        )
+        assertFalse(toolApi.wasCancelled("call-1"))
+        assertFalse(toolApi.wasCancelled("call-2"))
+    }
+
+    @Test
+    fun `handleCancelHermesCall sends the outcome through the bridge and records sent`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-1", prompt = "deploy status")
+        assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
+
+        manager.handleCancelHermesCall(callId = "cancel-1", question = "deploy status", sessionId = 7L)
+
+        withTimeout(500) {
+            while (bridge.cancelResponses.isEmpty()) { delay(10) }
+        }
+        val (callId, outcome) = bridge.cancelResponses.single()
+        assertEquals("cancel-1", callId)
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_sent" }) { delay(10) }
+        }
+    }
+
+    @Test
+    fun `handleCancelHermesCall records failed when the bridge send returns false`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge().apply { failCancelResponse = true }
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+
+        manager.handleCancelHermesCall(callId = "cancel-1", question = "anything", sessionId = 7L)
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-1"))
+        assertTrue(detail.contains("send_returned_false"))
+    }
+
+    @Test
+    fun `handleCancelHermesCall records send_timeout when the bridge send exceeds the timeout`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            bridgeSendTimeoutMs = 20L,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        val blockedCancel = bridge.blockNextCancelResponse()
+
+        manager.handleCancelHermesCall(callId = "cancel-timeout", question = "anything", sessionId = 7L)
+
+        assertTrue(blockedCancel.started.await(500, TimeUnit.MILLISECONDS))
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-timeout"))
+        assertTrue(detail.contains("error=send_timeout"))
+        blockedCancel.release.complete(Unit)
+    }
+
+    @Test
+    fun `handleCancelHermesCall records no_bridge_attached when no bridge is attached`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+
+        manager.handleCancelHermesCall(callId = "cancel-unattached", question = "anything", sessionId = 7L)
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-unattached"))
+        assertTrue(detail.contains("sessionId=none"))
+        assertTrue(detail.contains("error=no_bridge_attached"))
+        assertTrue(bridge.cancelResponses.isEmpty())
+    }
+
+    @Test
+    fun `handleCancelHermesCall records session_mismatch when the attachment session differs`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+
+        manager.handleCancelHermesCall(callId = "cancel-mismatch", question = "anything", sessionId = 9L)
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-mismatch"))
+        assertTrue(detail.contains("sessionId=7"))
+        assertTrue(detail.contains("error=session_mismatch"))
+        assertTrue(bridge.cancelResponses.isEmpty())
+    }
+
+    @Test
+    fun `handleCancelHermesCall reports delivered response as sent with attachmentChanged advisory`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            bridgeSendTimeoutMs = 10_000L,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        val blockedCancel = bridge.blockNextCancelResponse()
+
+        manager.handleCancelHermesCall(callId = "cancel-changed", question = "anything", sessionId = 7L)
+
+        assertTrue(blockedCancel.started.await(500, TimeUnit.MILLISECONDS))
+        manager.detachBridge(bridge)
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        blockedCancel.release.complete(Unit)
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_sent" }) { delay(10) }
+        }
+        assertEquals("cancel-changed", bridge.cancelResponses.single().first)
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_sent" }.second
+        assertTrue(detail.contains("callId=cancel-changed"))
+        assertTrue(detail.contains("attachmentChanged=true"))
+        assertTrue(diagnostics.none { it.first == "cancel_hermes_tool_response_failed" })
+    }
 }
 
 private class SnapshotBeforeBlockConversationStore(
@@ -2721,13 +2995,16 @@ private class RecordingHermesBridge : HermesSessionBridge {
     val completionFollowUps = Collections.synchronizedList(mutableListOf<CompletionFollowUp>())
     val terminalFollowUps = Collections.synchronizedList(mutableListOf<TerminalFollowUp>())
     val stillWorkingUpdates = Collections.synchronizedList(mutableListOf<StillWorkingUpdate>())
+    val cancelResponses = Collections.synchronizedList(mutableListOf<Pair<String, CancelHermesOutcome>>())
     var failCompletionFollowUp = false
     var failTerminalFollowUp = false
     var failQueuedAcknowledgement = false
     var throwQueuedAcknowledgement = false
     var failStillWorkingUpdate = false
+    var failCancelResponse = false
     private val blockedQueuedAcknowledgements = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
     private val blockedCompletionFollowUps = Collections.synchronizedList(mutableListOf<BlockedCompletionFollowUp>())
+    private val blockedCancelResponses = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
 
     override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
         val blocked = blockedQueuedAcknowledgements.removeFirstOrNull()
@@ -2792,6 +3069,19 @@ private class RecordingHermesBridge : HermesSessionBridge {
         return true
     }
 
+    override suspend fun sendCancelResponse(callId: String, outcome: CancelHermesOutcome, sessionId: Long): Boolean {
+        val blocked = blockedCancelResponses.removeFirstOrNull()
+        if (blocked != null) {
+            blocked.started.countDown()
+            // A suspending (not thread-blocking) wait so that the manager's own
+            // withTimeoutOrNull(bridgeSendTimeoutMs) can actually cancel this call,
+            // mirroring how a real, suspend-based bridge implementation behaves.
+            withTimeoutOrNull(blocked.timeoutMillis) { blocked.release.await() }
+        }
+        cancelResponses += callId to outcome
+        return !failCancelResponse
+    }
+
     fun blockNextCompletionFollowUp(): BlockedCompletionFollowUp {
         return BlockedCompletionFollowUp().also { blocked ->
             blockedCompletionFollowUps += blocked
@@ -2801,6 +3091,12 @@ private class RecordingHermesBridge : HermesSessionBridge {
     fun blockNextQueuedAcknowledgement(): BlockedBridgeCall {
         return BlockedBridgeCall().also { blocked ->
             blockedQueuedAcknowledgements += blocked
+        }
+    }
+
+    fun blockNextCancelResponse(): BlockedBridgeCall {
+        return BlockedBridgeCall().also { blocked ->
+            blockedCancelResponses += blocked
         }
     }
 
