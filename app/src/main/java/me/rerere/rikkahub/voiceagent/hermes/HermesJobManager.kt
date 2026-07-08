@@ -276,32 +276,15 @@ class HermesJobManager(
             activeKey?.let { activeJobs[it] } ?: activeJobs.values.lastOrNull { it.callId == callId }
         }
         if (actor != null) {
-            // Live job: cancellation is delivered as an event so the reducer aborts
-            // the in-flight request, cancels the remote job, and terminates at exactly
-            // one point. The canceled record is ALSO persisted eagerly here, because the
-            // actor drains its channel asynchronously and may be parked on an in-flight
-            // bridge send: a caller that inspects the queue right after cancel() must not
-            // race the actor's own terminal write. The eager write and the actor's
-            // PersistTerminal converge through the writer's terminal freeze — whichever
-            // lands first wins, the other is a no-op — so this never double-writes.
+            // Live job: cancellation is delivered as an event and nothing more. The
+            // reducer's cancel row is the single point that aborts the in-flight request,
+            // persists the canceled record, cancels the remote job, and terminates. There
+            // is deliberately no eager persist here: that would reintroduce a second
+            // cancellation-persistence site, the exact duplication this actor model
+            // deletes. Durability-before-inspection is the drain's job — callers that must
+            // observe the terminal write await it through awaitJobs() (which the coordinator
+            // folds into its close/drain path and tests await via awaitToolJobs()).
             actor.events.trySend(JobEvent.CancelRequested(origin))
-            val prompt = actor.prompt
-            val jobId = actor.jobId
-            scope.launch(dispatcher) {
-                val canceled = queueStore.persistCanceled(
-                    callId = callId,
-                    prompt = prompt,
-                    jobId = jobId,
-                    message = HERMES_CANCELED_MESSAGE,
-                    announced = userInitiated,
-                )
-                if (canceled) {
-                    updateToolStatus(
-                        callId,
-                        VoiceToolStatus.HermesFailed(callId = callId, message = HERMES_CANCELED_MESSAGE),
-                    )
-                }
-            }
             return
         }
         // Orphaned durable record (no live writer, so a direct write cannot race).
@@ -1026,16 +1009,6 @@ class HermesJobManager(
         runCatching {
             updateToolStatus(status)
         }
-    }
-
-    private fun VoiceToolRecordStatus.queueEventStatus(): String = when (this) {
-        VoiceToolRecordStatus.Pending -> HermesQueueStatus.Pending.wireName
-        VoiceToolRecordStatus.Queued -> HermesQueueStatus.Queued.wireName
-        VoiceToolRecordStatus.Running -> HermesQueueStatus.Running.wireName
-        is VoiceToolRecordStatus.Complete -> HermesQueueStatus.Complete.wireName
-        is VoiceToolRecordStatus.Failed -> HermesQueueStatus.Failed.wireName
-        is VoiceToolRecordStatus.Expired -> HermesQueueStatus.Expired.wireName
-        is VoiceToolRecordStatus.Canceled -> HermesQueueStatus.Canceled.wireName
     }
 
     private fun currentBridgeAttachment(): BridgeAttachment? = synchronized(lock) {
