@@ -23,6 +23,7 @@ import me.rerere.rikkahub.voiceagent.isTerminalHermesToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.summarizeVoiceToolStatus
+import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -43,6 +44,7 @@ interface HermesSessionBridge {
         sessionId: Long,
     ): Boolean
     suspend fun sendStillWorkingUpdate(callId: String, prompt: String, sessionId: Long): Boolean
+    suspend fun sendCancelResponse(callId: String, outcome: CancelHermesOutcome, sessionId: Long): Boolean
 }
 
 data class HermesJobCompletion(
@@ -356,6 +358,57 @@ class HermesJobManager(
 
     private fun String.normalizeForHermesMatch(): String =
         lowercase().replace(Regex("\\s+"), " ").trim()
+
+    /**
+     * Full cancel_hermes handling: resolve (and on a unique match cancel), then send
+     * the outcome as the tool response through the bridge, inheriting the standard
+     * send machinery (attachment guard, bridgeSendTimeoutMs, sanitized failure
+     * diagnostics). The coordinator's only involvement is dispatching here.
+     */
+    fun handleCancelHermesCall(callId: String, question: String) {
+        val outcome = resolveCancelRequest(question)
+        scope.launch(dispatcher) {
+            var failureReason = "send_returned_false"
+            val attachment = currentBridgeAttachment()
+            val sent = if (attachment == null) {
+                failureReason = "no_bridge_attached"
+                false
+            } else {
+                try {
+                    withTimeoutOrNull(bridgeSendTimeoutMs) {
+                        if (!attachment.isCurrentBridgeAttachment()) return@withTimeoutOrNull false
+                        attachment.bridge.sendCancelResponse(
+                            callId = callId,
+                            outcome = outcome,
+                            sessionId = attachment.sessionId,
+                        )
+                    } ?: run {
+                        failureReason = "send_timeout"
+                        false
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    failureReason = HermesTelemetryLogSanitizer.failureMessage(
+                        error.message ?: error.javaClass.simpleName
+                    )
+                    false
+                }
+            }
+            val sessionDetail = attachment?.sessionId?.toString() ?: "none"
+            if (sent) {
+                recordDiagnostic(
+                    "cancel_hermes_tool_response_sent",
+                    "callId=$callId, sessionId=$sessionDetail",
+                )
+            } else {
+                recordDiagnostic(
+                    "cancel_hermes_tool_response_failed",
+                    "callId=$callId, sessionId=$sessionDetail, error=$failureReason",
+                )
+            }
+        }
+    }
 
     private fun launchManagedJob(
         managedJob: ManagedHermesJob,

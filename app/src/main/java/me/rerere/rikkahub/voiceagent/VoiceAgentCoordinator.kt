@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.voiceagent
 
 import android.util.Log
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -33,7 +32,6 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesPollFailure
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
-import me.rerere.rikkahub.voiceagent.hermes.PendingHermesRequest
 import me.rerere.rikkahub.voiceagent.persistence.VoiceConversationPersister
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptStatus
 import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
@@ -668,7 +666,12 @@ class VoiceAgentCoordinator(
             "callId=${call.callId}, name=${call.name}, promptChars=${call.argLength()}",
         )
         when (call) {
-            is GeminiLiveEvent.CancelHermesCall -> handleCancelHermesToolCall(call = call, sessionId = sessionId)
+            is GeminiLiveEvent.CancelHermesCall -> {
+                if (sessionId == null) {
+                    attachDefaultHermesBridge()
+                }
+                hermesJobManager.handleCancelHermesCall(callId = call.callId, question = call.question)
+            }
             is GeminiLiveEvent.AskHermesCall -> handleAskHermesToolCall(call = call, sessionId = sessionId)
         }
     }
@@ -694,82 +697,6 @@ class VoiceAgentCoordinator(
             diagnostics.record("duplicate_tool_call_active", "callId=${call.callId}")
         }
     }
-
-    private fun handleCancelHermesToolCall(call: GeminiLiveEvent.CancelHermesCall, sessionId: Long?) {
-        if (sessionId == null) {
-            attachDefaultHermesBridge()
-        }
-        val pending = hermesJobManager.pendingRequests()
-        val question = call.question.normalizeForHermesMatch()
-        val matches = when {
-            pending.size <= 1 -> pending
-            else -> pending.filter { request ->
-                val prompt = request.prompt.normalizeForHermesMatch()
-                prompt.contains(question) || question.contains(prompt)
-            }
-        }
-        val answer = when {
-            pending.isEmpty() ->
-                "There are no pending Hermes requests to cancel. Tell the user nothing is currently pending."
-            matches.size == 1 -> {
-                hermesJobManager.cancelByUser(matches.single())
-                diagnostics.record("hermes_user_cancel", "callId=${matches.single().callId}")
-                "Canceling the pending Hermes request: \"${matches.single().prompt}\". " +
-                    "Confirm the cancellation to the user in one short sentence."
-            }
-            matches.isEmpty() ->
-                "No pending Hermes request matches that question. Pending requests: " +
-                    pending.pendingPromptSummary() + ". Ask the user which one to cancel."
-            else ->
-                "Multiple pending Hermes requests match: " + matches.pendingPromptSummary() +
-                    ". Ask the user which one to cancel."
-        }
-        sessionScope.launch(toolLaunchContext) {
-            var failureReason = "send_returned_false"
-            val sent = try {
-                if (sessionId != null) {
-                    gemini.sendToolResponse(
-                        callId = call.callId,
-                        answer = answer,
-                        sessionId = sessionId,
-                        name = VoiceAgentToolNames.CANCEL_HERMES,
-                    )
-                } else {
-                    gemini.sendToolResponse(
-                        callId = call.callId,
-                        answer = answer,
-                        name = VoiceAgentToolNames.CANCEL_HERMES,
-                    )
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Error) {
-                throw error
-            } catch (error: Exception) {
-                failureReason = HermesTelemetryLogSanitizer.failureMessage(
-                    error.message ?: error.javaClass.simpleName
-                )
-                false
-            }
-            if (!sent) {
-                diagnostics.record(
-                    "cancel_hermes_tool_response_failed",
-                    "callId=${call.callId}, sessionId=${sessionId ?: "none"}, error=$failureReason",
-                )
-            } else {
-                diagnostics.record(
-                    "cancel_hermes_tool_response_sent",
-                    "callId=${call.callId}, sessionId=${sessionId ?: "none"}",
-                )
-            }
-        }
-    }
-
-    private fun List<PendingHermesRequest>.pendingPromptSummary(): String =
-        joinToString(separator = "; ") { "\"${it.prompt}\"" }
-
-    private fun String.normalizeForHermesMatch(): String =
-        lowercase().replace(Regex("\\s+"), " ").trim()
 
     private fun attachDefaultHermesBridge() {
         val shouldAttach = synchronized(toolJobsLock) {

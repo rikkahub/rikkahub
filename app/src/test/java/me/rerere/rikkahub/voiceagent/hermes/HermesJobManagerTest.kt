@@ -2707,6 +2707,56 @@ class HermesJobManagerTest {
         assertFalse(toolApi.wasCancelled("call-1"))
         assertFalse(toolApi.wasCancelled("call-2"))
     }
+
+    @Test
+    fun `handleCancelHermesCall sends the outcome through the bridge and records sent`() = runTest {
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = toolApi,
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.submit(callId = "call-1", prompt = "deploy status")
+        assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
+
+        manager.handleCancelHermesCall(callId = "cancel-1", question = "deploy status")
+
+        withTimeout(500) {
+            while (bridge.cancelResponses.isEmpty()) { delay(10) }
+        }
+        val (callId, outcome) = bridge.cancelResponses.single()
+        assertEquals("cancel-1", callId)
+        assertTrue(outcome is CancelHermesOutcome.Canceled)
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_sent" }) { delay(10) }
+        }
+    }
+
+    @Test
+    fun `handleCancelHermesCall records failed when the bridge send returns false`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge().apply { failCancelResponse = true }
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+
+        manager.handleCancelHermesCall(callId = "cancel-1", question = "anything")
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-1"))
+        assertTrue(detail.contains("send_returned_false"))
+    }
 }
 
 private class SnapshotBeforeBlockConversationStore(
@@ -2841,11 +2891,13 @@ private class RecordingHermesBridge : HermesSessionBridge {
     val completionFollowUps = Collections.synchronizedList(mutableListOf<CompletionFollowUp>())
     val terminalFollowUps = Collections.synchronizedList(mutableListOf<TerminalFollowUp>())
     val stillWorkingUpdates = Collections.synchronizedList(mutableListOf<StillWorkingUpdate>())
+    val cancelResponses = Collections.synchronizedList(mutableListOf<Pair<String, CancelHermesOutcome>>())
     var failCompletionFollowUp = false
     var failTerminalFollowUp = false
     var failQueuedAcknowledgement = false
     var throwQueuedAcknowledgement = false
     var failStillWorkingUpdate = false
+    var failCancelResponse = false
     private val blockedQueuedAcknowledgements = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
     private val blockedCompletionFollowUps = Collections.synchronizedList(mutableListOf<BlockedCompletionFollowUp>())
 
@@ -2910,6 +2962,11 @@ private class RecordingHermesBridge : HermesSessionBridge {
         if (failStillWorkingUpdate) return false
         stillWorkingUpdates += StillWorkingUpdate(callId = callId, prompt = prompt, sessionId = sessionId)
         return true
+    }
+
+    override suspend fun sendCancelResponse(callId: String, outcome: CancelHermesOutcome, sessionId: Long): Boolean {
+        cancelResponses += callId to outcome
+        return !failCancelResponse
     }
 
     fun blockNextCompletionFollowUp(): BlockedCompletionFollowUp {
