@@ -250,4 +250,21 @@ class HermesAnnouncementLifecycleTest {
         assertEquals(null, transition.state.inFlight)
         assertTrue(transition.sends().isEmpty())
     }
+
+    @Test
+    fun `drain marker changes nothing and emits no effects`() {
+        // Open state (mid-queue, blocked): a pure shell sentinel must not disturb anything.
+        val open = reducer.reduce(
+            attached.copy(audioActive = true), AnnouncerEvent.IntentEnqueued(completion, 100L)
+        ).state
+        val openTransition = reducer.reduce(open, AnnouncerEvent.DrainMarker(id = 1L))
+        assertEquals(open, openTransition.state)
+        assertTrue(openTransition.effects.isEmpty())
+
+        // Closed state: still a no-op.
+        val closed = reducer.reduce(AnnouncerState(), AnnouncerEvent.Close).state
+        val closedTransition = reducer.reduce(closed, AnnouncerEvent.DrainMarker(id = 2L))
+        assertEquals(closed, closedTransition.state)
+        assertTrue(closedTransition.effects.isEmpty())
+    }
 }

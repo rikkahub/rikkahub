@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -11,6 +13,7 @@ import me.rerere.rikkahub.voiceagent.InMemoryVoiceConversationStore
 import me.rerere.rikkahub.voiceagent.SynchronizedVoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
+import kotlinx.coroutines.yield
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import org.junit.Assert.assertEquals
@@ -378,6 +381,52 @@ class HermesAnnouncerTest {
         assertTrue(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
     }
 
+    // 16 (Task 10 review fix: the drain ack is tied to its own marker, not to any Close)
+    @Test
+    fun `awaitClosed drains tail intents enqueued after close`() = runTest {
+        // The store yields inside update(), mirroring the production store's genuine
+        // suspension — that is the window in which a barrier released too early lets the
+        // scope cancel kill an undrained tail intent.
+        val store = yieldingStore(
+            emptyConversation().withComplete(callId = "call-1", jobId = "job-1", answer = "first"),
+        )
+        val bridge = RecordingBridge(completionDelayMs = 10_000L)
+        val announcer = announcer(queueStore = store, bridgeSendTimeoutMs = 60_000L)
+
+        // Replay starts the completion send for call-1; the consumer stalls mid-send.
+        announcer.attachScoped(bridge, sessionId = 7L)
+        runCurrent()
+        assertEquals(listOf("call-1"), bridge.completions)
+
+        // A job finishes while the consumer is stalled (like a job actor completing during
+        // awaitJobs()): terminal record persisted, close() posted (Close A), THEN the tail
+        // intent enqueued — after Close A.
+        store.persistTerminal(
+            callId = "call-2",
+            prompt = "prompt-call-2",
+            status = VoiceToolRecordStatus.Complete("second"),
+            jobId = "job-2",
+            announced = false,
+        )
+        announcer.close()
+        announcer.enqueueCompletion(callId = "call-2", jobId = "job-2")
+
+        // The barrier, then the scope cancel it exists to make safe, exactly at release.
+        val barrier = launch {
+            announcer.awaitClosed()
+            announcer.consumer?.cancel() // simulates hermesScope.cancel() right after the barrier
+        }
+        runCurrent() // register the drain ack while the consumer is still stalled
+
+        advanceTimeBy(10_001)
+        barrier.join()
+
+        // call-2 must have been fallback-processed BEFORE the barrier released. Pre-fix
+        // (ack completed on ANY Close), Close A released the barrier while call-2 was
+        // still queued and the cancel killed it undrained — this assertion goes red.
+        assertTrue(store.latestRecord(callId = "call-2", jobId = "job-2")!!.messageWritten)
+    }
+
     // --- fixtures ---
 
     private fun emptyConversation(): Conversation = Conversation.ofId(Uuid.random())
@@ -436,6 +485,14 @@ class HermesAnnouncerTest {
         transcriptPersister = transcriptPersister,
     )
 
+    private fun yieldingStore(conversation: Conversation): HermesQueueStore = HermesQueueStore(
+        conversationStore = SynchronizedVoiceConversationStore(
+            YieldingStore(InMemoryVoiceConversationStore(conversation)),
+        ),
+        writer = writer,
+        transcriptPersister = transcriptPersister,
+    )
+
     private fun telemetry(
         diagnostics: MutableList<Pair<String, String>> = mutableListOf(),
     ): HermesJobTelemetry = HermesJobTelemetry(
@@ -468,6 +525,18 @@ class HermesAnnouncerTest {
         nowMs = { testScheduler.currentTime },
     )
 
+    /** A conversation store whose [update] suspends (yields) first, like the production store. */
+    private class YieldingStore(
+        private val delegate: VoiceConversationStore,
+    ) : VoiceConversationStore {
+        override val conversation: StateFlow<Conversation> get() = delegate.conversation
+
+        override suspend fun update(transform: (Conversation) -> Conversation) {
+            yield()
+            delegate.update(transform)
+        }
+    }
+
     /** A conversation store whose first [update] throws, then delegates normally. */
     private class FirstUpdateThrowsStore(
         private val delegate: VoiceConversationStore,
@@ -488,13 +557,16 @@ class HermesAnnouncerTest {
         var completionResult: Boolean = true,
         var terminalResult: Boolean = true,
         var stillWorkingResult: Boolean = true,
+        var completionDelayMs: Long = 0L,
     ) : HermesSessionBridge {
         val completions = mutableListOf<String>()
         val terminals = mutableListOf<String>()
         val stillWorking = mutableListOf<String>()
         override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long) = true
         override suspend fun sendCompletionFollowUp(callId: String, prompt: String, answer: String, sessionId: Long): Boolean {
-            completions += callId; return completionResult
+            completions += callId
+            if (completionDelayMs > 0L) delay(completionDelayMs)
+            return completionResult
         }
         override suspend fun sendTerminalFollowUp(callId: String, prompt: String, status: HermesQueueStatus, reason: String, sessionId: Long): Boolean {
             terminals += callId; return terminalResult

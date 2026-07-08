@@ -49,6 +49,13 @@ sealed interface AnnouncerEvent {
     data class HoldDeadlineFired(val nowMs: Long) : AnnouncerEvent
     data class SendReturned(val outcome: AnnouncementSendOutcome, val nowMs: Long) : AnnouncerEvent
     data object Close : AnnouncerEvent
+
+    /**
+     * Shell-level FIFO sentinel for [HermesAnnouncer.awaitClosed]: a pure no-op in the
+     * reducer. When the consumer reaches it, every event posted before it (including the
+     * Close that drains the queue) has already been processed.
+     */
+    data class DrainMarker(val id: Long) : AnnouncerEvent
 }
 
 sealed interface AnnouncerEffect {
@@ -79,6 +86,8 @@ class AnnouncerReducer(
 ) {
     fun reduce(state: AnnouncerState, event: AnnouncerEvent): AnnouncerTransition = when (event) {
         is AnnouncerEvent.Close -> drainOnClose(state)
+
+        is AnnouncerEvent.DrainMarker -> noChange(state)
 
         is AnnouncerEvent.IntentEnqueued ->
             if (state.closed) {
