@@ -254,6 +254,16 @@ class HermesAnnouncerTest {
         assertTrue(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
     }
 
+    // Pins PR-2 delta 1 (docs/voiceagent/phase4-announcement-deltas.md row 1) against a
+    // silent revert to the old 30_000L hold-papering constant: the behavioral timeout path
+    // is pinned separately with an overridden short timeout (HermesJobManagerTest
+    // `handleCancelHermesCall records send_timeout when the bridge send exceeds the timeout`),
+    // so only this constant assert notices the default value itself changing.
+    @Test
+    fun `default bridge send timeout is five seconds`() {
+        assertEquals(5_000L, HermesAnnouncer.DEFAULT_BRIDGE_SEND_TIMEOUT_MS)
+    }
+
     // 10
     @Test
     fun `a throwing store during a Send effect is contained and the queue continues`() = runTest {
