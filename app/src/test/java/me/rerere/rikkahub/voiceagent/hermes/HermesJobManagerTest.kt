@@ -2757,6 +2757,55 @@ class HermesJobManagerTest {
         assertTrue(detail.contains("callId=cancel-1"))
         assertTrue(detail.contains("send_returned_false"))
     }
+
+    @Test
+    fun `handleCancelHermesCall records send_timeout when the bridge send exceeds the timeout`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            bridgeSendTimeoutMs = 20L,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        val blockedCancel = bridge.blockNextCancelResponse()
+
+        manager.handleCancelHermesCall(callId = "cancel-timeout", question = "anything")
+
+        assertTrue(blockedCancel.started.await(500, TimeUnit.MILLISECONDS))
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-timeout"))
+        assertTrue(detail.contains("error=send_timeout"))
+        blockedCancel.release.complete(Unit)
+    }
+
+    @Test
+    fun `handleCancelHermesCall records no_bridge_attached when no bridge is attached`() = runTest {
+        val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val bridge = RecordingHermesBridge()
+        val manager = manager(
+            toolApi = FakeVoiceToolApi(),
+            conversationStore = FakeVoiceConversationStore(),
+            scope = this,
+            recordDiagnostic = { name, detail -> diagnostics += name to detail },
+        )
+
+        manager.handleCancelHermesCall(callId = "cancel-unattached", question = "anything")
+
+        withTimeout(500) {
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+        }
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertTrue(detail.contains("callId=cancel-unattached"))
+        assertTrue(detail.contains("sessionId=none"))
+        assertTrue(detail.contains("error=no_bridge_attached"))
+        assertTrue(bridge.cancelResponses.isEmpty())
+    }
 }
 
 private class SnapshotBeforeBlockConversationStore(
@@ -2900,6 +2949,7 @@ private class RecordingHermesBridge : HermesSessionBridge {
     var failCancelResponse = false
     private val blockedQueuedAcknowledgements = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
     private val blockedCompletionFollowUps = Collections.synchronizedList(mutableListOf<BlockedCompletionFollowUp>())
+    private val blockedCancelResponses = Collections.synchronizedList(mutableListOf<BlockedBridgeCall>())
 
     override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
         val blocked = blockedQueuedAcknowledgements.removeFirstOrNull()
@@ -2965,6 +3015,14 @@ private class RecordingHermesBridge : HermesSessionBridge {
     }
 
     override suspend fun sendCancelResponse(callId: String, outcome: CancelHermesOutcome, sessionId: Long): Boolean {
+        val blocked = blockedCancelResponses.removeFirstOrNull()
+        if (blocked != null) {
+            blocked.started.countDown()
+            // A suspending (not thread-blocking) wait so that the manager's own
+            // withTimeoutOrNull(bridgeSendTimeoutMs) can actually cancel this call,
+            // mirroring how a real, suspend-based bridge implementation behaves.
+            withTimeoutOrNull(blocked.timeoutMillis) { blocked.release.await() }
+        }
         cancelResponses += callId to outcome
         return !failCancelResponse
     }
@@ -2978,6 +3036,12 @@ private class RecordingHermesBridge : HermesSessionBridge {
     fun blockNextQueuedAcknowledgement(): BlockedBridgeCall {
         return BlockedBridgeCall().also { blocked ->
             blockedQueuedAcknowledgements += blocked
+        }
+    }
+
+    fun blockNextCancelResponse(): BlockedBridgeCall {
+        return BlockedBridgeCall().also { blocked ->
+            blockedCancelResponses += blocked
         }
     }
 

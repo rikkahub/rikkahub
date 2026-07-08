@@ -376,7 +376,10 @@ class HermesJobManager(
             } else {
                 try {
                     withTimeoutOrNull(bridgeSendTimeoutMs) {
-                        if (!attachment.isCurrentBridgeAttachment()) return@withTimeoutOrNull false
+                        if (!attachment.isCurrentBridgeAttachment()) {
+                            failureReason = "bridge_attachment_changed"
+                            return@withTimeoutOrNull false
+                        }
                         attachment.bridge.sendCancelResponse(
                             callId = callId,
                             outcome = outcome,
