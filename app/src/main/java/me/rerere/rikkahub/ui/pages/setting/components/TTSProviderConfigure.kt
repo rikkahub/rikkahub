@@ -453,47 +453,6 @@ private fun MiniMaxTTSConfiguration(
         }
     }
 
-    // Emotion
-    var emotionExpanded by remember { mutableStateOf(false) }
-    val emotions = listOf("calm", "happy", "sad", "angry", "fearful", "disgusted", "surprised")
-
-    FormItem(
-        label = { Text(stringResource(R.string.setting_tts_page_emotion)) },
-        description = { Text(stringResource(R.string.setting_tts_page_emotion_description)) }
-    ) {
-        ExposedDropdownMenuBox(
-            expanded = emotionExpanded,
-            onExpandedChange = { emotionExpanded = !emotionExpanded }
-        ) {
-            OutlinedTextField(
-                value = setting.emotion,
-                onValueChange = { newEmotion ->
-                    onValueChange(setting.copy(emotion = newEmotion))
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable),
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = emotionExpanded)
-                }
-            )
-            ExposedDropdownMenu(
-                expanded = emotionExpanded,
-                onDismissRequest = { emotionExpanded = false }
-            ) {
-                emotions.forEach { emotion ->
-                    DropdownMenuItem(
-                        text = { Text(emotion) },
-                        onClick = {
-                            emotionExpanded = false
-                            onValueChange(setting.copy(emotion = emotion))
-                        }
-                    )
-                }
-            }
-        }
-    }
-
     // Speed
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_speed)) },
