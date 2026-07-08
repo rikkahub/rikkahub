@@ -3,7 +3,6 @@ package me.rerere.rikkahub.voiceagent
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -13,10 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
@@ -86,9 +82,8 @@ class VoiceAgentCoordinator(
     private val eventLock = Any()
     private val playbackSuppressionLock = Any()
     private val toolJobsLock = Any()
-    private val persistenceJobsLock = Any()
-    private val persistenceLock = Mutex()
     private val persistenceScope = CoroutineScope(SupervisorJob() + (dispatcher ?: Dispatchers.IO))
+    private val persistenceQueue = VoicePersistenceQueue(persistenceScope)
     private val sharedConversationStore = SynchronizedVoiceConversationStore(
         conversationStore ?: InMemoryVoiceConversationStore()
     )
@@ -137,8 +132,6 @@ class VoiceAgentCoordinator(
         announcementScheduler = this.hermesAnnouncementScheduler,
     )
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
-    private val persistenceJobs = mutableSetOf<Job>()
-    private var lastPersistenceJob: Job? = null
     private var hermesQueueStatusProjectionJob: Job? = null
     private var activeSessionId = 0L
     private var acceptsUnscopedGeminiEvents = true
@@ -348,15 +341,7 @@ class VoiceAgentCoordinator(
     }
 
     suspend fun awaitPersistenceJobs() {
-        while (true) {
-            val jobs = synchronized(persistenceJobsLock) {
-                if (persistenceJobs.isEmpty()) {
-                    return
-                }
-                persistenceJobs.toList()
-            }
-            jobs.joinAll()
-        }
+        persistenceQueue.await()
     }
 
     suspend fun closeAndDrain() {
@@ -955,25 +940,9 @@ class VoiceAgentCoordinator(
     ) {
         if (conversationStore == null) return
         val store = sharedConversationStore
-        lateinit var job: Job
-        synchronized(persistenceJobsLock) {
-            val previousJob = lastPersistenceJob
-            job = persistenceScope.launch(start = CoroutineStart.LAZY) {
-                previousJob?.join()
-                persistConversationNow(store = store, transform = transform, onPersisted = onPersisted)
-            }
-            persistenceJobs += job
-            lastPersistenceJob = job
+        persistenceQueue.enqueue {
+            persistConversationNow(store = store, transform = transform, onPersisted = onPersisted)
         }
-        job.invokeOnCompletion {
-            synchronized(persistenceJobsLock) {
-                persistenceJobs -= job
-                if (lastPersistenceJob === job) {
-                    lastPersistenceJob = null
-                }
-            }
-        }
-        job.start()
     }
 
     private suspend fun persistConversationNow(
@@ -984,9 +953,7 @@ class VoiceAgentCoordinator(
         runCatching {
             diagnostics.record("conversation_persist_saving")
             _state.update { it.copy(persistence = VoicePersistenceStatus.Saving) }
-            persistenceLock.withLock {
-                store.update(transform)
-            }
+            store.update(transform)
         }.onSuccess {
             diagnostics.record("conversation_persist_saved")
             _state.update { it.copy(persistence = VoicePersistenceStatus.Saved) }
