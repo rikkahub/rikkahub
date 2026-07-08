@@ -16,6 +16,29 @@ import kotlinx.serialization.json.putJsonObject
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 
+internal data class VoiceToolSpec(
+    val name: String,
+    val argKey: String,
+    val responseScheduling: String,
+)
+
+internal val VOICE_TOOL_SPECS: List<VoiceToolSpec> = listOf(
+    VoiceToolSpec(
+        name = VoiceAgentToolNames.ASK_HERMES,
+        argKey = "prompt",
+        responseScheduling = VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+    ),
+    VoiceToolSpec(
+        name = VoiceAgentToolNames.CANCEL_HERMES,
+        argKey = "question",
+        // WHEN_IDLE for cancel is deliberate (adjudicated in the UX-gaps review:
+        // blocking + immediate at idle turn, no barge-in) — now explicit per tool.
+        responseScheduling = VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+    ),
+)
+
+internal val voiceToolSpecsByName: Map<String, VoiceToolSpec> = VOICE_TOOL_SPECS.associateBy { it.name }
+
 class GeminiLiveCodec(
     private val json: Json = JsonInstant,
 ) {
@@ -37,15 +60,14 @@ class GeminiLiveCodec(
                             put(key, value)
                         }
                     }
-                    if ("toolConfig" !in normalizedLiveConnectConfig && normalizedLiveConnectConfig.declaresAskHermesTool()) {
+                    val declaredToolNames = VOICE_TOOL_SPECS.map { it.name }
+                        .filter { normalizedLiveConnectConfig.declaresTool(it) }
+                    if ("toolConfig" !in normalizedLiveConnectConfig && declaredToolNames.isNotEmpty()) {
                         putJsonObject("toolConfig") {
                             putJsonObject("functionCallingConfig") {
                                 put("mode", "ANY")
                                 putJsonArray("allowedFunctionNames") {
-                                    add(JsonPrimitive(VoiceAgentToolNames.ASK_HERMES))
-                                    if (normalizedLiveConnectConfig.declaresTool(VoiceAgentToolNames.CANCEL_HERMES)) {
-                                        add(JsonPrimitive(VoiceAgentToolNames.CANCEL_HERMES))
-                                    }
+                                    declaredToolNames.forEach { add(JsonPrimitive(it)) }
                                 }
                             }
                         }
@@ -131,7 +153,11 @@ class GeminiLiveCodec(
                         buildJsonObject {
                             put("id", callId)
                             put("name", name)
-                            put("scheduling", VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE)
+                            put(
+                                "scheduling",
+                                voiceToolSpecsByName[name]?.responseScheduling
+                                    ?: VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+                            )
                             putJsonObject("response") {
                                 put("answer", answer)
                             }
@@ -205,17 +231,13 @@ class GeminiLiveCodec(
                 ?: return@mapNotNull null
             val name = functionCall["name"]?.stringContentOrNull()?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
-            val argKey = when (name) {
-                VoiceAgentToolNames.ASK_HERMES -> "prompt"
-                VoiceAgentToolNames.CANCEL_HERMES -> "question"
-                else -> {
-                    unsupportedCalls += GeminiLiveEvent.UnsupportedToolCall(callId = callId, name = name)
-                    return@mapNotNull null
-                }
+            val spec = voiceToolSpecsByName[name] ?: run {
+                unsupportedCalls += GeminiLiveEvent.UnsupportedToolCall(callId = callId, name = name)
+                return@mapNotNull null
             }
             val prompt = functionCall["args"]
                 ?.jsonObjectOrNull()
-                ?.get(argKey)
+                ?.get(spec.argKey)
                 ?.stringContentOrNull()
                 ?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
@@ -249,8 +271,6 @@ class GeminiLiveCodec(
         return GeminiLiveEvent.ToolCallCancellation(ids)
     }
 
-    private fun JsonObject.declaresAskHermesTool(): Boolean = declaresTool(VoiceAgentToolNames.ASK_HERMES)
-
     private fun JsonObject.declaresTool(name: String): Boolean =
         this["tools"]
             ?.jsonArrayOrNull()
@@ -266,7 +286,7 @@ class GeminiLiveCodec(
             } == true
 
     private fun JsonObject.withAskHermesSetupDefaults(): JsonObject {
-        if (!declaresAskHermesTool()) return this
+        if (!declaresTool(VoiceAgentToolNames.ASK_HERMES)) return this
         return buildJsonObject {
             forEach { (key, value) ->
                 put(

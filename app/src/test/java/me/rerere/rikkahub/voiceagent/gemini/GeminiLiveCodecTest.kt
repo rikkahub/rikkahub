@@ -4,9 +4,12 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import org.junit.Assert.assertEquals
@@ -210,6 +213,49 @@ class GeminiLiveCodecTest {
             .jsonArray
             .map { it.jsonPrimitive.content }
         assertEquals(listOf("ask_hermes", "cancel_hermes"), allowed)
+    }
+
+    @Test
+    fun `setup message omits tool config when no registered tool is declared`() {
+        val message = codec.setupMessage(
+            providerModel = "gemini-test",
+            liveConnectConfig = buildJsonObject {
+                putJsonArray("tools") { }
+            },
+            systemInstruction = "sys",
+        ).jsonObject()
+
+        val setup = message["setup"]!!.jsonObject
+        assertFalse("toolConfig" in setup)
+    }
+
+    @Test
+    fun `setup message allows only declared registered tools`() {
+        // Declares cancel_hermes but NOT ask_hermes: under the uniform
+        // declaration-gated rule the toolConfig lists only cancel_hermes.
+        val message = codec.setupMessage(
+            providerModel = "gemini-test",
+            liveConnectConfig = buildJsonObject {
+                putJsonArray("tools") {
+                    add(
+                        buildJsonObject {
+                            putJsonArray("functionDeclarations") {
+                                add(buildJsonObject { put("name", "cancel_hermes") })
+                            }
+                        }
+                    )
+                }
+            },
+            systemInstruction = "sys",
+        ).jsonObject()
+
+        val allowed = message["setup"]!!
+            .jsonObject["toolConfig"]!!
+            .jsonObject["functionCallingConfig"]!!
+            .jsonObject["allowedFunctionNames"]!!
+            .jsonArray
+            .map { it.jsonPrimitive.content }
+        assertEquals(listOf("cancel_hermes"), allowed)
     }
 
     @Test
