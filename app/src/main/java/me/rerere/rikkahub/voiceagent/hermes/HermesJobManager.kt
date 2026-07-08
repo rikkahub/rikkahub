@@ -14,12 +14,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
-import me.rerere.rikkahub.voiceagent.hermesCompletionFollowUpText
 import me.rerere.rikkahub.voiceagent.isTerminalHermesToolStatus
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import me.rerere.rikkahub.voiceagent.summarizeVoiceToolStatus
@@ -28,7 +25,6 @@ import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
 import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
 import java.time.Instant
@@ -96,7 +92,7 @@ class HermesJobManager(
     private val stillWorkingThresholdMs: Long = DEFAULT_STILL_WORKING_THRESHOLD_MS,
     private val updateToolStatus: (VoiceToolStatus) -> Unit = {},
     private val recordDiagnostic: (String, String) -> Unit = { _, _ -> },
-    private val writeQueueEvent: (String) -> Unit = {},
+    private val writeQueueEvent: (HermesQueueEvent) -> Unit = {},
     private val writeHermesAnswer: (String) -> Unit = {},
     private val persistenceSessionId: () -> String? = { null },
     private val onJobCompleted: (HermesJobCompletion) -> Unit = {},
@@ -108,6 +104,16 @@ class HermesJobManager(
     private val lock = Any()
     private val announcementMutex = Mutex()
     private val recordWriter = HermesToolRecordWriter()
+    private val telemetry = HermesJobTelemetry(
+        observability = observability,
+        traceContext = traceContext,
+        recordDiagnostic = recordDiagnostic,
+        writeQueueEvent = writeQueueEvent,
+        writeHermesAnswer = writeHermesAnswer,
+        onJobCompleted = onJobCompleted,
+        onJobFailed = onJobFailed,
+        onPollFailed = onPollFailed,
+    )
     private val queueStore = HermesQueueStore(
         conversationStore = conversationStore,
         writer = recordWriter,
@@ -188,32 +194,11 @@ class HermesJobManager(
             announced = null,
         )
         if (!persisted) return
-        recordEventSafely(
-            name = "voicelab.mobile.hermes_tool.failed",
-            attributes = mapOf(
-                "callId" to record.callId,
-                "jobId" to record.jobId,
-                "gemini.tool_call.call_id" to record.callId,
-                "hermes_job_id" to record.jobId,
-                "hermes_job_status" to HermesQueueStatus.Expired.wireName,
-                "status" to HermesQueueStatus.Expired.wireName,
-                "message" to message,
-            ),
-        )
-        safeRecordDiagnostic(
-            "hermes_job_failed",
-            "callId=${record.callId}${record.jobId?.let { ", jobId=$it" }.orEmpty()}, message=$message",
-        )
-        safeOnJobFailed(
-            HermesJobFailure(callId = record.callId, jobId = record.jobId, message = message, elapsedMs = 0L)
-        )
-        safeWriteQueueEvent(
-            buildQueueEvent(
-                type = "job_failed",
-                callId = record.callId,
-                jobId = record.jobId ?: "none",
-                status = HermesQueueStatus.Expired.wireName,
-            )
+        telemetry.jobFailed(
+            callId = record.callId,
+            jobId = record.jobId,
+            statusWire = HermesQueueStatus.Expired.wireName,
+            message = message,
         )
         updateToolStatus(
             record.callId,
@@ -466,7 +451,7 @@ class HermesJobManager(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Throwable) {
-                        safeRecordDiagnostic(
+                        telemetry.diagnostic(
                             "hermes_effect_failed",
                             "callId=${actor.callId}, effect=${effect::class.simpleName}, " +
                                 "error=${HermesTelemetryLogSanitizer.failureMessage(e.message ?: e.javaClass.simpleName)}",
@@ -496,13 +481,7 @@ class HermesJobManager(
             JobEffect.PersistPending -> {
                 val persisted = queueStore.persistPending(callId = actor.callId, prompt = actor.prompt)
                 if (persisted) {
-                    recordEventSafely(
-                        name = "voicelab.mobile.hermes_tool.submitted",
-                        attributes = mapOf(
-                            "callId" to actor.callId,
-                            "gemini.tool_call.call_id" to actor.callId,
-                        ) + voiceTextPayload(key = "gemini.tool_call.prompt", text = actor.prompt),
-                    )
+                    telemetry.jobSubmitted(callId = actor.callId, prompt = actor.prompt)
                 }
             }
 
@@ -589,18 +568,7 @@ class HermesJobManager(
             }
 
             is JobEffect.NoteJobCreated -> {
-                safeRecordDiagnostic(
-                    "hermes_job_created",
-                    "callId=${actor.callId}, jobId=${effect.jobId}, status=${effect.status}",
-                )
-                safeWriteQueueEvent(
-                    buildQueueEvent(
-                        type = "job_created",
-                        callId = actor.callId,
-                        jobId = effect.jobId,
-                        status = effect.status.wireName,
-                    )
-                )
+                telemetry.jobCreated(callId = actor.callId, jobId = effect.jobId, status = effect.status)
             }
 
             is JobEffect.PersistActive -> {
@@ -645,7 +613,7 @@ class HermesJobManager(
 
             is JobEffect.AnnounceStillWorking -> announceStillWorking(actor, effect.jobId)
 
-            is JobEffect.NotifyPollFailure -> safeOnPollFailed(
+            is JobEffect.NotifyPollFailure -> telemetry.pollFailed(
                 HermesPollFailure(
                     callId = actor.callId,
                     jobId = actor.jobId.orEmpty(),
@@ -669,7 +637,7 @@ class HermesJobManager(
                 )
                 if (!persisted) return
                 val elapsedMs = actor.elapsedMs()
-                safeOnJobCompleted(
+                telemetry.jobCompleted(
                     HermesJobCompletion(
                         callId = actor.callId,
                         jobId = requireNotNull(effect.jobId),
@@ -678,35 +646,6 @@ class HermesJobManager(
                         serverElapsedMs = kind.serverElapsedMs,
                     )
                 )
-                recordEventSafely(
-                    name = "voicelab.mobile.hermes_tool.completed",
-                    attributes = mapOf(
-                        "callId" to actor.callId,
-                        "jobId" to effect.jobId,
-                        "gemini.tool_call.call_id" to actor.callId,
-                        "hermes_job_id" to effect.jobId,
-                        "hermes_job_status" to "succeeded",
-                        "elapsedMs" to elapsedMs,
-                        "serverElapsedMs" to kind.serverElapsedMs,
-                    ) + voiceTextPayload(key = "hermes.response.answer", text = kind.answer),
-                )
-                safeRecordDiagnostic(
-                    "hermes_job_completed",
-                    "callId=${actor.callId}, jobId=${effect.jobId}, elapsedMs=$elapsedMs" +
-                        "${kind.serverElapsedMs?.let { ", serverElapsedMs=$it" }.orEmpty()}, answerChars=${kind.answer.length}",
-                )
-                safeWriteQueueEvent(
-                    buildQueueEvent(
-                        type = "job_completed",
-                        callId = actor.callId,
-                        jobId = requireNotNull(effect.jobId),
-                        status = "succeeded",
-                        elapsedMs = elapsedMs,
-                        serverElapsedMs = kind.serverElapsedMs,
-                        answerChars = kind.answer.length,
-                    )
-                )
-                safeWriteHermesAnswer(kind.answer)
                 updateToolStatus(
                     actor.callId,
                     VoiceToolStatus.HermesAnswered(callId = actor.callId, elapsedMs = actor.elapsedMs()),
@@ -770,33 +709,11 @@ class HermesJobManager(
         effect: JobEffect.PersistTerminal,
         message: String,
     ) {
-        val statusWire = effect.kind.queueEventStatus()
-        recordEventSafely(
-            name = "voicelab.mobile.hermes_tool.failed",
-            attributes = mapOf(
-                "callId" to actor.callId,
-                "jobId" to effect.jobId,
-                "gemini.tool_call.call_id" to actor.callId,
-                "hermes_job_id" to effect.jobId,
-                "hermes_job_status" to statusWire,
-                "status" to statusWire,
-                "message" to message,
-            ),
-        )
-        safeRecordDiagnostic(
-            "hermes_job_failed",
-            "callId=${actor.callId}${effect.jobId?.let { ", jobId=$it" }.orEmpty()}, message=$message",
-        )
-        safeOnJobFailed(
-            HermesJobFailure(callId = actor.callId, jobId = effect.jobId, message = message, elapsedMs = 0L)
-        )
-        safeWriteQueueEvent(
-            buildQueueEvent(
-                type = "job_failed",
-                callId = actor.callId,
-                jobId = effect.jobId ?: "none",
-                status = statusWire,
-            )
+        telemetry.jobFailed(
+            callId = actor.callId,
+            jobId = effect.jobId,
+            statusWire = effect.kind.queueEventStatus(),
+            message = message,
         )
     }
 
@@ -825,7 +742,7 @@ class HermesJobManager(
             }.getOrDefault(false)
             if (sent) {
                 queueStore.markStillWorkingAnnounced(callId = actor.callId, jobId = jobId)
-                safeRecordDiagnostic(
+                telemetry.diagnostic(
                     "hermes_still_working_announced",
                     "callId=${actor.callId}, jobId=$jobId",
                 )
@@ -890,18 +807,11 @@ class HermesJobManager(
             }.getOrDefault(false)
             if (sent) {
                 queueStore.markResultAnnounced(callId = callId, jobId = jobId)
-                recordEventSafely(
-                    name = "voicelab.mobile.gemini.followup_sent",
-                    attributes = mapOf(
-                        "callId" to callId,
-                        "jobId" to jobId,
-                        "gemini.tool_call.call_id" to callId,
-                        "hermes_job_id" to jobId,
-                        "sent" to true,
-                    ) + voiceTextPayload(
-                        key = "gemini.followup_text",
-                        text = hermesCompletionFollowUpText(prompt = record.prompt, answer = record.answer),
-                    ),
+                telemetry.followUpSent(
+                    callId = callId,
+                    jobId = jobId,
+                    prompt = record.prompt,
+                    answer = requireNotNull(record.answer),
                 )
             }
             if (!sent) {
@@ -951,48 +861,6 @@ class HermesJobManager(
         }
     }
 
-    private fun safeRecordDiagnostic(event: String, detail: String) {
-        runCatching {
-            recordDiagnostic(event, detail)
-        }
-    }
-
-    private fun safeWriteQueueEvent(event: String) {
-        runCatching {
-            writeQueueEvent(event)
-        }
-    }
-
-    private fun safeWriteHermesAnswer(answer: String) {
-        runCatching {
-            writeHermesAnswer(answer)
-        }
-    }
-
-    private fun safeOnJobCompleted(completion: HermesJobCompletion) {
-        runCatching {
-            onJobCompleted(completion)
-        }
-    }
-
-    private fun safeOnJobFailed(failure: HermesJobFailure) {
-        runCatching {
-            onJobFailed(failure)
-        }
-    }
-
-    private fun safeOnPollFailed(failure: HermesPollFailure) {
-        runCatching {
-            onPollFailed(failure)
-        }
-    }
-
-    private fun recordEventSafely(name: String, attributes: Map<String, Any?> = emptyMap()) {
-        runCatching {
-            observability.recordEvent(name = name, trace = traceContext, attributes = attributes)
-        }
-    }
-
     private fun currentPersistenceSessionId(): String? =
         persistenceSessionId() ?: currentBridgeAttachment()?.sessionId?.toString()
 
@@ -1030,39 +898,6 @@ class HermesJobManager(
     private fun BridgeAttachment.isCurrentBridgeAttachment(): Boolean = synchronized(lock) {
         active && bridgeAttachment?.bridge === bridge && bridgeAttachment?.sessionId == sessionId
     }
-
-    private fun buildQueueEvent(
-        type: String,
-        callId: String,
-        jobId: String,
-        status: String? = null,
-        elapsedMs: Long? = null,
-        serverElapsedMs: Long? = null,
-        answerChars: Int? = null,
-        sent: Boolean? = null,
-    ): String {
-        return buildJsonObject {
-            put("type", type)
-            put("callId", callId)
-            put("jobId", jobId)
-            status?.let { put("status", it) }
-            elapsedMs?.let { put("elapsedMs", it) }
-            serverElapsedMs?.let { put("serverElapsedMs", it) }
-            answerChars?.let { put("answerChars", it) }
-            sent?.let { put("sent", it) }
-        }.toString()
-    }
-
-    private val HermesJobStatus.wireName: String
-        get() = when (this) {
-            HermesJobStatus.Accepted -> "accepted"
-            HermesJobStatus.Queued -> "queued"
-            HermesJobStatus.Running -> "running"
-            HermesJobStatus.Succeeded -> "succeeded"
-            HermesJobStatus.Failed -> "failed"
-            HermesJobStatus.Expired -> "expired"
-            HermesJobStatus.Canceled -> "canceled"
-        }
 
     private fun Throwable.isTerminalHermesPollFailure(): Boolean {
         if (this !is VoiceLabHttpException) return false

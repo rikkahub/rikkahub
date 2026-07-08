@@ -113,7 +113,7 @@ class VoiceAgentCoordinator(
         stillWorkingThresholdMs = hermesStillWorkingThresholdMs,
         updateToolStatus = ::updateHermesToolStatusFromManager,
         recordDiagnostic = diagnostics::record,
-        writeQueueEvent = ::writeHermesQueueArtifactLine,
+        writeQueueEvent = { event -> writeHermesQueueArtifactLine(event.toJson()) },
         writeHermesAnswer = { answer -> writeArtifactSafely(VoiceE2EArtifact.HermesAnswer, answer) },
         persistenceSessionId = { voiceArtifactSessionId },
         onJobCompleted = ::recordHermesJobCompletion,

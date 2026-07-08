@@ -1755,7 +1755,7 @@ class HermesJobManagerTest {
         val conversationStore = FakeVoiceConversationStore()
         val bridge = RecordingHermesBridge()
         val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
-        val queueEvents = Collections.synchronizedList(mutableListOf<String>())
+        val queueEvents = Collections.synchronizedList(mutableListOf<HermesQueueEvent>())
         val blockedSubmit = toolApi.blockSubmitCancellable("call-cancel-mid-submit")
         val manager = manager(
             toolApi = toolApi,
@@ -1794,7 +1794,7 @@ class HermesJobManagerTest {
 
         // No job-created side effects fired, since the job never entered its active state.
         assertTrue(diagnostics.none { it.first == "hermes_job_created" })
-        assertTrue(queueEvents.none { it.contains("job_created") })
+        assertTrue(queueEvents.none { it.toJson().contains("job_created") })
 
         // A user-initiated cancel is announced on write, so re-attaching never replays it.
         manager.detachBridge(bridge)
@@ -2171,7 +2171,7 @@ class HermesJobManagerTest {
         dispatcher: CoroutineDispatcher = Dispatchers.Default,
         updateToolStatus: (VoiceToolStatus) -> Unit = {},
         recordDiagnostic: (String, String) -> Unit = { _, _ -> },
-        writeQueueEvent: (String) -> Unit = {},
+        writeQueueEvent: (HermesQueueEvent) -> Unit = {},
         writeHermesAnswer: (String) -> Unit = {},
         onPollFailed: (HermesPollFailure) -> Unit = {},
         pollIntervalMs: Long = 10L,
