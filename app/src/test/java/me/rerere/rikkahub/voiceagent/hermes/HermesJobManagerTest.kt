@@ -2832,7 +2832,7 @@ class HermesJobManagerTest {
     }
 
     @Test
-    fun `handleCancelHermesCall records bridge_attachment_changed when the attachment changes mid-send`() = runTest {
+    fun `handleCancelHermesCall reports delivered response as sent with attachmentChanged advisory`() = runTest {
         val diagnostics = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
         val bridge = RecordingHermesBridge()
         val manager = manager(
@@ -2853,11 +2853,13 @@ class HermesJobManagerTest {
         blockedCancel.release.complete(Unit)
 
         withTimeout(500) {
-            while (diagnostics.none { it.first == "cancel_hermes_tool_response_failed" }) { delay(10) }
+            while (diagnostics.none { it.first == "cancel_hermes_tool_response_sent" }) { delay(10) }
         }
-        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_failed" }.second
+        assertEquals("cancel-changed", bridge.cancelResponses.single().first)
+        val detail = diagnostics.single { it.first == "cancel_hermes_tool_response_sent" }.second
         assertTrue(detail.contains("callId=cancel-changed"))
-        assertTrue(detail.contains("error=bridge_attachment_changed"))
+        assertTrue(detail.contains("attachmentChanged=true"))
+        assertTrue(diagnostics.none { it.first == "cancel_hermes_tool_response_failed" })
     }
 }
 

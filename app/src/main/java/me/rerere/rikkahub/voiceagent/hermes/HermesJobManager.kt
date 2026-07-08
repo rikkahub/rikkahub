@@ -376,6 +376,7 @@ class HermesJobManager(
         val outcome = resolveAndCancelRequest(question)
         scope.launch(dispatcher) {
             var failureReason = "send_returned_false"
+            var attachmentChangedAfterDelivery = false
             val attachment = currentBridgeAttachment()
             val sent = if (attachment == null) {
                 failureReason = "no_bridge_attached"
@@ -396,14 +397,19 @@ class HermesJobManager(
                             sessionId = attachment.sessionId,
                         )
                         // Re-validate after the send: a detach/re-attach while the bridge
-                        // call was suspended means the response raced a session change, so
-                        // it is reported as bridge_attachment_changed rather than success.
+                        // call was suspended means the response raced a session change. A
+                        // delivered response still counts as sent — the change is surfaced
+                        // as an attachmentChanged advisory on the sent diagnostic. Only an
+                        // undelivered send with a changed attachment is labeled
+                        // bridge_attachment_changed.
                         if (!attachment.isCurrentBridgeAttachment()) {
-                            failureReason = "bridge_attachment_changed"
-                            false
-                        } else {
-                            delivered
+                            if (delivered) {
+                                attachmentChangedAfterDelivery = true
+                            } else {
+                                failureReason = "bridge_attachment_changed"
+                            }
                         }
+                        delivered
                     } ?: run {
                         failureReason = "send_timeout"
                         false
@@ -425,7 +431,8 @@ class HermesJobManager(
             if (sent) {
                 recordDiagnostic(
                     "cancel_hermes_tool_response_sent",
-                    "callId=$callId, sessionId=$sessionDetail",
+                    "callId=$callId, sessionId=$sessionDetail" +
+                        if (attachmentChangedAfterDelivery) ", attachmentChanged=true" else "",
                 )
             } else {
                 recordDiagnostic(
