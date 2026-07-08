@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
+import java.io.File
 import com.drew.imaging.ImageMetadataReader
 import com.drew.imaging.png.PngChunkType
 import com.drew.metadata.png.PngDirectory
@@ -138,6 +139,69 @@ object ImageUtils {
             it.printStackTrace()
         }.getOrDefault(bitmap)
     }
+
+    /**
+     * 判断 uri 指向的图片是否为 HEIF/HEIC 格式
+     * 优先使用 ContentResolver 的 MIME 类型，回退到读取文件头魔数嗅探
+     */
+    fun isHeifImage(context: Context, uri: Uri): Boolean {
+        context.contentResolver.getType(uri)?.lowercase()?.let { mime ->
+            if (mime.contains("heic") || mime.contains("heif")) return true
+        }
+        return runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val header = ByteArray(12)
+                val read = input.read(header)
+                if (read < 12) return@use false
+                if (header.copyOfRange(4, 8).toString(Charsets.US_ASCII) != "ftyp") return@use false
+                header.copyOfRange(8, 12).toString(Charsets.US_ASCII) in HEIF_BRANDS
+            } ?: false
+        }.getOrDefault(false)
+    }
+
+    /**
+     * 将 HEIF/HEIC 图片解码后重编码为 JPEG 写入 [target]
+     * 用于规避部分组件（如 UCrop）对 HEIF（尤其 HDR HEIF）解码兼容性不佳的问题
+     *
+     * @return 转换成功返回 true，失败（如系统无法解码 HEIF）返回 false
+     */
+    fun convertHeifToJpeg(
+        context: Context,
+        uri: Uri,
+        target: File,
+        maxSize: Int = 4096,
+        quality: Int = 95,
+    ): Boolean = runCatching {
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, boundsOptions)
+        }
+        val loadOptions = BitmapFactory.Options().apply {
+            inSampleSize = calculateInSampleSize(boundsOptions, maxSize, maxSize)
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val decoded = context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, loadOptions)
+        } ?: return@runCatching false
+        // 将 EXIF 旋转烘焙进像素，输出的 JPEG 不再带方向信息，避免下游二次旋转
+        val oriented = correctImageOrientation(context, uri, decoded)
+        try {
+            target.outputStream().use { output ->
+                oriented.compress(Bitmap.CompressFormat.JPEG, quality, output)
+            }
+            true
+        } finally {
+            recycleBitmapSafely(oriented)
+        }
+    }.onFailure {
+        it.printStackTrace()
+    }.getOrDefault(false)
+
+    private val HEIF_BRANDS = setOf(
+        "heic", "heix", "heim", "heis",
+        "hevc", "hevx", "hevm", "hevs",
+        "mif1", "msf1", "heif",
+    )
 
     /**
      * 从图片中解析二维码
