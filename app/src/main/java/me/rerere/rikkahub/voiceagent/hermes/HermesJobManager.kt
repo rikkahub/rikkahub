@@ -10,8 +10,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
@@ -88,8 +86,12 @@ class HermesJobManager(
     private val pollRetryDelayMs: Long = DEFAULT_POLL_RETRY_DELAY_MS,
     private val maxElapsedMs: Long = DEFAULT_MAX_ELAPSED_MS,
     private val remoteCancelTimeoutMs: Long = DEFAULT_REMOTE_CANCEL_TIMEOUT_MS,
-    private val bridgeSendTimeoutMs: Long = DEFAULT_BRIDGE_SEND_TIMEOUT_MS,
+    private val bridgeSendTimeoutMs: Long = HermesAnnouncer.DEFAULT_BRIDGE_SEND_TIMEOUT_MS,
     private val stillWorkingThresholdMs: Long = DEFAULT_STILL_WORKING_THRESHOLD_MS,
+    private val defaultBridge: (() -> HermesSessionBridge)? = null,
+    private val announcementQuietWindowMs: Long = HermesAnnouncer.DEFAULT_QUIET_WINDOW_MS,
+    private val announcementMaxHoldMs: Long = HermesAnnouncer.DEFAULT_MAX_HOLD_MS,
+    private val announcementNowMs: () -> Long = System::currentTimeMillis,
     private val updateToolStatus: (VoiceToolStatus) -> Unit = {},
     private val recordDiagnostic: (String, String) -> Unit = { _, _ -> },
     private val writeQueueEvent: (HermesQueueEvent) -> Unit = {},
@@ -102,7 +104,6 @@ class HermesJobManager(
     private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
 ) {
     private val lock = Any()
-    private val announcementMutex = Mutex()
     private val recordWriter = HermesToolRecordWriter()
     private val telemetry = HermesJobTelemetry(
         observability = observability,
@@ -120,6 +121,17 @@ class HermesJobManager(
         transcriptPersister = transcriptPersister,
         persistenceSessionId = ::currentPersistenceSessionId,
     )
+    val announcer = HermesAnnouncer(
+        scope = scope,
+        dispatcher = dispatcher,
+        queueStore = queueStore,
+        telemetry = telemetry,
+        defaultBridge = defaultBridge,
+        bridgeSendTimeoutMs = bridgeSendTimeoutMs,
+        quietWindowMs = announcementQuietWindowMs,
+        maxHoldMs = announcementMaxHoldMs,
+        nowMs = announcementNowMs,
+    )
     private val reducer = HermesJobReducer(
         pollIntervalMs = pollIntervalMs,
         pollRetryDelayMs = pollRetryDelayMs,
@@ -128,7 +140,6 @@ class HermesJobManager(
     private val toolCalls = mutableMapOf<String, VoiceToolStatus>()
     private val _toolStatus = MutableStateFlow<VoiceToolStatus>(VoiceToolStatus.Idle)
     val toolStatus: StateFlow<VoiceToolStatus> = _toolStatus
-    private var bridgeAttachment: BridgeAttachment? = null
 
     fun submit(callId: String, prompt: String, activeKey: String = callActiveKey(callId)): Boolean {
         val actor = synchronized(lock) {
@@ -226,30 +237,6 @@ class HermesJobManager(
                 continue
             }
             consumers.joinAll()
-        }
-    }
-
-    fun attachBridge(bridge: HermesSessionBridge, sessionId: Long) {
-        synchronized(lock) {
-            bridgeAttachment?.active = false
-            bridgeAttachment = BridgeAttachment(bridge = bridge, sessionId = sessionId)
-        }
-        scope.launch(dispatcher) {
-            announceUnannouncedTerminalResults(bridge = bridge, sessionId = sessionId)
-        }
-    }
-
-    fun attachBridge(bridge: HermesSessionBridge) {
-        attachBridge(bridge = bridge, sessionId = UNBOUND_BRIDGE_SESSION_ID)
-    }
-
-    fun detachBridge(bridge: HermesSessionBridge) {
-        synchronized(lock) {
-            val attachment = bridgeAttachment
-            if (attachment?.bridge === bridge) {
-                attachment.active = false
-                bridgeAttachment = null
-            }
         }
     }
 
@@ -358,7 +345,7 @@ class HermesJobManager(
         scope.launch(dispatcher) {
             var failureReason = "send_returned_false"
             var attachmentChangedAfterDelivery = false
-            val attachment = currentBridgeAttachment()
+            val attachment = announcer.currentAttachment()
             val sent = if (attachment == null) {
                 failureReason = "no_bridge_attached"
                 false
@@ -368,7 +355,7 @@ class HermesJobManager(
             } else {
                 try {
                     withTimeoutOrNull(bridgeSendTimeoutMs) {
-                        if (!attachment.isCurrentBridgeAttachment()) {
+                        if (!announcer.isCurrent(attachment)) {
                             failureReason = "bridge_attachment_changed"
                             return@withTimeoutOrNull false
                         }
@@ -383,7 +370,7 @@ class HermesJobManager(
                         // as an attachmentChanged advisory on the sent diagnostic. Only an
                         // undelivered send with a changed attachment is labeled
                         // bridge_attachment_changed.
-                        if (!attachment.isCurrentBridgeAttachment()) {
+                        if (!announcer.isCurrent(attachment)) {
                             if (delivered) {
                                 attachmentChangedAfterDelivery = true
                             } else {
@@ -593,17 +580,18 @@ class HermesJobManager(
             is JobEffect.CancelRemoteJob -> cancelRemoteJob(effect.jobId)
 
             is JobEffect.AnnounceCompletion ->
-                announceCompletedResult(callId = actor.callId, jobId = effect.jobId)
+                announcer.enqueueCompletion(callId = actor.callId, jobId = effect.jobId)
 
             is JobEffect.AnnounceTerminal -> {
                 val acknowledged = effect.ackDelivered ||
                     sendQueuedAcknowledgementIfAttached(callId = actor.callId)
                 if (acknowledged) {
-                    announceTerminalResult(callId = actor.callId, jobId = effect.jobId)
+                    announcer.enqueueTerminal(callId = actor.callId, jobId = effect.jobId)
                 }
             }
 
-            is JobEffect.AnnounceStillWorking -> announceStillWorking(actor, effect.jobId)
+            is JobEffect.AnnounceStillWorking ->
+                announcer.enqueueStillWorking(callId = actor.callId, jobId = effect.jobId)
 
             is JobEffect.NotifyPollFailure -> telemetry.pollFailed(
                 HermesPollFailure(
@@ -716,145 +704,18 @@ class HermesJobManager(
         is TerminalKind.Canceled -> HermesQueueStatus.Canceled.wireName
     }
 
-    private suspend fun announceStillWorking(actor: JobActor, jobId: String) {
-        val current = currentBridgeAttachment() ?: return
-        announcementMutex.withLock {
-            val record = queueStore.latestRecord(callId = actor.callId, jobId = jobId)
-                ?: return@withLock
-            if (record.status.isTerminal || record.stillWorkingAnnounced) return@withLock
-            if (!current.isCurrentBridgeAttachment()) return@withLock
-            val sent = runCatching {
-                withTimeoutOrNull(bridgeSendTimeoutMs) {
-                    current.bridge.sendStillWorkingUpdate(
-                        callId = actor.callId,
-                        prompt = record.prompt,
-                        sessionId = current.sessionId,
-                    )
-                } ?: false
-            }.getOrDefault(false)
-            if (sent) {
-                queueStore.markStillWorkingAnnounced(callId = actor.callId, jobId = jobId)
-                telemetry.diagnostic(
-                    "hermes_still_working_announced",
-                    "callId=${actor.callId}, jobId=$jobId",
-                )
-            }
-        }
-    }
-
     private suspend fun sendQueuedAcknowledgementIfAttached(callId: String): Boolean {
-        val attachment = currentBridgeAttachment() ?: return false
+        val attachment = announcer.currentAttachment() ?: return false
         return runCatching {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
-                if (!attachment.isCurrentBridgeAttachment()) return@withTimeoutOrNull false
+                if (!announcer.isCurrent(attachment)) return@withTimeoutOrNull false
                 attachment.bridge.sendQueuedAcknowledgement(callId = callId, sessionId = attachment.sessionId)
             } ?: false
         }.getOrDefault(false)
     }
 
-    private suspend fun announceUnannouncedTerminalResults(bridge: HermesSessionBridge, sessionId: Long) {
-        queueStore.unannouncedTerminalRecords()
-            .forEach { record ->
-                val current = currentBridgeAttachment() ?: return@forEach
-                if (current.bridge !== bridge || current.sessionId != sessionId) return@forEach
-                if (record.status == HermesQueueStatus.Complete && record.answer != null) {
-                    announceCompletedResult(
-                        callId = record.callId,
-                        jobId = record.jobId,
-                        attachment = current,
-                    )
-                } else if (record.status != HermesQueueStatus.Complete) {
-                    announceTerminalResult(
-                        callId = record.callId,
-                        jobId = record.jobId,
-                        attachment = current,
-                    )
-                }
-            }
-    }
-
-    private suspend fun announceCompletedResult(
-        callId: String,
-        jobId: String?,
-        attachment: BridgeAttachment? = currentBridgeAttachment(),
-    ) {
-        val current = attachment ?: run {
-            queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
-            return
-        }
-        announcementMutex.withLock {
-            val record = queueStore.latestRecord(callId = callId, jobId = jobId)
-            if (record?.status != HermesQueueStatus.Complete || record.resultAnnounced || record.answer == null) return@withLock
-            if (!current.isCurrentBridgeAttachment()) return@withLock
-
-            val sent = runCatching {
-                withTimeoutOrNull(bridgeSendTimeoutMs) {
-                    current.bridge.sendCompletionFollowUp(
-                        callId = callId,
-                        prompt = record.prompt,
-                        answer = requireNotNull(record.answer),
-                        sessionId = current.sessionId,
-                    )
-                } ?: false
-            }.getOrDefault(false)
-            if (sent) {
-                queueStore.markResultAnnounced(callId = callId, jobId = jobId)
-                telemetry.followUpSent(
-                    callId = callId,
-                    jobId = jobId,
-                    prompt = record.prompt,
-                    answer = requireNotNull(record.answer),
-                )
-            }
-            if (!sent) {
-                queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
-            }
-        }
-    }
-
-    private suspend fun announceTerminalResult(
-        callId: String,
-        jobId: String?,
-        attachment: BridgeAttachment? = currentBridgeAttachment(),
-    ) {
-        val current = attachment ?: run {
-            queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
-            return
-        }
-        announcementMutex.withLock {
-            val record = queueStore.latestRecord(callId = callId, jobId = jobId)
-            if (
-                record == null ||
-                record.status == HermesQueueStatus.Complete ||
-                !record.status.isTerminal ||
-                record.resultAnnounced
-            ) {
-                return@withLock
-            }
-            if (!current.isCurrentBridgeAttachment()) return@withLock
-
-            val sent = runCatching {
-                withTimeoutOrNull(bridgeSendTimeoutMs) {
-                    current.bridge.sendTerminalFollowUp(
-                        callId = callId,
-                        prompt = record.prompt,
-                        status = record.status,
-                        reason = record.error.orEmpty(),
-                        sessionId = current.sessionId,
-                    )
-                } ?: false
-            }.getOrDefault(false)
-            if (sent) {
-                queueStore.markResultAnnounced(callId = callId, jobId = jobId)
-            }
-            if (!sent) {
-                queueStore.appendVisibleResultMessageIfNeeded(callId = callId, jobId = jobId)
-            }
-        }
-    }
-
     private fun currentPersistenceSessionId(): String? =
-        persistenceSessionId() ?: currentBridgeAttachment()?.sessionId?.toString()
+        persistenceSessionId() ?: announcer.currentAttachment()?.sessionId?.toString()
 
     private suspend fun cancelRemoteJob(jobId: String) {
         try {
@@ -881,14 +742,6 @@ class HermesJobManager(
         runCatching {
             updateToolStatus(status)
         }
-    }
-
-    private fun currentBridgeAttachment(): BridgeAttachment? = synchronized(lock) {
-        bridgeAttachment
-    }
-
-    private fun BridgeAttachment.isCurrentBridgeAttachment(): Boolean = synchronized(lock) {
-        active && bridgeAttachment?.bridge === bridge && bridgeAttachment?.sessionId == sessionId
     }
 
     private fun Throwable.isTerminalHermesPollFailure(): Boolean {
@@ -934,14 +787,6 @@ class HermesJobManager(
         fun remainingMs(maxElapsedMs: Long): Long = (maxElapsedMs - elapsedMs()).coerceAtLeast(1L)
     }
 
-    private class BridgeAttachment(
-        val bridge: HermesSessionBridge,
-        val sessionId: Long,
-    ) {
-        @Volatile
-        var active: Boolean = true
-    }
-
     companion object {
         /**
          * Sentinel session id for a bridge attachment that is not scoped to a concrete
@@ -955,7 +800,6 @@ class HermesJobManager(
         private const val MISSING_JOB_ID_MESSAGE = "Hermes job was missing a job id."
         private const val INVALID_TIMESTAMP_MESSAGE = "Hermes job had invalid timing metadata."
         private const val DEFAULT_REMOTE_CANCEL_TIMEOUT_MS = 5_000L
-        private const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 30_000L
         const val DEFAULT_STILL_WORKING_THRESHOLD_MS = 45_000L
     }
 }

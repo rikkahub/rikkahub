@@ -453,7 +453,7 @@ class VoiceAgentCoordinator(
             }
             detachDefaultHermesBridge()
         }
-        hermesJobManager.attachBridge(bridge = bridge, sessionId = sessionId)
+        hermesJobManager.announcer.attachScoped(bridge = bridge, sessionId = sessionId)
         hermesAnnouncementScheduler.onBridgeAvailable(true)
     }
 
@@ -461,7 +461,7 @@ class VoiceAgentCoordinator(
         // Announcements must not target a bridge that is going away. If the default bridge is
         // re-attached below, it flips availability back to true.
         hermesAnnouncementScheduler.onBridgeAvailable(false)
-        hermesJobManager.detachBridge(bridge)
+        hermesJobManager.announcer.detachScoped(bridge)
         val shouldAttachDefault = synchronized(toolJobsLock) {
             !closed && !closing && !hasAttachedScopedHermesBridge
         }
@@ -695,7 +695,7 @@ class VoiceAgentCoordinator(
             }
         }
         if (shouldAttach) {
-            hermesJobManager.attachBridge(defaultHermesBridge, sessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID)
+            hermesJobManager.announcer.attachScoped(defaultHermesBridge, sessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID)
             hermesAnnouncementScheduler.onBridgeAvailable(true)
         }
     }
@@ -713,7 +713,7 @@ class VoiceAgentCoordinator(
             }
         }
         if (shouldDetach) {
-            hermesJobManager.detachBridge(defaultHermesBridge)
+            hermesJobManager.announcer.detachScoped(defaultHermesBridge)
         }
     }
 
