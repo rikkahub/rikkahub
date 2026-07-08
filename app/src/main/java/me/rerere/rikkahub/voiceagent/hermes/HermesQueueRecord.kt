@@ -4,18 +4,24 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 
-const val HERMES_TOOL_SOURCE_KEY = "voice_tool_source"
 const val HERMES_TOOL_STATUS_KEY = "voice_tool_status"
 const val HERMES_TOOL_JOB_ID_KEY = "voice_tool_job_id"
 const val HERMES_TOOL_CREATED_AT_KEY = "voice_tool_created_at"
 const val HERMES_TOOL_UPDATED_AT_KEY = "voice_tool_updated_at"
+const val HERMES_TOOL_ANNOUNCEMENT_KEY = "voice_tool_announcement"
+
+// TEMPORARY: the persister still writes these until Task 3 replaces it with
+// HermesToolRecordWriter; Task 3 deletes all four constants.
+const val HERMES_TOOL_SOURCE_KEY = "voice_tool_source"
 const val HERMES_TOOL_RESULT_ANNOUNCED_KEY = "voice_tool_result_announced"
 const val HERMES_TOOL_STILL_WORKING_KEY = "voice_tool_still_working_announced"
 const val HERMES_TOOL_MESSAGE_WRITTEN_KEY = "voice_tool_message_written"
@@ -38,6 +44,35 @@ enum class HermesQueueStatus(val wireName: String) {
     }
 }
 
+enum class HermesAnnouncementEvent { StillWorkingFired, VisibleMessageWritten, ResultAnnounced }
+
+sealed interface HermesAnnouncementState {
+    val wireName: String
+
+    data object NotAnnounced : HermesAnnouncementState {
+        override val wireName: String = "not_announced"
+    }
+
+    data object StillWorkingAnnounced : HermesAnnouncementState {
+        override val wireName: String = "still_working_announced"
+    }
+
+    data object MessageWritten : HermesAnnouncementState {
+        override val wireName: String = "message_written"
+    }
+
+    data object Announced : HermesAnnouncementState {
+        override val wireName: String = "announced"
+    }
+
+    companion object {
+        private val all = listOf(NotAnnounced, StillWorkingAnnounced, MessageWritten, Announced)
+
+        fun fromWireName(value: String?): HermesAnnouncementState? =
+            all.firstOrNull { it.wireName == value }
+    }
+}
+
 data class HermesQueueRecord(
     val callId: String,
     val jobId: String?,
@@ -45,12 +80,124 @@ data class HermesQueueRecord(
     val status: HermesQueueStatus,
     val answer: String?,
     val error: String?,
-    val resultAnnounced: Boolean,
-    val stillWorkingAnnounced: Boolean,
-    val messageWritten: Boolean,
+    val announcement: HermesAnnouncementState,
     val createdAt: String?,
     val updatedAt: String?,
-)
+) {
+    val resultAnnounced: Boolean
+        get() = announcement == HermesAnnouncementState.Announced
+
+    val stillWorkingAnnounced: Boolean
+        get() = announcement == HermesAnnouncementState.StillWorkingAnnounced
+
+    val messageWritten: Boolean
+        get() = announcement == HermesAnnouncementState.MessageWritten
+
+    /**
+     * Legal announcement transitions. Returns null for every illegal or repeated
+     * event, which is what makes each announcement at-most-once: callers write
+     * back only non-null results.
+     */
+    fun advance(event: HermesAnnouncementEvent): HermesQueueRecord? = when (event) {
+        HermesAnnouncementEvent.StillWorkingFired ->
+            if (announcement == HermesAnnouncementState.NotAnnounced && !status.isTerminal) {
+                copy(announcement = HermesAnnouncementState.StillWorkingAnnounced)
+            } else null
+
+        HermesAnnouncementEvent.VisibleMessageWritten ->
+            if (
+                status.isTerminal &&
+                (announcement == HermesAnnouncementState.NotAnnounced ||
+                    announcement == HermesAnnouncementState.StillWorkingAnnounced)
+            ) {
+                copy(announcement = HermesAnnouncementState.MessageWritten)
+            } else null
+
+        HermesAnnouncementEvent.ResultAnnounced ->
+            if (announcement != HermesAnnouncementState.Announced) {
+                copy(announcement = HermesAnnouncementState.Announced)
+            } else null
+    }
+
+    fun matchesIdentity(callId: String, jobId: String?): Boolean =
+        this.callId == callId && this.jobId == jobId
+
+    /**
+     * A record without a jobId may adopt a newly returned one while it is still
+     * active, or when a canceled record receives the canceled update that carries
+     * the job id a racing submit returned (see the cancel-during-submit path).
+     */
+    fun mayAdoptJobId(newStatus: HermesQueueStatus): Boolean =
+        jobId == null && (
+            !status.isTerminal ||
+                (status == HermesQueueStatus.Canceled && newStatus == HermesQueueStatus.Canceled)
+            )
+
+    fun toMetadata(nowIso: String): JsonObject = buildJsonObject {
+        put(HERMES_TOOL_STATUS_KEY, status.wireName)
+        put(HERMES_TOOL_ANNOUNCEMENT_KEY, announcement.wireName)
+        jobId?.let { put(HERMES_TOOL_JOB_ID_KEY, it) }
+        put(HERMES_TOOL_CREATED_AT_KEY, createdAt ?: nowIso)
+        put(HERMES_TOOL_UPDATED_AT_KEY, nowIso)
+    }
+
+    companion object {
+        fun fromToolPart(part: UIMessagePart.Tool): HermesQueueRecord? {
+            if (part.toolName != VoiceAgentToolNames.ASK_HERMES) return null
+            val metadata = part.metadata ?: return null
+            val parsedStatus = HermesQueueStatus.fromWireName(metadata.stringOrNull(HERMES_TOOL_STATUS_KEY))
+            val prompt = runCatching {
+                Json.parseToJsonElement(part.input).jsonObject["prompt"]?.jsonPrimitive?.content.orEmpty()
+            }.getOrDefault("")
+            val outputText = part.output.filterIsInstance<UIMessagePart.Text>()
+                .joinToString(separator = "\n") { it.text }
+                .trim()
+            val status = parsedStatus ?: when {
+                outputText.isNotBlank() && metadata.hasAnnouncementSignal() -> HermesQueueStatus.Failed
+                else -> return null
+            }
+            val announcement = HermesAnnouncementState.fromWireName(
+                metadata.stringOrNull(HERMES_TOOL_ANNOUNCEMENT_KEY)
+            )
+                ?: legacyAnnouncementOrNull(metadata, status)
+                ?: if (status.isTerminal) HermesAnnouncementState.Announced else HermesAnnouncementState.NotAnnounced
+
+            return HermesQueueRecord(
+                callId = part.toolCallId,
+                jobId = metadata.stringOrNull(HERMES_TOOL_JOB_ID_KEY),
+                prompt = prompt,
+                status = status,
+                answer = outputText.takeIf { status == HermesQueueStatus.Complete && it.isNotBlank() },
+                error = outputText.takeIf { status != HermesQueueStatus.Complete && status.isTerminal && it.isNotBlank() },
+                announcement = announcement,
+                createdAt = metadata.stringOrNull(HERMES_TOOL_CREATED_AT_KEY),
+                updatedAt = metadata.stringOrNull(HERMES_TOOL_UPDATED_AT_KEY),
+            )
+        }
+
+        private fun JsonObject.hasAnnouncementSignal(): Boolean =
+            HERMES_TOOL_ANNOUNCEMENT_KEY in this || "voice_tool_result_announced" in this
+
+        // TEMPORARY Task-2->3 bridge: delete when HermesToolRecordWriter writes
+        // voice_tool_announcement (Task 3). Maps the legacy three-boolean encoding.
+        private fun legacyAnnouncementOrNull(
+            metadata: JsonObject,
+            status: HermesQueueStatus,
+        ): HermesAnnouncementState? {
+            val announced = metadata.booleanOrNull("voice_tool_result_announced")
+            val messageWritten = metadata.booleanOrNull("voice_tool_message_written") == true
+            val stillWorking = metadata.booleanOrNull("voice_tool_still_working_announced") == true
+            if (announced == null && !messageWritten && !stillWorking) return null
+            return when {
+                announced == true -> HermesAnnouncementState.Announced
+                messageWritten -> HermesAnnouncementState.MessageWritten
+                stillWorking -> HermesAnnouncementState.StillWorkingAnnounced
+                announced == false -> HermesAnnouncementState.NotAnnounced
+                else -> null
+            }
+        }
+    }
+}
 
 data class HermesQueueSnapshot(
     val active: List<HermesQueueRecord>,
@@ -103,7 +250,7 @@ fun Conversation.hermesQueueRecords(): List<HermesQueueRecord> {
     return currentMessages
         .flatMap { it.parts }
         .filterIsInstance<UIMessagePart.Tool>()
-        .mapNotNull { it.toHermesQueueRecord() }
+        .mapNotNull { HermesQueueRecord.fromToolPart(it) }
 }
 
 internal fun List<HermesQueueRecord>.latestByHermesDurableIdentity(): List<HermesQueueRecord> {
@@ -123,42 +270,6 @@ private data class HermesDurableIdentity(
 
 private fun HermesQueueRecord.durableIdentity(): HermesDurableIdentity {
     return HermesDurableIdentity(callId = callId, jobId = jobId)
-}
-
-private fun UIMessagePart.Tool.toHermesQueueRecord(): HermesQueueRecord? {
-    if (toolName != VoiceAgentToolNames.ASK_HERMES) return null
-    val metadata = metadata ?: return null
-    val parsedStatus = HermesQueueStatus.fromWireName(metadata.stringOrNull(HERMES_TOOL_STATUS_KEY))
-    val prompt = runCatching {
-        Json.parseToJsonElement(input).jsonObject["prompt"]?.jsonPrimitive?.content.orEmpty()
-    }.getOrDefault("")
-    val outputText = output.filterIsInstance<UIMessagePart.Text>()
-        .joinToString(separator = "\n") { it.text }
-        .trim()
-    val hasResultAnnounced = HERMES_TOOL_RESULT_ANNOUNCED_KEY in metadata
-    val resultAnnounced = if (hasResultAnnounced) {
-        metadata.booleanOrNull(HERMES_TOOL_RESULT_ANNOUNCED_KEY) == true
-    } else {
-        parsedStatus?.isTerminal == true
-    }
-    val status = parsedStatus ?: when {
-        outputText.isNotBlank() && hasResultAnnounced -> HermesQueueStatus.Failed
-        else -> return null
-    }
-
-    return HermesQueueRecord(
-        callId = toolCallId,
-        jobId = metadata.stringOrNull(HERMES_TOOL_JOB_ID_KEY),
-        prompt = prompt,
-        status = status,
-        answer = outputText.takeIf { status == HermesQueueStatus.Complete && it.isNotBlank() },
-        error = outputText.takeIf { status != HermesQueueStatus.Complete && status.isTerminal && it.isNotBlank() },
-        resultAnnounced = resultAnnounced,
-        stillWorkingAnnounced = metadata.booleanOrNull(HERMES_TOOL_STILL_WORKING_KEY) == true,
-        messageWritten = metadata.booleanOrNull(HERMES_TOOL_MESSAGE_WRITTEN_KEY) == true,
-        createdAt = metadata.stringOrNull(HERMES_TOOL_CREATED_AT_KEY),
-        updatedAt = metadata.stringOrNull(HERMES_TOOL_UPDATED_AT_KEY),
-    )
 }
 
 private fun JsonObject.stringOrNull(key: String): String? {
