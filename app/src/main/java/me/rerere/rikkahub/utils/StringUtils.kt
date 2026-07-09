@@ -140,3 +140,14 @@ fun String.extractQuotedContentAsText(separator: String = "\n"): String? {
         null
     }
 }
+
+/**
+ * 移除字符串中所有括号内的内容
+ * 支持英文括号 (...) 和中文括号（...）
+ * @return 移除括号内容后的字符串，如果全被移除则返回 null
+ */
+fun String.removeBracketedContent(): String? {
+    val pattern = """\([^)]*?\)|（[^）]*?）""".toRegex()
+    val result = pattern.replace(this, "").trim()
+    return result.ifBlank { null }
+}

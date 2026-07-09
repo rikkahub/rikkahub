@@ -274,6 +274,18 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_tts_read_outside_brackets_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_tts_read_outside_brackets_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.ttsOnlyReadOutsideBrackets,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(ttsOnlyReadOutsideBrackets = it))
+                                }
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_auto_play_tts_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_auto_play_tts_desc)) },
                         trailingContent = {
