@@ -1273,5 +1273,7 @@
   <string name="chat_page_folder_add">Новая</string>
   <string name="chat_page_delete_folder_confirm">Удалить папку "%1$s"? Беседы внутри не будут удалены, только исключены из папки.</string>
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
 </resources>
 

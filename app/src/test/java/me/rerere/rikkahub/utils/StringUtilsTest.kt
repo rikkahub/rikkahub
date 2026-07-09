@@ -64,4 +64,44 @@ class StringUtilsTest {
     fun `extract as text returns null when empty`() {
         assertNull("没有引号".extractQuotedContentAsText())
     }
+
+    @Test
+    fun `remove english brackets`() {
+        assertEquals("你好世界", "你好(旁白)世界".removeBracketedContent())
+    }
+
+    @Test
+    fun `remove chinese brackets`() {
+        assertEquals("你好世界", "你好（旁白）世界".removeBracketedContent())
+    }
+
+    @Test
+    fun `remove multiple brackets`() {
+        assertEquals("你好世界", "你好(注释)世界（备注）".removeBracketedContent())
+    }
+
+    @Test
+    fun `remove brackets keeps outside text trimmed`() {
+        assertEquals("你好", "(旁白) 你好 ".removeBracketedContent())
+    }
+
+    @Test
+    fun `remove brackets does not cross bracket boundaries`() {
+        assertEquals("ac", "a(b)c".removeBracketedContent())
+    }
+
+    @Test
+    fun `remove brackets returns null when all removed`() {
+        assertNull("(全是旁白)".removeBracketedContent())
+    }
+
+    @Test
+    fun `remove brackets returns null for blank result`() {
+        assertNull("（旁白） ".removeBracketedContent())
+    }
+
+    @Test
+    fun `no brackets returns original text`() {
+        assertEquals("没有括号", "没有括号".removeBracketedContent())
+    }
 }

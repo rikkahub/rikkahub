@@ -1273,5 +1273,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_folder_add">新規</string>
   <string name="chat_page_delete_folder_confirm">フォルダ "%1$s" を削除しますか？内部の会話は削除されず、フォルダから取り除かれるだけです。</string>
   <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
 </resources>
 
