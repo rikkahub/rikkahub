@@ -21,6 +21,8 @@ internal data class VoiceToolSpec(
     val argKey: String,
     val responseScheduling: String,
     val buildCall: (callId: String, argValue: String) -> GeminiLiveEvent.ToolCall,
+    /** Client-policy fields merged into this tool's server-sent declaration. */
+    val declarationDefaults: Map<String, JsonPrimitive> = emptyMap(),
 )
 
 internal val VOICE_TOOL_SPECS: List<VoiceToolSpec> = listOf(
@@ -29,6 +31,10 @@ internal val VOICE_TOOL_SPECS: List<VoiceToolSpec> = listOf(
         argKey = "prompt",
         responseScheduling = VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
         buildCall = { callId, argValue -> GeminiLiveEvent.AskHermesCall(callId = callId, prompt = argValue) },
+        declarationDefaults = mapOf(
+            "description" to JsonPrimitive(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION),
+            "behavior" to JsonPrimitive(VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING),
+        ),
     ),
     VoiceToolSpec(
         name = VoiceAgentToolNames.CANCEL_HERMES,
@@ -49,11 +55,14 @@ class GeminiLiveCodec(
         providerModel: String,
         liveConnectConfig: JsonObject,
         systemInstruction: String,
+        hasInitialContext: Boolean = false,
     ): String {
         val generationConfigElement = liveConnectConfig["generationConfig"]
         val generationConfig = generationConfigElement?.jsonObjectOrNull()
         val topLevelResponseModalities = liveConnectConfig["responseModalities"]
-        val normalizedLiveConnectConfig = liveConnectConfig.withAskHermesSetupDefaults()
+        val normalizedLiveConnectConfig = liveConnectConfig
+            .withVoiceToolDeclarationDefaults()
+            .withInitialHistoryConfig(hasInitialContext)
 
         return json.encodeToString(
             buildJsonObject {
@@ -284,61 +293,63 @@ class GeminiLiveCodec(
                     } == true
             } == true
 
-    private fun JsonObject.withAskHermesSetupDefaults(): JsonObject {
-        if (!declaresTool(VoiceAgentToolNames.ASK_HERMES)) return this
-        return buildJsonObject {
-            forEach { (key, value) ->
-                put(
-                    key,
-                    if (key == "tools") value.withAskHermesToolDefaults() else value,
-                )
-            }
-        }
-    }
-
-    private fun JsonElement.withAskHermesToolDefaults(): JsonElement {
-        val tools = jsonArrayOrNull() ?: return this
-        return buildJsonArray {
+    /** Walk tools[].functionDeclarations[], applying transform to each declaration object. */
+    private fun JsonObject.mapToolDeclarations(
+        transform: (JsonObject) -> JsonObject,
+    ): JsonObject {
+        val tools = this["tools"]?.jsonArrayOrNull() ?: return this
+        val mappedTools = buildJsonArray {
             tools.forEach { tool ->
                 val toolObject = tool.jsonObjectOrNull()
-                if (toolObject == null || "functionDeclarations" !in toolObject) {
+                val declarations = toolObject?.get("functionDeclarations")?.jsonArrayOrNull()
+                if (toolObject == null || declarations == null) {
                     add(tool)
                 } else {
-                    add(toolObject.withAskHermesFunctionDeclarations())
+                    add(
+                        JsonObject(
+                            toolObject + mapOf(
+                                "functionDeclarations" to buildJsonArray {
+                                    declarations.forEach { declaration ->
+                                        val declarationObject = declaration.jsonObjectOrNull()
+                                        if (declarationObject == null) {
+                                            add(declaration)
+                                        } else {
+                                            add(transform(declarationObject))
+                                        }
+                                    }
+                                },
+                            ),
+                        ),
+                    )
                 }
             }
         }
+        return JsonObject(this + mapOf("tools" to mappedTools))
     }
 
-    private fun JsonObject.withAskHermesFunctionDeclarations(): JsonObject = buildJsonObject {
-        forEach { (key, value) ->
-            put(
-                key,
-                if (key == "functionDeclarations") value.withAskHermesFunctionDeclarationDefaults() else value,
-            )
-        }
-    }
-
-    private fun JsonElement.withAskHermesFunctionDeclarationDefaults(): JsonElement {
-        val declarations = jsonArrayOrNull() ?: return this
-        return buildJsonArray {
-            declarations.forEach { declaration ->
-                val declarationObject = declaration.jsonObjectOrNull()
-                if (declarationObject?.get("name")?.stringContentOrNull() == VoiceAgentToolNames.ASK_HERMES) {
-                    add(declarationObject.withAskHermesSingleDeclarationDefaults())
-                } else {
-                    add(declaration)
-                }
+    /** Merge each tool's typed declarationDefaults into its server-sent declaration. */
+    private fun JsonObject.withVoiceToolDeclarationDefaults(): JsonObject =
+        mapToolDeclarations { declaration ->
+            val name = declaration["name"]?.stringContentOrNull()
+            val defaults = name?.let { voiceToolSpecsByName[it] }?.declarationDefaults
+            if (defaults.isNullOrEmpty()) {
+                declaration
+            } else {
+                JsonObject(declaration + defaults)
             }
         }
-    }
 
-    private fun JsonObject.withAskHermesSingleDeclarationDefaults(): JsonObject = buildJsonObject {
-        forEach { (key, value) ->
-            put(key, value)
-        }
-        put("description", JsonPrimitive(VoiceAgentToolNames.ASK_HERMES_DESCRIPTION))
-        put("behavior", JsonPrimitive(VoiceAgentToolNames.ASK_HERMES_BEHAVIOR_NON_BLOCKING))
+    private fun JsonObject.withInitialHistoryConfig(hasInitialContext: Boolean): JsonObject {
+        if (!hasInitialContext) return this
+        val historyConfig = this["historyConfig"]?.jsonObjectOrNull() ?: JsonObject(emptyMap())
+        if ("initialHistoryInClientContent" in historyConfig) return this
+        return JsonObject(
+            this + mapOf(
+                "historyConfig" to JsonObject(
+                    historyConfig + mapOf("initialHistoryInClientContent" to JsonPrimitive(true)),
+                ),
+            ),
+        )
     }
 
     private fun JsonObject.sessionResumptionUpdate(raw: String): GeminiLiveEvent {

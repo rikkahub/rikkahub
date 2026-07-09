@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.voiceagent.gemini
 
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -109,8 +108,9 @@ class TestableGeminiLiveVoiceClient(
     ) {
         val setupMessage = codec.setupMessage(
             providerModel = providerModel,
-            liveConnectConfig = liveConnectConfig.withInitialHistoryConfigIfNeeded(contextTurns),
+            liveConnectConfig = liveConnectConfig,
             systemInstruction = systemInstruction,
+            hasInitialContext = contextTurns.isNotEmpty(),
         )
         setupMessage.geminiDebugSetupEvent()?.let(debugObserver)
         val pendingContext = contextTurns
@@ -498,19 +498,6 @@ class TestableGeminiLiveVoiceClient(
         else -> listOf(this)
     }
 
-    private fun JsonObject.withInitialHistoryConfigIfNeeded(
-        contextTurns: List<GeminiContentTurn>,
-    ): JsonObject {
-        if (contextTurns.isEmpty()) return this
-
-        val updated = toMutableMap()
-        val historyConfig = (updated["historyConfig"] as? JsonObject)
-            ?.toMutableMap()
-            ?: mutableMapOf()
-        historyConfig.putIfAbsent("initialHistoryInClientContent", JsonPrimitive(true))
-        updated["historyConfig"] = JsonObject(historyConfig)
-        return JsonObject(updated)
-    }
 }
 
 private fun String.geminiDebugMessageKind(): String = runCatching {
