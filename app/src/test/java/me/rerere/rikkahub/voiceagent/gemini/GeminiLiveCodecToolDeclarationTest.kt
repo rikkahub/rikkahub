@@ -192,7 +192,7 @@ class GeminiLiveCodecToolDeclarationTest {
             systemInstruction = "sys",
             hasInitialContext = true,
         )
-        val setup = JsonInstant.parseToJsonElement(encoded).jsonObject["setup"]!!.jsonObject
+        val setup = JsonInstant.parseToJsonElement(encoded.message.text).jsonObject["setup"]!!.jsonObject
         assertEquals(
             true,
             setup["historyConfig"]!!.jsonObject["initialHistoryInClientContent"]!!.jsonPrimitive.boolean,
@@ -212,7 +212,7 @@ class GeminiLiveCodecToolDeclarationTest {
             systemInstruction = "sys",
             hasInitialContext = true,
         )
-        val setup = JsonInstant.parseToJsonElement(encoded).jsonObject["setup"]!!.jsonObject
+        val setup = JsonInstant.parseToJsonElement(encoded.message.text).jsonObject["setup"]!!.jsonObject
         assertEquals(
             false,
             setup["historyConfig"]!!.jsonObject["initialHistoryInClientContent"]!!.jsonPrimitive.boolean,
@@ -232,7 +232,7 @@ class GeminiLiveCodecToolDeclarationTest {
             systemInstruction = "sys",
             hasInitialContext = true,
         )
-        val historyConfig = JsonInstant.parseToJsonElement(encoded)
+        val historyConfig = JsonInstant.parseToJsonElement(encoded.message.text)
             .jsonObject["setup"]!!
             .jsonObject["historyConfig"]!!
             .jsonObject
@@ -249,7 +249,7 @@ class GeminiLiveCodecToolDeclarationTest {
             systemInstruction = "sys",
             hasInitialContext = false,
         )
-        val setup = JsonInstant.parseToJsonElement(encoded).jsonObject["setup"]!!.jsonObject
+        val setup = JsonInstant.parseToJsonElement(encoded.message.text).jsonObject["setup"]!!.jsonObject
         assertNull(setup["historyConfig"])
     }
 
@@ -281,7 +281,7 @@ class GeminiLiveCodecToolDeclarationTest {
             ),
             systemInstruction = "sys",
         )
-        val declaration = JsonInstant.parseToJsonElement(encoded)
+        val declaration = JsonInstant.parseToJsonElement(encoded.message.text)
             .jsonObject["setup"]!!
             .jsonObject["tools"]!!
             .jsonArray[0]
@@ -317,6 +317,8 @@ class GeminiLiveCodecToolDeclarationTest {
             ),
         )
     )
+
+    private fun EncodedSetup.jsonObject(): JsonObject = message.text.jsonObject()
 
     private fun String.jsonObject(): JsonObject = JsonInstant.parseToJsonElement(this).jsonObject
 }

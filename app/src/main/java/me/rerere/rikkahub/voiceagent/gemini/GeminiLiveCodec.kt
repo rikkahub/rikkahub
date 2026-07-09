@@ -48,6 +48,17 @@ internal val VOICE_TOOL_SPECS: List<VoiceToolSpec> = listOf(
 
 internal val voiceToolSpecsByName: Map<String, VoiceToolSpec> = VOICE_TOOL_SPECS.associateBy { it.name }
 
+data class EncodedMessage(
+    val kind: String,
+    val text: String,
+    val audioDataBytes: Int? = null,
+)
+
+data class EncodedSetup(
+    val message: EncodedMessage,
+    val debug: GeminiLiveDebugEvent.Setup,
+)
+
 class GeminiLiveCodec(
     private val json: Json = JsonInstant,
 ) {
@@ -56,7 +67,7 @@ class GeminiLiveCodec(
         liveConnectConfig: JsonObject,
         systemInstruction: String,
         hasInitialContext: Boolean = false,
-    ): String {
+    ): EncodedSetup {
         val generationConfigElement = liveConnectConfig["generationConfig"]
         val generationConfig = generationConfigElement?.jsonObjectOrNull()
         val topLevelResponseModalities = liveConnectConfig["responseModalities"]
@@ -64,120 +75,136 @@ class GeminiLiveCodec(
             .withVoiceToolDeclarationDefaults()
             .withInitialHistoryConfig(hasInitialContext)
 
-        return json.encodeToString(
-            buildJsonObject {
-                putJsonObject("setup") {
-                    normalizedLiveConnectConfig.forEach { (key, value) ->
-                        if (key != "responseModalities" && key != "generationConfig") {
-                            put(key, value)
-                        }
+        val payload = buildJsonObject {
+            putJsonObject("setup") {
+                normalizedLiveConnectConfig.forEach { (key, value) ->
+                    if (key != "responseModalities" && key != "generationConfig") {
+                        put(key, value)
                     }
-                    val declaredToolNames = VOICE_TOOL_SPECS.map { it.name }
-                        .filter { normalizedLiveConnectConfig.declaresTool(it) }
-                    if ("toolConfig" !in normalizedLiveConnectConfig && declaredToolNames.isNotEmpty()) {
-                        putJsonObject("toolConfig") {
-                            putJsonObject("functionCallingConfig") {
-                                put("mode", "ANY")
-                                putJsonArray("allowedFunctionNames") {
-                                    declaredToolNames.forEach { add(JsonPrimitive(it)) }
-                                }
+                }
+                val declaredToolNames = VOICE_TOOL_SPECS.map { it.name }
+                    .filter { normalizedLiveConnectConfig.declaresTool(it) }
+                if ("toolConfig" !in normalizedLiveConnectConfig && declaredToolNames.isNotEmpty()) {
+                    putJsonObject("toolConfig") {
+                        putJsonObject("functionCallingConfig") {
+                            put("mode", "ANY")
+                            putJsonArray("allowedFunctionNames") {
+                                declaredToolNames.forEach { add(JsonPrimitive(it)) }
                             }
                         }
                     }
-                    put("model", "models/$providerModel")
-                    if (generationConfig != null || topLevelResponseModalities != null) {
-                        put(
-                            "generationConfig",
+                }
+                put("model", "models/$providerModel")
+                if (generationConfig != null || topLevelResponseModalities != null) {
+                    put(
+                        "generationConfig",
+                        buildJsonObject {
+                            generationConfig?.forEach { (key, value) -> put(key, value) }
+                            topLevelResponseModalities?.let { put("responseModalities", it) }
+                        },
+                    )
+                } else if (generationConfigElement != null) {
+                    put("generationConfig", generationConfigElement)
+                }
+                putJsonObject("systemInstruction") {
+                    putJsonArray("parts") {
+                        add(
                             buildJsonObject {
-                                generationConfig?.forEach { (key, value) -> put(key, value) }
-                                topLevelResponseModalities?.let { put("responseModalities", it) }
-                            },
+                                put("text", systemInstruction)
+                            }
                         )
-                    } else if (generationConfigElement != null) {
-                        put("generationConfig", generationConfigElement)
                     }
-                    putJsonObject("systemInstruction") {
-                        putJsonArray("parts") {
+                }
+            }
+        }
+        val setup = payload["setup"] as JsonObject
+        return EncodedSetup(
+            message = EncodedMessage(kind = "setup", text = json.encodeToString(payload)),
+            debug = setup.toDebugSetup(),
+        )
+    }
+
+    fun clientContentMessage(turns: List<GeminiContentTurn>): EncodedMessage = EncodedMessage(
+        kind = "clientContent",
+        text = json.encodeToString(
+            buildJsonObject {
+                putJsonObject("clientContent") {
+                    putJsonArray("turns") {
+                        turns.forEach { turn ->
                             add(
                                 buildJsonObject {
-                                    put("text", systemInstruction)
+                                    put("role", turn.role)
+                                    putJsonArray("parts") {
+                                        add(
+                                            buildJsonObject {
+                                                put("text", turn.text)
+                                            }
+                                        )
+                                    }
                                 }
                             )
                         }
                     }
+                    put("turnComplete", true)
                 }
             }
-        )
-    }
+        ),
+    )
 
-    fun clientContentMessage(turns: List<GeminiContentTurn>): String = json.encodeToString(
-        buildJsonObject {
-            putJsonObject("clientContent") {
-                putJsonArray("turns") {
-                    turns.forEach { turn ->
-                        add(
-                            buildJsonObject {
-                                put("role", turn.role)
-                                putJsonArray("parts") {
-                                    add(
-                                        buildJsonObject {
-                                            put("text", turn.text)
-                                        }
-                                    )
-                                }
-                            }
-                        )
+    fun realtimeAudioMessage(base64Pcm16: String): EncodedMessage = EncodedMessage(
+        kind = "realtimeInput.audio",
+        text = json.encodeToString(
+            buildJsonObject {
+                putJsonObject("realtimeInput") {
+                    putJsonObject("audio") {
+                        put("mimeType", "audio/pcm;rate=16000")
+                        put("data", base64Pcm16)
                     }
                 }
-                put("turnComplete", true)
-            }
-        }
+            },
+        ),
+        audioDataBytes = base64Pcm16.estimatedBase64DecodedBytes(),
     )
 
-    fun realtimeAudioMessage(base64Pcm16: String): String = json.encodeToString(
-        buildJsonObject {
-            putJsonObject("realtimeInput") {
-                putJsonObject("audio") {
-                    put("mimeType", "audio/pcm;rate=16000")
-                    put("data", base64Pcm16)
+    fun realtimeAudioStreamEndMessage(): EncodedMessage = EncodedMessage(
+        kind = "realtimeInput.audioStreamEnd",
+        text = json.encodeToString(
+            buildJsonObject {
+                putJsonObject("realtimeInput") {
+                    put("audioStreamEnd", true)
                 }
-            }
-        }
-    )
-
-    fun realtimeAudioStreamEndMessage(): String = json.encodeToString(
-        buildJsonObject {
-            putJsonObject("realtimeInput") {
-                put("audioStreamEnd", true)
-            }
-        }
+            },
+        ),
     )
 
     fun toolResponseMessage(
         callId: String,
         answer: String,
         name: String = VoiceAgentToolNames.ASK_HERMES,
-    ): String = json.encodeToString(
-        buildJsonObject {
-            putJsonObject("toolResponse") {
-                putJsonArray("functionResponses") {
-                    add(
-                        buildJsonObject {
-                            put("id", callId)
-                            put("name", name)
-                            put(
-                                "scheduling",
-                                voiceToolSpecsByName[name]?.responseScheduling
-                                    ?: VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
-                            )
-                            putJsonObject("response") {
-                                put("answer", answer)
+    ): EncodedMessage = EncodedMessage(
+        kind = "toolResponse",
+        text = json.encodeToString(
+            buildJsonObject {
+                putJsonObject("toolResponse") {
+                    putJsonArray("functionResponses") {
+                        add(
+                            buildJsonObject {
+                                put("id", callId)
+                                put("name", name)
+                                put(
+                                    "scheduling",
+                                    voiceToolSpecsByName[name]?.responseScheduling
+                                        ?: VoiceAgentToolNames.ASK_HERMES_RESPONSE_SCHEDULING_WHEN_IDLE,
+                                )
+                                putJsonObject("response") {
+                                    put("answer", answer)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
-            }
-        }
+            },
+        ),
     )
 
     fun parseServerMessage(text: String): GeminiLiveEvent {
@@ -352,6 +379,62 @@ class GeminiLiveCodec(
         )
     }
 
+    private fun JsonObject.toDebugSetup(): GeminiLiveDebugEvent.Setup {
+        val functionCallingConfig = this["toolConfig"]
+            ?.jsonObjectOrNull()
+            ?.get("functionCallingConfig")
+            ?.jsonObjectOrNull()
+        val generationConfig = this["generationConfig"]?.jsonObjectOrNull()
+        return GeminiLiveDebugEvent.Setup(
+            hasAskHermesTool = declaresTool(VoiceAgentToolNames.ASK_HERMES),
+            toolConfigMode = functionCallingConfig
+                ?.get("mode")
+                ?.jsonPrimitiveOrNull()
+                ?.contentOrNull,
+            allowedFunctionNames = functionCallingConfig
+                ?.get("allowedFunctionNames")
+                ?.jsonArrayOrNull()
+                ?.mapNotNull { it.jsonPrimitiveOrNull()?.contentOrNull }
+                ?: emptyList(),
+            responseModalities = generationConfig
+                ?.get("responseModalities")
+                ?.jsonArrayOrNull()
+                ?.mapNotNull { it.jsonPrimitiveOrNull()?.contentOrNull }
+                ?: emptyList(),
+            systemInstructionChars = this["systemInstruction"]
+                ?.jsonObjectOrNull()
+                ?.get("parts")
+                ?.jsonArrayOrNull()
+                ?.sumOf { part ->
+                    part.jsonObjectOrNull()
+                        ?.get("text")
+                        ?.jsonPrimitiveOrNull()
+                        ?.contentOrNull
+                        ?.length
+                        ?: 0
+                }
+                ?: 0,
+            realtimeInputConfig = geminiDebugRealtimeInputConfig(),
+        )
+    }
+
+    private fun JsonObject.geminiDebugRealtimeInputConfig(): String? {
+        val config = this["realtimeInputConfig"]?.jsonObjectOrNull() ?: return null
+        val activityDetection = config["automaticActivityDetection"]?.jsonObjectOrNull()
+        return if (activityDetection != null) {
+            "automaticActivityDetection.disabled=${activityDetection.stringValue("disabled") ?: "n/a"} " +
+                "start=${activityDetection.stringValue("startOfSpeechSensitivity") ?: "n/a"} " +
+                "end=${activityDetection.stringValue("endOfSpeechSensitivity") ?: "n/a"} " +
+                "prefixPaddingMs=${activityDetection.stringValue("prefixPaddingMs") ?: "n/a"} " +
+                "silenceDurationMs=${activityDetection.stringValue("silenceDurationMs") ?: "n/a"}"
+        } else {
+            "automaticActivityDetection=missing"
+        }
+    }
+
+    private fun JsonObject.stringValue(name: String): String? =
+        get(name)?.jsonPrimitiveOrNull()?.contentOrNull
+
     private fun JsonObject.sessionResumptionUpdate(raw: String): GeminiLiveEvent {
         val update = this["sessionResumptionUpdate"]?.jsonObjectOrNull()
             ?: return GeminiLiveEvent.Ignored(raw)
@@ -407,5 +490,10 @@ class GeminiLiveCodec(
     private fun JsonElement.booleanContentOrNull(): Boolean? {
         val primitive = jsonPrimitiveOrNull() ?: return null
         return primitive.takeUnless { it.isString }?.booleanOrNull
+    }
+
+    private fun String.estimatedBase64DecodedBytes(): Int {
+        val padding = takeLastWhile { it == '=' }.length.coerceAtMost(2)
+        return ((length * 3) / 4 - padding).coerceAtLeast(0)
     }
 }
