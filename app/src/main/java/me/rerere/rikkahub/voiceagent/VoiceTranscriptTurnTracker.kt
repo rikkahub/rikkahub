@@ -21,6 +21,12 @@ internal class VoiceTranscriptTurnTracker(
     private val recordEvent: (name: String, attributes: Map<String, Any?>) -> Unit,
     private val recordDiagnostic: (name: String, detail: String) -> Unit,
 ) {
+    /**
+     * Each mutator holds this lock across mutation AND the persist enqueue, so the
+     * persistence queue's FIFO order matches lock-acquisition order — a later-state
+     * transform can never be applied before an earlier one. Do not split these into
+     * separate lock holds.
+     */
     private val lock = Any()
     private var activeSpeaker: TranscriptSpeaker? = null
     private var inputTurnTranscript = ""
@@ -31,43 +37,40 @@ internal class VoiceTranscriptTurnTracker(
     private var outputTurnId = ""
     private val finalTelemetryKeys = mutableSetOf<String>()
 
-    fun appendUserDelta(text: String): String {
-        val (transcript, turnId) = synchronized(lock) {
-            if (activeSpeaker != TranscriptSpeaker.User) {
-                inputTurnTranscript = ""
-                inputTurnId = nextTurnId(TranscriptSpeaker.User)
-            }
-            activeSpeaker = TranscriptSpeaker.User
-            inputTurnTranscript += text
-            inputTurnTranscript to inputTurnId
+    fun appendUserDelta(text: String): String = synchronized(lock) {
+        if (activeSpeaker != TranscriptSpeaker.User) {
+            inputTurnTranscript = ""
+            inputTurnId = nextTurnId(TranscriptSpeaker.User)
         }
+        activeSpeaker = TranscriptSpeaker.User
+        inputTurnTranscript += text
+        val transcript = inputTurnTranscript
+        val turnId = inputTurnId
         recordDiagnostic("input_transcript_delta", "turnId=$turnId, chars=${text.length}")
         recordEvent(
             "voicelab.mobile.transcript.input_delta",
             mapOf("turnId" to turnId) + voiceTextMetadata(key = "text", text = text),
         )
-        persistUser(transcript = transcript, turnId = turnId, status = VoiceTranscriptStatus.Partial)
-        return transcript
+        persistUserLocked(transcript = transcript, turnId = turnId, status = VoiceTranscriptStatus.Partial)
+        transcript
     }
 
-    fun appendAssistantDelta(text: String, suppressed: Boolean): String {
-        val (transcript, turnId) = synchronized(lock) {
-            if (activeSpeaker != TranscriptSpeaker.Assistant) {
-                outputTurnTranscript = ""
-                outputTurnId = nextTurnId(TranscriptSpeaker.Assistant)
-                outputTurnStatus = VoiceTranscriptStatus.Partial
-            }
-            activeSpeaker = TranscriptSpeaker.Assistant
-            outputTurnTranscript += text
-            outputTurnTranscript to outputTurnId
+    fun appendAssistantDelta(text: String, suppressed: Boolean): String = synchronized(lock) {
+        if (activeSpeaker != TranscriptSpeaker.Assistant) {
+            outputTurnTranscript = ""
+            outputTurnId = nextTurnId(TranscriptSpeaker.Assistant)
+            outputTurnStatus = VoiceTranscriptStatus.Partial
         }
-        recordDiagnostic("output_transcript_delta", "turnId=$turnId, chars=${text.length}")
+        activeSpeaker = TranscriptSpeaker.Assistant
+        outputTurnTranscript += text
+        val transcript = outputTurnTranscript
+        recordDiagnostic("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
         recordEvent(
             "voicelab.mobile.transcript.output_delta",
-            mapOf("turnId" to turnId) + voiceTextMetadata(key = "text", text = text),
+            mapOf("turnId" to outputTurnId) + voiceTextMetadata(key = "text", text = text),
         )
-        persistAssistant(suppressed = suppressed)
-        return transcript
+        persistAssistantLocked(suppressed = suppressed)
+        transcript
     }
 
     fun interruptAssistantTurn(suppressed: Boolean) {
@@ -76,8 +79,8 @@ internal class VoiceTranscriptTurnTracker(
             if (outputTurnStatus != VoiceTranscriptStatus.Complete) {
                 outputTurnStatus = VoiceTranscriptStatus.Interrupted
             }
+            persistAssistantLocked(suppressed = suppressed)
         }
-        persistAssistant(suppressed = suppressed)
     }
 
     fun completeAssistantTurn(suppressed: Boolean) {
@@ -90,32 +93,39 @@ internal class VoiceTranscriptTurnTracker(
                 return
             }
             outputTurnStatus = VoiceTranscriptStatus.Complete
+            persistAssistantLocked(suppressed = suppressed)
         }
-        persistAssistant(suppressed = suppressed)
     }
 
     fun persistAssistantForSessionClose(suppressed: Boolean) {
-        val status = synchronized(lock) {
-            when {
+        synchronized(lock) {
+            val status = when {
                 outputTurnTranscript.isBlank() || outputTurnId.isBlank() -> return
                 suppressed -> VoiceTranscriptStatus.Interrupted
                 outputTurnStatus == VoiceTranscriptStatus.Interrupted -> VoiceTranscriptStatus.Interrupted
                 outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
                 else -> VoiceTranscriptStatus.SessionClosedBeforeFinal
             }
+            persistAssistantLocked(suppressed = suppressed, statusOverride = status)
         }
-        persistAssistant(suppressed = suppressed, statusOverride = status)
     }
 
     fun persistUserForSessionClose() {
-        val (transcript, turnId) = synchronized(lock) {
-            inputTurnTranscript to inputTurnId
+        synchronized(lock) {
+            persistUserLocked(
+                transcript = inputTurnTranscript,
+                turnId = inputTurnId,
+                status = VoiceTranscriptStatus.SessionClosedBeforeFinal,
+            )
         }
-        if (transcript.isBlank() || turnId.isBlank()) return
-        persistUser(transcript = transcript, turnId = turnId, status = VoiceTranscriptStatus.SessionClosedBeforeFinal)
     }
 
-    private fun persistUser(transcript: String, turnId: String, status: VoiceTranscriptStatus) {
+    /**
+     * Must be called with [lock] held. The persist enqueue is non-blocking (bookkeeping
+     * plus a lazily started coroutine); `onPersisted` runs later on the persistence
+     * coroutine, never nested inside this hold.
+     */
+    private fun persistUserLocked(transcript: String, turnId: String, status: VoiceTranscriptStatus) {
         if (transcript.isBlank() || turnId.isBlank()) return
         persist(
             { conversation ->
@@ -140,19 +150,19 @@ internal class VoiceTranscriptTurnTracker(
         )
     }
 
-    private fun persistAssistant(suppressed: Boolean, statusOverride: VoiceTranscriptStatus? = null) {
-        val snapshot = synchronized(lock) {
-            val transcript = outputTurnTranscript
-            val turnId = outputTurnId
-            if (transcript.isBlank() || turnId.isBlank()) return
-            val status = statusOverride ?: when {
-                outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
-                suppressed -> VoiceTranscriptStatus.Interrupted
-                else -> outputTurnStatus
-            }
-            Triple(transcript, turnId, status)
+    /**
+     * Must be called with [lock] held. See [persistUserLocked] for why enqueueing
+     * inside the hold is safe.
+     */
+    private fun persistAssistantLocked(suppressed: Boolean, statusOverride: VoiceTranscriptStatus? = null) {
+        val transcript = outputTurnTranscript
+        val turnId = outputTurnId
+        if (transcript.isBlank() || turnId.isBlank()) return
+        val status = statusOverride ?: when {
+            outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
+            suppressed -> VoiceTranscriptStatus.Interrupted
+            else -> outputTurnStatus
         }
-        val (transcript, turnId, status) = snapshot
         persist(
             { conversation ->
                 transcriptPersister.upsertAssistantTranscriptTurn(
@@ -187,6 +197,8 @@ internal class VoiceTranscriptTurnTracker(
     ) {
         if (status == VoiceTranscriptStatus.Partial) return
         val telemetryKey = "$finalEventName|$turnId"
+        // Invoked from `onPersisted` on the persistence coroutine, outside any mutator's
+        // hold — so it takes the lock itself to guard the dedup set.
         val shouldRecord = synchronized(lock) {
             finalTelemetryKeys.add(telemetryKey)
         }
