@@ -21,6 +21,29 @@ import kotlin.uuid.Uuid
 
 class VoiceContextBuilderTest {
     @Test
+    fun `hermes tool policy is byte-identical to the golden text`() {
+        assertEquals(EXPECTED_HERMES_TOOL_POLICY, VoiceContextBuilder.hermesToolPolicyForTest())
+    }
+
+    @Test
+    fun `hermes tool policy sections assemble in order with blank-line separators`() {
+        val sections = VoiceContextBuilder.hermesToolPolicyForTest().split("\n\n")
+
+        assertEquals(11, sections.size)
+        assertTrue(sections[0].startsWith("Hermes is the source of truth"))
+        assertTrue(sections[1].startsWith("Treat every user request as substantive"))
+        assertTrue(sections[2].startsWith("A request is substantive if"))
+        assertTrue(sections[3].startsWith("If you would otherwise say"))
+        assertTrue(sections[4].startsWith("Answer directly only for"))
+        assertTrue(sections[5].startsWith("Multiple Hermes requests may be pending"))
+        assertTrue(sections[6].startsWith("If ask_hermes returns"))
+        assertTrue(sections[7].startsWith("If a still-working update arrives"))
+        assertTrue(sections[8].startsWith("If a Hermes request fails"))
+        assertTrue(sections[9].startsWith("If the user dismisses or cancels"))
+        assertTrue(sections[10].startsWith("When a Hermes completion follow-up arrives"))
+    }
+
+    @Test
     fun `build keeps the last twenty text turns in order`() {
         val conversation = conversationWith(
             (1..25).map { index -> UIMessage.user("message $index") }
@@ -641,9 +664,8 @@ class VoiceContextBuilderTest {
     )
 
     private companion object {
-        const val EXPECTED_VOICE_SYSTEM_PREFIX =
-            "You are Hermes in RikkaHub voice mode.\n" +
-                "Hermes is the source of truth for substantive answers in RikkaHub voice mode.\n" +
+        const val EXPECTED_HERMES_TOOL_POLICY =
+            "Hermes is the source of truth for substantive answers in RikkaHub voice mode.\n" +
                 "You are the voice interface to Hermes, not a replacement for Hermes.\n" +
                 "\n" +
                 "Treat every user request as substantive unless it is clearly one of the direct-answer exceptions below.\n" +
@@ -682,5 +704,9 @@ class VoiceContextBuilderTest {
                 "If the user dismisses or cancels a pending request (for example \"never mind that\"), call cancel_hermes with the original question, then confirm the cancellation in one short sentence.\n" +
                 "\n" +
                 "When a Hermes completion follow-up arrives, connect the answer to the original request and summarize the Hermes answer naturally and briefly."
+
+        const val EXPECTED_VOICE_SYSTEM_PREFIX =
+            "You are Hermes in RikkaHub voice mode.\n" +
+                EXPECTED_HERMES_TOOL_POLICY
     }
 }
