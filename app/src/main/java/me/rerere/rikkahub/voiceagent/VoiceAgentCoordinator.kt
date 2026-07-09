@@ -24,16 +24,12 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
-import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptStatus
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnosticEvent
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import me.rerere.rikkahub.voiceagent.telemetry.voiceTextMetadata
-import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
 
@@ -41,6 +37,8 @@ const val HERMES_JOB_POLL_INTERVAL_MS = 10_000L
 private const val HERMES_JOB_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000L
 private const val HERMES_JOB_POLL_RETRY_DELAY_MS = 2_000L
 private const val UNBOUND_HERMES_BRIDGE_SESSION_ID = HermesJobManager.UNBOUND_BRIDGE_SESSION_ID
+
+enum class SessionTransition { Reconnect, AutomaticReconnect, SessionEnd }
 
 class VoiceAgentCoordinator(
     private val gemini: GeminiLiveVoiceClient,
@@ -81,7 +79,6 @@ class VoiceAgentCoordinator(
     private val toolLaunchContext = dispatcher ?: EmptyCoroutineContext
     private val closeLock = Any()
     private val eventLock = Any()
-    private val playbackSuppressionLock = Any()
     private val toolJobsLock = Any()
     private val persistenceScope = CoroutineScope(SupervisorJob() + (dispatcher ?: Dispatchers.IO))
     private val persistenceQueue = VoicePersistenceQueue(persistenceScope)
@@ -126,12 +123,15 @@ class VoiceAgentCoordinator(
         observability = observability,
         traceContext = traceContext,
     )
+    private val suppressionController = PlaybackSuppressionController(
+        onAssistantAudioActiveChanged = { active -> hermesJobManager.announcer.onAssistantAudioActive(active) },
+    )
     private val hermesBridgeFactory = VoiceHermesSessionBridgeFactory(
         gemini = gemini,
         diagnostics = diagnostics,
         unboundSessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID,
         writeQueueEvent = { event -> hermesTelemetrySink.writeQueueEvent(event) },
-        clearOutputAudioSuppressionForNewTurn = ::clearOutputAudioSuppressionForNewTurn,
+        clearOutputAudioSuppressionForNewTurn = suppressionController::clearForNewTurn,
     )
     // lazy: evaluated on first default attach, after construction completes
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
@@ -141,20 +141,15 @@ class VoiceAgentCoordinator(
     private val cancelledToolCallIds = mutableSetOf<ToolCallKey>()
     private var closing = false
     private var closed = false
-    private var outputAudioSuppressed = false
-    private var outputAudioSuppressedByGeminiInterruption = false
-    private var activeTranscriptSpeaker: TranscriptSpeaker? = null
-    private var inputTurnTranscript = ""
-    private var outputTurnTranscript = ""
-    private var outputTurnStatus = VoiceTranscriptStatus.Partial
-    private var transcriptTurnSequence = 0L
-    private var inputTurnId = ""
-    private var outputTurnId = ""
-    private val finalTranscriptTelemetryLock = Any()
-    private val finalTranscriptTelemetryKeys = mutableSetOf<String>()
     private val voiceArtifactSessionId = Uuid.random().toString()
+    private val turnTracker = VoiceTranscriptTurnTracker(
+        transcriptPersister = transcriptPersister,
+        sessionId = voiceArtifactSessionId,
+        persist = ::persistConversation,
+        recordEvent = ::recordEventSafely,
+        recordDiagnostic = diagnostics::record,
+    )
     private val removeDiagnosticsListener: () -> Unit
-    private val assistantOutputAudioActive = AtomicBoolean(false)
 
     private val _state = MutableStateFlow(VoiceAgentUiState(traceId = traceContext.traceId))
     val state: StateFlow<VoiceAgentUiState> = _state.asStateFlow()
@@ -220,20 +215,39 @@ class VoiceAgentCoordinator(
     }
 
     fun onGeminiEvent(sessionId: Long, event: GeminiLiveEvent) {
+        route(event = event, sessionId = sessionId)
+    }
+
+    fun onGeminiEvent(event: GeminiLiveEvent) {
+        route(event = event, sessionId = null)
+    }
+
+    private fun route(event: GeminiLiveEvent, sessionId: Long?) {
+        // Unscoped events: closed + invalidation gates run on the event as received —
+        // including on an Events container before unwrapping (one diagnostic for the
+        // batch, matching the old unscoped entry point). Scoped events carry no top
+        // gate here (see the per-branch checks below).
+        if (sessionId == null) {
+            if (shouldIgnoreEventAfterClose(event) || shouldIgnoreUnscopedEventAfterInvalidation(event)) return
+        }
+        if (event is GeminiLiveEvent.Events) {
+            event.events.forEach { route(event = it, sessionId = sessionId) }
+            return
+        }
         when (event) {
-            is GeminiLiveEvent.Events -> event.events.forEach { onGeminiEvent(sessionId = sessionId, event = it) }
             is GeminiLiveEvent.ToolCall -> handleToolCall(call = event, sessionId = sessionId)
             is GeminiLiveEvent.ToolCalls -> {
-                if (!isActiveSession(sessionId)) {
+                if (sessionId != null && !isActiveSession(sessionId)) {
                     diagnostics.record("stale_gemini_event", event.javaClass.simpleName)
                     return
                 }
                 event.unsupportedCalls.forEach(::recordUnsupportedToolCall)
                 event.calls.forEach { handleToolCall(call = it, sessionId = sessionId) }
             }
-            is GeminiLiveEvent.ToolCallCancellation -> handleToolCallCancellation(event = event, sessionId = sessionId)
+            is GeminiLiveEvent.ToolCallCancellation ->
+                handleToolCallCancellation(event = event, sessionId = sessionId)
             else -> synchronized(eventLock) {
-                if (!isActiveSession(sessionId)) {
+                if (sessionId != null && !isActiveSession(sessionId)) {
                     diagnostics.record("stale_gemini_event", event.javaClass.simpleName)
                     return
                 }
@@ -242,48 +256,12 @@ class VoiceAgentCoordinator(
         }
     }
 
-    private fun setAssistantOutputAudioActive(active: Boolean) {
-        assistantOutputAudioActive.set(active)
-        hermesJobManager.announcer.onAssistantAudioActive(active)
-    }
-
     fun suppressPlayback() {
-        setAssistantOutputAudioActive(false)
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = true
-            if (outputTurnTranscript.isNotBlank()) {
-                if (outputTurnStatus != VoiceTranscriptStatus.Complete) {
-                    outputTurnStatus = VoiceTranscriptStatus.Interrupted
-                }
-                persistAssistantTranscript()
-            }
-            _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
-        }
+        suppressionController.suppress()
+        turnTracker.interruptAssistantTurn(suppressed = true)
+        _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
         sessionScope.launch(toolLaunchContext) {
             audio.suppressPlayback()
-        }
-    }
-
-    fun onGeminiEvent(event: GeminiLiveEvent) {
-        if (shouldIgnoreEventAfterClose(event) || shouldIgnoreUnscopedEventAfterInvalidation(event)) return
-        when (event) {
-            is GeminiLiveEvent.Events -> event.events.forEach(::onGeminiEvent)
-            is GeminiLiveEvent.ToolCall -> {
-                if (shouldIgnoreEventAfterClose(event)) return
-                handleToolCall(event, sessionId = null)
-            }
-            is GeminiLiveEvent.ToolCalls -> {
-                if (shouldIgnoreEventAfterClose(event)) return
-                event.unsupportedCalls.forEach(::recordUnsupportedToolCall)
-                event.calls.forEach { handleToolCall(call = it, sessionId = null) }
-            }
-            is GeminiLiveEvent.ToolCallCancellation -> {
-                if (shouldIgnoreEventAfterClose(event)) return
-                handleToolCallCancellation(event = event, sessionId = null)
-            }
-            else -> synchronized(eventLock) {
-                onNonToolGeminiEvent(event = event, sessionId = null)
-            }
         }
     }
 
@@ -386,10 +364,12 @@ class VoiceAgentCoordinator(
                 diagnostics.record("coordinator_closing")
             }
             synchronized(eventLock) {
-                // Wait for any in-flight non-tool event to finish before resources are released.
+                // Barrier: waits for any in-flight non-tool event (see route()) to finish before resources are released.
             }
-            persistAssistantTranscriptForSessionClose()
-            persistUserTranscript(status = VoiceTranscriptStatus.SessionClosedBeforeFinal)
+            turnTracker.persistAssistantForSessionClose(
+                suppressed = suppressionController.isSuppressed(),
+            )
+            turnTracker.persistUserForSessionClose()
             synchronized(toolJobsLock) {
                 cancelledToolCallIds.clear()
                 closed = true
@@ -402,7 +382,7 @@ class VoiceAgentCoordinator(
                     toolCalls = emptyMap(),
                 )
             }
-            setAssistantOutputAudioActive(false)
+            suppressionController.setAssistantAudioActive(false)
             hermesQueueStatusProjectionJob?.cancel()
             hermesQueueStatusProjectionJob = null
             hermesJobManager.announcer.close()
@@ -416,34 +396,27 @@ class VoiceAgentCoordinator(
         }
     }
 
-    fun prepareForReconnect() {
-        setAssistantOutputAudioActive(false)
-        diagnostics.record("prepare_for_reconnect")
+    fun prepareFor(transition: SessionTransition) {
+        suppressionController.setAssistantAudioActive(false)
+        diagnostics.record(
+            when (transition) {
+                SessionTransition.Reconnect -> "prepare_for_reconnect"
+                SessionTransition.AutomaticReconnect -> "prepare_for_automatic_reconnect"
+                SessionTransition.SessionEnd -> "prepare_for_session_end"
+            }
+        )
         invalidateActiveSession()
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = false
-        }
-        _state.update {
-            it.copy(
-                tool = VoiceToolStatus.Idle,
-                toolCalls = emptyMap(),
-            )
-        }
-    }
-
-    fun prepareForAutomaticReconnect() {
-        setAssistantOutputAudioActive(false)
-        diagnostics.record("prepare_for_automatic_reconnect")
-        invalidateActiveSession()
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = false
+        when (transition) {
+            SessionTransition.Reconnect -> {
+                suppressionController.clearSuppressionOnly()
+                resetToolUiState()
+            }
+            SessionTransition.AutomaticReconnect -> suppressionController.clearSuppressionOnly()
+            SessionTransition.SessionEnd -> resetToolUiState()
         }
     }
 
-    fun prepareForSessionEnd() {
-        setAssistantOutputAudioActive(false)
-        diagnostics.record("prepare_for_session_end")
-        invalidateActiveSession()
+    private fun resetToolUiState() {
         _state.update {
             it.copy(
                 tool = VoiceToolStatus.Idle,
@@ -468,63 +441,29 @@ class VoiceAgentCoordinator(
     }
 
     private fun appendInputTranscript(text: String, sessionId: Long?) {
-        val artifactSnapshot = synchronized(toolJobsLock) {
-            if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.InputTranscript(text))) return
-            if (activeTranscriptSpeaker != TranscriptSpeaker.User) {
-                inputTurnTranscript = ""
-                inputTurnId = nextTranscriptTurnId(TranscriptSpeaker.User)
-            }
-            activeTranscriptSpeaker = TranscriptSpeaker.User
-            inputTurnTranscript += text
-            diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, chars=${text.length}")
-            hermesJobManager.announcer.onInputTranscriptDelta()
-            recordEventSafely(
-                name = "voicelab.mobile.transcript.input_delta",
-                attributes = mapOf("turnId" to inputTurnId) + voiceTextMetadata(key = "text", text = text),
-            )
-            clearOutputAudioSuppressionForNewTurn()
-            _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
-            val transcript = inputTurnTranscript
-            val turnId = inputTurnId
-            persistConversation(transform = { conversation ->
-                transcriptPersister.upsertUserTranscriptTurn(
-                    conversation = conversation,
-                    text = transcript,
-                    turnId = turnId,
-                    sessionId = voiceArtifactSessionId,
-                    status = VoiceTranscriptStatus.Partial,
-                )
-            })
-            transcript
-        }
-        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = artifactSnapshot)
+        if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.InputTranscript(text))) return
+        hermesJobManager.announcer.onInputTranscriptDelta()
+        suppressionController.clearForNewTurn()
+        _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
+        val snapshot = turnTracker.appendUserDelta(text)
+        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = snapshot)
     }
 
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
-        val artifactSnapshot = synchronized(toolJobsLock) {
-            if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
-            clearOutputAudioSuppressionForAssistantTurnAfterInterruption()
-            if (activeTranscriptSpeaker != TranscriptSpeaker.Assistant) {
-                outputTurnTranscript = ""
-                outputTurnId = nextTranscriptTurnId(TranscriptSpeaker.Assistant)
-                outputTurnStatus = VoiceTranscriptStatus.Partial
-            }
-            activeTranscriptSpeaker = TranscriptSpeaker.Assistant
-            outputTurnTranscript += text
-            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
-            recordEventSafely(
-                name = "voicelab.mobile.transcript.output_delta",
-                attributes = mapOf("turnId" to outputTurnId) + voiceTextMetadata(key = "text", text = text),
-            )
-            _state.update { it.copy(outputTranscript = it.outputTranscript + text) }
-            persistAssistantTranscript()
-            outputTurnTranscript
+        if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
+        if (suppressionController.clearForAssistantTurnAfterInterruption()) {
+            diagnostics.record("output_audio_suppression_cleared_after_interruption")
         }
-        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = artifactSnapshot)
+        _state.update { it.copy(outputTranscript = it.outputTranscript + text) }
+        val snapshot = turnTracker.appendAssistantDelta(
+            text = text,
+            suppressed = suppressionController.isSuppressed(),
+        )
+        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = snapshot)
     }
 
     private fun playOutputAudio(base64Pcm16: String, sessionId: Long?) {
-        if (synchronized(playbackSuppressionLock) { outputAudioSuppressed }) {
+        if (suppressionController.isSuppressed()) {
             diagnostics.record("output_audio_suppressed_after_interruption")
             return
         }
@@ -545,27 +484,17 @@ class VoiceAgentCoordinator(
             diagnostics.record("stale_output_audio_state_suppressed")
             return
         }
-        if (synchronized(playbackSuppressionLock) { outputAudioSuppressed }) {
+        if (suppressionController.isSuppressed()) {
             diagnostics.record("output_audio_accepted_suppressed_after_interruption")
             return
         }
-        var skippedQueuedAudioDiagnostic: String? = null
-        val queued = synchronized(playbackSuppressionLock) {
-            if (outputAudioSuppressed) {
-                skippedQueuedAudioDiagnostic = "output_audio_state_suppressed_after_interruption"
-                false
-            } else if (sessionId != null && !isActiveSession(sessionId)) {
-                skippedQueuedAudioDiagnostic = "stale_output_audio_state_suppressed"
-                false
-            } else {
-                setAssistantOutputAudioActive(true)
-                _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
-                true
-            }
-        }
-        if (!queued) {
-            skippedQueuedAudioDiagnostic?.let(diagnostics::record)
+        val skipDiagnostic = suppressionController.tryActivatePlayback(
+            isStale = { sessionId != null && !isActiveSession(sessionId) },
+        )
+        if (skipDiagnostic != null) {
+            diagnostics.record(skipDiagnostic)
         } else {
+            _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
             recordEventSafely(
                 name = "voicelab.mobile.audio.playback_queued",
                 attributes = mapOf(
@@ -578,50 +507,16 @@ class VoiceAgentCoordinator(
 
     private fun handleInterrupted(event: GeminiLiveEvent.Interrupted) {
         diagnostics.record("gemini_interrupted", event.reason)
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressedByGeminiInterruption = true
-        }
+        suppressionController.markInterruptedByGemini()
         suppressPlayback()
-    }
-
-    private fun clearOutputAudioSuppressionForNewTurn() {
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = false
-            outputAudioSuppressedByGeminiInterruption = false
-        }
-        setAssistantOutputAudioActive(false)
-    }
-
-    private fun clearOutputAudioSuppressionForAssistantTurnAfterInterruption() {
-        val cleared = synchronized(playbackSuppressionLock) {
-            if (outputAudioSuppressed && outputAudioSuppressedByGeminiInterruption) {
-                outputAudioSuppressed = false
-                outputAudioSuppressedByGeminiInterruption = false
-                true
-            } else {
-                outputAudioSuppressedByGeminiInterruption = false
-                false
-            }
-        }
-        if (cleared) {
-            diagnostics.record("output_audio_suppression_cleared_after_interruption")
-        }
     }
 
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
         hermesJobManager.announcer.onGenerationComplete()
-        synchronized(playbackSuppressionLock) {
-            if (
-                outputTurnTranscript.isBlank() ||
-                outputAudioSuppressed ||
-                outputTurnStatus == VoiceTranscriptStatus.Interrupted
-            ) {
-                return
-            }
-            outputTurnStatus = VoiceTranscriptStatus.Complete
-            persistAssistantTranscript()
-        }
+        turnTracker.completeAssistantTurn(
+            suppressed = suppressionController.isSuppressed(),
+        )
     }
 
     private fun handleIgnored(event: GeminiLiveEvent.Ignored) {
@@ -785,115 +680,6 @@ class VoiceAgentCoordinator(
         }
     }
 
-    private fun persistAssistantTranscript(statusOverride: VoiceTranscriptStatus? = null) {
-        val transcript = outputTurnTranscript
-        val turnId = outputTurnId
-        if (transcript.isBlank() || turnId.isBlank()) return
-        val status = synchronized(playbackSuppressionLock) {
-            statusOverride ?: when {
-                outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
-                outputAudioSuppressed -> VoiceTranscriptStatus.Interrupted
-                else -> outputTurnStatus
-            }
-        }
-        persistConversation(
-            transform = { conversation ->
-                transcriptPersister.upsertAssistantTranscriptTurn(
-                    conversation = conversation,
-                    text = transcript,
-                    interrupted = status == VoiceTranscriptStatus.Interrupted,
-                    turnId = turnId,
-                    sessionId = voiceArtifactSessionId,
-                    status = status,
-                )
-            },
-            onPersisted = {
-                recordFinalTranscriptEventsOnce(
-                    finalEventName = "voicelab.mobile.transcript.assistant_final",
-                    turnId = turnId,
-                    speaker = "assistant",
-                    status = status,
-                    textKey = "gemini.output_transcript",
-                    text = transcript,
-                )
-            },
-        )
-    }
-
-    private fun persistAssistantTranscriptForSessionClose() {
-        val status = synchronized(playbackSuppressionLock) {
-            when {
-                outputTurnTranscript.isBlank() || outputTurnId.isBlank() -> return
-                outputAudioSuppressed -> VoiceTranscriptStatus.Interrupted
-                outputTurnStatus == VoiceTranscriptStatus.Interrupted -> VoiceTranscriptStatus.Interrupted
-                outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
-                else -> VoiceTranscriptStatus.SessionClosedBeforeFinal
-            }
-        }
-        persistAssistantTranscript(statusOverride = status)
-    }
-
-    private fun persistUserTranscript(status: VoiceTranscriptStatus) {
-        val transcript = inputTurnTranscript
-        val turnId = inputTurnId
-        if (transcript.isBlank() || turnId.isBlank()) return
-        persistConversation(
-            transform = { conversation ->
-                transcriptPersister.upsertUserTranscriptTurn(
-                    conversation = conversation,
-                    text = transcript,
-                    turnId = turnId,
-                    sessionId = voiceArtifactSessionId,
-                    status = status,
-                )
-            },
-            onPersisted = {
-                recordFinalTranscriptEventsOnce(
-                    finalEventName = "voicelab.mobile.transcript.user_final",
-                    turnId = turnId,
-                    speaker = "user",
-                    status = status,
-                    textKey = "voice.user_transcript",
-                    text = transcript,
-                )
-            },
-        )
-    }
-
-    private fun recordFinalTranscriptEventsOnce(
-        finalEventName: String,
-        turnId: String,
-        speaker: String,
-        status: VoiceTranscriptStatus,
-        textKey: String,
-        text: String,
-    ) {
-        if (status == VoiceTranscriptStatus.Partial) return
-        val telemetryKey = "$finalEventName|$turnId"
-        val shouldRecord = synchronized(finalTranscriptTelemetryLock) {
-            finalTranscriptTelemetryKeys.add(telemetryKey)
-        }
-        if (!shouldRecord) return
-        val attributes = mapOf(
-            "turnId" to turnId,
-            "speaker" to speaker,
-            "status" to status.statusName,
-        ) + voiceTextPayload(key = textKey, text = text)
-        recordEventSafely(
-            name = finalEventName,
-            attributes = attributes,
-        )
-        recordEventSafely(
-            name = "voicelab.mobile.transcript.turn",
-            attributes = attributes,
-        )
-    }
-
-    private fun nextTranscriptTurnId(speaker: TranscriptSpeaker): String {
-        transcriptTurnSequence += 1
-        return "${speaker.name.lowercase()}-$transcriptTurnSequence"
-    }
-
     private fun persistConversation(
         transform: (Conversation) -> Conversation,
         onPersisted: () -> Unit = {},
@@ -960,11 +746,6 @@ class VoiceAgentCoordinator(
         VoiceAudioStatus.AssistantSpeaking -> "assistant_speaking"
         VoiceAudioStatus.Muted -> "muted"
         VoiceAudioStatus.PlaybackSuppressed -> "playback_suppressed"
-    }
-
-    private enum class TranscriptSpeaker {
-        User,
-        Assistant,
     }
 
     private data class ToolCallKey(

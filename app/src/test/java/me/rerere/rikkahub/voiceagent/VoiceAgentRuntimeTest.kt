@@ -471,7 +471,8 @@ class VoiceAgentRuntimeTest {
         )
 
         // The user cuts in: Interrupted routes through suppressPlayback, which clears
-        // assistantOutputAudioActive — the production pause signal the scheduler gates on.
+        // assistant-audio-active via PlaybackSuppressionController — the production pause
+        // signal the scheduler gates on.
         coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
 
         withTimeout(2_000) {
@@ -2565,6 +2566,32 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `unscoped batched events after close record one diagnostic for the container`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = FakeVoiceToolApi(),
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        coordinator.close()
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.Events(
+                listOf(
+                    GeminiLiveEvent.InputTranscript("late input"),
+                    GeminiLiveEvent.OutputTranscript("late output"),
+                )
+            )
+        )
+
+        val afterCloseEvents = diagnostics.events.value.filter { it.name == "gemini_event_after_close" }
+        assertEquals(listOf("Events"), afterCloseEvents.map { it.detail })
+    }
+
+    @Test
     fun `close is idempotent and clears visible state`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()
@@ -2883,7 +2910,7 @@ class VoiceAgentRuntimeTest {
         )
         coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
 
-        coordinator.prepareForSessionEnd()
+        coordinator.prepareFor(SessionTransition.SessionEnd)
         coordinator.onGeminiEvent(GeminiLiveEvent.WebSocketClosed(code = 1008, reason = "The operation was aborted."))
 
         assertEquals(VoiceSessionStatus.Connected, coordinator.state.value.session)
@@ -3096,7 +3123,7 @@ class VoiceAgentRuntimeTest {
         )
         assertEquals("call-reconnect-persist" to "old", toolApi.awaitRequest("call-reconnect-persist"))
 
-        coordinator.prepareForReconnect()
+        coordinator.prepareFor(SessionTransition.Reconnect)
         toolApi.complete(response(callId = "call-reconnect-persist", answer = "old answer"))
         coordinator.awaitToolJobsWithTimeout()
         coordinator.awaitPersistenceJobsWithTimeout()
@@ -3209,7 +3236,7 @@ class VoiceAgentRuntimeTest {
         assertTrue(blockedSend.started.await(500, TimeUnit.MILLISECONDS))
 
         val reconnectJob = launch(Dispatchers.Default) {
-            coordinator.prepareForReconnect()
+            coordinator.prepareFor(SessionTransition.Reconnect)
         }
         withTimeout(500) {
             reconnectJob.join()
@@ -3350,7 +3377,7 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(voiceToolCall(callId = "call-reconnect", name = "ask_hermes", arg = "old"))
         assertEquals("call-reconnect" to "old", toolApi.awaitRequest("call-reconnect"))
 
-        coordinator.prepareForReconnect()
+        coordinator.prepareFor(SessionTransition.Reconnect)
         toolApi.complete(response(callId = "call-reconnect", answer = "old answer"))
         coordinator.awaitToolJobsWithTimeout()
 
@@ -3374,7 +3401,7 @@ class VoiceAgentRuntimeTest {
         )
         val staleSessionId = coordinator.nextSessionId()
 
-        coordinator.prepareForReconnect()
+        coordinator.prepareFor(SessionTransition.Reconnect)
         coordinator.onGeminiEvent(staleSessionId, GeminiLiveEvent.InputTranscript("late input"))
         coordinator.onGeminiEvent(
             staleSessionId,
