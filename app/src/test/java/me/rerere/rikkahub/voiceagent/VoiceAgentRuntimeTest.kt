@@ -2566,6 +2566,32 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `unscoped batched events after close record one diagnostic for the container`() = runTest {
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = FakeVoiceToolApi(),
+            audio = FakeVoiceAudioEngine(),
+            diagnostics = diagnostics,
+            scope = this,
+        )
+
+        coordinator.close()
+
+        coordinator.onGeminiEvent(
+            GeminiLiveEvent.Events(
+                listOf(
+                    GeminiLiveEvent.InputTranscript("late input"),
+                    GeminiLiveEvent.OutputTranscript("late output"),
+                )
+            )
+        )
+
+        val afterCloseEvents = diagnostics.events.value.filter { it.name == "gemini_event_after_close" }
+        assertEquals(listOf("Events"), afterCloseEvents.map { it.detail })
+    }
+
+    @Test
     fun `close is idempotent and clears visible state`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()

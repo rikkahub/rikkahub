@@ -223,15 +223,16 @@ class VoiceAgentCoordinator(
     }
 
     private fun route(event: GeminiLiveEvent, sessionId: Long?) {
+        // Unscoped events: closed + invalidation gates run on the event as received —
+        // including on an Events container before unwrapping (one diagnostic for the
+        // batch, matching the old unscoped entry point). Scoped events carry no top
+        // gate here (see the per-branch checks below).
+        if (sessionId == null) {
+            if (shouldIgnoreEventAfterClose(event) || shouldIgnoreUnscopedEventAfterInvalidation(event)) return
+        }
         if (event is GeminiLiveEvent.Events) {
             event.events.forEach { route(event = it, sessionId = sessionId) }
             return
-        }
-        // One guard pass. Unscoped events: closed + invalidation gates. Scoped tool
-        // events: active-session gate. Scoped non-tool events keep their gate inside
-        // the eventLock block below so the check-and-handle stays atomic with close().
-        if (sessionId == null) {
-            if (shouldIgnoreEventAfterClose(event) || shouldIgnoreUnscopedEventAfterInvalidation(event)) return
         }
         when (event) {
             is GeminiLiveEvent.ToolCall -> handleToolCall(call = event, sessionId = sessionId)
