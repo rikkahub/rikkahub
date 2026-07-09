@@ -24,15 +24,12 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
-import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptStatus
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnosticEvent
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import me.rerere.rikkahub.voiceagent.telemetry.voiceTextMetadata
-import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
@@ -143,16 +140,14 @@ class VoiceAgentCoordinator(
     private var closed = false
     private var outputAudioSuppressed = false
     private var outputAudioSuppressedByGeminiInterruption = false
-    private var activeTranscriptSpeaker: TranscriptSpeaker? = null
-    private var inputTurnTranscript = ""
-    private var outputTurnTranscript = ""
-    private var outputTurnStatus = VoiceTranscriptStatus.Partial
-    private var transcriptTurnSequence = 0L
-    private var inputTurnId = ""
-    private var outputTurnId = ""
-    private val finalTranscriptTelemetryLock = Any()
-    private val finalTranscriptTelemetryKeys = mutableSetOf<String>()
     private val voiceArtifactSessionId = Uuid.random().toString()
+    private val turnTracker = VoiceTranscriptTurnTracker(
+        transcriptPersister = transcriptPersister,
+        sessionId = voiceArtifactSessionId,
+        persist = ::persistConversation,
+        recordEvent = ::recordEventSafely,
+        recordDiagnostic = diagnostics::record,
+    )
     private val removeDiagnosticsListener: () -> Unit
     private val assistantOutputAudioActive = AtomicBoolean(false)
 
@@ -251,14 +246,9 @@ class VoiceAgentCoordinator(
         setAssistantOutputAudioActive(false)
         synchronized(playbackSuppressionLock) {
             outputAudioSuppressed = true
-            if (outputTurnTranscript.isNotBlank()) {
-                if (outputTurnStatus != VoiceTranscriptStatus.Complete) {
-                    outputTurnStatus = VoiceTranscriptStatus.Interrupted
-                }
-                persistAssistantTranscript()
-            }
-            _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
         }
+        turnTracker.interruptAssistantTurn(suppressed = true)
+        _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
         sessionScope.launch(toolLaunchContext) {
             audio.suppressPlayback()
         }
@@ -388,8 +378,10 @@ class VoiceAgentCoordinator(
             synchronized(eventLock) {
                 // Wait for any in-flight non-tool event to finish before resources are released.
             }
-            persistAssistantTranscriptForSessionClose()
-            persistUserTranscript(status = VoiceTranscriptStatus.SessionClosedBeforeFinal)
+            turnTracker.persistAssistantForSessionClose(
+                suppressed = synchronized(playbackSuppressionLock) { outputAudioSuppressed },
+            )
+            turnTracker.persistUserForSessionClose()
             synchronized(toolJobsLock) {
                 cancelledToolCallIds.clear()
                 closed = true
@@ -468,59 +460,23 @@ class VoiceAgentCoordinator(
     }
 
     private fun appendInputTranscript(text: String, sessionId: Long?) {
-        val artifactSnapshot = synchronized(toolJobsLock) {
-            if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.InputTranscript(text))) return
-            if (activeTranscriptSpeaker != TranscriptSpeaker.User) {
-                inputTurnTranscript = ""
-                inputTurnId = nextTranscriptTurnId(TranscriptSpeaker.User)
-            }
-            activeTranscriptSpeaker = TranscriptSpeaker.User
-            inputTurnTranscript += text
-            diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, chars=${text.length}")
-            hermesJobManager.announcer.onInputTranscriptDelta()
-            recordEventSafely(
-                name = "voicelab.mobile.transcript.input_delta",
-                attributes = mapOf("turnId" to inputTurnId) + voiceTextMetadata(key = "text", text = text),
-            )
-            clearOutputAudioSuppressionForNewTurn()
-            _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
-            val transcript = inputTurnTranscript
-            val turnId = inputTurnId
-            persistConversation(transform = { conversation ->
-                transcriptPersister.upsertUserTranscriptTurn(
-                    conversation = conversation,
-                    text = transcript,
-                    turnId = turnId,
-                    sessionId = voiceArtifactSessionId,
-                    status = VoiceTranscriptStatus.Partial,
-                )
-            })
-            transcript
-        }
-        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = artifactSnapshot)
+        if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.InputTranscript(text))) return
+        hermesJobManager.announcer.onInputTranscriptDelta()
+        clearOutputAudioSuppressionForNewTurn()
+        _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
+        val snapshot = turnTracker.appendUserDelta(text)
+        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = snapshot)
     }
 
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
-        val artifactSnapshot = synchronized(toolJobsLock) {
-            if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
-            clearOutputAudioSuppressionForAssistantTurnAfterInterruption()
-            if (activeTranscriptSpeaker != TranscriptSpeaker.Assistant) {
-                outputTurnTranscript = ""
-                outputTurnId = nextTranscriptTurnId(TranscriptSpeaker.Assistant)
-                outputTurnStatus = VoiceTranscriptStatus.Partial
-            }
-            activeTranscriptSpeaker = TranscriptSpeaker.Assistant
-            outputTurnTranscript += text
-            diagnostics.record("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
-            recordEventSafely(
-                name = "voicelab.mobile.transcript.output_delta",
-                attributes = mapOf("turnId" to outputTurnId) + voiceTextMetadata(key = "text", text = text),
-            )
-            _state.update { it.copy(outputTranscript = it.outputTranscript + text) }
-            persistAssistantTranscript()
-            outputTurnTranscript
-        }
-        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = artifactSnapshot)
+        if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
+        clearOutputAudioSuppressionForAssistantTurnAfterInterruption()
+        _state.update { it.copy(outputTranscript = it.outputTranscript + text) }
+        val snapshot = turnTracker.appendAssistantDelta(
+            text = text,
+            suppressed = synchronized(playbackSuppressionLock) { outputAudioSuppressed },
+        )
+        voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = snapshot)
     }
 
     private fun playOutputAudio(base64Pcm16: String, sessionId: Long?) {
@@ -611,17 +567,9 @@ class VoiceAgentCoordinator(
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
         hermesJobManager.announcer.onGenerationComplete()
-        synchronized(playbackSuppressionLock) {
-            if (
-                outputTurnTranscript.isBlank() ||
-                outputAudioSuppressed ||
-                outputTurnStatus == VoiceTranscriptStatus.Interrupted
-            ) {
-                return
-            }
-            outputTurnStatus = VoiceTranscriptStatus.Complete
-            persistAssistantTranscript()
-        }
+        turnTracker.completeAssistantTurn(
+            suppressed = synchronized(playbackSuppressionLock) { outputAudioSuppressed },
+        )
     }
 
     private fun handleIgnored(event: GeminiLiveEvent.Ignored) {
@@ -785,115 +733,6 @@ class VoiceAgentCoordinator(
         }
     }
 
-    private fun persistAssistantTranscript(statusOverride: VoiceTranscriptStatus? = null) {
-        val transcript = outputTurnTranscript
-        val turnId = outputTurnId
-        if (transcript.isBlank() || turnId.isBlank()) return
-        val status = synchronized(playbackSuppressionLock) {
-            statusOverride ?: when {
-                outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
-                outputAudioSuppressed -> VoiceTranscriptStatus.Interrupted
-                else -> outputTurnStatus
-            }
-        }
-        persistConversation(
-            transform = { conversation ->
-                transcriptPersister.upsertAssistantTranscriptTurn(
-                    conversation = conversation,
-                    text = transcript,
-                    interrupted = status == VoiceTranscriptStatus.Interrupted,
-                    turnId = turnId,
-                    sessionId = voiceArtifactSessionId,
-                    status = status,
-                )
-            },
-            onPersisted = {
-                recordFinalTranscriptEventsOnce(
-                    finalEventName = "voicelab.mobile.transcript.assistant_final",
-                    turnId = turnId,
-                    speaker = "assistant",
-                    status = status,
-                    textKey = "gemini.output_transcript",
-                    text = transcript,
-                )
-            },
-        )
-    }
-
-    private fun persistAssistantTranscriptForSessionClose() {
-        val status = synchronized(playbackSuppressionLock) {
-            when {
-                outputTurnTranscript.isBlank() || outputTurnId.isBlank() -> return
-                outputAudioSuppressed -> VoiceTranscriptStatus.Interrupted
-                outputTurnStatus == VoiceTranscriptStatus.Interrupted -> VoiceTranscriptStatus.Interrupted
-                outputTurnStatus == VoiceTranscriptStatus.Complete -> VoiceTranscriptStatus.Complete
-                else -> VoiceTranscriptStatus.SessionClosedBeforeFinal
-            }
-        }
-        persistAssistantTranscript(statusOverride = status)
-    }
-
-    private fun persistUserTranscript(status: VoiceTranscriptStatus) {
-        val transcript = inputTurnTranscript
-        val turnId = inputTurnId
-        if (transcript.isBlank() || turnId.isBlank()) return
-        persistConversation(
-            transform = { conversation ->
-                transcriptPersister.upsertUserTranscriptTurn(
-                    conversation = conversation,
-                    text = transcript,
-                    turnId = turnId,
-                    sessionId = voiceArtifactSessionId,
-                    status = status,
-                )
-            },
-            onPersisted = {
-                recordFinalTranscriptEventsOnce(
-                    finalEventName = "voicelab.mobile.transcript.user_final",
-                    turnId = turnId,
-                    speaker = "user",
-                    status = status,
-                    textKey = "voice.user_transcript",
-                    text = transcript,
-                )
-            },
-        )
-    }
-
-    private fun recordFinalTranscriptEventsOnce(
-        finalEventName: String,
-        turnId: String,
-        speaker: String,
-        status: VoiceTranscriptStatus,
-        textKey: String,
-        text: String,
-    ) {
-        if (status == VoiceTranscriptStatus.Partial) return
-        val telemetryKey = "$finalEventName|$turnId"
-        val shouldRecord = synchronized(finalTranscriptTelemetryLock) {
-            finalTranscriptTelemetryKeys.add(telemetryKey)
-        }
-        if (!shouldRecord) return
-        val attributes = mapOf(
-            "turnId" to turnId,
-            "speaker" to speaker,
-            "status" to status.statusName,
-        ) + voiceTextPayload(key = textKey, text = text)
-        recordEventSafely(
-            name = finalEventName,
-            attributes = attributes,
-        )
-        recordEventSafely(
-            name = "voicelab.mobile.transcript.turn",
-            attributes = attributes,
-        )
-    }
-
-    private fun nextTranscriptTurnId(speaker: TranscriptSpeaker): String {
-        transcriptTurnSequence += 1
-        return "${speaker.name.lowercase()}-$transcriptTurnSequence"
-    }
-
     private fun persistConversation(
         transform: (Conversation) -> Conversation,
         onPersisted: () -> Unit = {},
@@ -960,11 +799,6 @@ class VoiceAgentCoordinator(
         VoiceAudioStatus.AssistantSpeaking -> "assistant_speaking"
         VoiceAudioStatus.Muted -> "muted"
         VoiceAudioStatus.PlaybackSuppressed -> "playback_suppressed"
-    }
-
-    private enum class TranscriptSpeaker {
-        User,
-        Assistant,
     }
 
     private data class ToolCallKey(
