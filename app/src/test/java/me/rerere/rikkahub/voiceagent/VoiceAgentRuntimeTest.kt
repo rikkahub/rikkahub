@@ -36,6 +36,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.sha256Hex
+import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
 import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
@@ -877,14 +878,14 @@ class VoiceAgentRuntimeTest {
         )
         assertEquals("call-poll" to "slow", toolApi.awaitRequest("call-poll"))
 
-        toolApi.scriptPoll("call-poll", jobPoll(callId = "call-poll", jobId = "job-1", status = "queued"))
+        toolApi.scriptPoll("call-poll", jobPoll(callId = "call-poll", jobId = "job-1", status = HermesJobStatus.Queued))
         withTimeout(500) {
             while (coordinator.state.value.tool != VoiceToolStatus.QueuedHermes("call-poll", "job-1")) {
                 delay(10)
             }
         }
 
-        toolApi.scriptPoll("call-poll", jobPoll(callId = "call-poll", jobId = "job-1", status = "running"))
+        toolApi.scriptPoll("call-poll", jobPoll(callId = "call-poll", jobId = "job-1", status = HermesJobStatus.Running))
         withTimeout(500) {
             while (coordinator.state.value.tool !is VoiceToolStatus.CallingHermes) {
                 delay(10)
@@ -1028,7 +1029,7 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-local-timeout" to "slow", toolApi.awaitRequest("call-local-timeout"))
         toolApi.scriptPoll(
             "call-local-timeout",
-            jobPoll(callId = "call-local-timeout", jobId = "job-1", status = "queued"),
+            jobPoll(callId = "call-local-timeout", jobId = "job-1", status = HermesJobStatus.Queued),
         )
         coordinator.awaitToolJobsWithTimeout()
 
@@ -1068,10 +1069,10 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-malformed" to "slow", toolApi.awaitRequest("call-malformed"))
         toolApi.scriptPoll(
             "call-malformed",
-            MobileHermesJobPollResponse(
+            hermesJobSnapshotFixture(
                 jobId = "job-1",
                 callId = "call-malformed",
-                status = "succeeded",
+                status = HermesJobStatus.Succeeded,
                 answer = null,
                 createdAt = "2026-06-11T00:00:00.000Z",
                 completedAt = "2026-06-11T00:00:01.000Z",
@@ -1113,7 +1114,7 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
-    fun `Hermes unknown poll status persists failure with job id`() = runTest {
+    fun `Hermes failed poll persists failure with job id`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
@@ -1130,7 +1131,18 @@ class VoiceAgentRuntimeTest {
             voiceToolCall(callId = "call-unknown", name = "ask_hermes", arg = "slow")
         )
         assertEquals("call-unknown" to "slow", toolApi.awaitRequest("call-unknown"))
-        toolApi.scriptPoll("call-unknown", jobPoll(callId = "call-unknown", jobId = "job-1", status = "mystery"))
+        toolApi.scriptPoll(
+            "call-unknown",
+            hermesJobSnapshotFixture(
+                callId = "call-unknown",
+                jobId = "job-1",
+                status = HermesJobStatus.Failed,
+                failure = hermesFailureFixture(
+                    message = "Unknown Hermes job status: mystery",
+                    kind = VoiceFailureKind.Internal,
+                ),
+            ),
+        )
         coordinator.awaitToolJobsWithTimeout()
         coordinator.awaitPersistenceJobsWithTimeout()
 
@@ -5577,8 +5589,8 @@ class VoiceAgentRuntimeTest {
     private fun jobPoll(
         callId: String,
         jobId: String,
-        status: String,
-    ): MobileHermesJobPollResponse = MobileHermesJobPollResponse(
+        status: HermesJobStatus,
+    ): MobileHermesJobPollResponse = hermesJobSnapshotFixture(
         jobId = jobId,
         callId = callId,
         status = status,

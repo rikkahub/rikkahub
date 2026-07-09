@@ -68,49 +68,26 @@ class VoiceHermesSessionBridgeFactory(
     private val clearOutputAudioSuppressionForNewTurn: () -> Unit,
 ) {
     fun create(sessionId: Long): HermesSessionBridge = object : HermesSessionBridge {
-        override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean {
-            return if (sessionId == unboundSessionId) {
-                gemini.sendToolResponse(callId = callId, answer = HERMES_QUEUED_ACKNOWLEDGEMENT)
-            } else {
-                gemini.sendToolResponse(
-                    callId = callId,
-                    answer = HERMES_QUEUED_ACKNOWLEDGEMENT,
-                    sessionId = sessionId,
-                )
-            }
-        }
+        override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long): Boolean =
+            gemini.sendToolResponse(
+                callId = callId,
+                answer = HERMES_QUEUED_ACKNOWLEDGEMENT,
+                sessionId = sessionId.outboundOrNull(),
+            )
 
         override suspend fun sendCompletionFollowUp(
             callId: String,
             prompt: String,
             answer: String,
             sessionId: Long,
-        ): Boolean {
-            clearOutputAudioSuppressionForNewTurn()
-            val sent = if (sessionId == unboundSessionId) {
-                gemini.sendTextTurn(text = hermesCompletionFollowUpText(prompt = prompt, answer = answer))
-            } else {
-                gemini.sendTextTurn(
-                    text = hermesCompletionFollowUpText(prompt = prompt, answer = answer),
-                    sessionId = sessionId,
-                )
-            }
-            writeQueueEvent(
-                HermesQueueEvent(
-                    type = "late_text_turn_sent",
-                    callId = callId,
-                    jobId = "none",
-                    sent = sent,
-                )
-            )
-            val detail = "callId=$callId, jobId=none, answerChars=${answer.length}"
-            if (sent) {
-                diagnostics.record("hermes_completion_follow_up_sent", detail)
-            } else {
-                diagnostics.record("hermes_completion_follow_up_failed", detail)
-            }
-            return sent
-        }
+        ): Boolean = sendGatedTextTurn(
+            text = hermesCompletionFollowUpText(prompt = prompt, answer = answer),
+            sessionId = sessionId,
+            queueEventType = "late_text_turn_sent",
+            callId = callId,
+            diagnosticBase = "hermes_completion_follow_up",
+            detail = "callId=$callId, jobId=none, answerChars=${answer.length}",
+        )
 
         override suspend fun sendTerminalFollowUp(
             callId: String,
@@ -118,82 +95,62 @@ class VoiceHermesSessionBridgeFactory(
             status: HermesQueueStatus,
             reason: String,
             sessionId: Long,
-        ): Boolean {
-            val text = hermesTerminalFollowUpText(prompt = prompt, status = status, reason = reason)
-            clearOutputAudioSuppressionForNewTurn()
-            val sent = if (sessionId == unboundSessionId) {
-                gemini.sendTextTurn(text = text)
-            } else {
-                gemini.sendTextTurn(text = text, sessionId = sessionId)
-            }
-            writeQueueEvent(
-                HermesQueueEvent(
-                    type = "late_terminal_text_turn_sent",
-                    callId = callId,
-                    jobId = "none",
-                    sent = sent,
-                )
-            )
-            val detail = "callId=$callId, jobId=none, status=${status.wireName}, reasonChars=${reason.length}"
-            if (sent) {
-                diagnostics.record("hermes_terminal_follow_up_sent", detail)
-            } else {
-                diagnostics.record("hermes_terminal_follow_up_failed", detail)
-            }
-            return sent
-        }
+        ): Boolean = sendGatedTextTurn(
+            text = hermesTerminalFollowUpText(prompt = prompt, status = status, reason = reason),
+            sessionId = sessionId,
+            queueEventType = "late_terminal_text_turn_sent",
+            callId = callId,
+            diagnosticBase = "hermes_terminal_follow_up",
+            detail = "callId=$callId, jobId=none, status=${status.wireName}, reasonChars=${reason.length}",
+        )
 
         override suspend fun sendStillWorkingUpdate(
             callId: String,
             prompt: String,
             sessionId: Long,
-        ): Boolean {
-            clearOutputAudioSuppressionForNewTurn()
-            val sent = if (sessionId == unboundSessionId) {
-                gemini.sendTextTurn(text = hermesStillWorkingUpdateText(prompt = prompt))
-            } else {
-                gemini.sendTextTurn(
-                    text = hermesStillWorkingUpdateText(prompt = prompt),
-                    sessionId = sessionId,
-                )
-            }
-            writeQueueEvent(
-                HermesQueueEvent(
-                    type = "still_working_text_turn_sent",
-                    callId = callId,
-                    jobId = "none",
-                    sent = sent,
-                )
-            )
-            val detail = "callId=$callId, jobId=none"
-            if (sent) {
-                diagnostics.record("hermes_still_working_sent", detail)
-            } else {
-                diagnostics.record("hermes_still_working_failed", detail)
-            }
-            return sent
-        }
+        ): Boolean = sendGatedTextTurn(
+            text = hermesStillWorkingUpdateText(prompt = prompt),
+            sessionId = sessionId,
+            queueEventType = "still_working_text_turn_sent",
+            callId = callId,
+            diagnosticBase = "hermes_still_working",
+            detail = "callId=$callId, jobId=none",
+        )
 
         override suspend fun sendCancelResponse(
             callId: String,
             outcome: CancelHermesOutcome,
             sessionId: Long,
-        ): Boolean {
-            val answer = cancelHermesResponseText(outcome)
-            return if (sessionId == unboundSessionId) {
-                gemini.sendToolResponse(
-                    callId = callId,
-                    answer = answer,
-                    name = VoiceAgentToolNames.CANCEL_HERMES,
-                )
-            } else {
-                gemini.sendToolResponse(
-                    callId = callId,
-                    answer = answer,
-                    sessionId = sessionId,
-                    name = VoiceAgentToolNames.CANCEL_HERMES,
-                )
-            }
-        }
+        ): Boolean = gemini.sendToolResponse(
+            callId = callId,
+            answer = cancelHermesResponseText(outcome),
+            sessionId = sessionId.outboundOrNull(),
+            name = VoiceAgentToolNames.CANCEL_HERMES,
+        )
+    }
+
+    /** The unbound sentinel means "send ungated" -- the client's null. */
+    private fun Long.outboundOrNull(): Long? = takeUnless { it == unboundSessionId }
+
+    private fun sendGatedTextTurn(
+        text: String,
+        sessionId: Long,
+        queueEventType: String,
+        callId: String,
+        diagnosticBase: String,
+        detail: String,
+    ): Boolean {
+        clearOutputAudioSuppressionForNewTurn()
+        val sent = gemini.sendTextTurn(text = text, sessionId = sessionId.outboundOrNull())
+        writeQueueEvent(
+            HermesQueueEvent(
+                type = queueEventType,
+                callId = callId,
+                jobId = "none",
+                sent = sent,
+            )
+        )
+        diagnostics.record(if (sent) "${diagnosticBase}_sent" else "${diagnosticBase}_failed", detail)
+        return sent
     }
 }

@@ -14,6 +14,7 @@ import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.voiceagent.VoiceAgentToolNames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -162,11 +163,12 @@ class GeminiLiveCodecTest {
             )
         )
 
-        val message = codec.setupMessage(
+        val encoded = codec.setupMessage(
             providerModel = "gemini-2.0-flash-live-001",
             liveConnectConfig = liveConnectConfig,
             systemInstruction = "Local instruction.",
-        ).jsonObject()
+        )
+        val message = encoded.jsonObject()
 
         val functionCallingConfig = message["setup"]!!
             .jsonObject["toolConfig"]!!
@@ -177,6 +179,9 @@ class GeminiLiveCodecTest {
             listOf("ask_hermes"),
             functionCallingConfig["allowedFunctionNames"]!!.jsonArray.map { it.jsonPrimitive.content },
         )
+        assertEquals(true, encoded.debug.hasAskHermesTool)
+        assertEquals("ANY", encoded.debug.toolConfigMode)
+        assertEquals(listOf("ask_hermes"), encoded.debug.allowedFunctionNames)
     }
 
     @Test
@@ -341,6 +346,21 @@ class GeminiLiveCodecTest {
                 .jsonObject["text"]!!
                 .jsonPrimitive.content,
         )
+    }
+
+    @Test
+    fun `encoded messages carry their debug kind and audio byte estimate`() {
+        val codec = GeminiLiveCodec()
+        val audio = codec.realtimeAudioMessage("aGVsbG8=")
+        assertEquals("realtimeInput.audio", audio.kind)
+        assertEquals(5, audio.audioDataBytes)
+
+        val toolResponse = codec.toolResponseMessage(callId = "c1", answer = "a", name = "ask_hermes")
+        assertEquals("toolResponse", toolResponse.kind)
+        assertNull(toolResponse.audioDataBytes)
+
+        val text = codec.clientContentMessage(listOf(GeminiContentTurn(role = "user", text = "hi")))
+        assertEquals("clientContent", text.kind)
     }
 
     @Test
@@ -997,6 +1017,10 @@ class GeminiLiveCodecTest {
 
         assertEquals(GeminiLiveEvent.Ignored(raw), event)
     }
+
+    private fun EncodedSetup.jsonObject(): JsonObject = message.text.jsonObject()
+
+    private fun EncodedMessage.jsonObject(): JsonObject = text.jsonObject()
 
     private fun String.jsonObject(): JsonObject = JsonInstant.parseToJsonElement(this).jsonObject
 }

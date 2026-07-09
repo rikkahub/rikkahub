@@ -76,6 +76,21 @@ enum class HermesJobStatus {
 
     @SerialName("canceled")
     Canceled,
+    ;
+
+    companion object {
+        /** The single wire-status parser. Returns null for unknown statuses. */
+        fun parse(raw: String?): HermesJobStatus? = when (raw?.lowercase()) {
+            "accepted" -> Accepted
+            "queued" -> Queued
+            "running" -> Running
+            "succeeded" -> Succeeded
+            "failed" -> Failed
+            "expired", "timeout" -> Expired
+            "canceled", "cancelled" -> Canceled
+            else -> null
+        }
+    }
 }
 
 @Serializable
@@ -188,32 +203,6 @@ data class HermesJobSnapshot(
     val elapsedMs: Long? = null,
     val failure: VoiceFailure? = null,
 ) {
-    constructor(
-        jobId: String? = null,
-        callId: String? = null,
-        status: String,
-        answer: String? = null,
-        model: String? = null,
-        profileId: String? = null,
-        profileLabel: String? = null,
-        elapsedMs: Long? = null,
-        error: String? = null,
-        createdAt: String? = null,
-        completedAt: String? = null,
-    ) : this(
-        jobId = jobId.orEmpty(),
-        callId = callId,
-        status = status.toHermesJobStatus(),
-        createdAt = createdAt.orEmpty(),
-        completedAt = completedAt,
-        answer = answer,
-        model = model,
-        profileId = profileId,
-        profileLabel = profileLabel,
-        elapsedMs = elapsedMs,
-        failure = status.toLegacyVoiceFailure(error),
-    )
-
     override fun toString(): String =
         "HermesJobSnapshot(" +
             "jobId=$jobId, " +
@@ -251,9 +240,9 @@ internal data class MobileHermesJobSnapshotWire(
 )
 
 internal fun MobileHermesJobSnapshotWire.toHermesJobSnapshot(): HermesJobSnapshot {
-    val parsedStatus = status.toHermesJobStatus()
-    val parsedFailure = if (!status.isKnownHermesJobStatus()) {
-        status.toLegacyVoiceFailure(error = null)
+    val parsedStatus = HermesJobStatus.parse(status)
+    val parsedFailure = if (parsedStatus == null) {
+        unknownHermesStatusFailure(status)
     } else {
         failure?.let {
             runCatching { JsonInstant.decodeFromJsonElement<VoiceFailure>(it) }.getOrNull()
@@ -263,7 +252,7 @@ internal fun MobileHermesJobSnapshotWire.toHermesJobSnapshot(): HermesJobSnapsho
         jobId = jobId,
         callId = callId,
         prompt = prompt,
-        status = parsedStatus,
+        status = parsedStatus ?: HermesJobStatus.Failed,
         createdAt = createdAt,
         updatedAt = updatedAt,
         completedAt = completedAt,
@@ -276,55 +265,16 @@ internal fun MobileHermesJobSnapshotWire.toHermesJobSnapshot(): HermesJobSnapsho
     )
 }
 
-private fun String.toHermesJobStatus(): HermesJobStatus =
-    when (lowercase()) {
-        "accepted" -> HermesJobStatus.Accepted
-        "queued" -> HermesJobStatus.Queued
-        "running" -> HermesJobStatus.Running
-        "succeeded" -> HermesJobStatus.Succeeded
-        "failed" -> HermesJobStatus.Failed
-        "expired", "timeout" -> HermesJobStatus.Expired
-        "canceled", "cancelled" -> HermesJobStatus.Canceled
-        else -> HermesJobStatus.Failed
-    }
-
-private fun String.toLegacyVoiceFailure(error: String?): VoiceFailure? {
-    val safeMessage = when {
-        !isKnownHermesJobStatus() -> "Unknown Hermes job status: $this"
-        error != null -> error
-        else -> return null
-    }
+private fun unknownHermesStatusFailure(raw: String): VoiceFailure {
+    val safeMessage = "Unknown Hermes job status: $raw"
     return VoiceFailure(
-        kind = toVoiceFailureKind(),
+        kind = VoiceFailureKind.Internal,
         safeMessage = safeMessage,
         safeSummary = safeMessage,
         retryable = false,
         source = VoiceFailureSource.VoiceLab,
     )
 }
-
-private fun String.isKnownHermesJobStatus(): Boolean =
-    when (lowercase()) {
-        "accepted",
-        "queued",
-        "running",
-        "succeeded",
-        "failed",
-        "expired",
-        "timeout",
-        "canceled",
-        "cancelled",
-            -> true
-        else -> false
-    }
-
-private fun String.toVoiceFailureKind(): VoiceFailureKind =
-    when (lowercase()) {
-        "canceled", "cancelled" -> VoiceFailureKind.Canceled
-        "expired", "timeout" -> VoiceFailureKind.Expired
-        "failed" -> VoiceFailureKind.HermesFailed
-        else -> VoiceFailureKind.Internal
-    }
 
 typealias MobileHermesJobSubmitResponse = HermesJobSnapshot
 typealias MobileHermesJobPollResponse = HermesJobSnapshot
