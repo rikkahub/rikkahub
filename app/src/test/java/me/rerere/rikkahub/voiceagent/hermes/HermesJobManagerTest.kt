@@ -24,11 +24,14 @@ import me.rerere.rikkahub.voiceagent.FakeVoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
+import me.rerere.rikkahub.voiceagent.hermesFailureFixture
+import me.rerere.rikkahub.voiceagent.hermesJobSnapshotFixture
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
+import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
@@ -115,7 +118,7 @@ class HermesJobManagerTest {
         assertEquals("call-ackless" to "ackless request", toolApi.awaitRequest("call-ackless"))
         toolApi.scriptPoll(
             callId = "call-ackless",
-            response = MobileHermesJobPollResponse(callId = "call-ackless", status = "running"),
+            response = hermesJobSnapshotFixture(callId = "call-ackless", status = HermesJobStatus.Running),
         )
         conversationStore.awaitHermesRecord("call-ackless") { it.status == HermesQueueStatus.Running }
         delay(80)
@@ -649,10 +652,10 @@ class HermesJobManagerTest {
             seedJob(jobId = "job-resume-still-working", callId = "call-resume-still-working")
             scriptPoll(
                 callId = "call-resume-still-working",
-                response = MobileHermesJobPollResponse(
+                response = hermesJobSnapshotFixture(
                     jobId = "job-resume-still-working",
                     callId = "call-resume-still-working",
-                    status = "running",
+                    status = HermesJobStatus.Running,
                 ),
             )
         }
@@ -1110,9 +1113,9 @@ class HermesJobManagerTest {
         assertEquals("call-polled-running" to "polled running", toolApi.awaitRequest("call-polled-running"))
         toolApi.scriptPoll(
             callId = "call-polled-running",
-            response = MobileHermesJobPollResponse(
+            response = hermesJobSnapshotFixture(
                 callId = "call-polled-running",
-                status = "running",
+                status = HermesJobStatus.Running,
             ),
         )
         conversationStore.awaitHermesRecord("call-polled-running") {
@@ -1149,9 +1152,9 @@ class HermesJobManagerTest {
         assertEquals("call-still-working" to "long request", toolApi.awaitRequest("call-still-working"))
         toolApi.scriptPoll(
             callId = "call-still-working",
-            response = MobileHermesJobPollResponse(
+            response = hermesJobSnapshotFixture(
                 callId = "call-still-working",
-                status = "running",
+                status = HermesJobStatus.Running,
             ),
         )
         conversationStore.awaitHermesRecord("call-still-working") {
@@ -2701,10 +2704,10 @@ private class BlockingPollVoiceToolApi : VoiceToolApi {
     val pollStarts = AtomicInteger(0)
 
     override suspend fun submitHermesJob(callId: String, prompt: String): MobileHermesJobSubmitResponse {
-        return MobileHermesJobSubmitResponse(
+        return hermesJobSnapshotFixture(
             jobId = "job-live-resume",
             callId = callId,
-            status = "queued",
+            status = HermesJobStatus.Queued,
             createdAt = "2026-06-11T00:00:00.000Z",
         )
     }
@@ -2713,10 +2716,10 @@ private class BlockingPollVoiceToolApi : VoiceToolApi {
         pollStarts.incrementAndGet()
         firstPollStarted.complete(Unit)
         releasePoll.await()
-        return MobileHermesJobPollResponse(
+        return hermesJobSnapshotFixture(
             jobId = jobId,
             callId = "call-live-resume",
-            status = "succeeded",
+            status = HermesJobStatus.Succeeded,
             answer = "live resume answer",
             model = "hermes-agent",
             profileId = "default",
@@ -2728,11 +2731,14 @@ private class BlockingPollVoiceToolApi : VoiceToolApi {
     }
 
     override suspend fun cancelHermesJob(jobId: String): MobileHermesJobPollResponse {
-        return MobileHermesJobPollResponse(
+        return hermesJobSnapshotFixture(
             jobId = jobId,
             callId = "call-live-resume",
-            status = "canceled",
-            error = "Hermes job canceled",
+            status = HermesJobStatus.Canceled,
+            failure = hermesFailureFixture(
+                message = "Hermes job canceled",
+                kind = VoiceFailureKind.Canceled,
+            ),
             createdAt = "2026-06-11T00:00:00.000Z",
             completedAt = "2026-06-11T00:00:01.000Z",
         )

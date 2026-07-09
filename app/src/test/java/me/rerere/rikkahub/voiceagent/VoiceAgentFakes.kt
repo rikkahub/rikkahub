@@ -15,10 +15,15 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.gemini.voiceToolSpecsByName
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
+import me.rerere.rikkahub.voiceagent.voicelab.HermesJobSnapshot
+import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
 import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
+import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -27,6 +32,47 @@ import kotlin.uuid.Uuid
 fun voiceToolCall(callId: String, name: String, arg: String): GeminiLiveEvent.ToolCall =
     voiceToolSpecsByName[name]?.buildCall?.invoke(callId, arg)
         ?: error("voiceToolCall: unknown tool name '$name' — construct GeminiLiveEvent.UnsupportedToolCall directly for negative-path fixtures")
+
+internal fun hermesJobSnapshotFixture(
+    jobId: String? = null,
+    callId: String? = null,
+    status: HermesJobStatus = HermesJobStatus.Queued,
+    answer: String? = null,
+    model: String? = null,
+    profileId: String? = null,
+    profileLabel: String? = null,
+    elapsedMs: Long? = null,
+    failure: VoiceFailure? = null,
+    createdAt: String? = null,
+    completedAt: String? = null,
+    prompt: String? = null,
+    updatedAt: String? = null,
+): HermesJobSnapshot = HermesJobSnapshot(
+    jobId = jobId.orEmpty(),
+    callId = callId,
+    prompt = prompt,
+    status = status,
+    createdAt = createdAt.orEmpty(),
+    updatedAt = updatedAt,
+    completedAt = completedAt,
+    answer = answer,
+    model = model,
+    profileId = profileId,
+    profileLabel = profileLabel,
+    elapsedMs = elapsedMs,
+    failure = failure,
+)
+
+internal fun hermesFailureFixture(
+    message: String,
+    kind: VoiceFailureKind,
+): VoiceFailure = VoiceFailure(
+    kind = kind,
+    safeMessage = message,
+    safeSummary = message,
+    retryable = false,
+    source = VoiceFailureSource.VoiceLab,
+)
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     val audioMessages = mutableListOf<String>()
@@ -290,10 +336,10 @@ class FakeVoiceToolApi : VoiceToolApi {
                 return response.copy(jobId = job.jobId, callId = callId)
             }
         }
-        return MobileHermesJobSubmitResponse(
+        return hermesJobSnapshotFixture(
             jobId = job.jobId,
             callId = callId,
-            status = "queued",
+            status = HermesJobStatus.Queued,
             createdAt = "2026-06-11T00:00:00.000Z",
         )
     }
@@ -338,11 +384,14 @@ class FakeVoiceToolApi : VoiceToolApi {
         }
         job.remoteCancelled.complete(Unit)
         job.result.cancel()
-        return MobileHermesJobPollResponse(
+        return hermesJobSnapshotFixture(
             jobId = job.jobId,
             callId = job.callId,
-            status = "failed",
-            error = "Hermes job canceled",
+            status = HermesJobStatus.Failed,
+            failure = hermesFailureFixture(
+                message = "Hermes job canceled",
+                kind = VoiceFailureKind.HermesFailed,
+            ),
             createdAt = "2026-06-11T00:00:00.000Z",
             completedAt = "2026-06-11T00:00:01.000Z",
         )
@@ -363,10 +412,10 @@ class FakeVoiceToolApi : VoiceToolApi {
     fun complete(response: MobileHermesResponse) {
         val job = call(response.callId)
         job.result.complete(
-            MobileHermesJobPollResponse(
+            hermesJobSnapshotFixture(
                 jobId = job.jobId,
                 callId = response.callId,
-                status = "succeeded",
+                status = HermesJobStatus.Succeeded,
                 answer = response.answer,
                 model = response.model,
                 profileId = response.profileId,
@@ -389,11 +438,14 @@ class FakeVoiceToolApi : VoiceToolApi {
     fun failJob(callId: String, message: String) {
         val job = call(callId)
         job.result.complete(
-            MobileHermesJobPollResponse(
+            hermesJobSnapshotFixture(
                 jobId = job.jobId,
                 callId = callId,
-                status = "failed",
-                error = message,
+                status = HermesJobStatus.Failed,
+                failure = hermesFailureFixture(
+                    message = message,
+                    kind = VoiceFailureKind.HermesFailed,
+                ),
                 createdAt = "2026-06-11T00:00:00.000Z",
                 completedAt = "2026-06-11T00:00:01.000Z",
             )
@@ -403,11 +455,16 @@ class FakeVoiceToolApi : VoiceToolApi {
     fun expireJob(callId: String, message: String? = null) {
         val job = call(callId)
         job.result.complete(
-            MobileHermesJobPollResponse(
+            hermesJobSnapshotFixture(
                 jobId = job.jobId,
                 callId = callId,
-                status = "expired",
-                error = message,
+                status = HermesJobStatus.Expired,
+                failure = message?.let {
+                    hermesFailureFixture(
+                        message = it,
+                        kind = VoiceFailureKind.Expired,
+                    )
+                },
                 createdAt = "2026-06-11T00:00:00.000Z",
                 completedAt = "2026-06-11T00:00:01.000Z",
             )
@@ -426,10 +483,10 @@ class FakeVoiceToolApi : VoiceToolApi {
             calls.getOrPut(jobId) {
                 PendingHermesJob(callId = callId, prompt = "", jobId = jobId)
             }
-            scriptedPolls.getOrPut(jobId) { ArrayDeque() } += MobileHermesJobPollResponse(
+            scriptedPolls.getOrPut(jobId) { ArrayDeque() } += hermesJobSnapshotFixture(
                 jobId = jobId,
                 callId = callId,
-                status = "succeeded",
+                status = HermesJobStatus.Succeeded,
                 answer = answer,
                 createdAt = "2026-06-11T00:00:00.000Z",
                 completedAt = "2026-06-11T00:00:01.000Z",
@@ -460,10 +517,19 @@ class FakeVoiceToolApi : VoiceToolApi {
 
     fun scriptSubmitStatus(callId: String, status: String) {
         synchronized(lock) {
-            submitResponses[callId] = MobileHermesJobSubmitResponse(
+            val parsedStatus = HermesJobStatus.parse(status)
+            submitResponses[callId] = hermesJobSnapshotFixture(
                 jobId = "",
                 callId = callId,
-                status = status,
+                status = parsedStatus ?: HermesJobStatus.Failed,
+                failure = if (parsedStatus == null) {
+                    hermesFailureFixture(
+                        message = "Unknown Hermes job status: $status",
+                        kind = VoiceFailureKind.Internal,
+                    )
+                } else {
+                    null
+                },
                 createdAt = "2026-06-11T00:00:00.000Z",
             )
         }
@@ -498,10 +564,10 @@ class FakeVoiceToolApi : VoiceToolApi {
             val job = call(callId)
             scriptPoll(
                 callId = callId,
-                response = MobileHermesJobPollResponse(
+                response = hermesJobSnapshotFixture(
                     jobId = job.jobId,
                     callId = callId,
-                    status = "queued",
+                    status = HermesJobStatus.Queued,
                     createdAt = "2026-06-11T00:00:00.000Z",
                 ),
             )

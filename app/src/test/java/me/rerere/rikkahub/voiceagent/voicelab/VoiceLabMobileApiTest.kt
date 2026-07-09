@@ -344,6 +344,33 @@ class VoiceLabMobileApiTest {
     }
 
     @Test
+    fun `parse maps wire aliases and rejects unknown statuses`() {
+        assertEquals(HermesJobStatus.Expired, HermesJobStatus.parse("timeout"))
+        assertEquals(HermesJobStatus.Expired, HermesJobStatus.parse("expired"))
+        assertEquals(HermesJobStatus.Canceled, HermesJobStatus.parse("cancelled"))
+        assertEquals(HermesJobStatus.Canceled, HermesJobStatus.parse("CANCELED"))
+        assertEquals(HermesJobStatus.Succeeded, HermesJobStatus.parse("succeeded"))
+        assertNull(HermesJobStatus.parse("exploded"))
+        assertNull(HermesJobStatus.parse(null))
+    }
+
+    @Test
+    fun `unknown wire status maps to Failed with a synthesized unknown-status failure`() {
+        val snapshot = MobileHermesJobSnapshotWire(
+            jobId = "j1",
+            callId = "c1",
+            status = "exploded",
+            createdAt = "2026-07-09T00:00:00Z",
+        ).toHermesJobSnapshot()
+
+        assertEquals(HermesJobStatus.Failed, snapshot.status)
+        assertEquals("Unknown Hermes job status: exploded", snapshot.failure?.safeMessage)
+        assertEquals("Unknown Hermes job status: exploded", snapshot.failure?.safeSummary)
+        assertEquals(VoiceFailureKind.Internal, snapshot.failure?.kind)
+        assertEquals(false, snapshot.failure?.retryable)
+    }
+
+    @Test
     fun `getHermesJob sends GET request and parses succeeded response`() = runBlocking {
         var seenRequest: Request? = null
         val transport = transportFor { request ->
