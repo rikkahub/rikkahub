@@ -42,28 +42,21 @@ interface GeminiLiveVoiceClient {
         onEvent: (GeminiLiveEvent) -> Unit,
     )
 
-    fun sendAudio(base64Pcm16: String)
-    fun sendAudio(base64Pcm16: String, sessionId: Long?): Boolean {
-        sendAudio(base64Pcm16)
-        return true
-    }
-    fun sendAudioStreamEnd(sessionId: Long?): Boolean = true
-    fun activateOutboundSession(sessionId: Long) = Unit
-    fun invalidateOutboundSession() = Unit
+    /**
+     * When [sessionId] is null the send is not gated by the active outbound-session check.
+     */
+    fun sendAudio(base64Pcm16: String, sessionId: Long? = null): Boolean
+    fun sendAudioStreamEnd(sessionId: Long? = null): Boolean
+    fun activateOutboundSession(sessionId: Long)
+    fun invalidateOutboundSession()
 
-    fun sendToolResponse(callId: String, answer: String, name: String = VoiceAgentToolNames.ASK_HERMES): Boolean
     fun sendToolResponse(
         callId: String,
         answer: String,
-        sessionId: Long?,
+        sessionId: Long? = null,
         name: String = VoiceAgentToolNames.ASK_HERMES,
-    ): Boolean {
-        return sendToolResponse(callId = callId, answer = answer, name = name)
-    }
-    fun sendTextTurn(text: String): Boolean
-    fun sendTextTurn(text: String, sessionId: Long?): Boolean {
-        return sendTextTurn(text = text)
-    }
+    ): Boolean
+    fun sendTextTurn(text: String, sessionId: Long? = null): Boolean
 
     fun close()
 }
@@ -173,14 +166,6 @@ class TestableGeminiLiveVoiceClient(
         setupError?.emitIfCurrent()
     }
 
-    override fun sendAudio(base64Pcm16: String) {
-        sendPostSetupMessage(
-            message = codec.realtimeAudioMessage(base64Pcm16),
-            errorMessage = "Failed to send Gemini audio message",
-            queueBeforeSetup = true,
-        )
-    }
-
     override fun sendAudio(base64Pcm16: String, sessionId: Long?): Boolean {
         synchronized(outboundSendLock) {
             synchronized(lock) {
@@ -227,14 +212,6 @@ class TestableGeminiLiveVoiceClient(
         }
     }
 
-    override fun sendToolResponse(callId: String, answer: String, name: String): Boolean {
-        return sendPostSetupMessage(
-            message = codec.toolResponseMessage(callId = callId, answer = answer, name = name),
-            errorMessage = "Failed to send Gemini tool response message",
-            queueBeforeSetup = false,
-        )
-    }
-
     override fun sendToolResponse(
         callId: String,
         answer: String,
@@ -249,14 +226,6 @@ class TestableGeminiLiveVoiceClient(
                 requiredOutboundSessionId = sessionId,
             )
         }
-    }
-
-    override fun sendTextTurn(text: String): Boolean {
-        return sendPostSetupMessage(
-            message = codec.clientContentMessage(listOf(GeminiContentTurn(role = "user", text = text))),
-            errorMessage = "Failed to send Gemini text turn message",
-            queueBeforeSetup = false,
-        )
     }
 
     override fun sendTextTurn(text: String, sessionId: Long?): Boolean {

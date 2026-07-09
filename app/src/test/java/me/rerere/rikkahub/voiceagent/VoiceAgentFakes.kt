@@ -143,10 +143,6 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
         blocked?.release?.await()
     }
 
-    override fun sendAudio(base64Pcm16: String) {
-        audioMessages += base64Pcm16
-    }
-
     override fun sendAudio(base64Pcm16: String, sessionId: Long?): Boolean {
         synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
@@ -194,10 +190,6 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
         }
     }
 
-    override fun sendToolResponse(callId: String, answer: String, name: String): Boolean {
-        return sendToolResponse(callId = callId, answer = answer, sessionId = null, name = name)
-    }
-
     override fun sendToolResponse(
         callId: String,
         answer: String,
@@ -234,10 +226,6 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             toolResponseNames += name
             return true
         }
-    }
-
-    override fun sendTextTurn(text: String): Boolean {
-        return sendTextTurn(text = text, sessionId = null)
     }
 
     override fun sendTextTurn(text: String, sessionId: Long?): Boolean {
