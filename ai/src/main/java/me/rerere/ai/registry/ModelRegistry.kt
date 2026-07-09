@@ -317,6 +317,21 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val QWEN_3_5_MAX = defineModel {
+        tokens("qwen", "3", "5", "max")
+        toolReasoningAbility()
+    }
+
+    private val QWEN_3_6_MAX = defineModel {
+        tokens("qwen", "3", "6", "max")
+        toolReasoningAbility()
+    }
+
+    private val QWEN_3_7_MAX = defineModel {
+        tokens("qwen", "3", "7", "max")
+        toolReasoningAbility()
+    }
+
     private val DOUBAO_1_6 = defineModel {
         tokens("doubao", "1", "6")
         visionInput()
@@ -325,6 +340,18 @@ object ModelRegistry {
 
     private val DOUBAO_1_8 = defineModel {
         tokens("doubao", "1", "8")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val DOUBAO_2_0 = defineModel {
+        tokens("doubao", "2", "0")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val DOUBAO_2_1 = defineModel {
+        tokens("doubao", "2", "1")
         visionInput()
         toolReasoningAbility()
     }
@@ -395,6 +422,11 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GLM_5_2 = defineModel {
+        tokens("glm", "5", "2")
+        toolReasoningAbility()
+    }
+
     private val MINIMAX_M2 = defineModel {
         tokens("minimax", "m", "2")
         toolReasoningAbility()
@@ -434,6 +466,16 @@ object ModelRegistry {
 
     private val XIAOMI_MIMO_V2_5_PRO = defineModel {
         tokens("mimo", "v", "2", "5", "pro")
+        toolReasoningAbility()
+    }
+
+    private val HY3 = defineModel {
+        tokens("hy", "3")
+        toolReasoningAbility()
+    }
+
+    private val LONGCAT_2 = defineModel {
+        tokens("longcat", "2", "0")
         toolReasoningAbility()
     }
 
@@ -489,8 +531,13 @@ object ModelRegistry {
         QWEN_3_5,
         QWEN_3_6,
         QWEN_3_7,
+        QWEN_3_5_MAX,
+        QWEN_3_6_MAX,
+        QWEN_3_7_MAX,
         DOUBAO_1_6,
         DOUBAO_1_8,
+        DOUBAO_2_0,
+        DOUBAO_2_1,
         GROK_4,
         KIMI_K2,
         KIMI_K2_5,
@@ -503,6 +550,7 @@ object ModelRegistry {
         GLM_4_7,
         GLM_5,
         GLM_5_1,
+        GLM_5_2,
         MINIMAX_M2,
         MINIMAX_M2_5,
         MINIMAX_M2_7,
@@ -511,6 +559,8 @@ object ModelRegistry {
         XIAOMI_MIMO_V2_PRO,
         XIAOMI_MIMO_V2_5,
         XIAOMI_MIMO_V2_5_PRO,
+        HY3,
+        LONGCAT_2,
         QWEN_MT
     )
 

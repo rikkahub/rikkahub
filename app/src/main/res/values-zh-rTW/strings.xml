@@ -1289,5 +1289,7 @@
   <string name="chat_page_folder_add">新增</string>
   <string name="chat_page_delete_folder_confirm">刪除資料夾「%1$s」？資料夾內的對話不會被刪除，只會從資料夾中移除。</string>
   <string name="chat_page_delete_folder_generating">此資料夾中的部分對話仍在生成中。請先停止它們再刪除。</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS 不朗讀括號內的內容</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">啟用後，TTS 將不朗讀括號內的內容</string>
 </resources>
 

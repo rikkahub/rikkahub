@@ -7,9 +7,31 @@ export interface ConversationListDto {
   assistantId: string;
   title: string;
   isPinned: boolean;
+  folderId?: string | null;
   createAt: number;
   updateAt: number;
   isGenerating: boolean;
+}
+
+/**
+ * Folder (conversation grouping within an assistant)
+ * @see app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt - FolderDto
+ */
+export interface FolderDto {
+  id: string;
+  assistantId: string;
+  name: string;
+  sortIndex: number;
+  createAt: number;
+}
+
+/**
+ * Folder list change event (pushed on the shared `/api/events` stream)
+ * @see app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt - FolderListEvent
+ */
+export interface FolderListEventDto {
+  assistantId: string;
+  folders: FolderDto[];
 }
 
 export interface PagedResult<T> {
@@ -63,12 +85,13 @@ export interface ConversationDto {
   assistantId: string;
   title: string;
   messages: MessageNodeDto[];
-  truncateIndex: number;
   chatSuggestions: string[];
   isPinned: boolean;
   customSystemPrompt?: string | null;
   modeInjectionIds?: string[];
   lorebookIds?: string[];
+  workspaceCwd?: string | null;
+  folderId?: string | null;
   createAt: number;
   updateAt: number;
   isGenerating: boolean;

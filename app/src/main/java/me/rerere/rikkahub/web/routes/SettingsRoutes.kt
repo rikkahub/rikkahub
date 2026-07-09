@@ -6,13 +6,10 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.route
-import io.ktor.server.sse.heartbeat
-import io.ktor.server.sse.sse
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
-import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.web.dto.UpdateAssistantModelRequest
@@ -25,7 +22,6 @@ import me.rerere.rikkahub.web.dto.UpdateFavoriteModelsRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchEnabledRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchServiceRequest
 import java.util.Locale
-import kotlin.time.Duration.Companion.seconds
 
 fun Route.settingsRoutes(
     settingsStore: SettingsStore
@@ -191,17 +187,6 @@ fun Route.settingsRoutes(
                 settings.copy(favoriteModels = favoriteModelIds)
             }
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
-        }
-
-        sse("/stream") {
-            heartbeat {
-                period = 15.seconds
-            }
-            settingsStore.settingsFlow
-                .collect { settings ->
-                    val json = JsonInstant.encodeToString(settings)
-                    send(data = json, event = "update")
-                }
         }
     }
 }

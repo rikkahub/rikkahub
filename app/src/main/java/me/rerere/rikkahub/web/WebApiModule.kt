@@ -23,6 +23,7 @@ import io.ktor.server.routing.routing
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.dto.ErrorResponse
@@ -31,7 +32,9 @@ import me.rerere.rikkahub.web.dto.WebAuthTokenResponse
 import me.rerere.rikkahub.web.routes.aiIconRoutes
 import me.rerere.rikkahub.web.routes.assetsRoutes
 import me.rerere.rikkahub.web.routes.conversationRoutes
+import me.rerere.rikkahub.web.routes.eventsRoutes
 import me.rerere.rikkahub.web.routes.filesRoutes
+import me.rerere.rikkahub.web.routes.folderRoutes
 import me.rerere.rikkahub.web.routes.settingsRoutes
 import java.security.MessageDigest
 import java.util.Date
@@ -59,6 +62,7 @@ fun Application.configureWebApi(
     context: Context,
     chatService: ChatService,
     conversationRepo: ConversationRepository,
+    folderRepo: FolderRepository,
     settingsStore: SettingsStore,
     filesManager: FilesManager
 ) {
@@ -165,13 +169,17 @@ fun Application.configureWebApi(
 
             if (jwtEnabled) {
                 authenticate("auth-jwt") {
-                    conversationRoutes(chatService, conversationRepo, settingsStore)
+                    conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore)
+                    folderRoutes(chatService, folderRepo, settingsStore)
+                    eventsRoutes(chatService, conversationRepo, folderRepo, settingsStore)
                     settingsRoutes(settingsStore)
                     filesRoutes(filesManager, context)
                     assetsRoutes(context)
                 }
             } else {
-                conversationRoutes(chatService, conversationRepo, settingsStore)
+                conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore)
+                folderRoutes(chatService, folderRepo, settingsStore)
+                eventsRoutes(chatService, conversationRepo, folderRepo, settingsStore)
                 settingsRoutes(settingsStore)
                 filesRoutes(filesManager, context)
                 assetsRoutes(context)

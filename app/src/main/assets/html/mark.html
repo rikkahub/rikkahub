@@ -206,7 +206,9 @@
         });
 
         // Add plugins
-        md.use(vscodemarkdownItKatex);
+        // 传入已加载 mhchem 扩展的 katex 实例, 否则插件会使用其内部自带的另一个 katex 实例,
+        // 导致 \ce 等 mhchem 语法无法识别 (Undefined control sequence: \ce)
+        md.use(vscodemarkdownItKatex, { katex });
 
         md.use(markdownItTaskLists, {
             enabled: true,
