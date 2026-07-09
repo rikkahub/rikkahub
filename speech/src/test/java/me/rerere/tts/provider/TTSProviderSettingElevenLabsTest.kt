@@ -16,7 +16,7 @@ class TTSProviderSettingElevenLabsTest {
             name = "Test ElevenLabs",
             apiKey = "test-key",
             baseUrl = "https://api.elevenlabs.io",
-            model = "eleven_multilingual_v2",
+            model = "eleven_v3",
             voiceId = "test-voice-id",
             stability = 0.5f,
             similarityBoost = 0.75f,
@@ -25,7 +25,7 @@ class TTSProviderSettingElevenLabsTest {
         val encoded = json.encodeToString(TTSProviderSetting.serializer(), setting)
         assertTrue(encoded.contains("\"elevenlabs\""))
         assertTrue(encoded.contains("\"test-key\""))
-        assertTrue(encoded.contains("\"eleven_multilingual_v2\""))
+        assertTrue(encoded.contains("\"eleven_v3\""))
 
         val decoded = json.decodeFromString(
             TTSProviderSetting.serializer(),
