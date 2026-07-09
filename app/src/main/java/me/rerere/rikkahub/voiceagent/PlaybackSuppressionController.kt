@@ -1,7 +1,5 @@
 package me.rerere.rikkahub.voiceagent
 
-import java.util.concurrent.atomic.AtomicBoolean
-
 /**
  * Owns the playback-suppression flags and assistant-audio-active state. Suppression
  * is set on user/Gemini interruption and cleared when a new turn starts; audio-active
@@ -13,7 +11,6 @@ internal class PlaybackSuppressionController(
     private val lock = Any()
     private var suppressed = false
     private var suppressedByGeminiInterruption = false
-    private val assistantAudioActive = AtomicBoolean(false)
 
     fun isSuppressed(): Boolean = synchronized(lock) { suppressed }
 
@@ -50,7 +47,6 @@ internal class PlaybackSuppressionController(
     }
 
     fun setAssistantAudioActive(active: Boolean) {
-        assistantAudioActive.set(active)
         onAssistantAudioActiveChanged(active)
     }
 

@@ -60,8 +60,8 @@ class PlaybackSuppressionControllerTest {
 
     @Test
     fun `tryActivatePlayback suppressed diagnostic, stale diagnostic, otherwise activates audio`() {
-        val activeChanges = mutableListOf<Boolean>()
-        val suppressedController = controller(onAssistantAudioActiveChanged = { activeChanges += it })
+        val suppressedActiveChanges = mutableListOf<Boolean>()
+        val suppressedController = controller(onAssistantAudioActiveChanged = { suppressedActiveChanges += it })
         suppressedController.suppress()
         assertEquals(
             "output_audio_state_suppressed_after_interruption",
@@ -74,9 +74,10 @@ class PlaybackSuppressionControllerTest {
             staleController.tryActivatePlayback(isStale = { true }),
         )
 
-        val activatingController = controller(onAssistantAudioActiveChanged = { activeChanges += it })
+        val activatingActiveChanges = mutableListOf<Boolean>()
+        val activatingController = controller(onAssistantAudioActiveChanged = { activatingActiveChanges += it })
         assertNull(activatingController.tryActivatePlayback(isStale = { false }))
-        assertTrue(activeChanges.contains(true))
+        assertEquals(listOf(true), activatingActiveChanges)
     }
 
     @Test
