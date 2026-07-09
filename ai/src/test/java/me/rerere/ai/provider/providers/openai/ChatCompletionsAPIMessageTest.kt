@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
@@ -38,10 +39,16 @@ class ChatCompletionsAPIMessageTest {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
             List::class.java,
-            Boolean::class.javaPrimitiveType
+            Boolean::class.javaPrimitiveType,
+            List::class.java
         )
         method.isAccessible = true
-        return method.invoke(api, messages, includeHistoryReasoning) as JsonArray
+        return method.invoke(
+            api,
+            messages,
+            includeHistoryReasoning,
+            listOf(Modality.TEXT, Modality.IMAGE)
+        ) as JsonArray
     }
 
     @Test
