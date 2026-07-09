@@ -640,7 +640,7 @@ class VoiceAgentCallSession internal constructor(
             if (ended || !reconnectController.isCurrentJob(job)) {
                 false
             } else {
-                coordinator.prepareForAutomaticReconnect()
+                coordinator.prepareFor(SessionTransition.AutomaticReconnect)
                 startJob = job
                 true
             }

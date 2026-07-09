@@ -48,7 +48,7 @@ internal class VoiceSessionResourceCleaner(
         synchronized(cleanupLock) {
             runCleanupSequence(
                 closeGemini = closeGemini,
-                prepare = coordinator::prepareForReconnect,
+                prepare = { coordinator.prepareFor(SessionTransition.Reconnect) },
             )
         }
     }
@@ -67,7 +67,7 @@ internal class VoiceSessionResourceCleaner(
         synchronized(cleanupLock) {
             runCleanupSequence(
                 closeGemini = closeGemini,
-                prepare = coordinator::prepareForSessionEnd,
+                prepare = { coordinator.prepareFor(SessionTransition.SessionEnd) },
             )
         }
     }
@@ -76,7 +76,7 @@ internal class VoiceSessionResourceCleaner(
         synchronized(cleanupLock) {
             runCleanupSequence(
                 closeGemini = closeGemini,
-                prepare = coordinator::prepareForSessionEnd,
+                prepare = { coordinator.prepareFor(SessionTransition.SessionEnd) },
             )
         }
     }

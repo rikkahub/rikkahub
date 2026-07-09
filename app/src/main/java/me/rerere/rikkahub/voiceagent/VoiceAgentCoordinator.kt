@@ -38,6 +38,8 @@ private const val HERMES_JOB_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000L
 private const val HERMES_JOB_POLL_RETRY_DELAY_MS = 2_000L
 private const val UNBOUND_HERMES_BRIDGE_SESSION_ID = HermesJobManager.UNBOUND_BRIDGE_SESSION_ID
 
+enum class SessionTransition { Reconnect, AutomaticReconnect, SessionEnd }
+
 class VoiceAgentCoordinator(
     private val gemini: GeminiLiveVoiceClient,
     private val toolApi: VoiceToolApi,
@@ -213,20 +215,38 @@ class VoiceAgentCoordinator(
     }
 
     fun onGeminiEvent(sessionId: Long, event: GeminiLiveEvent) {
+        route(event = event, sessionId = sessionId)
+    }
+
+    fun onGeminiEvent(event: GeminiLiveEvent) {
+        route(event = event, sessionId = null)
+    }
+
+    private fun route(event: GeminiLiveEvent, sessionId: Long?) {
+        if (event is GeminiLiveEvent.Events) {
+            event.events.forEach { route(event = it, sessionId = sessionId) }
+            return
+        }
+        // One guard pass. Unscoped events: closed + invalidation gates. Scoped tool
+        // events: active-session gate. Scoped non-tool events keep their gate inside
+        // the eventLock block below so the check-and-handle stays atomic with close().
+        if (sessionId == null) {
+            if (shouldIgnoreEventAfterClose(event) || shouldIgnoreUnscopedEventAfterInvalidation(event)) return
+        }
         when (event) {
-            is GeminiLiveEvent.Events -> event.events.forEach { onGeminiEvent(sessionId = sessionId, event = it) }
             is GeminiLiveEvent.ToolCall -> handleToolCall(call = event, sessionId = sessionId)
             is GeminiLiveEvent.ToolCalls -> {
-                if (!isActiveSession(sessionId)) {
+                if (sessionId != null && !isActiveSession(sessionId)) {
                     diagnostics.record("stale_gemini_event", event.javaClass.simpleName)
                     return
                 }
                 event.unsupportedCalls.forEach(::recordUnsupportedToolCall)
                 event.calls.forEach { handleToolCall(call = it, sessionId = sessionId) }
             }
-            is GeminiLiveEvent.ToolCallCancellation -> handleToolCallCancellation(event = event, sessionId = sessionId)
+            is GeminiLiveEvent.ToolCallCancellation ->
+                handleToolCallCancellation(event = event, sessionId = sessionId)
             else -> synchronized(eventLock) {
-                if (!isActiveSession(sessionId)) {
+                if (sessionId != null && !isActiveSession(sessionId)) {
                     diagnostics.record("stale_gemini_event", event.javaClass.simpleName)
                     return
                 }
@@ -241,29 +261,6 @@ class VoiceAgentCoordinator(
         _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
         sessionScope.launch(toolLaunchContext) {
             audio.suppressPlayback()
-        }
-    }
-
-    fun onGeminiEvent(event: GeminiLiveEvent) {
-        if (shouldIgnoreEventAfterClose(event) || shouldIgnoreUnscopedEventAfterInvalidation(event)) return
-        when (event) {
-            is GeminiLiveEvent.Events -> event.events.forEach(::onGeminiEvent)
-            is GeminiLiveEvent.ToolCall -> {
-                if (shouldIgnoreEventAfterClose(event)) return
-                handleToolCall(event, sessionId = null)
-            }
-            is GeminiLiveEvent.ToolCalls -> {
-                if (shouldIgnoreEventAfterClose(event)) return
-                event.unsupportedCalls.forEach(::recordUnsupportedToolCall)
-                event.calls.forEach { handleToolCall(call = it, sessionId = null) }
-            }
-            is GeminiLiveEvent.ToolCallCancellation -> {
-                if (shouldIgnoreEventAfterClose(event)) return
-                handleToolCallCancellation(event = event, sessionId = null)
-            }
-            else -> synchronized(eventLock) {
-                onNonToolGeminiEvent(event = event, sessionId = null)
-            }
         }
     }
 
@@ -366,7 +363,7 @@ class VoiceAgentCoordinator(
                 diagnostics.record("coordinator_closing")
             }
             synchronized(eventLock) {
-                // Wait for any in-flight non-tool event to finish before resources are released.
+                // Barrier: waits for any in-flight non-tool event (see route()) to finish before resources are released.
             }
             turnTracker.persistAssistantForSessionClose(
                 suppressed = suppressionController.isSuppressed(),
@@ -398,30 +395,27 @@ class VoiceAgentCoordinator(
         }
     }
 
-    fun prepareForReconnect() {
+    fun prepareFor(transition: SessionTransition) {
         suppressionController.setAssistantAudioActive(false)
-        diagnostics.record("prepare_for_reconnect")
+        diagnostics.record(
+            when (transition) {
+                SessionTransition.Reconnect -> "prepare_for_reconnect"
+                SessionTransition.AutomaticReconnect -> "prepare_for_automatic_reconnect"
+                SessionTransition.SessionEnd -> "prepare_for_session_end"
+            }
+        )
         invalidateActiveSession()
-        suppressionController.clearSuppressionOnly()
-        _state.update {
-            it.copy(
-                tool = VoiceToolStatus.Idle,
-                toolCalls = emptyMap(),
-            )
+        when (transition) {
+            SessionTransition.Reconnect -> {
+                suppressionController.clearSuppressionOnly()
+                resetToolUiState()
+            }
+            SessionTransition.AutomaticReconnect -> suppressionController.clearSuppressionOnly()
+            SessionTransition.SessionEnd -> resetToolUiState()
         }
     }
 
-    fun prepareForAutomaticReconnect() {
-        suppressionController.setAssistantAudioActive(false)
-        diagnostics.record("prepare_for_automatic_reconnect")
-        invalidateActiveSession()
-        suppressionController.clearSuppressionOnly()
-    }
-
-    fun prepareForSessionEnd() {
-        suppressionController.setAssistantAudioActive(false)
-        diagnostics.record("prepare_for_session_end")
-        invalidateActiveSession()
+    private fun resetToolUiState() {
         _state.update {
             it.copy(
                 tool = VoiceToolStatus.Idle,

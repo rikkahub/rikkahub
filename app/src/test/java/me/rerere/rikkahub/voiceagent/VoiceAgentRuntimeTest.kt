@@ -2884,7 +2884,7 @@ class VoiceAgentRuntimeTest {
         )
         coordinator.updateSessionStatus(VoiceSessionStatus.Connected)
 
-        coordinator.prepareForSessionEnd()
+        coordinator.prepareFor(SessionTransition.SessionEnd)
         coordinator.onGeminiEvent(GeminiLiveEvent.WebSocketClosed(code = 1008, reason = "The operation was aborted."))
 
         assertEquals(VoiceSessionStatus.Connected, coordinator.state.value.session)
@@ -3097,7 +3097,7 @@ class VoiceAgentRuntimeTest {
         )
         assertEquals("call-reconnect-persist" to "old", toolApi.awaitRequest("call-reconnect-persist"))
 
-        coordinator.prepareForReconnect()
+        coordinator.prepareFor(SessionTransition.Reconnect)
         toolApi.complete(response(callId = "call-reconnect-persist", answer = "old answer"))
         coordinator.awaitToolJobsWithTimeout()
         coordinator.awaitPersistenceJobsWithTimeout()
@@ -3210,7 +3210,7 @@ class VoiceAgentRuntimeTest {
         assertTrue(blockedSend.started.await(500, TimeUnit.MILLISECONDS))
 
         val reconnectJob = launch(Dispatchers.Default) {
-            coordinator.prepareForReconnect()
+            coordinator.prepareFor(SessionTransition.Reconnect)
         }
         withTimeout(500) {
             reconnectJob.join()
@@ -3351,7 +3351,7 @@ class VoiceAgentRuntimeTest {
         coordinator.onGeminiEvent(voiceToolCall(callId = "call-reconnect", name = "ask_hermes", arg = "old"))
         assertEquals("call-reconnect" to "old", toolApi.awaitRequest("call-reconnect"))
 
-        coordinator.prepareForReconnect()
+        coordinator.prepareFor(SessionTransition.Reconnect)
         toolApi.complete(response(callId = "call-reconnect", answer = "old answer"))
         coordinator.awaitToolJobsWithTimeout()
 
@@ -3375,7 +3375,7 @@ class VoiceAgentRuntimeTest {
         )
         val staleSessionId = coordinator.nextSessionId()
 
-        coordinator.prepareForReconnect()
+        coordinator.prepareFor(SessionTransition.Reconnect)
         coordinator.onGeminiEvent(staleSessionId, GeminiLiveEvent.InputTranscript("late input"))
         coordinator.onGeminiEvent(
             staleSessionId,
