@@ -79,6 +79,7 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     val audioStreamEndSessionIds = mutableListOf<Long?>()
     val toolResponses = mutableListOf<Pair<String, String>>()
     val toolResponseNames = mutableListOf<String>()
+    val toolResponseSessionIds = mutableListOf<Long?>()
     val textTurns = mutableListOf<Pair<Long?, String>>()
     val failToolResponses = mutableSetOf<String>()
     val toolResponseErrors = mutableMapOf<String, Throwable>()
@@ -224,6 +225,7 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             }
             toolResponses += callId to answer
             toolResponseNames += name
+            toolResponseSessionIds += sessionId
             return true
         }
     }
