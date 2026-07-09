@@ -471,7 +471,8 @@ class VoiceAgentRuntimeTest {
         )
 
         // The user cuts in: Interrupted routes through suppressPlayback, which clears
-        // assistantOutputAudioActive — the production pause signal the scheduler gates on.
+        // assistant-audio-active via PlaybackSuppressionController — the production pause
+        // signal the scheduler gates on.
         coordinator.onGeminiEvent(GeminiLiveEvent.Interrupted())
 
         withTimeout(2_000) {

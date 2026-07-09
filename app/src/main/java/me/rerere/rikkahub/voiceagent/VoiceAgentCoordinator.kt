@@ -30,7 +30,6 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnosticEvent
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.uuid.Uuid
 
@@ -78,7 +77,6 @@ class VoiceAgentCoordinator(
     private val toolLaunchContext = dispatcher ?: EmptyCoroutineContext
     private val closeLock = Any()
     private val eventLock = Any()
-    private val playbackSuppressionLock = Any()
     private val toolJobsLock = Any()
     private val persistenceScope = CoroutineScope(SupervisorJob() + (dispatcher ?: Dispatchers.IO))
     private val persistenceQueue = VoicePersistenceQueue(persistenceScope)
@@ -123,12 +121,15 @@ class VoiceAgentCoordinator(
         observability = observability,
         traceContext = traceContext,
     )
+    private val suppressionController = PlaybackSuppressionController(
+        onAssistantAudioActiveChanged = { active -> hermesJobManager.announcer.onAssistantAudioActive(active) },
+    )
     private val hermesBridgeFactory = VoiceHermesSessionBridgeFactory(
         gemini = gemini,
         diagnostics = diagnostics,
         unboundSessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID,
         writeQueueEvent = { event -> hermesTelemetrySink.writeQueueEvent(event) },
-        clearOutputAudioSuppressionForNewTurn = ::clearOutputAudioSuppressionForNewTurn,
+        clearOutputAudioSuppressionForNewTurn = suppressionController::clearForNewTurn,
     )
     // lazy: evaluated on first default attach, after construction completes
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
@@ -138,8 +139,6 @@ class VoiceAgentCoordinator(
     private val cancelledToolCallIds = mutableSetOf<ToolCallKey>()
     private var closing = false
     private var closed = false
-    private var outputAudioSuppressed = false
-    private var outputAudioSuppressedByGeminiInterruption = false
     private val voiceArtifactSessionId = Uuid.random().toString()
     private val turnTracker = VoiceTranscriptTurnTracker(
         transcriptPersister = transcriptPersister,
@@ -149,7 +148,6 @@ class VoiceAgentCoordinator(
         recordDiagnostic = diagnostics::record,
     )
     private val removeDiagnosticsListener: () -> Unit
-    private val assistantOutputAudioActive = AtomicBoolean(false)
 
     private val _state = MutableStateFlow(VoiceAgentUiState(traceId = traceContext.traceId))
     val state: StateFlow<VoiceAgentUiState> = _state.asStateFlow()
@@ -237,16 +235,8 @@ class VoiceAgentCoordinator(
         }
     }
 
-    private fun setAssistantOutputAudioActive(active: Boolean) {
-        assistantOutputAudioActive.set(active)
-        hermesJobManager.announcer.onAssistantAudioActive(active)
-    }
-
     fun suppressPlayback() {
-        setAssistantOutputAudioActive(false)
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = true
-        }
+        suppressionController.suppress()
         turnTracker.interruptAssistantTurn(suppressed = true)
         _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
         sessionScope.launch(toolLaunchContext) {
@@ -379,7 +369,7 @@ class VoiceAgentCoordinator(
                 // Wait for any in-flight non-tool event to finish before resources are released.
             }
             turnTracker.persistAssistantForSessionClose(
-                suppressed = synchronized(playbackSuppressionLock) { outputAudioSuppressed },
+                suppressed = suppressionController.isSuppressed(),
             )
             turnTracker.persistUserForSessionClose()
             synchronized(toolJobsLock) {
@@ -394,7 +384,7 @@ class VoiceAgentCoordinator(
                     toolCalls = emptyMap(),
                 )
             }
-            setAssistantOutputAudioActive(false)
+            suppressionController.setAssistantAudioActive(false)
             hermesQueueStatusProjectionJob?.cancel()
             hermesQueueStatusProjectionJob = null
             hermesJobManager.announcer.close()
@@ -409,12 +399,10 @@ class VoiceAgentCoordinator(
     }
 
     fun prepareForReconnect() {
-        setAssistantOutputAudioActive(false)
+        suppressionController.setAssistantAudioActive(false)
         diagnostics.record("prepare_for_reconnect")
         invalidateActiveSession()
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = false
-        }
+        suppressionController.clearSuppressionOnly()
         _state.update {
             it.copy(
                 tool = VoiceToolStatus.Idle,
@@ -424,16 +412,14 @@ class VoiceAgentCoordinator(
     }
 
     fun prepareForAutomaticReconnect() {
-        setAssistantOutputAudioActive(false)
+        suppressionController.setAssistantAudioActive(false)
         diagnostics.record("prepare_for_automatic_reconnect")
         invalidateActiveSession()
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = false
-        }
+        suppressionController.clearSuppressionOnly()
     }
 
     fun prepareForSessionEnd() {
-        setAssistantOutputAudioActive(false)
+        suppressionController.setAssistantAudioActive(false)
         diagnostics.record("prepare_for_session_end")
         invalidateActiveSession()
         _state.update {
@@ -462,7 +448,7 @@ class VoiceAgentCoordinator(
     private fun appendInputTranscript(text: String, sessionId: Long?) {
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.InputTranscript(text))) return
         hermesJobManager.announcer.onInputTranscriptDelta()
-        clearOutputAudioSuppressionForNewTurn()
+        suppressionController.clearForNewTurn()
         _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
         val snapshot = turnTracker.appendUserDelta(text)
         voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.InputTranscript, content = snapshot)
@@ -470,17 +456,19 @@ class VoiceAgentCoordinator(
 
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
-        clearOutputAudioSuppressionForAssistantTurnAfterInterruption()
+        if (suppressionController.clearForAssistantTurnAfterInterruption()) {
+            diagnostics.record("output_audio_suppression_cleared_after_interruption")
+        }
         _state.update { it.copy(outputTranscript = it.outputTranscript + text) }
         val snapshot = turnTracker.appendAssistantDelta(
             text = text,
-            suppressed = synchronized(playbackSuppressionLock) { outputAudioSuppressed },
+            suppressed = suppressionController.isSuppressed(),
         )
         voiceE2EArtifactSink.writeArtifactSafely(artifact = VoiceE2EArtifact.OutputTranscript, content = snapshot)
     }
 
     private fun playOutputAudio(base64Pcm16: String, sessionId: Long?) {
-        if (synchronized(playbackSuppressionLock) { outputAudioSuppressed }) {
+        if (suppressionController.isSuppressed()) {
             diagnostics.record("output_audio_suppressed_after_interruption")
             return
         }
@@ -501,27 +489,17 @@ class VoiceAgentCoordinator(
             diagnostics.record("stale_output_audio_state_suppressed")
             return
         }
-        if (synchronized(playbackSuppressionLock) { outputAudioSuppressed }) {
+        if (suppressionController.isSuppressed()) {
             diagnostics.record("output_audio_accepted_suppressed_after_interruption")
             return
         }
-        var skippedQueuedAudioDiagnostic: String? = null
-        val queued = synchronized(playbackSuppressionLock) {
-            if (outputAudioSuppressed) {
-                skippedQueuedAudioDiagnostic = "output_audio_state_suppressed_after_interruption"
-                false
-            } else if (sessionId != null && !isActiveSession(sessionId)) {
-                skippedQueuedAudioDiagnostic = "stale_output_audio_state_suppressed"
-                false
-            } else {
-                setAssistantOutputAudioActive(true)
-                _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
-                true
-            }
-        }
-        if (!queued) {
-            skippedQueuedAudioDiagnostic?.let(diagnostics::record)
+        val skipDiagnostic = suppressionController.tryActivatePlayback(
+            isStale = { sessionId != null && !isActiveSession(sessionId) },
+        )
+        if (skipDiagnostic != null) {
+            diagnostics.record(skipDiagnostic)
         } else {
+            _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
             recordEventSafely(
                 name = "voicelab.mobile.audio.playback_queued",
                 attributes = mapOf(
@@ -534,41 +512,15 @@ class VoiceAgentCoordinator(
 
     private fun handleInterrupted(event: GeminiLiveEvent.Interrupted) {
         diagnostics.record("gemini_interrupted", event.reason)
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressedByGeminiInterruption = true
-        }
+        suppressionController.markInterruptedByGemini()
         suppressPlayback()
-    }
-
-    private fun clearOutputAudioSuppressionForNewTurn() {
-        synchronized(playbackSuppressionLock) {
-            outputAudioSuppressed = false
-            outputAudioSuppressedByGeminiInterruption = false
-        }
-        setAssistantOutputAudioActive(false)
-    }
-
-    private fun clearOutputAudioSuppressionForAssistantTurnAfterInterruption() {
-        val cleared = synchronized(playbackSuppressionLock) {
-            if (outputAudioSuppressed && outputAudioSuppressedByGeminiInterruption) {
-                outputAudioSuppressed = false
-                outputAudioSuppressedByGeminiInterruption = false
-                true
-            } else {
-                outputAudioSuppressedByGeminiInterruption = false
-                false
-            }
-        }
-        if (cleared) {
-            diagnostics.record("output_audio_suppression_cleared_after_interruption")
-        }
     }
 
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
         hermesJobManager.announcer.onGenerationComplete()
         turnTracker.completeAssistantTurn(
-            suppressed = synchronized(playbackSuppressionLock) { outputAudioSuppressed },
+            suppressed = suppressionController.isSuppressed(),
         )
     }
 
