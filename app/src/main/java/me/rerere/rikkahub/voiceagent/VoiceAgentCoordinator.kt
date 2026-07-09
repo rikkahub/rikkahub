@@ -18,7 +18,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
-import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncementScheduler
+import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncer
 import me.rerere.rikkahub.voiceagent.hermes.HermesJobManager
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueSnapshot
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
@@ -69,7 +69,9 @@ class VoiceAgentCoordinator(
     private val hermesJobMaxElapsedMs: Long = HERMES_JOB_MAX_ELAPSED_MS,
     private val hermesJobPollRetryDelayMs: Long = HERMES_JOB_POLL_RETRY_DELAY_MS,
     private val hermesStillWorkingThresholdMs: Long = HermesJobManager.DEFAULT_STILL_WORKING_THRESHOLD_MS,
-    hermesAnnouncementScheduler: HermesAnnouncementScheduler? = null,
+    private val hermesAnnouncementQuietWindowMs: Long = HermesAnnouncer.DEFAULT_QUIET_WINDOW_MS,
+    private val hermesAnnouncementMaxHoldMs: Long = HermesAnnouncer.DEFAULT_MAX_HOLD_MS,
+    private val hermesAnnouncementNowMs: () -> Long = System::currentTimeMillis,
     scope: CoroutineScope? = null,
     dispatcher: CoroutineDispatcher? = null,
 ) {
@@ -86,8 +88,6 @@ class VoiceAgentCoordinator(
     private val sharedConversationStore = SynchronizedVoiceConversationStore(
         conversationStore ?: InMemoryVoiceConversationStore()
     )
-    private val hermesAnnouncementScheduler = hermesAnnouncementScheduler
-        ?: HermesAnnouncementScheduler(recordDiagnostic = diagnostics::record)
     private val voiceE2EArtifactSink = VoiceE2EArtifactSink(
         diagnostics = diagnostics,
         writeVoiceE2EArtifact = writeVoiceE2EArtifact,
@@ -111,6 +111,10 @@ class VoiceAgentCoordinator(
         pollRetryDelayMs = hermesJobPollRetryDelayMs,
         maxElapsedMs = hermesJobMaxElapsedMs,
         stillWorkingThresholdMs = hermesStillWorkingThresholdMs,
+        defaultBridge = { defaultHermesBridge },
+        announcementQuietWindowMs = hermesAnnouncementQuietWindowMs,
+        announcementMaxHoldMs = hermesAnnouncementMaxHoldMs,
+        announcementNowMs = hermesAnnouncementNowMs,
         updateToolStatus = ::updateHermesToolStatusFromManager,
         recordDiagnostic = diagnostics::record,
         writeQueueEvent = hermesTelemetrySink::writeQueueEvent,
@@ -128,14 +132,12 @@ class VoiceAgentCoordinator(
         unboundSessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID,
         writeQueueEvent = { event -> hermesTelemetrySink.writeQueueEvent(event) },
         clearOutputAudioSuppressionForNewTurn = ::clearOutputAudioSuppressionForNewTurn,
-        announcementScheduler = this.hermesAnnouncementScheduler,
     )
+    // lazy: evaluated on first default attach, after construction completes
     private val defaultHermesBridge = createHermesSessionBridge(UNBOUND_HERMES_BRIDGE_SESSION_ID)
     private var hermesQueueStatusProjectionJob: Job? = null
     private var activeSessionId = 0L
     private var acceptsUnscopedGeminiEvents = true
-    private var hasAttachedScopedHermesBridge = false
-    private var defaultHermesBridgeAttached = false
     private val cancelledToolCallIds = mutableSetOf<ToolCallKey>()
     private var closing = false
     private var closed = false
@@ -242,7 +244,7 @@ class VoiceAgentCoordinator(
 
     private fun setAssistantOutputAudioActive(active: Boolean) {
         assistantOutputAudioActive.set(active)
-        hermesAnnouncementScheduler.onAssistantAudioActive(active)
+        hermesJobManager.announcer.onAssistantAudioActive(active)
     }
 
     fun suppressPlayback() {
@@ -353,6 +355,14 @@ class VoiceAgentCoordinator(
         persistenceScope.cancel()
         hermesScope.launch {
             hermesJobManager.awaitJobs()
+            // Drain barrier — a within-process teardown ordering guarantee only: every
+            // announcement enqueued before close is processed (sent or fallback-to-text) before
+            // the store closes and this scope is cancelled, so the racing cancel can't drop a tail
+            // completion/terminal that teardown itself produced. It is NOT a crash-durability
+            // guarantee: process death mid-drain is recovered next session by resumeActiveJobs()
+            // + announcer replay-on-attach, because the terminal record is persisted before the
+            // announce is ever enqueued.
+            hermesJobManager.announcer.awaitClosed()
             if (conversationStore != null) {
                 sharedConversationStore.close()
             }
@@ -395,14 +405,13 @@ class VoiceAgentCoordinator(
             setAssistantOutputAudioActive(false)
             hermesQueueStatusProjectionJob?.cancel()
             hermesQueueStatusProjectionJob = null
-            hermesAnnouncementScheduler.close()
+            hermesJobManager.announcer.close()
             gemini.close()
             audio.release()
             audio.setErrorHandler(null)
             if (ownsSessionScope) {
                 sessionScope.cancel()
             }
-            detachDefaultHermesBridge()
             removeDiagnosticsListener()
         }
     }
@@ -447,27 +456,11 @@ class VoiceAgentCoordinator(
         hermesBridgeFactory.create(sessionId = sessionId)
 
     fun attachHermesBridge(bridge: HermesSessionBridge, sessionId: Long) {
-        if (sessionId != UNBOUND_HERMES_BRIDGE_SESSION_ID) {
-            synchronized(toolJobsLock) {
-                hasAttachedScopedHermesBridge = true
-            }
-            detachDefaultHermesBridge()
-        }
-        hermesJobManager.attachBridge(bridge = bridge, sessionId = sessionId)
-        hermesAnnouncementScheduler.onBridgeAvailable(true)
+        hermesJobManager.announcer.attachScoped(bridge = bridge, sessionId = sessionId)
     }
 
     fun detachHermesBridge(bridge: HermesSessionBridge) {
-        // Announcements must not target a bridge that is going away. If the default bridge is
-        // re-attached below, it flips availability back to true.
-        hermesAnnouncementScheduler.onBridgeAvailable(false)
-        hermesJobManager.detachBridge(bridge)
-        val shouldAttachDefault = synchronized(toolJobsLock) {
-            !closed && !closing && !hasAttachedScopedHermesBridge
-        }
-        if (shouldAttachDefault) {
-            attachDefaultHermesBridge()
-        }
+        hermesJobManager.announcer.detachScoped(bridge)
     }
 
     fun resumeHermesJobs() {
@@ -484,7 +477,7 @@ class VoiceAgentCoordinator(
             activeTranscriptSpeaker = TranscriptSpeaker.User
             inputTurnTranscript += text
             diagnostics.record("input_transcript_delta", "turnId=$inputTurnId, chars=${text.length}")
-            hermesAnnouncementScheduler.onInputTranscriptDelta()
+            hermesJobManager.announcer.onInputTranscriptDelta()
             recordEventSafely(
                 name = "voicelab.mobile.transcript.input_delta",
                 attributes = mapOf("turnId" to inputTurnId) + voiceTextMetadata(key = "text", text = text),
@@ -617,7 +610,7 @@ class VoiceAgentCoordinator(
 
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
-        hermesAnnouncementScheduler.onGenerationComplete()
+        hermesJobManager.announcer.onGenerationComplete()
         synchronized(playbackSuppressionLock) {
             if (
                 outputTurnTranscript.isBlank() ||
@@ -651,7 +644,7 @@ class VoiceAgentCoordinator(
         when (call) {
             is GeminiLiveEvent.CancelHermesCall -> {
                 if (sessionId == null) {
-                    attachDefaultHermesBridge()
+                    hermesJobManager.announcer.attachDefaultIfNeeded()
                 }
                 hermesJobManager.handleCancelHermesCall(
                     callId = call.callId,
@@ -670,7 +663,7 @@ class VoiceAgentCoordinator(
 
     private fun handleAskHermesToolCall(call: GeminiLiveEvent.AskHermesCall, sessionId: Long?) {
         if (sessionId == null) {
-            attachDefaultHermesBridge()
+            hermesJobManager.announcer.attachDefaultIfNeeded()
         }
         runCatching {
             Log.d(E2E_TAG, "hermes_tool_call_received callId=${call.callId} promptChars=${call.prompt.length}")
@@ -682,38 +675,6 @@ class VoiceAgentCoordinator(
             diagnostics.record("hermes_tool_started", "callId=${call.callId}")
         } else {
             diagnostics.record("duplicate_tool_call_active", "callId=${call.callId}")
-        }
-    }
-
-    private fun attachDefaultHermesBridge() {
-        val shouldAttach = synchronized(toolJobsLock) {
-            if (closed || closing || hasAttachedScopedHermesBridge || defaultHermesBridgeAttached) {
-                false
-            } else {
-                defaultHermesBridgeAttached = true
-                true
-            }
-        }
-        if (shouldAttach) {
-            hermesJobManager.attachBridge(defaultHermesBridge, sessionId = UNBOUND_HERMES_BRIDGE_SESSION_ID)
-            hermesAnnouncementScheduler.onBridgeAvailable(true)
-        }
-    }
-
-    private fun detachDefaultHermesBridge() {
-        // Callers either re-attach a scoped bridge right after (which flips availability back
-        // to true) or are closing down, so signalling unavailability first is always safe.
-        hermesAnnouncementScheduler.onBridgeAvailable(false)
-        val shouldDetach = synchronized(toolJobsLock) {
-            if (defaultHermesBridgeAttached) {
-                defaultHermesBridgeAttached = false
-                true
-            } else {
-                false
-            }
-        }
-        if (shouldDetach) {
-            hermesJobManager.detachBridge(defaultHermesBridge)
         }
     }
 

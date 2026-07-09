@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -207,10 +208,10 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
         manager.submit(callId = "call-1", prompt = "slow request")
         assertEquals("call-1" to "slow request", toolApi.awaitRequest("call-1"))
-        manager.detachBridge(bridge)
+        manager.announcer.detachScoped(bridge)
 
         toolApi.complete(response(callId = "call-1", answer = "detached answer"))
         conversationStore.awaitHermesRecord("call-1") {
@@ -420,7 +421,7 @@ class HermesJobManagerTest {
         val conversationStore = FakeVoiceConversationStore()
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
-        manager.attachBridge(bridge = bridge, sessionId = 13L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 13L)
 
         manager.submit(callId = "call-submit-failed", prompt = "submit failed")
         manager.submit(callId = "call-submit-expired", prompt = "submit expired")
@@ -475,7 +476,7 @@ class HermesJobManagerTest {
         val retryBridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = failingBridge, sessionId = 14L)
+        manager.announcer.attachScoped(bridge = failingBridge, sessionId = 14L)
         manager.submit(callId = "call-submit-failed-ack", prompt = "submit failed ack")
         conversationStore.awaitHermesRecord("call-submit-failed-ack") {
             it.status == HermesQueueStatus.Failed && !it.resultAnnounced
@@ -484,8 +485,8 @@ class HermesJobManagerTest {
         assertTrue(failingBridge.queuedAcknowledgements.isEmpty())
         assertTrue(failingBridge.terminalFollowUps.isEmpty())
 
-        manager.detachBridge(failingBridge)
-        manager.attachBridge(bridge = retryBridge, sessionId = 15L)
+        manager.announcer.detachScoped(failingBridge)
+        manager.announcer.attachScoped(bridge = retryBridge, sessionId = 15L)
         conversationStore.awaitHermesRecord("call-submit-failed-ack") {
             it.status == HermesQueueStatus.Failed && it.resultAnnounced
         }
@@ -509,7 +510,7 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 42L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 42L)
         manager.submit(callId = "call-ack", prompt = "ack request")
         bridge.awaitQueuedAcknowledgements(count = 1)
 
@@ -529,7 +530,7 @@ class HermesJobManagerTest {
         )
 
         val blockedAck = bridge.blockNextQueuedAcknowledgement()
-        manager.attachBridge(bridge = bridge, sessionId = 43L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 43L)
         manager.submit(callId = "call-blocked-ack", prompt = "blocked ack")
         assertTrue(blockedAck.started.await(500, TimeUnit.MILLISECONDS))
         assertEquals("call-blocked-ack" to "blocked ack", toolApi.awaitRequest("call-blocked-ack"))
@@ -554,10 +555,10 @@ class HermesJobManagerTest {
         )
 
         val blockedAck = bridge.blockNextQueuedAcknowledgement()
-        manager.attachBridge(bridge = bridge, sessionId = 45L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 45L)
         manager.submit(callId = "call-detached-ack", prompt = "detached ack")
         assertTrue(blockedAck.started.await(500, TimeUnit.MILLISECONDS))
-        manager.detachBridge(bridge)
+        manager.announcer.detachScoped(bridge)
         conversationStore.awaitHermesRecord("call-detached-ack") {
             it.status == HermesQueueStatus.Queued
         }
@@ -578,7 +579,7 @@ class HermesJobManagerTest {
         }
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 44L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 44L)
         manager.submit(callId = "call-throwing-ack", prompt = "throwing ack")
         assertEquals("call-throwing-ack" to "throwing ack", toolApi.awaitRequest("call-throwing-ack"))
         toolApi.complete(response(callId = "call-throwing-ack", answer = "throwing ack answer"))
@@ -605,7 +606,7 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 9L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 9L)
         manager.resumeActiveJobs()
         conversationStore.awaitHermesRecord("call-resume") {
             it.status == HermesQueueStatus.Complete && it.resultAnnounced
@@ -666,7 +667,7 @@ class HermesJobManagerTest {
             stillWorkingThresholdMs = 1L,
         )
 
-        manager.attachBridge(bridge = bridge, sessionId = 9L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 9L)
         manager.resumeActiveJobs()
         conversationStore.awaitHermesRecord("call-resume-still-working") {
             it.status == HermesQueueStatus.Running && it.stillWorkingAnnounced
@@ -706,7 +707,7 @@ class HermesJobManagerTest {
         assertFalse(record.resultAnnounced)
 
         val bridge = RecordingHermesBridge()
-        manager.attachBridge(bridge = bridge, sessionId = 21L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 21L)
         withTimeout(500) {
             while (bridge.terminalFollowUps.isEmpty()) { delay(10) }
         }
@@ -750,7 +751,7 @@ class HermesJobManagerTest {
         assertTrue(record.resultAnnounced)
 
         val bridge = RecordingHermesBridge()
-        manager.attachBridge(bridge = bridge, sessionId = 22L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 22L)
         delay(100)
         assertTrue(bridge.terminalFollowUps.isEmpty())
         assertTrue(bridge.completionFollowUps.isEmpty())
@@ -943,7 +944,7 @@ class HermesJobManagerTest {
         val retryBridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = failingBridge, sessionId = 1L)
+        manager.announcer.attachScoped(bridge = failingBridge, sessionId = 1L)
         manager.submit(callId = "call-retry", prompt = "retry request")
         assertEquals("call-retry" to "retry request", toolApi.awaitRequest("call-retry"))
         toolApi.complete(response(callId = "call-retry", answer = "retry answer"))
@@ -951,8 +952,8 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Complete && !it.resultAnnounced
         }
 
-        manager.detachBridge(failingBridge)
-        manager.attachBridge(bridge = retryBridge, sessionId = 2L)
+        manager.announcer.detachScoped(failingBridge)
+        manager.announcer.attachScoped(bridge = retryBridge, sessionId = 2L)
         conversationStore.awaitHermesRecord("call-retry") {
             it.status == HermesQueueStatus.Complete && it.resultAnnounced
         }
@@ -970,7 +971,7 @@ class HermesJobManagerTest {
         val retryBridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = failingBridge, sessionId = 1L)
+        manager.announcer.attachScoped(bridge = failingBridge, sessionId = 1L)
         manager.submit(callId = "call-terminal-retry", prompt = "terminal retry request")
         assertEquals("call-terminal-retry" to "terminal retry request", toolApi.awaitRequest("call-terminal-retry"))
         toolApi.failJob(callId = "call-terminal-retry", message = "terminal retry failure")
@@ -978,8 +979,8 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Failed && !it.resultAnnounced
         }
 
-        manager.detachBridge(failingBridge)
-        manager.attachBridge(bridge = retryBridge, sessionId = 2L)
+        manager.announcer.detachScoped(failingBridge)
+        manager.announcer.attachScoped(bridge = retryBridge, sessionId = 2L)
         conversationStore.awaitHermesRecord("call-terminal-retry") {
             it.status == HermesQueueStatus.Failed && it.resultAnnounced
         }
@@ -1004,7 +1005,7 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 1L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 1L)
         manager.submit(callId = "call-detach-after-send", prompt = "detach after send")
         assertEquals("call-detach-after-send" to "detach after send", toolApi.awaitRequest("call-detach-after-send"))
         val blockedFollowUp = bridge.blockNextCompletionFollowUp()
@@ -1017,7 +1018,7 @@ class HermesJobManagerTest {
 
         blockedFollowUp.release.complete(Unit)
         assertTrue(blockedUpdate.started.await(500, TimeUnit.MILLISECONDS))
-        manager.detachBridge(bridge)
+        manager.announcer.detachScoped(bridge)
         blockedUpdate.release.countDown()
 
         conversationStore.awaitHermesRecord("call-detach-after-send") {
@@ -1045,7 +1046,7 @@ class HermesJobManagerTest {
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
         val blockedFollowUp = bridge.blockNextCompletionFollowUp()
-        manager.attachBridge(bridge = bridge, sessionId = 1L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 1L)
         blockedFollowUp.started.await()
 
         manager.submit(callId = "call-waiting", prompt = "waiting completion")
@@ -1055,7 +1056,7 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Complete && !it.resultAnnounced
         }
 
-        manager.detachBridge(bridge)
+        manager.announcer.detachScoped(bridge)
         blockedFollowUp.release.complete(Unit)
         delay(50)
 
@@ -1143,7 +1144,7 @@ class HermesJobManagerTest {
             stillWorkingThresholdMs = 50L,
         )
 
-        manager.attachBridge(bridge = bridge, sessionId = 9L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 9L)
         manager.submit(callId = "call-still-working", prompt = "long request")
         assertEquals("call-still-working" to "long request", toolApi.awaitRequest("call-still-working"))
         toolApi.scriptPoll(
@@ -1207,7 +1208,7 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 11L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 11L)
         manager.submit(callId = "call-polled-failed-live", prompt = "polled failed live")
         assertEquals("call-polled-failed-live" to "polled failed live", toolApi.awaitRequest("call-polled-failed-live"))
         toolApi.failJob(callId = "call-polled-failed-live", message = "Hermes failed live.")
@@ -1237,7 +1238,7 @@ class HermesJobManagerTest {
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
         val blockedInitialAck = bridge.blockNextQueuedAcknowledgement()
-        manager.attachBridge(bridge = bridge, sessionId = 16L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 16L)
         manager.submit(callId = "call-polled-failed-retry-ack", prompt = "polled failed retry ack")
         assertEquals("call-polled-failed-retry-ack" to "polled failed retry ack", toolApi.awaitRequest("call-polled-failed-retry-ack"))
         assertTrue(blockedInitialAck.started.await(500, TimeUnit.MILLISECONDS))
@@ -1380,7 +1381,7 @@ class HermesJobManagerTest {
                 scope = this,
                 maxElapsedMs = 10_000L,
             )
-            manager.attachBridge(bridge = bridge, sessionId = 14L)
+            manager.announcer.attachScoped(bridge = bridge, sessionId = 14L)
 
             manager.submit(callId = "call-terminal-http", prompt = "terminal http request")
             assertEquals("call-terminal-http" to "terminal http request", toolApi.awaitRequest("call-terminal-http"))
@@ -1766,7 +1767,7 @@ class HermesJobManagerTest {
             writeQueueEvent = queueEvents::add,
         )
 
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
         manager.submit(callId = "call-cancel-mid-submit", prompt = "cancel mid submit")
         assertTrue(blockedSubmit.started.await(500, TimeUnit.MILLISECONDS))
         conversationStore.awaitHermesRecord("call-cancel-mid-submit") {
@@ -1797,8 +1798,8 @@ class HermesJobManagerTest {
         assertTrue(queueEvents.none { it.toJson().contains("job_created") })
 
         // A user-initiated cancel is announced on write, so re-attaching never replays it.
-        manager.detachBridge(bridge)
-        manager.attachBridge(bridge = bridge, sessionId = 8L)
+        manager.announcer.detachScoped(bridge)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 8L)
         delay(100)
         assertTrue(bridge.terminalFollowUps.isEmpty())
     }
@@ -1850,8 +1851,8 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 1L)
-        manager.attachBridge(bridge = bridge, sessionId = 1L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 1L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 1L)
         conversationStore.awaitHermesRecord("call-announced-once") {
             it.resultAnnounced
         }
@@ -1881,7 +1882,7 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 3L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 3L)
         conversationStore.awaitHermesRecord("call-duplicate-complete") {
             it.resultAnnounced
         }
@@ -1925,7 +1926,7 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 4L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 4L)
         delay(50)
 
         assertTrue(bridge.completionFollowUps.isEmpty())
@@ -1953,8 +1954,8 @@ class HermesJobManagerTest {
         val bridge = RecordingHermesBridge()
         val manager = manager(toolApi = toolApi, conversationStore = conversationStore, scope = this)
 
-        manager.attachBridge(bridge = bridge, sessionId = 5L)
-        manager.attachBridge(bridge = bridge, sessionId = 5L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 5L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 5L)
         conversationStore.awaitHermesRecord("call-failed-once") {
             it.resultAnnounced
         }
@@ -2179,6 +2180,12 @@ class HermesJobManagerTest {
         remoteCancelTimeoutMs: Long = 50L,
         bridgeSendTimeoutMs: Long = 200L,
         stillWorkingThresholdMs: Long = 45_000L,
+        // The announcer's quiet-window/hold pacing (proven in HermesAnnouncerTest) is
+        // switched off here so the manager-shell suite exercises announcement *delivery*
+        // and *ordering* without racing the pacing clock: quiet window 0 sends the head
+        // immediately and max hold 0 releases each paced follow-up on the next tick.
+        announcementQuietWindowMs: Long = 0L,
+        announcementMaxHoldMs: Long = 0L,
         observability: VoiceObservability = NoOpVoiceObservability,
         traceContext: VoiceTraceContext = VoiceTraceContext(
             traceId = "trace-test",
@@ -2196,6 +2203,8 @@ class HermesJobManagerTest {
         remoteCancelTimeoutMs = remoteCancelTimeoutMs,
         bridgeSendTimeoutMs = bridgeSendTimeoutMs,
         stillWorkingThresholdMs = stillWorkingThresholdMs,
+        announcementQuietWindowMs = announcementQuietWindowMs,
+        announcementMaxHoldMs = announcementMaxHoldMs,
         updateToolStatus = updateToolStatus,
         recordDiagnostic = recordDiagnostic,
         writeQueueEvent = writeQueueEvent,
@@ -2361,7 +2370,15 @@ class HermesJobManagerTest {
         error("unreachable")
     }
 
-    private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
+    // The manager now owns a HermesAnnouncer whose consumer coroutine is launched on the
+    // provided scope and drains its event channel until close(). These shell tests never
+    // call close(), and the manager's own actor coroutines self-terminate via maxElapsedMs,
+    // so the only long-lived child left when the body returns is the announcer consumer. Cancel
+    // the leftover children so runBlocking completes instead of parking on that consumer.
+    private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking {
+        block()
+        coroutineContext.cancelChildren()
+    }
 
     @Test
     fun `resolveAndCancelRequest with nothing pending returns NothingPending`() = runTest {
@@ -2494,7 +2511,7 @@ class HermesJobManagerTest {
             scope = this,
             recordDiagnostic = { name, detail -> diagnostics += name to detail },
         )
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
         manager.submit(callId = "call-1", prompt = "deploy status")
         assertEquals("call-1" to "deploy status", toolApi.awaitRequest("call-1"))
 
@@ -2521,7 +2538,7 @@ class HermesJobManagerTest {
             scope = this,
             recordDiagnostic = { name, detail -> diagnostics += name to detail },
         )
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
 
         manager.handleCancelHermesCall(callId = "cancel-1", question = "anything", sessionId = 7L)
 
@@ -2544,7 +2561,7 @@ class HermesJobManagerTest {
             bridgeSendTimeoutMs = 20L,
             recordDiagnostic = { name, detail -> diagnostics += name to detail },
         )
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
         val blockedCancel = bridge.blockNextCancelResponse()
 
         manager.handleCancelHermesCall(callId = "cancel-timeout", question = "anything", sessionId = 7L)
@@ -2592,7 +2609,7 @@ class HermesJobManagerTest {
             scope = this,
             recordDiagnostic = { name, detail -> diagnostics += name to detail },
         )
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
 
         manager.handleCancelHermesCall(callId = "cancel-mismatch", question = "anything", sessionId = 9L)
 
@@ -2617,14 +2634,14 @@ class HermesJobManagerTest {
             bridgeSendTimeoutMs = 10_000L,
             recordDiagnostic = { name, detail -> diagnostics += name to detail },
         )
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
         val blockedCancel = bridge.blockNextCancelResponse()
 
         manager.handleCancelHermesCall(callId = "cancel-changed", question = "anything", sessionId = 7L)
 
         assertTrue(blockedCancel.started.await(500, TimeUnit.MILLISECONDS))
-        manager.detachBridge(bridge)
-        manager.attachBridge(bridge = bridge, sessionId = 7L)
+        manager.announcer.detachScoped(bridge)
+        manager.announcer.attachScoped(bridge = bridge, sessionId = 7L)
         blockedCancel.release.complete(Unit)
 
         withTimeout(500) {
