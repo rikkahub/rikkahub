@@ -50,6 +50,14 @@ internal fun Conversation.movedToAssistant(targetAssistantId: Uuid): Conversatio
     folderId = null,
 )
 
+internal fun Conversation?.requireCurrentAssistant(assistantId: Uuid): Conversation {
+    val conversation = this
+    if (conversation == null || conversation.assistantId != assistantId) {
+        throw NotFoundException("Conversation not found")
+    }
+    return conversation
+}
+
 fun Route.conversationRoutes(
     chatService: ChatService,
     conversationRepo: ConversationRepository,
@@ -261,16 +269,12 @@ fun Route.conversationRoutes(
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<MoveConversationToFolderRequest>()
 
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val settings = settingsStore.settingsFlow.first()
+            conversationRepo.getConversationById(uuid).requireCurrentAssistant(settings.assistantId)
 
             val targetFolderId = request.folderId?.takeIf { it.isNotBlank() }?.toUuid("folder id")
             if (targetFolderId != null) {
-                val folder = folderRepo.getFolderById(targetFolderId)
-                    ?: throw NotFoundException("Folder not found")
-                if (folder.assistantId != conversation.assistantId) {
-                    throw BadRequestException("Folder belongs to another assistant")
-                }
+                folderRepo.getFolderById(targetFolderId).requireCurrentAssistant(settings.assistantId)
             }
 
             chatService.moveConversationToFolder(uuid, targetFolderId)

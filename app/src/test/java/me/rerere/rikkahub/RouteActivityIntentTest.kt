@@ -112,8 +112,41 @@ class FolderRouteScopeTest {
 
     @Test
     fun `missing folder is hidden`() {
+        val folder: Folder? = null
+
         assertThrows(NotFoundException::class.java) {
-            null.requireCurrentAssistant(currentAssistantId)
+            folder.requireCurrentAssistant(currentAssistantId)
+        }
+    }
+
+    @Test
+    fun `current assistant conversation is accepted`() {
+        val conversation = Conversation(
+            assistantId = currentAssistantId,
+            messageNodes = emptyList(),
+        )
+
+        assertSame(conversation, conversation.requireCurrentAssistant(currentAssistantId))
+    }
+
+    @Test
+    fun `another assistant conversation is hidden`() {
+        val conversation = Conversation(
+            assistantId = kotlin.uuid.Uuid.random(),
+            messageNodes = emptyList(),
+        )
+
+        assertThrows(NotFoundException::class.java) {
+            conversation.requireCurrentAssistant(currentAssistantId)
+        }
+    }
+
+    @Test
+    fun `missing conversation is hidden`() {
+        val conversation: Conversation? = null
+
+        assertThrows(NotFoundException::class.java) {
+            conversation.requireCurrentAssistant(currentAssistantId)
         }
     }
 
