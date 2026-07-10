@@ -167,6 +167,11 @@ internal fun MutableList<NavKey>.openVoiceAgentIntent(conversationId: String?): 
     return true
 }
 
+internal fun MutableList<NavKey>.openIncomingIntent(
+    voiceConversationId: String?,
+    conversationId: String?,
+): Boolean = openVoiceAgentIntent(voiceConversationId) || openConversationIntent(conversationId)
+
 class RouteActivity : ComponentActivity() {
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
@@ -260,8 +265,10 @@ class RouteActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        navStack?.openVoiceAgentIntent(intent.getStringExtra(EXTRA_VOICE_AGENT_CONVERSATION_ID))
-            ?: navStack?.openConversationIntent(intent.getStringExtra(EXTRA_CONVERSATION_ID))
+        navStack?.openIncomingIntent(
+            voiceConversationId = intent.getStringExtra(EXTRA_VOICE_AGENT_CONVERSATION_ID),
+            conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID),
+        )
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
