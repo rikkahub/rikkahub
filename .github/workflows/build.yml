@@ -5,6 +5,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
       - name: JDK 17
         uses: actions/setup-java@v4
         with:
@@ -25,8 +28,6 @@ jobs:
         with:
           path: ~/.gradle/caches
           key: gradle
-      - name: Prepare
-        run: echo "${{ secrets.KEY_BASE64 }}" > /dev/null
       - name: Build
         run: |
           chmod +x gradlew
