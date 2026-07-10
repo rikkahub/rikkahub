@@ -32,7 +32,7 @@ jobs:
         run: |
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
           echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          touch app/google-services.json
 
       - name: Build
         run: |
