@@ -16,6 +16,9 @@ import com.google.zxing.BinaryBitmap
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 图片处理工具类
@@ -100,6 +103,37 @@ object ImageUtils {
         return inSampleSize
     }
 
+    internal fun calculateStrictInSampleSize(
+        width: Int,
+        height: Int,
+        maxSize: Int,
+    ): Int {
+        require(maxSize > 0) { "maxSize must be positive" }
+        val largestEdge = maxOf(width, height)
+        if (largestEdge <= 0 || largestEdge <= maxSize) return 1
+
+        var sampleSize = 1
+        while (
+            (largestEdge.toLong() + sampleSize - 1L) / sampleSize > maxSize &&
+            sampleSize <= Int.MAX_VALUE / 2
+        ) {
+            sampleSize *= 2
+        }
+        return sampleSize
+    }
+
+    internal suspend fun prepareImageForCrop(
+        dispatcher: CoroutineDispatcher = Dispatchers.IO,
+        convert: () -> Boolean,
+        copyOriginal: () -> Unit,
+    ) {
+        withContext(dispatcher) {
+            if (!convert()) {
+                copyOriginal()
+            }
+        }
+    }
+
     /**
      * 修正图片旋转
      * 根据EXIF信息自动旋转图片到正确方向
@@ -177,7 +211,11 @@ object ImageUtils {
             BitmapFactory.decodeStream(input, null, boundsOptions)
         }
         val loadOptions = BitmapFactory.Options().apply {
-            inSampleSize = calculateInSampleSize(boundsOptions, maxSize, maxSize)
+            inSampleSize = calculateStrictInSampleSize(
+                width = boundsOptions.outWidth,
+                height = boundsOptions.outHeight,
+                maxSize = maxSize,
+            )
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val decoded = context.contentResolver.openInputStream(uri)?.use { input ->
