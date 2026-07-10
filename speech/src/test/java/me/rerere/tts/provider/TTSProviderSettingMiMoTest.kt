@@ -11,7 +11,7 @@ class TTSProviderSettingMiMoTest {
 
         assertEquals("MiMo TTS", setting.name)
         assertEquals("https://api.xiaomimimo.com/v1", setting.baseUrl)
-        assertEquals("mimo-v2-tts", setting.model)
+        assertEquals("mimo-v2.5-tts", setting.model)
         assertEquals("mimo_default", setting.voice)
         assertEquals("", setting.apiKey)
     }

@@ -16,7 +16,7 @@ class TTSProviderSettingFishAudioTest {
             name = "Test Fish Audio",
             apiKey = "test-key",
             baseUrl = "https://api.fish.audio",
-            model = "s2.1-pro",
+            model = "s2.1-pro-free",
             referenceId = "test-voice-id",
             temperature = 0.7f,
             speed = 1.0f,
@@ -25,7 +25,7 @@ class TTSProviderSettingFishAudioTest {
         val encoded = json.encodeToString(TTSProviderSetting.serializer(), setting)
         assertTrue(encoded.contains("\"fish-audio\""))
         assertTrue(encoded.contains("\"test-key\""))
-        assertTrue(encoded.contains("\"s2.1-pro\""))
+        assertTrue(encoded.contains("\"s2.1-pro-free\""))
 
         val decoded = json.decodeFromString(
             TTSProviderSetting.serializer(),
