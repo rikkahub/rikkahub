@@ -71,7 +71,7 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
 
       - name: Publish Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: success()
         with:
           tag_name: v2.4.1-procare
