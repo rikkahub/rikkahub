@@ -32,6 +32,7 @@ jobs:
         run: |
           echo "${{ secrets.KEY_BASE64 }}" > /dev/null
           echo "${{ secrets.SIGNING_CONFIG }}" > /dev/null
+          echo "test" > /dev/null
 
       - name: Build
         run: |
