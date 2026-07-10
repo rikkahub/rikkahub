@@ -30,8 +30,8 @@ jobs:
 
       - name: Prepare build files
         run: |
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          echo "${{ secrets.KEY_BASE64 }}" > /dev/null
+          echo "${{ secrets.SIGNING_CONFIG }}" > /dev/null
 
       - name: Build
         run: |
