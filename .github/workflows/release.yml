@@ -1,4 +1,5 @@
 name: Release Build
+
 on: workflow_dispatch
 
 jobs:
@@ -14,53 +15,32 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web-ui/pnpm-lock.yaml
-
-      - name: Install web-ui
-        working-directory: web-ui
-        run: pnpm install --frozen-lockfile
+      - name: Install pnpm
+        run: |
+          npm install -g pnpm
+          cd web-ui && pnpm install --frozen-lockfile
 
       - uses: actions/cache@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-cache
+          path: ~/.gradle/caches
+          key: gradle
 
-      - name: Keystore
-        shell: bash
-        run: echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+      - name: Prepare build files
+        run: |
+          echo "${{ secrets.KEY_BASE64 }}" > app/app.key
+          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
 
-      - name: Signing config
-        shell: bash
-        run: echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --parallel --configuration-cache
 
-      - name: Google Services
-        shell: bash
-        run: echo '{}' > app/google-services.json
-
-      - name: Build APK
-        shell: bash
-        run: ./gradlew assembleRelease
-
-      - name: Release
+      - name: Publish
         uses: softprops/action-gh-release@v2
-        if: success()
         with:
           tag_name: v2.4.1-procare
           name: v2.4.1-procare
-          generate_release_notes: true
           files: app/build/outputs/apk/release/*.apk
