@@ -16,7 +16,7 @@ export interface UseFoldersResult {
   moveConversationToFolder: (conversationId: string, folderId: string | null) => Promise<void>;
 }
 
-export function reconcileSelectedFolderId(
+function reconcileSelectedFolderId(
   selectedFolderId: string | null,
   folders: FolderDto[],
 ): string | null {

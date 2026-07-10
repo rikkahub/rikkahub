@@ -679,6 +679,7 @@ function FolderBar({
 
       {folders.map((folder) => {
         const selected = folder.id === selectedFolderId;
+        const folderActionsLabel = `${folder.name}: ${t("conversation_sidebar.folder_actions")}`;
         return (
           <DropdownMenu key={folder.id}>
             <div
@@ -705,8 +706,8 @@ function FolderBar({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    aria-label={t("conversation_sidebar.folder_actions")}
-                    title={t("conversation_sidebar.folder_actions")}
+                    aria-label={folderActionsLabel}
+                    title={folderActionsLabel}
                     className="mr-1 inline-flex rounded-full p-0.5 opacity-70 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <MoreHorizontal className="size-3" />

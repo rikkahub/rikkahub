@@ -18,7 +18,7 @@ type EventListener = (data: unknown) => void;
 
 type EventsConnectionCloseDisposition = "ignore" | "idle" | "reconnect";
 
-export function getEventsConnectionCloseDisposition({
+function getEventsConnectionCloseDisposition({
   isCurrentConnection,
   wasAborted,
   unauthorized,
