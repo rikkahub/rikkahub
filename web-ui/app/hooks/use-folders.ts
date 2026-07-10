@@ -16,6 +16,14 @@ export interface UseFoldersResult {
   moveConversationToFolder: (conversationId: string, folderId: string | null) => Promise<void>;
 }
 
+export function reconcileSelectedFolderId(
+  selectedFolderId: string | null,
+  folders: FolderDto[],
+): string | null {
+  if (selectedFolderId === null) return null;
+  return folders.some((folder) => folder.id === selectedFolderId) ? selectedFolderId : null;
+}
+
 /**
  * Folder management for the current assistant. Folders are an assistant-scoped
  * grouping; switching assistant resets both the list and the selected folder.
@@ -50,7 +58,10 @@ export function useFolders(currentAssistantId: string | null): UseFoldersResult 
   // Reset selection and reload folders whenever the assistant changes.
   React.useEffect(() => {
     setSelectedFolderId(null);
-    void refreshFolders();
+    setFolders([]);
+    void refreshFolders().catch((folderError) => {
+      console.error("Refresh folders failed", folderError);
+    });
   }, [currentAssistantId, refreshFolders]);
 
   // Live folder updates for the current assistant (create/rename/delete from any client).
@@ -58,6 +69,7 @@ export function useFolders(currentAssistantId: string | null): UseFoldersResult 
     return subscribeToEvent<FolderListEventDto>(EVENT_FOLDERS, (data) => {
       if (data.assistantId !== currentAssistantIdRef.current) return;
       setFolders(data.folders);
+      setSelectedFolderId((current) => reconcileSelectedFolderId(current, data.folders));
     });
   }, []);
 

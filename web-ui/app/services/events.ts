@@ -1,4 +1,4 @@
-import { sse } from "~/services/api";
+import { ApiError, sse } from "~/services/api";
 
 /**
  * Multiplexed SSE client for `/api/events`.
@@ -15,6 +15,24 @@ export const EVENT_CONVERSATION_LIST_INVALIDATE = "conversation_list_invalidate"
 export const EVENT_FOLDERS = "folders";
 
 type EventListener = (data: unknown) => void;
+
+type EventsConnectionCloseDisposition = "ignore" | "idle" | "reconnect";
+
+export function getEventsConnectionCloseDisposition({
+  isCurrentConnection,
+  wasAborted,
+  unauthorized,
+  hasListeners,
+}: {
+  isCurrentConnection: boolean;
+  wasAborted: boolean;
+  unauthorized: boolean;
+  hasListeners: boolean;
+}): EventsConnectionCloseDisposition {
+  if (!isCurrentConnection) return "ignore";
+  if (!wasAborted && !unauthorized && hasListeners) return "reconnect";
+  return "idle";
+}
 
 const RECONNECT_DELAY_MS = 1000;
 
@@ -56,23 +74,33 @@ function startConnection() {
 
   const controller = new AbortController();
   abortController = controller;
+  let unauthorized = false;
 
   void sse<unknown>(
     "events",
     {
       onMessage: ({ event, data }) => {
+        if (abortController !== controller) return;
         dispatch(event, data);
       },
       onError: (error) => {
+        if (error instanceof ApiError && error.code === 401) {
+          unauthorized = true;
+        }
         console.error("Events SSE error:", error);
       },
       onClose: () => {
+        const disposition = getEventsConnectionCloseDisposition({
+          isCurrentConnection: abortController === controller,
+          wasAborted: controller.signal.aborted,
+          unauthorized,
+          hasListeners: hasListeners(),
+        });
+        if (disposition === "ignore") return;
+
         running = false;
-        if (abortController === controller) {
-          abortController = null;
-        }
-        // Reconnect on unexpected drop while listeners remain; skip intentional aborts.
-        if (!controller.signal.aborted && hasListeners()) {
+        abortController = null;
+        if (disposition === "reconnect") {
           scheduleReconnect();
         }
       },

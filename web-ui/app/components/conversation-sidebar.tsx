@@ -666,6 +666,7 @@ function FolderBar({
       <button
         type="button"
         onClick={() => onSelect(null)}
+        aria-pressed={selectedFolderId === null}
         className={cn(
           "inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition",
           selectedFolderId === null
@@ -681,39 +682,35 @@ function FolderBar({
         return (
           <DropdownMenu key={folder.id}>
             <div
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(folder.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect(folder.id);
-                }
-              }}
-              onContextMenu={(event) => {
-                if (!onRename && !onDelete) return;
-                event.preventDefault();
-              }}
               className={cn(
-                "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition",
+                "inline-flex shrink-0 items-center rounded-full text-xs font-medium transition",
                 selected
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80",
               )}
             >
-              <Folder className="size-3" />
-              <span className="max-w-[8rem] truncate">{folder.name}</span>
+              <button
+                type="button"
+                onClick={() => onSelect(folder.id)}
+                aria-pressed={selected}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full py-1 pl-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  onRename || onDelete ? "pr-1" : "pr-3",
+                )}
+              >
+                <Folder className="size-3" />
+                <span className="max-w-[8rem] truncate">{folder.name}</span>
+              </button>
               {(onRename || onDelete) && (
                 <DropdownMenuTrigger asChild>
-                  <span
-                    role="button"
-                    tabIndex={-1}
+                  <button
+                    type="button"
                     aria-label={t("conversation_sidebar.folder_actions")}
-                    onClick={(event) => event.stopPropagation()}
-                    className="ml-0.5 inline-flex items-center opacity-70 hover:opacity-100"
+                    title={t("conversation_sidebar.folder_actions")}
+                    className="mr-1 inline-flex rounded-full p-0.5 opacity-70 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <MoreHorizontal className="size-3" />
-                  </span>
+                  </button>
                 </DropdownMenuTrigger>
               )}
             </div>

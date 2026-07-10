@@ -191,7 +191,7 @@ export const useChatInputStore = useAppStore;
 ```
 
 **Settings Slice**:
-- 从后端 SSE 流 (`/api/settings/stream`) 实时更新
+- 从共享后端 SSE 流 (`/api/events` 的 `settings` 事件) 实时更新
 - 包含助手、模型、提供商、显示设置等全局配置
 - 在 `root.tsx` 中通过 `useSettingsSubscription` 订阅
 
@@ -474,7 +474,7 @@ pnpm run typecheck  # React Router 类型生成 + tsc 检查
 ```
 root.tsx 渲染
   ↓
-useSettingsSubscription() 订阅 /api/settings/stream (SSE)
+useSettingsSubscription() 订阅 /api/events 中的 settings 事件 (SSE)
   ↓
 后端推送 Settings 对象
   ↓
@@ -581,7 +581,8 @@ web-ui/build/client/
 ### API Endpoints
 
 所有 API 端点定义在 `web` 模块的 Kotlin 代码中：
-- `GET /api/settings/stream` - 设置 SSE 流
+- `GET /api/events` - 共享 SSE 流（设置、对话列表失效和文件夹事件）
+- `GET /api/folders` - 当前助手的文件夹列表
 - `GET /api/conversations` - 对话列表
 - `GET /api/conversations/:id` - 获取对话
 - `GET /api/conversations/:id/stream` - 对话 SSE 流

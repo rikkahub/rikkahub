@@ -1,7 +1,15 @@
 import * as React from "react";
 
 import { useMutation } from "@tanstack/react-query";
-import { Brain, BrainCircuit, ChevronDown, Lightbulb, LightbulbOff, LoaderCircle, Sparkles } from "lucide-react";
+import {
+  Brain,
+  BrainCircuit,
+  ChevronDown,
+  Lightbulb,
+  LightbulbOff,
+  LoaderCircle,
+  Sparkles,
+} from "lucide-react";
 import { Slider as SliderPrimitive } from "radix-ui";
 import { useTranslation } from "react-i18next";
 
@@ -43,12 +51,18 @@ function isReasoningModel(model: ProviderModel | null): boolean {
 function ReasoningIcon({ level, className }: { level: ReasoningLevel; className?: string }) {
   const props = { className: cn("size-4", className) };
   switch (level) {
-    case "off":    return <LightbulbOff {...props} />;
-    case "auto":   return <Sparkles {...props} />;
-    case "low":    return <Lightbulb {...props} />;
-    case "medium": return <Lightbulb {...props} />;
-    case "high":   return <BrainCircuit {...props} />;
-    case "xhigh":  return <Brain {...props} />;
+    case "off":
+      return <LightbulbOff {...props} />;
+    case "auto":
+      return <Sparkles {...props} />;
+    case "low":
+      return <Lightbulb {...props} />;
+    case "medium":
+      return <Lightbulb {...props} />;
+    case "high":
+      return <BrainCircuit {...props} />;
+    case "xhigh":
+      return <Brain {...props} />;
   }
 }
 
@@ -105,17 +119,42 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
 
   const reasoningPresets = React.useMemo<ReasoningPreset[]>(
     () => [
-      { key: "off",    label: t("reasoning.presets.off.label"),    description: t("reasoning.presets.off.description") },
-      { key: "auto",   label: t("reasoning.presets.auto.label"),   description: t("reasoning.presets.auto.description") },
-      { key: "low",    label: t("reasoning.presets.low.label"),    description: t("reasoning.presets.low.description") },
-      { key: "medium", label: t("reasoning.presets.medium.label"), description: t("reasoning.presets.medium.description") },
-      { key: "high",   label: t("reasoning.presets.high.label"),   description: t("reasoning.presets.high.description") },
-      { key: "xhigh",  label: t("reasoning.presets.xhigh.label"),  description: t("reasoning.presets.xhigh.description") },
+      {
+        key: "off",
+        label: t("reasoning.presets.off.label"),
+        description: t("reasoning.presets.off.description"),
+      },
+      {
+        key: "auto",
+        label: t("reasoning.presets.auto.label"),
+        description: t("reasoning.presets.auto.description"),
+      },
+      {
+        key: "low",
+        label: t("reasoning.presets.low.label"),
+        description: t("reasoning.presets.low.description"),
+      },
+      {
+        key: "medium",
+        label: t("reasoning.presets.medium.label"),
+        description: t("reasoning.presets.medium.description"),
+      },
+      {
+        key: "high",
+        label: t("reasoning.presets.high.label"),
+        description: t("reasoning.presets.high.description"),
+      },
+      {
+        key: "xhigh",
+        label: t("reasoning.presets.xhigh.label"),
+        description: t("reasoning.presets.xhigh.description"),
+      },
     ],
     [t],
   );
 
-  const currentLevel = ((currentAssistant?.reasoningLevel as ReasoningLevel | null | undefined) ?? "auto");
+  const currentLevel =
+    (currentAssistant?.reasoningLevel as ReasoningLevel | null | undefined) ?? "auto";
   const currentIndex = Math.max(0, REASONING_LEVELS.indexOf(currentLevel));
 
   const [localIndex, setLocalIndex] = React.useState(currentIndex);
@@ -137,7 +176,13 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   }, [open]);
 
   const updateReasoningLevelMutation = useMutation({
-    mutationFn: ({ assistantId, reasoningLevel }: { assistantId: string; reasoningLevel: ReasoningLevel }) =>
+    mutationFn: ({
+      assistantId,
+      reasoningLevel,
+    }: {
+      assistantId: string;
+      reasoningLevel: ReasoningLevel;
+    }) =>
       api.post<{ status: string }>("settings/assistant/thinking-budget", {
         assistantId,
         reasoningLevel,

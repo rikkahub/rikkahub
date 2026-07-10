@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
@@ -43,6 +44,11 @@ import me.rerere.rikkahub.web.dto.toListDto
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
+
+internal fun Conversation.movedToAssistant(targetAssistantId: Uuid): Conversation = copy(
+    assistantId = targetAssistantId,
+    folderId = null,
+)
 
 fun Route.conversationRoutes(
     chatService: ChatService,
@@ -102,11 +108,15 @@ fun Route.conversationRoutes(
                         limit = limit
                     )
 
-                else -> conversationRepo.getConversationsOfFolderPage(
-                    folderId = folderParam.toUuid("folderId"),
-                    offset = offset,
-                    limit = limit
-                )
+                else -> {
+                    val folderId = folderParam.toUuid("folderId")
+                    folderRepo.getFolderById(folderId).requireCurrentAssistant(settings.assistantId)
+                    conversationRepo.getConversationsOfFolderPage(
+                        folderId = folderId,
+                        offset = offset,
+                        limit = limit
+                    )
+                }
             }
             val generationJobs = chatService.getConversationJobs().first()
 
@@ -242,7 +252,7 @@ fun Route.conversationRoutes(
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
-            chatService.saveConversation(uuid, conversation.copy(assistantId = targetAssistantId))
+            chatService.saveConversation(uuid, conversation.movedToAssistant(targetAssistantId))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 

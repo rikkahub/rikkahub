@@ -1,9 +1,17 @@
 package me.rerere.rikkahub
 
 import androidx.navigation3.runtime.NavKey
+import me.rerere.rikkahub.data.model.Folder
+import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.web.NotFoundException
+import me.rerere.rikkahub.web.routes.movedToAssistant
+import me.rerere.rikkahub.web.routes.requireCurrentAssistant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class RouteActivityIntentTest {
@@ -80,5 +88,47 @@ class RouteActivityIntentTest {
 
         assertTrue(handled)
         assertEquals(listOf(Screen.VoiceAgent(conversationId = voiceConversationId)), backStack)
+    }
+}
+
+class FolderRouteScopeTest {
+    private val currentAssistantId = kotlin.uuid.Uuid.random()
+
+    @Test
+    fun `current assistant folder is accepted`() {
+        val folder = Folder(assistantId = currentAssistantId, name = "Current")
+
+        assertSame(folder, folder.requireCurrentAssistant(currentAssistantId))
+    }
+
+    @Test
+    fun `another assistant folder is hidden`() {
+        val folder = Folder(assistantId = kotlin.uuid.Uuid.random(), name = "Other")
+
+        assertThrows(NotFoundException::class.java) {
+            folder.requireCurrentAssistant(currentAssistantId)
+        }
+    }
+
+    @Test
+    fun `missing folder is hidden`() {
+        assertThrows(NotFoundException::class.java) {
+            null.requireCurrentAssistant(currentAssistantId)
+        }
+    }
+
+    @Test
+    fun `moving a conversation to another assistant clears its folder`() {
+        val conversation = Conversation(
+            assistantId = currentAssistantId,
+            messageNodes = emptyList(),
+            folderId = kotlin.uuid.Uuid.random(),
+        )
+        val targetAssistantId = kotlin.uuid.Uuid.random()
+
+        val moved = conversation.movedToAssistant(targetAssistantId)
+
+        assertEquals(targetAssistantId, moved.assistantId)
+        assertNull(moved.folderId)
     }
 }
