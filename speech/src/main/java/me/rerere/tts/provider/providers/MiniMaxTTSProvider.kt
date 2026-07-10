@@ -60,7 +60,6 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
             })
             put("voice_setting", buildJsonObject {
                 put("voice_id", providerSetting.voiceId)
-                put("emotion", providerSetting.emotion)
                 put("speed", providerSetting.speed)
             })
         }

@@ -1,34 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
-import { sse } from "~/services/api";
+import { EVENT_SETTINGS, subscribeToEvent } from "~/services/events";
 import { useSettingsStore } from "~/stores/app-store";
 import type { Settings } from "~/types";
 
 /**
- * Hook to subscribe to settings SSE stream (call once in root)
+ * Hook to subscribe to settings updates on the shared events stream (call once in root).
  */
 export function useSettingsSubscription() {
   const setSettings = useSettingsStore((state) => state.setSettings);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    abortControllerRef.current = new AbortController();
-
-    sse<Settings>(
-      "settings/stream",
-      {
-        onMessage: ({ data }) => {
-          setSettings(data);
-        },
-        onError: (error) => {
-          console.error("Settings SSE error:", error);
-        },
-      },
-      { signal: abortControllerRef.current.signal },
-    );
-
-    return () => {
-      abortControllerRef.current?.abort();
-    };
+    return subscribeToEvent<Settings>(EVENT_SETTINGS, (data) => {
+      setSettings(data);
+    });
   }, [setSettings]);
 }

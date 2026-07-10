@@ -270,6 +270,7 @@ class McpManager(
 
         transport.onError { error ->
             Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            if (isSseStreamGiveUpError(error)) return@onError
             val currentStatus = syncingStatus.value[config.id]
             // 只有在已连接状态下才触发重连
             if (currentStatus == McpStatus.Connected) {
@@ -478,6 +479,7 @@ class McpManager(
 
         transport.onError { error ->
             Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            if (isSseStreamGiveUpError(error)) return@onError
             val currentStatus = syncingStatus.value[config.id]
             if (currentStatus == McpStatus.Connected) {
                 scheduleReconnect(config)
@@ -743,6 +745,23 @@ class McpManager(
         return runCatching { oauthClient.discoverProtectedResource(config.serverUrl) }
             .onFailure { Log.i(TAG, "OAuth probe failed for ${config.commonOptions.name}: ${it.message}") }
             .isSuccess
+    }
+
+    /**
+     * 是否为 Streamable HTTP 的 SSE 通知流重试耗尽错误。
+     *
+     * StreamableHttpClientTransport 除 POST 请求/响应外，还会额外开一条 GET 的 SSE 长连接
+     * 用于接收服务端主动推送。部分 server 不支持或会主动关闭该流，SDK 内部按退避重试若干次后
+     * 放弃，并向 onError emit "Maximum reconnection attempts exceeded"。
+     *
+     * 此时 POST 通道仍然健康（listTools/callTool 均可用），不应据此重建整个客户端——否则每次
+     * 整体重连都会成功并清零计数，同时又开启一条新 SSE 流再次失败，形成无限重连循环。
+     */
+    private fun isSseStreamGiveUpError(error: Throwable): Boolean {
+        val message = generateSequence(error) { it.cause }
+            .mapNotNull { it.message }
+            .joinToString(" ")
+        return message.contains("Maximum reconnection attempts exceeded", ignoreCase = true)
     }
 
     /** 错误文本是否疑似未授权（HTTP 401 或 RFC 6750 定义的 OAuth token 错误）。 */

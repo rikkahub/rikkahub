@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -53,7 +54,7 @@ fun AssistantRequestPage(id: String) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         AssistantRequestContent(
-            modifier = Modifier.padding(innerPadding),
+            innerPadding = innerPadding,
             assistant = assistant,
             onUpdate = { vm.update(it) }
         )
@@ -62,15 +63,16 @@ fun AssistantRequestPage(id: String) {
 
 @Composable
 internal fun AssistantRequestContent(
-    modifier: Modifier = Modifier,
+    innerPadding: PaddingValues,
     assistant: Assistant,
     onUpdate: (Assistant) -> Unit
 ) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(horizontal = 16.dp)
+            .padding(innerPadding)
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {

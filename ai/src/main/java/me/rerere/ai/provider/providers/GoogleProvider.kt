@@ -3,8 +3,11 @@ package me.rerere.ai.provider.providers
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
@@ -23,12 +26,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
-import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -39,8 +40,6 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.GoogleThoughtMetadata
-import me.rerere.ai.ui.ImageAspectRatio
-import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
@@ -290,7 +289,9 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         usage = usage
                     )
 
-                    trySend(messageChunk)
+                    trySend(messageChunk).onFailure { e ->
+                        Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     println("[onEvent] 解析错误: $data")
@@ -344,7 +345,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             println("[awaitClose] 关闭eventSource")
             eventSource.cancel()
         }
-    }
+        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
+    }.buffer(Channel.UNLIMITED)
 
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,
@@ -796,83 +798,5 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             totalTokens = totalTokens,
             cachedTokens = cachedTokens
         )
-    }
-
-    override suspend fun generateImage(
-        providerSetting: ProviderSetting,
-        params: ImageGenerationParams
-    ): Flow<ImageGenerationItem> = flow {
-        require(providerSetting is ProviderSetting.Google) {
-            "Expected Google provider setting"
-        }
-
-        val items = withContext(Dispatchers.IO) {
-            val requestBody = buildJsonObject {
-                putJsonArray("instances") {
-                    add(buildJsonObject {
-                        put("prompt", params.prompt)
-                    })
-                }
-                putJsonObject("parameters") {
-                    put("sampleCount", params.numOfImages)
-                    put(
-                        "aspectRatio", when (params.aspectRatio) {
-                            ImageAspectRatio.SQUARE -> "1:1"
-                            ImageAspectRatio.LANDSCAPE -> "16:9"
-                            ImageAspectRatio.PORTRAIT -> "9:16"
-                        }
-                    )
-                }
-            }.mergeCustomBody(params.customBody)
-
-            val url = buildUrl(
-                providerSetting = providerSetting,
-                path = if (providerSetting.vertexAI) {
-                    "publishers/google/models/${params.model.modelId}:predict"
-                } else {
-                    "models/${params.model.modelId}:predict"
-                }
-            )
-
-            val request = transformRequest(
-                providerSetting = providerSetting,
-                request = Request.Builder()
-                    .url(url)
-                    .headers(params.customHeaders.toHeaders())
-                    .post(
-                        json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
-                    )
-                    .configureReferHeaders(providerSetting.baseUrl)
-                    .build()
-            )
-
-            val response = client.newCall(request).await()
-            if (!response.isSuccessful) {
-                error("Failed to generate image: ${response.code} ${response.body.string()}")
-            }
-
-            val bodyStr = response.body.string()
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-
-            val predictions = bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
-
-            predictions.mapNotNull { prediction ->
-                val predictionObj = prediction.jsonObject
-                val bytesBase64Encoded = predictionObj["bytesBase64Encoded"]?.jsonPrimitive?.contentOrNull
-
-                if (bytesBase64Encoded != null) {
-                    ImageGenerationItem(
-                        data = bytesBase64Encoded,
-                        mimeType = "image/png"
-                    )
-                } else {
-                    null
-                }
-            }
-        }
-
-        items.forEach { item ->
-            emit(item)
-        }
     }
 }

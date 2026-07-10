@@ -179,8 +179,7 @@
 
         import katex from 'https://esm.sh/katex@0.16.8';
         // mhchem 扩展: 支持 \ce{} 等化学公式语法
-        import katexMhchem from 'https://esm.sh/katex@0.16.8/dist/contrib/mhchem.mjs';
-        katex.use(katexMhchem);
+        import 'https://esm.sh/katex@0.16.8/dist/contrib/mhchem.mjs';
         import hljs from 'https://esm.sh/highlight.js@11.9.0';
         import mermaid from 'https://esm.sh/mermaid@10.6.1';
         import { Base64 } from 'https://esm.sh/js-base64@3.7.5';
@@ -207,7 +206,9 @@
         });
 
         // Add plugins
-        md.use(vscodemarkdownItKatex);
+        // 传入已加载 mhchem 扩展的 katex 实例, 否则插件会使用其内部自带的另一个 katex 实例,
+        // 导致 \ce 等 mhchem 语法无法识别 (Undefined control sequence: \ce)
+        md.use(vscodemarkdownItKatex, { katex });
 
         md.use(markdownItTaskLists, {
             enabled: true,

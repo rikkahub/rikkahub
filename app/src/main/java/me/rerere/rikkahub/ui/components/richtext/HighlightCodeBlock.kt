@@ -71,6 +71,7 @@ import me.rerere.hugeicons.stroke.View
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.webview.WebView
+import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -80,7 +81,6 @@ import me.rerere.rikkahub.ui.theme.AtomOneDarkPalette
 import me.rerere.rikkahub.ui.theme.AtomOneLightPalette
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
-import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.toDp
 import kotlin.time.Clock
 
@@ -365,6 +365,7 @@ private fun HighlightCodeActions(
     canInlinePreview: Boolean = false,
     onTogglePreviewMode: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -461,7 +462,8 @@ private fun HighlightCodeActions(
                         .clip(RoundedCornerShape(4.dp))
                         .onClick {
                             val content = buildCodePreviewHtml(code = code, language = normalizedLanguage)
-                            navController.navigate(Screen.WebView(content = content.base64Encode()))
+                            val contentId = WebViewContentCache.store(context.cacheDir, content)
+                            navController.navigate(Screen.WebView(contentId = contentId))
                         }
                         .padding(4.dp)
                         .size(iconSize)

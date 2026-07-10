@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import api, { sse } from "~/services/api";
+import api from "~/services/api";
+import { EVENT_CONVERSATION_LIST_INVALIDATE, subscribeToEvent } from "~/services/events";
 import type {
   ConversationDto,
   ConversationListDto,
@@ -14,6 +15,16 @@ export interface UseConversationListOptions {
   autoSelectFirst?: boolean;
   pageSize?: number;
   maxRefreshLimit?: number;
+  /**
+   * Folder filter: `null` = unfiled (default "chats" view), a folder id = that folder.
+   * Passed to the backend as `folderId` ("none" for unfiled).
+   */
+  folderId?: string | null;
+}
+
+// Backend expects "none" for the unfiled view; a folder uuid otherwise.
+function toFolderQueryValue(folderId: string | null): string {
+  return folderId === null ? "none" : folderId;
 }
 
 interface ConversationSummaryUpdate {
@@ -43,6 +54,7 @@ export function useConversationList({
   autoSelectFirst = true,
   pageSize = 30,
   maxRefreshLimit = 100,
+  folderId = null,
 }: UseConversationListOptions): UseConversationListResult {
   const [conversations, setConversations] = React.useState<ConversationListDto[]>([]);
   const [activeId, setActiveId] = React.useState<string | null>(routeId ?? null);
@@ -52,8 +64,10 @@ export function useConversationList({
   const [refreshToken, setRefreshToken] = React.useState(0);
   const nextOffsetRef = React.useRef<number | null>(0);
   const currentAssistantIdRef = React.useRef<string | null>(currentAssistantId);
+  const folderIdRef = React.useRef<string | null>(folderId);
   const conversationsRef = React.useRef<ConversationListDto[]>([]);
   const previousAssistantIdRef = React.useRef<string | null>(null);
+  const previousFolderIdRef = React.useRef<string | null>(folderId);
   const refreshTimerRef = React.useRef<number | null>(null);
   const listRequestEpochRef = React.useRef(0);
 
@@ -125,6 +139,10 @@ export function useConversationList({
   }, [currentAssistantId]);
 
   React.useEffect(() => {
+    folderIdRef.current = folderId;
+  }, [folderId]);
+
+  React.useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
 
@@ -138,38 +156,28 @@ export function useConversationList({
   }, []);
 
   React.useEffect(() => {
-    const abortController = new AbortController();
-
-    void sse<ConversationListInvalidateEventDto>(
-      "conversations/stream",
-      {
-        onMessage: ({ event, data }) => {
-          if (event !== "invalidate") return;
-          if (data.assistantId !== currentAssistantIdRef.current) return;
-          scheduleListRefresh();
-        },
-        onError: (streamError) => {
-          console.error("Conversation list SSE error:", streamError);
-        },
+    return subscribeToEvent<ConversationListInvalidateEventDto>(
+      EVENT_CONVERSATION_LIST_INVALIDATE,
+      (data) => {
+        if (data.assistantId !== currentAssistantIdRef.current) return;
+        scheduleListRefresh();
       },
-      { signal: abortController.signal },
     );
-
-    return () => {
-      abortController.abort();
-    };
   }, [scheduleListRefresh]);
 
   React.useEffect(() => {
     let active = true;
     const assistantChanged = previousAssistantIdRef.current !== currentAssistantId;
     previousAssistantIdRef.current = currentAssistantId;
+    const folderChanged = previousFolderIdRef.current !== folderId;
+    previousFolderIdRef.current = folderId;
+    const scopeChanged = assistantChanged || folderChanged;
 
-    const loadedCount = assistantChanged ? 0 : conversationsRef.current.length;
+    const loadedCount = scopeChanged ? 0 : conversationsRef.current.length;
     const limit = Math.min(Math.max(pageSize, loadedCount), maxRefreshLimit);
     const requestEpoch = ++listRequestEpochRef.current;
 
-    if (assistantChanged || loadedCount === 0) {
+    if (scopeChanged || loadedCount === 0) {
       setLoading(true);
       setConversations([]);
       nextOffsetRef.current = 0;
@@ -180,12 +188,12 @@ export function useConversationList({
 
     api
       .get<PagedResult<ConversationListDto>>("conversations/paged", {
-        searchParams: { offset: 0, limit },
+        searchParams: { offset: 0, limit, folderId: toFolderQueryValue(folderId) },
       })
       .then((data) => {
         if (!active || requestEpoch !== listRequestEpochRef.current) return;
 
-        if (assistantChanged || loadedCount === 0) {
+        if (scopeChanged || loadedCount === 0) {
           setConversations(sortConversations(data.items));
         } else {
           setConversations((prev) => refreshConversations(prev, data.items, limit));
@@ -220,6 +228,7 @@ export function useConversationList({
   }, [
     autoSelectFirst,
     currentAssistantId,
+    folderId,
     maxRefreshLimit,
     pageSize,
     refreshConversations,
@@ -236,7 +245,11 @@ export function useConversationList({
 
     api
       .get<PagedResult<ConversationListDto>>("conversations/paged", {
-        searchParams: { offset, limit: pageSize },
+        searchParams: {
+          offset,
+          limit: pageSize,
+          folderId: toFolderQueryValue(folderIdRef.current),
+        },
       })
       .then((data) => {
         if (requestEpoch !== listRequestEpochRef.current) return;

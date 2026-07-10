@@ -426,13 +426,6 @@ private fun JsonElement?.int(key: String): Int? =
 private fun JsonElement?.long(key: String): Long? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.longOrNull
 
-/** 将字节数格式化为人类可读大小 */
-private fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
-    else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-}
-
 private const val FILE_SUMMARY_MAX_LINES = 10
 
 /** 由文件扩展名推断语法高亮语言 */

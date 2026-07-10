@@ -37,7 +37,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +51,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Camera01
@@ -285,7 +283,9 @@ internal fun FilesPicker(
             settings = settings,
             onUpdateAssistant = onUpdateAssistant,
             onUpdateConversation = onUpdateConversation,
-            onDismiss = { onShowInjectionSheetChange(false) })
+            onDismiss = { onShowInjectionSheetChange(false) },
+            onDismissAll = onDismiss,
+        )
     }
 
     // Compress Context Dialog
@@ -392,10 +392,10 @@ private fun InjectionQuickConfigSheet(
     settings: Settings,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateConversation: (Conversation) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onDismissAll: () -> Unit,
 ) {
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-    val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
 
     ModalBottomSheet(
@@ -416,25 +416,16 @@ private fun InjectionQuickConfigSheet(
                 onUpdateConversation = onUpdateConversation,
                 modifier = Modifier.weight(1f),
                 onNavigateToQuickMessages = {
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.QuickMessages)
-                    }
+                    onDismissAll()
+                    navController.navigate(Screen.QuickMessages)
                 },
                 onNavigateToPrompts = {
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.Prompts)
-                    }
+                    onDismissAll()
+                    navController.navigate(Screen.Prompts)
                 },
                 onNavigateToSkills = {
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.Skills)
-                    }
+                    onDismissAll()
+                    navController.navigate(Screen.Skills)
                 })
 
             Spacer(modifier = Modifier.height(16.dp))

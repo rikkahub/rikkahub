@@ -91,7 +91,7 @@
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScriptエンジン</string>
   <string name="assistant_page_local_tools_time_info_desc">デバイスから現在の日付、曜日、時刻、タイムゾーン情報を取得</string>
   <string name="assistant_page_local_tools_time_info_title">時刻情報</string>
-  <string name="assistant_page_local_tools_tts_desc">AIがデバイスのTTSエンジンを使ってテキストを読み上げます</string>
+  <string name="assistant_page_local_tools_tts_desc">AIが選択したTTSサービスを使ってテキストを読み上げます</string>
   <string name="assistant_page_local_tools_tts_title">テキスト読み上げ</string>
   <string name="assistant_page_manage_memory_title">記憶を管理</string>
   <string name="assistant_page_max_tokens">最大トークン数</string>
@@ -1273,5 +1273,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_folder_add">新規</string>
   <string name="chat_page_delete_folder_confirm">フォルダ "%1$s" を削除しますか？内部の会話は削除されず、フォルダから取り除かれるだけです。</string>
   <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
 </resources>
 

@@ -91,7 +91,7 @@
   <string name="assistant_page_local_tools_javascript_engine_title">Движок JavaScript</string>
   <string name="assistant_page_local_tools_time_info_desc">Получить текущую дату, день недели, время и часовой пояс с устройства</string>
   <string name="assistant_page_local_tools_time_info_title">Информация о времени</string>
-  <string name="assistant_page_local_tools_tts_desc">Позвольте ИИ озвучить текст с помощью системного движка TTS устройства</string>
+  <string name="assistant_page_local_tools_tts_desc">Позвольте ИИ озвучить текст с помощью выбранного вами сервиса TTS</string>
   <string name="assistant_page_local_tools_tts_title">Преобразование текста в речь</string>
   <string name="assistant_page_manage_memory_title">Управление памятью</string>
   <string name="assistant_page_max_tokens">Макс. токенов</string>
@@ -1273,5 +1273,7 @@
   <string name="chat_page_folder_add">Новая</string>
   <string name="chat_page_delete_folder_confirm">Удалить папку "%1$s"? Беседы внутри не будут удалены, только исключены из папки.</string>
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
 </resources>
 

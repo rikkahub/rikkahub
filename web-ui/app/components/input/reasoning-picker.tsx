@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { useMutation } from "@tanstack/react-query";
 import { Brain, BrainCircuit, ChevronDown, Lightbulb, LightbulbOff, LoaderCircle, Sparkles } from "lucide-react";
+import { Slider as SliderPrimitive } from "radix-ui";
 import { useTranslation } from "react-i18next";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
@@ -12,21 +13,16 @@ import { cn } from "~/lib/utils";
 import api from "~/services/api";
 import type { ProviderModel } from "~/types";
 import { Button } from "~/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "~/components/ui/popover";
-import { Slider } from "~/components/ui/slider";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 
 import { PickerErrorAlert } from "./picker-error-alert";
 
 type ReasoningLevel = "off" | "auto" | "low" | "medium" | "high" | "xhigh";
 
 const REASONING_LEVELS: ReasoningLevel[] = ["off", "auto", "low", "medium", "high", "xhigh"];
+
+// Thumb size in px, keep in sync with `size-7` on the thumb below
+const THUMB_SIZE = 28;
 
 interface ReasoningPreset {
   key: ReasoningLevel;
@@ -56,6 +52,48 @@ function ReasoningIcon({ level, className }: { level: ReasoningLevel; className?
   }
 }
 
+function ReasoningSlider({
+  value,
+  disabled,
+  onValueChange,
+  onValueCommit,
+}: {
+  value: number;
+  disabled?: boolean;
+  onValueChange: (index: number) => void;
+  onValueCommit: (index: number) => void;
+}) {
+  const max = REASONING_LEVELS.length - 1;
+  return (
+    <SliderPrimitive.Root
+      value={[value]}
+      min={0}
+      max={max}
+      step={1}
+      disabled={disabled}
+      onValueChange={([index]) => onValueChange(index)}
+      onValueCommit={([index]) => onValueCommit(index)}
+      className="relative flex h-7 w-full touch-none items-center select-none data-[disabled]:opacity-50"
+    >
+      <SliderPrimitive.Track className="relative h-7 w-full grow overflow-hidden rounded-full bg-muted">
+        <SliderPrimitive.Range className="absolute h-full bg-primary/75" />
+        {/* Tick dots inside the track, aligned with thumb travel positions */}
+        {REASONING_LEVELS.map((level, i) => (
+          <span
+            key={level}
+            className={cn(
+              "pointer-events-none absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
+              i <= value ? "bg-primary-foreground/60" : "bg-foreground/25",
+            )}
+            style={{ left: `calc(${THUMB_SIZE / 2}px + (100% - ${THUMB_SIZE}px) * ${i / max})` }}
+          />
+        ))}
+      </SliderPrimitive.Track>
+      <SliderPrimitive.Thumb className="block size-7 shrink-0 rounded-lg border-2 border-primary bg-background shadow-md ring-ring/50 transition-[box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none" />
+    </SliderPrimitive.Root>
+  );
+}
+
 export function ReasoningPickerButton({ disabled = false, className }: ReasoningPickerButtonProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
@@ -79,7 +117,6 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
 
   const currentLevel = ((currentAssistant?.reasoningLevel as ReasoningLevel | null | undefined) ?? "auto");
   const currentIndex = Math.max(0, REASONING_LEVELS.indexOf(currentLevel));
-  const currentPreset = reasoningPresets.find((p) => p.key === currentLevel) ?? reasoningPresets[1];
 
   const [localIndex, setLocalIndex] = React.useState(currentIndex);
 
@@ -114,8 +151,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
 
   const loading = updateReasoningLevelMutation.isPending;
   const localLevel = REASONING_LEVELS[localIndex] ?? currentLevel;
-  const localPreset = reasoningPresets.find((p) => p.key === localLevel) ?? currentPreset;
-  const isEnabled = localLevel !== "off";
+  const localPreset = reasoningPresets.find((p) => p.key === localLevel) ?? reasoningPresets[1];
 
   if (!canReasoning) return null;
 
@@ -132,8 +168,8 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
             className,
           )}
         >
-          <ReasoningIcon level={currentLevel} className="size-3.5" />
-          <span className="hidden sm:block">{currentPreset.label}</span>
+          <ReasoningIcon level={localLevel} className="size-3.5" />
+          <span className="hidden sm:block">{localPreset.label}</span>
           <span className="hidden sm:block">
             {loading ? (
               <LoaderCircle className="size-3.5 animate-spin" />
@@ -144,71 +180,34 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[min(92vw,22rem)] gap-0 p-0">
-        <PopoverHeader className="border-b px-6 py-4">
-          <PopoverTitle>{t("reasoning.title")}</PopoverTitle>
-          <PopoverDescription>{t("reasoning.description")}</PopoverDescription>
-        </PopoverHeader>
+      <PopoverContent align="end" className="w-[min(92vw,20rem)] space-y-3 px-4 py-4">
+        <PickerErrorAlert error={error} />
 
-        <div className="space-y-5 px-6 py-5">
-          <PickerErrorAlert error={error} />
+        {/* Faster / Smarter labels */}
+        <div className="flex items-center justify-between text-sm font-medium text-foreground">
+          <span>{t("reasoning.faster")}</span>
+          <span>{t("reasoning.smarter")}</span>
+        </div>
 
-          {/* Current level display */}
-          <div className="flex flex-col items-center gap-1.5">
-            <ReasoningIcon
-              level={localLevel}
-              className={cn(
-                "size-8 transition-colors",
-                isEnabled ? "text-primary" : "text-muted-foreground",
-              )}
-            />
-            <span className={cn(
-              "text-sm font-medium transition-colors",
-              isEnabled ? "text-primary" : "text-foreground",
-            )}>
-              {localPreset.label}
-            </span>
-            <span className="text-xs text-muted-foreground text-center min-h-[2.5em]">
-              {localPreset.description}
-            </span>
-          </div>
+        {/* Thick slider with tick dots */}
+        <ReasoningSlider
+          value={localIndex}
+          disabled={disabled || loading}
+          onValueChange={setLocalIndex}
+          onValueCommit={(index) => {
+            if (!currentAssistant) return;
+            updateReasoningLevelMutation.mutate({
+              assistantId: currentAssistant.id,
+              reasoningLevel: REASONING_LEVELS[index],
+            });
+          }}
+        />
 
-          {/* Slider */}
-          <div className="space-y-2">
-            <Slider
-              value={[localIndex]}
-              min={0}
-              max={REASONING_LEVELS.length - 1}
-              step={1}
-              disabled={disabled || loading}
-              onValueChange={([index]) => {
-                setLocalIndex(index);
-              }}
-              onValueCommit={([index]) => {
-                if (!currentAssistant) return;
-                const level = REASONING_LEVELS[index];
-                updateReasoningLevelMutation.mutate({
-                  assistantId: currentAssistant.id,
-                  reasoningLevel: level,
-                });
-              }}
-            />
-
-            {/* Tick labels */}
-            <div className="flex justify-between">
-              {reasoningPresets.map((preset, i) => (
-                <span
-                  key={preset.key}
-                  className={cn(
-                    "flex-1 text-center text-[10px] transition-colors",
-                    i === localIndex ? "text-primary font-medium" : "text-muted-foreground",
-                  )}
-                >
-                  {preset.label}
-                </span>
-              ))}
-            </div>
-          </div>
+        {/* Current preset hint */}
+        <div className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">{localPreset.label}</span>
+          {" · "}
+          {localPreset.description}
         </div>
       </PopoverContent>
     </Popover>
