@@ -5,5 +5,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test signing config
-        run: echo "${{ secrets.SIGNING_CONFIG }}"
+      - name: Test KEY_BASE64
+        run: echo "${{ secrets.KEY_BASE64 }}" | head -c 10
