@@ -107,6 +107,10 @@ class WebServerManager(
         }
     }
 
+    fun reportError(message: String) {
+        _state.value = _state.value.copy(isRunning = false, isLoading = false, error = message)
+    }
+
     fun stop() {
         _state.value =
             _state.value.copy(isRunning = false, isLoading = true, hostname = null, address = null, error = null)
