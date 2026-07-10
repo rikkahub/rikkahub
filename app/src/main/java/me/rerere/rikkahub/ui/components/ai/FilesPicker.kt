@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -40,10 +41,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -99,6 +102,7 @@ internal fun FilesPicker(
     showCompressDialog: Boolean,
     onShowCompressDialogChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
+    isPreparingImage: Boolean,
     onTakePic: () -> Unit,
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
@@ -116,22 +120,29 @@ internal fun FilesPicker(
             .fillMaxWidth()
             .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        val loadingLabel = stringResource(R.string.workspace_detail_loading)
+        if (isPreparingImage) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = loadingLabel },
+            )
+        }
+
         FlowRow(
             modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            TakePicButton(onLaunchCamera = onTakePic)
-
-            ImagePickButton(onClick = onPickImage)
+            TakePicButton(enabled = !isPreparingImage, onLaunchCamera = onTakePic)
+            ImagePickButton(enabled = !isPreparingImage, onClick = onPickImage)
 
             if (provider != null && provider is ProviderSetting.Google) {
-                VideoPickButton(onClick = onPickVideo)
-
-                AudioPickButton(onClick = onPickAudio)
+                VideoPickButton(enabled = !isPreparingImage, onClick = onPickVideo)
+                AudioPickButton(enabled = !isPreparingImage, onClick = onPickAudio)
             }
 
-            FilePickButton(onClick = onPickFile)
+            FilePickButton(enabled = !isPreparingImage, onClick = onPickFile)
         }
 
         HorizontalDivider(
@@ -434,63 +445,59 @@ private fun InjectionQuickConfigSheet(
 }
 
 @Composable
-private fun ImagePickButton(onClick: () -> Unit = {}) {
-    BigIconTextButton(icon = {
-        Icon(HugeIcons.Image02, null)
-    }, text = {
-        Text(stringResource(R.string.photo))
-    }) {
-        onClick()
-    }
+private fun ImagePickButton(enabled: Boolean = true, onClick: () -> Unit = {}) {
+    BigIconTextButton(
+        enabled = enabled,
+        icon = { Icon(HugeIcons.Image02, null) },
+        text = { Text(stringResource(R.string.photo)) },
+        onClick = onClick,
+    )
 }
 
 @Composable
-fun TakePicButton(onLaunchCamera: () -> Unit = {}) {
-    BigIconTextButton(icon = {
-        Icon(HugeIcons.Camera01, null)
-    }, text = {
-        Text(stringResource(R.string.take_picture))
-    }) {
-        onLaunchCamera()
-    }
+fun TakePicButton(enabled: Boolean = true, onLaunchCamera: () -> Unit = {}) {
+    BigIconTextButton(
+        enabled = enabled,
+        icon = { Icon(HugeIcons.Camera01, null) },
+        text = { Text(stringResource(R.string.take_picture)) },
+        onClick = onLaunchCamera,
+    )
 }
 
 @Composable
-fun VideoPickButton(onClick: () -> Unit = {}) {
-    BigIconTextButton(icon = {
-        Icon(HugeIcons.Video01, null)
-    }, text = {
-        Text(stringResource(R.string.video))
-    }) {
-        onClick()
-    }
+fun VideoPickButton(enabled: Boolean = true, onClick: () -> Unit = {}) {
+    BigIconTextButton(
+        enabled = enabled,
+        icon = { Icon(HugeIcons.Video01, null) },
+        text = { Text(stringResource(R.string.video)) },
+        onClick = onClick,
+    )
 }
 
 @Composable
-fun AudioPickButton(onClick: () -> Unit = {}) {
-    BigIconTextButton(icon = {
-        Icon(HugeIcons.MusicNote03, null)
-    }, text = {
-        Text(stringResource(R.string.audio))
-    }) {
-        onClick()
-    }
+fun AudioPickButton(enabled: Boolean = true, onClick: () -> Unit = {}) {
+    BigIconTextButton(
+        enabled = enabled,
+        icon = { Icon(HugeIcons.MusicNote03, null) },
+        text = { Text(stringResource(R.string.audio)) },
+        onClick = onClick,
+    )
 }
 
 @Composable
-fun FilePickButton(onClick: () -> Unit = {}) {
-    BigIconTextButton(icon = {
-        Icon(HugeIcons.Files02, null)
-    }, text = {
-        Text(stringResource(R.string.upload_file))
-    }) {
-        onClick()
-    }
+fun FilePickButton(enabled: Boolean = true, onClick: () -> Unit = {}) {
+    BigIconTextButton(
+        enabled = enabled,
+        icon = { Icon(HugeIcons.Files02, null) },
+        text = { Text(stringResource(R.string.upload_file)) },
+        onClick = onClick,
+    )
 }
 
 @Composable
 private fun BigIconTextButton(
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     icon: @Composable () -> Unit,
     text: @Composable () -> Unit,
     onClick: () -> Unit,
@@ -498,22 +505,23 @@ private fun BigIconTextButton(
     val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
+            .alpha(if (enabled) 1f else 0.38f)
             .clip(RoundedCornerShape(8.dp))
             .clickable(
-                interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick,
             )
-            .semantics {
-                role = Role.Button
-            }
-            .wrapContentWidth(),
+            .semantics { role = Role.Button },
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Surface(
-            color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(8.dp)
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            shape = RoundedCornerShape(8.dp),
         ) {
-            Box(
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
-            ) {
+            Box(modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)) {
                 icon()
             }
         }

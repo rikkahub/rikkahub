@@ -61,6 +61,7 @@ import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
@@ -521,6 +522,9 @@ private fun ChatPageContent(
     }
 }
 
+internal fun canStartImagePreparation(isPreparingImage: Boolean): Boolean =
+    !isPreparingImage
+
 @Composable
 private fun ChatFilesPickerSheet(
     inputState: ChatInputState,
@@ -530,6 +534,8 @@ private fun ChatFilesPickerSheet(
     vm: ChatVM,
     onDismiss: () -> Unit,
 ) {
+    val imagePreparationScope = rememberCoroutineScope()
+    var isPreparingImage by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val resources = LocalResources.current
     val toaster = LocalToaster.current
@@ -606,23 +612,39 @@ private fun ChatFilesPickerSheet(
                 if (setting.displaySetting.skipCropImage) {
                     inputState.addImages(filesManager.createChatFilesByContents(selectedUris))
                     dismissAll()
-                } else if (selectedUris.size == 1) {
+                } else if (selectedUris.size == 1 && canStartImagePreparation(isPreparingImage)) {
+                    val source = selectedUris.first()
                     val tempFile = File(context.appTempFolder, "pick_temp_${System.currentTimeMillis()}.jpg")
-                    runCatching {
-                        val source = selectedUris.first()
-                        // HEIF/HEIC（尤其 HDR HEIF）交给 UCrop 前先解码转为 JPEG，规避裁剪解码失败
-                        val converted = ImageUtils.isHeifImage(context, source) &&
-                            ImageUtils.convertHeifToJpeg(context, source, tempFile)
-                        if (!converted) {
-                            context.contentResolver.openInputStream(source)?.use { input ->
-                                tempFile.outputStream().use { output -> input.copyTo(output) }
+                    isPreparingImage = true
+                    imagePreparationScope.launch {
+                        var handedToCrop = false
+                        try {
+                            ImageUtils.prepareImageForCrop(
+                                convert = {
+                                    ImageUtils.isHeifImage(context, source) &&
+                                        ImageUtils.convertHeifToJpeg(context, source, tempFile)
+                                },
+                                copyOriginal = {
+                                    context.contentResolver.openInputStream(source)?.use { input ->
+                                        tempFile.outputStream().use { output -> input.copyTo(output) }
+                                    } ?: error("Unable to open selected image")
+                                },
+                            )
+                            preCropTempFile = tempFile
+                            launchImageCrop(tempFile.toUri())
+                            handedToCrop = true
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (error: Exception) {
+                            Log.e("ImagePickButton", "Failed to prepare image for crop, falling back", error)
+                            launchImageCrop(source)
+                        } finally {
+                            if (!handedToCrop) {
+                                if (preCropTempFile == tempFile) preCropTempFile = null
+                                tempFile.delete()
                             }
+                            isPreparingImage = false
                         }
-                        preCropTempFile = tempFile
-                        launchImageCrop(tempFile.toUri())
-                    }.onFailure {
-                        Log.e("ImagePickButton", "Failed to copy image to temp, falling back", it)
-                        launchImageCrop(selectedUris.first())
                     }
                 } else {
                     inputState.addImages(filesManager.createChatFilesByContents(selectedUris))
@@ -718,6 +740,7 @@ private fun ChatFilesPickerSheet(
             showCompressDialog = showCompressDialog,
             onShowCompressDialogChange = { showCompressDialog = it },
             onDismiss = { dismissAll() },
+            isPreparingImage = isPreparingImage,
             onTakePic = onLaunchCamera,
             onPickImage = { imagePickerLauncher.launch("image/*") },
             onPickVideo = { videoPickerLauncher.launch("video/*") },
