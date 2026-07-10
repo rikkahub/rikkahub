@@ -25,5 +25,7 @@ jobs:
         with:
           path: ~/.gradle/caches
           key: gradle
+      - name: Secret test
+        run: echo "${{ secrets.KEY_BASE64 }}" > /dev/null
       - name: Build
         run: echo "build ok"
