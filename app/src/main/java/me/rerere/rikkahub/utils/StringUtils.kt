@@ -147,9 +147,45 @@ fun String.extractQuotedContentAsText(separator: String = "\n"): String? {
  * @return 移除括号内容后的字符串，如果全被移除则返回 null
  */
 fun String.removeBracketedContent(): String? {
-    val pattern = """\([^)]*?\)|（[^）]*?）""".toRegex()
-    val result = pattern.replace(this, "").trim()
-    return result.ifBlank { null }
+    val result = StringBuilder(length)
+    val bracketSegment = StringBuilder()
+    val expectedClosers = ArrayDeque<Char>()
+
+    for (char in this) {
+        if (expectedClosers.isEmpty()) {
+            when (char) {
+                '(' -> {
+                    bracketSegment.append(char)
+                    expectedClosers.addLast(')')
+                }
+
+                '（' -> {
+                    bracketSegment.append(char)
+                    expectedClosers.addLast('）')
+                }
+
+                else -> result.append(char)
+            }
+            continue
+        }
+
+        bracketSegment.append(char)
+        when (char) {
+            '(' -> expectedClosers.addLast(')')
+            '（' -> expectedClosers.addLast('）')
+            expectedClosers.last() -> {
+                expectedClosers.removeLast()
+                if (expectedClosers.isEmpty()) {
+                    bracketSegment.clear()
+                }
+            }
+        }
+    }
+
+    if (expectedClosers.isNotEmpty()) {
+        result.append(bracketSegment)
+    }
+    return result.toString().trim().ifBlank { null }
 }
 
 fun String.filterTextForTts(

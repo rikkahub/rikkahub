@@ -106,6 +106,70 @@ class StringUtilsTest {
     }
 
     @Test
+    fun `remove nested english brackets keeps outside text`() {
+        assertEquals(
+            "beforeafter",
+            "before(outer (inner) tail)after".removeBracketedContent(),
+        )
+    }
+
+    @Test
+    fun `remove nested full-width brackets keeps outside text`() {
+        assertEquals(
+            "前后",
+            "前（外层（内层）尾部）后".removeBracketedContent(),
+        )
+    }
+
+    @Test
+    fun `remove mixed english brackets inside full-width brackets`() {
+        assertEquals(
+            "beforeafter",
+            "before（outer(inner)tail）after".removeBracketedContent(),
+        )
+    }
+
+    @Test
+    fun `remove mixed full-width brackets inside english brackets`() {
+        assertEquals(
+            "前后",
+            "前(外层（内层）尾部)后".removeBracketedContent(),
+        )
+    }
+
+    @Test
+    fun `remove all nested bracket text returns null`() {
+        assertNull("(outer(inner)tail)".removeBracketedContent())
+    }
+
+    @Test
+    fun `tts filter returns empty for all nested bracket text`() {
+        assertEquals(
+            "",
+            "(outer(inner)tail)".filterTextForTts(
+                onlyReadQuoted = false,
+                onlyReadOutsideBrackets = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `remove brackets preserves unmatched opening delimiter and suffix`() {
+        assertEquals(
+            "before(unclosed suffix",
+            "before(unclosed suffix".removeBracketedContent(),
+        )
+    }
+
+    @Test
+    fun `remove brackets preserves unmatched closing delimiter`() {
+        assertEquals(
+            "before）after",
+            "before）after".removeBracketedContent(),
+        )
+    }
+
+    @Test
     fun `tts filter returns empty for bracket-only text`() {
         assertEquals(
             "",
