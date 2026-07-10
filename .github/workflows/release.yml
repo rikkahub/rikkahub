@@ -13,7 +13,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Keystore
-        run: echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+      - name: Test pipe
+        run: echo "hello" | cat
       - name: Build
-        run: echo "test build ok"
+        run: echo "build ok"
