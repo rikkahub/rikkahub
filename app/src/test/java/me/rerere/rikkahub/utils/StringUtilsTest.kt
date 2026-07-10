@@ -128,10 +128,32 @@ class StringUtilsTest {
     }
 
     @Test
-    fun `tts filter composes quoted extraction before bracket removal`() {
+    fun `tts filter removes brackets inside quoted content`() {
         assertEquals(
             "你好",
             "他说“你好（低声）”".filterTextForTts(
+                onlyReadQuoted = true,
+                onlyReadOutsideBrackets = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `tts filter excludes quoted content inside brackets`() {
+        assertEquals(
+            "spoken",
+            "（“aside”）“spoken”".filterTextForTts(
+                onlyReadQuoted = true,
+                onlyReadOutsideBrackets = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `tts filter returns empty when all quoted content is inside brackets`() {
+        assertEquals(
+            "",
+            "（“aside”）".filterTextForTts(
                 onlyReadQuoted = true,
                 onlyReadOutsideBrackets = true,
             ),

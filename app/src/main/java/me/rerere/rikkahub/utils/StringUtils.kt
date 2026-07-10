@@ -157,11 +157,11 @@ fun String.filterTextForTts(
     onlyReadOutsideBrackets: Boolean,
 ): String {
     var result = this
-    if (onlyReadQuoted) {
-        result = result.extractQuotedContentAsText() ?: result
-    }
     if (onlyReadOutsideBrackets) {
         result = result.removeBracketedContent().orEmpty()
+    }
+    if (onlyReadQuoted) {
+        result = result.extractQuotedContentAsText() ?: result
     }
     return result
 }
