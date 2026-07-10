@@ -30,8 +30,10 @@ jobs:
 
       - name: Prepare build files
         run: |
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > /dev/null
-          echo "${{ secrets.SIGNING_CONFIG }}" > /dev/null
+          echo "${{ secrets.KEY_BASE64 }}" > /tmp/key.b64
+          base64 -d /tmp/key.b64 > app/app.key
+          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          touch app/google-services.json
 
       - name: Build
         run: |
