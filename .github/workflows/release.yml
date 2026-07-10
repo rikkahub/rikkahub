@@ -28,11 +28,8 @@ jobs:
           path: ~/.gradle/caches
           key: gradle
 
-      - name: Prepare build files
-        run: |
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+      - name: Prepare
+        run: echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
 
       - name: Build
         run: |
