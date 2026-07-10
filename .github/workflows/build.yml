@@ -36,14 +36,15 @@ jobs:
 
       - name: Generate keystore
         run: |
-          keytool -genkey -v -keystore app/app.key \
+          keytool -genkey -v -keystore app.key \
             -alias rikkahub -keyalg RSA -keysize 2048 \
             -validity 10000 -storepass android123 -keypass android123 \
             -dname "CN=RikkaHub, OU=Procare, O=Pheobe-Southwood, L=Earth, ST=World, C=CN"
+          mv app.key app/
 
       - name: Signing config
         run: |
-          echo "storeFile=app/app.key" > local.properties
+          echo "storeFile=app.key" > local.properties
           echo "storePassword=android123" >> local.properties
           echo "keyAlias=rikkahub" >> local.properties
           echo "keyPassword=android123" >> local.properties
