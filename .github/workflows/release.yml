@@ -1,0 +1,41 @@
+name: Release Build
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install pnpm
+        run: |
+          npm install -g pnpm
+          cd web-ui && pnpm install --frozen-lockfile
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: gradle
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --parallel --configuration-cache
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.4.1-procare
+          name: v2.4.1-procare
+          files: app/build/outputs/apk/release/*.apk
