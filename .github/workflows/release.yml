@@ -14,27 +14,20 @@ jobs:
           distribution: temurin
           java-version: 17
       - name: Install pnpm
-        run: |
-          npm install -g pnpm
-          cd web-ui && pnpm install --frozen-lockfile
+        run: npm install -g pnpm && cd web-ui && pnpm install --frozen-lockfile
       - uses: actions/cache@v4
         with:
           path: ~/.gradle/caches
           key: gradle
-      - name: Prepare build files
-        run: |
-          echo "${{ secrets.KEY_BASE64 }}" > /tmp/key.b64
-          base64 -d /tmp/key.b64 > app/app.key
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          touch app/google-services.json
+      - name: Decode keystore
+        run: echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+      - name: Write signing config
+        run: echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+      - name: Create google-services.json
+        run: echo '{}' > app/google-services.json
       - name: Build
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --parallel --configuration-cache
+        run: chmod +x gradlew && ./gradlew assembleRelease --parallel --configuration-cache
       - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create v2.4.1-procare app/build/outputs/apk/release/*.apk \
-            --title "v2.4.1-procare" \
-            --generate-notes
+        run: gh release create v2.4.1-procare app/build/outputs/apk/release/*.apk --title "v2.4.1-procare" --generate-notes
