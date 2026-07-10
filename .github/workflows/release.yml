@@ -13,13 +13,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Decode keystore
-        env:
-          KEY_B64: ${{ secrets.KEY_BASE64 }}
-        run: echo "$KEY_B64" | base64 -d > app/app.key
-      - name: Write signing config
-        env:
-          SIGNING: ${{ secrets.SIGNING_CONFIG }}
-        run: echo "$SIGNING" > local.properties
+      - name: Extra step
+        run: echo "extra step"
       - name: Build
         run: echo "build ok"
