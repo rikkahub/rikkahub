@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
@@ -17,6 +18,7 @@ import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
 import me.rerere.rikkahub.web.dto.FolderListEvent
 import me.rerere.rikkahub.web.dto.toDto
 import kotlin.time.Duration.Companion.seconds
+import kotlin.uuid.Uuid
 
 /**
  * Multiplexed server-sent events stream.
@@ -55,20 +57,7 @@ fun Route.eventsRoutes(
                     conversationRepo.getConversationsOfAssistant(assistantId),
                     chatService.getConversationJobs()
                 ) { conversations, generationJobs ->
-                    // Key per conversation folds in generation state (so start/stop invalidates the
-                    // sidebar even when content isn't persisted) and folderId (so moving a
-                    // conversation between folders invalidates other clients' folder views).
-                    conversations.map { conversation ->
-                        buildString {
-                            append(conversation.id)
-                            append('|')
-                            append(conversation.updateAt.toEpochMilli())
-                            append('|')
-                            append(generationJobs[conversation.id] != null)
-                            append('|')
-                            append(conversation.folderId?.toString().orEmpty())
-                        }
-                    }
+                    conversationListFingerprint(conversations, generationJobs.keys)
                 }
                     .distinctUntilChanged()
                     .map { assistantId }
@@ -112,4 +101,31 @@ fun Route.eventsRoutes(
 private data class EventPayload(
     val event: String,
     val json: String,
+)
+
+internal fun conversationListFingerprint(
+    conversations: List<Conversation>,
+    generatingConversationIds: Set<Uuid>,
+): List<ConversationListItemFingerprint> = conversations.map { conversation ->
+    ConversationListItemFingerprint(
+        id = conversation.id,
+        assistantId = conversation.assistantId,
+        title = conversation.title,
+        isPinned = conversation.isPinned,
+        folderId = conversation.folderId,
+        createAtMillis = conversation.createAt.toEpochMilli(),
+        updateAtMillis = conversation.updateAt.toEpochMilli(),
+        isGenerating = conversation.id in generatingConversationIds,
+    )
+}
+
+internal data class ConversationListItemFingerprint(
+    val id: Uuid,
+    val assistantId: Uuid,
+    val title: String,
+    val isPinned: Boolean,
+    val folderId: Uuid?,
+    val createAtMillis: Long,
+    val updateAtMillis: Long,
+    val isGenerating: Boolean,
 )

@@ -74,24 +74,21 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
                 .build()
 
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string()
-                val searchResponse = json.decodeFromString<OllamaSearchResponse>(responseBody)
+            httpClient.newCall(request).await().use { response ->
+                if (!response.isSuccessful) {
+                    error("Ollama search failed with code ${response.code}: ${response.message}")
+                }
+                val searchResponse = json.decodeFromString<OllamaSearchResponse>(response.body.string())
 
-                return@withContext Result.success(
-                    SearchResult(
-                        items = searchResponse.results.map {
-                            SearchResultItem(
-                                title = it.title,
-                                url = it.url,
-                                text = it.content
-                            )
-                        }
-                    )
+                SearchResult(
+                    items = searchResponse.results.map {
+                        SearchResultItem(
+                            title = it.title,
+                            url = it.url,
+                            text = it.content
+                        )
+                    }
                 )
-            } else {
-                error("Ollama search failed with code ${response.code}: ${response.message}")
             }
         }
     }
@@ -114,25 +111,26 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
                 .build()
 
-            val response = httpClient.newCall(request).await()
-            if (!response.isSuccessful) {
-                error("response failed for url $url #${response.code}")
-            }
-            val responseData = response.body.string().let {
-                json.decodeFromString<OllamaScrapeResponse>(it)
-            }
+            httpClient.newCall(request).await().use { response ->
+                if (!response.isSuccessful) {
+                    error("response failed for url $url #${response.code}")
+                }
+                val responseData = response.body.string().let {
+                    json.decodeFromString<OllamaScrapeResponse>(it)
+                }
 
-            ScrapedResult(
-                urls = listOf(
-                    ScrapedResultUrl(
-                        url = url,
-                        content = responseData.content,
-                        metadata = ScrapedResultMetadata(
-                            title = responseData.title
+                ScrapedResult(
+                    urls = listOf(
+                        ScrapedResultUrl(
+                            url = url,
+                            content = responseData.content,
+                            metadata = ScrapedResultMetadata(
+                                title = responseData.title
+                            )
                         )
                     )
                 )
-            )
+            }
         }
     }
 

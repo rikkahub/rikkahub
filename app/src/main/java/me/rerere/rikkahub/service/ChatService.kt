@@ -931,17 +931,15 @@ class ChatService(
     /**
      * 移动会话到文件夹（folderId 为 null 表示移出到未归类）。
      *
-     * 若该会话当前有活跃 session（正在查看或后台生成），先同步内存态再落库：
-     * 否则仅改数据库 folder_id，而内存里那份 Conversation 仍是旧 folderId，
-     * 后续任意 saveConversation(id, state.value) 会用整对象把 folder_id 覆盖回旧值，导致移动丢失。
-     * 先改内存可确保这段窗口内的整对象保存也带上新 folderId。
+     * 文件夹仍存在且与会话属于同一助手时，数据库更新会在序列化事务中提交；
+     * 活跃 session 随后在同一个序列化区间内同步，避免后续整对象保存写回旧 folderId。
      */
-    suspend fun moveConversationToFolder(conversationId: Uuid, folderId: Uuid?) {
-        if (sessions.containsKey(conversationId)) {
-            updateConversationState(conversationId) { it.copy(folderId = folderId) }
+    suspend fun moveConversationToFolder(conversationId: Uuid, folderId: Uuid?): Boolean =
+        folderRepository.moveConversationToFolder(conversationId, folderId) {
+            if (sessions.containsKey(conversationId)) {
+                updateConversationState(conversationId) { it.copy(folderId = folderId) }
+            }
         }
-        conversationRepo.updateConversationFolderId(conversationId, folderId)
-    }
 
     /**
      * 文件夹内是否存在正在生成回复的会话。
@@ -954,15 +952,15 @@ class ChatService(
     /**
      * 删除文件夹（folder_id 归属会被清空，会话本身保留）。
      *
-     * 先把内存中归属该文件夹的活跃 session folderId 置空，再删库：
-     * 否则 clearFolder 只改了数据库，而活跃 session 内存态仍指向该文件夹，
-     * 后续整对象保存会写回一个已被删除的 folder_id，导致会话在列表中悬空。
+     * 数据库会在一个序列化事务中清空 folder_id 并删除文件夹；事务提交后，
+     * 同一个序列化区间会清空活跃 session，避免后续整对象保存写回已删除的 folderId。
      */
     suspend fun deleteFolder(folderId: Uuid) {
-        sessions.values
-            .filter { it.state.value.folderId == folderId }
-            .forEach { updateConversationState(it.id) { c -> c.copy(folderId = null) } }
-        folderRepository.deleteFolder(folderId)
+        folderRepository.deleteFolder(folderId) {
+            sessions.values
+                .filter { it.state.value.folderId == folderId }
+                .forEach { updateConversationState(it.id) { c -> c.copy(folderId = null) } }
+        }
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {

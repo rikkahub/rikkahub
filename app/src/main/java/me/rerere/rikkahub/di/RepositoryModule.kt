@@ -8,8 +8,10 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
+import me.rerere.rikkahub.data.repository.FolderMutationCoordinator
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.RoomFolderTransactionRunner
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
@@ -24,7 +26,11 @@ val repositoryModule = module {
     }
 
     single {
-        FolderRepository(get(), get())
+        FolderMutationCoordinator(RoomFolderTransactionRunner(get()))
+    }
+
+    single {
+        FolderRepository(get(), get(), get())
     }
 
     single {

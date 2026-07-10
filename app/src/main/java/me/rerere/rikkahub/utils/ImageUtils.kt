@@ -234,7 +234,6 @@ object ImageUtils {
             target.outputStream().use { output ->
                 oriented.compress(Bitmap.CompressFormat.JPEG, quality, output)
             }
-            true
         } finally {
             recycleBitmapSafely(oriented)
         }
