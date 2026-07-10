@@ -77,9 +77,9 @@ internal fun hermesFailureFixture(
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     val audioMessages = mutableListOf<String>()
     val audioStreamEndSessionIds = mutableListOf<Long?>()
-    val toolResponses = mutableListOf<Pair<String, String>>()
-    val toolResponseNames = mutableListOf<String>()
-    val toolResponseSessionIds = mutableListOf<Long?>()
+    private val recordedToolResponses = mutableListOf<Pair<String, String>>()
+    private val recordedToolResponseNames = mutableListOf<String>()
+    private val recordedToolResponseSessionIds = mutableListOf<Long?>()
     val textTurns = mutableListOf<Pair<Long?, String>>()
     val failToolResponses = mutableSetOf<String>()
     val toolResponseErrors = mutableMapOf<String, Throwable>()
@@ -100,6 +100,15 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     private val blockedConnectCompletions = mutableListOf<BlockedConnect>()
     private val outboundSendLock = Any()
     private var outboundSessionId: Long? = null
+
+    val toolResponses: List<Pair<String, String>>
+        get() = synchronized(outboundSendLock) { recordedToolResponses.toList() }
+
+    val toolResponseNames: List<String>
+        get() = synchronized(outboundSendLock) { recordedToolResponseNames.toList() }
+
+    val toolResponseSessionIds: List<Long?>
+        get() = synchronized(outboundSendLock) { recordedToolResponseSessionIds.toList() }
 
     fun blockToolResponse(callId: String): BlockedToolResponse {
         return blockNextToolResponse(callId)
@@ -223,9 +232,9 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             if (callId in failToolResponses) {
                 return false
             }
-            toolResponses += callId to answer
-            toolResponseNames += name
-            toolResponseSessionIds += sessionId
+            recordedToolResponses += callId to answer
+            recordedToolResponseNames += name
+            recordedToolResponseSessionIds += sessionId
             return true
         }
     }
