@@ -14,6 +14,6 @@ jobs:
           distribution: temurin
           java-version: 17
       - name: Extra step
-        run: echo "extra step"
+        run: echo "test" > app/test.txt
       - name: Build
         run: echo "build ok"
