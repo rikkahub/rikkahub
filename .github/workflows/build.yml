@@ -49,7 +49,7 @@ jobs:
           echo "keyPassword=android123" >> local.properties
 
       - name: Google Services
-        run: echo '{}' > app/google-services.json
+        run: echo '{"project_info":{"project_number":"0","project_id":"rikkahub"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0","android_client_info":{"package_name":"me.rerere.rikkahub"}},"api_key":[{"current_key":"0"}]}]}' > app/google-services.json
 
       - name: Build
         run: |
