@@ -92,6 +92,7 @@ class ProviderCallbackFlowTest {
         val producerBlocked = CountDownLatch(1)
         val producerFinished = CountDownLatch(1)
         val terminalFailure = AtomicBoolean()
+        val senderInterruptedAfterSend = AtomicBoolean(true)
 
         try {
             val flow = losslessProviderCallbackFlow<Int> {
@@ -111,6 +112,7 @@ class ProviderCallbackFlowTest {
                             value += 1
                         }
                     } finally {
+                        senderInterruptedAfterSend.set(Thread.currentThread().isInterrupted)
                         producerFinished.countDown()
                     }
                 }
@@ -126,8 +128,42 @@ class ProviderCallbackFlowTest {
 
             assertTrue(producerFinished.await(5, TimeUnit.SECONDS))
             assertTrue(terminalFailure.get())
+            assertFalse(senderInterruptedAfterSend.get())
         } finally {
             consumerGate.complete(Unit)
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `cleanup racing after send return does not poison callback thread`() {
+        val senderRegistry = ProviderCallbackSenderRegistry()
+        val sendReturned = CountDownLatch(1)
+        val allowDeregister = AtomicBoolean()
+        val senderFinished = CountDownLatch(1)
+        val senderInterruptedAfterDeregister = AtomicBoolean(true)
+        val executor = Executors.newSingleThreadExecutor()
+
+        try {
+            executor.execute {
+                senderRegistry.withRegisteredSender {
+                    sendReturned.countDown()
+                    while (!allowDeregister.get()) {
+                        Thread.onSpinWait()
+                    }
+                }
+                senderInterruptedAfterDeregister.set(Thread.currentThread().isInterrupted)
+                senderFinished.countDown()
+            }
+
+            assertTrue(sendReturned.await(5, TimeUnit.SECONDS))
+            senderRegistry.interruptRegisteredSenders()
+            allowDeregister.set(true)
+
+            assertTrue(senderFinished.await(5, TimeUnit.SECONDS))
+            assertFalse(senderInterruptedAfterDeregister.get())
+        } finally {
+            allowDeregister.set(true)
             executor.shutdownNow()
         }
     }

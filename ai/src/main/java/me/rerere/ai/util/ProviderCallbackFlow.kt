@@ -1,6 +1,5 @@
 package me.rerere.ai.util
 
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.channels.ChannelResult
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
@@ -25,20 +24,17 @@ internal fun <T> losslessProviderCallbackFlow(
 internal class ProviderCallbackScope<T>(
     private val producerScope: ProducerScope<T>,
 ) : ProducerScope<T> by producerScope {
-    private val callbackSenders = ConcurrentHashMap.newKeySet<Thread>()
+    private val callbackSenders = ProviderCallbackSenderRegistry()
 
     fun sendFromProviderCallback(value: T): ChannelResult<Unit> {
-        val callbackThread = Thread.currentThread()
-        callbackSenders += callbackThread
-        return try {
-            producerScope.trySendBlocking(value)
-        } catch (_: InterruptedException) {
-            // awaitProviderClose interrupts only active callback sends to break the
-            // trySendBlocking/callbackFlow-close cycle. InterruptedException clears
-            // the flag, so pooled HTTP callback threads are returned unpoisoned.
-            producerScope.trySend(value)
-        } finally {
-            callbackSenders -= callbackThread
+        return callbackSenders.withRegisteredSender {
+            try {
+                producerScope.trySendBlocking(value)
+            } catch (_: InterruptedException) {
+                // awaitProviderClose interrupts only registered callback sends to
+                // break the trySendBlocking/callbackFlow-close cycle.
+                producerScope.trySend(value)
+            }
         }
     }
 
@@ -50,6 +46,40 @@ internal class ProviderCallbackScope<T>(
     }
 
     fun cancelBlockedSends() {
-        callbackSenders.forEach(Thread::interrupt)
+        callbackSenders.interruptRegisteredSenders()
+    }
+}
+
+internal class ProviderCallbackSenderRegistry {
+    private val lock = Any()
+    private val senders = mutableSetOf<Thread>()
+    // Normal deregistration must not clear an interrupt unless cleanup issued one.
+    private val interruptedSenders = mutableSetOf<Thread>()
+
+    fun <T> withRegisteredSender(block: () -> T): T {
+        val sender = Thread.currentThread()
+        synchronized(lock) {
+            senders += sender
+        }
+        try {
+            return block()
+        } finally {
+            val clearCleanupInterrupt = synchronized(lock) {
+                senders -= sender
+                interruptedSenders.remove(sender)
+            }
+            if (clearCleanupInterrupt) {
+                Thread.interrupted()
+            }
+        }
+    }
+
+    fun interruptRegisteredSenders() {
+        synchronized(lock) {
+            senders.forEach { sender ->
+                interruptedSenders += sender
+                sender.interrupt()
+            }
+        }
     }
 }
