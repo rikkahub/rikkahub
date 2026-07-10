@@ -5,5 +5,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test
-        run: echo "hello"
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web-ui
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: gradle
+      - name: Prepare
+        run: echo "${{ secrets.KEY_BASE64 }}" > /dev/null
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.4.1-procare
+          name: v2.4.1-procare
+          files: app/build/outputs/apk/release/*.apk
