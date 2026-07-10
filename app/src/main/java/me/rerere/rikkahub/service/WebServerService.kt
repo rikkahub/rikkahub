@@ -47,7 +47,10 @@ class WebServerService : Service() {
             ACTION_START -> {
                 val port = intent.getIntExtra(EXTRA_PORT, 8080)
                 val localhostOnly = intent.getBooleanExtra(EXTRA_LOCALHOST_ONLY, false)
-                startForegroundCompat()
+                if (!startForegroundCompat()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 startObservingState()
                 webServerManager.start(port = port, localhostOnly = localhostOnly)
             }
@@ -62,7 +65,10 @@ class WebServerService : Service() {
 
             null -> {
                 // 兜底：intent 为 null 时根据设置决定是否启动
-                startForegroundCompat()
+                if (!startForegroundCompat()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 serviceScope.launch {
                     val settings = settingsStore.settingsFlowRaw.first()
                     if (settings.webServerEnabled) {
@@ -85,16 +91,25 @@ class WebServerService : Service() {
         serviceScope.cancel()
     }
 
-    private fun startForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                buildStartingNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, buildStartingNotification())
+    private fun startForegroundCompat(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    buildStartingNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildStartingNotification())
+            }
+            true
+        } catch (e: Exception) {
+            // 部分 OEM ROM (如 realme UI/ColorOS) 会在系统侧拒绝 FGS 类型权限，
+            // 即使 Manifest 已声明 FOREGROUND_SERVICE_SPECIAL_USE 也会抛 SecurityException
+            Log.e(TAG, "Failed to start foreground service", e)
+            webServerManager.reportError("Failed to start foreground service: ${e.message}")
+            false
         }
     }
 
