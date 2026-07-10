@@ -62,6 +62,7 @@ import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
@@ -525,6 +526,31 @@ private fun ChatPageContent(
 internal fun canStartImagePreparation(isPreparingImage: Boolean): Boolean =
     !isPreparingImage
 
+internal suspend fun coordinateImagePreparation(
+    prepare: suspend () -> Unit,
+    launchPrepared: () -> Unit,
+    launchFallback: (Exception) -> Unit,
+    cleanupPartial: () -> Unit,
+    onFinished: () -> Unit,
+) {
+    var handedToCrop = false
+    try {
+        prepare()
+        launchPrepared()
+        handedToCrop = true
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (error: Exception) {
+        launchFallback(error)
+    } finally {
+        try {
+            if (!handedToCrop) cleanupPartial()
+        } finally {
+            onFinished()
+        }
+    }
+}
+
 @Composable
 private fun ChatFilesPickerSheet(
     inputState: ChatInputState,
@@ -536,6 +562,7 @@ private fun ChatFilesPickerSheet(
 ) {
     val imagePreparationScope = rememberCoroutineScope()
     var isPreparingImage by remember { mutableStateOf(false) }
+    var activeImagePreparationJob by remember { mutableStateOf<Job?>(null) }
     val context = LocalContext.current
     val resources = LocalResources.current
     val toaster = LocalToaster.current
@@ -544,6 +571,9 @@ private fun ChatFilesPickerSheet(
     var showCompressDialog by remember { mutableStateOf(false) }
 
     fun dismissAll() {
+        activeImagePreparationJob?.cancel()
+        activeImagePreparationJob = null
+        isPreparingImage = false
         showInjectionSheet = false
         showCompressDialog = false
         onDismiss()
@@ -609,43 +639,53 @@ private fun ChatFilesPickerSheet(
         rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
             if (selectedUris.isNotEmpty()) {
                 Log.d("ImagePickButton", "Selected URIs: $selectedUris")
-                if (setting.displaySetting.skipCropImage) {
+                if (selectedUris.size == 1 && !canStartImagePreparation(isPreparingImage)) {
+                    Log.d("ImagePickButton", "Ignoring image result while preparation is active")
+                } else if (setting.displaySetting.skipCropImage) {
                     inputState.addImages(filesManager.createChatFilesByContents(selectedUris))
                     dismissAll()
-                } else if (selectedUris.size == 1 && canStartImagePreparation(isPreparingImage)) {
+                } else if (selectedUris.size == 1) {
                     val source = selectedUris.first()
                     val tempFile = File(context.appTempFolder, "pick_temp_${System.currentTimeMillis()}.jpg")
                     isPreparingImage = true
-                    imagePreparationScope.launch {
-                        var handedToCrop = false
-                        try {
-                            ImageUtils.prepareImageForCrop(
-                                convert = {
-                                    ImageUtils.isHeifImage(context, source) &&
-                                        ImageUtils.convertHeifToJpeg(context, source, tempFile)
-                                },
-                                copyOriginal = {
-                                    context.contentResolver.openInputStream(source)?.use { input ->
-                                        tempFile.outputStream().use { output -> input.copyTo(output) }
-                                    } ?: error("Unable to open selected image")
-                                },
-                            )
-                            preCropTempFile = tempFile
-                            launchImageCrop(tempFile.toUri())
-                            handedToCrop = true
-                        } catch (cancellation: CancellationException) {
-                            throw cancellation
-                        } catch (error: Exception) {
-                            Log.e("ImagePickButton", "Failed to prepare image for crop, falling back", error)
-                            launchImageCrop(source)
-                        } finally {
-                            if (!handedToCrop) {
+                    lateinit var preparationJob: Job
+                    preparationJob = imagePreparationScope.launch(start = CoroutineStart.LAZY) {
+                        coordinateImagePreparation(
+                            prepare = {
+                                ImageUtils.prepareImageForCrop(
+                                    convert = {
+                                        ImageUtils.isHeifImage(context, source) &&
+                                            ImageUtils.convertHeifToJpeg(context, source, tempFile)
+                                    },
+                                    copyOriginal = {
+                                        context.contentResolver.openInputStream(source)?.use { input ->
+                                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                                        } ?: error("Unable to open selected image")
+                                    },
+                                )
+                            },
+                            launchPrepared = {
+                                preCropTempFile = tempFile
+                                launchImageCrop(tempFile.toUri())
+                            },
+                            launchFallback = { error ->
+                                Log.e("ImagePickButton", "Failed to prepare image for crop, falling back", error)
+                                launchImageCrop(source)
+                            },
+                            cleanupPartial = {
                                 if (preCropTempFile == tempFile) preCropTempFile = null
                                 tempFile.delete()
-                            }
-                            isPreparingImage = false
-                        }
+                            },
+                            onFinished = {
+                                if (activeImagePreparationJob === preparationJob) {
+                                    activeImagePreparationJob = null
+                                    isPreparingImage = false
+                                }
+                            },
+                        )
                     }
+                    activeImagePreparationJob = preparationJob
+                    preparationJob.start()
                 } else {
                     inputState.addImages(filesManager.createChatFilesByContents(selectedUris))
                     dismissAll()
