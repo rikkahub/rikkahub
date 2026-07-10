@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FolderDAO
 import me.rerere.rikkahub.data.db.entity.FolderEntity
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Folder
 import java.time.Instant
 import kotlin.uuid.Uuid
@@ -75,7 +76,34 @@ class FolderRepository internal constructor(
             onCommitted = { onCommitted() },
         )
     }
+
+    internal suspend fun <T> persistConversationSerialized(
+        conversationId: Uuid,
+        persist: suspend (PersistedConversationFolder) -> T,
+        onCommitted: (T) -> Unit = {},
+    ): T = mutationCoordinator.serialize(
+        operation = {
+            val entity = conversationDAO.getConversationById(conversationId.toString())
+            persist(
+                PersistedConversationFolder(
+                    exists = entity != null,
+                    assistantId = entity?.assistantId?.let(Uuid::parse),
+                    folderId = entity?.folderId?.ifEmpty { null }?.let(Uuid::parse),
+                )
+            )
+        },
+        onCommitted = onCommitted,
+    )
 }
+
+internal data class PersistedConversationFolder(
+    val exists: Boolean,
+    val assistantId: Uuid?,
+    val folderId: Uuid?,
+)
+
+internal fun Conversation.withPersistedFolder(state: PersistedConversationFolder): Conversation =
+    if (state.exists && assistantId == state.assistantId) copy(folderId = state.folderId) else this
 
 internal interface FolderTransactionRunner {
     suspend fun <T> runInTransaction(block: suspend () -> T): T
@@ -97,18 +125,28 @@ internal class FolderMutationCoordinator(
         validate: suspend () -> Boolean,
         mutation: suspend () -> T,
         onCommitted: (T) -> Unit = {},
-    ): FolderMutationResult<T> = mutex.withLock {
-        val result = transactionRunner.runInTransaction {
-            if (validate()) {
-                FolderMutationResult.Applied(mutation())
-            } else {
-                FolderMutationResult.Rejected
+    ): FolderMutationResult<T> = serialize(
+        operation = {
+            transactionRunner.runInTransaction {
+                if (validate()) {
+                    FolderMutationResult.Applied(mutation())
+                } else {
+                    FolderMutationResult.Rejected
+                }
             }
-        }
-        if (result is FolderMutationResult.Applied) {
-            onCommitted(result.value)
-        }
-        result
+        },
+        onCommitted = { result ->
+            if (result is FolderMutationResult.Applied) {
+                onCommitted(result.value)
+            }
+        },
+    )
+
+    suspend fun <T> serialize(
+        onCommitted: (T) -> Unit = {},
+        operation: suspend () -> T,
+    ): T = mutex.withLock {
+        operation().also(onCommitted)
     }
 }
 

@@ -80,6 +80,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.repository.withPersistedFolder
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -976,19 +977,27 @@ class ChatService(
     }
 
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
-        val exists = conversationRepo.existsConversationById(conversation.id)
-        if (!exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
-            return // 新会话且为空时不保存
-        }
+        folderRepository.persistConversationSerialized(
+            conversationId = conversation.id,
+            persist = { persistedFolder ->
+                if (!persistedFolder.exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
+                    return@persistConversationSerialized null
+                }
 
-        val updatedConversation = conversation.copy()
-        updateConversation(conversationId, updatedConversation)
-
-        if (!exists) {
-            conversationRepo.insertConversation(updatedConversation)
-        } else {
-            conversationRepo.updateConversation(updatedConversation)
-        }
+                val updatedConversation = conversation.withPersistedFolder(persistedFolder)
+                if (persistedFolder.exists) {
+                    conversationRepo.updateConversation(updatedConversation)
+                } else {
+                    conversationRepo.insertConversation(updatedConversation)
+                }
+                updatedConversation
+            },
+            onCommitted = { updatedConversation ->
+                if (updatedConversation != null) {
+                    updateConversation(conversationId, updatedConversation)
+                }
+            },
+        )
     }
 
     // ---- 翻译消息 ----

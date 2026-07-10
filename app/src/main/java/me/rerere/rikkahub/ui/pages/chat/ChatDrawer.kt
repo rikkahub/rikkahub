@@ -447,12 +447,13 @@ fun ChatDrawerContent(
     if (showMoveToFolderSheet) {
         val doMove: (Uuid?) -> Unit = { folderId ->
             conversationToMoveFolder?.let { conversation ->
-                drawerVm.moveConversationToFolder(conversation.id, folderId)
-                scope.launch {
-                    folderSheetState.hide()
-                    showMoveToFolderSheet = false
-                    conversationToMoveFolder = null
-                    conversations.refresh()
+                drawerVm.moveConversationToFolder(conversation.id, folderId) {
+                    scope.launch {
+                        folderSheetState.hide()
+                        showMoveToFolderSheet = false
+                        conversationToMoveFolder = null
+                        conversations.refresh()
+                    }
                 }
             }
         }

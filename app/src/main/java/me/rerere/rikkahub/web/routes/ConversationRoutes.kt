@@ -58,6 +58,12 @@ internal fun Conversation?.requireCurrentAssistant(assistantId: Uuid): Conversat
     return conversation
 }
 
+internal fun requireFolderMoveCommitted(committed: Boolean) {
+    if (!committed) {
+        throw NotFoundException("Conversation not found")
+    }
+}
+
 fun Route.conversationRoutes(
     chatService: ChatService,
     conversationRepo: ConversationRepository,
@@ -277,7 +283,7 @@ fun Route.conversationRoutes(
                 folderRepo.getFolderById(targetFolderId).requireCurrentAssistant(settings.assistantId)
             }
 
-            chatService.moveConversationToFolder(uuid, targetFolderId)
+            requireFolderMoveCommitted(chatService.moveConversationToFolder(uuid, targetFolderId))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 

@@ -32,6 +32,12 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.uuid.Uuid
 
+internal fun onFolderMoveCommitted(committed: Boolean, onCommitted: () -> Unit) {
+    if (committed) {
+        onCommitted()
+    }
+}
+
 class ChatDrawerVM(
     private val context: Application,
     private val settingsStore: SettingsStore,
@@ -176,10 +182,14 @@ class ChatDrawerVM(
         return true
     }
 
-    fun moveConversationToFolder(conversationId: Uuid, folderId: Uuid?) {
+    internal fun moveConversationToFolder(
+        conversationId: Uuid,
+        folderId: Uuid?,
+        onCommitted: () -> Unit,
+    ) {
         viewModelScope.launch {
-            // 经 ChatService 移动：活跃会话会先同步内存态，避免后续整对象保存覆盖 folder_id
-            chatService.moveConversationToFolder(conversationId, folderId)
+            val committed = chatService.moveConversationToFolder(conversationId, folderId)
+            onFolderMoveCommitted(committed, onCommitted)
         }
     }
 
